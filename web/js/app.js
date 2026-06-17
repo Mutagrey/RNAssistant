@@ -357,6 +357,7 @@
 
   async function sendChat(text) {
     $("sendButton").disabled = true;
+    $("chatInput").disabled = true;
     try {
       var response = await send("sendChat", { text: text });
       state.messages = response.messages || state.messages;
@@ -371,7 +372,25 @@
       }
     } finally {
       $("sendButton").disabled = false;
+      $("chatInput").disabled = false;
+      $("chatInput").focus();
     }
+  }
+
+  function submitChatInput() {
+    if ($("sendButton").disabled) {
+      return;
+    }
+
+    var text = $("chatInput").value.trim();
+    if (!text) {
+      return;
+    }
+
+    $("chatInput").value = "";
+    state.messages.push({ Role: "user", Content: text });
+    renderMessages();
+    sendChat(text);
   }
 
   async function runQuickAction(action) {
@@ -396,15 +415,15 @@
 
     $("refreshButton").addEventListener("click", initialize);
     $("clearInputButton").addEventListener("click", function () { $("chatInput").value = ""; });
+    $("chatInput").addEventListener("keydown", function (event) {
+      if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        event.preventDefault();
+        submitChatInput();
+      }
+    });
     $("chatForm").addEventListener("submit", function (event) {
       event.preventDefault();
-      var text = $("chatInput").value.trim();
-      if (text) {
-        $("chatInput").value = "";
-        state.messages.push({ Role: "user", Content: text });
-        renderMessages();
-        sendChat(text);
-      }
+      submitChatInput();
     });
 
     $("saveSettingsButton").addEventListener("click", async function () {
