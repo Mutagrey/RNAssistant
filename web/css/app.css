@@ -7,7 +7,9 @@
   --accent: #2264d1;
   --accent-strong: #174ea6;
   --danger: #b42318;
-  --code: #101827;
+  --code: #f6f8fb;
+  --code-border: #d6deea;
+  --code-text: #202938;
   --radius: 8px;
 }
 
@@ -178,10 +180,98 @@ button.danger {
 
 .markdown pre {
   margin: 8px 0;
-  padding: 12px;
+  padding: 0;
   overflow: auto;
+  border: 1px solid var(--code-border);
   border-radius: 6px;
   background: var(--code);
+}
+
+.markdown pre code,
+.markdown pre code.hljs {
+  display: block;
+  padding: 12px;
+  background: transparent;
+  color: var(--code-text);
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.markdown :not(pre) > code {
+  padding: 2px 5px;
+  border: 1px solid #dce3ee;
+  border-radius: 4px;
+  background: #eef2f7;
+  color: #1f2937;
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: 0.92em;
+}
+
+.markdown .hljs-comment,
+.markdown .hljs-code,
+.markdown .hljs-formula {
+  color: #68768a;
+}
+
+.markdown .hljs-keyword,
+.markdown .hljs-doctag,
+.markdown .hljs-template-tag,
+.markdown .hljs-template-variable,
+.markdown .hljs-type,
+.markdown .hljs-variable.language_ {
+  color: #b42318;
+}
+
+.markdown .hljs-string,
+.markdown .hljs-regexp,
+.markdown .hljs-meta .hljs-string {
+  color: #116329;
+}
+
+.markdown .hljs-title,
+.markdown .hljs-title.class_,
+.markdown .hljs-title.function_ {
+  color: #6941c6;
+}
+
+.markdown .hljs-attr,
+.markdown .hljs-attribute,
+.markdown .hljs-literal,
+.markdown .hljs-number,
+.markdown .hljs-operator,
+.markdown .hljs-selector-attr,
+.markdown .hljs-selector-class,
+.markdown .hljs-selector-id,
+.markdown .hljs-variable {
+  color: #0550ae;
+}
+
+.markdown .hljs-built_in,
+.markdown .hljs-symbol {
+  color: #9a6700;
+}
+
+.markdown .hljs-name,
+.markdown .hljs-quote,
+.markdown .hljs-selector-pseudo,
+.markdown .hljs-selector-tag {
+  color: #1a7f37;
+}
+
+.markdown .hljs-section {
+  color: #0969da;
+  font-weight: 700;
+}
+
+.markdown .hljs-addition {
+  color: #1a7f37;
+  background: #dafbe1;
+}
+
+.markdown .hljs-deletion {
+  color: #cf222e;
+  background: #ffebe9;
 }
 
 .code-wrap,
@@ -341,4 +431,3 @@ button.danger {
   color: var(--muted);
   font-size: 12px;
 }
-
