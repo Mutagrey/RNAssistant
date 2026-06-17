@@ -8,7 +8,8 @@
     messages: [],
     pending: {},
     seq: 1,
-    highlightLog: {}
+    highlightLog: {},
+    webViewFocused: true
   };
 
   function $(id) {
@@ -355,7 +356,7 @@
     }
   }
 
-  async function sendChat(text) {
+  async function sendChat(text, restoreComposerFocus) {
     $("sendButton").disabled = true;
     $("chatInput").disabled = true;
     try {
@@ -373,7 +374,9 @@
     } finally {
       $("sendButton").disabled = false;
       $("chatInput").disabled = false;
-      $("chatInput").focus();
+      if (restoreComposerFocus && state.webViewFocused && document.hasFocus()) {
+        $("chatInput").focus();
+      }
     }
   }
 
@@ -387,10 +390,13 @@
       return;
     }
 
+    var active = document.activeElement;
+    var restoreComposerFocus = active === $("chatInput") || active === $("sendButton");
+
     $("chatInput").value = "";
     state.messages.push({ Role: "user", Content: text });
     renderMessages();
-    sendChat(text);
+    sendChat(text, restoreComposerFocus);
   }
 
   async function runQuickAction(action) {
@@ -409,6 +415,9 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    window.addEventListener("focus", function () { state.webViewFocused = true; });
+    window.addEventListener("blur", function () { state.webViewFocused = false; });
+
     Array.prototype.slice.call(document.querySelectorAll(".tab")).forEach(function (tab) {
       tab.addEventListener("click", function () { switchTab(tab.dataset.tab); });
     });
