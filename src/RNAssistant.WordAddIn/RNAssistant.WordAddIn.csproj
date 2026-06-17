@@ -13,7 +13,7 @@
     <OfficeApplication>Word</OfficeApplication>
     <TargetOfficeVersion>v15.0</TargetOfficeVersion>
     <UseVSTO>true</UseVSTO>
-    <SignManifests>true</SignManifests>
+    <SignManifests>false</SignManifests>
     <GenerateManifests>true</GenerateManifests>
     <VSTO_TrustAssembliesLocation>true</VSTO_TrustAssembliesLocation>
   </PropertyGroup>

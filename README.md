@@ -33,12 +33,13 @@ VSTO AI assistant skeleton for Excel, Word, PowerPoint and Outlook.
 
 The add-in projects intentionally do not use legacy `ProjectTypeGuids`. Visual Studio 2022 opens them as C# class library projects, while VSTO metadata and Office targets remain in the project files. If build/debug complains about missing Office tools, install or enable the `Office/SharePoint development` workload in Visual Studio Installer.
 
-ClickOnce/VSTO manifest signing is enabled in the project files, but no `.pfx` is committed. On the Windows build machine, create a local test certificate in each add-in project through `Project Properties -> Signing -> Create Test Certificate...`; Visual Studio will write the local `ManifestKeyFile` value.
+ClickOnce/VSTO manifest signing is disabled in the repository because certificate thumbprints are machine-local. On the Windows build machine, create a local test certificate in each add-in project through `Project Properties -> Signing -> Create Test Certificate...`; Visual Studio will write local `SignManifests`, `ManifestKeyFile`, and `ManifestCertificateThumbprint` values.
 
 If the Signing page is unavailable, unload the project and add a local line manually:
 
 ```xml
 <ManifestKeyFile>YourLocalCertificate.pfx</ManifestKeyFile>
+<ManifestCertificateThumbprint>YourCertificateThumbprint</ManifestCertificateThumbprint>
 ```
 
 The add-ins copy `web/**` to output and load `web/index.html` inside a WinForms `WebView2` hosted by a VSTO custom task pane.
