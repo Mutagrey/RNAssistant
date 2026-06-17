@@ -40,54 +40,89 @@ namespace RNAssistant.Core.Llm
             using (var client = new HttpClient())
             {
                 client.Timeout = TimeSpan.FromSeconds(120);
+                client.DefaultRequestHeaders.Accept.Clear();
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("RNAssistant/0.1");
                 if (!string.IsNullOrWhiteSpace(apiKey))
                 {
                     client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
                 }
 
-                foreach (var header in settings.CustomHeaders)
+                string contentTypeOverride = null;
+                if (settings.CustomHeaders != null)
                 {
-                    if (!string.IsNullOrWhiteSpace(header.Key) && !string.IsNullOrWhiteSpace(header.Value))
+                    foreach (var header in settings.CustomHeaders)
                     {
-                        client.DefaultRequestHeaders.Remove(header.Key);
-                        client.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
+                        if (!string.IsNullOrWhiteSpace(header.Key) && !string.IsNullOrWhiteSpace(header.Value))
+                        {
+                            if (string.Equals(header.Key, "Content-Type", StringComparison.OrdinalIgnoreCase))
+                            {
+                                contentTypeOverride = header.Value;
+                                continue;
+                            }
+
+                            if (string.Equals(header.Key, "Content-Length", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(header.Key, "Host", StringComparison.OrdinalIgnoreCase))
+                            {
+                                throw new InvalidOperationException("Custom header cannot be set manually: " + header.Key);
+                            }
+
+                            client.DefaultRequestHeaders.Remove(header.Key);
+                            if (!client.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value))
+                            {
+                                throw new InvalidOperationException("Custom header is not valid for request headers: " + header.Key);
+                            }
+                        }
                     }
+                }
+
+                var apiMessages = ToApiMessages(messages);
+                if (apiMessages.Count == 0)
+                {
+                    throw new InvalidOperationException("LLM request has no messages.");
                 }
 
                 var body = new
                 {
                     model = settings.Model,
-                    messages = ToApiMessages(messages),
+                    messages = apiMessages,
                     max_tokens = settings.MaxTokens,
                     temperature = settings.Temperature,
                     stream = false
                 };
 
                 var json = JsonConvert.SerializeObject(body, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
+                var diagnostics = CreateDiagnostics(requestUri, settings, apiMessages.Count, !string.IsNullOrWhiteSpace(apiKey));
                 try
                 {
-                    var response = await client.PostAsync(requestUri, new StringContent(json, Encoding.UTF8, "application/json")).ConfigureAwait(false);
+                    var requestContent = new StringContent(json, Encoding.UTF8, "application/json");
+                    if (!string.IsNullOrWhiteSpace(contentTypeOverride))
+                    {
+                        requestContent.Headers.ContentType = MediaTypeHeaderValue.Parse(contentTypeOverride);
+                    }
+
+                    var response = await client.PostAsync(requestUri, requestContent).ConfigureAwait(false);
                     var responseJson = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                     if (!response.IsSuccessStatusCode)
                     {
-                        throw new InvalidOperationException("LLM request failed: HTTP " + (int)response.StatusCode + " " + response.ReasonPhrase + ". Endpoint: " + requestUri + ". Response: " + responseJson);
+                        throw new InvalidOperationException("LLM request failed: HTTP " + (int)response.StatusCode + " " + response.ReasonPhrase + ". " + diagnostics + ". Response: " + responseJson);
                     }
 
                     var parsed = JObject.Parse(responseJson);
-                    var content = parsed.SelectToken("choices[0].message.content");
-                    return content == null ? string.Empty : content.Value<string>();
+                    var assistantContent = parsed.SelectToken("choices[0].message.content");
+                    return assistantContent == null ? string.Empty : assistantContent.Value<string>();
                 }
                 catch (TaskCanceledException ex)
                 {
-                    throw new InvalidOperationException("LLM request timed out after " + client.Timeout.TotalSeconds + " seconds. Endpoint: " + requestUri + ". " + DeepestMessage(ex), ex);
+                    throw new InvalidOperationException("LLM request timed out after " + client.Timeout.TotalSeconds + " seconds. " + diagnostics + ". " + DeepestMessage(ex), ex);
                 }
                 catch (HttpRequestException ex)
                 {
-                    throw new InvalidOperationException("LLM request could not be sent. Endpoint: " + requestUri + ". " + DeepestMessage(ex), ex);
+                    throw new InvalidOperationException("LLM request could not be sent. " + diagnostics + ". " + DeepestMessage(ex), ex);
                 }
                 catch (WebException ex)
                 {
-                    throw new InvalidOperationException("LLM network error. Endpoint: " + requestUri + ". " + DeepestMessage(ex), ex);
+                    throw new InvalidOperationException("LLM network error. " + diagnostics + ". " + DeepestMessage(ex), ex);
                 }
             }
         }
@@ -118,9 +153,41 @@ namespace RNAssistant.Core.Llm
             return current.Message;
         }
 
+        private static string CreateDiagnostics(Uri requestUri, AppSettings settings, int messageCount, bool hasBearerKey)
+        {
+            var headerNames = new List<string>();
+            if (hasBearerKey)
+            {
+                headerNames.Add("Authorization: Bearer ***");
+            }
+
+            if (settings.CustomHeaders != null)
+            {
+                foreach (var header in settings.CustomHeaders)
+                {
+                    if (!string.IsNullOrWhiteSpace(header.Key))
+                    {
+                        headerNames.Add(header.Key + ": ***");
+                    }
+                }
+            }
+
+            return "Endpoint: " + requestUri +
+                ". Model: " + settings.Model +
+                ". Messages: " + messageCount +
+                ". MaxTokens: " + settings.MaxTokens +
+                ". Temperature: " + settings.Temperature +
+                ". Headers: [" + string.Join(", ", headerNames.ToArray()) + "]";
+        }
+
         private static List<object> ToApiMessages(IEnumerable<ChatMessage> messages)
         {
             var result = new List<object>();
+            if (messages == null)
+            {
+                return result;
+            }
+
             foreach (var message in messages)
             {
                 if (message == null || string.IsNullOrWhiteSpace(message.Role))
