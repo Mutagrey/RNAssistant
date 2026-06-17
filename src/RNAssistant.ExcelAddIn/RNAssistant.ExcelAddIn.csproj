@@ -10,6 +10,7 @@
     <AssemblyName>RNAssistant.ExcelAddIn</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <LangVersion>7.3</LangVersion>
+    <ProjectTypeGuids>{BAA0C2D2-18E2-41B9-852F-F413020CAA33};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <OfficeApplication>Excel</OfficeApplication>
     <TargetOfficeVersion>v15.0</TargetOfficeVersion>
     <UseVSTO>true</UseVSTO>

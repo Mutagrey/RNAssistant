@@ -31,7 +31,7 @@ VSTO AI assistant skeleton for Excel, Word, PowerPoint and Outlook.
 4. Build one add-in project at a time.
 5. Start the selected Office host from Visual Studio.
 
-The add-in projects intentionally do not use legacy `ProjectTypeGuids`. Visual Studio 2022 opens them as C# class library projects, while VSTO metadata and Office targets remain in the project files. If build/debug complains about missing Office tools, install or enable the `Office/SharePoint development` workload in Visual Studio Installer.
+The add-in projects use the VSTO project flavor (`ProjectTypeGuids`) so Visual Studio shows Office/VSTO icons and enables the VSTO property pages. If Visual Studio says the projects are incompatible, install or enable the `Office/SharePoint development` workload and the `Visual Studio Tools for Office` component in Visual Studio Installer.
 
 ClickOnce/VSTO manifest signing is disabled in the repository because certificate thumbprints are machine-local. If the Visual Studio Signing page is disabled, run the local helper in Windows PowerShell:
 
