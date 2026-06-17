@@ -16,6 +16,20 @@
     return document.getElementById(id);
   }
 
+  window.RNAssistantHost = {
+    blurComposer: function () {
+      var active = document.activeElement;
+      var chatInput = $("chatInput");
+      if (chatInput) {
+        chatInput.blur();
+      }
+      if (active && active !== document.body && typeof active.blur === "function") {
+        active.blur();
+      }
+      state.webViewFocused = false;
+    }
+  };
+
   function log(message) {
     var box = $("logBox");
     if (!box) {

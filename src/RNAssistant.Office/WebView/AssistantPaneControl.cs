@@ -24,6 +24,11 @@ namespace RNAssistant.Office.WebView
             Load += OnLoad;
         }
 
+        public void BlurComposer()
+        {
+            ExecuteScript("window.RNAssistantHost && window.RNAssistantHost.blurComposer && window.RNAssistantHost.blurComposer();");
+        }
+
         private async void OnLoad(object sender, EventArgs e)
         {
             try
@@ -97,6 +102,25 @@ namespace RNAssistant.Office.WebView
         {
             var message = System.Net.WebUtility.HtmlEncode(ex.Message);
             _webView.NavigateToString("<html><body style='font-family:Segoe UI;padding:20px'><h3>RN Assistant</h3><p>WebView2 startup failed.</p><pre>" + message + "</pre></body></html>");
+        }
+
+        private void ExecuteScript(string script)
+        {
+            if (IsDisposed || !IsHandleCreated)
+            {
+                return;
+            }
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => ExecuteScript(script)));
+                return;
+            }
+
+            if (_webView.CoreWebView2 != null)
+            {
+                _webView.CoreWebView2.ExecuteScriptAsync(script);
+            }
         }
 
         private static string EscapeJson(string value)

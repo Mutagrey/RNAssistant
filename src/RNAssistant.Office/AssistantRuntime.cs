@@ -7,6 +7,7 @@ namespace RNAssistant.Office
     public sealed class AssistantRuntime
     {
         private readonly IOfficeApplicationAdapter _adapter;
+        private AssistantPaneControl _paneControl;
 
         public AssistantRuntime(IOfficeApplicationAdapter adapter)
         {
@@ -18,12 +19,21 @@ namespace RNAssistant.Office
 
         public AssistantPaneControl CreatePaneControl()
         {
-            return new AssistantPaneControl(Controller, ResolveWebRoot());
+            _paneControl = new AssistantPaneControl(Controller, ResolveWebRoot());
+            return _paneControl;
         }
 
         public void RunQuickAction(string action)
         {
             Controller.QueueQuickAction(action);
+        }
+
+        public void BlurComposer()
+        {
+            if (_paneControl != null)
+            {
+                _paneControl.BlurComposer();
+            }
         }
 
         private static string ResolveWebRoot()
@@ -34,4 +44,3 @@ namespace RNAssistant.Office
         }
     }
 }
-
