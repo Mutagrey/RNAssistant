@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RN Assistant</title>
+  <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div>
+        <div class="brand">RN Assistant</div>
+        <div class="docline" id="docLine">Loading...</div>
+      </div>
+      <button class="icon-button" id="refreshButton" title="Refresh">R</button>
+    </header>
+
+    <nav class="tabs" aria-label="Assistant tabs">
+      <button class="tab active" data-tab="chat">Chat</button>
+      <button class="tab" data-tab="skills">Skills</button>
+      <button class="tab" data-tab="context">Context</button>
+      <button class="tab" data-tab="settings">Settings</button>
+      <button class="tab" data-tab="logs">Logs</button>
+    </nav>
+
+    <main class="content">
+      <section class="panel active" id="tab-chat">
+        <div class="messages" id="messages"></div>
+        <form class="composer" id="chatForm">
+          <textarea id="chatInput" rows="4" placeholder="Ask about the current document..."></textarea>
+          <div class="composer-actions">
+            <button type="button" class="secondary" id="clearInputButton">Clear</button>
+            <button type="submit" id="sendButton">Send</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel" id="tab-skills">
+        <div class="toolbar">
+          <button id="addSkillButton">Add Skill</button>
+          <button class="secondary" id="saveSkillsButton">Save</button>
+        </div>
+        <div id="skillsList" class="stack"></div>
+      </section>
+
+      <section class="panel" id="tab-context">
+        <div class="toolbar">
+          <button class="danger" id="clearContextButton">Clear Context</button>
+        </div>
+        <pre class="json-box" id="contextBox">{}</pre>
+      </section>
+
+      <section class="panel" id="tab-settings">
+        <div class="form-grid">
+          <label>Base URL<input id="baseUrlInput" autocomplete="off"></label>
+          <label>Model<input id="modelInput" autocomplete="off"></label>
+          <label>API key<input id="apiKeyInput" type="password" autocomplete="off" placeholder="Leave empty to keep saved key"></label>
+          <label>Max tokens<input id="maxTokensInput" type="number" min="1" max="200000"></label>
+          <label>Temperature<input id="temperatureInput" type="number" min="0" max="2" step="0.1"></label>
+          <label>Context chars<input id="contextLimitInput" type="number" min="1000" max="200000"></label>
+          <label class="checkline"><input id="streamInput" type="checkbox"> Stream responses</label>
+          <label>Custom headers<textarea id="headersInput" rows="4" placeholder="Header-Name: value"></textarea></label>
+          <label>System prompt<textarea id="systemPromptInput" rows="7"></textarea></label>
+        </div>
+        <div class="toolbar">
+          <button id="saveSettingsButton">Save Settings</button>
+        </div>
+      </section>
+
+      <section class="panel" id="tab-logs">
+        <pre class="log-box" id="logBox"></pre>
+      </section>
+    </main>
+  </div>
+
+  <script src="js/vendor/purify.min.js"></script>
+  <script src="js/vendor/marked.min.js"></script>
+  <script src="js/vendor/highlight.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
+

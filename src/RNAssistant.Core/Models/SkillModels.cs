@@ -1,0 +1,51 @@
+using System;
+using System.Collections.Generic;
+
+namespace RNAssistant.Core.Models
+{
+    public sealed class SkillDefinition
+    {
+        public string Id { get; set; }
+        public string Host { get; set; }
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public string ArgumentSchemaJson { get; set; }
+        public bool Enabled { get; set; }
+        public bool BuiltIn { get; set; }
+
+        public SkillDefinition()
+        {
+            Enabled = true;
+            ArgumentSchemaJson = "{}";
+        }
+    }
+
+    public sealed class SkillCommand
+    {
+        public string SkillId { get; set; }
+        public Dictionary<string, object> Arguments { get; set; }
+
+        public SkillCommand()
+        {
+            Arguments = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    public sealed class SkillResult
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; }
+        public string DataJson { get; set; }
+
+        public static SkillResult Ok(string message, string dataJson = null)
+        {
+            return new SkillResult { Success = true, Message = message, DataJson = dataJson };
+        }
+
+        public static SkillResult Fail(string message)
+        {
+            return new SkillResult { Success = false, Message = message };
+        }
+    }
+}
+

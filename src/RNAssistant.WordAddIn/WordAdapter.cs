@@ -1,0 +1,146 @@
+using System;
+using System.Collections.Generic;
+using Newtonsoft.Json;
+using Word = Microsoft.Office.Interop.Word;
+using RNAssistant.Core.Models;
+using RNAssistant.Office;
+using RNAssistant.Office.Skills;
+
+namespace RNAssistant.WordAddIn
+{
+    public sealed class WordAdapter : IOfficeApplicationAdapter
+    {
+        private readonly Word.Application _application;
+
+        public WordAdapter(Word.Application application)
+        {
+            _application = application;
+        }
+
+        public string HostName { get { return "Word"; } }
+
+        public string DocumentKey
+        {
+            get
+            {
+                var doc = ActiveDocument();
+                if (doc == null)
+                {
+                    return "Word:NoDocument";
+                }
+
+                return string.IsNullOrWhiteSpace(doc.FullName) ? doc.Name : doc.FullName;
+            }
+        }
+
+        public string DocumentTitle
+        {
+            get
+            {
+                var doc = ActiveDocument();
+                return doc == null ? "No document" : doc.Name;
+            }
+        }
+
+        public IEnumerable<SkillDefinition> GetBuiltInSkills()
+        {
+            return new[]
+            {
+                Skill("word.read_document", "Read current document text.", "{\"maxChars\":12000}"),
+                Skill("word.read_selection", "Read current Word selection.", "{}"),
+                Skill("word.insert_text", "Insert text at current cursor position.", "{\"text\":\"Text to insert\"}"),
+                Skill("word.replace_selection", "Replace selected text.", "{\"text\":\"Replacement text\"}"),
+                Skill("word.add_comment", "Add a comment to the current selection.", "{\"text\":\"Comment text\"}")
+            };
+        }
+
+        public string GetDocumentSnapshot(int maxChars)
+        {
+            var doc = ActiveDocument();
+            if (doc == null)
+            {
+                return "No active Word document.";
+            }
+
+            return Trim(doc.Range().Text, maxChars);
+        }
+
+        public SkillResult ExecuteSkill(SkillCommand command)
+        {
+            try
+            {
+                switch (command.SkillId)
+                {
+                    case "word.read_document":
+                        return ReadDocument(command);
+                    case "word.read_selection":
+                        return SkillResult.Ok("Selection read.", JsonConvert.SerializeObject(new { text = SelectionText() }));
+                    case "word.insert_text":
+                        _application.Selection.TypeText(SkillArgumentReader.String(command.Arguments, "text", string.Empty));
+                        return SkillResult.Ok("Text inserted.");
+                    case "word.replace_selection":
+                        _application.Selection.Range.Text = SkillArgumentReader.String(command.Arguments, "text", string.Empty);
+                        return SkillResult.Ok("Selection replaced.");
+                    case "word.add_comment":
+                        _application.ActiveDocument.Comments.Add(_application.Selection.Range, SkillArgumentReader.String(command.Arguments, "text", string.Empty));
+                        return SkillResult.Ok("Comment added.");
+                    default:
+                        return SkillResult.Fail("Unsupported Word skill: " + command.SkillId);
+                }
+            }
+            catch (Exception ex)
+            {
+                return SkillResult.Fail(ex.Message);
+            }
+        }
+
+        private SkillResult ReadDocument(SkillCommand command)
+        {
+            var maxChars = SkillArgumentReader.Int32(command.Arguments, "maxChars", 12000);
+            var doc = RequireDocument();
+            return SkillResult.Ok("Document read.", JsonConvert.SerializeObject(new { text = Trim(doc.Range().Text, maxChars) }));
+        }
+
+        private string SelectionText()
+        {
+            try
+            {
+                return _application.Selection == null ? string.Empty : _application.Selection.Text;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private Word.Document ActiveDocument()
+        {
+            try { return _application.ActiveDocument; }
+            catch { return null; }
+        }
+
+        private Word.Document RequireDocument()
+        {
+            var doc = ActiveDocument();
+            if (doc == null)
+            {
+                throw new InvalidOperationException("No active Word document.");
+            }
+            return doc;
+        }
+
+        private static SkillDefinition Skill(string id, string description, string schema)
+        {
+            return new SkillDefinition { Id = id, Host = "Word", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true };
+        }
+
+        private static string Trim(string text, int maxChars)
+        {
+            if (string.IsNullOrEmpty(text) || text.Length <= maxChars)
+            {
+                return text;
+            }
+            return text.Substring(0, maxChars) + "\n...[truncated]";
+        }
+    }
+}
