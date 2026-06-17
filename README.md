@@ -33,12 +33,19 @@ VSTO AI assistant skeleton for Excel, Word, PowerPoint and Outlook.
 
 The add-in projects intentionally do not use legacy `ProjectTypeGuids`. Visual Studio 2022 opens them as C# class library projects, while VSTO metadata and Office targets remain in the project files. If build/debug complains about missing Office tools, install or enable the `Office/SharePoint development` workload in Visual Studio Installer.
 
-ClickOnce/VSTO manifest signing is disabled in the repository because certificate thumbprints are machine-local. On the Windows build machine, create a local test certificate in each add-in project through `Project Properties -> Signing -> Create Test Certificate...`; Visual Studio will write local `SignManifests`, `ManifestKeyFile`, and `ManifestCertificateThumbprint` values.
+ClickOnce/VSTO manifest signing is disabled in the repository because certificate thumbprints are machine-local. If the Visual Studio Signing page is disabled, run the local helper in Windows PowerShell:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force
+.\tools\New-LocalClickOnceCertificate.ps1
+```
+
+The script creates a CurrentUser code-signing certificate and writes ignored `Directory.Build.local.props` with `SignManifests=true` and `ManifestCertificateThumbprint`.
 
 If the Signing page is unavailable, unload the project and add a local line manually:
 
 ```xml
-<ManifestKeyFile>YourLocalCertificate.pfx</ManifestKeyFile>
+<SignManifests>true</SignManifests>
 <ManifestCertificateThumbprint>YourCertificateThumbprint</ManifestCertificateThumbprint>
 ```
 

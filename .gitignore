@@ -6,3 +6,5 @@ obj/
 *.cache
 *.log
 TestResults/
+Directory.Build.local.props
+certs/local/
