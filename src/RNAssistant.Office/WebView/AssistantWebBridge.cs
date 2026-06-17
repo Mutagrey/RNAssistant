@@ -73,7 +73,8 @@ namespace RNAssistant.Office.WebView
                 {
                     id = id,
                     ok = false,
-                    error = ex.Message
+                    error = ex.Message,
+                    errorDetail = ex.ToString()
                 });
             }
         }

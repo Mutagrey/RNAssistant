@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -28,9 +29,17 @@ namespace RNAssistant.Core.Llm
 
             var apiKey = _apiKeyProvider == null ? null : _apiKeyProvider();
             var url = CombineUrl(settings.BaseUrl, "/chat/completions");
+            Uri requestUri;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out requestUri))
+            {
+                throw new InvalidOperationException("Invalid LLM endpoint URL: " + url);
+            }
+
+            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
 
             using (var client = new HttpClient())
             {
+                client.Timeout = TimeSpan.FromSeconds(120);
                 if (!string.IsNullOrWhiteSpace(apiKey))
                 {
                     client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
@@ -55,16 +64,31 @@ namespace RNAssistant.Core.Llm
                 };
 
                 var json = JsonConvert.SerializeObject(body, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
-                var response = await client.PostAsync(url, new StringContent(json, Encoding.UTF8, "application/json")).ConfigureAwait(false);
-                var responseJson = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                if (!response.IsSuccessStatusCode)
+                try
                 {
-                    throw new InvalidOperationException("LLM request failed: " + (int)response.StatusCode + " " + responseJson);
-                }
+                    var response = await client.PostAsync(requestUri, new StringContent(json, Encoding.UTF8, "application/json")).ConfigureAwait(false);
+                    var responseJson = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        throw new InvalidOperationException("LLM request failed: HTTP " + (int)response.StatusCode + " " + response.ReasonPhrase + ". Endpoint: " + requestUri + ". Response: " + responseJson);
+                    }
 
-                var parsed = JObject.Parse(responseJson);
-                var content = parsed.SelectToken("choices[0].message.content");
-                return content == null ? string.Empty : content.Value<string>();
+                    var parsed = JObject.Parse(responseJson);
+                    var content = parsed.SelectToken("choices[0].message.content");
+                    return content == null ? string.Empty : content.Value<string>();
+                }
+                catch (TaskCanceledException ex)
+                {
+                    throw new InvalidOperationException("LLM request timed out after " + client.Timeout.TotalSeconds + " seconds. Endpoint: " + requestUri + ". " + DeepestMessage(ex), ex);
+                }
+                catch (HttpRequestException ex)
+                {
+                    throw new InvalidOperationException("LLM request could not be sent. Endpoint: " + requestUri + ". " + DeepestMessage(ex), ex);
+                }
+                catch (WebException ex)
+                {
+                    throw new InvalidOperationException("LLM network error. Endpoint: " + requestUri + ". " + DeepestMessage(ex), ex);
+                }
             }
         }
 
@@ -81,6 +105,17 @@ namespace RNAssistant.Core.Llm
             }
 
             return baseUrl.TrimEnd('/') + path;
+        }
+
+        private static string DeepestMessage(Exception exception)
+        {
+            var current = exception;
+            while (current.InnerException != null)
+            {
+                current = current.InnerException;
+            }
+
+            return current.Message;
         }
 
         private static List<object> ToApiMessages(IEnumerable<ChatMessage> messages)

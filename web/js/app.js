@@ -42,7 +42,9 @@
     if (response.ok) {
       pending.resolve(response.payload);
     } else {
-      pending.reject(new Error(response.error || "Bridge error"));
+      var error = new Error(response.error || "Bridge error");
+      error.detail = response.errorDetail || response.error || "";
+      pending.reject(error);
     }
   });
 
@@ -278,6 +280,9 @@
       }
     } catch (error) {
       log(error.message);
+      if (error.detail && error.detail !== error.message) {
+        log(error.detail);
+      }
     } finally {
       $("sendButton").disabled = false;
     }
