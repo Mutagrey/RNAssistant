@@ -75,6 +75,11 @@ namespace RNAssistant.Core.Llm
                 baseUrl = "https://api.openai.com/v1";
             }
 
+            if (baseUrl.IndexOf("/chat/completions", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return baseUrl;
+            }
+
             return baseUrl.TrimEnd('/') + path;
         }
 

@@ -31,7 +31,7 @@ namespace RNAssistant.Office.WebView
                         payloadJson = _controller.InitializeJson();
                         break;
                     case "sendChat":
-                        payloadJson = await _controller.SendChatAsync((string)payload["text"]).ConfigureAwait(false);
+                        payloadJson = await _controller.SendChatAsync((string)payload["text"]);
                         break;
                     case "getSettings":
                         payloadJson = _controller.GetSettingsJson();
@@ -54,7 +54,7 @@ namespace RNAssistant.Office.WebView
                         payloadJson = _controller.ClearContextJson();
                         break;
                     case "quickAction":
-                        payloadJson = await _controller.RunQuickActionAsync((string)payload["action"]).ConfigureAwait(false);
+                        payloadJson = await _controller.RunQuickActionAsync((string)payload["action"]);
                         break;
                     default:
                         throw new InvalidOperationException("Unknown bridge message: " + type);

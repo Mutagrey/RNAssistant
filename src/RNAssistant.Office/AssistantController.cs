@@ -77,7 +77,7 @@ namespace RNAssistant.Office
                 skills);
 
             var messages = BuildPromptMessages(systemPrompt, session.Messages, settings.ContextCharLimit);
-            var assistantText = await _llmClient.CompleteAsync(settings, messages).ConfigureAwait(false);
+            var assistantText = await _llmClient.CompleteAsync(settings, messages);
             var assistantMessage = new ChatMessage { Role = "assistant", Content = assistantText };
             session.Messages.Add(assistantMessage);
 
@@ -234,4 +234,3 @@ namespace RNAssistant.Office
         }
     }
 }
-

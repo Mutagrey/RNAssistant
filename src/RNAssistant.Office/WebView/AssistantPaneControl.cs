@@ -26,7 +26,14 @@ namespace RNAssistant.Office.WebView
 
         private async void OnLoad(object sender, EventArgs e)
         {
-            await InitializeAsync().ConfigureAwait(true);
+            try
+            {
+                await InitializeAsync().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                RenderStartupError(ex);
+            }
         }
 
         private async Task InitializeAsync()
@@ -50,9 +57,16 @@ namespace RNAssistant.Office.WebView
 
         private async void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
-            var requestJson = e.WebMessageAsJson;
-            var responseJson = await _bridge.HandleMessageAsync(requestJson).ConfigureAwait(true);
-            _webView.CoreWebView2.PostWebMessageAsJson(responseJson);
+            try
+            {
+                var requestJson = e.WebMessageAsJson;
+                var responseJson = await _bridge.HandleMessageAsync(requestJson).ConfigureAwait(true);
+                _webView.CoreWebView2.PostWebMessageAsJson(responseJson);
+            }
+            catch (Exception ex)
+            {
+                _webView.CoreWebView2.PostWebMessageAsJson("{\"ok\":false,\"error\":\"" + EscapeJson(ex.Message) + "\"}");
+            }
         }
 
         private static string ResolveFixedRuntimeFolder()
@@ -78,6 +92,16 @@ namespace RNAssistant.Office.WebView
 
             return null;
         }
+
+        private void RenderStartupError(Exception ex)
+        {
+            var message = System.Net.WebUtility.HtmlEncode(ex.Message);
+            _webView.NavigateToString("<html><body style='font-family:Segoe UI;padding:20px'><h3>RN Assistant</h3><p>WebView2 startup failed.</p><pre>" + message + "</pre></body></html>");
+        }
+
+        private static string EscapeJson(string value)
+        {
+            return (value ?? string.Empty).Replace("\\", "\\\\").Replace("\"", "\\\"");
+        }
     }
 }
-

@@ -15,14 +15,25 @@ namespace RNAssistant.Core.Storage
 
         public string LoadApiKey()
         {
-            if (!File.Exists(_path))
+            try
+            {
+                if (!File.Exists(_path))
+                {
+                    return string.Empty;
+                }
+
+                var protectedBytes = File.ReadAllBytes(_path);
+                var bytes = ProtectedData.Unprotect(protectedBytes, null, DataProtectionScope.CurrentUser);
+                return Encoding.UTF8.GetString(bytes);
+            }
+            catch (IOException)
             {
                 return string.Empty;
             }
-
-            var protectedBytes = File.ReadAllBytes(_path);
-            var bytes = ProtectedData.Unprotect(protectedBytes, null, DataProtectionScope.CurrentUser);
-            return Encoding.UTF8.GetString(bytes);
+            catch (CryptographicException)
+            {
+                return string.Empty;
+            }
         }
 
         public void SaveApiKey(string apiKey)
@@ -39,4 +50,3 @@ namespace RNAssistant.Core.Storage
         }
     }
 }
-

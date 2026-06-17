@@ -7,14 +7,25 @@ namespace RNAssistant.Core.Storage
     {
         public T Load<T>(string path, T fallback)
         {
-            if (!File.Exists(path))
+            try
+            {
+                if (!File.Exists(path))
+                {
+                    return fallback;
+                }
+
+                var json = File.ReadAllText(path);
+                var value = JsonConvert.DeserializeObject<T>(json);
+                return value == null ? fallback : value;
+            }
+            catch (IOException)
             {
                 return fallback;
             }
-
-            var json = File.ReadAllText(path);
-            var value = JsonConvert.DeserializeObject<T>(json);
-            return value == null ? fallback : value;
+            catch (JsonException)
+            {
+                return fallback;
+            }
         }
 
         public void Save<T>(string path, T value)
@@ -30,4 +41,3 @@ namespace RNAssistant.Core.Storage
         }
     }
 }
-
