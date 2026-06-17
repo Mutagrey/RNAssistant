@@ -33,6 +33,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.CSharp" />
+    <Reference Include="Microsoft.Office.Tools" />
     <Reference Include="Microsoft.Office.Tools.Common" />
     <Reference Include="Microsoft.Office.Tools.Common.v4.0.Utilities" />
     <Reference Include="Microsoft.Office.Tools.Excel" />
