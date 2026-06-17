@@ -33,7 +33,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.CSharp" />
+    <Reference Include="Microsoft.Office.Tools.Common" />
     <Reference Include="Microsoft.Office.Tools.Common.v4.0.Utilities" />
+    <Reference Include="Microsoft.Office.Tools.Excel" />
     <Reference Include="Microsoft.Office.Tools.Excel.v4.0.Utilities" />
     <Reference Include="Microsoft.Office.Tools.v4.0.Framework" />
     <Reference Include="Microsoft.VisualStudio.Tools.Applications.Runtime" />
