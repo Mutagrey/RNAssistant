@@ -15,8 +15,6 @@
     <UseVSTO>true</UseVSTO>
     <SignManifests>true</SignManifests>
     <GenerateManifests>true</GenerateManifests>
-    <ManifestKeyFile>..\..\certs\RNAssistantClickOnce.pfx</ManifestKeyFile>
-    <ManifestCertificateThumbprint>AF7A00F0139288ED04CCCC1CED124740D38AFE04</ManifestCertificateThumbprint>
     <VSTO_TrustAssembliesLocation>true</VSTO_TrustAssembliesLocation>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">
@@ -109,9 +107,6 @@
       <Link>vendor\webview2-runtime\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <None Include="..\..\certs\RNAssistantClickOnce.pfx">
-      <Link>RNAssistantClickOnce.pfx</Link>
-    </None>
     <None Include="packages.config" />
   </ItemGroup>
   <PropertyGroup>
