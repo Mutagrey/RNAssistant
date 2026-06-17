@@ -283,8 +283,18 @@ button.danger {
 .block-tools {
   display: flex;
   gap: 6px;
+  align-items: center;
   justify-content: flex-end;
   margin-bottom: 4px;
+}
+
+.code-lang {
+  margin-right: auto;
+  color: #607089;
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .block-tools button {

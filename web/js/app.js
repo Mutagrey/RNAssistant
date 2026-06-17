@@ -7,7 +7,8 @@
     context: {},
     messages: [],
     pending: {},
-    seq: 1
+    seq: 1,
+    highlightLog: {}
   };
 
   function $(id) {
@@ -16,9 +17,20 @@
 
   function log(message) {
     var box = $("logBox");
+    if (!box) {
+      return;
+    }
     var line = new Date().toISOString() + " " + message;
     box.textContent += line + "\n";
     box.scrollTop = box.scrollHeight;
+  }
+
+  function logOnce(message) {
+    if (state.highlightLog[message]) {
+      return;
+    }
+    state.highlightLog[message] = true;
+    log(message);
   }
 
   function send(type, payload) {
@@ -74,9 +86,7 @@
 
   function enhanceMarkdown(root) {
     Array.prototype.slice.call(root.querySelectorAll("pre code")).forEach(function (code) {
-      if (window.hljs && typeof window.hljs.highlightElement === "function") {
-        window.hljs.highlightElement(code);
-      }
+      highlightCode(code);
     });
 
     Array.prototype.slice.call(root.querySelectorAll("pre")).forEach(function (pre) {
@@ -87,6 +97,13 @@
       wrap.className = "code-wrap";
       var tools = document.createElement("div");
       tools.className = "block-tools";
+      var code = pre.querySelector("code");
+      if (code && code.dataset.language) {
+        var language = document.createElement("span");
+        language.className = "code-lang";
+        language.textContent = code.dataset.language;
+        tools.appendChild(language);
+      }
       var copy = document.createElement("button");
       copy.type = "button";
       copy.textContent = "Copy code";
@@ -127,6 +144,73 @@
       wrap.appendChild(tools);
       wrap.appendChild(table);
     });
+  }
+
+  function detectCodeLanguage(code) {
+    var classes = (code.className || "").split(/\s+/);
+    for (var i = 0; i < classes.length; i++) {
+      if (classes[i].indexOf("language-") === 0) {
+        return classes[i].substring("language-".length);
+      }
+      if (classes[i].indexOf("lang-") === 0) {
+        return classes[i].substring("lang-".length);
+      }
+    }
+    return "";
+  }
+
+  function normalizeCodeLanguage(language) {
+    var value = (language || "").toLowerCase();
+    var aliases = {
+      "c#": "csharp",
+      "cs": "csharp",
+      "js": "javascript",
+      "ts": "typescript",
+      "py": "python",
+      "ps": "powershell",
+      "ps1": "powershell",
+      "vb": "vbnet",
+      "vba": "vbnet"
+    };
+    return aliases[value] || value;
+  }
+
+  function highlightCode(code) {
+    var text = code.textContent || "";
+    var requestedLanguage = detectCodeLanguage(code);
+    var language = normalizeCodeLanguage(requestedLanguage);
+
+    code.classList.add("hljs");
+    if (!window.hljs) {
+      code.dataset.language = language || "plaintext";
+      logOnce("Highlight.js is not loaded; code is shown without syntax colors.");
+      return;
+    }
+
+    try {
+      var result;
+      if (language && window.hljs.getLanguage && window.hljs.getLanguage(language)) {
+        result = window.hljs.highlight(text, { language: language, ignoreIllegals: true });
+      } else if (window.hljs.highlightAuto) {
+        if (language) {
+          logOnce("Highlight language is not bundled: " + requestedLanguage + "; using auto-detect.");
+        }
+        result = window.hljs.highlightAuto(text);
+        language = result.language || "plaintext";
+      }
+
+      if (result && result.value) {
+        code.innerHTML = result.value;
+      }
+      code.dataset.language = language || "plaintext";
+      code.classList.add("language-" + code.dataset.language);
+      logOnce("Highlighted code as " + code.dataset.language + (requestedLanguage ? " from " + requestedLanguage : " by auto-detect") + ".");
+    } catch (error) {
+      code.textContent = text;
+      code.dataset.language = "plaintext";
+      code.classList.add("language-plaintext");
+      logOnce("Highlight failed: " + (error.message || error));
+    }
   }
 
   function copyText(text) {
