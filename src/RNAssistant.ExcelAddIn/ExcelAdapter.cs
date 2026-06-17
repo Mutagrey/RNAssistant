@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using Excel = Microsoft.Office.Interop.Excel;
+using VBIDE = Microsoft.Vbe.Interop;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Office;
@@ -177,8 +178,8 @@ namespace RNAssistant.ExcelAddIn
 
             try
             {
-                dynamic vbProject = workbook.VBProject;
-                dynamic component = vbProject.VBComponents.Add(1);
+                VBIDE.VBProject vbProject = workbook.VBProject;
+                VBIDE.VBComponent component = vbProject.VBComponents.Add(VBIDE.vbext_ComponentType.vbext_ct_StdModule);
                 component.Name = moduleName;
                 component.CodeModule.AddFromString(code);
                 return SkillResult.Ok("Inserted VBA module: " + moduleName);
