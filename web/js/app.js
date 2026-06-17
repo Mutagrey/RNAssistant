@@ -74,7 +74,9 @@
 
   function enhanceMarkdown(root) {
     Array.prototype.slice.call(root.querySelectorAll("pre code")).forEach(function (code) {
-      hljs.highlightElement(code);
+      if (window.hljs && typeof window.hljs.highlightElement === "function") {
+        window.hljs.highlightElement(code);
+      }
     });
 
     Array.prototype.slice.call(root.querySelectorAll("pre")).forEach(function (pre) {
