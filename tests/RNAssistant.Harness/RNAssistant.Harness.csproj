@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>..\..\packages\Newtonsoft.Json.13.0.3\lib\net6.0\Newtonsoft.Json.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\..\src\RNAssistant.Core\Models\ChatModels.cs" Link="Core\Models\ChatModels.cs" />
+    <Compile Include="..\..\src\RNAssistant.Core\Models\ContextModels.cs" Link="Core\Models\ContextModels.cs" />
+    <Compile Include="..\..\src\RNAssistant.Core\Models\SkillModels.cs" Link="Core\Models\SkillModels.cs" />
+    <Compile Include="..\..\src\RNAssistant.Core\Skills\SkillCommandParser.cs" Link="Core\Skills\SkillCommandParser.cs" />
+    <Compile Include="..\..\src\RNAssistant.Core\Storage\AppDataPaths.cs" Link="Core\Storage\AppDataPaths.cs" />
+    <Compile Include="..\..\src\RNAssistant.Core\Storage\ChatStore.cs" Link="Core\Storage\ChatStore.cs" />
+    <Compile Include="..\..\src\RNAssistant.Core\Storage\JsonFileStore.cs" Link="Core\Storage\JsonFileStore.cs" />
+  </ItemGroup>
+</Project>

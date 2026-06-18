@@ -52,15 +52,25 @@ web static UI
 - `Controller/AssistantController.*` should shrink further into services after the harness exists and constructor dependencies stabilize.
 - Add-in adapters are medium-sized and host-specific; refactor only with Windows/VSTO validation available.
 
-## Target Harness Pipeline
+## Harness Pipeline
 
-Create a non-VSTO harness project or script that runs on macOS/Linux/Windows:
+`tests/RNAssistant.Harness` is the local non-VSTO harness. Run it with:
 
-- parser fixtures: fenced JSON, bare JSON, `tool_calls`, malformed JSON;
+```bash
+dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj
+```
+
+Current coverage:
+
+- parser fixtures: fenced `rnassistant-agent`, bare JSON arrays, native `tool_calls`, malformed JSON;
+- chat store fixtures using temp directories, including broken JSON files being skipped;
+- no Office COM dependency.
+
+Next harness coverage:
+
 - prompt composition/context trimming fixtures;
 - pipeline dry-run fixtures with fake `IOfficeApplicationAdapter`;
-- chat store fixtures using temp directories, including unreadable files being skipped;
-- no Office COM dependency.
+- unreadable-directory storage edge cases where the OS can simulate them reliably.
 
 Windows-only validation remains separate:
 

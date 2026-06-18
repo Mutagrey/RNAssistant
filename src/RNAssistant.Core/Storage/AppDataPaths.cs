@@ -19,6 +19,16 @@ namespace RNAssistant.Core.Storage
         public static AppDataPaths CreateDefault()
         {
             var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RNAssistant");
+            return CreateForRoot(root);
+        }
+
+        public static AppDataPaths CreateForRoot(string root)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                throw new ArgumentException("Root path is required.", "root");
+            }
+
             var paths = new AppDataPaths
             {
                 Root = root,

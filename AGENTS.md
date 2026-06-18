@@ -20,6 +20,7 @@ RNAssistant - локальный VSTO/WebView2 ассистент для Office,
 - Не добавляй новые responsibilities в VSTO add-ins. Если код не зависит от конкретного Office host, он должен быть в `Core` или `Office`.
 - Не меняй `*.Designer.cs` и VSTO project metadata без необходимости.
 - Не запускай VSTO/Office validation на этой машине: здесь нет рабочей VSTO-среды. Для COM/VSTO изменений фиксируй, что нужна проверка на Windows + Office x64 + VS 2022.
+- Для Core parser/storage изменений используй быстрый контур `dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj`.
 - Сохраняй C# 7.3 и .NET Framework 4.8 compatibility.
 - Не вводи npm/bundler без отдельного решения: текущий UI грузится как static local files в WebView2.
 - Не раздувай `web/js/app.js`; новую UI-логику клади в существующий feature-файл или выделяй новый static script в `index.html`.
@@ -45,5 +46,5 @@ RNAssistant - локальный VSTO/WebView2 ассистент для Office,
 - Зона ответственности не смешана с соседним слоем.
 - Новые файлы добавлены в old-style `.csproj`.
 - Для VSTO/COM изменений указан Windows validation step.
-- Для parser/tool changes есть хотя бы легкая локальная проверка или явное объяснение, почему проверка не запускалась.
+- Для parser/storage/tool changes есть harness-проверка или явное объяснение, почему проверка не запускалась.
 - Документация обновлена, если меняется архитектурное правило или protocol.

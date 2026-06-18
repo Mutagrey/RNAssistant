@@ -5,14 +5,14 @@
 1. `SkillCommandParser` mixed native `tool_calls` wrappers with local command objects. A native-style call could be parsed as `call_xxx` instead of `function.name`. Fixed by handling `tool_calls` explicitly.
 2. `Controller/AssistantController.cs` owned chat state, context, prompt flow, pipeline execution, VBA patching and transcript formatting. Split into controller orchestration, chat/session partial, context partial, `AgentTranscript`, `OfficeToolExecutor`, and `PromptMessageBuilder`.
 3. The WebView UI no longer has one super-file: bridge/state, settings, tools, VBA, context and chat flows are split across static `web/js/app-*.js` files. `app.js` remains boot plus shared rendering helpers.
-4. There is no local harness for parser/pipeline/chat storage behavior. VSTO cannot be launched on this machine, so pure logic needs host-free tests.
+4. A local non-VSTO harness now covers parser and chat storage basics. Pipeline dry-run and prompt trimming fixtures are still missing.
 5. VSTO adapter code should be treated as Windows-only. Changes there need explicit Office x64 validation.
 
 ## Short-Term Plan
 
-- Add parser fixtures for `rnassistant-agent`, JSON arrays, native `tool_calls`, and bad JSON.
 - Add a fake `IOfficeApplicationAdapter` harness for dry-run pipeline execution.
-- Add storage fixtures for new chat layout and unreadable files.
+- Add prompt composition/context trimming fixtures.
+- Add more storage edge fixtures where they are reliable cross-platform.
 - Keep `Controller/AssistantController.cs` as orchestration only.
 - Keep new UI responsibilities in the matching `web/js/app-*.js` feature file; do not grow `app.js` back into orchestration.
 
