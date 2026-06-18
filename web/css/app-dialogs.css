@@ -1,0 +1,66 @@
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(16, 24, 39, 0.36);
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-panel {
+  width: min(620px, 100%);
+  max-height: min(760px, 92vh);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  box-shadow: 0 18px 44px rgba(16, 24, 39, 0.22);
+}
+
+.modal-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.modal-head h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.help-content {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.help-content h3 {
+  margin: 0 0 5px;
+  font-size: 13px;
+}
+
+.help-content p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.help-content pre {
+  margin: 8px 0 0;
+  padding: 9px;
+  overflow: auto;
+  border: 1px solid var(--code-border);
+  border-radius: 6px;
+  background: var(--code);
+  color: var(--code-text);
+  white-space: pre-wrap;
+}
+

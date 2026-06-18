@@ -1,0 +1,60 @@
+@media (max-width: 520px) {
+  .composer-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .composer-toolbar #addSelectionContextButton,
+  .composer-toolbar #toggleVbaContextButton {
+    width: 100%;
+    margin-right: 0;
+  }
+
+  .composer-left {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .context-meter {
+    flex: 1 1 180px;
+    grid-template-columns: auto auto 1fr;
+  }
+
+  .composer-model {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .context-meter em {
+    grid-column: 1 / -1;
+  }
+
+  .tool-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .vba-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .vba-code-pane {
+    grid-template-columns: 1fr;
+  }
+
+  .vba-code-preview {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding-left: 0;
+    padding-top: 10px;
+  }
+
+  .danger-zone {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tool-list {
+    max-height: 180px;
+  }
+}
