@@ -75,13 +75,13 @@ namespace RNAssistant.Office
         public DocumentContext ClearContext(string chatId = null) { return new DocumentContext { DocumentKey = chatId ?? string.Empty }; }
         public Task<QuickActionResponse> RunQuickActionAsync(string action) { return Task.FromResult(new QuickActionResponse { Prompt = action }); }
 
-        public Task<SendChatResponse> SendChatAsync(string text, string chatId = null, Action<string, string> progress = null)
+        public Task<SendChatResponse> SendChatAsync(string text, string chatId = null, Action<string, string, ChatActivity> progress = null)
         {
             LastChatText = text;
             LastChatId = chatId;
             if (progress != null)
             {
-                progress("thinking", "Testing progress");
+                progress("thinking", "Testing progress", new ChatActivity { Kind = "notice", Title = "Testing progress", Status = "running" });
             }
             return Task.FromResult(new SendChatResponse { Message = "ok" });
         }

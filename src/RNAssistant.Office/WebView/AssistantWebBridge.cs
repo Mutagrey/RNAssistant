@@ -61,7 +61,7 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "sendChat":
                         var sendChat = Payload<SendChatPayload>(payload);
-                        responsePayload = await _controller.SendChatAsync(sendChat.Text, sendChat.ChatId, (phase, message) => ReportProgress(id, phase, message));
+                        responsePayload = await _controller.SendChatAsync(sendChat.Text, sendChat.ChatId, (phase, message, activity) => ReportProgress(id, phase, message, activity));
                         break;
                     case "deleteMessage":
                         var deleteMessage = Payload<MessageActionPayload>(payload);
@@ -176,6 +176,11 @@ namespace RNAssistant.Office.WebView
 
         private void ReportProgress(string id, string phase, string message)
         {
+            ReportProgress(id, phase, message, null);
+        }
+
+        private void ReportProgress(string id, string phase, string message, ChatActivity activity)
+        {
             if (_postMessageJson == null)
             {
                 return;
@@ -188,7 +193,8 @@ namespace RNAssistant.Office.WebView
                 Payload = new ProgressPayload
                 {
                     Phase = phase,
-                    Message = message
+                    Message = message,
+                    Activity = activity
                 }
             }));
         }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -15,12 +16,20 @@ using RNAssistant.Office.WebView;
 
 namespace RNAssistant.Harness
 {
-    internal static class Program
+    internal static partial class Program
     {
         private sealed class HarnessTest
         {
             public string Name { get; set; }
             public Action Run { get; set; }
+        }
+
+        private sealed class HostTaskScenario
+        {
+            public string Host { get; set; }
+            public string UserText { get; set; }
+            public string Response { get; set; }
+            public string[] ExpectedTools { get; set; }
         }
 
         public static int Main(string[] args)
@@ -30,20 +39,33 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "parser: fenced agent steps", Run = ParsesFencedAgentSteps },
                 new HarnessTest { Name = "parser: bare json array", Run = ParsesBareJsonArray },
                 new HarnessTest { Name = "parser: native tool_calls", Run = ParsesNativeToolCalls },
+                new HarnessTest { Name = "parser: noisy embedded json", Run = ParsesNoisyEmbeddedJson },
                 new HarnessTest { Name = "parser: bad json skipped", Run = SkipsBadJson },
                 new HarnessTest { Name = "storage: chat roundtrip", Run = CreatesAndListsChatsInTempRoot },
                 new HarnessTest { Name = "storage: broken chat skipped", Run = SkipsBrokenChatFiles },
                 new HarnessTest { Name = "pipeline: dry-run resolves placeholders", Run = PipelineDryRunResolvesPlaceholders },
                 new HarnessTest { Name = "pipeline: executes fake adapter steps", Run = PipelineExecutesFakeAdapterSteps },
                 new HarnessTest { Name = "pipeline: resolves step output placeholders", Run = PipelineResolvesStepOutputPlaceholders },
+                new HarnessTest { Name = "pipeline: stops after failed step", Run = PipelineStopsAfterFailedStep },
+                new HarnessTest { Name = "pipeline: rejects invalid definitions", Run = PipelineRejectsInvalidDefinitions },
+                new HarnessTest { Name = "pipeline: enforces nesting limit", Run = PipelineEnforcesNestingLimit },
                 new HarnessTest { Name = "pipeline: custom tool needs confirmation", Run = CustomPipelineNeedsConfirmation },
                 new HarnessTest { Name = "pipeline: agent mode gates built-in mutation", Run = AgentModeGatesBuiltInMutation },
                 new HarnessTest { Name = "tools: catalog merges visible tools", Run = ToolCatalogMergesVisibleTools },
+                new HarnessTest { Name = "tools: store saves and updates custom tools", Run = ToolStoreSavesAndUpdatesCustomTools },
+                new HarnessTest { Name = "tools: unknown and disabled tools fail", Run = UnknownAndDisabledToolsFail },
                 new HarnessTest { Name = "tools: safety metadata gates mutations", Run = ToolSafetyMetadataGatesMutations },
+                new HarnessTest { Name = "tools: confirmation matrix covers dry and manual runs", Run = ConfirmationMatrixCoversDryAndManualRuns },
                 new HarnessTest { Name = "vba: replace text backs up module", Run = VbaReplaceTextBacksUpModule },
                 new HarnessTest { Name = "prompt: trims oldest history", Run = PromptBuilderTrimsOldestHistory },
                 new HarnessTest { Name = "prompt: usage estimator counts context", Run = ContextUsageEstimatorCountsPromptAndSession },
                 new HarnessTest { Name = "chat: completion service records prose", Run = ChatCompletionServiceRecordsProseResponse },
+                new HarnessTest { Name = "chat: executes typical host tasks", Run = ChatExecutesTypicalHostTasks },
+                new HarnessTest { Name = "chat: agent activity transcript", Run = AgentTranscriptCreatesActivityTree },
+                new HarnessTest { Name = "chat: prose action forces tool follow-up", Run = ChatProseActionForcesToolFollowUp },
+                new HarnessTest { Name = "chat: failed tool retries corrected call", Run = ChatFailedToolRetriesCorrectedCall },
+                new HarnessTest { Name = "chat: auto-run disabled records failure", Run = ChatAutoRunDisabledRecordsLocalFailure },
+                new HarnessTest { Name = "chat: malformed tool response stays prose", Run = ChatMalformedToolResponseStaysProse },
                 new HarnessTest { Name = "chat: explicit clone preserves values", Run = ChatCloneServicePreservesValues },
                 new HarnessTest { Name = "context: normalize and upsert", Run = ContextServiceNormalizesAndUpserts },
                 new HarnessTest { Name = "context: trim helper", Run = ContextServiceTrimsText },
@@ -116,6 +138,18 @@ namespace RNAssistant.Harness
             AssertEqual("excel.autofit", commands[1].SkillId, "second skill id");
         }
 
+        private static void ParsesNoisyEmbeddedJson()
+        {
+            var commands = new SkillCommandParser().Parse(
+                "I will handle it. First, here is the plan: " +
+                "{\"steps\":[{\"toolId\":\"powerpoint.add_slide\",\"arguments\":{\"title\":\"Q1\",\"body\":\"Revenue grew\"}}]} " +
+                "Then I will summarize.");
+
+            AssertEqual(1, commands.Count, "command count");
+            AssertEqual("powerpoint.add_slide", commands[0].SkillId, "skill id");
+            AssertEqual("Q1", commands[0].Arguments["title"], "title arg");
+        }
+
         private static void SkipsBadJson()
         {
             var commands = new SkillCommandParser().Parse("```rnassistant-agent\n{\"steps\":[\n```");
@@ -128,7 +162,17 @@ namespace RNAssistant.Harness
             {
                 var store = new ChatStore(paths);
                 var session = store.Create("Word", "doc-key", "Doc", "First");
-                session.Messages.Add(new ChatMessage { Role = "user", Content = "hello" });
+                session.Messages.Add(new ChatMessage
+                {
+                    Role = "user",
+                    Content = "hello",
+                    Activity = new ChatActivity
+                    {
+                        Kind = "notice",
+                        Title = "Stored activity",
+                        Status = "completed"
+                    }
+                });
                 store.Save(session);
 
                 var loaded = store.Load("Word", "doc-key", ChatStore.GetSessionId(session));
@@ -136,6 +180,7 @@ namespace RNAssistant.Harness
                 AssertEqual("First", loaded.Title, "title");
                 AssertEqual(1, loaded.Messages.Count, "message count");
                 AssertEqual("hello", loaded.Messages[0].Content, "message content");
+                AssertEqual("Stored activity", loaded.Messages[0].Activity.Title, "message activity title");
 
                 var sessions = store.List("Word", "doc-key", "Doc");
                 AssertEqual(1, sessions.Count, "document session count");
@@ -215,6 +260,25 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void PipelineStopsAfterFailedStep()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.QueueResult("excel.write_table", SkillResult.Fail("No table values provided."));
+                var tools = BuildThreeStepPipelineTools();
+                var command = new SkillCommand { SkillId = "excel.full_report" };
+                command.Arguments["sheet"] = "Report";
+
+                var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+
+                AssertTrue(!result.Success, "pipeline should fail");
+                AssertContains(result.Message, "Pipeline step failed: table", "failure message");
+                AssertEqual(2, adapter.Executed.Count, "adapter execution count");
+                AssertEqual("excel.add_sheet", adapter.Executed[0].SkillId, "first tool");
+                AssertEqual("excel.write_table", adapter.Executed[1].SkillId, "failed tool");
+            });
+        }
+
         private static void CustomPipelineNeedsConfirmation()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
@@ -267,6 +331,42 @@ namespace RNAssistant.Harness
                 AssertTrue(HasTool(catalog, "common.inspect"), "common custom tool visible");
                 AssertTrue(HasTool(catalog, "excel.custom"), "host custom tool visible");
                 AssertTrue(!HasTool(catalog, "word.hidden"), "other host custom tool hidden");
+            });
+        }
+
+        private static void ToolStoreSavesAndUpdatesCustomTools()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var store = new ToolStore(paths);
+                var initial = CustomTool("Excel", "excel.custom_report");
+                initial.Name = "Initial report";
+                initial.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}";
+                initial.Readme = "Creates a report sheet.";
+                var otherHost = CustomTool("Word", "word.review");
+                store.Save(new[] { initial, otherHost });
+
+                var loadedInitial = FindTool(store.Load(), "excel.custom_report");
+                AssertTrue(loadedInitial != null, "initial custom tool loaded");
+                AssertEqual("Initial report", loadedInitial.Name, "initial name");
+                AssertContains(loadedInitial.PipelineJson, "excel.add_sheet", "initial pipeline");
+                AssertContains(loadedInitial.Readme, "report sheet", "initial readme");
+                AssertTrue(!string.IsNullOrWhiteSpace(loadedInitial.StoragePath), "storage path set");
+
+                var edited = CustomTool("Excel", "excel.custom_report");
+                edited.Name = "Updated report";
+                edited.RequiresConfirmation = true;
+                edited.MutatesDocument = true;
+                edited.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.write_table\",\"arguments\":{\"sheet\":\"Report\",\"startAddress\":\"A1\",\"values\":\"[[\\\"A\\\"]]\"}}]}";
+                store.Save(new[] { edited }, "Excel");
+
+                var loaded = store.Load();
+                var updated = FindTool(loaded, "excel.custom_report");
+                AssertTrue(updated != null, "updated custom tool loaded");
+                AssertEqual("Updated report", updated.Name, "updated name");
+                AssertTrue(updated.RequiresConfirmation, "updated confirmation flag");
+                AssertContains(updated.PipelineJson, "excel.write_table", "updated pipeline");
+                AssertTrue(HasTool(loaded, "word.review"), "other host preserved");
             });
         }
 
@@ -428,6 +528,222 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ChatExecutesTypicalHostTasks()
+        {
+            var scenarios = new[]
+            {
+                new HostTaskScenario
+                {
+                    Host = "Excel",
+                    UserText = "Create a sales report sheet and chart.",
+                    Response = AgentBlock(
+                        Command("excel.add_sheet", "name", "Report"),
+                        Command("excel.write_table", "sheet", "Report", "startAddress", "A1", "values", "[[\"Month\",\"Sales\"],[\"Jan\",10]]"),
+                        Command("excel.add_chart", "sheet", "Report", "sourceRange", "A1:B2", "chartType", "column", "title", "Sales")),
+                    ExpectedTools = new[] { "excel.add_sheet", "excel.write_table", "excel.add_chart" }
+                },
+                new HostTaskScenario
+                {
+                    Host = "Word",
+                    UserText = "Insert an executive summary and add a review comment.",
+                    Response = AgentBlock(
+                        Command("word.insert_text", "text", "Executive summary"),
+                        Command("word.add_comment", "text", "Review this paragraph.")),
+                    ExpectedTools = new[] { "word.insert_text", "word.add_comment" }
+                },
+                new HostTaskScenario
+                {
+                    Host = "PowerPoint",
+                    UserText = "Add a quarterly summary slide.",
+                    Response = AgentBlock(
+                        Command("powerpoint.add_slide", "title", "Q1 Summary", "body", "Revenue grew.")),
+                    ExpectedTools = new[] { "powerpoint.add_slide" }
+                },
+                new HostTaskScenario
+                {
+                    Host = "Outlook",
+                    UserText = "Read the selected email and draft a reply.",
+                    Response = AgentBlock(
+                        Command("outlook.read_selection", "maxChars", "12000"),
+                        Command("outlook.draft_reply", "body", "Thanks, I will follow up.")),
+                    ExpectedTools = new[] { "outlook.read_selection", "outlook.draft_reply" }
+                }
+            };
+
+            for (var i = 0; i < scenarios.Length; i++)
+            {
+                var scenario = scenarios[i];
+                WithTempExecutor(FakeOfficeAdapter.ForHost(scenario.Host), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+                {
+                    var calls = new List<IReadOnlyList<ChatMessage>>();
+                    var service = ChatServiceWithResponses(adapter, executor, calls, scenario.Response, "Done.");
+                    var session = NewSession(adapter);
+                    var context = NewContext(adapter);
+                    context.Notes.Add(new ContextNote { Host = adapter.HostName, Kind = "selection", Title = "Pinned", Reference = "ref", Text = "Pinned context" });
+
+                    var result = service.ExecuteAsync(
+                        scenario.UserText,
+                        session,
+                        context,
+                        new AppSettings { ContextCharLimit = 8000 },
+                        new List<SkillDefinition>(adapter.GetBuiltInSkills()),
+                        null).GetAwaiter().GetResult();
+
+                    AssertEqual("Done.", result.AssistantText, scenario.Host + " assistant text");
+                    AssertEqual(scenario.ExpectedTools.Length, adapter.Executed.Count, scenario.Host + " executed count");
+                    for (var toolIndex = 0; toolIndex < scenario.ExpectedTools.Length; toolIndex++)
+                    {
+                        AssertEqual(scenario.ExpectedTools[toolIndex], adapter.Executed[toolIndex].SkillId, scenario.Host + " tool " + toolIndex);
+                    }
+                    AssertTrue(ContainsMessage(calls[0], "User-added context attachments"), scenario.Host + " context prompt");
+                    AssertTrue(ContainsMessage(session.Messages, "Agent plan"), scenario.Host + " plan recorded");
+                    AssertTrue(ContainsMessage(session.Messages, "Agent step"), scenario.Host + " result recorded");
+                });
+            }
+        }
+
+        private static void ChatProseActionForcesToolFollowUp()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    "Sure, I can do that.",
+                    AgentBlock(Command("excel.add_sheet", "name", "Report")),
+                    "Done.");
+                var session = NewSession(adapter);
+
+                var result = service.ExecuteAsync(
+                    "Create a new sheet named Report.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000 },
+                    new List<SkillDefinition>(adapter.GetBuiltInSkills()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Done.", result.AssistantText, "assistant text");
+                AssertEqual(3, calls.Count, "llm call count");
+                AssertTrue(ContainsMessage(calls[1], "prose-only answer is not acceptable"), "forced follow-up prompt");
+                AssertEqual(1, adapter.Executed.Count, "adapter execution count");
+                AssertEqual("excel.add_sheet", adapter.Executed[0].SkillId, "executed tool");
+            });
+        }
+
+        private static void AgentTranscriptCreatesActivityTree()
+        {
+            var plan = AgentTranscript.CreateAgentPlanActivity(new[] { Command("excel.add_sheet", "name", "Report") });
+            AssertEqual("plan", plan.Kind, "plan kind");
+            AssertEqual(1, plan.Children.Count, "plan child count");
+            AssertEqual("excel.add_sheet", plan.Children[0].ToolId, "plan child tool");
+            AssertContains(plan.Children[0].ArgumentsJson, "Report", "plan child args");
+
+            var command = new SkillCommand { SkillId = "excel.make_report" };
+            command.Arguments["sheet"] = "Report";
+            var result = SkillResult.Ok(
+                "Pipeline executed: excel.make_report",
+                "{\"toolId\":\"excel.make_report\",\"steps\":[{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"success\":true,\"message\":\"Added sheet\"},{\"id\":\"table\",\"toolId\":\"excel.write_table\",\"success\":false,\"message\":\"No table\"}]}");
+            var activity = AgentTranscript.CreateToolActivity(command, result, "tool");
+
+            AssertEqual("completed", activity.Status, "pipeline parent status");
+            AssertEqual(2, activity.Children.Count, "pipeline child count");
+            AssertEqual("sheet", activity.Children[0].Title, "first child title");
+            AssertEqual("completed", activity.Children[0].Status, "first child status");
+            AssertEqual("failed", activity.Children[1].Status, "second child status");
+
+            var session = new ChatSession();
+            AgentTranscript.AddLocalResultMessage(session, command, result);
+            AssertEqual(1, session.Messages.Count, "transcript message count");
+            AssertTrue(session.Messages[0].Activity != null, "transcript activity exists");
+            AssertContains(session.Messages[0].Content, "Agent step", "fallback content");
+            var promptMessages = PromptMessageBuilder.Build("system", string.Empty, session.Messages, 8000);
+            AssertContains(promptMessages.Last().Content, "Structured agent activity", "prompt activity marker");
+            AssertContains(promptMessages.Last().Content, "Pipeline executed", "prompt activity result");
+        }
+
+        private static void ChatFailedToolRetriesCorrectedCall()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.QueueResult("excel.write_table", SkillResult.Fail("No table values provided."));
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    AgentBlock(Command("excel.write_table", "sheet", "Report", "startAddress", "A1")),
+                    AgentBlock(Command("excel.write_table", "sheet", "Report", "startAddress", "A1", "values", "[[\"Month\",\"Sales\"]]")));
+                var session = NewSession(adapter);
+
+                var result = service.ExecuteAsync(
+                    "Write a report table.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000 },
+                    new List<SkillDefinition>(adapter.GetBuiltInSkills()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual(2, calls.Count, "llm call count");
+                AssertEqual(2, adapter.Executed.Count, "adapter execution count");
+                AssertEqual("excel.write_table", adapter.Executed[0].SkillId, "first tool");
+                AssertTrue(!adapter.Executed[0].Arguments.ContainsKey("values"), "first command missing values");
+                AssertEqual("[[\"Month\",\"Sales\"]]", adapter.Executed[1].Arguments["values"], "retry values");
+                var resultJson = JsonConvert.SerializeObject(result.SkillResults);
+                AssertContains(resultJson, "No table values provided", "failed result logged");
+                AssertContains(resultJson, "executed excel.write_table", "retry result logged");
+                AssertTrue(ContainsMessage(session.Messages, "Local skill retry result") || ContainsMessage(session.Messages, "Agent step"), "retry transcript recorded");
+            });
+        }
+
+        private static void ChatAutoRunDisabledRecordsLocalFailure()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(adapter, executor, calls, AgentBlock(Command("word.insert_text", "text", "Hello")));
+                var session = NewSession(adapter);
+
+                var result = service.ExecuteAsync(
+                    "Insert text into the document.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { AutoRunToolCalls = false, ContextCharLimit = 8000 },
+                    new List<SkillDefinition>(adapter.GetBuiltInSkills()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual(0, adapter.Executed.Count, "adapter execution count");
+                AssertContains(JsonConvert.SerializeObject(result.SkillResults), "Auto tool execution is disabled", "auto-run result");
+                AssertTrue(ContainsMessage(session.Messages, "Agent plan"), "plan recorded");
+                AssertTrue(ContainsMessage(session.Messages, "failed"), "failure recorded");
+            });
+        }
+
+        private static void ChatMalformedToolResponseStaysProse()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("PowerPoint"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var malformed = "I tried this but it is broken:\n```rnassistant-agent\n{\"steps\":[\n```\nExtra noisy text.";
+                var service = ChatServiceWithResponses(adapter, executor, calls, malformed);
+                var session = NewSession(adapter);
+
+                var result = service.ExecuteAsync(
+                    "Summarize the presentation.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { AgentModeEnabled = false, ContextCharLimit = 8000 },
+                    new List<SkillDefinition>(adapter.GetBuiltInSkills()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual(malformed, result.AssistantText, "assistant text");
+                AssertEqual(0, adapter.Executed.Count, "adapter execution count");
+                AssertEqual(2, session.Messages.Count, "session message count");
+                AssertEqual(malformed, session.Messages[1].Content, "assistant transcript");
+            });
+        }
+
         private static void ChatCloneServicePreservesValues()
         {
             var context = new DocumentContext
@@ -469,6 +785,17 @@ namespace RNAssistant.Harness
                 CompletionTokens = 2,
                 TotalTokens = 12,
                 UsageJson = "{\"total\":12}",
+                Activity = new ChatActivity
+                {
+                    Kind = "tool",
+                    Title = "Write table",
+                    Status = "completed",
+                    ToolId = "excel.write_table",
+                    Children = new List<ChatActivity>
+                    {
+                        new ChatActivity { Kind = "tool", Title = "Nested", Status = "completed", ToolId = "excel.add_sheet" }
+                    }
+                },
                 CreatedUtc = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc)
             };
             var clonedMessages = ChatCloneService.CloneMessages(new[] { sourceMessage });
@@ -477,8 +804,13 @@ namespace RNAssistant.Harness
             AssertEqual("message-1", clonedMessages[0].Id, "message id");
             AssertEqual("assistant", clonedMessages[0].Role, "message role");
             AssertEqual(12, clonedMessages[0].TotalTokens, "message tokens");
+            AssertTrue(!object.ReferenceEquals(sourceMessage.Activity, clonedMessages[0].Activity), "activity cloned");
+            AssertTrue(!object.ReferenceEquals(sourceMessage.Activity.Children[0], clonedMessages[0].Activity.Children[0]), "activity child cloned");
+            AssertEqual("Write table", clonedMessages[0].Activity.Title, "activity title");
             sourceMessage.Content = "Changed";
+            sourceMessage.Activity.Title = "Changed activity";
             AssertEqual("Done", clonedMessages[0].Content, "message clone independent");
+            AssertEqual("Write table", clonedMessages[0].Activity.Title, "activity clone independent");
         }
 
         private static void ContextServiceNormalizesAndUpserts()
@@ -580,8 +912,10 @@ namespace RNAssistant.Harness
             AssertEqual("ok", response["payload"]["message"].Value<string>(), "chat response message");
             AssertEqual("hello", controller.LastChatText, "chat text");
             AssertEqual("chat-1", controller.LastChatId, "chat id");
-            AssertEqual("b2", JObject.Parse(progressMessages[0])["id"].Value<string>(), "progress id");
-            AssertEqual("thinking", JObject.Parse(progressMessages[0])["payload"]["phase"].Value<string>(), "progress phase");
+            var progress = JObject.Parse(progressMessages[0]);
+            AssertEqual("b2", progress["id"].Value<string>(), "progress id");
+            AssertEqual("thinking", progress["payload"]["phase"].Value<string>(), "progress phase");
+            AssertEqual("Testing progress", progress["payload"]["activity"]["Title"].Value<string>(), "progress activity title");
         }
 
         private static void BridgeUsesTypedSettingsPayload()
@@ -659,6 +993,19 @@ namespace RNAssistant.Harness
             return false;
         }
 
+        private static SkillDefinition FindTool(IEnumerable<SkillDefinition> tools, string id)
+        {
+            foreach (var tool in tools ?? new SkillDefinition[0])
+            {
+                if (tool != null && string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase))
+                {
+                    return tool;
+                }
+            }
+
+            return null;
+        }
+
         private static bool ContainsMessage(IEnumerable<ChatMessage> messages, string text)
         {
             foreach (var message in messages ?? new ChatMessage[0])
@@ -713,11 +1060,113 @@ namespace RNAssistant.Harness
             };
         }
 
+        private static List<SkillDefinition> BuildThreeStepPipelineTools()
+        {
+            return new List<SkillDefinition>
+            {
+                new SkillDefinition
+                {
+                    Id = "excel.full_report",
+                    Host = "Excel",
+                    Name = "Full report",
+                    Executor = "pipeline",
+                    Enabled = true,
+                    PipelineJson = "{" +
+                        "\"steps\":[" +
+                        "{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}," +
+                        "{\"id\":\"table\",\"toolId\":\"excel.write_table\",\"arguments\":{\"sheet\":\"{{args.sheet}}\",\"startAddress\":\"A1\"}}," +
+                        "{\"id\":\"chart\",\"toolId\":\"excel.add_chart\",\"arguments\":{\"sheet\":\"{{args.sheet}}\",\"sourceRange\":\"A1:B2\",\"chartType\":\"column\",\"title\":\"Report\"}}" +
+                        "]}"
+                }
+            };
+        }
+
+        private static SkillCommand Command(string id, params object[] keyValues)
+        {
+            var command = new SkillCommand { SkillId = id };
+            for (var i = 0; i + 1 < (keyValues == null ? 0 : keyValues.Length); i += 2)
+            {
+                command.Arguments[Convert.ToString(keyValues[i])] = keyValues[i + 1];
+            }
+
+            return command;
+        }
+
+        private static string AgentBlock(params SkillCommand[] commands)
+        {
+            return "```rnassistant-agent\n" +
+                JsonConvert.SerializeObject(new
+                {
+                    steps = (commands ?? new SkillCommand[0]).Select(command => new
+                    {
+                        skillId = command.SkillId,
+                        arguments = command.Arguments
+                    }).ToArray()
+                }) +
+                "\n```";
+        }
+
+        private static ChatCompletionService ChatServiceWithResponses(
+            FakeOfficeAdapter adapter,
+            OfficeToolExecutor executor,
+            ICollection<IReadOnlyList<ChatMessage>> calls,
+            params string[] responses)
+        {
+            var index = 0;
+            return new ChatCompletionService(
+                adapter,
+                executor,
+                delegate(AppSettings settings, IEnumerable<ChatMessage> messages)
+                {
+                    if (calls != null)
+                    {
+                        calls.Add(new List<ChatMessage>(messages ?? new ChatMessage[0]));
+                    }
+
+                    var content = index < (responses == null ? 0 : responses.Length)
+                        ? responses[index]
+                        : "Done.";
+                    index += 1;
+                    return Task.FromResult(new LlmCompletionResult
+                    {
+                        Content = content,
+                        PromptTokens = 10,
+                        CompletionTokens = 2,
+                        TotalTokens = 12
+                    });
+                });
+        }
+
+        private static ChatSession NewSession(FakeOfficeAdapter adapter)
+        {
+            return new ChatSession
+            {
+                Host = adapter.HostName,
+                DocumentKey = adapter.DocumentKey,
+                DocumentTitle = adapter.DocumentTitle,
+                Title = "New chat"
+            };
+        }
+
+        private static DocumentContext NewContext(FakeOfficeAdapter adapter)
+        {
+            return new DocumentContext
+            {
+                Host = adapter.HostName,
+                DocumentKey = adapter.DocumentKey,
+                Title = adapter.DocumentTitle
+            };
+        }
+
         private static void WithTempExecutor(Action<OfficeToolExecutor, FakeOfficeAdapter> action)
+        {
+            WithTempExecutor(new FakeOfficeAdapter(), action);
+        }
+
+        private static void WithTempExecutor(FakeOfficeAdapter adapter, Action<OfficeToolExecutor, FakeOfficeAdapter> action)
         {
             WithTempPaths(delegate(AppDataPaths paths)
             {
-                var adapter = new FakeOfficeAdapter();
                 var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths));
                 action(executor, adapter);
             });
@@ -768,16 +1217,57 @@ namespace RNAssistant.Harness
             public readonly List<SkillCommand> Executed = new List<SkillCommand>();
             public string VbaModuleCode = string.Empty;
             public string VbaModuleType = "StdModule";
+            public bool FailUnknownSkills { get; set; }
 
-            public string HostName { get { return "Excel"; } }
+            private readonly string _hostName;
+            private readonly string _documentTitle;
+            private readonly string _documentSnapshot;
+            private readonly List<SkillDefinition> _builtInSkills;
+            private readonly Dictionary<string, Queue<SkillResult>> _scriptedResults;
+
+            public FakeOfficeAdapter()
+                : this("Excel", "Harness.xlsx", ExcelBuiltIns(), "Harness document")
+            {
+            }
+
+            private FakeOfficeAdapter(string hostName, string documentTitle, IEnumerable<SkillDefinition> builtInSkills, string documentSnapshot)
+            {
+                _hostName = hostName;
+                _documentTitle = documentTitle;
+                _documentSnapshot = documentSnapshot;
+                _builtInSkills = new List<SkillDefinition>((builtInSkills ?? new SkillDefinition[0]).Select(CloneSkill));
+                _scriptedResults = new Dictionary<string, Queue<SkillResult>>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            public static FakeOfficeAdapter ForHost(string host)
+            {
+                if (string.Equals(host, "Word", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new FakeOfficeAdapter("Word", "Harness.docx", WordBuiltIns(), "Harness Word document");
+                }
+
+                if (string.Equals(host, "PowerPoint", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new FakeOfficeAdapter("PowerPoint", "Harness.pptx", PowerPointBuiltIns(), "Harness slide deck");
+                }
+
+                if (string.Equals(host, "Outlook", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new FakeOfficeAdapter("Outlook", "Selected mail", OutlookBuiltIns(), "Subject: Harness mail");
+                }
+
+                return new FakeOfficeAdapter("Excel", "Harness.xlsx", ExcelBuiltIns(), "Harness workbook");
+            }
+
+            public string HostName { get { return _hostName; } }
             public string DocumentKey { get { return "doc"; } }
             public string LegacyDocumentKey { get { return "legacy-doc"; } }
             public string RuntimeDocumentKey { get { return "runtime-doc"; } }
-            public string DocumentTitle { get { return "Harness.xlsx"; } }
+            public string DocumentTitle { get { return _documentTitle; } }
 
             public string GetDocumentSnapshot(int maxChars)
             {
-                return "Harness document";
+                return _documentSnapshot;
             }
 
             public string GetVbaSnapshot(int maxChars)
@@ -796,17 +1286,30 @@ namespace RNAssistant.Harness
 
             public IEnumerable<SkillDefinition> GetBuiltInSkills()
             {
-                return new[]
+                return _builtInSkills.Select(CloneSkill).ToArray();
+            }
+
+            public void QueueResult(string skillId, SkillResult result)
+            {
+                Queue<SkillResult> queue;
+                if (!_scriptedResults.TryGetValue(skillId, out queue))
                 {
-                    BuiltIn("excel.add_sheet", false, true, true),
-                    BuiltIn("excel.write_table", true, true, true),
-                    BuiltIn("excel.vba_replace_module", false, true, false)
-                };
+                    queue = new Queue<SkillResult>();
+                    _scriptedResults[skillId] = queue;
+                }
+
+                queue.Enqueue(result);
             }
 
             public SkillResult ExecuteSkill(SkillCommand command)
             {
                 Executed.Add(Clone(command));
+                SkillResult scripted;
+                if (TryDequeueResult(command.SkillId, out scripted))
+                {
+                    return scripted;
+                }
+
                 if ((command.SkillId ?? string.Empty).EndsWith(".vba_read_module", StringComparison.OrdinalIgnoreCase))
                 {
                     return SkillResult.Ok("read " + command.SkillId, JsonConvert.SerializeObject(new { code = VbaModuleCode, type = VbaModuleType }));
@@ -823,21 +1326,128 @@ namespace RNAssistant.Harness
                     return SkillResult.Ok("replaced " + command.SkillId);
                 }
 
-                return SkillResult.Ok("executed " + command.SkillId);
+                if (FailUnknownSkills && !IsKnownSkill(command.SkillId))
+                {
+                    return SkillResult.Fail("Unsupported " + HostName + " skill: " + command.SkillId);
+                }
+
+                return SkillResult.Ok("executed " + command.SkillId, JsonConvert.SerializeObject(new { host = HostName, skillId = command.SkillId }));
             }
 
-            private static SkillDefinition BuiltIn(string id, bool requiresConfirmation, bool mutatesDocument, bool agentCanRun)
+            private bool TryDequeueResult(string skillId, out SkillResult result)
+            {
+                result = null;
+                Queue<SkillResult> queue;
+                if (!_scriptedResults.TryGetValue(skillId ?? string.Empty, out queue) || queue.Count == 0)
+                {
+                    return false;
+                }
+
+                result = queue.Dequeue();
+                return true;
+            }
+
+            private bool IsKnownSkill(string skillId)
+            {
+                return _builtInSkills.Any(skill => string.Equals(skill.Id, skillId, StringComparison.OrdinalIgnoreCase));
+            }
+
+            private static IEnumerable<SkillDefinition> ExcelBuiltIns()
+            {
+                return new[]
+                {
+                    BuiltIn("Excel", "excel.workbook_summary", false, false, true),
+                    BuiltIn("Excel", "excel.list_sheets", false, false, true),
+                    BuiltIn("Excel", "excel.read_range", false, false, true),
+                    BuiltIn("Excel", "excel.write_range", false, true, true),
+                    BuiltIn("Excel", "excel.write_table", false, true, true),
+                    BuiltIn("Excel", "excel.add_chart", false, true, true),
+                    BuiltIn("Excel", "excel.add_sheet", false, true, true),
+                    BuiltIn("Excel", "excel.vba_read_project", false, false, true),
+                    BuiltIn("Excel", "excel.vba_read_module", false, false, true),
+                    BuiltIn("Excel", "excel.vba_replace_module", false, true, false),
+                    BuiltIn("Excel", "excel.insert_vba_module", false, true, false),
+                    BuiltIn("Excel", "excel.run_macro", false, true, false)
+                };
+            }
+
+            private static IEnumerable<SkillDefinition> WordBuiltIns()
+            {
+                return new[]
+                {
+                    BuiltIn("Word", "word.read_document", false, false, true),
+                    BuiltIn("Word", "word.read_selection", false, false, true),
+                    BuiltIn("Word", "word.insert_text", false, true, true),
+                    BuiltIn("Word", "word.replace_selection", false, true, true),
+                    BuiltIn("Word", "word.add_comment", false, true, true),
+                    BuiltIn("Word", "word.vba_read_project", false, false, true),
+                    BuiltIn("Word", "word.vba_read_module", false, false, true),
+                    BuiltIn("Word", "word.vba_replace_module", false, true, false),
+                    BuiltIn("Word", "word.insert_vba_module", false, true, false),
+                    BuiltIn("Word", "word.run_macro", false, true, false)
+                };
+            }
+
+            private static IEnumerable<SkillDefinition> PowerPointBuiltIns()
+            {
+                return new[]
+                {
+                    BuiltIn("PowerPoint", "powerpoint.read_slides", false, false, true),
+                    BuiltIn("PowerPoint", "powerpoint.add_slide", false, true, true),
+                    BuiltIn("PowerPoint", "powerpoint.replace_selection_text", false, true, true),
+                    BuiltIn("PowerPoint", "powerpoint.vba_read_project", false, false, true),
+                    BuiltIn("PowerPoint", "powerpoint.vba_read_module", false, false, true),
+                    BuiltIn("PowerPoint", "powerpoint.vba_replace_module", false, true, false),
+                    BuiltIn("PowerPoint", "powerpoint.insert_vba_module", false, true, false),
+                    BuiltIn("PowerPoint", "powerpoint.run_macro", false, true, false)
+                };
+            }
+
+            private static IEnumerable<SkillDefinition> OutlookBuiltIns()
+            {
+                return new[]
+                {
+                    BuiltIn("Outlook", "outlook.read_selection", false, false, true),
+                    BuiltIn("Outlook", "outlook.draft_reply", false, true, true),
+                    BuiltIn("Outlook", "outlook.collect_folder_mail", false, false, true),
+                    BuiltIn("Outlook", "outlook.collect_monthly_summary_data", false, false, true)
+                };
+            }
+
+            private static SkillDefinition BuiltIn(string host, string id, bool requiresConfirmation, bool mutatesDocument, bool agentCanRun)
             {
                 return new SkillDefinition
                 {
                     Id = id,
-                    Host = "Excel",
+                    Host = host,
                     Name = id,
                     Enabled = true,
                     BuiltIn = true,
                     RequiresConfirmation = requiresConfirmation,
                     MutatesDocument = mutatesDocument,
                     AgentCanRun = agentCanRun
+                };
+            }
+
+            private static SkillDefinition CloneSkill(SkillDefinition skill)
+            {
+                return new SkillDefinition
+                {
+                    Id = skill.Id,
+                    Host = skill.Host,
+                    Name = skill.Name,
+                    Description = skill.Description,
+                    ArgumentSchemaJson = skill.ArgumentSchemaJson,
+                    Executor = skill.Executor,
+                    RequiresConfirmation = skill.RequiresConfirmation,
+                    MutatesDocument = skill.MutatesDocument,
+                    AgentCanRun = skill.AgentCanRun,
+                    PipelineJson = skill.PipelineJson,
+                    Code = skill.Code,
+                    Readme = skill.Readme,
+                    StoragePath = skill.StoragePath,
+                    Enabled = skill.Enabled,
+                    BuiltIn = skill.BuiltIn
                 };
             }
 

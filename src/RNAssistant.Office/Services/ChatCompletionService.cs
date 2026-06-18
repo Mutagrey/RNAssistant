@@ -45,7 +45,7 @@ namespace RNAssistant.Office.Services
             DocumentContext documentContext,
             AppSettings settings,
             IReadOnlyList<SkillDefinition> tools,
-            Action<string, string> progress)
+            Action<string, string, ChatActivity> progress)
         {
             ReportProgress(progress, "context", "Читаю документ...");
             ApplyChatModel(settings, session);
@@ -96,7 +96,8 @@ namespace RNAssistant.Office.Services
                     break;
                 }
 
-                session.Messages.Add(AgentTranscript.CreateAssistantMessage(AgentTranscript.CreateAgentPlanMessage(commands), completion));
+                ReportProgress(progress, "plan", "Агент подготовил план: " + commands.Count + " step(s).", AgentTranscript.CreateAgentPlanActivity(commands));
+                session.Messages.Add(AgentTranscript.CreateAgentPlanChatMessage(commands, completion));
                 var shouldContinue = settings.AutoRunToolCalls != false;
                 for (var i = 0; i < commands.Count; i++)
                 {
@@ -104,12 +105,14 @@ namespace RNAssistant.Office.Services
                     ReportProgress(
                         progress,
                         settings.AutoRunToolCalls != false ? "executing" : "waiting",
-                        (settings.AutoRunToolCalls != false ? "Исполняю tool " : "Auto-run отключен для tool ") + (i + 1) + "/" + commands.Count + ": " + command.SkillId);
+                        (settings.AutoRunToolCalls != false ? "Исполняю tool " : "Auto-run отключен для tool ") + (i + 1) + "/" + commands.Count + ": " + command.SkillId,
+                        CreateRunningActivity(command, settings.AutoRunToolCalls != false ? "running" : "waiting", "tool"));
                     var result = settings.AutoRunToolCalls != false
                         ? _toolExecutor.Execute(command, tools, settings, false, false)
                         : SkillResult.Fail("Auto tool execution is disabled: " + command.SkillId);
                     resultLog.Add(AgentTranscript.DescribeResult(command, result));
                     AgentTranscript.AddLocalResultMessage(session, command, result);
+                    ReportProgress(progress, result.Success ? "completed" : "failed", result.Message, AgentTranscript.CreateToolActivity(command, result, "tool"));
                     if (!result.Success)
                     {
                         shouldContinue = false;
@@ -146,7 +149,7 @@ namespace RNAssistant.Office.Services
             SkillCommand failedCommand,
             SkillResult failedResult,
             ICollection<object> resultLog,
-            Action<string, string> progress)
+            Action<string, string, ChatActivity> progress)
         {
             var repairPrompt = "A local tool call failed. Return only corrected rnassistant-skill JSON block(s), no prose. " +
                 "Original command: `" + failedCommand.SkillId + "` with arguments:\n```json\n" +
@@ -163,13 +166,14 @@ namespace RNAssistant.Office.Services
             for (var i = 0; i < retryCommands.Count; i++)
             {
                 var retry = retryCommands[i];
-                ReportProgress(progress, "retrying", "Повтор tool " + (i + 1) + "/" + retryCommands.Count + ": " + retry.SkillId);
+                ReportProgress(progress, "retrying", "Повтор tool " + (i + 1) + "/" + retryCommands.Count + ": " + retry.SkillId, CreateRunningActivity(retry, "running", "retry"));
                 var retryResult = _toolExecutor.Execute(retry, tools, settings, false, false);
                 if (resultLog != null)
                 {
                     resultLog.Add(AgentTranscript.DescribeResult(retry, retryResult));
                 }
                 AgentTranscript.AddLocalResultMessage(session, retry, retryResult);
+                ReportProgress(progress, retryResult.Success ? "completed" : "failed", retryResult.Message, AgentTranscript.CreateToolActivity(retry, retryResult, "retry"));
             }
 
             if (retryCommands.Count == 0)
@@ -209,11 +213,31 @@ namespace RNAssistant.Office.Services
             session.Title = title.Length <= 64 ? title : title.Substring(0, 61) + "...";
         }
 
-        private static void ReportProgress(Action<string, string> progress, string phase, string message)
+        private static ChatActivity CreateRunningActivity(SkillCommand command, string status, string kind)
+        {
+            return new ChatActivity
+            {
+                Kind = string.IsNullOrWhiteSpace(kind) ? "tool" : kind,
+                Title = command == null || string.IsNullOrWhiteSpace(command.Description)
+                    ? (command == null ? "Tool step" : command.SkillId)
+                    : command.Description,
+                Subtitle = command == null ? string.Empty : command.SkillId,
+                Status = status,
+                ToolId = command == null ? string.Empty : command.SkillId,
+                ArgumentsJson = command == null ? null : JsonConvert.SerializeObject(command.Arguments, Formatting.Indented)
+            };
+        }
+
+        private static void ReportProgress(Action<string, string, ChatActivity> progress, string phase, string message)
+        {
+            ReportProgress(progress, phase, message, null);
+        }
+
+        private static void ReportProgress(Action<string, string, ChatActivity> progress, string phase, string message, ChatActivity activity)
         {
             if (progress != null)
             {
-                progress(phase, message);
+                progress(phase, message, activity);
             }
         }
     }

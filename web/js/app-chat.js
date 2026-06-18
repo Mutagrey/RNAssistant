@@ -295,6 +295,8 @@ async function sendChat(text) {
   } finally {
     $("sendButton").disabled = false;
     $("chatInput").readOnly = false;
+    state.liveActivity = null;
+    renderMessages();
     renderModelControls();
     clearActivity();
   }

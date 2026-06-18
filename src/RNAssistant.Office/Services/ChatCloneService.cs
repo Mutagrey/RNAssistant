@@ -43,11 +43,33 @@ namespace RNAssistant.Office.Services
                 Id = message.Id,
                 Role = message.Role,
                 Content = message.Content,
+                Activity = CloneActivity(message.Activity),
                 PromptTokens = message.PromptTokens,
                 CompletionTokens = message.CompletionTokens,
                 TotalTokens = message.TotalTokens,
                 UsageJson = message.UsageJson,
                 CreatedUtc = message.CreatedUtc
+            };
+        }
+
+        public static ChatActivity CloneActivity(ChatActivity activity)
+        {
+            if (activity == null)
+            {
+                return null;
+            }
+
+            return new ChatActivity
+            {
+                Kind = activity.Kind,
+                Title = activity.Title,
+                Subtitle = activity.Subtitle,
+                Status = activity.Status,
+                ToolId = activity.ToolId,
+                ArgumentsJson = activity.ArgumentsJson,
+                ResultMessage = activity.ResultMessage,
+                DataJson = activity.DataJson,
+                Children = activity.Children == null ? null : activity.Children.Select(CloneActivity).ToList()
             };
         }
 

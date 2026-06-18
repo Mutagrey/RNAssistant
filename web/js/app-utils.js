@@ -16,6 +16,10 @@
     return objectValue(message, "Content", "content", "") || "";
   };
 
+  window.messageActivity = function (message) {
+    return objectValue(message, "Activity", "activity", null);
+  };
+
   window.messageTotalTokens = function (message) {
     return objectValue(message, "TotalTokens", "totalTokens", null);
   };

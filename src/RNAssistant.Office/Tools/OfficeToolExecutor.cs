@@ -61,7 +61,7 @@ namespace RNAssistant.Office.Tools
                 return SkillResult.Fail("Tool requires confirmation before execution: " + command.SkillId);
             }
 
-            if (customTool != null && customTool.RequiresConfirmation && !settings.AutoConfirmToolActions && !manualRun)
+            if (customTool != null && customTool.RequiresConfirmation && !settings.AutoConfirmToolActions && !dryRun && !manualRun)
             {
                 return SkillResult.Fail("Tool requires confirmation before execution: " + customTool.Id);
             }

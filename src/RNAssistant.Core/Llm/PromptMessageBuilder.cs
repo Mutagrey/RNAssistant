@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Llm
@@ -19,22 +20,98 @@ namespace RNAssistant.Core.Llm
             var remaining = Math.Max(4000, charLimit);
             foreach (var message in (sessionMessages ?? new ChatMessage[0]).Reverse())
             {
-                if (string.IsNullOrEmpty(message.Content))
+                var promptContent = ContentForPrompt(message);
+                if (string.IsNullOrEmpty(promptContent))
                 {
                     continue;
                 }
 
-                remaining -= message.Content.Length;
+                remaining -= promptContent.Length;
                 if (remaining < 0)
                 {
                     break;
                 }
 
-                history.Insert(0, message);
+                history.Insert(0, new ChatMessage
+                {
+                    Id = message.Id,
+                    Role = message.Role,
+                    Content = promptContent,
+                    PromptTokens = message.PromptTokens,
+                    CompletionTokens = message.CompletionTokens,
+                    TotalTokens = message.TotalTokens,
+                    UsageJson = message.UsageJson,
+                    CreatedUtc = message.CreatedUtc
+                });
             }
 
             result.AddRange(history);
             return result;
+        }
+
+        private static string ContentForPrompt(ChatMessage message)
+        {
+            if (message == null)
+            {
+                return string.Empty;
+            }
+
+            if (message.Activity == null)
+            {
+                return message.Content ?? string.Empty;
+            }
+
+            var builder = new StringBuilder();
+            if (!string.IsNullOrWhiteSpace(message.Content))
+            {
+                builder.AppendLine(message.Content);
+                builder.AppendLine();
+            }
+
+            builder.AppendLine("Structured agent activity:");
+            AppendActivity(builder, message.Activity, 0);
+            return builder.ToString();
+        }
+
+        private static void AppendActivity(StringBuilder builder, ChatActivity activity, int depth)
+        {
+            if (activity == null)
+            {
+                return;
+            }
+
+            var indent = new string(' ', depth * 2);
+            builder.Append(indent).Append("- ");
+            builder.Append(string.IsNullOrWhiteSpace(activity.Title) ? "Agent step" : activity.Title);
+            if (!string.IsNullOrWhiteSpace(activity.ToolId))
+            {
+                builder.Append(" [").Append(activity.ToolId).Append("]");
+            }
+            if (!string.IsNullOrWhiteSpace(activity.Status))
+            {
+                builder.Append(" status=").Append(activity.Status);
+            }
+            builder.AppendLine();
+
+            if (!string.IsNullOrWhiteSpace(activity.ResultMessage))
+            {
+                builder.Append(indent).Append("  result: ").AppendLine(activity.ResultMessage);
+            }
+            if (!string.IsNullOrWhiteSpace(activity.ArgumentsJson))
+            {
+                builder.Append(indent).AppendLine("  arguments:");
+                builder.AppendLine(activity.ArgumentsJson);
+            }
+            if (!string.IsNullOrWhiteSpace(activity.DataJson))
+            {
+                builder.Append(indent).AppendLine("  data:");
+                builder.AppendLine(activity.DataJson);
+            }
+
+            foreach (var child in activity.Children ?? new List<ChatActivity>())
+            {
+                AppendActivity(builder, child, depth + 1);
+            }
         }
     }
 

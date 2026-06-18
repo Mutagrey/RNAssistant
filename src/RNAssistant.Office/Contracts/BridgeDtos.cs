@@ -54,6 +54,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("message")]
         public string Message { get; set; }
+
+        [JsonProperty("activity", NullValueHandling = NullValueHandling.Ignore)]
+        public ChatActivity Activity { get; set; }
     }
 
     public class ChatPayload

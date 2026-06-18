@@ -8,6 +8,7 @@ namespace RNAssistant.Core.Models
         public string Id { get; set; }
         public string Role { get; set; }
         public string Content { get; set; }
+        public ChatActivity Activity { get; set; }
         public int? PromptTokens { get; set; }
         public int? CompletionTokens { get; set; }
         public int? TotalTokens { get; set; }
@@ -18,6 +19,24 @@ namespace RNAssistant.Core.Models
         {
             Id = Guid.NewGuid().ToString("N");
             CreatedUtc = DateTime.UtcNow;
+        }
+    }
+
+    public sealed class ChatActivity
+    {
+        public string Kind { get; set; }
+        public string Title { get; set; }
+        public string Subtitle { get; set; }
+        public string Status { get; set; }
+        public string ToolId { get; set; }
+        public string ArgumentsJson { get; set; }
+        public string ResultMessage { get; set; }
+        public string DataJson { get; set; }
+        public List<ChatActivity> Children { get; set; }
+
+        public ChatActivity()
+        {
+            Children = new List<ChatActivity>();
         }
     }
 

@@ -10,6 +10,7 @@ var state = {
   activeChatModel: "",
   messages: [],
   failedSend: null,
+  liveActivity: null,
   modelCatalog: { configUrl: "", defaultModel: "", models: [], loaded: false, loading: false, error: "" },
   modelSaving: false,
   selectedToolIndex: -1,
@@ -107,7 +108,7 @@ function hideHelp() {
 function send(type, payload) {
   return new Promise(function (resolve, reject) {
     var id = String(state.seq++);
-    state.pending[id] = { resolve: resolve, reject: reject };
+    state.pending[id] = { resolve: resolve, reject: reject, type: type };
     window.chrome.webview.postMessage({ id: id, type: type, payload: payload || {} });
   });
 }
@@ -159,7 +160,12 @@ window.chrome.webview.addEventListener("message", function (event) {
   }
   if (response && response.type === "progress") {
     var progress = response.payload || {};
+    var progressPending = state.pending[response.id];
     setActivity(progress.phase || "working", progress.message || "Working...");
+    if (progressPending && progressPending.type === "sendChat") {
+      state.liveActivity = normalizeProgressActivity(progress);
+      renderMessages();
+    }
     log("[" + (progress.phase || "working") + "] " + (progress.message || "Working..."));
     return;
   }

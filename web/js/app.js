@@ -34,6 +34,9 @@ function applyChatState(response) {
   if (response.context || response.Context) {
     state.context = response.context || response.Context || {};
   }
+  if (response.messages || response.Messages) {
+    state.liveActivity = null;
+  }
   state.messages = response.messages || response.Messages || [];
   state.contextUsage = response.contextUsage || response.ContextUsage || state.contextUsage || {};
   renderChatSessions();
@@ -87,6 +90,183 @@ function messageUsageText(message) {
   return parts.join(" · ");
 }
 
+function activityValue(activity, pascal, camel, fallback) {
+  activity = activity || {};
+  return activity[pascal] !== undefined ? activity[pascal] : (activity[camel] !== undefined ? activity[camel] : fallback);
+}
+
+function activityStatusFromPhase(phase) {
+  var value = (phase || "").toLowerCase();
+  if (value === "completed") {
+    return "completed";
+  }
+  if (value === "failed") {
+    return "failed";
+  }
+  if (value === "waiting") {
+    return "waiting";
+  }
+  return "running";
+}
+
+function normalizeProgressActivity(progress) {
+  progress = progress || {};
+  var activity = progress.activity || progress.Activity;
+  if (activity) {
+    return activity;
+  }
+
+  return {
+    kind: "notice",
+    title: progress.message || progress.Message || "Working...",
+    subtitle: progress.phase || progress.Phase || "working",
+    status: activityStatusFromPhase(progress.phase || progress.Phase)
+  };
+}
+
+function activityChildren(activity) {
+  return activityValue(activity, "Children", "children", []) || [];
+}
+
+function activityStatus(activity) {
+  return activityValue(activity, "Status", "status", "completed") || "completed";
+}
+
+function activityTitle(activity) {
+  return activityValue(activity, "Title", "title", "Agent step") || "Agent step";
+}
+
+function activityToolId(activity) {
+  return activityValue(activity, "ToolId", "toolId", "") || "";
+}
+
+function activityText(activity) {
+  var lines = [];
+  function append(item, depth) {
+    if (!item) {
+      return;
+    }
+    var prefix = new Array(depth + 1).join("  ");
+    var toolId = activityToolId(item);
+    lines.push(prefix + activityTitle(item) + (toolId ? " (" + toolId + ")" : "") + " - " + activityStatus(item));
+    var result = activityValue(item, "ResultMessage", "resultMessage", "");
+    if (result) {
+      lines.push(prefix + result);
+    }
+    activityChildren(item).forEach(function (child) {
+      append(child, depth + 1);
+    });
+  }
+  append(activity, 0);
+  return lines.join("\n");
+}
+
+function prettyJsonText(text) {
+  if (!text) {
+    return "";
+  }
+
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  } catch (error) {
+    return String(text);
+  }
+}
+
+function appendActivityJson(parent, label, text) {
+  if (!text) {
+    return;
+  }
+
+  var details = document.createElement("details");
+  details.className = "agent-json";
+  var summary = document.createElement("summary");
+  summary.textContent = label;
+  details.appendChild(summary);
+
+  var pre = document.createElement("pre");
+  var code = document.createElement("code");
+  code.className = "language-json";
+  code.textContent = prettyJsonText(text);
+  pre.appendChild(code);
+  details.appendChild(pre);
+  parent.appendChild(details);
+}
+
+function renderActivityNode(activity, nested) {
+  var node = document.createElement("div");
+  var status = activityStatus(activity);
+  node.className = "agent-activity" + (nested ? " nested" : "") + " status-" + status;
+
+  var row = document.createElement("div");
+  row.className = "agent-activity-row";
+
+  var mark = document.createElement("span");
+  mark.className = "agent-activity-mark";
+  mark.setAttribute("aria-hidden", "true");
+  row.appendChild(mark);
+
+  var text = document.createElement("div");
+  text.className = "agent-activity-text";
+
+  var title = document.createElement("div");
+  title.className = "agent-activity-title";
+  title.textContent = activityTitle(activity);
+  text.appendChild(title);
+
+  var metaParts = [];
+  var subtitle = activityValue(activity, "Subtitle", "subtitle", "");
+  var toolId = activityToolId(activity);
+  var result = activityValue(activity, "ResultMessage", "resultMessage", "");
+  metaParts.push(status);
+  if (toolId) {
+    metaParts.push(toolId);
+  } else if (subtitle) {
+    metaParts.push(subtitle);
+  }
+  if (result) {
+    metaParts.push(result);
+  }
+  var meta = document.createElement("div");
+  meta.className = "agent-activity-meta";
+  meta.textContent = metaParts.join(" · ");
+  text.appendChild(meta);
+  row.appendChild(text);
+  node.appendChild(row);
+
+  var children = activityChildren(activity);
+  var argumentsJson = activityValue(activity, "ArgumentsJson", "argumentsJson", "");
+  var dataJson = activityValue(activity, "DataJson", "dataJson", "");
+  if (children.length || argumentsJson || dataJson) {
+    var details = document.createElement("details");
+    details.className = "agent-activity-details";
+    var summary = document.createElement("summary");
+    summary.textContent = children.length ? "Details and nested steps" : "Details";
+    details.appendChild(summary);
+
+    if (children.length) {
+      var childList = document.createElement("div");
+      childList.className = "agent-activity-children";
+      children.forEach(function (child) {
+        childList.appendChild(renderActivityNode(child, true));
+      });
+      details.appendChild(childList);
+    }
+
+    appendActivityJson(details, "Arguments", argumentsJson);
+    appendActivityJson(details, "Result data", dataJson);
+    node.appendChild(details);
+  }
+
+  return node;
+}
+
+function enhanceActivity(root) {
+  Array.prototype.slice.call(root.querySelectorAll("pre code")).forEach(function (code) {
+    highlightCode(code);
+  });
+}
+
 function renderLatex(root) {
   if (!window.renderMathInElement) {
     return;
@@ -114,10 +294,16 @@ function renderMessages() {
   state.messages.forEach(function (message, index) {
     var node = document.createElement("article");
     node.className = "message " + messageRole(message) + (message.Pending ? " pending" : "") + (message.Failed ? " failed" : "");
+    var activity = messageActivity(message);
 
     var body = document.createElement("div");
-    body.className = "markdown";
-    body.innerHTML = markdown(messageContent(message));
+    if (activity) {
+      body.className = "agent-activity-wrap";
+      body.appendChild(renderActivityNode(activity, false));
+    } else {
+      body.className = "markdown";
+      body.innerHTML = markdown(messageContent(message));
+    }
     node.appendChild(body);
 
     var footer = document.createElement("div");
@@ -145,7 +331,7 @@ function renderMessages() {
       forkChatAtMessage(message, index);
     }));
     actions.appendChild(smallIconButton("Copy message", "copy", function () {
-      copyText(messageContent(message));
+      copyText(activity ? activityText(activity) : messageContent(message));
       log("Message copied.");
     }));
     actions.appendChild(smallIconButton("Delete message", "trash", function () {
@@ -157,8 +343,24 @@ function renderMessages() {
     node.appendChild(footer);
 
     box.appendChild(node);
-    enhanceMarkdown(body);
+    if (activity) {
+      enhanceActivity(body);
+    } else {
+      enhanceMarkdown(body);
+    }
   });
+
+  if (state.liveActivity) {
+    var live = document.createElement("article");
+    live.className = "message assistant pending agent-live";
+    var liveBody = document.createElement("div");
+    liveBody.className = "agent-activity-wrap";
+    liveBody.appendChild(renderActivityNode(state.liveActivity, false));
+    live.appendChild(liveBody);
+    box.appendChild(live);
+    enhanceActivity(liveBody);
+  }
+
   box.scrollTop = box.scrollHeight;
 }
 

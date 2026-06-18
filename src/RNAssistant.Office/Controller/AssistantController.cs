@@ -75,7 +75,7 @@ namespace RNAssistant.Office
             };
         }
 
-        public async Task<SendChatResponse> SendChatAsync(string text, string chatId = null, Action<string, string> progress = null)
+        public async Task<SendChatResponse> SendChatAsync(string text, string chatId = null, Action<string, string, ChatActivity> progress = null)
         {
             if (string.IsNullOrWhiteSpace(text))
             {
@@ -262,6 +262,14 @@ namespace RNAssistant.Office
             if (progress != null)
             {
                 progress(phase, message);
+            }
+        }
+
+        private static void ReportProgress(Action<string, string, ChatActivity> progress, string phase, string message)
+        {
+            if (progress != null)
+            {
+                progress(phase, message, null);
             }
         }
     }
