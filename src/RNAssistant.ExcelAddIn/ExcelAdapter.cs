@@ -126,6 +126,20 @@ namespace RNAssistant.ExcelAddIn
             return VbaProjectSupport.GetSnapshot(workbook, workbook.Name, maxChars);
         }
 
+        public void PrepareForContextCapture()
+        {
+            try
+            {
+                if (_application.ActiveWindow != null)
+                {
+                    _application.ActiveWindow.Activate();
+                }
+            }
+            catch
+            {
+            }
+        }
+
         public ContextNote CaptureSelectionContext(string mode, int maxChars)
         {
             var workbook = RequireWorkbook();

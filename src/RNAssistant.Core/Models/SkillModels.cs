@@ -30,6 +30,7 @@ namespace RNAssistant.Core.Models
     public sealed class SkillCommand
     {
         public string SkillId { get; set; }
+        public string Description { get; set; }
         public Dictionary<string, object> Arguments { get; set; }
 
         public SkillCommand()

@@ -108,6 +108,17 @@ namespace RNAssistant.PowerPointAddIn
             return VbaProjectSupport.GetSnapshot(presentation, presentation.Name, maxChars);
         }
 
+        public void PrepareForContextCapture()
+        {
+            try
+            {
+                _application.Activate();
+            }
+            catch
+            {
+            }
+        }
+
         public ContextNote CaptureSelectionContext(string mode, int maxChars)
         {
             var presentation = RequirePresentation();

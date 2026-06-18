@@ -57,6 +57,10 @@ namespace RNAssistant.Core.Storage
             {
                 settings.SystemPrompt = defaults.SystemPrompt;
             }
+            if (string.IsNullOrWhiteSpace(settings.AgentPrompt))
+            {
+                settings.AgentPrompt = defaults.AgentPrompt;
+            }
             if (settings.MaxTokens <= 0)
             {
                 settings.MaxTokens = defaults.MaxTokens;
@@ -80,6 +84,10 @@ namespace RNAssistant.Core.Storage
             if (settings.ContextCharLimit <= 0)
             {
                 settings.ContextCharLimit = defaults.ContextCharLimit;
+            }
+            if (!settings.AgentModeEnabled.HasValue)
+            {
+                settings.AgentModeEnabled = defaults.AgentModeEnabled;
             }
             if (!settings.AutoRunToolCalls.HasValue)
             {

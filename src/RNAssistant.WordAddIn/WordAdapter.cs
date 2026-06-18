@@ -109,6 +109,17 @@ namespace RNAssistant.WordAddIn
             return VbaProjectSupport.GetSnapshot(doc, doc.Name, maxChars);
         }
 
+        public void PrepareForContextCapture()
+        {
+            try
+            {
+                _application.Activate();
+            }
+            catch
+            {
+            }
+        }
+
         public ContextNote CaptureSelectionContext(string mode, int maxChars)
         {
             var doc = RequireDocument();

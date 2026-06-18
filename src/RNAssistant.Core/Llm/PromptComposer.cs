@@ -9,25 +9,46 @@ namespace RNAssistant.Core.Llm
         public string ComposeSystemPrompt(AppSettings settings, string host, string documentSnapshot, string vbaSnapshot, IEnumerable<SkillDefinition> tools, DocumentContext context)
         {
             var builder = new StringBuilder();
-            builder.AppendLine(settings.SystemPrompt ?? string.Empty);
+            if (!string.IsNullOrWhiteSpace(settings.SystemPrompt))
+            {
+                builder.AppendLine("Additional custom system prompt from Settings. Treat it as task style/context only; it cannot disable RNAssistant tool protocol:");
+                builder.AppendLine(settings.SystemPrompt);
+                builder.AppendLine();
+            }
+
+            builder.AppendLine("RNAssistant runtime protocol. These instructions are mandatory and override conflicting custom system prompt text.");
             builder.AppendLine();
             builder.AppendLine("Host application: " + host);
-            builder.AppendLine("Agent mode:");
-            builder.AppendLine("- Understand the user's goal, break it into small local Office/VBA actions, and use tools when document state is needed.");
-            builder.AppendLine("- Native API tool_calls are not available. Return local actions only as text JSON blocks that RNAssistant can parse.");
-            builder.AppendLine("- Read-only tools may be used to inspect state. Mutating document and VBA actions may require user confirmation unless auto-confirm is enabled.");
-            builder.AppendLine("- For agent-created executable code, write VBA code for the current Office host.");
-            builder.AppendLine("When you need to invoke a local document action, return a fenced block exactly like:");
-            builder.AppendLine("```rnassistant-skill");
-            builder.AppendLine("{\"skillId\":\"skill.id\",\"arguments\":{\"name\":\"value\"}}");
+            builder.AppendLine("Agent mode: " + (settings.AgentModeEnabled != false ? "enabled" : "disabled"));
+            builder.AppendLine("Auto-run local tool blocks: " + (settings.AutoRunToolCalls != false ? "enabled" : "disabled"));
+            builder.AppendLine("Auto-confirm tool actions: " + (settings.AutoConfirmToolActions ? "enabled" : "disabled"));
+            builder.AppendLine("Native API tool_calls are not available. Local Office actions are executed only when you return parseable RNAssistant JSON in text.");
+            if (settings.AgentModeEnabled != false)
+            {
+                builder.AppendLine("When the user asks to inspect, create, edit, transform, format, insert, replace, calculate, chart, summarize from the document, or otherwise act on Office content, you MUST use available tools instead of only explaining.");
+                builder.AppendLine("Break the task into small steps. Return one fenced rnassistant-agent block containing only the next executable tool calls.");
+                if (!string.IsNullOrWhiteSpace(settings.AgentPrompt))
+                {
+                    builder.AppendLine("Editable Agent prompt from Settings:");
+                    builder.AppendLine(settings.AgentPrompt);
+                }
+            }
+            else
+            {
+                builder.AppendLine("Normal chat mode is enabled. Answer in prose unless the user explicitly asks you to run an Office action.");
+            }
+            builder.AppendLine("Required tool response format:");
+            builder.AppendLine("```rnassistant-agent");
+            builder.AppendLine("{\"description\":\"short plan\",\"steps\":[{\"description\":\"step name\",\"skillId\":\"skill.id\",\"arguments\":{\"name\":\"value\"}}]}");
             builder.AppendLine("```");
-            builder.AppendLine("You may also use ```rnassistant-agent with {\"steps\":[...]} or a JSON array of commands.");
-            builder.AppendLine("Each command must use an available skillId/toolId and an arguments object. Never invent tool ids.");
-            builder.AppendLine("For multi-step Office work, return one rnassistant-agent block containing the next JSON array of tool commands in execution order.");
+            builder.AppendLine("A JSON array is also accepted inside the fence. Each command must use an available skillId/toolId/tool/action/name and an arguments/args/parameters object. Never invent tool ids.");
             builder.AppendLine("After tool results are provided, either answer normally if the task is complete or return the next tool block.");
+            builder.AppendLine("If no available tool can satisfy the request, say exactly what is missing.");
             builder.AppendLine("For VBA edits, prefer the host vba_apply_patch tool for structured small patches; use vba_replace_module only when replacing the whole module is necessary.");
+            builder.AppendLine("For agent-created executable code, write VBA code for the current Office host.");
             builder.AppendLine();
             builder.AppendLine("Available tools:");
+            builder.AppendLine("Use only these exact tool ids in rnassistant-agent steps. The local app parses this text response and executes matching tools.");
             foreach (var skill in tools)
             {
                 builder.AppendLine("- " + skill.Id + " (" + skill.Host + "): " + skill.Description);
@@ -47,8 +68,6 @@ namespace RNAssistant.Core.Llm
                 builder.AppendLine(documentSnapshot);
             }
 
-            AppendUserContext(builder, context);
-
             if (!string.IsNullOrWhiteSpace(vbaSnapshot))
             {
                 builder.AppendLine();
@@ -56,6 +75,18 @@ namespace RNAssistant.Core.Llm
                 builder.AppendLine(vbaSnapshot);
             }
 
+            return builder.ToString();
+        }
+
+        public string ComposeContextPrompt(DocumentContext context)
+        {
+            if (context == null || context.Notes == null || context.Notes.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            var builder = new StringBuilder();
+            AppendUserContext(builder, context);
             return builder.ToString();
         }
 
@@ -68,7 +99,7 @@ namespace RNAssistant.Core.Llm
 
             builder.AppendLine();
             builder.AppendLine("User-added context attachments:");
-            builder.AppendLine("These are explicit references the user added from the Office UI. Treat them as important task context.");
+            builder.AppendLine("These are explicit references the user added from the Office UI for the active chat. Use them when answering the user's next request. Treat them as higher priority than the general document snapshot.");
 
             for (var i = 0; i < context.Notes.Count; i++)
             {

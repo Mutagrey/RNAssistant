@@ -45,6 +45,7 @@ button {
   padding: 8px 12px;
   cursor: pointer;
   font-weight: 600;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
 }
 
 button svg {
@@ -167,11 +168,18 @@ button.danger {
   background: #fff;
   color: var(--muted);
   border-bottom: 2px solid transparent;
+  font-weight: 700;
+}
+
+.tab:hover {
+  background: #f4f7fb;
+  color: var(--text);
 }
 
 .tab.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
+  background: #f8fbff;
 }
 
 .activity {
@@ -240,6 +248,12 @@ button.danger {
 .chatbar select {
   min-width: 0;
   height: 32px;
+  border: 1px solid #cfd8e6;
+  border-radius: 6px;
+  padding: 0 8px;
+  background: #fff;
+  color: var(--text);
+  transition: border-color 0.12s ease, outline-color 0.12s ease;
 }
 
 .messages {
@@ -247,17 +261,16 @@ button.danger {
   min-height: 0;
   overflow: auto;
   padding-right: 2px;
+  scrollbar-gutter: stable;
 }
 
 .message {
-  margin: 0 0 12px;
-  padding: 10px 11px 9px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--panel);
+  margin: 0 0 6px;
+  padding: 0 0 2px;
+  background: transparent;
 }
 
-.message.user {
+.message.user .markdown {
   border-color: #bdd2ff;
   background: #f0f5ff;
 }
@@ -266,7 +279,7 @@ button.danger {
   opacity: 0.78;
 }
 
-.message.failed {
+.message.failed .markdown {
   border-color: #f1b8b1;
   background: #fff7f6;
 }
@@ -281,20 +294,48 @@ button.danger {
 
 .message .role {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.message-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+  margin: 3px 2px 0;
+  gap: 8px;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.message:hover .message-footer,
+.message:focus-within .message-footer {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.message-footer-meta {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.message-usage {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .message-actions {
   display: inline-flex;
   gap: 4px;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-
-.message:hover .message-actions,
-.message:focus-within .message-actions {
   opacity: 1;
 }
 
@@ -302,8 +343,8 @@ button.danger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border-radius: 6px;
   background: transparent;
@@ -331,7 +372,20 @@ button.danger {
 }
 
 .markdown {
+  padding: 10px 11px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: 0 1px 2px rgba(16, 24, 39, 0.04);
   line-height: 1.45;
+  overflow-wrap: break-word;
+}
+
+@media (hover: none) {
+  .message-footer {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .markdown p:first-child {
@@ -537,11 +591,19 @@ button.danger {
   gap: 8px;
   align-items: center;
   justify-content: space-between;
+  min-width: 0;
   margin-bottom: 7px;
+}
+
+.context-toggle-button.active {
+  border-color: #a7c7ff;
+  background: #eaf2ff;
+  color: var(--accent);
 }
 
 .composer-left {
   display: flex;
+  flex: 1 1 auto;
   gap: 8px;
   align-items: center;
   min-width: 0;
@@ -549,6 +611,7 @@ button.danger {
 
 .context-meter {
   display: grid;
+  flex: 1 1 230px;
   grid-template-columns: auto auto minmax(68px, 112px) auto;
   gap: 6px;
   align-items: center;
@@ -559,16 +622,20 @@ button.danger {
 }
 
 .composer-model {
-  display: grid;
-  gap: 2px;
-  min-width: 118px;
-  max-width: 190px;
+  display: flex;
+  flex: 0 1 280px;
+  gap: 6px;
+  align-items: center;
+  min-width: 170px;
+  max-width: 280px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .composer-model select {
+  flex: 1 1 auto;
   width: 100%;
   height: 30px;
   min-width: 0;
@@ -640,6 +707,7 @@ button.danger {
 }
 
 .composer textarea:focus,
+.chatbar select:focus,
 .composer-model select:focus,
 .form-grid textarea:focus,
 .form-grid input:focus,
@@ -908,6 +976,7 @@ button.danger {
 .form-grid label > input,
 .form-grid label > select,
 .form-grid label > textarea {
+  min-width: 0;
   color: var(--text);
   font-size: 14px;
   font-weight: 400;
@@ -1044,10 +1113,21 @@ button.danger {
   color: var(--text);
 }
 
-.vba-editor textarea {
+.vba-code-pane {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+}
+
+.vba-editor textarea,
+.vba-code-preview {
   width: 100%;
   height: 100%;
   min-height: 280px;
+}
+
+.vba-editor textarea {
   resize: none;
   border: 0;
   outline: 0;
@@ -1055,6 +1135,38 @@ button.danger {
   font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
   font-size: 12.5px;
   line-height: 1.5;
+}
+
+.vba-code-preview {
+  min-width: 0;
+  overflow: auto;
+  border-left: 1px solid var(--line);
+  padding-left: 10px;
+}
+
+.vba-code-preview pre {
+  min-height: calc(100% - 30px);
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  border-radius: 6px;
+  background: #0f172a;
+}
+
+.vba-code-preview code {
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.vba-preview-tools {
+  margin-bottom: 6px;
+}
+
+.vba-code-empty {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .vba-meta {
@@ -1276,7 +1388,8 @@ button.danger {
     flex-direction: column;
   }
 
-  .composer-toolbar #addSelectionContextButton {
+  .composer-toolbar #addSelectionContextButton,
+  .composer-toolbar #toggleVbaContextButton {
     width: 100%;
     margin-right: 0;
   }
@@ -1292,7 +1405,8 @@ button.danger {
   }
 
   .composer-model {
-    flex: 1 1 120px;
+    flex: 1 1 100%;
+    min-width: 0;
     max-width: none;
   }
 
@@ -1306,6 +1420,17 @@ button.danger {
 
   .vba-layout {
     grid-template-columns: 1fr;
+  }
+
+  .vba-code-pane {
+    grid-template-columns: 1fr;
+  }
+
+  .vba-code-preview {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding-left: 0;
+    padding-top: 10px;
   }
 
   .tool-list {

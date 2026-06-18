@@ -91,7 +91,7 @@ namespace RNAssistant.Office.WebView
 
         private void OnAcceleratorKeyPressed(object sender, CoreWebView2AcceleratorKeyPressedEventArgs e)
         {
-            if (!IsEditOrNavigationAccelerator(e.VirtualKey))
+            if (!IsEditOrNavigationAccelerator((int)e.VirtualKey))
             {
                 return;
             }

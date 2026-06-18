@@ -277,6 +277,7 @@
     var icons = {
       copy: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"9\" y=\"9\" width=\"13\" height=\"13\" rx=\"2\"/><path d=\"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\"/></svg>",
       trash: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 6h18\"/><path d=\"M8 6V4h8v2\"/><path d=\"M19 6l-1 14H6L5 6\"/><path d=\"M10 11v5\"/><path d=\"M14 11v5\"/></svg>",
+      branch: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"6\" cy=\"6\" r=\"3\"/><circle cx=\"18\" cy=\"6\" r=\"3\"/><circle cx=\"18\" cy=\"18\" r=\"3\"/><path d=\"M9 6h3a6 6 0 0 1 6 6v3\"/><path d=\"M6 9v9\"/></svg>",
       retry: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M20 6v5h-5\"/><path d=\"M4 18v-5h5\"/><path d=\"M6.1 9A7 7 0 0 1 18.2 6.8L20 11\"/><path d=\"M17.9 15A7 7 0 0 1 5.8 17.2L4 13\"/></svg>",
       eye: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/></svg>",
       eyeOff: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 3l18 18\"/><path d=\"M10.6 10.6A3 3 0 0 0 13.4 13.4\"/><path d=\"M9.9 5.2A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a17.9 17.9 0 0 1-3.2 4.2\"/><path d=\"M6.1 6.6C3.4 8.4 2 12 2 12s3.5 7 10 7a10.6 10.6 0 0 0 4.1-.8\"/></svg>"
@@ -344,15 +345,35 @@
       var node = document.createElement("article");
       node.className = "message " + messageRole(message) + (message.Pending ? " pending" : "") + (message.Failed ? " failed" : "");
 
-      var head = document.createElement("div");
-      head.className = "message-head";
+      var body = document.createElement("div");
+      body.className = "markdown";
+      body.innerHTML = markdown(messageContent(message));
+      node.appendChild(body);
 
-      var role = document.createElement("div");
+      var footer = document.createElement("div");
+      footer.className = "message-footer";
+
+      var meta = document.createElement("div");
+      meta.className = "message-footer-meta";
+
+      var role = document.createElement("span");
       role.className = "role";
       role.textContent = messageRole(message);
+      meta.appendChild(role);
+
+      var usage = messageUsageText(message);
+      if (usage || message.Pending || message.Failed) {
+        var usageNode = document.createElement("span");
+        usageNode.className = "message-usage";
+        usageNode.textContent = message.Failed ? "Not sent" : (message.Pending ? "Sending..." : usage);
+        meta.appendChild(usageNode);
+      }
 
       var actions = document.createElement("div");
       actions.className = "message-actions";
+      actions.appendChild(smallIconButton("Fork from this message", "branch", function () {
+        forkChatAtMessage(message, index);
+      }));
       actions.appendChild(smallIconButton("Copy message", "copy", function () {
         copyText(messageContent(message));
         log("Message copied.");
@@ -361,22 +382,9 @@
         deleteMessage(message, index);
       }));
 
-      head.appendChild(role);
-      head.appendChild(actions);
-
-      var body = document.createElement("div");
-      body.className = "markdown";
-      body.innerHTML = markdown(messageContent(message));
-      node.appendChild(head);
-      node.appendChild(body);
-
-      var usage = messageUsageText(message);
-      if (usage || message.Pending || message.Failed) {
-        var meta = document.createElement("div");
-        meta.className = "message-meta";
-        meta.textContent = message.Failed ? "Not sent" : (message.Pending ? "Sending..." : usage);
-        node.appendChild(meta);
-      }
+      footer.appendChild(meta);
+      footer.appendChild(actions);
+      node.appendChild(footer);
 
       box.appendChild(node);
       enhanceMarkdown(body);
@@ -622,12 +630,14 @@
     $("topPInput").value = s.TopP || s.topP || 1;
     $("contextLimitInput").value = s.ContextCharLimit || s.contextCharLimit || 24000;
     $("streamInput").checked = !!(s.StreamResponses || s.streamResponses);
+    $("agentModeInput").checked = (s.AgentModeEnabled !== false && s.agentModeEnabled !== false);
     $("autoRunToolsInput").checked = (s.AutoRunToolCalls !== false && s.autoRunToolCalls !== false);
     $("autoConfirmToolsInput").checked = !!(s.AutoConfirmToolActions || s.autoConfirmToolActions);
     $("autoRetryToolsInput").checked = (s.AutoRetryToolErrors !== false && s.autoRetryToolErrors !== false);
     $("includeVbaContextInput").checked = !!(s.IncludeVbaContext || s.includeVbaContext);
     $("vbaContextLimitInput").value = s.VbaContextCharLimit || s.vbaContextCharLimit || 30000;
     $("systemPromptInput").value = s.SystemPrompt || s.systemPrompt || "";
+    $("agentPromptInput").value = s.AgentPrompt || s.agentPrompt || "";
     $("headersInput").value = headersToText(s.CustomHeaders || s.customHeaders || {});
     renderModelControls();
   }
@@ -642,12 +652,14 @@
       TopP: Number($("topPInput").value || 1),
       ContextCharLimit: Number($("contextLimitInput").value || 24000),
       StreamResponses: $("streamInput").checked,
+      AgentModeEnabled: $("agentModeInput").checked,
       AutoRunToolCalls: $("autoRunToolsInput").checked,
       AutoConfirmToolActions: $("autoConfirmToolsInput").checked,
       AutoRetryToolErrors: $("autoRetryToolsInput").checked,
       IncludeVbaContext: $("includeVbaContextInput").checked,
       VbaContextCharLimit: Number($("vbaContextLimitInput").value || 30000),
       SystemPrompt: $("systemPromptInput").value,
+      AgentPrompt: $("agentPromptInput").value,
       CustomHeaders: textToHeaders($("headersInput").value)
     };
   }
@@ -1220,6 +1232,7 @@
     var module = selectedVbaModule();
     state.vba.selectedModule = vbaModuleName(module);
     $("vbaCodeInput").value = module ? vbaModuleCode(module) : "";
+    renderVbaCodePreview();
     $("vbaMetaBox").textContent = module ? JSON.stringify({
       name: vbaModuleName(module),
       type: module.type || module.Type,
@@ -1245,6 +1258,39 @@
 
   function vbaModuleCode(module) {
     return module ? (module.code || module.Code || "") : "";
+  }
+
+  function renderVbaCodePreview() {
+    var preview = $("vbaCodePreview");
+    if (!preview) {
+      return;
+    }
+
+    preview.innerHTML = "";
+    var codeText = $("vbaCodeInput").value || "";
+    if (!codeText.trim()) {
+      var empty = document.createElement("div");
+      empty.className = "vba-code-empty";
+      empty.textContent = "No VBA code loaded.";
+      preview.appendChild(empty);
+      return;
+    }
+
+    var tools = document.createElement("div");
+    tools.className = "block-tools vba-preview-tools";
+    var language = document.createElement("span");
+    language.className = "code-lang";
+    language.textContent = "vba";
+    tools.appendChild(language);
+
+    var pre = document.createElement("pre");
+    var code = document.createElement("code");
+    code.className = "language-vba";
+    code.textContent = codeText;
+    pre.appendChild(code);
+    preview.appendChild(tools);
+    preview.appendChild(pre);
+    highlightCode(code);
   }
 
   function formatVbaDiff(before, after) {
@@ -1358,17 +1404,24 @@
 
   function reviewVbaInChat() {
     var patchTool = (state.host || "excel").toLowerCase() + ".vba_apply_patch";
-    var modules = state.vba.modules.map(function (module) {
-      return "===== " + (module.name || module.Name) + " =====\n" + (module.code || module.Code || "");
-    }).join("\n\n");
-    $("chatInput").value = "Проверь мой VBA код: найди ошибки, риски, места для улучшения, предложи комментарии. Если нужны небольшие правки, используй " + patchTool + "; полную замену модуля предлагай только когда это реально нужно.\\n\\n" + modules;
-    switchTab("chat");
-    $("chatInput").focus();
+    ensureVbaContextAttached().then(function () {
+      $("chatInput").value = "Проверь VBA код из добавленного контекста: найди ошибки, риски и места для улучшения. Если нужны небольшие правки, используй " + patchTool + "; полную замену модуля предлагай только когда это реально нужно.";
+      switchTab("chat");
+      $("chatInput").focus();
+    }).catch(function (error) {
+      log(error.detail || error.message);
+    });
   }
 
   function contextNotes() {
     var context = state.context || {};
     return (context.Notes || context.notes || []).filter(function (note) { return !!note; });
+  }
+
+  function vbaContextNotes() {
+    return contextNotes().filter(function (note) {
+      return noteKind(note) === "vba_project";
+    });
   }
 
   function noteValue(note, pascal, camel, fallback) {
@@ -1499,6 +1552,18 @@
     });
   }
 
+  function renderVbaContextToggle() {
+    var button = $("toggleVbaContextButton");
+    if (!button) {
+      return;
+    }
+
+    var active = vbaContextNotes().length > 0;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+    button.title = active ? "Detach VBA project context" : "Attach VBA project context";
+  }
+
   function renderContextList(notes) {
     var list = $("contextList");
     var summary = $("contextSummary");
@@ -1546,6 +1611,7 @@
     renderContextChips(notes);
     renderContextList(notes);
     $("contextBox").textContent = JSON.stringify(state.context || {}, null, 2);
+    renderVbaContextToggle();
     if (!skipUsageEstimate) {
       updateEstimatedContextUsage();
     }
@@ -1564,6 +1630,10 @@
   async function addSelectionContext(mode) {
     setActivity("context", "Добавляю выделение в контекст...");
     try {
+      if (document.activeElement && typeof document.activeElement.blur === "function") {
+        document.activeElement.blur();
+      }
+      reportFocusState();
       state.context = await send("addSelectionContext", { chatId: state.activeChatId, mode: mode || "full" });
       renderContext();
       log("Selection added to context.");
@@ -1571,6 +1641,79 @@
       log(error.detail || error.message);
     } finally {
       clearActivity();
+    }
+  }
+
+  async function addTextContext(kind, title, reference, text, details) {
+    state.context = await send("addTextContext", {
+      chatId: state.activeChatId,
+      kind: kind,
+      title: title,
+      reference: reference,
+      text: text,
+      detailsJson: typeof details === "string" ? details : JSON.stringify(details || {})
+    });
+    renderContext();
+  }
+
+  async function addSelectedToolContextToContext() {
+    syncSelectedToolFromEditor();
+    var skill = state.tools[state.selectedToolIndex];
+    var context = selectedToolContext();
+    if (!skill || !context) {
+      return false;
+    }
+
+    await addTextContext(
+      "tool_definition",
+      "Tool: " + (skill.Id || "tool"),
+      "tool:" + (skill.Id || "tool"),
+      context,
+      {
+        type: "tool_definition",
+        id: skill.Id || ""
+      });
+    log("Tool context added to chat context.");
+    return true;
+  }
+
+  async function ensureVbaContextAttached() {
+    if (vbaContextNotes().length > 0) {
+      return;
+    }
+
+    await addVbaContext();
+  }
+
+  async function addVbaContext() {
+    setActivity("context", "Добавляю VBA в контекст...");
+    try {
+      state.context = await send("addVbaContext", {
+        chatId: state.activeChatId,
+        maxChars: Number($("vbaContextLimitInput").value || 30000)
+      });
+      renderContext();
+      log("VBA context added.");
+    } finally {
+      clearActivity();
+    }
+  }
+
+  async function toggleVbaContext() {
+    var notes = vbaContextNotes();
+    try {
+      if (notes.length) {
+        for (var i = 0; i < notes.length; i += 1) {
+          state.context = await send("removeContextItem", { chatId: state.activeChatId, id: noteId(notes[i]) });
+        }
+        renderContext();
+        log("VBA context removed.");
+        return;
+      }
+
+      await addVbaContext();
+    } catch (error) {
+      log(error.detail || error.message);
     }
   }
 
@@ -1795,6 +1938,20 @@
     }
   }
 
+  async function forkChatAtMessage(message, index) {
+    if (!state.activeChatId) {
+      return;
+    }
+
+    try {
+      applyChatState(await send("forkChat", { chatId: state.activeChatId, id: messageId(message), index: index }));
+      clearSendError();
+      log("Chat branch created.");
+    } catch (error) {
+      log(error.detail || error.message);
+    }
+  }
+
   async function initialize() {
     setActivity("loading", "Загружаю состояние...");
     try {
@@ -1942,9 +2099,11 @@
     $("deleteChatButton").addEventListener("click", deleteChat);
     $("openContextTabButton").addEventListener("click", function () { switchTab("context"); });
     $("addSelectionContextButton").addEventListener("click", function () { addSelectionContext("full"); });
+    $("toggleVbaContextButton").addEventListener("click", toggleVbaContext);
     $("retrySendButton").addEventListener("click", retryFailedSend);
     $("refreshVbaButton").addEventListener("click", refreshVbaProject);
     $("vbaModuleSelect").addEventListener("change", renderSelectedVbaModule);
+    $("vbaCodeInput").addEventListener("input", renderVbaCodePreview);
     $("previewVbaDiffButton").addEventListener("click", previewVbaDiff);
     $("saveVbaButton").addEventListener("click", saveVbaModule);
     $("restoreVbaButton").addEventListener("click", restoreVbaBackup);
@@ -2075,14 +2234,17 @@
     });
 
     $("askToolBuilderButton").addEventListener("click", function () {
-      var context = selectedToolContext();
-      if (!context) {
-        return;
-      }
+      addSelectedToolContextToContext().then(function (added) {
+        if (!added) {
+          return;
+        }
 
-      $("chatInput").value = "Отредактируй этот RNAssistant tool. Верни обновленные tool.json/pipeline/code блоки, не выполняй действия без подтверждения.\\n\\n" + context;
-      switchTab("chat");
-      $("chatInput").focus();
+        $("chatInput").value = "Отредактируй RNAssistant tool из добавленного контекста. Верни обновленные tool.json/pipeline/code блоки, не выполняй действия без подтверждения.";
+        switchTab("chat");
+        $("chatInput").focus();
+      }).catch(function (error) {
+        log(error.detail || error.message);
+      });
     });
 
     $("clearContextButton").addEventListener("click", async function () {

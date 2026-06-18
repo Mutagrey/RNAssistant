@@ -90,6 +90,10 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
               <span>Add selection</span>
             </button>
+            <button type="button" class="secondary icon-text-button context-toggle-button" id="toggleVbaContextButton" title="Attach or detach VBA project context">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4 4 12l4 8"/><path d="m16 4 4 8-4 8"/><path d="m14 4-4 16"/></svg>
+              <span>VBA</span>
+            </button>
           </div>
           <textarea id="chatInput" rows="3" placeholder="Ask about the current document..."></textarea>
           <div class="composer-actions">
@@ -153,7 +157,7 @@
           <button id="saveVbaButton" type="button">Save Module</button>
           <button class="secondary" id="restoreVbaButton" type="button">Restore Backup</button>
         </div>
-        <div class="status" id="vbaStatus">VBA context is optional. Enable it in Settings when you want VBA code in chat context.</div>
+        <div class="status" id="vbaStatus">VBA context is optional. Use the VBA toggle next to Add selection to attach it to the active chat.</div>
         <div class="vba-layout">
           <aside class="vba-sidebar">
             <label>Module<select id="vbaModuleSelect"></select></label>
@@ -161,7 +165,10 @@
             <pre class="json-box vba-meta" id="vbaMetaBox"></pre>
           </aside>
           <section class="vba-editor">
-            <textarea id="vbaCodeInput" spellcheck="false" placeholder="Refresh VBA to load modules."></textarea>
+            <div class="vba-code-pane">
+              <textarea id="vbaCodeInput" spellcheck="false" placeholder="Refresh VBA to load modules."></textarea>
+              <div class="vba-code-preview" id="vbaCodePreview" aria-label="Highlighted VBA preview"></div>
+            </div>
             <pre class="json-box vba-diff" id="vbaDiffOutput"></pre>
           </section>
         </div>
@@ -192,13 +199,16 @@
           <label>Top P<input id="topPInput" type="number" min="0" max="1" step="0.01"></label>
           <label>Context chars<input id="contextLimitInput" type="number" min="1000" max="200000"></label>
           <label class="checkline"><input id="streamInput" type="checkbox"> Stream responses</label>
+          <label class="checkline"><input id="agentModeInput" type="checkbox"> Agent mode for Office actions</label>
           <label class="checkline"><input id="autoRunToolsInput" type="checkbox"> Auto-run tool calls from LLM</label>
           <label class="checkline"><input id="autoConfirmToolsInput" type="checkbox"> Auto-confirm tool actions</label>
           <label class="checkline"><input id="autoRetryToolsInput" type="checkbox"> Auto-retry failed tool calls</label>
-          <label class="checkline"><input id="includeVbaContextInput" type="checkbox"> Include VBA code in chat context</label>
+          <label class="checkline hidden"><input id="includeVbaContextInput" type="checkbox"> Legacy VBA auto-context</label>
           <label>VBA context chars<input id="vbaContextLimitInput" type="number" min="1000" max="200000"></label>
           <label>Custom headers<textarea id="headersInput" rows="4" placeholder="Header-Name: value"></textarea></label>
           <label>System prompt<textarea id="systemPromptInput" rows="7"></textarea></label>
+          <label>Agent prompt<textarea id="agentPromptInput" rows="7"></textarea></label>
+          <div class="status">System prompt controls style/general behavior. Agent prompt controls decomposition and tool use. RNAssistant still appends the required parser protocol.</div>
         </div>
         <div class="toolbar">
           <button class="secondary" id="loadModelsButton" type="button">Load Models</button>
@@ -224,8 +234,19 @@
       <div class="help-content">
         <section>
           <h3>Chat workflow</h3>
-          <p>Ask for the Office result in normal language. The model sees enabled tools and the active chat context, returns RNAssistant JSON blocks, and RNAssistant executes them when auto-run is enabled.</p>
+          <p>With Agent mode enabled, ask for the Office result in normal language. The model must return RNAssistant JSON tool blocks for document actions, and RNAssistant executes them when auto-run is enabled.</p>
           <pre><code>Создай новый лист Sales Demo, сгенерируй данные продаж по месяцам и построй линейный график.</code></pre>
+        </section>
+        <section>
+          <h3>Agent format</h3>
+          <p>Models should return one fenced rnassistant-agent block. RNAssistant parses skillId/toolId/tool/action/name plus arguments/args/parameters.</p>
+          <pre><code>```rnassistant-agent
+{"description":"Create sales demo","steps":[
+  {"description":"Add sheet","skillId":"excel.add_sheet","arguments":{"name":"Sales Demo"}},
+  {"description":"Write data","skillId":"excel.write_table","arguments":{"sheet":"Sales Demo","startAddress":"A1","values":[["Month","Sales"],["Jan",120]]}},
+  {"description":"Create chart","skillId":"excel.add_chart","arguments":{"sheet":"Sales Demo","sourceRange":"A1:B2","chartType":"line","title":"Sales"}}
+]}
+```</code></pre>
         </section>
         <section>
           <h3>Tools workflow</h3>
@@ -237,7 +258,7 @@
         </section>
         <section>
           <h3>VBA workflow</h3>
-          <p>Use the VBA tab to load Office VBA modules, preview diffs, save module changes with automatic backup, and restore backups. Enable VBA context in Settings only when chat needs existing VBA code.</p>
+          <p>Use the VBA tab to load Office VBA modules, preview highlighted code, save module changes with automatic backup, and restore backups. Use the VBA toggle in Chat to attach the project as active chat context.</p>
         </section>
         <section>
           <h3>Safety switches</h3>

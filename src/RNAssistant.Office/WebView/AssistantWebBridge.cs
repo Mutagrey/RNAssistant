@@ -59,6 +59,9 @@ namespace RNAssistant.Office.WebView
                     case "deleteMessage":
                         payloadJson = _controller.DeleteMessageJson((string)payload["id"], payload["index"] == null ? -1 : (int)payload["index"], (string)payload["chatId"]);
                         break;
+                    case "forkChat":
+                        payloadJson = _controller.ForkChatJson((string)payload["id"], payload["index"] == null ? -1 : (int)payload["index"], (string)payload["chatId"]);
+                        break;
                     case "getSettings":
                         payloadJson = _controller.GetSettingsJson();
                         break;
@@ -99,6 +102,20 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "addSelectionContext":
                         payloadJson = _controller.AddSelectionContextJson((string)payload["mode"], (string)payload["chatId"]);
+                        break;
+                    case "addTextContext":
+                        payloadJson = _controller.AddTextContextJson(
+                            (string)payload["kind"],
+                            (string)payload["title"],
+                            (string)payload["reference"],
+                            (string)payload["text"],
+                            (string)payload["detailsJson"],
+                            (string)payload["chatId"]);
+                        break;
+                    case "addVbaContext":
+                        payloadJson = _controller.AddVbaContextJson(
+                            (string)payload["chatId"],
+                            payload["maxChars"] == null ? 0 : (int)payload["maxChars"]);
                         break;
                     case "removeContextItem":
                         payloadJson = _controller.RemoveContextItemJson((string)payload["id"], (string)payload["chatId"]);

@@ -93,16 +93,19 @@ namespace RNAssistant.Office
 
             var tools = GetVisibleTools().Where(s => s.Enabled).ToList();
             var documentContext = LoadContext(session);
-            var vbaSnapshot = settings.IncludeVbaContext
-                ? _adapter.GetVbaSnapshot(settings.VbaContextCharLimit)
-                : string.Empty;
+            var vbaSnapshot = string.Empty;
             var systemPrompt = _promptComposer.ComposeSystemPrompt(
                 settings,
                 _adapter.HostName,
                 _adapter.GetDocumentSnapshot(settings.ContextCharLimit),
                 vbaSnapshot,
                 tools,
-                documentContext);
+                null);
+            var contextPrompt = _promptComposer.ComposeContextPrompt(documentContext);
+            if (!string.IsNullOrWhiteSpace(contextPrompt))
+            {
+                ReportProgress(progress, "context", "Добавленный контекст включен в запрос: " + documentContext.Notes.Count + " item(s).");
+            }
 
             object contextUsage = null;
             var assistantText = string.Empty;
@@ -110,7 +113,7 @@ namespace RNAssistant.Office
             string followUpPrompt = null;
             for (var iteration = 0; iteration < MaxAgentIterations; iteration++)
             {
-                var messages = BuildPromptMessages(systemPrompt, session.Messages, settings.ContextCharLimit);
+                var messages = BuildPromptMessages(systemPrompt, contextPrompt, session.Messages, settings.ContextCharLimit);
                 if (!string.IsNullOrWhiteSpace(followUpPrompt))
                 {
                     messages.Add(new ChatMessage { Role = "user", Content = followUpPrompt });
@@ -120,16 +123,21 @@ namespace RNAssistant.Office
                 ReportProgress(progress, "thinking", iteration == 0 ? "Модель думает..." : "Модель продолжает агентскую задачу...");
                 var completion = await _llmClient.CompleteAsync(settings, messages);
                 assistantText = completion.Content ?? string.Empty;
-                var assistantMessage = CreateAssistantMessage(assistantText, completion);
-                session.Messages.Add(assistantMessage);
 
                 ReportProgress(progress, "processing", "Разбираю ответ...");
                 var commands = _commandParser.Parse(assistantText).ToList();
                 if (commands.Count == 0)
                 {
+                    if (iteration == 0 && settings.AgentModeEnabled != false && ShouldForceAgentToolUse(text, _adapter.HostName))
+                    {
+                        followUpPrompt = "You are in RNAssistant Agent mode. The user asked for an Office action, so a prose-only answer is not acceptable. Return only one ```rnassistant-agent fenced JSON block with executable steps using available tools. If a tool is missing, say that plainly instead of inventing one.";
+                        continue;
+                    }
+                    session.Messages.Add(CreateAssistantMessage(assistantText, completion));
                     break;
                 }
 
+                session.Messages.Add(CreateAssistantMessage(CreateAgentPlanMessage(commands), completion));
                 var shouldContinue = settings.AutoRunToolCalls != false;
                 for (var i = 0; i < commands.Count; i++)
                 {
@@ -150,7 +158,7 @@ namespace RNAssistant.Office
                     if (!result.Success && settings.AutoRunToolCalls != false && settings.AutoRetryToolErrors != false && CanRetryToolError(result))
                     {
                         ReportProgress(progress, "repairing", "Tool упал, прошу модель исправить вызов: " + command.SkillId);
-                        await RetryFailedToolAsync(systemPrompt, session, settings, tools, command, result, resultLog, progress);
+                        await RetryFailedToolAsync(systemPrompt, contextPrompt, session, settings, tools, command, result, resultLog, progress);
                     }
                 }
 
@@ -190,6 +198,36 @@ namespace RNAssistant.Office
 
             var activeId = ChatStore.GetSessionId(session);
             return JsonConvert.SerializeObject(new { activeChatId = activeId, activeChatModel = session.Model, chats = GetChatSummaries(activeId), context = LoadContext(session), messages = session.Messages, contextUsage = EstimateContextUsage(session, _settingsService.Load()) });
+        }
+
+        public string ForkChatJson(string id, int index, string chatId = null)
+        {
+            var source = LoadSession(chatId);
+            var sourceMessages = source.Messages ?? new List<ChatMessage>();
+            var targetIndex = -1;
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                targetIndex = sourceMessages.FindIndex(m => m != null && string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase));
+            }
+            if (targetIndex < 0 && index >= 0 && index < sourceMessages.Count)
+            {
+                targetIndex = index;
+            }
+            if (targetIndex < 0)
+            {
+                targetIndex = sourceMessages.Count - 1;
+            }
+
+            var fork = _chatStore.Create(source.Host, source.DocumentKey, source.DocumentTitle, BuildForkTitle(source));
+            fork.Model = source.Model;
+            fork.Context = CloneJson(LoadContext(source)) ?? CreateEmptyContext();
+            fork.Messages = targetIndex < 0
+                ? new List<ChatMessage>()
+                : CloneJson(sourceMessages.Take(targetIndex + 1).ToList()) ?? new List<ChatMessage>();
+            NormalizeContext(fork.Context, fork);
+            _chatStore.Save(fork);
+            SetActiveSession(fork);
+            return ChatStateJson(fork);
         }
 
         public string ListChatsJson()
@@ -371,6 +409,59 @@ namespace RNAssistant.Office
             return JsonConvert.SerializeObject(AddSelectionContext(mode, chatId));
         }
 
+        public string AddTextContextJson(string kind, string title, string reference, string text, string detailsJson, string chatId = null)
+        {
+            var settings = _settingsService.Load();
+            var session = LoadSession(chatId);
+            var context = AddContextNote(session, new ContextNote
+            {
+                Host = _adapter.HostName,
+                Kind = string.IsNullOrWhiteSpace(kind) ? "context" : kind.Trim(),
+                Title = string.IsNullOrWhiteSpace(title) ? "Context" : title.Trim(),
+                Reference = string.IsNullOrWhiteSpace(reference) ? title : reference.Trim(),
+                Source = string.IsNullOrWhiteSpace(reference) ? title : reference.Trim(),
+                Text = TrimForContext(text ?? string.Empty, Math.Max(1000, settings.ContextCharLimit)),
+                Preview = TrimForContext(text ?? string.Empty, 360),
+                DetailsJson = detailsJson
+            }, kind);
+            return JsonConvert.SerializeObject(context);
+        }
+
+        public string AddVbaContextJson(string chatId = null, int maxChars = 0)
+        {
+            var settings = _settingsService.Load();
+            var session = LoadSession(chatId);
+            var limit = maxChars <= 0 ? settings.VbaContextCharLimit : maxChars;
+            var snapshot = _adapter.GetVbaSnapshot(Math.Max(1000, limit));
+            if (string.IsNullOrWhiteSpace(snapshot) ||
+                snapshot.IndexOf("VBA project could not be read", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                throw new InvalidOperationException(string.IsNullOrWhiteSpace(snapshot) ? "VBA project is empty or unavailable." : snapshot);
+            }
+
+            var text =
+                "Attached VBA project snapshot for this chat. Modules are separated by lines like ===== ModuleName (Type) =====.\n" +
+                "When editing VBA, use `" + VbaToolId("vba_apply_patch") + "` for targeted changes and avoid whole-module replacement unless necessary.\n\n" +
+                snapshot;
+            var context = AddContextNote(session, new ContextNote
+            {
+                Host = _adapter.HostName,
+                Kind = "vba_project",
+                Title = "VBA project",
+                Reference = "vba:project",
+                Source = _adapter.DocumentTitle,
+                Text = TrimForContext(text, Math.Max(1000, limit)),
+                Preview = "VBA project attached for this chat. Use VBA tools to patch modules.",
+                DetailsJson = JsonConvert.SerializeObject(new
+                {
+                    type = "vba_project",
+                    patchTool = VbaToolId("vba_apply_patch"),
+                    replaceModuleTool = VbaToolId("vba_replace_module")
+                })
+            }, "vba_project");
+            return JsonConvert.SerializeObject(context);
+        }
+
         public DocumentContext AddSelectionContext(string mode, string chatId = null)
         {
             var settings = _settingsService.Load();
@@ -380,6 +471,13 @@ namespace RNAssistant.Office
             {
                 context.Notes = new List<ContextNote>();
             }
+            try
+            {
+                _adapter.PrepareForContextCapture();
+            }
+            catch
+            {
+            }
             var note = _adapter.CaptureSelectionContext(mode, Math.Min(Math.Max(1000, settings.ContextCharLimit), 12000));
             if (note == null)
             {
@@ -387,7 +485,21 @@ namespace RNAssistant.Office
             }
 
             NormalizeContextNote(note, mode);
-            context.Notes.Add(note);
+            UpsertContextNote(context, note);
+            SaveSessionContext(session);
+            return context;
+        }
+
+        private DocumentContext AddContextNote(ChatSession session, ContextNote note, string mode)
+        {
+            var context = LoadContext(session);
+            if (context.Notes == null)
+            {
+                context.Notes = new List<ContextNote>();
+            }
+
+            NormalizeContextNote(note, mode);
+            UpsertContextNote(context, note);
             SaveSessionContext(session);
             return context;
         }
@@ -457,6 +569,7 @@ namespace RNAssistant.Office
 
         private async Task RetryFailedToolAsync(
             string systemPrompt,
+            string contextPrompt,
             ChatSession session,
             AppSettings settings,
             IReadOnlyList<SkillDefinition> tools,
@@ -470,7 +583,7 @@ namespace RNAssistant.Office
                 JsonConvert.SerializeObject(failedCommand.Arguments, Formatting.Indented) +
                 "\n```\nError: " + failedResult.Message +
                 (string.IsNullOrWhiteSpace(failedResult.DataJson) ? string.Empty : "\nData:\n```json\n" + failedResult.DataJson + "\n```");
-            var repairMessages = BuildPromptMessages(systemPrompt, session.Messages, settings.ContextCharLimit);
+            var repairMessages = BuildPromptMessages(systemPrompt, contextPrompt, session.Messages, settings.ContextCharLimit);
             repairMessages.Add(new ChatMessage { Role = "user", Content = repairPrompt });
 
             var repairCompletion = await _llmClient.CompleteAsync(settings, repairMessages);
@@ -502,10 +615,18 @@ namespace RNAssistant.Office
 
         private static void AddLocalResultMessage(ChatSession session, SkillCommand command, SkillResult result)
         {
+            var success = result != null && result.Success;
+            var message = result == null ? string.Empty : result.Message ?? string.Empty;
+            var waiting = !success && message.IndexOf("requires confirmation", StringComparison.OrdinalIgnoreCase) >= 0;
+            var title = string.IsNullOrWhiteSpace(command.Description) ? command.SkillId : command.Description;
             session.Messages.Add(new ChatMessage
             {
                 Role = "assistant",
-                Content = "Local skill result for `" + command.SkillId + "`: " + result.Message + (string.IsNullOrWhiteSpace(result.DataJson) ? string.Empty : "\n```json\n" + result.DataJson + "\n```")
+                Content = "### Agent step: " + title +
+                    "\n- Tool: `" + command.SkillId + "`" +
+                    "\n- Status: " + (success ? "completed" : (waiting ? "waiting for confirmation" : "failed")) +
+                    "\n- Result: " + message +
+                    (string.IsNullOrWhiteSpace(result == null ? null : result.DataJson) ? string.Empty : "\n```json\n" + result.DataJson + "\n```")
             });
         }
 
@@ -527,10 +648,42 @@ namespace RNAssistant.Office
             return new
             {
                 skillId = command == null ? string.Empty : command.SkillId,
+                description = command == null ? string.Empty : command.Description,
                 success = result != null && result.Success,
                 message = result == null ? string.Empty : result.Message,
                 dataJson = result == null ? null : result.DataJson
             };
+        }
+
+        private static string CreateAgentPlanMessage(IReadOnlyList<SkillCommand> commands)
+        {
+            var builder = new System.Text.StringBuilder();
+            builder.AppendLine("### Agent plan");
+            if (commands == null || commands.Count == 0)
+            {
+                builder.AppendLine("No executable steps were returned.");
+                return builder.ToString();
+            }
+
+            for (var i = 0; i < commands.Count; i++)
+            {
+                var command = commands[i];
+                var title = command == null || string.IsNullOrWhiteSpace(command.Description)
+                    ? (command == null ? "Tool step" : command.SkillId)
+                    : command.Description;
+                builder.AppendLine((i + 1) + ". " + title + " (`" + (command == null ? string.Empty : command.SkillId) + "`)");
+            }
+
+            builder.AppendLine();
+            builder.AppendLine("```json");
+            builder.AppendLine(JsonConvert.SerializeObject(commands.Select(command => new
+            {
+                description = command == null ? string.Empty : command.Description,
+                skillId = command == null ? string.Empty : command.SkillId,
+                arguments = command == null ? null : command.Arguments
+            }), Formatting.Indented));
+            builder.AppendLine("```");
+            return builder.ToString();
         }
 
         private string DequeueQuickAction()
@@ -706,6 +859,65 @@ namespace RNAssistant.Office
                     NormalizeContextNote(note, note.Kind);
                 }
             }
+        }
+
+        private static void UpsertContextNote(DocumentContext context, ContextNote note)
+        {
+            if (context == null || note == null)
+            {
+                return;
+            }
+
+            if (context.Notes == null)
+            {
+                context.Notes = new List<ContextNote>();
+            }
+
+            var existing = context.Notes.FirstOrDefault(item => IsSameContextNote(item, note));
+            if (existing == null)
+            {
+                context.Notes.Add(note);
+                return;
+            }
+
+            existing.Host = note.Host;
+            existing.Kind = note.Kind;
+            existing.Title = note.Title;
+            existing.Reference = note.Reference;
+            existing.Source = note.Source;
+            existing.Text = note.Text;
+            existing.Preview = note.Preview;
+            existing.DetailsJson = note.DetailsJson;
+            existing.CreatedUtc = note.CreatedUtc == default(DateTime) ? DateTime.UtcNow : note.CreatedUtc;
+        }
+
+        private static bool IsSameContextNote(ContextNote left, ContextNote right)
+        {
+            if (left == null || right == null)
+            {
+                return false;
+            }
+
+            return string.Equals(left.Host, right.Host, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(left.Kind, right.Kind, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(left.Reference, right.Reference, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(left.DetailsJson, right.DetailsJson, StringComparison.Ordinal);
+        }
+
+        private static T CloneJson<T>(T value) where T : class
+        {
+            return value == null ? null : JsonConvert.DeserializeObject<T>(JsonConvert.SerializeObject(value));
+        }
+
+        private static string BuildForkTitle(ChatSession source)
+        {
+            var title = source == null || string.IsNullOrWhiteSpace(source.Title) ? "Chat" : source.Title.Trim();
+            if (title.EndsWith(" fork", StringComparison.OrdinalIgnoreCase))
+            {
+                return title;
+            }
+
+            return (title.Length > 52 ? title.Substring(0, 52).TrimEnd() : title) + " fork";
         }
 
         private void SetActiveSession(ChatSession session)
@@ -902,7 +1114,8 @@ namespace RNAssistant.Office
                 s.Enabled &&
                 string.Equals(s.Id, command.SkillId, StringComparison.OrdinalIgnoreCase));
 
-            if (IsMutationTool(command.SkillId) && !settings.AutoConfirmToolActions && !manualRun && !dryRun)
+            if (IsMutationTool(command.SkillId) && !settings.AutoConfirmToolActions && !manualRun && !dryRun &&
+                !CanAgentRunBuiltInMutation(command.SkillId, tool, settings))
             {
                 return SkillResult.Fail("Tool requires confirmation before execution: " + command.SkillId);
             }
@@ -1455,9 +1668,44 @@ namespace RNAssistant.Office
                 EndsWithTool(toolId, ".run_macro");
         }
 
+        private static bool CanAgentRunBuiltInMutation(string toolId, SkillDefinition customTool, AppSettings settings)
+        {
+            return settings != null &&
+                settings.AgentModeEnabled != false &&
+                customTool == null &&
+                !IsVbaMutationTool(toolId);
+        }
+
+        private static bool IsVbaMutationTool(string toolId)
+        {
+            return EndsWithTool(toolId, ".vba_replace_module") ||
+                EndsWithTool(toolId, ".vba_replace_text") ||
+                EndsWithTool(toolId, ".vba_apply_patch") ||
+                EndsWithTool(toolId, ".vba_restore_backup") ||
+                EndsWithTool(toolId, ".insert_vba_module") ||
+                EndsWithTool(toolId, ".run_macro");
+        }
+
         private static bool EndsWithTool(string toolId, string suffix)
         {
             return (toolId ?? string.Empty).EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool ShouldForceAgentToolUse(string text, string host)
+        {
+            var value = (text ?? string.Empty).ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            var action = Regex.IsMatch(value, "(создай|создать|сделай|построй|сгенерируй|заполни|вставь|замени|измени|добавь|нарисуй|create|make|add|insert|replace|update|write|generate|build|chart)");
+            if (!action)
+            {
+                return false;
+            }
+
+            return Regex.IsMatch(value, "(лист|таблиц|диапазон|ячейк|график|диаграмм|sheet|table|range|cell|chart|slide|слайд|document|документ|selection|выдел|mail|email|письм)");
         }
 
         private static bool CanRetryToolError(SkillResult result)
@@ -1525,9 +1773,15 @@ namespace RNAssistant.Office
             });
         }
 
-        private static List<ChatMessage> BuildPromptMessages(string systemPrompt, IEnumerable<ChatMessage> sessionMessages, int charLimit)
+        private static List<ChatMessage> BuildPromptMessages(string systemPrompt, string contextPrompt, IEnumerable<ChatMessage> sessionMessages, int charLimit)
         {
             var result = new List<ChatMessage> { new ChatMessage { Role = "system", Content = systemPrompt } };
+            if (!string.IsNullOrWhiteSpace(contextPrompt))
+            {
+                result.Add(new ChatMessage { Role = "user", Content = contextPrompt });
+            }
+
+            var history = new List<ChatMessage>();
             var remaining = Math.Max(4000, charLimit);
             foreach (var message in sessionMessages.Reverse())
             {
@@ -1542,9 +1796,10 @@ namespace RNAssistant.Office
                     break;
                 }
 
-                result.Insert(1, message);
+                history.Insert(0, message);
             }
 
+            result.AddRange(history);
             return result;
         }
 

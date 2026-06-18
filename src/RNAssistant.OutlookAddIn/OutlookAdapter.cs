@@ -87,6 +87,28 @@ namespace RNAssistant.OutlookAddIn
             return string.Empty;
         }
 
+        public void PrepareForContextCapture()
+        {
+            try
+            {
+                var explorer = _application.ActiveExplorer();
+                if (explorer != null)
+                {
+                    explorer.Activate();
+                    return;
+                }
+
+                var inspector = _application.ActiveInspector();
+                if (inspector != null)
+                {
+                    inspector.Activate();
+                }
+            }
+            catch
+            {
+            }
+        }
+
         public ContextNote CaptureSelectionContext(string mode, int maxChars)
         {
             var mail = RequireSelectedMail();

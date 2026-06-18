@@ -136,7 +136,11 @@ Agent responses may also use:
 ```
 ````
 
-Pure JSON arrays/objects with `skillId` or `toolId` are accepted too. Native API `tool_calls` are not required or used. The agent may run read-only tools automatically; document-changing and VBA tools require manual confirmation unless `Auto-confirm tool actions` is enabled.
+Pure JSON arrays/objects with `skillId`, `toolId`, `tool`, `action`, or `name` are accepted too. Native API `tool_calls` are not required or used. In Agent mode, built-in Office tools can run automatically; custom tools marked `requiresConfirmation` and VBA mutation tools still require confirmation unless `Auto-confirm tool actions` is enabled.
+
+`System prompt` in Settings is treated as additional custom instruction. The fixed RNAssistant tool protocol is always appended as mandatory runtime protocol so custom text cannot disable parsing or tool execution rules.
+
+When `Agent mode for Office actions` is enabled, ordinary Office requests such as creating sheets, writing data, adding charts, editing documents, or creating slides should return a `rnassistant-agent` block. If the first model answer is prose-only for an obvious Office action, RNAssistant asks the model once more to return an executable agent block.
 
 ## Tool Library
 

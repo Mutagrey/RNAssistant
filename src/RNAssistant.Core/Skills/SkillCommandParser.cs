@@ -25,6 +25,14 @@ namespace RNAssistant.Core.Skills
             ExtractFenced(assistantText, commands);
             ExtractXml(assistantText, commands);
             ExtractBareJson(assistantText, commands);
+            if (commands.Count == 0)
+            {
+                ExtractGenericJsonFences(assistantText, commands);
+            }
+            if (commands.Count == 0)
+            {
+                ExtractEmbeddedJson(assistantText, commands);
+            }
             return commands;
         }
 
@@ -82,6 +90,115 @@ namespace RNAssistant.Core.Skills
             TryAdd(trimmed, commands);
         }
 
+        private static void ExtractGenericJsonFences(string text, ICollection<SkillCommand> commands)
+        {
+            var index = 0;
+            while ((index = text.IndexOf("```", index, StringComparison.OrdinalIgnoreCase)) >= 0)
+            {
+                var contentStart = index + 3;
+                var lineEnd = text.IndexOf('\n', contentStart);
+                if (lineEnd < 0)
+                {
+                    break;
+                }
+
+                var language = text.Substring(contentStart, lineEnd - contentStart).Trim();
+                var end = text.IndexOf("```", lineEnd + 1, StringComparison.OrdinalIgnoreCase);
+                if (end < 0)
+                {
+                    break;
+                }
+
+                if (string.Equals(language, "json", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(language))
+                {
+                    TryAdd(text.Substring(lineEnd + 1, end - lineEnd - 1), commands);
+                }
+                index = end + 3;
+            }
+        }
+
+        private static void ExtractEmbeddedJson(string text, ICollection<SkillCommand> commands)
+        {
+            foreach (var start in FindJsonStarts(text))
+            {
+                var candidate = ReadBalancedJson(text, start);
+                if (string.IsNullOrWhiteSpace(candidate))
+                {
+                    continue;
+                }
+
+                TryAdd(candidate, commands);
+                if (commands.Count > 0)
+                {
+                    return;
+                }
+            }
+        }
+
+        private static IEnumerable<int> FindJsonStarts(string text)
+        {
+            for (var i = 0; i < (text == null ? 0 : text.Length); i++)
+            {
+                if (text[i] == '{' || text[i] == '[')
+                {
+                    yield return i;
+                }
+            }
+        }
+
+        private static string ReadBalancedJson(string text, int start)
+        {
+            if (string.IsNullOrEmpty(text) || start < 0 || start >= text.Length)
+            {
+                return null;
+            }
+
+            var open = text[start];
+            var close = open == '{' ? '}' : ']';
+            var depth = 0;
+            var inString = false;
+            var escaped = false;
+            for (var i = start; i < text.Length; i++)
+            {
+                var c = text[i];
+                if (inString)
+                {
+                    if (escaped)
+                    {
+                        escaped = false;
+                    }
+                    else if (c == '\\')
+                    {
+                        escaped = true;
+                    }
+                    else if (c == '"')
+                    {
+                        inString = false;
+                    }
+                    continue;
+                }
+
+                if (c == '"')
+                {
+                    inString = true;
+                }
+                else if (c == open)
+                {
+                    depth++;
+                }
+                else if (c == close)
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        return text.Substring(start, i - start + 1);
+                    }
+                }
+            }
+
+            return null;
+        }
+
         private static void TryAdd(string json, ICollection<SkillCommand> commands)
         {
             try
@@ -112,8 +229,19 @@ namespace RNAssistant.Core.Skills
                 return;
             }
 
-            var steps = (obj["steps"] as JArray) ?? (obj["commands"] as JArray) ?? (obj["actions"] as JArray) ?? (obj["tools"] as JArray);
-            var explicitId = (string)(obj["skillId"] ?? obj["skill_id"] ?? obj["toolId"] ?? obj["tool_id"]);
+            var steps = (obj["steps"] as JArray) ?? (obj["commands"] as JArray) ?? (obj["actions"] as JArray) ?? (obj["tools"] as JArray) ?? (obj["tool_calls"] as JArray);
+            var argumentToken = obj["arguments"] ?? obj["args"] ?? obj["parameters"] ?? obj["input"];
+            var explicitId = (string)(obj["skillId"] ?? obj["skill_id"] ?? obj["toolId"] ?? obj["tool_id"] ?? obj["tool"]);
+            var function = obj["function"] as JObject;
+            if (string.IsNullOrWhiteSpace(explicitId) && function != null)
+            {
+                explicitId = (string)function["name"];
+                argumentToken = argumentToken ?? function["arguments"];
+            }
+            if (string.IsNullOrWhiteSpace(explicitId) && argumentToken != null)
+            {
+                explicitId = (string)(obj["action"] ?? obj["name"]);
+            }
             if (string.IsNullOrWhiteSpace(explicitId) && steps != null)
             {
                 foreach (var step in steps.Children())
@@ -129,8 +257,12 @@ namespace RNAssistant.Core.Skills
                 return;
             }
 
-            var command = new SkillCommand { SkillId = id };
-            var args = (obj["arguments"] as JObject) ?? (obj["args"] as JObject) ?? (obj["input"] as JObject);
+            var command = new SkillCommand
+            {
+                SkillId = id,
+                Description = (string)(obj["description"] ?? obj["title"] ?? obj["reason"])
+            };
+            var args = ReadObject(argumentToken);
             if (args != null)
             {
                 foreach (var property in args.Properties())
@@ -142,6 +274,34 @@ namespace RNAssistant.Core.Skills
             }
 
             commands.Add(command);
+        }
+
+        private static JObject ReadObject(JToken token)
+        {
+            if (token == null || token.Type == JTokenType.Null)
+            {
+                return null;
+            }
+
+            var obj = token as JObject;
+            if (obj != null)
+            {
+                return obj;
+            }
+
+            if (token.Type == JTokenType.String)
+            {
+                try
+                {
+                    return JObject.Parse(token.Value<string>() ?? "{}");
+                }
+                catch (JsonException)
+                {
+                    return null;
+                }
+            }
+
+            return null;
         }
     }
 }
