@@ -31,6 +31,7 @@ namespace RNAssistant.Core.Models
         public string Title { get; set; }
         public DateTime CreatedUtc { get; set; }
         public DateTime UpdatedUtc { get; set; }
+        public DocumentContext Context { get; set; }
         public List<ChatMessage> Messages { get; set; }
 
         public ChatSession()
@@ -39,6 +40,7 @@ namespace RNAssistant.Core.Models
             SessionId = Id;
             CreatedUtc = DateTime.UtcNow;
             UpdatedUtc = DateTime.UtcNow;
+            Context = new DocumentContext();
             Messages = new List<ChatMessage>();
         }
     }

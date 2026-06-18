@@ -106,8 +106,8 @@ Runtime data is stored under:
 - `settings.json` - API base URL, model, headers, token limits, prompt.
 - `secret.bin` - API key protected with DPAPI CurrentUser.
 - `tools` - central editable tool library.
-- `chats` - per-document chat session folders.
-- `contexts` - per-document context.
+- `chats` - per-document chat session folders; each chat stores its own context attachments.
+- `contexts` - legacy per-document context store, migrated into the first loaded chat.
 
 Word, Excel and PowerPoint documents are identified by a custom document property named `RNAssistantDocumentId` when available, so chat sessions and context survive file rename/move. If the property cannot be read or written, RNAssistant falls back to the document path.
 
@@ -124,6 +124,19 @@ Native tool calling is not required. The model is prompted to return local actio
 ````
 
 The add-in parses these blocks and executes known local tools when `Auto-run tool calls from LLM` is enabled.
+
+Agent responses may also use:
+
+````
+```rnassistant-agent
+[
+  {"skillId":"excel.read_range","arguments":{"address":"A1:D20"}},
+  {"skillId":"excel.add_chart","arguments":{"sourceRange":"A1:B20","chartType":"line","title":"Sales"}}
+]
+```
+````
+
+Pure JSON arrays/objects with `skillId` or `toolId` are accepted too. Native API `tool_calls` are not required or used. The agent may run read-only tools automatically; document-changing and VBA tools require manual confirmation unless `Auto-confirm tool actions` is enabled.
 
 ## Tool Library
 
@@ -164,12 +177,13 @@ Supported placeholders are `{{args.name}}`, `{{steps.stepId.message}}`, `{{steps
 The Tools tab can run a selected tool with ad hoc JSON arguments. `Dry Run` resolves the planned calls without changing the Office document. `Run` is treated as explicit user confirmation.
 
 For Excel, Word, and PowerPoint, `executor: "vba"` inserts `code.vba` through the current host `insert_vba_module`; if the run arguments include `macroName`, it then calls the current host `run_macro`.
+Agent-generated executable code should be VBA for the current Office host.
 
 ## VBA Workflow
 
 Office VBA support requires Office setting `Trust access to the VBA project object model`.
 
-- Settings has `Include VBA code in chat context`; keep it off unless the model needs to review existing VBA.
+- Settings has `Include VBA code in chat context`; keep it off unless the model needs to review existing VBA. Settings also has request timeout seconds; increase it for slow local or proxy LLM endpoints.
 - Excel, Word, and PowerPoint can read VBA modules, show source code, and list RNAssistant rollback backups.
 - `Preview Diff` shows the current editor changes before saving.
 - `Save Module` replaces the selected module and stores the previous version under `%AppData%\RNAssistant\vba-backups`.

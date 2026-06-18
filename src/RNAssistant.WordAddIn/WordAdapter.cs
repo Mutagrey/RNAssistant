@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using Newtonsoft.Json;
 using Word = Microsoft.Office.Interop.Word;
 using RNAssistant.Core.Models;
@@ -233,13 +234,18 @@ namespace RNAssistant.WordAddIn
 
         private SkillResult RunMacro(SkillCommand command)
         {
-            object macroName = SkillArgumentReader.String(command.Arguments, "macroName", string.Empty);
-            if (string.IsNullOrWhiteSpace((string)macroName))
+            var macroName = SkillArgumentReader.String(command.Arguments, "macroName", string.Empty);
+            if (string.IsNullOrWhiteSpace(macroName))
             {
                 return SkillResult.Fail("No macroName provided.");
             }
 
-            _application.Run(ref macroName);
+            _application.GetType().InvokeMember(
+                "Run",
+                BindingFlags.InvokeMethod,
+                null,
+                _application,
+                new object[] { macroName });
             return SkillResult.Ok("Macro ran: " + macroName);
         }
 

@@ -14,6 +14,7 @@ namespace RNAssistant.Office
 {
     public sealed class AssistantController
     {
+        private const int MaxAgentIterations = 3;
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly AppDataPaths _paths;
         private readonly SettingsService _settingsService;
@@ -52,6 +53,7 @@ namespace RNAssistant.Office
         {
             var session = LoadSession(null);
             var activeId = ChatStore.GetSessionId(session);
+            var context = LoadContext(session);
             var state = new
             {
                 host = _adapter.HostName,
@@ -63,7 +65,7 @@ namespace RNAssistant.Office
                 hasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey()),
                 tools = GetVisibleTools(),
                 toolsPath = _paths.ToolsDirectory,
-                context = LoadContext(),
+                context = context,
                 messages = session.Messages,
                 contextUsage = EstimateContextUsage(session, _settingsService.Load()),
                 quickAction = DequeueQuickAction()
@@ -77,7 +79,7 @@ namespace RNAssistant.Office
             {
                 var emptySession = LoadSession(chatId);
                 var emptyId = ChatStore.GetSessionId(emptySession);
-                return JsonConvert.SerializeObject(new { message = string.Empty, skillResults = new SkillResult[0], activeChatId = emptyId, chats = GetChatSummaries(emptyId), messages = emptySession.Messages, contextUsage = EstimateContextUsage(emptySession, _settingsService.Load()) });
+                return JsonConvert.SerializeObject(new { message = string.Empty, skillResults = new SkillResult[0], activeChatId = emptyId, chats = GetChatSummaries(emptyId), context = LoadContext(emptySession), messages = emptySession.Messages, contextUsage = EstimateContextUsage(emptySession, _settingsService.Load()) });
             }
 
             ReportProgress(progress, "context", "Читаю документ...");
@@ -87,7 +89,7 @@ namespace RNAssistant.Office
             EnsureSessionTitleFromUserText(session, text);
 
             var tools = GetVisibleTools().Where(s => s.Enabled).ToList();
-            var documentContext = LoadContext();
+            var documentContext = LoadContext(session);
             var vbaSnapshot = settings.IncludeVbaContext
                 ? _adapter.GetVbaSnapshot(settings.VbaContextCharLimit)
                 : string.Empty;
@@ -99,40 +101,68 @@ namespace RNAssistant.Office
                 tools,
                 documentContext);
 
-            var messages = BuildPromptMessages(systemPrompt, session.Messages, settings.ContextCharLimit);
-            var contextUsage = CreateContextUsage(messages, settings);
-            ReportProgress(progress, "thinking", "Модель думает...");
-            var completion = await _llmClient.CompleteAsync(settings, messages);
-            var assistantText = completion.Content ?? string.Empty;
-            var assistantMessage = CreateAssistantMessage(assistantText, completion);
-            session.Messages.Add(assistantMessage);
-
-            ReportProgress(progress, "processing", "Разбираю ответ...");
-            var commands = _commandParser.Parse(assistantText).ToList();
+            object contextUsage = null;
+            var assistantText = string.Empty;
             var resultLog = new List<object>();
-            for (var i = 0; i < commands.Count; i++)
+            string followUpPrompt = null;
+            for (var iteration = 0; iteration < MaxAgentIterations; iteration++)
             {
-                var command = commands[i];
-                ReportProgress(
-                    progress,
-                    settings.AutoRunToolCalls != false ? "executing" : "waiting",
-                    (settings.AutoRunToolCalls != false ? "Исполняю tool " : "Auto-run отключен для tool ") + (i + 1) + "/" + commands.Count + ": " + command.SkillId);
-                var result = settings.AutoRunToolCalls != false
-                    ? ExecuteCommand(command, tools, settings, 0, false, false)
-                    : SkillResult.Fail("Auto tool execution is disabled: " + command.SkillId);
-                resultLog.Add(DescribeResult(command, result));
-                AddLocalResultMessage(session, command, result);
-                if (!result.Success && settings.AutoRunToolCalls != false && settings.AutoRetryToolErrors != false && CanRetryToolError(result))
+                var messages = BuildPromptMessages(systemPrompt, session.Messages, settings.ContextCharLimit);
+                if (!string.IsNullOrWhiteSpace(followUpPrompt))
                 {
-                    ReportProgress(progress, "repairing", "Tool упал, прошу модель исправить вызов: " + command.SkillId);
-                    await RetryFailedToolAsync(systemPrompt, session, settings, tools, command, result, resultLog, progress);
+                    messages.Add(new ChatMessage { Role = "user", Content = followUpPrompt });
                 }
+
+                contextUsage = CreateContextUsage(messages, settings);
+                ReportProgress(progress, "thinking", iteration == 0 ? "Модель думает..." : "Модель продолжает агентскую задачу...");
+                var completion = await _llmClient.CompleteAsync(settings, messages);
+                assistantText = completion.Content ?? string.Empty;
+                var assistantMessage = CreateAssistantMessage(assistantText, completion);
+                session.Messages.Add(assistantMessage);
+
+                ReportProgress(progress, "processing", "Разбираю ответ...");
+                var commands = _commandParser.Parse(assistantText).ToList();
+                if (commands.Count == 0)
+                {
+                    break;
+                }
+
+                var shouldContinue = settings.AutoRunToolCalls != false;
+                for (var i = 0; i < commands.Count; i++)
+                {
+                    var command = commands[i];
+                    ReportProgress(
+                        progress,
+                        settings.AutoRunToolCalls != false ? "executing" : "waiting",
+                        (settings.AutoRunToolCalls != false ? "Исполняю tool " : "Auto-run отключен для tool ") + (i + 1) + "/" + commands.Count + ": " + command.SkillId);
+                    var result = settings.AutoRunToolCalls != false
+                        ? ExecuteCommand(command, tools, settings, 0, false, false)
+                        : SkillResult.Fail("Auto tool execution is disabled: " + command.SkillId);
+                    resultLog.Add(DescribeResult(command, result));
+                    AddLocalResultMessage(session, command, result);
+                    if (!result.Success)
+                    {
+                        shouldContinue = false;
+                    }
+                    if (!result.Success && settings.AutoRunToolCalls != false && settings.AutoRetryToolErrors != false && CanRetryToolError(result))
+                    {
+                        ReportProgress(progress, "repairing", "Tool упал, прошу модель исправить вызов: " + command.SkillId);
+                        await RetryFailedToolAsync(systemPrompt, session, settings, tools, command, result, resultLog, progress);
+                    }
+                }
+
+                if (!shouldContinue)
+                {
+                    break;
+                }
+
+                followUpPrompt = "Local tool results above are available. If the task is complete, answer the user normally. If more Office/VBA actions are needed, return one rnassistant-agent block with only the next commands.";
             }
 
             ReportProgress(progress, "saving", "Сохраняю историю...");
             _chatStore.Save(session);
             var activeId = ChatStore.GetSessionId(session);
-            return JsonConvert.SerializeObject(new { message = assistantText, skillResults = resultLog, activeChatId = activeId, chats = GetChatSummaries(activeId), messages = session.Messages, contextUsage = contextUsage });
+            return JsonConvert.SerializeObject(new { message = assistantText, skillResults = resultLog, activeChatId = activeId, chats = GetChatSummaries(activeId), context = LoadContext(session), messages = session.Messages, contextUsage = contextUsage ?? EstimateContextUsage(session, settings) });
         }
 
         public string DeleteMessageJson(string id, int index, string chatId = null)
@@ -156,7 +186,7 @@ namespace RNAssistant.Office
             }
 
             var activeId = ChatStore.GetSessionId(session);
-            return JsonConvert.SerializeObject(new { activeChatId = activeId, chats = GetChatSummaries(activeId), messages = session.Messages, contextUsage = EstimateContextUsage(session, _settingsService.Load()) });
+            return JsonConvert.SerializeObject(new { activeChatId = activeId, chats = GetChatSummaries(activeId), context = LoadContext(session), messages = session.Messages, contextUsage = EstimateContextUsage(session, _settingsService.Load()) });
         }
 
         public string ListChatsJson()
@@ -219,6 +249,22 @@ namespace RNAssistant.Office
             {
                 settings = _settingsService.Load(),
                 hasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey())
+            });
+        }
+
+        public async Task<string> GetModelCatalogJsonAsync(string settingsJson, string apiKey)
+        {
+            var settings = string.IsNullOrWhiteSpace(settingsJson)
+                ? _settingsService.Load()
+                : (JsonConvert.DeserializeObject<AppSettings>(settingsJson) ?? _settingsService.Load());
+            var json = await _llmClient.GetModelsConfigJsonAsync(
+                settings,
+                string.IsNullOrWhiteSpace(apiKey) ? null : apiKey).ConfigureAwait(false);
+
+            return JsonConvert.SerializeObject(new
+            {
+                configUrl = LlmClient.BuildModelsConfigUrl(settings.BaseUrl),
+                catalog = JToken.Parse(json)
             });
         }
 
@@ -304,20 +350,21 @@ namespace RNAssistant.Office
             return JsonConvert.SerializeObject(result);
         }
 
-        public string GetContextJson()
+        public string GetContextJson(string chatId = null)
         {
-            return JsonConvert.SerializeObject(LoadContext());
+            return JsonConvert.SerializeObject(LoadContext(LoadSession(chatId)));
         }
 
-        public string AddSelectionContextJson(string mode)
+        public string AddSelectionContextJson(string mode, string chatId = null)
         {
-            return JsonConvert.SerializeObject(AddSelectionContext(mode));
+            return JsonConvert.SerializeObject(AddSelectionContext(mode, chatId));
         }
 
-        public DocumentContext AddSelectionContext(string mode)
+        public DocumentContext AddSelectionContext(string mode, string chatId = null)
         {
             var settings = _settingsService.Load();
-            var context = LoadContext();
+            var session = LoadSession(chatId);
+            var context = LoadContext(session);
             if (context.Notes == null)
             {
                 context.Notes = new List<ContextNote>();
@@ -330,26 +377,29 @@ namespace RNAssistant.Office
 
             NormalizeContextNote(note, mode);
             context.Notes.Add(note);
-            _contextStore.Save(context);
+            SaveSessionContext(session);
             return context;
         }
 
-        public string RemoveContextItemJson(string id)
+        public string RemoveContextItemJson(string id, string chatId = null)
         {
-            var context = LoadContext();
+            var session = LoadSession(chatId);
+            var context = LoadContext(session);
             if (context.Notes != null && !string.IsNullOrWhiteSpace(id))
             {
                 context.Notes.RemoveAll(n => n != null && string.Equals(n.Id, id, StringComparison.OrdinalIgnoreCase));
-                _contextStore.Save(context);
+                SaveSessionContext(session);
             }
 
             return JsonConvert.SerializeObject(context);
         }
 
-        public string ClearContextJson()
+        public string ClearContextJson(string chatId = null)
         {
-            _contextStore.Clear(_adapter.HostName, _adapter.DocumentKey);
-            return GetContextJson();
+            var session = LoadSession(chatId);
+            session.Context = CreateEmptyContext();
+            SaveSessionContext(session);
+            return JsonConvert.SerializeObject(session.Context);
         }
 
         public void QueueQuickAction(string action)
@@ -527,6 +577,7 @@ namespace RNAssistant.Office
             }
 
             SetActiveSession(session);
+            EnsureChatContext(session);
             return session;
         }
 
@@ -556,26 +607,94 @@ namespace RNAssistant.Office
             }
         }
 
-        private DocumentContext LoadContext()
+        private DocumentContext LoadContext(ChatSession session)
         {
-            var context = _contextStore.LoadOrCreate(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle);
+            if (session == null)
+            {
+                session = LoadSession(null);
+            }
+
+            if (session.Context == null)
+            {
+                session.Context = CreateEmptyContext();
+            }
+
+            var context = session.Context;
             if (string.IsNullOrWhiteSpace(context.Host))
             {
-                context.Host = _adapter.HostName;
+                context.Host = session.Host ?? _adapter.HostName;
             }
             if (string.IsNullOrWhiteSpace(context.DocumentKey))
             {
-                context.DocumentKey = _adapter.DocumentKey;
+                context.DocumentKey = session.DocumentKey ?? _adapter.DocumentKey;
             }
             if (string.IsNullOrWhiteSpace(context.Title))
             {
-                context.Title = _adapter.DocumentTitle;
+                context.Title = session.Title ?? _adapter.DocumentTitle;
             }
             if (context.Notes == null)
             {
                 context.Notes = new List<ContextNote>();
             }
             return context;
+        }
+
+        private void EnsureChatContext(ChatSession session)
+        {
+            var context = LoadContext(session);
+            NormalizeContext(context, session);
+            if ((context.Notes == null || context.Notes.Count == 0) &&
+                _contextStore.Exists(session.Host, session.DocumentKey))
+            {
+                var legacy = _contextStore.LoadOrCreate(session.Host, session.DocumentKey, session.DocumentTitle);
+                if (legacy != null && legacy.Notes != null && legacy.Notes.Count > 0)
+                {
+                    session.Context = legacy;
+                    NormalizeContext(session.Context, session);
+                    _chatStore.Save(session);
+                    _contextStore.Clear(session.Host, session.DocumentKey);
+                }
+            }
+        }
+
+        private DocumentContext CreateEmptyContext()
+        {
+            return new DocumentContext
+            {
+                Host = _adapter.HostName,
+                DocumentKey = _adapter.DocumentKey,
+                Title = _adapter.DocumentTitle
+            };
+        }
+
+        private void SaveSessionContext(ChatSession session)
+        {
+            NormalizeContext(LoadContext(session), session);
+            _chatStore.Save(session);
+        }
+
+        private void NormalizeContext(DocumentContext context, ChatSession session)
+        {
+            if (context == null || session == null)
+            {
+                return;
+            }
+
+            context.Host = string.IsNullOrWhiteSpace(session.Host) ? _adapter.HostName : session.Host;
+            context.DocumentKey = string.IsNullOrWhiteSpace(session.DocumentKey) ? _adapter.DocumentKey : session.DocumentKey;
+            context.Title = string.IsNullOrWhiteSpace(session.Title) ? _adapter.DocumentTitle : session.Title;
+            context.UpdatedUtc = DateTime.UtcNow;
+            if (context.Notes == null)
+            {
+                context.Notes = new List<ContextNote>();
+            }
+            foreach (var note in context.Notes)
+            {
+                if (note != null)
+                {
+                    NormalizeContextNote(note, note.Kind);
+                }
+            }
         }
 
         private void SetActiveSession(ChatSession session)
@@ -599,6 +718,7 @@ namespace RNAssistant.Office
             {
                 activeChatId = activeId,
                 chats = GetChatSummaries(activeId),
+                context = session == null ? CreateEmptyContext() : LoadContext(session),
                 messages = session == null ? new List<ChatMessage>() : session.Messages,
                 contextUsage = EstimateContextUsage(session, _settingsService.Load())
             });
@@ -759,9 +879,9 @@ namespace RNAssistant.Office
                 s.Enabled &&
                 string.Equals(s.Id, command.SkillId, StringComparison.OrdinalIgnoreCase));
 
-            if (IsVbaMutationTool(command.SkillId) && !settings.AutoConfirmToolActions && !manualRun)
+            if (IsMutationTool(command.SkillId) && !settings.AutoConfirmToolActions && !manualRun && !dryRun)
             {
-                return SkillResult.Fail("VBA tool requires confirmation before execution: " + command.SkillId);
+                return SkillResult.Fail("Tool requires confirmation before execution: " + command.SkillId);
             }
 
             if (tool != null && tool.RequiresConfirmation && !settings.AutoConfirmToolActions && !manualRun)
@@ -1292,9 +1412,19 @@ namespace RNAssistant.Office
                 string.Equals(_adapter.HostName, "PowerPoint", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static bool IsVbaMutationTool(string toolId)
+        private static bool IsMutationTool(string toolId)
         {
-            return EndsWithTool(toolId, ".vba_replace_module") ||
+            return EndsWithTool(toolId, ".write_range") ||
+                EndsWithTool(toolId, ".write_table") ||
+                EndsWithTool(toolId, ".add_chart") ||
+                EndsWithTool(toolId, ".add_sheet") ||
+                EndsWithTool(toolId, ".insert_text") ||
+                EndsWithTool(toolId, ".replace_selection") ||
+                EndsWithTool(toolId, ".add_comment") ||
+                EndsWithTool(toolId, ".add_slide") ||
+                EndsWithTool(toolId, ".replace_selection_text") ||
+                EndsWithTool(toolId, ".draft_reply") ||
+                EndsWithTool(toolId, ".vba_replace_module") ||
                 EndsWithTool(toolId, ".vba_replace_text") ||
                 EndsWithTool(toolId, ".vba_apply_patch") ||
                 EndsWithTool(toolId, ".vba_restore_backup") ||
@@ -1440,6 +1570,18 @@ namespace RNAssistant.Office
 
                     used += (message.Content ?? string.Empty).Length;
                     count += 1;
+                }
+            }
+            if (session != null && session.Context != null && session.Context.Notes != null)
+            {
+                foreach (var note in session.Context.Notes)
+                {
+                    if (note == null)
+                    {
+                        continue;
+                    }
+
+                    used += (note.Text ?? note.Preview ?? string.Empty).Length;
                 }
             }
 

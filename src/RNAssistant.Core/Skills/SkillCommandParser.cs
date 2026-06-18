@@ -8,9 +8,11 @@ namespace RNAssistant.Core.Skills
 {
     public sealed class SkillCommandParser
     {
-        private const string Fence = "```rnassistant-skill";
+        private static readonly string[] Fences = { "```rnassistant-skill", "```rnassistant-agent" };
         private const string XmlStart = "<rnassistant-skill>";
         private const string XmlEnd = "</rnassistant-skill>";
+        private const string AgentXmlStart = "<rnassistant-agent>";
+        private const string AgentXmlEnd = "</rnassistant-agent>";
 
         public IReadOnlyList<SkillCommand> Parse(string assistantText)
         {
@@ -22,41 +24,62 @@ namespace RNAssistant.Core.Skills
 
             ExtractFenced(assistantText, commands);
             ExtractXml(assistantText, commands);
+            ExtractBareJson(assistantText, commands);
             return commands;
         }
 
         private static void ExtractFenced(string text, ICollection<SkillCommand> commands)
         {
-            var index = 0;
-            while ((index = text.IndexOf(Fence, index, StringComparison.OrdinalIgnoreCase)) >= 0)
+            foreach (var fence in Fences)
             {
-                var jsonStart = index + Fence.Length;
-                var end = text.IndexOf("```", jsonStart, StringComparison.OrdinalIgnoreCase);
-                if (end < 0)
+                var index = 0;
+                while ((index = text.IndexOf(fence, index, StringComparison.OrdinalIgnoreCase)) >= 0)
                 {
-                    break;
-                }
+                    var jsonStart = index + fence.Length;
+                    var end = text.IndexOf("```", jsonStart, StringComparison.OrdinalIgnoreCase);
+                    if (end < 0)
+                    {
+                        break;
+                    }
 
-                TryAdd(text.Substring(jsonStart, end - jsonStart), commands);
-                index = end + 3;
+                    TryAdd(text.Substring(jsonStart, end - jsonStart), commands);
+                    index = end + 3;
+                }
             }
         }
 
         private static void ExtractXml(string text, ICollection<SkillCommand> commands)
         {
+            ExtractXml(text, XmlStart, XmlEnd, commands);
+            ExtractXml(text, AgentXmlStart, AgentXmlEnd, commands);
+        }
+
+        private static void ExtractXml(string text, string startTag, string endTag, ICollection<SkillCommand> commands)
+        {
             var index = 0;
-            while ((index = text.IndexOf(XmlStart, index, StringComparison.OrdinalIgnoreCase)) >= 0)
+            while ((index = text.IndexOf(startTag, index, StringComparison.OrdinalIgnoreCase)) >= 0)
             {
-                var jsonStart = index + XmlStart.Length;
-                var end = text.IndexOf(XmlEnd, jsonStart, StringComparison.OrdinalIgnoreCase);
+                var jsonStart = index + startTag.Length;
+                var end = text.IndexOf(endTag, jsonStart, StringComparison.OrdinalIgnoreCase);
                 if (end < 0)
                 {
                     break;
                 }
 
                 TryAdd(text.Substring(jsonStart, end - jsonStart), commands);
-                index = end + XmlEnd.Length;
+                index = end + endTag.Length;
             }
+        }
+
+        private static void ExtractBareJson(string text, ICollection<SkillCommand> commands)
+        {
+            var trimmed = (text ?? string.Empty).Trim();
+            if (!trimmed.StartsWith("{", StringComparison.Ordinal) && !trimmed.StartsWith("[", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            TryAdd(trimmed, commands);
         }
 
         private static void TryAdd(string json, ICollection<SkillCommand> commands)
@@ -89,14 +112,25 @@ namespace RNAssistant.Core.Skills
                 return;
             }
 
-            var id = (string)(obj["skillId"] ?? obj["skill_id"] ?? obj["id"]);
+            var steps = (obj["steps"] as JArray) ?? (obj["commands"] as JArray) ?? (obj["actions"] as JArray) ?? (obj["tools"] as JArray);
+            var explicitId = (string)(obj["skillId"] ?? obj["skill_id"] ?? obj["toolId"] ?? obj["tool_id"]);
+            if (string.IsNullOrWhiteSpace(explicitId) && steps != null)
+            {
+                foreach (var step in steps.Children())
+                {
+                    AddObject(step, commands);
+                }
+                return;
+            }
+
+            var id = string.IsNullOrWhiteSpace(explicitId) ? (string)obj["id"] : explicitId;
             if (string.IsNullOrWhiteSpace(id))
             {
                 return;
             }
 
             var command = new SkillCommand { SkillId = id };
-            var args = obj["arguments"] as JObject;
+            var args = (obj["arguments"] as JObject) ?? (obj["args"] as JObject) ?? (obj["input"] as JObject);
             if (args != null)
             {
                 foreach (var property in args.Properties())
@@ -111,4 +145,3 @@ namespace RNAssistant.Core.Skills
         }
     }
 }
-

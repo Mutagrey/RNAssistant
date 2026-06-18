@@ -60,6 +60,22 @@ namespace RNAssistant.Core.Storage
             {
                 settings.MaxTokens = defaults.MaxTokens;
             }
+            if (settings.TopP <= 0)
+            {
+                settings.TopP = defaults.TopP;
+            }
+            if (settings.TopP > 1)
+            {
+                settings.TopP = 1;
+            }
+            if (settings.RequestTimeoutSeconds <= 0)
+            {
+                settings.RequestTimeoutSeconds = defaults.RequestTimeoutSeconds;
+            }
+            if (settings.RequestTimeoutSeconds < 30)
+            {
+                settings.RequestTimeoutSeconds = 30;
+            }
             if (settings.ContextCharLimit <= 0)
             {
                 settings.ContextCharLimit = defaults.ContextCharLimit;

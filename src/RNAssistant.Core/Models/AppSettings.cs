@@ -9,7 +9,9 @@ namespace RNAssistant.Core.Models
         public string Model { get; set; }
         public string SystemPrompt { get; set; }
         public int MaxTokens { get; set; }
+        public int RequestTimeoutSeconds { get; set; }
         public double Temperature { get; set; }
+        public double TopP { get; set; }
         public int ContextCharLimit { get; set; }
         public bool StreamResponses { get; set; }
         public bool? AutoRunToolCalls { get; set; }
@@ -25,7 +27,9 @@ namespace RNAssistant.Core.Models
             Model = "gpt-4o-mini";
             SystemPrompt = "You are an Office AI assistant. Use provided tools only through rnassistant-skill JSON blocks when document actions are required.";
             MaxTokens = 2048;
+            RequestTimeoutSeconds = 300;
             Temperature = 0.2;
+            TopP = 1.0;
             ContextCharLimit = 24000;
             StreamResponses = false;
             AutoRunToolCalls = true;

@@ -321,6 +321,26 @@ namespace RNAssistant.Core.Storage
             {
                 session.Messages = new List<ChatMessage>();
             }
+            if (session.Context == null)
+            {
+                session.Context = new DocumentContext();
+            }
+            if (string.IsNullOrWhiteSpace(session.Context.Host))
+            {
+                session.Context.Host = session.Host;
+            }
+            if (string.IsNullOrWhiteSpace(session.Context.DocumentKey))
+            {
+                session.Context.DocumentKey = session.DocumentKey;
+            }
+            if (string.IsNullOrWhiteSpace(session.Context.Title))
+            {
+                session.Context.Title = session.Title;
+            }
+            if (session.Context.Notes == null)
+            {
+                session.Context.Notes = new List<ContextNote>();
+            }
         }
 
         private string GetDocumentDirectory(string host, string documentKey)

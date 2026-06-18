@@ -48,7 +48,7 @@ namespace RNAssistant.Core.Llm
 
             using (var client = new HttpClient())
             {
-                client.Timeout = TimeSpan.FromSeconds(120);
+                client.Timeout = TimeSpan.FromSeconds(Math.Max(30, settings.RequestTimeoutSeconds <= 0 ? 300 : settings.RequestTimeoutSeconds));
                 client.DefaultRequestHeaders.Accept.Clear();
                 client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("RNAssistant/0.1");
@@ -97,6 +97,7 @@ namespace RNAssistant.Core.Llm
                     messages = apiMessages,
                     max_tokens = settings.MaxTokens,
                     temperature = settings.Temperature,
+                    top_p = settings.TopP,
                     stream = false
                 };
 
@@ -149,6 +150,110 @@ namespace RNAssistant.Core.Llm
                     throw new InvalidOperationException("LLM network error. " + diagnostics + ". " + DeepestMessage(ex), ex);
                 }
             }
+        }
+
+        public async Task<string> GetModelsConfigJsonAsync(AppSettings settings, string apiKeyOverride)
+        {
+            if (settings == null)
+            {
+                throw new ArgumentNullException("settings");
+            }
+
+            var url = BuildModelsConfigUrl(settings.BaseUrl);
+            Uri requestUri;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out requestUri))
+            {
+                throw new InvalidOperationException("Invalid models config URL: " + url);
+            }
+
+            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+
+            using (var client = new HttpClient())
+            {
+                client.Timeout = TimeSpan.FromSeconds(30);
+                client.DefaultRequestHeaders.Accept.Clear();
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("RNAssistant/0.1");
+
+                var apiKey = apiKeyOverride ?? (_apiKeyProvider == null ? null : _apiKeyProvider());
+                if (!string.IsNullOrWhiteSpace(apiKey))
+                {
+                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+                }
+
+                if (settings.CustomHeaders != null)
+                {
+                    foreach (var header in settings.CustomHeaders)
+                    {
+                        if (!string.IsNullOrWhiteSpace(header.Key) && !string.IsNullOrWhiteSpace(header.Value))
+                        {
+                            if (string.Equals(header.Key, "Content-Type", StringComparison.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
+
+                            if (string.Equals(header.Key, "Content-Length", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(header.Key, "Host", StringComparison.OrdinalIgnoreCase))
+                            {
+                                throw new InvalidOperationException("Custom header cannot be set manually: " + header.Key);
+                            }
+
+                            client.DefaultRequestHeaders.Remove(header.Key);
+                            if (!client.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value))
+                            {
+                                throw new InvalidOperationException("Custom header is not valid for request headers: " + header.Key);
+                            }
+                        }
+                    }
+                }
+
+                try
+                {
+                    var response = await client.GetAsync(requestUri).ConfigureAwait(false);
+                    var responseJson = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        throw new InvalidOperationException("Models config request failed: HTTP " + (int)response.StatusCode + " " + response.ReasonPhrase + ". Endpoint: " + requestUri + ". Response: " + responseJson);
+                    }
+
+                    return responseJson;
+                }
+                catch (TaskCanceledException ex)
+                {
+                    throw new InvalidOperationException("Models config request timed out after " + client.Timeout.TotalSeconds + " seconds. Endpoint: " + requestUri + ". " + DeepestMessage(ex), ex);
+                }
+                catch (HttpRequestException ex)
+                {
+                    throw new InvalidOperationException("Models config request could not be sent. Endpoint: " + requestUri + ". " + DeepestMessage(ex), ex);
+                }
+                catch (WebException ex)
+                {
+                    throw new InvalidOperationException("Models config network error. Endpoint: " + requestUri + ". " + DeepestMessage(ex), ex);
+                }
+            }
+        }
+
+        public static string BuildModelsConfigUrl(string baseUrl)
+        {
+            if (string.IsNullOrWhiteSpace(baseUrl))
+            {
+                baseUrl = "https://api.openai.com/v1";
+            }
+
+            var url = baseUrl.Trim();
+            var completionsIndex = url.IndexOf("/chat/completions", StringComparison.OrdinalIgnoreCase);
+            if (completionsIndex >= 0)
+            {
+                url = url.Substring(0, completionsIndex);
+            }
+
+            url = url.TrimEnd('/');
+            if (url.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
+            {
+                url = url.Substring(0, url.Length - 3).TrimEnd('/');
+            }
+
+            return url + "/config/models.json";
         }
 
         private static string CombineUrl(string baseUrl, string path)
@@ -220,6 +325,7 @@ namespace RNAssistant.Core.Llm
                 ". Messages: " + messageCount +
                 ". MaxTokens: " + settings.MaxTokens +
                 ". Temperature: " + settings.Temperature +
+                ". TopP: " + settings.TopP +
                 ". Headers: [" + string.Join(", ", headerNames.ToArray()) + "]";
         }
 

@@ -59,6 +59,11 @@ namespace RNAssistant.Office.WebView
                     case "getSettings":
                         payloadJson = _controller.GetSettingsJson();
                         break;
+                    case "getModelCatalog":
+                        payloadJson = await _controller.GetModelCatalogJsonAsync(
+                            payload["settings"] == null ? "{}" : payload["settings"].ToString(Formatting.None),
+                            payload["apiKey"] == null ? null : (string)payload["apiKey"]);
+                        break;
                     case "saveSettings":
                         payloadJson = _controller.SaveSettingsJson(
                             payload["settings"] == null ? "{}" : payload["settings"].ToString(Formatting.None),
@@ -87,16 +92,16 @@ namespace RNAssistant.Office.WebView
                         payloadJson = _controller.RestoreVbaBackupJson((string)payload["backupId"], (string)payload["moduleName"]);
                         break;
                     case "getContext":
-                        payloadJson = _controller.GetContextJson();
+                        payloadJson = _controller.GetContextJson((string)payload["chatId"]);
                         break;
                     case "addSelectionContext":
-                        payloadJson = _controller.AddSelectionContextJson((string)payload["mode"]);
+                        payloadJson = _controller.AddSelectionContextJson((string)payload["mode"], (string)payload["chatId"]);
                         break;
                     case "removeContextItem":
-                        payloadJson = _controller.RemoveContextItemJson((string)payload["id"]);
+                        payloadJson = _controller.RemoveContextItemJson((string)payload["id"], (string)payload["chatId"]);
                         break;
                     case "clearContext":
-                        payloadJson = _controller.ClearContextJson();
+                        payloadJson = _controller.ClearContextJson((string)payload["chatId"]);
                         break;
                     case "quickAction":
                         payloadJson = await _controller.RunQuickActionAsync((string)payload["action"]);

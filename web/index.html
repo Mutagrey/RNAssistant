@@ -77,11 +77,14 @@
             </button>
           </div>
           <div class="composer-toolbar">
-            <div class="context-meter" id="contextMeter">
-              <span>Context</span>
-              <strong id="contextMeterValue">0%</strong>
-              <div class="context-meter-track"><div id="contextMeterFill"></div></div>
-              <em id="contextMeterDetail">0 / 0 chars</em>
+            <div class="composer-left">
+              <div class="context-meter" id="contextMeter">
+                <span>Context</span>
+                <strong id="contextMeterValue">0%</strong>
+                <div class="context-meter-track"><div id="contextMeterFill"></div></div>
+                <em id="contextMeterDetail">0 / 0 chars</em>
+              </div>
+              <label class="composer-model">Model<select id="chatModelSelect" aria-label="Chat model"></select></label>
             </div>
             <button type="button" class="secondary icon-text-button" id="addSelectionContextButton" title="Add current Office selection to context">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
@@ -179,10 +182,14 @@
       <section class="panel" id="tab-settings">
         <div class="form-grid">
           <label>Base URL<input id="baseUrlInput" autocomplete="off"></label>
-          <label>Model<input id="modelInput" autocomplete="off"></label>
+          <label>Model<select id="modelSelect"></select></label>
+          <label>Fallback model<input id="modelInput" autocomplete="off"></label>
+          <div class="model-info" id="modelInfo"></div>
           <label>API key<input id="apiKeyInput" type="password" autocomplete="off" placeholder="Leave empty to keep saved key"></label>
           <label>Max tokens<input id="maxTokensInput" type="number" min="1" max="200000"></label>
+          <label>Request timeout seconds<input id="requestTimeoutInput" type="number" min="30" max="3600"></label>
           <label>Temperature<input id="temperatureInput" type="number" min="0" max="2" step="0.1"></label>
+          <label>Top P<input id="topPInput" type="number" min="0" max="1" step="0.01"></label>
           <label>Context chars<input id="contextLimitInput" type="number" min="1000" max="200000"></label>
           <label class="checkline"><input id="streamInput" type="checkbox"> Stream responses</label>
           <label class="checkline"><input id="autoRunToolsInput" type="checkbox"> Auto-run tool calls from LLM</label>
@@ -194,8 +201,10 @@
           <label>System prompt<textarea id="systemPromptInput" rows="7"></textarea></label>
         </div>
         <div class="toolbar">
+          <button class="secondary" id="loadModelsButton" type="button">Load Models</button>
           <button id="saveSettingsButton">Save Settings</button>
         </div>
+        <div class="status" id="modelStatus"></div>
       </section>
 
       <section class="panel" id="tab-logs">
@@ -215,12 +224,12 @@
       <div class="help-content">
         <section>
           <h3>Chat workflow</h3>
-          <p>Ask for the Office result in normal language. The model sees enabled tools, returns tool calls, and RNAssistant executes them when auto-run is enabled.</p>
+          <p>Ask for the Office result in normal language. The model sees enabled tools and the active chat context, returns RNAssistant JSON blocks, and RNAssistant executes them when auto-run is enabled.</p>
           <pre><code>Создай новый лист Sales Demo, сгенерируй данные продаж по месяцам и построй линейный график.</code></pre>
         </section>
         <section>
           <h3>Tools workflow</h3>
-          <p>Open Tools, select a tool, inspect its schema, pipeline, VBA code, and notes. Use Dry Run before Run for custom tools.</p>
+          <p>Open Tools, select a tool, inspect its schema, pipeline, VBA code, and notes. Use Dry Run before Run for custom tools. Agent VBA code should be written as VBA for the current Office host.</p>
         </section>
         <section>
           <h3>Reusable tools</h3>
@@ -232,7 +241,7 @@
         </section>
         <section>
           <h3>Safety switches</h3>
-          <p>Settings controls whether LLM tool calls auto-run, retry after errors, and whether tools marked Requires confirmation can run without manual Run.</p>
+          <p>Settings controls request timeout, whether read-only LLM tool calls auto-run, retry after errors, and whether document/VBA mutations can run without manual confirmation.</p>
         </section>
       </div>
     </div>
