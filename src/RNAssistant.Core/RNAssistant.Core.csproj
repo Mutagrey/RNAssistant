@@ -46,7 +46,6 @@
     <Compile Include="Skills\SkillCommandParser.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
     <Compile Include="Storage\ChatStore.cs" />
-    <Compile Include="Storage\ContextStore.cs" />
     <Compile Include="Storage\JsonFileStore.cs" />
     <Compile Include="Storage\ProtectedSecretStore.cs" />
     <Compile Include="Storage\SettingsService.cs" />

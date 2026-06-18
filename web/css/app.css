@@ -1316,6 +1316,30 @@ button.danger {
   font-size: 12px;
 }
 
+.danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid #f2b8b5;
+  border-radius: var(--radius);
+  background: #fff7f6;
+}
+
+.danger-zone-title {
+  color: #7a271a;
+  font-weight: 700;
+}
+
+.danger-zone-text {
+  margin-top: 3px;
+  color: #8a3a32;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .modal {
   position: fixed;
   inset: 0;
@@ -1431,6 +1455,11 @@ button.danger {
     border-top: 1px solid var(--line);
     padding-left: 0;
     padding-top: 10px;
+  }
+
+  .danger-zone {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .tool-list {

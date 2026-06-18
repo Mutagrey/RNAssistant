@@ -34,7 +34,7 @@ web static UI
 - `src/RNAssistant.Office/Agent`: agent transcript/plan formatting and retry policy.
 - `src/RNAssistant.Office/Tools`: tool execution, pipelines, VBA patch/backup workflow.
 - `src/RNAssistant.*AddIn`: host adapters and VSTO wiring.
-- `web`: static HTML/CSS/JS task pane.
+- `web`: static HTML/CSS/JS task pane. Pure browser helpers live in `web/js/app-utils.js`; stateful UI orchestration still lives in `web/js/app.js`.
 
 ## Non-Negotiable Boundaries
 
@@ -45,7 +45,7 @@ web static UI
 
 ## Known Oversized Areas
 
-- `web/js/app.js` is still a UI super-file. Split next by stable globals: `bridge/state`, `chat`, `models/settings`, `tools`, `vba`, `context`, `boot`.
+- `web/js/app.js` is still the largest UI file. Split next by stable globals: `bridge/state`, `chat`, `models/settings`, `tools`, `vba`, `context`, `boot`.
 - `web/css/app.css` is also large. Split only after JS split or a UI restyle, because it is currently static and low-risk.
 - Add-in adapters are medium-sized and host-specific; refactor only with Windows/VSTO validation available.
 

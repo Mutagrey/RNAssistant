@@ -17,11 +17,6 @@ namespace RNAssistant.Core.Storage
             _json = new JsonFileStore();
         }
 
-        public ChatSession LoadOrCreate(string host, string documentKey, string title)
-        {
-            return LoadOrCreateActive(host, documentKey, title);
-        }
-
         public ChatSession LoadOrCreateActive(string host, string documentKey, string documentTitle)
         {
             var activeId = LoadActiveSessionId(host, documentKey);

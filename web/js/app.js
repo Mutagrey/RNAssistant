@@ -182,56 +182,6 @@
     return DOMPurify.sanitize(marked.parse(text || ""));
   }
 
-  function messageValue(message, pascal, camel, fallback) {
-    message = message || {};
-    return message[pascal] !== undefined ? message[pascal] : (message[camel] !== undefined ? message[camel] : fallback);
-  }
-
-  function messageId(message) {
-    return messageValue(message, "Id", "id", "");
-  }
-
-  function messageRole(message) {
-    return messageValue(message, "Role", "role", "assistant") || "assistant";
-  }
-
-  function messageContent(message) {
-    return messageValue(message, "Content", "content", "") || "";
-  }
-
-  function messageTotalTokens(message) {
-    return messageValue(message, "TotalTokens", "totalTokens", null);
-  }
-
-  function messagePromptTokens(message) {
-    return messageValue(message, "PromptTokens", "promptTokens", null);
-  }
-
-  function messageCompletionTokens(message) {
-    return messageValue(message, "CompletionTokens", "completionTokens", null);
-  }
-
-  function chatValue(chat, pascal, camel, fallback) {
-    chat = chat || {};
-    return chat[pascal] !== undefined ? chat[pascal] : (chat[camel] !== undefined ? chat[camel] : fallback);
-  }
-
-  function chatId(chat) {
-    return chatValue(chat, "Id", "id", "");
-  }
-
-  function chatTitle(chat) {
-    return chatValue(chat, "Title", "title", "New chat") || "New chat";
-  }
-
-  function chatMessageCount(chat) {
-    return Number(chatValue(chat, "MessageCount", "messageCount", 0) || 0);
-  }
-
-  function chatModel(chat) {
-    return chatValue(chat, "Model", "model", "") || "";
-  }
-
   function renderChatSessions() {
     var select = $("chatSessionSelect");
     if (!select) {
@@ -498,35 +448,6 @@
     });
 
     renderLatex(root);
-  }
-
-  function detectCodeLanguage(code) {
-    var classes = (code.className || "").split(/\s+/);
-    for (var i = 0; i < classes.length; i++) {
-      if (classes[i].indexOf("language-") === 0) {
-        return classes[i].substring("language-".length);
-      }
-      if (classes[i].indexOf("lang-") === 0) {
-        return classes[i].substring("lang-".length);
-      }
-    }
-    return "";
-  }
-
-  function normalizeCodeLanguage(language) {
-    var value = (language || "").toLowerCase();
-    var aliases = {
-      "c#": "csharp",
-      "cs": "csharp",
-      "js": "javascript",
-      "ts": "typescript",
-      "py": "python",
-      "ps": "powershell",
-      "ps1": "powershell",
-      "vb": "vbnet",
-      "vba": "vbnet"
-    };
-    return aliases[value] || value;
   }
 
   function highlightCode(code) {
@@ -997,23 +918,6 @@
       }
       renderModelControls();
     }
-  }
-
-  function headersToText(headers) {
-    return Object.keys(headers).map(function (key) {
-      return key + ": " + headers[key];
-    }).join("\n");
-  }
-
-  function textToHeaders(text) {
-    var headers = {};
-    (text || "").split(/\r?\n/).forEach(function (line) {
-      var index = line.indexOf(":");
-      if (index > 0) {
-        headers[line.slice(0, index).trim()] = line.slice(index + 1).trim();
-      }
-    });
-    return headers;
   }
 
   function renderTools() {
@@ -1741,11 +1645,6 @@
     (results || []).forEach(function (result, index) {
       logToolResult("Skill " + (index + 1), result.skillId || result.SkillId || "tool", result);
     });
-  }
-
-  function formatNumber(value) {
-    value = Number(value || 0);
-    return value.toLocaleString ? value.toLocaleString() : String(value);
   }
 
   function lastTokenUsageText() {
