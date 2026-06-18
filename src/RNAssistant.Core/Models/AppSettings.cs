@@ -14,6 +14,8 @@ namespace RNAssistant.Core.Models
         public bool StreamResponses { get; set; }
         public bool? AutoRunToolCalls { get; set; }
         public bool AutoConfirmToolActions { get; set; }
+        public bool IncludeVbaContext { get; set; }
+        public int VbaContextCharLimit { get; set; }
         public Dictionary<string, string> CustomHeaders { get; set; }
 
         public AppSettings()
@@ -27,6 +29,8 @@ namespace RNAssistant.Core.Models
             StreamResponses = false;
             AutoRunToolCalls = true;
             AutoConfirmToolActions = false;
+            IncludeVbaContext = false;
+            VbaContextCharLimit = 30000;
             CustomHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
     }

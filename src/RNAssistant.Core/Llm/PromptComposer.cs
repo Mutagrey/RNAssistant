@@ -6,7 +6,7 @@ namespace RNAssistant.Core.Llm
 {
     public sealed class PromptComposer
     {
-        public string ComposeSystemPrompt(AppSettings settings, string host, string documentSnapshot, IEnumerable<SkillDefinition> tools)
+        public string ComposeSystemPrompt(AppSettings settings, string host, string documentSnapshot, string vbaSnapshot, IEnumerable<SkillDefinition> tools)
         {
             var builder = new StringBuilder();
             builder.AppendLine(settings.SystemPrompt ?? string.Empty);
@@ -37,6 +37,13 @@ namespace RNAssistant.Core.Llm
                 builder.AppendLine();
                 builder.AppendLine("Current document snapshot:");
                 builder.AppendLine(documentSnapshot);
+            }
+
+            if (!string.IsNullOrWhiteSpace(vbaSnapshot))
+            {
+                builder.AppendLine();
+                builder.AppendLine("Current VBA project snapshot:");
+                builder.AppendLine(vbaSnapshot);
             }
 
             return builder.ToString();

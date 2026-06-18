@@ -11,6 +11,7 @@ namespace RNAssistant.Core.Storage
         public string SettingsFile { get; private set; }
         public string SecretFile { get; private set; }
         public string ToolsDirectory { get; private set; }
+        public string VbaBackupDirectory { get; private set; }
         public string ChatDirectory { get; private set; }
         public string ContextDirectory { get; private set; }
         public string WebViewUserDataDirectory { get; private set; }
@@ -24,6 +25,7 @@ namespace RNAssistant.Core.Storage
                 SettingsFile = Path.Combine(root, "settings.json"),
                 SecretFile = Path.Combine(root, "secret.bin"),
                 ToolsDirectory = Path.Combine(root, "tools"),
+                VbaBackupDirectory = Path.Combine(root, "vba-backups"),
                 ChatDirectory = Path.Combine(root, "chats"),
                 ContextDirectory = Path.Combine(root, "contexts"),
                 WebViewUserDataDirectory = Path.Combine(root, "webview")
@@ -36,6 +38,7 @@ namespace RNAssistant.Core.Storage
         {
             Directory.CreateDirectory(Root);
             Directory.CreateDirectory(ToolsDirectory);
+            Directory.CreateDirectory(VbaBackupDirectory);
             Directory.CreateDirectory(ChatDirectory);
             Directory.CreateDirectory(ContextDirectory);
             Directory.CreateDirectory(WebViewUserDataDirectory);

@@ -20,6 +20,7 @@ namespace RNAssistant.Office
         private readonly ChatStore _chatStore;
         private readonly ContextStore _contextStore;
         private readonly ToolStore _toolStore;
+        private readonly VbaBackupStore _vbaBackupStore;
         private readonly LlmClient _llmClient;
         private readonly PromptComposer _promptComposer;
         private readonly SkillCommandParser _commandParser;
@@ -34,6 +35,7 @@ namespace RNAssistant.Office
             _chatStore = new ChatStore(_paths);
             _contextStore = new ContextStore(_paths);
             _toolStore = new ToolStore(_paths);
+            _vbaBackupStore = new VbaBackupStore(_paths);
             _llmClient = new LlmClient(() => _settingsService.LoadApiKey());
             _promptComposer = new PromptComposer();
             _commandParser = new SkillCommandParser();
@@ -74,10 +76,14 @@ namespace RNAssistant.Office
             session.Messages.Add(new ChatMessage { Role = "user", Content = text });
 
             var tools = GetVisibleTools().Where(s => s.Enabled).ToList();
+            var vbaSnapshot = settings.IncludeVbaContext
+                ? _adapter.GetVbaSnapshot(settings.VbaContextCharLimit)
+                : string.Empty;
             var systemPrompt = _promptComposer.ComposeSystemPrompt(
                 settings,
                 _adapter.HostName,
                 _adapter.GetDocumentSnapshot(settings.ContextCharLimit),
+                vbaSnapshot,
                 tools);
 
             var messages = BuildPromptMessages(systemPrompt, session.Messages, settings.ContextCharLimit);
@@ -161,6 +167,48 @@ namespace RNAssistant.Office
             return JsonConvert.SerializeObject(result);
         }
 
+        public string GetVbaProjectJson(int maxChars)
+        {
+            var settings = _settingsService.Load();
+            var tools = GetVisibleTools().Where(s => s.Enabled).ToList();
+            var command = new SkillCommand { SkillId = VbaToolId("vba_read_project") };
+            command.Arguments["maxChars"] = maxChars <= 0 ? settings.VbaContextCharLimit : maxChars;
+            var result = ExecuteCommand(command, tools, settings, 0, false, true);
+            return JsonConvert.SerializeObject(new
+            {
+                result = result,
+                backups = _vbaBackupStore.List(_adapter.HostName, _adapter.DocumentKey)
+            });
+        }
+
+        public string SaveVbaModuleJson(string moduleName, string code)
+        {
+            var settings = _settingsService.Load();
+            var tools = GetVisibleTools().Where(s => s.Enabled).ToList();
+            var command = new SkillCommand { SkillId = VbaToolId("vba_replace_module") };
+            command.Arguments["moduleName"] = moduleName;
+            command.Arguments["code"] = code;
+            command.Arguments["createIfMissing"] = "true";
+            var result = ExecuteCommand(command, tools, settings, 0, false, true);
+            return JsonConvert.SerializeObject(result);
+        }
+
+        public string RestoreVbaBackupJson(string backupId, string moduleName)
+        {
+            var settings = _settingsService.Load();
+            var tools = GetVisibleTools().Where(s => s.Enabled).ToList();
+            var result = RestoreVbaBackup(new SkillCommand
+            {
+                SkillId = VbaToolId("vba_restore_backup"),
+                Arguments =
+                {
+                    ["backupId"] = backupId ?? string.Empty,
+                    ["moduleName"] = moduleName ?? string.Empty
+                }
+            }, tools, settings, false, true);
+            return JsonConvert.SerializeObject(result);
+        }
+
         public string GetContextJson()
         {
             return JsonConvert.SerializeObject(LoadContext());
@@ -239,6 +287,11 @@ namespace RNAssistant.Office
                 result[skill.Id] = skill;
             }
 
+            foreach (var tool in GetControllerTools())
+            {
+                result[tool.Id] = tool;
+            }
+
             foreach (var tool in _toolStore.Load().Where(s =>
                 string.Equals(s.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(s.Host, "Common", StringComparison.OrdinalIgnoreCase)))
@@ -250,6 +303,33 @@ namespace RNAssistant.Office
             }
 
             return result.Values.OrderBy(s => s.Host).ThenBy(s => s.Id).ToList();
+        }
+
+        private IEnumerable<SkillDefinition> GetControllerTools()
+        {
+            if (string.Equals(_adapter.HostName, "Excel", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return new SkillDefinition
+                {
+                    Id = "excel.vba_list_backups",
+                    Host = "Excel",
+                    Name = "excel.vba_list_backups",
+                    Description = "List RNAssistant VBA rollback backups for the current workbook.",
+                    ArgumentSchemaJson = "{}",
+                    BuiltIn = true,
+                    Enabled = true
+                };
+                yield return new SkillDefinition
+                {
+                    Id = "excel.vba_restore_backup",
+                    Host = "Excel",
+                    Name = "excel.vba_restore_backup",
+                    Description = "Restore a VBA module from a prior RNAssistant backup by backupId, or latest backup for moduleName.",
+                    ArgumentSchemaJson = "{\"backupId\":\"optional\",\"moduleName\":\"Module1\"}",
+                    BuiltIn = true,
+                    Enabled = true
+                };
+            }
         }
 
         private SkillResult ExecuteCommand(SkillCommand command, IReadOnlyList<SkillDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun)
@@ -268,6 +348,11 @@ namespace RNAssistant.Office
                 !s.BuiltIn &&
                 s.Enabled &&
                 string.Equals(s.Id, command.SkillId, StringComparison.OrdinalIgnoreCase));
+
+            if (IsVbaMutationTool(command.SkillId) && !settings.AutoConfirmToolActions && !manualRun)
+            {
+                return SkillResult.Fail("VBA tool requires confirmation before execution: " + command.SkillId);
+            }
 
             if (tool != null && tool.RequiresConfirmation && !settings.AutoConfirmToolActions && !manualRun)
             {
@@ -289,9 +374,24 @@ namespace RNAssistant.Office
                 return SkillResult.Fail("Tool executor is not runnable yet: " + tool.Executor);
             }
 
+            if (string.Equals(command.SkillId, VbaToolId("vba_list_backups"), StringComparison.OrdinalIgnoreCase))
+            {
+                return SkillResult.Ok("VBA backups listed.", JsonConvert.SerializeObject(_vbaBackupStore.List(_adapter.HostName, _adapter.DocumentKey)));
+            }
+
+            if (string.Equals(command.SkillId, VbaToolId("vba_restore_backup"), StringComparison.OrdinalIgnoreCase))
+            {
+                return RestoreVbaBackup(command, skills, settings, dryRun, manualRun);
+            }
+
             if (dryRun)
             {
                 return SkillResult.Ok("Dry run: would execute " + command.SkillId, JsonConvert.SerializeObject(command.Arguments));
+            }
+
+            if (string.Equals(command.SkillId, VbaToolId("vba_replace_module"), StringComparison.OrdinalIgnoreCase))
+            {
+                BackupVbaModuleBeforeReplace(command, skills, settings);
             }
 
             return _adapter.ExecuteSkill(command);
@@ -371,6 +471,10 @@ namespace RNAssistant.Office
             {
                 return SkillResult.Fail("VBA tool has no code: " + tool.Id);
             }
+            if (!dryRun && !manualRun && !settings.AutoConfirmToolActions)
+            {
+                return SkillResult.Fail("VBA tool requires confirmation before execution: " + tool.Id);
+            }
 
             var moduleName = GetArgument(command.Arguments, "moduleName", ToolModuleName(tool.Id));
             var macroName = GetArgument(command.Arguments, "macroName", string.Empty);
@@ -394,6 +498,63 @@ namespace RNAssistant.Office
             run.Arguments["macroName"] = macroName;
             var runResult = _adapter.ExecuteSkill(run);
             return SkillResult.Ok("VBA tool executed: " + tool.Id, JsonConvert.SerializeObject(new { insert = insertResult, run = runResult }));
+        }
+
+        private void BackupVbaModuleBeforeReplace(SkillCommand command, IReadOnlyList<SkillDefinition> tools, AppSettings settings)
+        {
+            var moduleName = GetArgument(command.Arguments, "moduleName", string.Empty);
+            if (string.IsNullOrWhiteSpace(moduleName) || GetArgument(command.Arguments, "skipBackup", "false").Equals("true", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            var read = new SkillCommand { SkillId = VbaToolId("vba_read_module") };
+            read.Arguments["moduleName"] = moduleName;
+            read.Arguments["maxChars"] = Math.Max(settings.VbaContextCharLimit, 30000);
+            var existing = _adapter.ExecuteSkill(read);
+            if (!existing.Success || string.IsNullOrWhiteSpace(existing.DataJson))
+            {
+                return;
+            }
+
+            try
+            {
+                var data = JObject.Parse(existing.DataJson);
+                var code = (string)data["code"];
+                var componentType = (string)data["type"];
+                if (code != null)
+                {
+                    _vbaBackupStore.Save(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle, moduleName, componentType, code);
+                }
+            }
+            catch (JsonException)
+            {
+            }
+        }
+
+        private SkillResult RestoreVbaBackup(SkillCommand command, IReadOnlyList<SkillDefinition> tools, AppSettings settings, bool dryRun, bool manualRun)
+        {
+            var backupId = GetArgument(command.Arguments, "backupId", string.Empty);
+            var moduleName = GetArgument(command.Arguments, "moduleName", string.Empty);
+            var backup = _vbaBackupStore.Find(_adapter.HostName, _adapter.DocumentKey, backupId, moduleName);
+            if (backup == null)
+            {
+                return SkillResult.Fail("VBA backup not found.");
+            }
+
+            if (dryRun)
+            {
+                return SkillResult.Ok("Dry run: would restore VBA backup " + backup.BackupId, JsonConvert.SerializeObject(backup));
+            }
+
+            var replace = new SkillCommand { SkillId = VbaToolId("vba_replace_module") };
+            replace.Arguments["moduleName"] = backup.ModuleName;
+            replace.Arguments["code"] = backup.Code;
+            replace.Arguments["createIfMissing"] = "true";
+            var result = ExecuteCommand(replace, tools, settings, 0, false, manualRun);
+            return result.Success
+                ? SkillResult.Ok("VBA backup restored: " + backup.BackupId, JsonConvert.SerializeObject(new { backup = backup, restore = result }))
+                : result;
         }
 
         private static object ResolvePipelineValue(JToken token, IDictionary<string, object> inputArgs, IDictionary<string, SkillResult> stepResults)
@@ -441,6 +602,19 @@ namespace RNAssistant.Office
         private static string ToolModuleName(string toolId)
         {
             return "RNAssistant_" + Regex.Replace(toolId ?? "Tool", "[^A-Za-z0-9_]", "_");
+        }
+
+        private static string VbaToolId(string suffix)
+        {
+            return "excel." + suffix;
+        }
+
+        private static bool IsVbaMutationTool(string toolId)
+        {
+            return string.Equals(toolId, "excel.vba_replace_module", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, "excel.vba_restore_backup", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, "excel.insert_vba_module", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, "excel.run_macro", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string ReplacePlaceholders(string value, IDictionary<string, object> inputArgs, IDictionary<string, SkillResult> stepResults)

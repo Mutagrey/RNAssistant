@@ -72,6 +72,11 @@ namespace RNAssistant.OutlookAddIn
             return Trim("Subject: " + mail.Subject + "\nFrom: " + mail.SenderName + "\nReceived: " + mail.ReceivedTime + "\n\n" + mail.Body, maxChars);
         }
 
+        public string GetVbaSnapshot(int maxChars)
+        {
+            return string.Empty;
+        }
+
         public SkillResult ExecuteSkill(SkillCommand command)
         {
             try

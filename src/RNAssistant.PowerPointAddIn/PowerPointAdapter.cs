@@ -65,6 +65,11 @@ namespace RNAssistant.PowerPointAddIn
             return Trim(ReadSlidesText(presentation, 20), maxChars);
         }
 
+        public string GetVbaSnapshot(int maxChars)
+        {
+            return string.Empty;
+        }
+
         public SkillResult ExecuteSkill(SkillCommand command)
         {
             try

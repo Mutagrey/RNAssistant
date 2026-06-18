@@ -65,6 +65,11 @@ namespace RNAssistant.WordAddIn
             return Trim(doc.Range().Text, maxChars);
         }
 
+        public string GetVbaSnapshot(int maxChars)
+        {
+            return string.Empty;
+        }
+
         public SkillResult ExecuteSkill(SkillCommand command)
         {
             try

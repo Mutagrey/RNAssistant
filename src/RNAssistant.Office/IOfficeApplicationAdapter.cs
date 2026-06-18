@@ -9,8 +9,8 @@ namespace RNAssistant.Office
         string DocumentKey { get; }
         string DocumentTitle { get; }
         string GetDocumentSnapshot(int maxChars);
+        string GetVbaSnapshot(int maxChars);
         IEnumerable<SkillDefinition> GetBuiltInSkills();
         SkillResult ExecuteSkill(SkillCommand command);
     }
 }
-

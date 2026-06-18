@@ -68,6 +68,10 @@ namespace RNAssistant.Core.Storage
             {
                 settings.AutoRunToolCalls = defaults.AutoRunToolCalls;
             }
+            if (settings.VbaContextCharLimit <= 0)
+            {
+                settings.VbaContextCharLimit = defaults.VbaContextCharLimit;
+            }
             return settings;
         }
     }

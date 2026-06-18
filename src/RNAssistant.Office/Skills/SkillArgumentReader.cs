@@ -22,6 +22,12 @@ namespace RNAssistant.Office.Skills
             int parsed;
             return int.TryParse(raw, out parsed) ? parsed : fallback;
         }
+
+        public static bool Boolean(IDictionary<string, object> args, string name, bool fallback = false)
+        {
+            var raw = String(args, name, null);
+            bool parsed;
+            return bool.TryParse(raw, out parsed) ? parsed : fallback;
+        }
     }
 }
-

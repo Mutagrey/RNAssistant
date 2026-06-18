@@ -8,6 +8,7 @@
     messages: [],
     selectedToolIndex: -1,
     toolsPath: "",
+    vba: { modules: [], backups: [], selectedModule: "" },
     activity: { visible: false, phase: "", message: "" },
     pending: {},
     seq: 1,
@@ -347,6 +348,8 @@
     $("streamInput").checked = !!(s.StreamResponses || s.streamResponses);
     $("autoRunToolsInput").checked = (s.AutoRunToolCalls !== false && s.autoRunToolCalls !== false);
     $("autoConfirmToolsInput").checked = !!(s.AutoConfirmToolActions || s.autoConfirmToolActions);
+    $("includeVbaContextInput").checked = !!(s.IncludeVbaContext || s.includeVbaContext);
+    $("vbaContextLimitInput").value = s.VbaContextCharLimit || s.vbaContextCharLimit || 30000;
     $("systemPromptInput").value = s.SystemPrompt || s.systemPrompt || "";
     $("headersInput").value = headersToText(s.CustomHeaders || s.customHeaders || {});
   }
@@ -361,6 +364,8 @@
       StreamResponses: $("streamInput").checked,
       AutoRunToolCalls: $("autoRunToolsInput").checked,
       AutoConfirmToolActions: $("autoConfirmToolsInput").checked,
+      IncludeVbaContext: $("includeVbaContextInput").checked,
+      VbaContextCharLimit: Number($("vbaContextLimitInput").value || 30000),
       SystemPrompt: $("systemPromptInput").value,
       CustomHeaders: textToHeaders($("headersInput").value)
     };
@@ -569,6 +574,117 @@
     }
   }
 
+  function renderVbaProject() {
+    var moduleSelect = $("vbaModuleSelect");
+    var backupSelect = $("vbaBackupSelect");
+    moduleSelect.innerHTML = "";
+    backupSelect.innerHTML = "";
+
+    state.vba.modules.forEach(function (module) {
+      var option = document.createElement("option");
+      option.value = module.name || module.Name || "";
+      option.textContent = option.value + " (" + (module.type || module.Type || "module") + ")";
+      moduleSelect.appendChild(option);
+    });
+
+    state.vba.backups.forEach(function (backup) {
+      var option = document.createElement("option");
+      option.value = backup.BackupId || backup.backupId || "";
+      option.textContent = (backup.ModuleName || backup.moduleName || "module") + " - " + (backup.CreatedUtc || backup.createdUtc || "");
+      backupSelect.appendChild(option);
+    });
+
+    if (state.vba.selectedModule) {
+      moduleSelect.value = state.vba.selectedModule;
+    }
+    renderSelectedVbaModule();
+  }
+
+  function renderSelectedVbaModule() {
+    var name = $("vbaModuleSelect").value;
+    state.vba.selectedModule = name;
+    var module = null;
+    state.vba.modules.forEach(function (item) {
+      if ((item.name || item.Name) === name) {
+        module = item;
+      }
+    });
+
+    $("vbaCodeInput").value = module ? (module.code || module.Code || "") : "";
+    $("vbaMetaBox").textContent = module ? JSON.stringify({
+      name: module.name || module.Name,
+      type: module.type || module.Type,
+      lineCount: module.lineCount || module.LineCount
+    }, null, 2) : "";
+  }
+
+  function readVbaResult(response) {
+    var result = response.result || response.Result || response;
+    var dataJson = result.DataJson || result.dataJson || "";
+    var data = dataJson ? JSON.parse(dataJson) : {};
+    state.vba.modules = data.modules || data.Modules || [];
+    state.vba.backups = response.backups || response.Backups || [];
+    $("vbaStatus").textContent = result.Message || result.message || "VBA project loaded.";
+    renderVbaProject();
+  }
+
+  async function refreshVbaProject() {
+    setActivity("vba", "Читаю VBA проект...");
+    try {
+      var response = await send("getVbaProject", { maxChars: Number($("vbaContextLimitInput").value || 30000) });
+      readVbaResult(response);
+    } catch (error) {
+      $("vbaStatus").textContent = error.message;
+      log(error.detail || error.message);
+    } finally {
+      clearActivity();
+    }
+  }
+
+  async function saveVbaModule() {
+    var moduleName = $("vbaModuleSelect").value;
+    if (!moduleName) {
+      return;
+    }
+
+    setActivity("vba", "Сохраняю VBA module...");
+    try {
+      var response = await send("saveVbaModule", { moduleName: moduleName, code: $("vbaCodeInput").value });
+      $("vbaStatus").textContent = response.Message || response.message || "VBA module saved.";
+      await refreshVbaProject();
+    } catch (error) {
+      $("vbaStatus").textContent = error.message;
+      log(error.detail || error.message);
+    } finally {
+      clearActivity();
+    }
+  }
+
+  async function restoreVbaBackup() {
+    var backupId = $("vbaBackupSelect").value;
+    var moduleName = $("vbaModuleSelect").value;
+    setActivity("vba", "Восстанавливаю VBA backup...");
+    try {
+      var response = await send("restoreVbaBackup", { backupId: backupId, moduleName: moduleName });
+      $("vbaStatus").textContent = response.Message || response.message || "VBA backup restored.";
+      await refreshVbaProject();
+    } catch (error) {
+      $("vbaStatus").textContent = error.message;
+      log(error.detail || error.message);
+    } finally {
+      clearActivity();
+    }
+  }
+
+  function reviewVbaInChat() {
+    var modules = state.vba.modules.map(function (module) {
+      return "===== " + (module.name || module.Name) + " =====\n" + (module.code || module.Code || "");
+    }).join("\n\n");
+    $("chatInput").value = "Проверь мой VBA код: найди ошибки, риски, места для улучшения, предложи комментарии. Если нужны правки, верни конкретные обновленные модули и объясни, что меняешь.\\n\\n" + modules;
+    switchTab("chat");
+    $("chatInput").focus();
+  }
+
   function renderContext() {
     $("contextBox").textContent = JSON.stringify(state.context || {}, null, 2);
   }
@@ -673,6 +789,11 @@
     });
 
     $("refreshButton").addEventListener("click", initialize);
+    $("refreshVbaButton").addEventListener("click", refreshVbaProject);
+    $("vbaModuleSelect").addEventListener("change", renderSelectedVbaModule);
+    $("saveVbaButton").addEventListener("click", saveVbaModule);
+    $("restoreVbaButton").addEventListener("click", restoreVbaBackup);
+    $("reviewVbaButton").addEventListener("click", reviewVbaInChat);
     $("clearInputButton").addEventListener("click", function () { $("chatInput").value = ""; });
     $("chatInput").addEventListener("keydown", function (event) {
       if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {

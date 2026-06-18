@@ -24,6 +24,7 @@
     <nav class="tabs" aria-label="Assistant tabs">
       <button class="tab active" data-tab="chat">Chat</button>
       <button class="tab" data-tab="tools">Tools</button>
+      <button class="tab" data-tab="vba">VBA</button>
       <button class="tab" data-tab="context">Context</button>
       <button class="tab" data-tab="settings">Settings</button>
       <button class="tab" data-tab="logs">Logs</button>
@@ -87,6 +88,26 @@
         </div>
       </section>
 
+      <section class="panel" id="tab-vba">
+        <div class="toolbar">
+          <button id="refreshVbaButton" type="button">Refresh VBA</button>
+          <button class="secondary" id="reviewVbaButton" type="button">Review in Chat</button>
+          <button id="saveVbaButton" type="button">Save Module</button>
+          <button class="secondary" id="restoreVbaButton" type="button">Restore Backup</button>
+        </div>
+        <div class="status" id="vbaStatus">VBA context is optional. Enable it in Settings when you want VBA code in chat context.</div>
+        <div class="vba-layout">
+          <aside class="vba-sidebar">
+            <label>Module<select id="vbaModuleSelect"></select></label>
+            <label>Backup<select id="vbaBackupSelect"></select></label>
+            <pre class="json-box vba-meta" id="vbaMetaBox"></pre>
+          </aside>
+          <section class="vba-editor">
+            <textarea id="vbaCodeInput" spellcheck="false" placeholder="Refresh VBA to load modules."></textarea>
+          </section>
+        </div>
+      </section>
+
       <section class="panel" id="tab-context">
         <div class="toolbar">
           <button class="danger" id="clearContextButton">Clear Context</button>
@@ -105,6 +126,8 @@
           <label class="checkline"><input id="streamInput" type="checkbox"> Stream responses</label>
           <label class="checkline"><input id="autoRunToolsInput" type="checkbox"> Auto-run tool calls from LLM</label>
           <label class="checkline"><input id="autoConfirmToolsInput" type="checkbox"> Auto-confirm tool actions</label>
+          <label class="checkline"><input id="includeVbaContextInput" type="checkbox"> Include VBA code in chat context</label>
+          <label>VBA context chars<input id="vbaContextLimitInput" type="number" min="1000" max="200000"></label>
           <label>Custom headers<textarea id="headersInput" rows="4" placeholder="Header-Name: value"></textarea></label>
           <label>System prompt<textarea id="systemPromptInput" rows="7"></textarea></label>
         </div>
@@ -138,6 +161,10 @@
         <section>
           <h3>Reusable tools</h3>
           <p>Custom tools are stored in %AppData%\RNAssistant\tools. Pipeline tools call existing tools in order. VBA tools store editable code in code.vba.</p>
+        </section>
+        <section>
+          <h3>VBA workflow</h3>
+          <p>Use the VBA tab to load workbook modules, review code, save module changes with automatic backup, and restore backups. Enable VBA context in Settings only when chat needs existing VBA code.</p>
         </section>
         <section>
           <h3>Safety switches</h3>

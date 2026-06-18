@@ -163,6 +163,18 @@ The Tools tab can run a selected tool with ad hoc JSON arguments. `Dry Run` reso
 
 For Excel, `executor: "vba"` inserts `code.vba` through `excel.insert_vba_module`; if the run arguments include `macroName`, it then calls `excel.run_macro`.
 
+## VBA Workflow
+
+Excel VBA support requires Office setting `Trust access to the VBA project object model`.
+
+- Settings has `Include VBA code in chat context`; keep it off unless the model needs to review existing VBA.
+- The VBA tab reads workbook modules, shows source code, and lists RNAssistant rollback backups.
+- `Save Module` replaces the selected module and stores the previous version under `%AppData%\RNAssistant\vba-backups`.
+- `Restore Backup` restores the selected backup; restoring also backs up the current module first.
+- `Review in Chat` sends loaded VBA modules to chat for review and improvement suggestions.
+
+The model can also call `excel.vba_read_project`, `excel.vba_read_module`, `excel.vba_replace_module`, `excel.vba_list_backups`, and `excel.vba_restore_backup`.
+
 ## Tool Usage
 
 In chat, ask for the desired Office action in normal language. For example:

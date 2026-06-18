@@ -39,6 +39,7 @@
     <Compile Include="Models\ChatModels.cs" />
     <Compile Include="Models\ContextModels.cs" />
     <Compile Include="Models\SkillModels.cs" />
+    <Compile Include="Models\VbaModels.cs" />
     <Compile Include="Llm\LlmClient.cs" />
     <Compile Include="Llm\PromptComposer.cs" />
     <Compile Include="Skills\SkillCommandParser.cs" />
@@ -49,6 +50,7 @@
     <Compile Include="Storage\ProtectedSecretStore.cs" />
     <Compile Include="Storage\SettingsService.cs" />
     <Compile Include="Storage\ToolStore.cs" />
+    <Compile Include="Storage\VbaBackupStore.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

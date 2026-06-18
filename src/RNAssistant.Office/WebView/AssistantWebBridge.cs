@@ -56,6 +56,15 @@ namespace RNAssistant.Office.WebView
                             payload["dryRun"] != null && (bool)payload["dryRun"],
                             (phase, message) => ReportProgress(id, phase, message));
                         break;
+                    case "getVbaProject":
+                        payloadJson = _controller.GetVbaProjectJson(payload["maxChars"] == null ? 30000 : (int)payload["maxChars"]);
+                        break;
+                    case "saveVbaModule":
+                        payloadJson = _controller.SaveVbaModuleJson((string)payload["moduleName"], (string)payload["code"]);
+                        break;
+                    case "restoreVbaBackup":
+                        payloadJson = _controller.RestoreVbaBackupJson((string)payload["backupId"], (string)payload["moduleName"]);
+                        break;
                     case "getContext":
                         payloadJson = _controller.GetContextJson();
                         break;
