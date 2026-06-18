@@ -20,11 +20,16 @@
 
     <nav class="tabs" aria-label="Assistant tabs">
       <button class="tab active" data-tab="chat">Chat</button>
-      <button class="tab" data-tab="skills">Skills</button>
+      <button class="tab" data-tab="tools">Tools</button>
       <button class="tab" data-tab="context">Context</button>
       <button class="tab" data-tab="settings">Settings</button>
       <button class="tab" data-tab="logs">Logs</button>
     </nav>
+
+    <div class="activity hidden" id="activityStatus" role="status" aria-live="polite">
+      <span class="activity-dot"></span>
+      <span id="activityText">Working...</span>
+    </div>
 
     <main class="content">
       <section class="panel active" id="tab-chat">
@@ -38,12 +43,45 @@
         </form>
       </section>
 
-      <section class="panel" id="tab-skills">
+      <section class="panel" id="tab-tools">
         <div class="toolbar">
-          <button id="addSkillButton">Add Skill</button>
-          <button class="secondary" id="saveSkillsButton">Save</button>
+          <button id="addToolButton">New Tool</button>
+          <button class="secondary" id="cloneToolButton">Clone</button>
+          <button class="secondary" id="saveToolsButton">Save Tools</button>
         </div>
-        <div id="skillsList" class="stack"></div>
+        <div class="status" id="toolsPath"></div>
+        <div class="tool-layout">
+          <aside class="tool-list" id="toolsList"></aside>
+          <section class="tool-editor">
+            <div class="skill-head">
+              <div>
+                <div class="skill-title" id="toolEditorTitle">No tool selected</div>
+                <div class="skill-meta" id="toolEditorMeta"></div>
+              </div>
+              <label class="checkline"><input type="checkbox" id="toolEnabledInput"> Enabled</label>
+            </div>
+            <div class="form-grid tool-form">
+              <label>Tool ID<input id="toolIdInput" placeholder="excel.normalize_table"></label>
+              <label>Host<select id="toolHostInput"><option>Common</option><option>Excel</option><option>Word</option><option>PowerPoint</option><option>Outlook</option></select></label>
+              <label>Executor<select id="toolExecutorInput"><option>pipeline</option><option>vba</option><option>builtin</option></select></label>
+              <label class="checkline"><input type="checkbox" id="toolConfirmInput"> Requires confirmation</label>
+              <label>Description<textarea id="toolDescriptionInput" rows="3" placeholder="Description for LLM"></textarea></label>
+              <label>Argument schema JSON<textarea id="toolSchemaInput" rows="4" placeholder="{&quot;address&quot;:&quot;A1:D20&quot;}"></textarea></label>
+              <label>Run arguments JSON<textarea id="toolRunArgsInput" rows="4" spellcheck="false" placeholder="{&quot;address&quot;:&quot;A1:D20&quot;}"></textarea></label>
+              <label>Pipeline JSON<textarea id="toolPipelineInput" rows="10" spellcheck="false" placeholder="{&quot;version&quot;:1,&quot;steps&quot;:[{&quot;id&quot;:&quot;read&quot;,&quot;toolId&quot;:&quot;excel.read_range&quot;,&quot;arguments&quot;:{&quot;address&quot;:&quot;{{args.address}}&quot;}}]}"></textarea></label>
+              <label>VBA / executor code<textarea id="toolCodeInput" rows="10" spellcheck="false" placeholder="Optional VBA module code"></textarea></label>
+              <label>README / notes<textarea id="toolReadmeInput" rows="5" spellcheck="false" placeholder="Usage notes and implementation details"></textarea></label>
+            </div>
+            <div class="toolbar">
+              <button class="secondary" id="dryRunToolButton" type="button">Dry Run</button>
+              <button id="runToolButton" type="button">Run</button>
+              <button class="secondary" id="copyToolContextButton" type="button">Copy Context</button>
+              <button class="secondary" id="askToolBuilderButton" type="button">Edit in Chat</button>
+              <button class="danger" id="deleteToolButton" type="button">Delete</button>
+            </div>
+            <pre class="json-box tool-run-output" id="toolRunOutput"></pre>
+          </section>
+        </div>
       </section>
 
       <section class="panel" id="tab-context">
@@ -62,6 +100,8 @@
           <label>Temperature<input id="temperatureInput" type="number" min="0" max="2" step="0.1"></label>
           <label>Context chars<input id="contextLimitInput" type="number" min="1000" max="200000"></label>
           <label class="checkline"><input id="streamInput" type="checkbox"> Stream responses</label>
+          <label class="checkline"><input id="autoRunToolsInput" type="checkbox"> Auto-run tool calls from LLM</label>
+          <label class="checkline"><input id="autoConfirmToolsInput" type="checkbox"> Auto-confirm tool actions</label>
           <label>Custom headers<textarea id="headersInput" rows="4" placeholder="Header-Name: value"></textarea></label>
           <label>System prompt<textarea id="systemPromptInput" rows="7"></textarea></label>
         </div>
@@ -82,4 +122,3 @@
   <script src="js/app.js"></script>
 </body>
 </html>
-

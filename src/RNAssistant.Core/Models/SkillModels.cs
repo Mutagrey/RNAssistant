@@ -10,12 +10,19 @@ namespace RNAssistant.Core.Models
         public string Name { get; set; }
         public string Description { get; set; }
         public string ArgumentSchemaJson { get; set; }
+        public string Executor { get; set; }
+        public bool RequiresConfirmation { get; set; }
+        public string PipelineJson { get; set; }
+        public string Code { get; set; }
+        public string Readme { get; set; }
+        public string StoragePath { get; set; }
         public bool Enabled { get; set; }
         public bool BuiltIn { get; set; }
 
         public SkillDefinition()
         {
             Enabled = true;
+            Executor = "builtin";
             ArgumentSchemaJson = "{}";
         }
     }
@@ -48,4 +55,3 @@ namespace RNAssistant.Core.Models
         }
     }
 }
-

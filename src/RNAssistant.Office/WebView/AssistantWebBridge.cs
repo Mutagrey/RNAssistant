@@ -8,10 +8,12 @@ namespace RNAssistant.Office.WebView
     public sealed class AssistantWebBridge
     {
         private readonly AssistantController _controller;
+        private readonly Action<string> _postMessageJson;
 
-        public AssistantWebBridge(AssistantController controller)
+        public AssistantWebBridge(AssistantController controller, Action<string> postMessageJson)
         {
             _controller = controller;
+            _postMessageJson = postMessageJson;
         }
 
         public async Task<string> HandleMessageAsync(string requestJson)
@@ -31,7 +33,7 @@ namespace RNAssistant.Office.WebView
                         payloadJson = _controller.InitializeJson();
                         break;
                     case "sendChat":
-                        payloadJson = await _controller.SendChatAsync((string)payload["text"]);
+                        payloadJson = await _controller.SendChatAsync((string)payload["text"], (phase, message) => ReportProgress(id, phase, message));
                         break;
                     case "getSettings":
                         payloadJson = _controller.GetSettingsJson();
@@ -41,11 +43,18 @@ namespace RNAssistant.Office.WebView
                             payload["settings"] == null ? "{}" : payload["settings"].ToString(Formatting.None),
                             payload["apiKey"] == null ? null : (string)payload["apiKey"]);
                         break;
-                    case "getSkills":
-                        payloadJson = _controller.GetSkillsJson();
+                    case "getTools":
+                        payloadJson = _controller.GetToolsJson();
                         break;
-                    case "saveSkills":
-                        payloadJson = _controller.SaveSkillsJson(payload["skills"] == null ? "[]" : payload["skills"].ToString(Formatting.None));
+                    case "saveTools":
+                        payloadJson = _controller.SaveToolsJson(payload["tools"] == null ? "[]" : payload["tools"].ToString(Formatting.None));
+                        break;
+                    case "runTool":
+                        payloadJson = _controller.RunToolJson(
+                            (string)payload["toolId"],
+                            payload["arguments"] == null ? "{}" : payload["arguments"].ToString(Formatting.None),
+                            payload["dryRun"] != null && (bool)payload["dryRun"],
+                            (phase, message) => ReportProgress(id, phase, message));
                         break;
                     case "getContext":
                         payloadJson = _controller.GetContextJson();
@@ -77,6 +86,25 @@ namespace RNAssistant.Office.WebView
                     errorDetail = ex.ToString()
                 });
             }
+        }
+
+        private void ReportProgress(string id, string phase, string message)
+        {
+            if (_postMessageJson == null)
+            {
+                return;
+            }
+
+            _postMessageJson(JsonConvert.SerializeObject(new
+            {
+                type = "progress",
+                id = id,
+                payload = new
+                {
+                    phase = phase,
+                    message = message
+                }
+            }));
         }
     }
 }

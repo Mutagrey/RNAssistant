@@ -18,8 +18,8 @@ namespace RNAssistant.Office.WebView
         {
             _controller = controller;
             _webRoot = webRoot;
-            _bridge = new AssistantWebBridge(controller);
             _webView = new WebView2 { Dock = DockStyle.Fill };
+            _bridge = new AssistantWebBridge(controller, PostBridgeMessage);
             Controls.Add(_webView);
             Load += OnLoad;
         }
@@ -66,11 +66,11 @@ namespace RNAssistant.Office.WebView
             {
                 var requestJson = e.WebMessageAsJson;
                 var responseJson = await _bridge.HandleMessageAsync(requestJson).ConfigureAwait(true);
-                _webView.CoreWebView2.PostWebMessageAsJson(responseJson);
+                PostBridgeMessage(responseJson);
             }
             catch (Exception ex)
             {
-                _webView.CoreWebView2.PostWebMessageAsJson("{\"ok\":false,\"error\":\"" + EscapeJson(ex.Message) + "\"}");
+                PostBridgeMessage("{\"ok\":false,\"error\":\"" + EscapeJson(ex.Message) + "\"}");
             }
         }
 
@@ -120,6 +120,25 @@ namespace RNAssistant.Office.WebView
             if (_webView.CoreWebView2 != null)
             {
                 _webView.CoreWebView2.ExecuteScriptAsync(script);
+            }
+        }
+
+        private void PostBridgeMessage(string json)
+        {
+            if (IsDisposed || !IsHandleCreated)
+            {
+                return;
+            }
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => PostBridgeMessage(json)));
+                return;
+            }
+
+            if (_webView.CoreWebView2 != null)
+            {
+                _webView.CoreWebView2.PostWebMessageAsJson(json);
             }
         }
 

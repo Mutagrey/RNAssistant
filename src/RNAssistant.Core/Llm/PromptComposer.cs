@@ -6,7 +6,7 @@ namespace RNAssistant.Core.Llm
 {
     public sealed class PromptComposer
     {
-        public string ComposeSystemPrompt(AppSettings settings, string host, string documentSnapshot, IEnumerable<SkillDefinition> skills)
+        public string ComposeSystemPrompt(AppSettings settings, string host, string documentSnapshot, IEnumerable<SkillDefinition> tools)
         {
             var builder = new StringBuilder();
             builder.AppendLine(settings.SystemPrompt ?? string.Empty);
@@ -16,13 +16,20 @@ namespace RNAssistant.Core.Llm
             builder.AppendLine("```rnassistant-skill");
             builder.AppendLine("{\"skillId\":\"skill.id\",\"arguments\":{\"name\":\"value\"}}");
             builder.AppendLine("```");
-            builder.AppendLine("You may include normal markdown before or after the command, but never invent skill ids.");
+            builder.AppendLine("You may include normal markdown before or after the command, but never invent tool ids.");
+            builder.AppendLine("For multi-step Office work, return one rnassistant-skill block containing a JSON array of tool commands in execution order.");
             builder.AppendLine();
-            builder.AppendLine("Available skills:");
-            foreach (var skill in skills)
+            builder.AppendLine("Available tools:");
+            foreach (var skill in tools)
             {
                 builder.AppendLine("- " + skill.Id + " (" + skill.Host + "): " + skill.Description);
                 builder.AppendLine("  args: " + skill.ArgumentSchemaJson);
+                if (!skill.BuiltIn)
+                {
+                    builder.AppendLine("  executor: " + (string.IsNullOrWhiteSpace(skill.Executor) ? "pipeline" : skill.Executor));
+                    builder.AppendLine("  requiresConfirmation: " + skill.RequiresConfirmation);
+                    AppendToolSource(builder, skill);
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(documentSnapshot))
@@ -34,6 +41,32 @@ namespace RNAssistant.Core.Llm
 
             return builder.ToString();
         }
+
+        private static void AppendToolSource(StringBuilder builder, SkillDefinition skill)
+        {
+            if (!string.IsNullOrWhiteSpace(skill.Readme))
+            {
+                builder.AppendLine("  readme:");
+                builder.AppendLine("```markdown");
+                builder.AppendLine(skill.Readme);
+                builder.AppendLine("```");
+            }
+
+            if (!string.IsNullOrWhiteSpace(skill.PipelineJson))
+            {
+                builder.AppendLine("  pipeline:");
+                builder.AppendLine("```json");
+                builder.AppendLine(skill.PipelineJson);
+                builder.AppendLine("```");
+            }
+
+            if (!string.IsNullOrWhiteSpace(skill.Code))
+            {
+                builder.AppendLine("  code:");
+                builder.AppendLine("```vba");
+                builder.AppendLine(skill.Code);
+                builder.AppendLine("```");
+            }
+        }
     }
 }
-

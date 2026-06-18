@@ -105,11 +105,11 @@ Runtime data is stored under:
 
 - `settings.json` - API base URL, model, headers, token limits, prompt.
 - `secret.bin` - API key protected with DPAPI CurrentUser.
-- `skills.json` - custom editable skills.
+- `tools` - central editable tool library.
 - `chats` - per-document chat sessions.
 - `contexts` - per-document context.
 
-## Skill Protocol
+## Tool Protocol
 
 The API is OpenAI-compatible chat completions: `/v1/chat/completions`.
 
@@ -121,4 +121,61 @@ Native tool calling is not required. The model is prompted to return local actio
 ```
 ````
 
-The add-in parses these blocks and executes known local skills.
+The add-in parses these blocks and executes known local tools when `Auto-run tool calls from LLM` is enabled.
+
+## Tool Library
+
+Custom tools are stored under:
+
+`%AppData%\RNAssistant\tools`
+
+Each tool is a folder with editable files:
+
+```text
+tools/<host>/<tool-name>/
+  tool.json
+  pipeline.json
+  code.vba
+  README.md
+```
+
+`tool.json` contains metadata shown to the LLM and the task pane. `pipeline.json` can call existing built-in tools in sequence. `code.vba` is kept as editable executor/source code for VBA-backed tools.
+Tools marked `requiresConfirmation` require manual Run or the `Auto-confirm tool actions` setting.
+
+Pipeline tools use:
+
+```json
+{
+  "version": 1,
+  "steps": [
+    {
+      "id": "read",
+      "toolId": "excel.read_range",
+      "arguments": { "address": "{{args.address}}" }
+    }
+  ]
+}
+```
+
+Supported placeholders are `{{args.name}}`, `{{steps.stepId.message}}`, `{{steps.stepId.dataJson}}`, and `{{steps.stepId.success}}`.
+
+The Tools tab can run a selected tool with ad hoc JSON arguments. `Dry Run` resolves the planned calls without changing the Office document. `Run` is treated as explicit user confirmation.
+
+For Excel, `executor: "vba"` inserts `code.vba` through `excel.insert_vba_module`; if the run arguments include `macroName`, it then calls `excel.run_macro`.
+
+## Tool Usage
+
+In chat, ask for the desired Office action in normal language. For example:
+
+`Создай новый лист Sales Demo, сгенерируй таблицу продаж по месяцам и построй линейный график.`
+
+The model can respond with one `rnassistant-skill` block containing an ordered JSON array, for example `excel.add_sheet`, `excel.write_table`, and `excel.add_chart`. If `Auto-run tool calls from LLM` is enabled, the add-in executes those tools in order.
+
+Use the Tools tab to create or edit reusable tools:
+
+- `New Tool` creates an editable custom tool.
+- `Pipeline JSON` defines ordered calls to existing tools.
+- `VBA / executor code` stores executable VBA source for `executor: "vba"`.
+- `Dry Run` previews execution without changing the document.
+- `Run` executes the selected tool and counts as explicit user confirmation.
+- `Edit in Chat` sends the selected tool definition and code to the LLM for improvement.

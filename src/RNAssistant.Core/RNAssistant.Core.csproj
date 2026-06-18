@@ -41,16 +41,14 @@
     <Compile Include="Models\SkillModels.cs" />
     <Compile Include="Llm\LlmClient.cs" />
     <Compile Include="Llm\PromptComposer.cs" />
-    <Compile Include="Skills\ISkill.cs" />
     <Compile Include="Skills\SkillCommandParser.cs" />
-    <Compile Include="Skills\SkillRegistry.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
     <Compile Include="Storage\ChatStore.cs" />
     <Compile Include="Storage\ContextStore.cs" />
     <Compile Include="Storage\JsonFileStore.cs" />
     <Compile Include="Storage\ProtectedSecretStore.cs" />
     <Compile Include="Storage\SettingsService.cs" />
-    <Compile Include="Storage\SkillStore.cs" />
+    <Compile Include="Storage\ToolStore.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

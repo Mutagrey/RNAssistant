@@ -4,6 +4,7 @@ using System.Text;
 using Excel = Microsoft.Office.Interop.Excel;
 using VBIDE = Microsoft.Vbe.Interop;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Office;
 using RNAssistant.Office.Skills;
@@ -52,8 +53,11 @@ namespace RNAssistant.ExcelAddIn
                 Skill("excel.list_sheets", "List workbook sheet names.", "{}"),
                 Skill("excel.read_range", "Read a worksheet range.", "{\"sheet\":\"optional\",\"address\":\"A1:D20\"}"),
                 Skill("excel.write_range", "Write a scalar value to a worksheet range.", "{\"sheet\":\"optional\",\"address\":\"A1\",\"value\":\"text\"}"),
+                Skill("excel.write_table", "Write a 2D JSON array to a worksheet starting at a cell.", "{\"sheet\":\"optional\",\"startAddress\":\"A1\",\"values\":[[\"Header\", \"Value\"],[\"A\", 1]]}"),
+                Skill("excel.add_chart", "Create a chart from a worksheet source range.", "{\"sheet\":\"optional\",\"sourceRange\":\"A1:B6\",\"chartType\":\"line|column|bar|pie\",\"title\":\"Chart title\",\"left\":300,\"top\":20,\"width\":480,\"height\":300}"),
                 Skill("excel.add_sheet", "Add a new worksheet.", "{\"name\":\"Sheet name\"}"),
-                Skill("excel.insert_vba_module", "Insert VBA module when Trust Access to VBA project is enabled; otherwise returns copyable code.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}")
+                Skill("excel.insert_vba_module", "Insert VBA module when Trust Access to VBA project is enabled; otherwise returns copyable code.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}"),
+                Skill("excel.run_macro", "Run an Excel VBA macro by name.", "{\"macroName\":\"Module1.Test\"}")
             };
         }
 
@@ -96,10 +100,16 @@ namespace RNAssistant.ExcelAddIn
                         return ReadRange(command);
                     case "excel.write_range":
                         return WriteRange(command);
+                    case "excel.write_table":
+                        return WriteTable(command);
+                    case "excel.add_chart":
+                        return AddChart(command);
                     case "excel.add_sheet":
                         return AddSheet(command);
                     case "excel.insert_vba_module":
                         return InsertVbaModule(command);
+                    case "excel.run_macro":
+                        return RunMacro(command);
                     default:
                         return SkillResult.Fail("Unsupported Excel skill: " + command.SkillId);
                 }
@@ -157,6 +167,71 @@ namespace RNAssistant.ExcelAddIn
             return SkillResult.Ok("Wrote value to " + sheet.Name + "!" + address);
         }
 
+        private SkillResult WriteTable(SkillCommand command)
+        {
+            var sheet = ResolveSheet(SkillArgumentReader.String(command.Arguments, "sheet", null));
+            var startAddress = SkillArgumentReader.String(command.Arguments, "startAddress", "A1");
+            var valuesJson = SkillArgumentReader.String(command.Arguments, "values", "[]");
+            var values = JArray.Parse(valuesJson);
+            if (values.Count == 0)
+            {
+                return SkillResult.Fail("No table values provided.");
+            }
+
+            var rows = values.Count;
+            var columns = 0;
+            foreach (var rowToken in values)
+            {
+                var row = rowToken as JArray;
+                if (row == null)
+                {
+                    return SkillResult.Fail("Table values must be a 2D JSON array.");
+                }
+                columns = Math.Max(columns, row.Count);
+            }
+            if (columns == 0)
+            {
+                return SkillResult.Fail("No table columns provided.");
+            }
+
+            var data = new object[rows, columns];
+            for (var r = 0; r < rows; r++)
+            {
+                var row = (JArray)values[r];
+                for (var c = 0; c < columns; c++)
+                {
+                    data[r, c] = c < row.Count ? ToCellValue(row[c]) : null;
+                }
+            }
+
+            var start = sheet.Range[startAddress];
+            var target = start.Resize[rows, columns];
+            target.Value2 = data;
+            return SkillResult.Ok("Wrote table to " + sheet.Name + "!" + target.Address[false, false], JsonConvert.SerializeObject(new { sheet = sheet.Name, range = target.Address[false, false], rows = rows, columns = columns }));
+        }
+
+        private SkillResult AddChart(SkillCommand command)
+        {
+            var sheet = ResolveSheet(SkillArgumentReader.String(command.Arguments, "sheet", null));
+            var sourceRange = SkillArgumentReader.String(command.Arguments, "sourceRange", "A1:B6");
+            var title = SkillArgumentReader.String(command.Arguments, "title", "Chart");
+            var chartType = SkillArgumentReader.String(command.Arguments, "chartType", "line");
+            var left = SkillArgumentReader.Int32(command.Arguments, "left", 300);
+            var top = SkillArgumentReader.Int32(command.Arguments, "top", 20);
+            var width = SkillArgumentReader.Int32(command.Arguments, "width", 480);
+            var height = SkillArgumentReader.Int32(command.Arguments, "height", 300);
+
+            var source = sheet.Range[sourceRange];
+            var chartObjects = (Excel.ChartObjects)sheet.ChartObjects(Type.Missing);
+            var chartObject = chartObjects.Add(left, top, width, height);
+            var chart = chartObject.Chart;
+            chart.SetSourceData(source);
+            chart.ChartType = ResolveChartType(chartType);
+            chart.HasTitle = true;
+            chart.ChartTitle.Text = title;
+            return SkillResult.Ok("Chart added: " + title, JsonConvert.SerializeObject(new { sheet = sheet.Name, sourceRange = sourceRange, chartType = chartType, title = title }));
+        }
+
         private SkillResult AddSheet(SkillCommand command)
         {
             var workbook = RequireWorkbook();
@@ -188,6 +263,18 @@ namespace RNAssistant.ExcelAddIn
             {
                 return SkillResult.Ok("VBA insert was blocked. Enable 'Trust access to the VBA project object model' or copy the code manually. " + ex.Message, JsonConvert.SerializeObject(new { moduleName = moduleName, code = code }));
             }
+        }
+
+        private SkillResult RunMacro(SkillCommand command)
+        {
+            var macroName = SkillArgumentReader.String(command.Arguments, "macroName", string.Empty);
+            if (string.IsNullOrWhiteSpace(macroName))
+            {
+                return SkillResult.Fail("No macroName provided.");
+            }
+
+            _application.Run(macroName);
+            return SkillResult.Ok("Macro ran: " + macroName);
         }
 
         private Excel.Workbook ActiveWorkbook()
@@ -244,6 +331,40 @@ namespace RNAssistant.ExcelAddIn
                 rows.Add(row);
             }
             return rows;
+        }
+
+        private static object ToCellValue(JToken token)
+        {
+            if (token == null || token.Type == JTokenType.Null)
+            {
+                return null;
+            }
+            if (token.Type == JTokenType.Integer || token.Type == JTokenType.Float)
+            {
+                return token.Value<double>();
+            }
+            if (token.Type == JTokenType.Boolean)
+            {
+                return token.Value<bool>();
+            }
+            return token.Type == JTokenType.String ? token.Value<string>() : token.ToString(Formatting.None);
+        }
+
+        private static Excel.XlChartType ResolveChartType(string value)
+        {
+            switch ((value ?? string.Empty).ToLowerInvariant())
+            {
+                case "column":
+                case "col":
+                    return Excel.XlChartType.xlColumnClustered;
+                case "bar":
+                    return Excel.XlChartType.xlBarClustered;
+                case "pie":
+                    return Excel.XlChartType.xlPie;
+                case "line":
+                default:
+                    return Excel.XlChartType.xlLineMarkers;
+            }
         }
 
         private static void AppendRangeValues(StringBuilder builder, Excel.Range range, int maxChars)
