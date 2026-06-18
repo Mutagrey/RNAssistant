@@ -348,6 +348,7 @@
     $("streamInput").checked = !!(s.StreamResponses || s.streamResponses);
     $("autoRunToolsInput").checked = (s.AutoRunToolCalls !== false && s.autoRunToolCalls !== false);
     $("autoConfirmToolsInput").checked = !!(s.AutoConfirmToolActions || s.autoConfirmToolActions);
+    $("autoRetryToolsInput").checked = (s.AutoRetryToolErrors !== false && s.autoRetryToolErrors !== false);
     $("includeVbaContextInput").checked = !!(s.IncludeVbaContext || s.includeVbaContext);
     $("vbaContextLimitInput").value = s.VbaContextCharLimit || s.vbaContextCharLimit || 30000;
     $("systemPromptInput").value = s.SystemPrompt || s.systemPrompt || "";
@@ -364,6 +365,7 @@
       StreamResponses: $("streamInput").checked,
       AutoRunToolCalls: $("autoRunToolsInput").checked,
       AutoConfirmToolActions: $("autoConfirmToolsInput").checked,
+      AutoRetryToolErrors: $("autoRetryToolsInput").checked,
       IncludeVbaContext: $("includeVbaContextInput").checked,
       VbaContextCharLimit: Number($("vbaContextLimitInput").value || 30000),
       SystemPrompt: $("systemPromptInput").value,
@@ -741,10 +743,11 @@
   }
 
   function reviewVbaInChat() {
+    var patchTool = (state.host || "excel").toLowerCase() + ".vba_apply_patch";
     var modules = state.vba.modules.map(function (module) {
       return "===== " + (module.name || module.Name) + " =====\n" + (module.code || module.Code || "");
     }).join("\n\n");
-    $("chatInput").value = "Проверь мой VBA код: найди ошибки, риски, места для улучшения, предложи комментарии. Если нужны небольшие правки, используй excel.vba_replace_text; полную замену модуля предлагай только когда это реально нужно.\\n\\n" + modules;
+    $("chatInput").value = "Проверь мой VBA код: найди ошибки, риски, места для улучшения, предложи комментарии. Если нужны небольшие правки, используй " + patchTool + "; полную замену модуля предлагай только когда это реально нужно.\\n\\n" + modules;
     switchTab("chat");
     $("chatInput").focus();
   }

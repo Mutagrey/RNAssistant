@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using Excel = Microsoft.Office.Interop.Excel;
-using VBIDE = Microsoft.Vbe.Interop;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
@@ -91,14 +90,13 @@ namespace RNAssistant.ExcelAddIn
 
         public string GetVbaSnapshot(int maxChars)
         {
-            try
+            var workbook = ActiveWorkbook();
+            if (workbook == null)
             {
-                return Trim(ReadVbaProjectText(RequireWorkbook(), maxChars), maxChars);
+                return "No active workbook.";
             }
-            catch (Exception ex)
-            {
-                return "VBA project could not be read. Enable 'Trust access to the VBA project object model'. " + ex.Message;
-            }
+
+            return VbaProjectSupport.GetSnapshot(workbook, workbook.Name, maxChars);
         }
 
         public SkillResult ExecuteSkill(SkillCommand command)
@@ -266,20 +264,7 @@ namespace RNAssistant.ExcelAddIn
         {
             var workbook = RequireWorkbook();
             var maxChars = SkillArgumentReader.Int32(command.Arguments, "maxChars", 30000);
-            var modules = new List<object>();
-            foreach (VBIDE.VBComponent component in workbook.VBProject.VBComponents)
-            {
-                var code = ReadComponentCode(component);
-                modules.Add(new
-                {
-                    name = component.Name,
-                    type = ComponentTypeName(component.Type),
-                    lineCount = component.CodeModule.CountOfLines,
-                    code = Trim(code, maxChars)
-                });
-            }
-
-            return SkillResult.Ok("VBA project read.", JsonConvert.SerializeObject(new { modules = modules }));
+            return VbaProjectSupport.ReadProject(workbook, workbook.Name, maxChars);
         }
 
         private SkillResult ReadVbaModule(SkillCommand command)
@@ -287,20 +272,7 @@ namespace RNAssistant.ExcelAddIn
             var workbook = RequireWorkbook();
             var moduleName = SkillArgumentReader.String(command.Arguments, "moduleName", string.Empty);
             var maxChars = SkillArgumentReader.Int32(command.Arguments, "maxChars", 30000);
-            var component = FindComponent(workbook, moduleName);
-            if (component == null)
-            {
-                return SkillResult.Fail("VBA module not found: " + moduleName);
-            }
-
-            var code = Trim(ReadComponentCode(component), maxChars);
-            return SkillResult.Ok("VBA module read: " + component.Name, JsonConvert.SerializeObject(new
-            {
-                name = component.Name,
-                type = ComponentTypeName(component.Type),
-                lineCount = component.CodeModule.CountOfLines,
-                code = code
-            }));
+            return VbaProjectSupport.ReadModule(workbook, moduleName, maxChars);
         }
 
         private SkillResult ReplaceVbaModule(SkillCommand command)
@@ -309,33 +281,7 @@ namespace RNAssistant.ExcelAddIn
             var moduleName = SkillArgumentReader.String(command.Arguments, "moduleName", string.Empty);
             var code = SkillArgumentReader.String(command.Arguments, "code", string.Empty);
             var createIfMissing = SkillArgumentReader.Boolean(command.Arguments, "createIfMissing", true);
-            if (string.IsNullOrWhiteSpace(moduleName))
-            {
-                return SkillResult.Fail("No moduleName provided.");
-            }
-            if (string.IsNullOrWhiteSpace(code))
-            {
-                return SkillResult.Fail("No VBA code provided.");
-            }
-
-            var component = FindComponent(workbook, moduleName);
-            if (component == null)
-            {
-                if (!createIfMissing)
-                {
-                    return SkillResult.Fail("VBA module not found: " + moduleName);
-                }
-                component = workbook.VBProject.VBComponents.Add(VBIDE.vbext_ComponentType.vbext_ct_StdModule);
-                component.Name = moduleName;
-            }
-
-            var module = component.CodeModule;
-            if (module.CountOfLines > 0)
-            {
-                module.DeleteLines(1, module.CountOfLines);
-            }
-            module.AddFromString(code);
-            return SkillResult.Ok("VBA module replaced: " + component.Name, JsonConvert.SerializeObject(new { moduleName = component.Name, lineCount = component.CodeModule.CountOfLines }));
+            return VbaProjectSupport.ReplaceModule(workbook, moduleName, code, createIfMissing);
         }
 
         private SkillResult InsertVbaModule(SkillCommand command)
@@ -350,11 +296,7 @@ namespace RNAssistant.ExcelAddIn
 
             try
             {
-                VBIDE.VBProject vbProject = workbook.VBProject;
-                VBIDE.VBComponent component = vbProject.VBComponents.Add(VBIDE.vbext_ComponentType.vbext_ct_StdModule);
-                component.Name = moduleName;
-                component.CodeModule.AddFromString(code);
-                return SkillResult.Ok("Inserted VBA module: " + moduleName);
+                return VbaProjectSupport.InsertModule(workbook, moduleName, code);
             }
             catch (Exception ex)
             {
@@ -445,63 +387,6 @@ namespace RNAssistant.ExcelAddIn
                 return token.Value<bool>();
             }
             return token.Type == JTokenType.String ? token.Value<string>() : token.ToString(Formatting.None);
-        }
-
-        private static VBIDE.VBComponent FindComponent(Excel.Workbook workbook, string moduleName)
-        {
-            if (workbook == null || string.IsNullOrWhiteSpace(moduleName))
-            {
-                return null;
-            }
-
-            foreach (VBIDE.VBComponent component in workbook.VBProject.VBComponents)
-            {
-                if (string.Equals(component.Name, moduleName, StringComparison.OrdinalIgnoreCase))
-                {
-                    return component;
-                }
-            }
-            return null;
-        }
-
-        private static string ReadComponentCode(VBIDE.VBComponent component)
-        {
-            var module = component.CodeModule;
-            return module.CountOfLines <= 0 ? string.Empty : module.Lines[1, module.CountOfLines];
-        }
-
-        private static string ReadVbaProjectText(Excel.Workbook workbook, int maxChars)
-        {
-            var builder = new StringBuilder();
-            builder.AppendLine("VBA Project: " + workbook.Name);
-            foreach (VBIDE.VBComponent component in workbook.VBProject.VBComponents)
-            {
-                builder.AppendLine();
-                builder.AppendLine("===== " + component.Name + " (" + ComponentTypeName(component.Type) + ") =====");
-                builder.AppendLine(ReadComponentCode(component));
-                if (builder.Length >= maxChars)
-                {
-                    break;
-                }
-            }
-            return builder.ToString();
-        }
-
-        private static string ComponentTypeName(VBIDE.vbext_ComponentType type)
-        {
-            switch (type)
-            {
-                case VBIDE.vbext_ComponentType.vbext_ct_ClassModule:
-                    return "ClassModule";
-                case VBIDE.vbext_ComponentType.vbext_ct_Document:
-                    return "Document";
-                case VBIDE.vbext_ComponentType.vbext_ct_MSForm:
-                    return "MSForm";
-                case VBIDE.vbext_ComponentType.vbext_ct_StdModule:
-                    return "StdModule";
-                default:
-                    return type.ToString();
-            }
         }
 
         private static Excel.XlChartType ResolveChartType(string value)

@@ -68,6 +68,10 @@ namespace RNAssistant.Core.Storage
             {
                 settings.AutoRunToolCalls = defaults.AutoRunToolCalls;
             }
+            if (!settings.AutoRetryToolErrors.HasValue)
+            {
+                settings.AutoRetryToolErrors = defaults.AutoRetryToolErrors;
+            }
             if (settings.VbaContextCharLimit <= 0)
             {
                 settings.VbaContextCharLimit = defaults.VbaContextCharLimit;

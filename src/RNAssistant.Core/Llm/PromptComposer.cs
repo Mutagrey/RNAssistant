@@ -18,6 +18,7 @@ namespace RNAssistant.Core.Llm
             builder.AppendLine("```");
             builder.AppendLine("You may include normal markdown before or after the command, but never invent tool ids.");
             builder.AppendLine("For multi-step Office work, return one rnassistant-skill block containing a JSON array of tool commands in execution order.");
+            builder.AppendLine("For VBA edits, prefer the host vba_apply_patch tool for structured small patches; use vba_replace_module only when replacing the whole module is necessary.");
             builder.AppendLine();
             builder.AppendLine("Available tools:");
             foreach (var skill in tools)

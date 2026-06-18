@@ -161,20 +161,30 @@ Supported placeholders are `{{args.name}}`, `{{steps.stepId.message}}`, `{{steps
 
 The Tools tab can run a selected tool with ad hoc JSON arguments. `Dry Run` resolves the planned calls without changing the Office document. `Run` is treated as explicit user confirmation.
 
-For Excel, `executor: "vba"` inserts `code.vba` through `excel.insert_vba_module`; if the run arguments include `macroName`, it then calls `excel.run_macro`.
+For Excel, Word, and PowerPoint, `executor: "vba"` inserts `code.vba` through the current host `insert_vba_module`; if the run arguments include `macroName`, it then calls the current host `run_macro`.
 
 ## VBA Workflow
 
-Excel VBA support requires Office setting `Trust access to the VBA project object model`.
+Office VBA support requires Office setting `Trust access to the VBA project object model`.
 
 - Settings has `Include VBA code in chat context`; keep it off unless the model needs to review existing VBA.
-- The VBA tab reads workbook modules, shows source code, and lists RNAssistant rollback backups.
+- Excel, Word, and PowerPoint can read VBA modules, show source code, and list RNAssistant rollback backups.
 - `Preview Diff` shows the current editor changes before saving.
 - `Save Module` replaces the selected module and stores the previous version under `%AppData%\RNAssistant\vba-backups`.
 - `Restore Backup` restores the selected backup; restoring also backs up the current module first.
 - `Review in Chat` sends loaded VBA modules to chat for review and improvement suggestions.
 
-The model can also call `excel.vba_read_project`, `excel.vba_read_module`, `excel.vba_replace_text`, `excel.vba_replace_module`, `excel.vba_list_backups`, and `excel.vba_restore_backup`. Prefer `excel.vba_replace_text` for small exact patches.
+The model can call host-specific tools such as `excel.vba_read_project`, `word.vba_read_module`, `powerpoint.vba_apply_patch`, `*.vba_replace_text`, `*.vba_replace_module`, `*.vba_list_backups`, and `*.vba_restore_backup`. Prefer `*.vba_apply_patch` for small structured patches and `*.vba_replace_module` only for whole-module replacement.
+
+Patch operations support:
+
+```json
+[
+  { "op": "replace", "find": "old code", "text": "new code" },
+  { "op": "insertAfter", "find": "anchor", "text": "\nnew code" },
+  { "op": "replaceLines", "startLine": 10, "deleteCount": 2, "text": "new code" }
+]
+```
 
 ## Tool Usage
 
@@ -182,7 +192,7 @@ In chat, ask for the desired Office action in normal language. For example:
 
 `Создай новый лист Sales Demo, сгенерируй таблицу продаж по месяцам и построй линейный график.`
 
-The model can respond with one `rnassistant-skill` block containing an ordered JSON array, for example `excel.add_sheet`, `excel.write_table`, and `excel.add_chart`. If `Auto-run tool calls from LLM` is enabled, the add-in executes those tools in order.
+The model can respond with one `rnassistant-skill` block containing an ordered JSON array, for example `excel.add_sheet`, `excel.write_table`, and `excel.add_chart`. If `Auto-run tool calls from LLM` is enabled, the add-in executes those tools in order. If `Auto-retry failed tool calls` is enabled, one failed tool call is sent back to the LLM once so it can return a corrected tool call.
 
 Use the Tools tab to create or edit reusable tools:
 

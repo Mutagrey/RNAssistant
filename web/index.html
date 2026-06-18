@@ -128,6 +128,7 @@
           <label class="checkline"><input id="streamInput" type="checkbox"> Stream responses</label>
           <label class="checkline"><input id="autoRunToolsInput" type="checkbox"> Auto-run tool calls from LLM</label>
           <label class="checkline"><input id="autoConfirmToolsInput" type="checkbox"> Auto-confirm tool actions</label>
+          <label class="checkline"><input id="autoRetryToolsInput" type="checkbox"> Auto-retry failed tool calls</label>
           <label class="checkline"><input id="includeVbaContextInput" type="checkbox"> Include VBA code in chat context</label>
           <label>VBA context chars<input id="vbaContextLimitInput" type="number" min="1000" max="200000"></label>
           <label>Custom headers<textarea id="headersInput" rows="4" placeholder="Header-Name: value"></textarea></label>
@@ -166,11 +167,11 @@
         </section>
         <section>
           <h3>VBA workflow</h3>
-          <p>Use the VBA tab to load workbook modules, preview diffs, save module changes with automatic backup, and restore backups. Enable VBA context in Settings only when chat needs existing VBA code.</p>
+          <p>Use the VBA tab to load Office VBA modules, preview diffs, save module changes with automatic backup, and restore backups. Enable VBA context in Settings only when chat needs existing VBA code.</p>
         </section>
         <section>
           <h3>Safety switches</h3>
-          <p>Settings controls whether LLM tool calls auto-run and whether tools marked Requires confirmation can run without manual Run.</p>
+          <p>Settings controls whether LLM tool calls auto-run, retry after errors, and whether tools marked Requires confirmation can run without manual Run.</p>
         </section>
       </div>
     </div>
