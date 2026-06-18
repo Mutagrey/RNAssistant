@@ -32,11 +32,29 @@ namespace RNAssistant.Office.WebView
                     case "init":
                         payloadJson = _controller.InitializeJson();
                         break;
+                    case "listChats":
+                        payloadJson = _controller.ListChatsJson();
+                        break;
+                    case "createChat":
+                        payloadJson = _controller.CreateChatJson((string)payload["title"]);
+                        break;
+                    case "selectChat":
+                        payloadJson = _controller.SelectChatJson((string)payload["chatId"]);
+                        break;
+                    case "renameChat":
+                        payloadJson = _controller.RenameChatJson((string)payload["chatId"], (string)payload["title"]);
+                        break;
+                    case "clearChat":
+                        payloadJson = _controller.ClearChatJson((string)payload["chatId"]);
+                        break;
+                    case "deleteChat":
+                        payloadJson = _controller.DeleteChatJson((string)payload["chatId"]);
+                        break;
                     case "sendChat":
-                        payloadJson = await _controller.SendChatAsync((string)payload["text"], (phase, message) => ReportProgress(id, phase, message));
+                        payloadJson = await _controller.SendChatAsync((string)payload["text"], (string)payload["chatId"], (phase, message) => ReportProgress(id, phase, message));
                         break;
                     case "deleteMessage":
-                        payloadJson = _controller.DeleteMessageJson((string)payload["id"], payload["index"] == null ? -1 : (int)payload["index"]);
+                        payloadJson = _controller.DeleteMessageJson((string)payload["id"], payload["index"] == null ? -1 : (int)payload["index"], (string)payload["chatId"]);
                         break;
                     case "getSettings":
                         payloadJson = _controller.GetSettingsJson();

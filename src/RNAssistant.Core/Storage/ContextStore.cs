@@ -36,10 +36,37 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        public bool Exists(string host, string documentKey)
+        {
+            return File.Exists(GetPath(host, documentKey));
+        }
+
+        public DocumentContext Move(string oldHost, string oldDocumentKey, string newHost, string newDocumentKey, string title)
+        {
+            var oldPath = GetPath(oldHost, oldDocumentKey);
+            var context = _json.Load(oldPath, (DocumentContext)null);
+            if (context == null)
+            {
+                return null;
+            }
+
+            context.Host = newHost;
+            context.DocumentKey = newDocumentKey;
+            context.Title = title;
+            Save(context);
+
+            var newPath = GetPath(newHost, newDocumentKey);
+            if (!string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase) && File.Exists(oldPath))
+            {
+                File.Delete(oldPath);
+            }
+
+            return context;
+        }
+
         private string GetPath(string host, string documentKey)
         {
             return Path.Combine(_paths.ContextDirectory, AppDataPaths.SafeFileName((host ?? string.Empty) + "|" + (documentKey ?? string.Empty)) + ".json");
         }
     }
 }
-

@@ -106,8 +106,10 @@ Runtime data is stored under:
 - `settings.json` - API base URL, model, headers, token limits, prompt.
 - `secret.bin` - API key protected with DPAPI CurrentUser.
 - `tools` - central editable tool library.
-- `chats` - per-document chat sessions.
+- `chats` - per-document chat session folders.
 - `contexts` - per-document context.
+
+Word, Excel and PowerPoint documents are identified by a custom document property named `RNAssistantDocumentId` when available, so chat sessions and context survive file rename/move. If the property cannot be read or written, RNAssistant falls back to the document path.
 
 ## Tool Protocol
 

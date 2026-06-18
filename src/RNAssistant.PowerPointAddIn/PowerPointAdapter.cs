@@ -31,7 +31,34 @@ namespace RNAssistant.PowerPointAddIn
                     return "PowerPoint:NoPresentation";
                 }
 
-                return string.IsNullOrWhiteSpace(presentation.FullName) ? presentation.Name : presentation.FullName;
+                return DocumentIdentity.ForOfficeDocument(
+                    HostName,
+                    presentation.Path,
+                    RuntimeDocumentKey,
+                    () => presentation.CustomDocumentProperties);
+            }
+        }
+
+        public string RuntimeDocumentKey
+        {
+            get
+            {
+                var presentation = ActivePresentation();
+                return presentation == null ? "PowerPoint:NoPresentation" : "PowerPoint:Runtime:" + presentation.GetHashCode().ToString("x");
+            }
+        }
+
+        public string LegacyDocumentKey
+        {
+            get
+            {
+                var presentation = ActivePresentation();
+                if (presentation == null)
+                {
+                    return "PowerPoint:NoPresentation";
+                }
+
+                return string.IsNullOrWhiteSpace(presentation.FullName) ? RuntimeDocumentKey : presentation.FullName;
             }
         }
 

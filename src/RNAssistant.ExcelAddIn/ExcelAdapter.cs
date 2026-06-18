@@ -31,7 +31,34 @@ namespace RNAssistant.ExcelAddIn
                     return "Excel:NoWorkbook";
                 }
 
-                return string.IsNullOrWhiteSpace(workbook.FullName) ? workbook.Name : workbook.FullName;
+                return DocumentIdentity.ForOfficeDocument(
+                    HostName,
+                    workbook.Path,
+                    RuntimeDocumentKey,
+                    () => workbook.CustomDocumentProperties);
+            }
+        }
+
+        public string RuntimeDocumentKey
+        {
+            get
+            {
+                var workbook = ActiveWorkbook();
+                return workbook == null ? "Excel:NoWorkbook" : "Excel:Runtime:" + workbook.GetHashCode().ToString("x");
+            }
+        }
+
+        public string LegacyDocumentKey
+        {
+            get
+            {
+                var workbook = ActiveWorkbook();
+                if (workbook == null)
+                {
+                    return "Excel:NoWorkbook";
+                }
+
+                return string.IsNullOrWhiteSpace(workbook.FullName) ? RuntimeDocumentKey : workbook.FullName;
             }
         }
 

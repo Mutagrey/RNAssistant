@@ -29,7 +29,34 @@ namespace RNAssistant.WordAddIn
                     return "Word:NoDocument";
                 }
 
-                return string.IsNullOrWhiteSpace(doc.FullName) ? doc.Name : doc.FullName;
+                return DocumentIdentity.ForOfficeDocument(
+                    HostName,
+                    doc.Path,
+                    RuntimeDocumentKey,
+                    () => doc.CustomDocumentProperties);
+            }
+        }
+
+        public string RuntimeDocumentKey
+        {
+            get
+            {
+                var doc = ActiveDocument();
+                return doc == null ? "Word:NoDocument" : "Word:Runtime:" + doc.GetHashCode().ToString("x");
+            }
+        }
+
+        public string LegacyDocumentKey
+        {
+            get
+            {
+                var doc = ActiveDocument();
+                if (doc == null)
+                {
+                    return "Word:NoDocument";
+                }
+
+                return string.IsNullOrWhiteSpace(doc.FullName) ? RuntimeDocumentKey : doc.FullName;
             }
         }
 

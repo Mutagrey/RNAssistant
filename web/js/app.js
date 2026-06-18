@@ -6,6 +6,8 @@
     tools: [],
     context: {},
     contextUsage: {},
+    chats: [],
+    activeChatId: "",
     messages: [],
     failedSend: null,
     selectedToolIndex: -1,
@@ -165,6 +167,55 @@
     return messageValue(message, "CompletionTokens", "completionTokens", null);
   }
 
+  function chatValue(chat, pascal, camel, fallback) {
+    chat = chat || {};
+    return chat[pascal] !== undefined ? chat[pascal] : (chat[camel] !== undefined ? chat[camel] : fallback);
+  }
+
+  function chatId(chat) {
+    return chatValue(chat, "Id", "id", "");
+  }
+
+  function chatTitle(chat) {
+    return chatValue(chat, "Title", "title", "New chat") || "New chat";
+  }
+
+  function chatMessageCount(chat) {
+    return Number(chatValue(chat, "MessageCount", "messageCount", 0) || 0);
+  }
+
+  function renderChatSessions() {
+    var select = $("chatSessionSelect");
+    if (!select) {
+      return;
+    }
+
+    select.innerHTML = "";
+    (state.chats || []).forEach(function (chat) {
+      var option = document.createElement("option");
+      option.value = chatId(chat);
+      option.textContent = chatTitle(chat) + " (" + chatMessageCount(chat) + ")";
+      select.appendChild(option);
+    });
+    select.value = state.activeChatId || "";
+
+    var hasActive = !!state.activeChatId;
+    $("renameChatButton").disabled = !hasActive;
+    $("clearChatButton").disabled = !hasActive || !state.messages.length;
+    $("deleteChatButton").disabled = !hasActive;
+  }
+
+  function applyChatState(response) {
+    response = response || {};
+    state.activeChatId = response.activeChatId || response.ActiveChatId || state.activeChatId || "";
+    state.chats = response.chats || response.Chats || state.chats || [];
+    state.messages = response.messages || response.Messages || [];
+    state.contextUsage = response.contextUsage || response.ContextUsage || state.contextUsage || {};
+    renderChatSessions();
+    renderMessages();
+    renderContextMeter();
+  }
+
   function iconSvg(name) {
     var icons = {
       copy: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"9\" y=\"9\" width=\"13\" height=\"13\" rx=\"2\"/><path d=\"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\"/></svg>",
@@ -276,6 +327,31 @@
     box.scrollTop = box.scrollHeight;
   }
 
+  function codePreviewText(code, pre) {
+    var raw = code ? code.textContent : (pre ? pre.innerText : "");
+    var lines = String(raw || "").replace(/\r\n/g, "\n").split("\n");
+    var useful = [];
+    lines.forEach(function (line) {
+      var text = line.trim();
+      if (text) {
+        useful.push(text);
+      }
+    });
+
+    if (!useful.length) {
+      return "Code block";
+    }
+
+    var preview = useful[0];
+    if ((preview === "{" || preview === "[" || preview.length < 8) && useful.length > 1) {
+      preview += " " + useful[1];
+    }
+    if (preview.length > 180) {
+      preview = preview.substring(0, 177) + "...";
+    }
+    return preview;
+  }
+
   function enhanceMarkdown(root) {
     Array.prototype.slice.call(root.querySelectorAll("pre code")).forEach(function (code) {
       highlightCode(code);
@@ -296,13 +372,17 @@
         language.textContent = code.dataset.language;
         tools.appendChild(language);
       }
+      var preview = document.createElement("div");
+      preview.className = "code-preview";
+      preview.textContent = codePreviewText(code, pre);
       var toggle = document.createElement("button");
       toggle.type = "button";
       toggle.className = "block-tool-button";
-      toggle.innerHTML = iconSvg("eyeOff") + "<span>Hide</span>";
+      toggle.innerHTML = iconSvg("eye") + "<span>Show</span>";
       toggle.addEventListener("click", function () {
         var hidden = pre.style.display === "none";
         pre.style.display = hidden ? "" : "none";
+        preview.style.display = hidden ? "none" : "";
         toggle.innerHTML = iconSvg(hidden ? "eyeOff" : "eye") + "<span>" + (hidden ? "Hide" : "Show") + "</span>";
       });
       var copy = document.createElement("button");
@@ -316,7 +396,9 @@
       tools.appendChild(copy);
       pre.parentNode.insertBefore(wrap, pre);
       wrap.appendChild(tools);
+      wrap.appendChild(preview);
       wrap.appendChild(pre);
+      pre.style.display = "none";
     });
 
     Array.prototype.slice.call(root.querySelectorAll("table")).forEach(function (table) {
@@ -1197,6 +1279,96 @@
     return false;
   }
 
+  async function createChat() {
+    setActivity("loading", "Создаю чат...");
+    try {
+      applyChatState(await send("createChat", { title: "New chat" }));
+      clearSendError();
+      log("Chat created.");
+    } catch (error) {
+      log(error.detail || error.message);
+    } finally {
+      clearActivity();
+    }
+  }
+
+  async function selectChat(id) {
+    if (!id || id === state.activeChatId) {
+      return;
+    }
+
+    setActivity("loading", "Открываю чат...");
+    try {
+      applyChatState(await send("selectChat", { chatId: id }));
+      clearSendError();
+      log("Chat selected.");
+    } catch (error) {
+      log(error.detail || error.message);
+      renderChatSessions();
+    } finally {
+      clearActivity();
+    }
+  }
+
+  async function renameChat() {
+    if (!state.activeChatId) {
+      return;
+    }
+
+    var current = "";
+    (state.chats || []).forEach(function (chat) {
+      if (chatId(chat) === state.activeChatId) {
+        current = chatTitle(chat);
+      }
+    });
+
+    var title = window.prompt("Chat name", current || "New chat");
+    if (title === null || !title.trim()) {
+      return;
+    }
+
+    try {
+      applyChatState(await send("renameChat", { chatId: state.activeChatId, title: title.trim() }));
+      log("Chat renamed.");
+    } catch (error) {
+      log(error.detail || error.message);
+    }
+  }
+
+  async function clearChat() {
+    if (!state.activeChatId || !window.confirm("Clear this chat?")) {
+      return;
+    }
+
+    setActivity("clearing", "Очищаю чат...");
+    try {
+      applyChatState(await send("clearChat", { chatId: state.activeChatId }));
+      clearSendError();
+      log("Chat cleared.");
+    } catch (error) {
+      log(error.detail || error.message);
+    } finally {
+      clearActivity();
+    }
+  }
+
+  async function deleteChat() {
+    if (!state.activeChatId || !window.confirm("Delete this chat?")) {
+      return;
+    }
+
+    setActivity("clearing", "Удаляю чат...");
+    try {
+      applyChatState(await send("deleteChat", { chatId: state.activeChatId }));
+      clearSendError();
+      log("Chat deleted.");
+    } catch (error) {
+      log(error.detail || error.message);
+    } finally {
+      clearActivity();
+    }
+  }
+
   async function deleteMessage(message, index) {
     if (message && message.Local) {
       state.messages.splice(index, 1);
@@ -1205,16 +1377,14 @@
       }
       updateEstimatedContextUsage();
       renderMessages();
+      renderChatSessions();
       renderContextMeter();
       return;
     }
 
     try {
-      var response = await send("deleteMessage", { id: messageId(message), index: index });
-      state.messages = response.messages || state.messages;
-      state.contextUsage = response.contextUsage || state.contextUsage;
-      renderMessages();
-      renderContextMeter();
+      var response = await send("deleteMessage", { chatId: state.activeChatId, id: messageId(message), index: index });
+      applyChatState(response);
       log("Message deleted.");
     } catch (error) {
       showSendError(error.detail || error.message, state.failedSend ? state.failedSend.text : "");
@@ -1233,12 +1403,15 @@
       state.toolsPath = init.toolsPath || "";
       state.context = init.context || {};
       state.contextUsage = init.contextUsage || {};
+      state.activeChatId = init.activeChatId || "";
+      state.chats = init.chats || [];
       state.messages = init.messages || [];
       $("docLine").textContent = init.host + " - " + init.title;
       $("toolsPath").textContent = state.toolsPath ? "Storage: " + state.toolsPath : "";
       renderSettings();
       renderTools();
       renderContext();
+      renderChatSessions();
       renderMessages();
       renderContextMeter();
       log("Initialized " + init.host);
@@ -1257,12 +1430,9 @@
     $("sendButton").disabled = true;
     $("chatInput").readOnly = true;
     try {
-      var response = await send("sendChat", { text: text });
-      state.messages = response.messages || state.messages;
-      state.contextUsage = response.contextUsage || state.contextUsage;
+      var response = await send("sendChat", { chatId: state.activeChatId, text: text });
+      applyChatState(response);
       clearSendError();
-      renderMessages();
-      renderContextMeter();
       if (response.skillResults && response.skillResults.length) {
         logSkillResults(response.skillResults);
       }
@@ -1296,6 +1466,7 @@
     state.messages.push({ Id: "local-" + Date.now(), Role: "user", Content: text, Local: true, Pending: true });
     updateEstimatedContextUsage();
     renderMessages();
+    renderChatSessions();
     renderContextMeter();
     sendChat(text);
   }
@@ -1308,6 +1479,7 @@
     markLocalMessage(state.failedSend.text, { Pending: true, Failed: false });
     updateEstimatedContextUsage();
     renderMessages();
+    renderChatSessions();
     renderContextMeter();
     var text = state.failedSend.text;
     clearSendError();
@@ -1347,6 +1519,11 @@
     });
 
     $("refreshButton").addEventListener("click", initialize);
+    $("chatSessionSelect").addEventListener("change", function () { selectChat($("chatSessionSelect").value); });
+    $("newChatButton").addEventListener("click", createChat);
+    $("renameChatButton").addEventListener("click", renameChat);
+    $("clearChatButton").addEventListener("click", clearChat);
+    $("deleteChatButton").addEventListener("click", deleteChat);
     $("openContextTabButton").addEventListener("click", function () { switchTab("context"); });
     $("addSelectionContextButton").addEventListener("click", function () { addSelectionContext("full"); });
     $("retrySendButton").addEventListener("click", retryFailedSend);

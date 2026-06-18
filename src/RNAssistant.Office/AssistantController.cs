@@ -26,6 +26,10 @@ namespace RNAssistant.Office
         private readonly SkillCommandParser _commandParser;
         private readonly object _syncRoot;
         private string _queuedQuickAction;
+        private string _activeSessionId;
+        private string _activeHost;
+        private string _activeDocumentKey;
+        private string _activeRuntimeDocumentKey;
 
         public AssistantController(IOfficeApplicationAdapter adapter)
         {
@@ -46,12 +50,15 @@ namespace RNAssistant.Office
 
         public string InitializeJson()
         {
-            var session = LoadSession();
+            var session = LoadSession(null);
+            var activeId = ChatStore.GetSessionId(session);
             var state = new
             {
                 host = _adapter.HostName,
                 documentKey = _adapter.DocumentKey,
                 title = _adapter.DocumentTitle,
+                activeChatId = activeId,
+                chats = GetChatSummaries(activeId),
                 settings = _settingsService.Load(),
                 hasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey()),
                 tools = GetVisibleTools(),
@@ -64,18 +71,20 @@ namespace RNAssistant.Office
             return JsonConvert.SerializeObject(state);
         }
 
-        public async Task<string> SendChatAsync(string text, Action<string, string> progress = null)
+        public async Task<string> SendChatAsync(string text, string chatId = null, Action<string, string> progress = null)
         {
             if (string.IsNullOrWhiteSpace(text))
             {
-                var emptySession = LoadSession();
-                return JsonConvert.SerializeObject(new { message = string.Empty, skillResults = new SkillResult[0], messages = emptySession.Messages, contextUsage = EstimateContextUsage(emptySession, _settingsService.Load()) });
+                var emptySession = LoadSession(chatId);
+                var emptyId = ChatStore.GetSessionId(emptySession);
+                return JsonConvert.SerializeObject(new { message = string.Empty, skillResults = new SkillResult[0], activeChatId = emptyId, chats = GetChatSummaries(emptyId), messages = emptySession.Messages, contextUsage = EstimateContextUsage(emptySession, _settingsService.Load()) });
             }
 
             ReportProgress(progress, "context", "Читаю документ...");
             var settings = _settingsService.Load();
-            var session = LoadSession();
+            var session = LoadSession(chatId);
             session.Messages.Add(new ChatMessage { Role = "user", Content = text });
+            EnsureSessionTitleFromUserText(session, text);
 
             var tools = GetVisibleTools().Where(s => s.Enabled).ToList();
             var documentContext = LoadContext();
@@ -122,12 +131,13 @@ namespace RNAssistant.Office
 
             ReportProgress(progress, "saving", "Сохраняю историю...");
             _chatStore.Save(session);
-            return JsonConvert.SerializeObject(new { message = assistantText, skillResults = resultLog, messages = session.Messages, contextUsage = contextUsage });
+            var activeId = ChatStore.GetSessionId(session);
+            return JsonConvert.SerializeObject(new { message = assistantText, skillResults = resultLog, activeChatId = activeId, chats = GetChatSummaries(activeId), messages = session.Messages, contextUsage = contextUsage });
         }
 
-        public string DeleteMessageJson(string id, int index)
+        public string DeleteMessageJson(string id, int index, string chatId = null)
         {
-            var session = LoadSession();
+            var session = LoadSession(chatId);
             var removed = false;
             if (!string.IsNullOrWhiteSpace(id))
             {
@@ -145,7 +155,62 @@ namespace RNAssistant.Office
                 _chatStore.Save(session);
             }
 
-            return JsonConvert.SerializeObject(new { messages = session.Messages, contextUsage = EstimateContextUsage(session, _settingsService.Load()) });
+            var activeId = ChatStore.GetSessionId(session);
+            return JsonConvert.SerializeObject(new { activeChatId = activeId, chats = GetChatSummaries(activeId), messages = session.Messages, contextUsage = EstimateContextUsage(session, _settingsService.Load()) });
+        }
+
+        public string ListChatsJson()
+        {
+            var session = LoadSession(null);
+            return ChatStateJson(session);
+        }
+
+        public string CreateChatJson(string title)
+        {
+            LoadSession(null);
+            var session = _chatStore.Create(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle, string.IsNullOrWhiteSpace(title) ? "New chat" : title.Trim());
+            SetActiveSession(session);
+            return ChatStateJson(session);
+        }
+
+        public string SelectChatJson(string chatId)
+        {
+            var session = LoadSession(chatId);
+            return ChatStateJson(session);
+        }
+
+        public string RenameChatJson(string chatId, string title)
+        {
+            var session = LoadSession(chatId);
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                session.Title = title.Trim();
+                _chatStore.Save(session);
+            }
+
+            return ChatStateJson(session);
+        }
+
+        public string ClearChatJson(string chatId)
+        {
+            var session = LoadSession(chatId);
+            session.Messages.Clear();
+            _chatStore.Save(session);
+            return ChatStateJson(session);
+        }
+
+        public string DeleteChatJson(string chatId)
+        {
+            var current = LoadSession(chatId);
+            _chatStore.Delete(_adapter.HostName, _adapter.DocumentKey, ChatStore.GetSessionId(current));
+            var next = _chatStore.List(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle).FirstOrDefault();
+            if (next == null)
+            {
+                next = _chatStore.Create(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle, "New chat");
+            }
+
+            SetActiveSession(next);
+            return ChatStateJson(next);
         }
 
         public string GetSettingsJson()
@@ -417,9 +482,78 @@ namespace RNAssistant.Office
             }
         }
 
-        private ChatSession LoadSession()
+        private ChatSession LoadSession(string requestedSessionId)
         {
-            return _chatStore.LoadOrCreate(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle);
+            var host = _adapter.HostName;
+            var documentKey = _adapter.DocumentKey;
+            var legacyDocumentKey = _adapter.LegacyDocumentKey;
+            var runtimeKey = _adapter.RuntimeDocumentKey;
+            var title = _adapter.DocumentTitle;
+
+            if (!string.IsNullOrWhiteSpace(_activeSessionId) &&
+                string.Equals(_activeHost, host, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(_activeRuntimeDocumentKey, runtimeKey, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(_activeDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))
+            {
+                var oldDocumentKey = _activeDocumentKey;
+                _contextStore.Move(_activeHost, oldDocumentKey, host, documentKey, title);
+                _chatStore.MoveDocument(_activeHost, oldDocumentKey, host, documentKey, title);
+                _activeHost = host;
+                _activeDocumentKey = documentKey;
+                _activeRuntimeDocumentKey = runtimeKey;
+            }
+
+            RestoreLegacyDocumentKeyIfNeeded(host, legacyDocumentKey, documentKey, title);
+
+            ChatSession session = null;
+            if (!string.IsNullOrWhiteSpace(requestedSessionId))
+            {
+                session = _chatStore.Load(host, documentKey, requestedSessionId);
+                if (session == null)
+                {
+                    throw new InvalidOperationException("Chat session was not found.");
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(_activeSessionId) &&
+                     string.Equals(_activeHost, host, StringComparison.OrdinalIgnoreCase) &&
+                     string.Equals(_activeDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))
+            {
+                session = _chatStore.Load(host, documentKey, _activeSessionId);
+            }
+
+            if (session == null)
+            {
+                session = _chatStore.LoadOrCreateActive(host, documentKey, title);
+            }
+
+            SetActiveSession(session);
+            return session;
+        }
+
+        private void RestoreLegacyDocumentKeyIfNeeded(string host, string legacyDocumentKey, string documentKey, string title)
+        {
+            if (string.IsNullOrWhiteSpace(legacyDocumentKey) ||
+                string.Equals(legacyDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (_chatStore.List(host, documentKey, title).Count > 0)
+            {
+                return;
+            }
+
+            if (_chatStore.List(host, legacyDocumentKey, title).Count > 0)
+            {
+                _chatStore.MoveDocument(host, legacyDocumentKey, host, documentKey, title);
+                _contextStore.Move(host, legacyDocumentKey, host, documentKey, title);
+                return;
+            }
+
+            if (!_contextStore.Exists(host, documentKey) && _contextStore.Exists(host, legacyDocumentKey))
+            {
+                _contextStore.Move(host, legacyDocumentKey, host, documentKey, title);
+            }
         }
 
         private DocumentContext LoadContext()
@@ -442,6 +576,65 @@ namespace RNAssistant.Office
                 context.Notes = new List<ContextNote>();
             }
             return context;
+        }
+
+        private void SetActiveSession(ChatSession session)
+        {
+            if (session == null)
+            {
+                return;
+            }
+
+            _activeSessionId = ChatStore.GetSessionId(session);
+            _activeHost = session.Host;
+            _activeDocumentKey = session.DocumentKey;
+            _activeRuntimeDocumentKey = _adapter.RuntimeDocumentKey;
+            _chatStore.SaveActiveSessionId(session.Host, session.DocumentKey, _activeSessionId);
+        }
+
+        private string ChatStateJson(ChatSession session)
+        {
+            var activeId = ChatStore.GetSessionId(session);
+            return JsonConvert.SerializeObject(new
+            {
+                activeChatId = activeId,
+                chats = GetChatSummaries(activeId),
+                messages = session == null ? new List<ChatMessage>() : session.Messages,
+                contextUsage = EstimateContextUsage(session, _settingsService.Load())
+            });
+        }
+
+        private IReadOnlyList<ChatSessionSummary> GetChatSummaries(string activeId)
+        {
+            return _chatStore.List(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle)
+                .Select(s => new ChatSessionSummary
+                {
+                    Id = ChatStore.GetSessionId(s),
+                    Host = s.Host,
+                    DocumentKey = s.DocumentKey,
+                    DocumentTitle = s.DocumentTitle,
+                    Title = s.Title,
+                    CreatedUtc = s.CreatedUtc,
+                    UpdatedUtc = s.UpdatedUtc,
+                    MessageCount = s.Messages == null ? 0 : s.Messages.Count
+                })
+                .ToList();
+        }
+
+        private static void EnsureSessionTitleFromUserText(ChatSession session, string text)
+        {
+            if (session == null || string.IsNullOrWhiteSpace(text))
+            {
+                return;
+            }
+
+            if (!string.Equals(session.Title, "New chat", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            var title = Regex.Replace(text.Trim(), "\\s+", " ");
+            session.Title = title.Length <= 64 ? title : title.Substring(0, 61) + "...";
         }
 
         private void NormalizeContextNote(ContextNote note, string mode)

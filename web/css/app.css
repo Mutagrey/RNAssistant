@@ -228,6 +228,19 @@ button.danger {
   flex-direction: column;
 }
 
+.chatbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(4, 32px);
+  gap: 7px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.chatbar select {
+  min-width: 0;
+  height: 32px;
+}
+
 .messages {
   flex: 1;
   min-height: 0;
@@ -450,6 +463,20 @@ button.danger {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.code-preview {
+  overflow: hidden;
+  padding: 8px 9px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #475569;
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .block-tool-button {

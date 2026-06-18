@@ -53,6 +53,7 @@
   <ItemGroup>
     <Compile Include="AssistantController.cs" />
     <Compile Include="AssistantRuntime.cs" />
+    <Compile Include="DocumentIdentity.cs" />
     <Compile Include="IOfficeApplicationAdapter.cs" />
     <Compile Include="VbaProjectSupport.cs" />
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />

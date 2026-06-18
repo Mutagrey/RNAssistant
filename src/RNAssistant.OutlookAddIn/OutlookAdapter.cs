@@ -34,6 +34,16 @@ namespace RNAssistant.OutlookAddIn
             }
         }
 
+        public string RuntimeDocumentKey
+        {
+            get { return DocumentKey; }
+        }
+
+        public string LegacyDocumentKey
+        {
+            get { return DocumentKey; }
+        }
+
         public string DocumentTitle
         {
             get
