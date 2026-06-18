@@ -1,0 +1,201 @@
+.markdown {
+  padding: 10px 11px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: 0 1px 2px rgba(16, 24, 39, 0.04);
+  line-height: 1.45;
+  overflow-wrap: break-word;
+}
+
+.markdown p:first-child {
+  margin-top: 0;
+}
+
+.markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown pre {
+  margin: 8px 0;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #f8fafc;
+  box-shadow: 0 1px 0 rgba(16, 24, 39, 0.04);
+}
+
+.markdown pre code,
+.markdown pre code.hljs {
+  display: block;
+  padding: 12px;
+  background: transparent;
+  color: var(--code-text);
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.markdown :not(pre) > code {
+  padding: 2px 5px;
+  border: 1px solid #dce3ee;
+  border-radius: 4px;
+  background: #eef2f7;
+  color: #1f2937;
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: 0.92em;
+}
+
+.markdown .hljs-comment,
+.markdown .hljs-code,
+.markdown .hljs-formula {
+  color: #68768a;
+}
+
+.markdown .hljs-keyword,
+.markdown .hljs-doctag,
+.markdown .hljs-template-tag,
+.markdown .hljs-template-variable,
+.markdown .hljs-type,
+.markdown .hljs-variable.language_ {
+  color: #b42318;
+}
+
+.markdown .hljs-string,
+.markdown .hljs-regexp,
+.markdown .hljs-meta .hljs-string {
+  color: #116329;
+}
+
+.markdown .hljs-title,
+.markdown .hljs-title.class_,
+.markdown .hljs-title.function_ {
+  color: #6941c6;
+}
+
+.markdown .hljs-attr,
+.markdown .hljs-attribute,
+.markdown .hljs-literal,
+.markdown .hljs-number,
+.markdown .hljs-operator,
+.markdown .hljs-selector-attr,
+.markdown .hljs-selector-class,
+.markdown .hljs-selector-id,
+.markdown .hljs-variable {
+  color: #0550ae;
+}
+
+.markdown .hljs-built_in,
+.markdown .hljs-symbol {
+  color: #9a6700;
+}
+
+.markdown .hljs-name,
+.markdown .hljs-quote,
+.markdown .hljs-selector-pseudo,
+.markdown .hljs-selector-tag {
+  color: #1a7f37;
+}
+
+.markdown .hljs-section {
+  color: #0969da;
+  font-weight: 700;
+}
+
+.markdown .hljs-addition {
+  color: #1a7f37;
+  background: #dafbe1;
+}
+
+.markdown .hljs-deletion {
+  color: #cf222e;
+  background: #ffebe9;
+}
+
+.code-wrap,
+.table-wrap {
+  position: relative;
+  margin: 10px 0;
+  padding: 7px;
+  border: 1px solid #d8e1ee;
+  border-radius: var(--radius);
+  background: #fbfdff;
+}
+
+.block-tools {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: 4px;
+}
+
+.code-lang {
+  margin-right: auto;
+  color: #607089;
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.code-preview {
+  overflow: hidden;
+  padding: 8px 9px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #475569;
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.block-tool-button {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  padding: 4px 7px;
+  background: #e8edf5;
+  color: #243044;
+  font-size: 12px;
+}
+
+.block-tool-button svg {
+  width: 13px;
+  height: 13px;
+}
+
+.markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid var(--line);
+  padding: 6px 7px;
+  vertical-align: top;
+}
+
+.markdown th {
+  background: #f1f4f8;
+}
+
+.markdown .katex {
+  font-size: 1.03em;
+}
+
+.markdown .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: 10px 0;
+  padding: 8px;
+  border: 1px solid #dde6f2;
+  border-radius: 6px;
+  background: #fbfdff;
+}
