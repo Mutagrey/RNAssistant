@@ -3,7 +3,7 @@
 ## Findings
 
 1. `SkillCommandParser` mixed native `tool_calls` wrappers with local command objects. A native-style call could be parsed as `call_xxx` instead of `function.name`. Fixed by handling `tool_calls` explicitly.
-2. `Controller/AssistantController.cs` owned chat state, context normalization, prompt flow, tool catalog composition, pipeline execution, VBA patching and transcript formatting. Split into controller orchestration, chat/session bridge methods, context bridge methods, `ContextService`, `ChatCompletionService`, `ToolCatalogService`, `AgentTranscript`, `OfficeToolExecutor`, and `PromptMessageBuilder`.
+2. `Controller/AssistantController.cs` owned chat state, context normalization, prompt flow, tool catalog composition, pipeline execution, VBA patching and transcript formatting. Split into controller orchestration, chat/session bridge methods, context bridge methods, `ContextService`, `ChatCompletionService`, `ToolCatalogService`, `AgentTranscript`, `OfficeToolExecutor`, `PipelineToolExecutor`, and `PromptMessageBuilder`.
 3. The WebView UI no longer has one super-file: bridge/state, settings, tools, VBA, context and chat flows are split across static `web/js/app-*.js` files. `app.js` remains boot plus shared rendering helpers.
 4. Bridge payloads and common controller responses now use DTO/model contracts. JSON serialization for WebView responses is isolated in `AssistantWebBridge`.
 5. Chat fork now uses explicit model cloning instead of non-boundary JSON roundtrips.
@@ -13,7 +13,7 @@
 ## Short-Term Plan
 
 - Add more storage edge fixtures where they are reliable cross-platform.
-- Split `OfficeToolExecutor` into command execution and pipeline execution internals without changing public behavior.
+- Split VBA patch/backup internals out of `OfficeToolExecutor` once command and pipeline boundaries stay stable.
 - Keep new UI responsibilities in the matching `web/js/app-*.js` feature file; do not grow `app.js` back into orchestration.
 
 ## Mid-Term Plan

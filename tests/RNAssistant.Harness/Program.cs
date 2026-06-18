@@ -34,6 +34,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "storage: broken chat skipped", Run = SkipsBrokenChatFiles },
                 new HarnessTest { Name = "pipeline: dry-run resolves placeholders", Run = PipelineDryRunResolvesPlaceholders },
                 new HarnessTest { Name = "pipeline: executes fake adapter steps", Run = PipelineExecutesFakeAdapterSteps },
+                new HarnessTest { Name = "pipeline: resolves step output placeholders", Run = PipelineResolvesStepOutputPlaceholders },
                 new HarnessTest { Name = "pipeline: custom tool needs confirmation", Run = CustomPipelineNeedsConfirmation },
                 new HarnessTest { Name = "pipeline: agent mode gates built-in mutation", Run = AgentModeGatesBuiltInMutation },
                 new HarnessTest { Name = "tools: catalog merges visible tools", Run = ToolCatalogMergesVisibleTools },
@@ -192,6 +193,22 @@ namespace RNAssistant.Harness
                 AssertEqual("Report", adapter.Executed[0].Arguments["name"], "first arg");
                 AssertEqual("excel.write_table", adapter.Executed[1].SkillId, "second tool");
                 AssertEqual("Report", adapter.Executed[1].Arguments["sheet"], "second arg");
+            });
+        }
+
+        private static void PipelineResolvesStepOutputPlaceholders()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var tools = BuildStepPlaceholderPipelineTools();
+                var command = new SkillCommand { SkillId = "excel.chain_report" };
+
+                var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+
+                AssertTrue(result.Success, "pipeline result");
+                AssertEqual(2, adapter.Executed.Count, "adapter execution count");
+                AssertEqual("executed excel.add_sheet", adapter.Executed[1].Arguments["sourceMessage"], "step message placeholder");
+                AssertEqual("true", adapter.Executed[1].Arguments["sourceSuccess"], "step success placeholder");
             });
         }
 
@@ -611,6 +628,26 @@ namespace RNAssistant.Harness
                         "\"steps\":[" +
                         "{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}," +
                         "{\"id\":\"table\",\"toolId\":\"excel.write_table\",\"arguments\":{\"sheet\":\"{{args.sheet}}\",\"startAddress\":\"A1\",\"values\":\"[[\\\"Month\\\",\\\"Sales\\\"]]\"}}" +
+                        "]}"
+                }
+            };
+        }
+
+        private static List<SkillDefinition> BuildStepPlaceholderPipelineTools()
+        {
+            return new List<SkillDefinition>
+            {
+                new SkillDefinition
+                {
+                    Id = "excel.chain_report",
+                    Host = "Excel",
+                    Name = "Chain report",
+                    Executor = "pipeline",
+                    Enabled = true,
+                    PipelineJson = "{" +
+                        "\"steps\":[" +
+                        "{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}," +
+                        "{\"id\":\"table\",\"toolId\":\"excel.write_table\",\"arguments\":{\"sheet\":\"Report\",\"sourceMessage\":\"{{steps.sheet.message}}\",\"sourceSuccess\":\"{{steps.sheet.success}}\"}}" +
                         "]}"
                 }
             };

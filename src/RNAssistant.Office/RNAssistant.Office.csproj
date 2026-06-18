@@ -67,6 +67,7 @@
     <Compile Include="Services\ToolCatalogService.cs" />
     <Compile Include="Skills\SkillArgumentReader.cs" />
     <Compile Include="Tools\OfficeToolExecutor.cs" />
+    <Compile Include="Tools\PipelineToolExecutor.cs" />
     <Compile Include="WebView\AssistantPaneControl.cs" />
     <Compile Include="WebView\AssistantWebBridge.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
