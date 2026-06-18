@@ -13,12 +13,18 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\..\src\RNAssistant.Core\Models\AppSettings.cs" Link="Core\Models\AppSettings.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Models\ChatModels.cs" Link="Core\Models\ChatModels.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Models\ContextModels.cs" Link="Core\Models\ContextModels.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Models\SkillModels.cs" Link="Core\Models\SkillModels.cs" />
+    <Compile Include="..\..\src\RNAssistant.Core\Models\VbaModels.cs" Link="Core\Models\VbaModels.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Skills\SkillCommandParser.cs" Link="Core\Skills\SkillCommandParser.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Storage\AppDataPaths.cs" Link="Core\Storage\AppDataPaths.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Storage\ChatStore.cs" Link="Core\Storage\ChatStore.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Storage\JsonFileStore.cs" Link="Core\Storage\JsonFileStore.cs" />
+    <Compile Include="..\..\src\RNAssistant.Core\Storage\VbaBackupStore.cs" Link="Core\Storage\VbaBackupStore.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Contracts\IOfficeApplicationAdapter.cs" Link="Office\Contracts\IOfficeApplicationAdapter.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Skills\SkillArgumentReader.cs" Link="Office\Skills\SkillArgumentReader.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Tools\OfficeToolExecutor.cs" Link="Office\Tools\OfficeToolExecutor.cs" />
   </ItemGroup>
 </Project>

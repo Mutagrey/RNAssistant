@@ -64,12 +64,13 @@ Current coverage:
 
 - parser fixtures: fenced `rnassistant-agent`, bare JSON arrays, native `tool_calls`, malformed JSON;
 - chat store fixtures using temp directories, including broken JSON files being skipped;
+- pipeline dry-run and execution fixtures with fake `IOfficeApplicationAdapter`;
+- confirmation gates for custom tools and Agent Mode built-in mutations;
 - no Office COM dependency.
 
 Next harness coverage:
 
 - prompt composition/context trimming fixtures;
-- pipeline dry-run fixtures with fake `IOfficeApplicationAdapter`;
 - unreadable-directory storage edge cases where the OS can simulate them reliably.
 
 Windows-only validation remains separate:

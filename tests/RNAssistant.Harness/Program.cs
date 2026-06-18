@@ -4,6 +4,8 @@ using System.IO;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Skills;
 using RNAssistant.Core.Storage;
+using RNAssistant.Office;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
 {
@@ -24,7 +26,11 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "parser: native tool_calls", Run = ParsesNativeToolCalls },
                 new HarnessTest { Name = "parser: bad json skipped", Run = SkipsBadJson },
                 new HarnessTest { Name = "storage: chat roundtrip", Run = CreatesAndListsChatsInTempRoot },
-                new HarnessTest { Name = "storage: broken chat skipped", Run = SkipsBrokenChatFiles }
+                new HarnessTest { Name = "storage: broken chat skipped", Run = SkipsBrokenChatFiles },
+                new HarnessTest { Name = "pipeline: dry-run resolves placeholders", Run = PipelineDryRunResolvesPlaceholders },
+                new HarnessTest { Name = "pipeline: executes fake adapter steps", Run = PipelineExecutesFakeAdapterSteps },
+                new HarnessTest { Name = "pipeline: custom tool needs confirmation", Run = CustomPipelineNeedsConfirmation },
+                new HarnessTest { Name = "pipeline: agent mode gates built-in mutation", Run = AgentModeGatesBuiltInMutation }
             };
 
             var failed = 0;
@@ -136,6 +142,105 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void PipelineDryRunResolvesPlaceholders()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var tools = BuildPipelineTools(false);
+                var command = new SkillCommand { SkillId = "excel.make_report" };
+                command.Arguments["sheet"] = "Report";
+
+                var result = executor.Execute(command, tools, new AppSettings(), true, false);
+
+                AssertTrue(result.Success, "pipeline dry-run result");
+                AssertContains(result.Message, "Dry run completed", "dry-run message");
+                AssertContains(result.DataJson, "Report", "pipeline data");
+                AssertEqual(0, adapter.Executed.Count, "adapter execution count");
+            });
+        }
+
+        private static void PipelineExecutesFakeAdapterSteps()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var tools = BuildPipelineTools(false);
+                var command = new SkillCommand { SkillId = "excel.make_report" };
+                command.Arguments["sheet"] = "Report";
+
+                var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+
+                AssertTrue(result.Success, "pipeline result");
+                AssertEqual(2, adapter.Executed.Count, "adapter execution count");
+                AssertEqual("excel.add_sheet", adapter.Executed[0].SkillId, "first tool");
+                AssertEqual("Report", adapter.Executed[0].Arguments["name"], "first arg");
+                AssertEqual("excel.write_table", adapter.Executed[1].SkillId, "second tool");
+                AssertEqual("Report", adapter.Executed[1].Arguments["sheet"], "second arg");
+            });
+        }
+
+        private static void CustomPipelineNeedsConfirmation()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var tools = BuildPipelineTools(true);
+                var command = new SkillCommand { SkillId = "excel.make_report" };
+                command.Arguments["sheet"] = "Report";
+
+                var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = false }, false, false);
+
+                AssertTrue(!result.Success, "pipeline should fail");
+                AssertContains(result.Message, "requires confirmation", "confirmation message");
+                AssertEqual(0, adapter.Executed.Count, "adapter execution count");
+            });
+        }
+
+        private static void AgentModeGatesBuiltInMutation()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var tools = BuildPipelineTools(false);
+                var command = new SkillCommand { SkillId = "excel.make_report" };
+                command.Arguments["sheet"] = "Report";
+
+                var result = executor.Execute(command, tools, new AppSettings { AgentModeEnabled = false, AutoConfirmToolActions = false }, false, false);
+
+                AssertTrue(!result.Success, "pipeline should fail");
+                AssertContains(result.Message, "requires confirmation", "confirmation message");
+                AssertEqual(0, adapter.Executed.Count, "adapter execution count");
+            });
+        }
+
+        private static List<SkillDefinition> BuildPipelineTools(bool requiresConfirmation)
+        {
+            return new List<SkillDefinition>
+            {
+                new SkillDefinition
+                {
+                    Id = "excel.make_report",
+                    Host = "Excel",
+                    Name = "Make report",
+                    Executor = "pipeline",
+                    Enabled = true,
+                    RequiresConfirmation = requiresConfirmation,
+                    PipelineJson = "{" +
+                        "\"steps\":[" +
+                        "{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}," +
+                        "{\"id\":\"table\",\"toolId\":\"excel.write_table\",\"arguments\":{\"sheet\":\"{{args.sheet}}\",\"startAddress\":\"A1\",\"values\":\"[[\\\"Month\\\",\\\"Sales\\\"]]\"}}" +
+                        "]}"
+                }
+            };
+        }
+
+        private static void WithTempExecutor(Action<OfficeToolExecutor, FakeOfficeAdapter> action)
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths));
+                action(executor, adapter);
+            });
+        }
+
         private static void WithTempPaths(Action<AppDataPaths> action)
         {
             var root = Path.Combine(Path.GetTempPath(), "RNAssistant.Harness." + Guid.NewGuid().ToString("N"));
@@ -165,6 +270,82 @@ namespace RNAssistant.Harness
             if (!value)
             {
                 throw new InvalidOperationException(name + " was false");
+            }
+        }
+
+        private static void AssertContains(string value, string expected, string name)
+        {
+            if ((value ?? string.Empty).IndexOf(expected, StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                throw new InvalidOperationException(name + ": expected '" + value + "' to contain '" + expected + "'");
+            }
+        }
+
+        private sealed class FakeOfficeAdapter : IOfficeApplicationAdapter
+        {
+            public readonly List<SkillCommand> Executed = new List<SkillCommand>();
+
+            public string HostName { get { return "Excel"; } }
+            public string DocumentKey { get { return "doc"; } }
+            public string LegacyDocumentKey { get { return "legacy-doc"; } }
+            public string RuntimeDocumentKey { get { return "runtime-doc"; } }
+            public string DocumentTitle { get { return "Harness.xlsx"; } }
+
+            public string GetDocumentSnapshot(int maxChars)
+            {
+                return "Harness document";
+            }
+
+            public string GetVbaSnapshot(int maxChars)
+            {
+                return string.Empty;
+            }
+
+            public void PrepareForContextCapture()
+            {
+            }
+
+            public ContextNote CaptureSelectionContext(string mode, int maxChars)
+            {
+                return null;
+            }
+
+            public IEnumerable<SkillDefinition> GetBuiltInSkills()
+            {
+                return new[]
+                {
+                    BuiltIn("excel.add_sheet", false),
+                    BuiltIn("excel.write_table", true)
+                };
+            }
+
+            public SkillResult ExecuteSkill(SkillCommand command)
+            {
+                Executed.Add(Clone(command));
+                return SkillResult.Ok("executed " + command.SkillId);
+            }
+
+            private static SkillDefinition BuiltIn(string id, bool requiresConfirmation)
+            {
+                return new SkillDefinition
+                {
+                    Id = id,
+                    Host = "Excel",
+                    Name = id,
+                    Enabled = true,
+                    BuiltIn = true,
+                    RequiresConfirmation = requiresConfirmation
+                };
+            }
+
+            private static SkillCommand Clone(SkillCommand command)
+            {
+                var clone = new SkillCommand { SkillId = command.SkillId, Description = command.Description };
+                foreach (var pair in command.Arguments)
+                {
+                    clone.Arguments[pair.Key] = pair.Value;
+                }
+                return clone;
             }
         }
     }
