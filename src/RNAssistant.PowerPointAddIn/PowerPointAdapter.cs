@@ -76,13 +76,13 @@ namespace RNAssistant.PowerPointAddIn
             return new[]
             {
                 Skill("powerpoint.read_slides", "Read text from slides.", "{\"maxSlides\":20}"),
-                Skill("powerpoint.add_slide", "Add a text slide.", "{\"title\":\"Slide title\",\"body\":\"Slide body\"}"),
-                Skill("powerpoint.replace_selection_text", "Replace text in selected shape.", "{\"text\":\"Replacement text\"}"),
+                Skill("powerpoint.add_slide", "Add a text slide.", "{\"title\":\"Slide title\",\"body\":\"Slide body\"}", true, true),
+                Skill("powerpoint.replace_selection_text", "Replace text in selected shape.", "{\"text\":\"Replacement text\"}", true, true),
                 Skill("powerpoint.vba_read_project", "Read VBA project modules and source code when Trust Access to VBA project is enabled.", "{\"maxChars\":30000}"),
                 Skill("powerpoint.vba_read_module", "Read one VBA module by name.", "{\"moduleName\":\"Module1\",\"maxChars\":30000}"),
-                Skill("powerpoint.vba_replace_module", "Replace a VBA module source code; RNAssistant stores rollback backups before replacement.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}"),
-                Skill("powerpoint.insert_vba_module", "Insert VBA module when Trust Access to VBA project is enabled; otherwise returns copyable code.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}"),
-                Skill("powerpoint.run_macro", "Run a PowerPoint VBA macro by name.", "{\"macroName\":\"Module1.Test\"}")
+                Skill("powerpoint.vba_replace_module", "Replace a VBA module source code; RNAssistant stores rollback backups before replacement.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}", true, false),
+                Skill("powerpoint.insert_vba_module", "Insert VBA module when Trust Access to VBA project is enabled; otherwise returns copyable code.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}", true, false),
+                Skill("powerpoint.run_macro", "Run a PowerPoint VBA macro by name.", "{\"macroName\":\"Module1.Test\"}", true, false)
             };
         }
 
@@ -354,9 +354,9 @@ namespace RNAssistant.PowerPointAddIn
             return presentation;
         }
 
-        private static SkillDefinition Skill(string id, string description, string schema)
+        private static SkillDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)
         {
-            return new SkillDefinition { Id = id, Host = "PowerPoint", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true };
+            return new SkillDefinition { Id = id, Host = "PowerPoint", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun };
         }
 
         private static string Trim(string text, int maxChars)

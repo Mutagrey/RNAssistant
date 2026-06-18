@@ -97,6 +97,8 @@ namespace RNAssistant.Core.Storage
                 ArgumentSchemaJson = string.IsNullOrWhiteSpace(tool.ArgumentSchemaJson) ? "{}" : tool.ArgumentSchemaJson,
                 Executor = string.IsNullOrWhiteSpace(tool.Executor) ? "pipeline" : tool.Executor,
                 RequiresConfirmation = tool.RequiresConfirmation,
+                MutatesDocument = tool.MutatesDocument,
+                AgentCanRun = tool.AgentCanRun,
                 Enabled = tool.Enabled,
                 BuiltIn = false
             };

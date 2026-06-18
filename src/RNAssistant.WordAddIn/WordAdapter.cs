@@ -76,14 +76,14 @@ namespace RNAssistant.WordAddIn
             {
                 Skill("word.read_document", "Read current document text.", "{\"maxChars\":12000}"),
                 Skill("word.read_selection", "Read current Word selection.", "{}"),
-                Skill("word.insert_text", "Insert text at current cursor position.", "{\"text\":\"Text to insert\"}"),
-                Skill("word.replace_selection", "Replace selected text.", "{\"text\":\"Replacement text\"}"),
-                Skill("word.add_comment", "Add a comment to the current selection.", "{\"text\":\"Comment text\"}"),
+                Skill("word.insert_text", "Insert text at current cursor position.", "{\"text\":\"Text to insert\"}", true, true),
+                Skill("word.replace_selection", "Replace selected text.", "{\"text\":\"Replacement text\"}", true, true),
+                Skill("word.add_comment", "Add a comment to the current selection.", "{\"text\":\"Comment text\"}", true, true),
                 Skill("word.vba_read_project", "Read VBA project modules and source code when Trust Access to VBA project is enabled.", "{\"maxChars\":30000}"),
                 Skill("word.vba_read_module", "Read one VBA module by name.", "{\"moduleName\":\"Module1\",\"maxChars\":30000}"),
-                Skill("word.vba_replace_module", "Replace a VBA module source code; RNAssistant stores rollback backups before replacement.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}"),
-                Skill("word.insert_vba_module", "Insert VBA module when Trust Access to VBA project is enabled; otherwise returns copyable code.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}"),
-                Skill("word.run_macro", "Run a Word VBA macro by name.", "{\"macroName\":\"Module1.Test\"}")
+                Skill("word.vba_replace_module", "Replace a VBA module source code; RNAssistant stores rollback backups before replacement.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}", true, false),
+                Skill("word.insert_vba_module", "Insert VBA module when Trust Access to VBA project is enabled; otherwise returns copyable code.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}", true, false),
+                Skill("word.run_macro", "Run a Word VBA macro by name.", "{\"macroName\":\"Module1.Test\"}", true, false)
             };
         }
 
@@ -288,9 +288,9 @@ namespace RNAssistant.WordAddIn
             return doc;
         }
 
-        private static SkillDefinition Skill(string id, string description, string schema)
+        private static SkillDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)
         {
-            return new SkillDefinition { Id = id, Host = "Word", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true };
+            return new SkillDefinition { Id = id, Host = "Word", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun };
         }
 
         private static string Trim(string text, int maxChars)

@@ -7,13 +7,13 @@
 3. The WebView UI no longer has one super-file: bridge/state, settings, tools, VBA, context and chat flows are split across static `web/js/app-*.js` files. `app.js` remains boot plus shared rendering helpers.
 4. Bridge payloads and common controller responses now use DTO/model contracts. JSON serialization for WebView responses is isolated in `AssistantWebBridge`.
 5. Chat fork now uses explicit model cloning instead of non-boundary JSON roundtrips.
-6. A local non-VSTO harness now covers parser, chat storage, fake-adapter pipeline basics, tool catalog composition, VBA patch/backup flow, context normalization/upsert and clone behavior, prompt trimming/context usage, settings/context/VBA/tool bridge payload parsing, and a no-network chat completion flow.
+6. A local non-VSTO harness now covers parser, chat storage, fake-adapter pipeline basics, metadata-driven tool safety, tool catalog composition, VBA patch/backup flow, context normalization/upsert and clone behavior, prompt trimming/context usage, settings/context/VBA/tool bridge payload parsing, and a no-network chat completion flow.
 7. VSTO adapter code should be treated as Windows-only. Changes there need explicit Office x64 validation.
 
 ## Short-Term Plan
 
 - Add more storage edge fixtures where they are reliable cross-platform.
-- Reduce `OfficeToolExecutor` mutation classification duplication by moving tool safety metadata closer to tool definitions.
+- Review WebView CSS/UX for low-risk cleanup without adding a build pipeline.
 - Keep new UI responsibilities in the matching `web/js/app-*.js` feature file; do not grow `app.js` back into orchestration.
 
 ## Mid-Term Plan

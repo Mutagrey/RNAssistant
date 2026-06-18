@@ -64,7 +64,7 @@ namespace RNAssistant.OutlookAddIn
             return new[]
             {
                 Skill("outlook.read_selection", "Read selected email metadata and body.", "{\"maxChars\":12000}"),
-                Skill("outlook.draft_reply", "Create and display a reply draft for selected email.", "{\"body\":\"Reply body\"}"),
+                Skill("outlook.draft_reply", "Create and display a reply draft for selected email.", "{\"body\":\"Reply body\"}", true, true),
                 Skill("outlook.collect_folder_mail", "Collect recent mail metadata from current folder for LLM analysis.", "{\"maxItems\":100,\"maxBodyChars\":1000}"),
                 Skill("outlook.collect_monthly_summary_data", "Collect current folder mail grouped by month for archive summary.", "{\"maxItems\":500,\"maxBodyChars\":500}")
             };
@@ -286,9 +286,9 @@ namespace RNAssistant.OutlookAddIn
             }
         }
 
-        private static SkillDefinition Skill(string id, string description, string schema)
+        private static SkillDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)
         {
-            return new SkillDefinition { Id = id, Host = "Outlook", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true };
+            return new SkillDefinition { Id = id, Host = "Outlook", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun };
         }
 
         private static string Trim(string text, int maxChars)

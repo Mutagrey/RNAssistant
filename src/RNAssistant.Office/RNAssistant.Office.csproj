@@ -68,6 +68,7 @@
     <Compile Include="Skills\SkillArgumentReader.cs" />
     <Compile Include="Tools\OfficeToolExecutor.cs" />
     <Compile Include="Tools\PipelineToolExecutor.cs" />
+    <Compile Include="Tools\ToolSafetyPolicy.cs" />
     <Compile Include="Tools\VbaToolExecutor.cs" />
     <Compile Include="WebView\AssistantPaneControl.cs" />
     <Compile Include="WebView\AssistantWebBridge.cs" />

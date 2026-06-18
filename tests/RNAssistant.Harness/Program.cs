@@ -39,6 +39,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "pipeline: custom tool needs confirmation", Run = CustomPipelineNeedsConfirmation },
                 new HarnessTest { Name = "pipeline: agent mode gates built-in mutation", Run = AgentModeGatesBuiltInMutation },
                 new HarnessTest { Name = "tools: catalog merges visible tools", Run = ToolCatalogMergesVisibleTools },
+                new HarnessTest { Name = "tools: safety metadata gates mutations", Run = ToolSafetyMetadataGatesMutations },
                 new HarnessTest { Name = "vba: replace text backs up module", Run = VbaReplaceTextBacksUpModule },
                 new HarnessTest { Name = "prompt: trims oldest history", Run = PromptBuilderTrimsOldestHistory },
                 new HarnessTest { Name = "prompt: usage estimator counts context", Run = ContextUsageEstimatorCountsPromptAndSession },
@@ -269,6 +270,34 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ToolSafetyMetadataGatesMutations()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var tools = new List<SkillDefinition>(adapter.GetBuiltInSkills());
+                tools.Add(new SkillDefinition
+                {
+                    Id = "excel.metadata_mutation",
+                    Host = "Excel",
+                    Name = "metadata mutation",
+                    BuiltIn = true,
+                    Enabled = true,
+                    MutatesDocument = true,
+                    AgentCanRun = true
+                });
+                var command = new SkillCommand { SkillId = "excel.metadata_mutation" };
+
+                var blocked = executor.Execute(command, tools, new AppSettings { AgentModeEnabled = false, AutoConfirmToolActions = false }, false, false);
+                AssertTrue(!blocked.Success, "metadata mutation blocked");
+                AssertContains(blocked.Message, "requires confirmation", "metadata block message");
+                AssertEqual(0, adapter.Executed.Count, "blocked adapter execution count");
+
+                var allowed = executor.Execute(command, tools, new AppSettings { AgentModeEnabled = true, AutoConfirmToolActions = false }, false, false);
+                AssertTrue(allowed.Success, "metadata mutation allowed in agent mode");
+                AssertEqual(1, adapter.Executed.Count, "allowed adapter execution count");
+            });
+        }
+
         private static void VbaReplaceTextBacksUpModule()
         {
             WithTempPaths(delegate(AppDataPaths paths)
@@ -281,6 +310,10 @@ namespace RNAssistant.Harness
                 command.Arguments["moduleName"] = "Module1";
                 command.Arguments["find"] = "\"old\"";
                 command.Arguments["replace"] = "\"new\"";
+
+                var blocked = executor.Execute(command, new List<SkillDefinition>(adapter.GetBuiltInSkills()), new AppSettings { AgentModeEnabled = true, AutoConfirmToolActions = false }, false, false);
+                AssertTrue(!blocked.Success, "vba replace blocked");
+                AssertEqual(0, adapter.Executed.Count, "blocked vba adapter execution count");
 
                 var result = executor.Execute(command, new List<SkillDefinition>(adapter.GetBuiltInSkills()), new AppSettings { AutoConfirmToolActions = true }, false, false);
 
@@ -765,8 +798,9 @@ namespace RNAssistant.Harness
             {
                 return new[]
                 {
-                    BuiltIn("excel.add_sheet", false),
-                    BuiltIn("excel.write_table", true)
+                    BuiltIn("excel.add_sheet", false, true, true),
+                    BuiltIn("excel.write_table", true, true, true),
+                    BuiltIn("excel.vba_replace_module", false, true, false)
                 };
             }
 
@@ -792,7 +826,7 @@ namespace RNAssistant.Harness
                 return SkillResult.Ok("executed " + command.SkillId);
             }
 
-            private static SkillDefinition BuiltIn(string id, bool requiresConfirmation)
+            private static SkillDefinition BuiltIn(string id, bool requiresConfirmation, bool mutatesDocument, bool agentCanRun)
             {
                 return new SkillDefinition
                 {
@@ -801,7 +835,9 @@ namespace RNAssistant.Harness
                     Name = id,
                     Enabled = true,
                     BuiltIn = true,
-                    RequiresConfirmation = requiresConfirmation
+                    RequiresConfirmation = requiresConfirmation,
+                    MutatesDocument = mutatesDocument,
+                    AgentCanRun = agentCanRun
                 };
             }
 

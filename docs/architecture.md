@@ -43,6 +43,7 @@ web static UI
 ## Non-Negotiable Boundaries
 
 - Parser converts text/native-compatible shapes to `SkillCommand`; executor decides whether command may run.
+- Tool safety belongs to `SkillDefinition` metadata: `MutatesDocument`, `AgentCanRun`, and `RequiresConfirmation`.
 - Controller coordinates request flow; it should not contain pipeline execution, VBA patch logic, or JS rendering logic.
 - VSTO adapters expose capabilities through `SkillDefinition` and `ExecuteSkill`; they should not know chat/session/storage details.
 - UI sends typed bridge messages; business rules stay in C# unless they are purely presentation behavior.
@@ -68,6 +69,7 @@ Current coverage:
 - chat store fixtures using temp directories, including broken JSON files being skipped;
 - pipeline dry-run and execution fixtures with fake `IOfficeApplicationAdapter`;
 - confirmation gates for custom tools and Agent Mode built-in mutations;
+- metadata-driven mutation safety gates;
 - VBA replace-text flow with rollback backup using fake `IOfficeApplicationAdapter`;
 - tool catalog service merge/filter behavior;
 - prompt message trimming, context usage estimates, and basic no-network chat completion flow;

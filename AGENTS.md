@@ -33,6 +33,7 @@ RNAssistant - локальный VSTO/WebView2 ассистент для Office,
 - Native `tool_calls` можно принимать только как compatibility input и конвертировать в `SkillCommand`; не привязывать выполнение к удаленному API tools.
 - Built-in Office mutation tools могут исполняться в Agent mode, кроме VBA mutation tools.
 - Custom tools с `requiresConfirmation` и VBA mutation tools требуют подтверждения, если `AutoConfirmToolActions` выключен.
+- Tool safety metadata живет в `SkillDefinition`: `MutatesDocument`, `AgentCanRun`, `RequiresConfirmation`. Не добавляй новые hardcoded suffix lists в executor.
 - Pipeline tools не должны обращаться напрямую к Office adapters: они вызывают existing tool ids через `OfficeToolExecutor`.
 
 ## Контекст и чаты

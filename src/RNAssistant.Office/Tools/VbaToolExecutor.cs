@@ -30,10 +30,10 @@ namespace RNAssistant.Office.Tools
                 yield break;
             }
 
-            yield return ControllerTool(ToolId("vba_list_backups"), "List RNAssistant VBA rollback backups for the current document.", "{}");
-            yield return ControllerTool(ToolId("vba_restore_backup"), "Restore a VBA module from a prior RNAssistant backup by backupId, or latest backup for moduleName.", "{\"backupId\":\"optional\",\"moduleName\":\"Module1\"}");
-            yield return ControllerTool(ToolId("vba_replace_text"), "Replace an exact text fragment inside one VBA module; safer than replacing the whole module and creates a rollback backup.", "{\"moduleName\":\"Module1\",\"find\":\"old code\",\"replace\":\"new code\"}");
-            yield return ControllerTool(ToolId("vba_apply_patch"), "Apply structured VBA code patches: replace exact text, insert before/after exact text, or replace line ranges; creates rollback backup.", "{\"moduleName\":\"Module1\",\"patch\":[{\"op\":\"replace\",\"find\":\"old\",\"text\":\"new\"},{\"op\":\"replaceLines\",\"startLine\":10,\"deleteCount\":2,\"text\":\"new code\"}]}");
+            yield return ControllerTool(ToolId("vba_list_backups"), "List RNAssistant VBA rollback backups for the current document.", "{}", false);
+            yield return ControllerTool(ToolId("vba_restore_backup"), "Restore a VBA module from a prior RNAssistant backup by backupId, or latest backup for moduleName.", "{\"backupId\":\"optional\",\"moduleName\":\"Module1\"}", true);
+            yield return ControllerTool(ToolId("vba_replace_text"), "Replace an exact text fragment inside one VBA module; safer than replacing the whole module and creates a rollback backup.", "{\"moduleName\":\"Module1\",\"find\":\"old code\",\"replace\":\"new code\"}", true);
+            yield return ControllerTool(ToolId("vba_apply_patch"), "Apply structured VBA code patches: replace exact text, insert before/after exact text, or replace line ranges; creates rollback backup.", "{\"moduleName\":\"Module1\",\"patch\":[{\"op\":\"replace\",\"find\":\"old\",\"text\":\"new\"},{\"op\":\"replaceLines\",\"startLine\":10,\"deleteCount\":2,\"text\":\"new code\"}]}", true);
         }
 
         public string ToolId(string suffix)
@@ -43,10 +43,17 @@ namespace RNAssistant.Office.Tools
 
         public bool IsControllerTool(string toolId)
         {
-            return string.Equals(toolId, ToolId("vba_list_backups"), StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, ToolId("vba_restore_backup"), StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, ToolId("vba_replace_text"), StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, ToolId("vba_apply_patch"), StringComparison.OrdinalIgnoreCase);
+            return GetControllerTool(toolId) != null;
+        }
+
+        public SkillDefinition GetControllerTool(string toolId)
+        {
+            if (string.IsNullOrWhiteSpace(toolId))
+            {
+                return null;
+            }
+
+            return GetControllerTools().FirstOrDefault(tool => string.Equals(tool.Id, toolId, StringComparison.OrdinalIgnoreCase));
         }
 
         public SkillResult ExecuteControllerTool(SkillCommand command, IReadOnlyList<SkillDefinition> skills, AppSettings settings, bool dryRun, bool manualRun, CommandRunner runCommand)
@@ -417,7 +424,7 @@ namespace RNAssistant.Office.Tools
             return SkillResult.Ok("Replaced lines at " + startLine + " deleting " + deleteCount + ".");
         }
 
-        private SkillDefinition ControllerTool(string id, string description, string schema)
+        private SkillDefinition ControllerTool(string id, string description, string schema, bool mutatesDocument)
         {
             return new SkillDefinition
             {
@@ -427,7 +434,9 @@ namespace RNAssistant.Office.Tools
                 Description = description,
                 ArgumentSchemaJson = schema,
                 BuiltIn = true,
-                Enabled = true
+                Enabled = true,
+                MutatesDocument = mutatesDocument,
+                AgentCanRun = !mutatesDocument
             };
         }
 

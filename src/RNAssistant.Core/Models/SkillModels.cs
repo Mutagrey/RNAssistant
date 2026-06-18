@@ -12,6 +12,8 @@ namespace RNAssistant.Core.Models
         public string ArgumentSchemaJson { get; set; }
         public string Executor { get; set; }
         public bool RequiresConfirmation { get; set; }
+        public bool MutatesDocument { get; set; }
+        public bool AgentCanRun { get; set; }
         public string PipelineJson { get; set; }
         public string Code { get; set; }
         public string Readme { get; set; }
@@ -24,6 +26,7 @@ namespace RNAssistant.Core.Models
             Enabled = true;
             Executor = "builtin";
             ArgumentSchemaJson = "{}";
+            AgentCanRun = true;
         }
     }
 

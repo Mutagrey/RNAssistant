@@ -37,6 +37,7 @@ namespace RNAssistant.Office.Tools
 
         private SkillResult ExecuteCommand(SkillCommand command, IReadOnlyList<SkillDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun)
         {
+            settings = settings ?? new AppSettings();
             if (command == null || string.IsNullOrWhiteSpace(command.SkillId))
             {
                 return SkillResult.Fail("Tool command is empty.");
@@ -47,35 +48,37 @@ namespace RNAssistant.Office.Tools
                 return SkillResult.Fail("Pipeline nesting limit exceeded.");
             }
 
-            var tool = skills.FirstOrDefault(s =>
-                !s.BuiltIn &&
-                s.Enabled &&
-                string.Equals(s.Id, command.SkillId, StringComparison.OrdinalIgnoreCase));
+            var tool = FindEnabledTool(skills, command.SkillId) ??
+                FindEnabledTool(_adapter.GetBuiltInSkills(), command.SkillId);
+            if (tool == null)
+            {
+                tool = _vbaExecutor.GetControllerTool(command.SkillId);
+            }
+            var customTool = tool != null && !tool.BuiltIn ? tool : null;
 
-            if (IsMutationTool(command.SkillId) && !settings.AutoConfirmToolActions && !manualRun && !dryRun &&
-                !CanAgentRunBuiltInMutation(command.SkillId, tool, settings))
+            if (ToolSafetyPolicy.RequiresConfirmation(tool, settings, dryRun, manualRun))
             {
                 return SkillResult.Fail("Tool requires confirmation before execution: " + command.SkillId);
             }
 
-            if (tool != null && tool.RequiresConfirmation && !settings.AutoConfirmToolActions && !manualRun)
+            if (customTool != null && customTool.RequiresConfirmation && !settings.AutoConfirmToolActions && !manualRun)
             {
-                return SkillResult.Fail("Tool requires confirmation before execution: " + tool.Id);
+                return SkillResult.Fail("Tool requires confirmation before execution: " + customTool.Id);
             }
 
-            if (tool != null && string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
+            if (customTool != null && string.Equals(customTool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
             {
-                return _pipelineExecutor.Execute(tool, command, skills, settings, depth + 1, dryRun, manualRun, ExecuteCommand);
+                return _pipelineExecutor.Execute(customTool, command, skills, settings, depth + 1, dryRun, manualRun, ExecuteCommand);
             }
 
-            if (tool != null && string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
+            if (customTool != null && string.Equals(customTool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
             {
-                return _vbaExecutor.ExecuteCustomTool(tool, command, settings, dryRun, manualRun);
+                return _vbaExecutor.ExecuteCustomTool(customTool, command, settings, dryRun, manualRun);
             }
 
-            if (tool != null)
+            if (customTool != null)
             {
-                return SkillResult.Fail("Tool executor is not runnable yet: " + tool.Executor);
+                return SkillResult.Fail("Tool executor is not runnable yet: " + customTool.Executor);
             }
 
             if (_vbaExecutor.IsControllerTool(command.SkillId))
@@ -96,47 +99,11 @@ namespace RNAssistant.Office.Tools
             return _adapter.ExecuteSkill(command);
         }
 
-        private static bool IsMutationTool(string toolId)
+        private static SkillDefinition FindEnabledTool(IEnumerable<SkillDefinition> tools, string toolId)
         {
-            return EndsWithTool(toolId, ".write_range") ||
-                EndsWithTool(toolId, ".write_table") ||
-                EndsWithTool(toolId, ".add_chart") ||
-                EndsWithTool(toolId, ".add_sheet") ||
-                EndsWithTool(toolId, ".insert_text") ||
-                EndsWithTool(toolId, ".replace_selection") ||
-                EndsWithTool(toolId, ".add_comment") ||
-                EndsWithTool(toolId, ".add_slide") ||
-                EndsWithTool(toolId, ".replace_selection_text") ||
-                EndsWithTool(toolId, ".draft_reply") ||
-                EndsWithTool(toolId, ".vba_replace_module") ||
-                EndsWithTool(toolId, ".vba_replace_text") ||
-                EndsWithTool(toolId, ".vba_apply_patch") ||
-                EndsWithTool(toolId, ".vba_restore_backup") ||
-                EndsWithTool(toolId, ".insert_vba_module") ||
-                EndsWithTool(toolId, ".run_macro");
-        }
-
-        private static bool CanAgentRunBuiltInMutation(string toolId, SkillDefinition customTool, AppSettings settings)
-        {
-            return settings != null &&
-                settings.AgentModeEnabled != false &&
-                customTool == null &&
-                !IsVbaMutationTool(toolId);
-        }
-
-        private static bool IsVbaMutationTool(string toolId)
-        {
-            return EndsWithTool(toolId, ".vba_replace_module") ||
-                EndsWithTool(toolId, ".vba_replace_text") ||
-                EndsWithTool(toolId, ".vba_apply_patch") ||
-                EndsWithTool(toolId, ".vba_restore_backup") ||
-                EndsWithTool(toolId, ".insert_vba_module") ||
-                EndsWithTool(toolId, ".run_macro");
-        }
-
-        private static bool EndsWithTool(string toolId, string suffix)
-        {
-            return (toolId ?? string.Empty).EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
+            return (tools ?? new SkillDefinition[0]).FirstOrDefault(s =>
+                s.Enabled &&
+                string.Equals(s.Id, toolId, StringComparison.OrdinalIgnoreCase));
         }
     }
 }
