@@ -107,6 +107,85 @@ namespace RNAssistant.Office.Contracts
         public bool DryRun { get; set; }
     }
 
+    public class ModelCatalogPayload
+    {
+        [JsonProperty("settings")]
+        public JObject Settings { get; set; }
+
+        [JsonProperty("apiKey")]
+        public string ApiKey { get; set; }
+    }
+
+    public sealed class SaveSettingsPayload : ModelCatalogPayload
+    {
+    }
+
+    public sealed class SaveToolsPayload
+    {
+        [JsonProperty("tools")]
+        public JArray Tools { get; set; }
+    }
+
+    public sealed class VbaProjectPayload
+    {
+        [JsonProperty("maxChars")]
+        public int? MaxChars { get; set; }
+    }
+
+    public sealed class VbaModulePayload
+    {
+        [JsonProperty("moduleName")]
+        public string ModuleName { get; set; }
+
+        [JsonProperty("code")]
+        public string Code { get; set; }
+    }
+
+    public sealed class RestoreVbaBackupPayload
+    {
+        [JsonProperty("backupId")]
+        public string BackupId { get; set; }
+
+        [JsonProperty("moduleName")]
+        public string ModuleName { get; set; }
+    }
+
+    public sealed class SelectionContextPayload : ChatPayload
+    {
+        [JsonProperty("mode")]
+        public string Mode { get; set; }
+    }
+
+    public sealed class TextContextPayload : ChatPayload
+    {
+        [JsonProperty("kind")]
+        public string Kind { get; set; }
+
+        [JsonProperty("title")]
+        public string Title { get; set; }
+
+        [JsonProperty("reference")]
+        public string Reference { get; set; }
+
+        [JsonProperty("text")]
+        public string Text { get; set; }
+
+        [JsonProperty("detailsJson")]
+        public string DetailsJson { get; set; }
+    }
+
+    public sealed class VbaContextPayload : ChatPayload
+    {
+        [JsonProperty("maxChars")]
+        public int? MaxChars { get; set; }
+    }
+
+    public sealed class RemoveContextItemPayload : ChatPayload
+    {
+        [JsonProperty("id")]
+        public string Id { get; set; }
+    }
+
     public sealed class QuickActionPayload
     {
         [JsonProperty("action")]

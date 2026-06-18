@@ -73,14 +73,16 @@ namespace RNAssistant.Office.WebView
                         payloadJson = _controller.GetSettingsJson();
                         break;
                     case "getModelCatalog":
+                        var modelCatalog = Payload<ModelCatalogPayload>(payload);
                         payloadJson = await _controller.GetModelCatalogJsonAsync(
-                            payload["settings"] == null ? "{}" : payload["settings"].ToString(Formatting.None),
-                            payload["apiKey"] == null ? null : (string)payload["apiKey"]);
+                            modelCatalog.Settings == null ? "{}" : modelCatalog.Settings.ToString(Formatting.None),
+                            modelCatalog.ApiKey);
                         break;
                     case "saveSettings":
+                        var saveSettings = Payload<SaveSettingsPayload>(payload);
                         payloadJson = _controller.SaveSettingsJson(
-                            payload["settings"] == null ? "{}" : payload["settings"].ToString(Formatting.None),
-                            payload["apiKey"] == null ? null : (string)payload["apiKey"]);
+                            saveSettings.Settings == null ? "{}" : saveSettings.Settings.ToString(Formatting.None),
+                            saveSettings.ApiKey);
                         break;
                     case "clearRuntimeData":
                         payloadJson = _controller.ClearRuntimeDataJson();
@@ -89,7 +91,8 @@ namespace RNAssistant.Office.WebView
                         payloadJson = _controller.GetToolsJson();
                         break;
                     case "saveTools":
-                        payloadJson = _controller.SaveToolsJson(payload["tools"] == null ? "[]" : payload["tools"].ToString(Formatting.None));
+                        var saveTools = Payload<SaveToolsPayload>(payload);
+                        payloadJson = _controller.SaveToolsJson(saveTools.Tools == null ? "[]" : saveTools.Tools.ToString(Formatting.None));
                         break;
                     case "runTool":
                         var runTool = Payload<RunToolPayload>(payload);
@@ -100,39 +103,45 @@ namespace RNAssistant.Office.WebView
                             (phase, message) => ReportProgress(id, phase, message));
                         break;
                     case "getVbaProject":
-                        payloadJson = _controller.GetVbaProjectJson(payload["maxChars"] == null ? 30000 : (int)payload["maxChars"]);
+                        payloadJson = _controller.GetVbaProjectJson(Payload<VbaProjectPayload>(payload).MaxChars ?? 30000);
                         break;
                     case "saveVbaModule":
-                        payloadJson = _controller.SaveVbaModuleJson((string)payload["moduleName"], (string)payload["code"]);
+                        var saveVbaModule = Payload<VbaModulePayload>(payload);
+                        payloadJson = _controller.SaveVbaModuleJson(saveVbaModule.ModuleName, saveVbaModule.Code);
                         break;
                     case "restoreVbaBackup":
-                        payloadJson = _controller.RestoreVbaBackupJson((string)payload["backupId"], (string)payload["moduleName"]);
+                        var restoreVba = Payload<RestoreVbaBackupPayload>(payload);
+                        payloadJson = _controller.RestoreVbaBackupJson(restoreVba.BackupId, restoreVba.ModuleName);
                         break;
                     case "getContext":
-                        payloadJson = _controller.GetContextJson((string)payload["chatId"]);
+                        payloadJson = _controller.GetContextJson(Payload<ChatPayload>(payload).ChatId);
                         break;
                     case "addSelectionContext":
-                        payloadJson = _controller.AddSelectionContextJson((string)payload["mode"], (string)payload["chatId"]);
+                        var selectionContext = Payload<SelectionContextPayload>(payload);
+                        payloadJson = _controller.AddSelectionContextJson(selectionContext.Mode, selectionContext.ChatId);
                         break;
                     case "addTextContext":
+                        var textContext = Payload<TextContextPayload>(payload);
                         payloadJson = _controller.AddTextContextJson(
-                            (string)payload["kind"],
-                            (string)payload["title"],
-                            (string)payload["reference"],
-                            (string)payload["text"],
-                            (string)payload["detailsJson"],
-                            (string)payload["chatId"]);
+                            textContext.Kind,
+                            textContext.Title,
+                            textContext.Reference,
+                            textContext.Text,
+                            textContext.DetailsJson,
+                            textContext.ChatId);
                         break;
                     case "addVbaContext":
+                        var vbaContext = Payload<VbaContextPayload>(payload);
                         payloadJson = _controller.AddVbaContextJson(
-                            (string)payload["chatId"],
-                            payload["maxChars"] == null ? 0 : (int)payload["maxChars"]);
+                            vbaContext.ChatId,
+                            vbaContext.MaxChars ?? 0);
                         break;
                     case "removeContextItem":
-                        payloadJson = _controller.RemoveContextItemJson((string)payload["id"], (string)payload["chatId"]);
+                        var removeContextItem = Payload<RemoveContextItemPayload>(payload);
+                        payloadJson = _controller.RemoveContextItemJson(removeContextItem.Id, removeContextItem.ChatId);
                         break;
                     case "clearContext":
-                        payloadJson = _controller.ClearContextJson((string)payload["chatId"]);
+                        payloadJson = _controller.ClearContextJson(Payload<ChatPayload>(payload).ChatId);
                         break;
                     case "quickAction":
                         payloadJson = await _controller.RunQuickActionAsync(Payload<QuickActionPayload>(payload).Action);

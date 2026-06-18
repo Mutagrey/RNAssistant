@@ -10,6 +10,14 @@ namespace RNAssistant.Office
         public bool LastDryRun { get; private set; }
         public string LastChatText { get; private set; }
         public string LastChatId { get; private set; }
+        public string LastSettingsJson { get; private set; }
+        public string LastApiKey { get; private set; }
+        public string LastModuleName { get; private set; }
+        public string LastModuleCode { get; private set; }
+        public string LastContextKind { get; private set; }
+        public string LastContextTitle { get; private set; }
+        public string LastContextReference { get; private set; }
+        public string LastContextText { get; private set; }
 
         public string InitializeJson() { return "{\"initialized\":true}"; }
         public string ListChatsJson() { return "{\"chats\":[]}"; }
@@ -23,16 +31,34 @@ namespace RNAssistant.Office
         public string ForkChatJson(string id, int index, string chatId = null) { return "{\"id\":\"" + Escape(id) + "\",\"index\":" + index + "}"; }
         public string GetSettingsJson() { return "{\"settings\":{}}"; }
         public Task<string> GetModelCatalogJsonAsync(string settingsJson, string apiKey) { return Task.FromResult("{\"catalog\":{}}"); }
-        public string SaveSettingsJson(string settingsJson, string apiKey) { return "{\"settings\":{}}"; }
+        public string SaveSettingsJson(string settingsJson, string apiKey)
+        {
+            LastSettingsJson = settingsJson;
+            LastApiKey = apiKey;
+            return "{\"settings\":{}}";
+        }
         public string ClearRuntimeDataJson() { return "{\"cleared\":true}"; }
         public string GetToolsJson() { return "[]"; }
         public string SaveToolsJson(string toolsJson) { return "[]"; }
         public string GetVbaProjectJson(int maxChars) { return "{\"maxChars\":" + maxChars + "}"; }
-        public string SaveVbaModuleJson(string moduleName, string code) { return "{\"moduleName\":\"" + Escape(moduleName) + "\"}"; }
+        public string SaveVbaModuleJson(string moduleName, string code)
+        {
+            LastModuleName = moduleName;
+            LastModuleCode = code;
+            return "{\"moduleName\":\"" + Escape(moduleName) + "\"}";
+        }
         public string RestoreVbaBackupJson(string backupId, string moduleName) { return "{\"backupId\":\"" + Escape(backupId) + "\"}"; }
         public string GetContextJson(string chatId = null) { return "{\"chatId\":\"" + Escape(chatId) + "\"}"; }
         public string AddSelectionContextJson(string mode, string chatId = null) { return "{\"mode\":\"" + Escape(mode) + "\"}"; }
-        public string AddTextContextJson(string kind, string title, string reference, string text, string detailsJson, string chatId = null) { return "{\"kind\":\"" + Escape(kind) + "\"}"; }
+        public string AddTextContextJson(string kind, string title, string reference, string text, string detailsJson, string chatId = null)
+        {
+            LastContextKind = kind;
+            LastContextTitle = title;
+            LastContextReference = reference;
+            LastContextText = text;
+            LastChatId = chatId;
+            return "{\"kind\":\"" + Escape(kind) + "\"}";
+        }
         public string AddVbaContextJson(string chatId = null, int maxChars = 0) { return "{\"maxChars\":" + maxChars + "}"; }
         public string RemoveContextItemJson(string id, string chatId = null) { return "{\"id\":\"" + Escape(id) + "\"}"; }
         public string ClearContextJson(string chatId = null) { return "{\"chatId\":\"" + Escape(chatId) + "\"}"; }

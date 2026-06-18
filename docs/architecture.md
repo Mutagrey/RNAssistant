@@ -70,7 +70,7 @@ Current coverage:
 - tool catalog service merge/filter behavior;
 - prompt message trimming, context usage estimates, and basic no-network chat completion flow;
 - context normalization/upsert/trim behavior;
-- typed bridge runTool/sendChat payload parsing and progress envelope;
+- typed bridge settings/context/VBA/tool/chat payload parsing and progress envelope;
 - no Office COM dependency.
 
 Next harness coverage:

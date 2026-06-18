@@ -43,7 +43,10 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "context: normalize and upsert", Run = ContextServiceNormalizesAndUpserts },
                 new HarnessTest { Name = "context: trim helper", Run = ContextServiceTrimsText },
                 new HarnessTest { Name = "bridge: typed runTool payload", Run = BridgeUsesTypedRunToolPayload },
-                new HarnessTest { Name = "bridge: typed sendChat progress", Run = BridgeUsesTypedSendChatPayloadAndProgress }
+                new HarnessTest { Name = "bridge: typed sendChat progress", Run = BridgeUsesTypedSendChatPayloadAndProgress },
+                new HarnessTest { Name = "bridge: typed settings payload", Run = BridgeUsesTypedSettingsPayload },
+                new HarnessTest { Name = "bridge: typed context payload", Run = BridgeUsesTypedContextPayload },
+                new HarnessTest { Name = "bridge: typed vba payload", Run = BridgeUsesTypedVbaPayload }
             };
 
             var failed = 0;
@@ -448,6 +451,54 @@ namespace RNAssistant.Harness
             AssertEqual("chat-1", controller.LastChatId, "chat id");
             AssertEqual("b2", JObject.Parse(progressMessages[0])["id"].Value<string>(), "progress id");
             AssertEqual("thinking", JObject.Parse(progressMessages[0])["payload"]["phase"].Value<string>(), "progress phase");
+        }
+
+        private static void BridgeUsesTypedSettingsPayload()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var responseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"payload\":{\"settings\":{\"model\":\"gpt-test\"},\"apiKey\":\"secret\"}}")
+                .GetAwaiter()
+                .GetResult();
+
+            var response = JObject.Parse(responseJson);
+            AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
+            AssertContains(controller.LastSettingsJson, "gpt-test", "settings json");
+            AssertEqual("secret", controller.LastApiKey, "api key");
+        }
+
+        private static void BridgeUsesTypedContextPayload()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var responseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"b4\",\"type\":\"addTextContext\",\"payload\":{\"chatId\":\"chat-2\",\"kind\":\"note\",\"title\":\"T\",\"reference\":\"R\",\"text\":\"Body\",\"detailsJson\":\"{}\"}}")
+                .GetAwaiter()
+                .GetResult();
+
+            var response = JObject.Parse(responseJson);
+            AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
+            AssertEqual("chat-2", controller.LastChatId, "chat id");
+            AssertEqual("note", controller.LastContextKind, "context kind");
+            AssertEqual("T", controller.LastContextTitle, "context title");
+            AssertEqual("R", controller.LastContextReference, "context reference");
+            AssertEqual("Body", controller.LastContextText, "context text");
+        }
+
+        private static void BridgeUsesTypedVbaPayload()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var responseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"b5\",\"type\":\"saveVbaModule\",\"payload\":{\"moduleName\":\"Module1\",\"code\":\"Sub Main()\\nEnd Sub\"}}")
+                .GetAwaiter()
+                .GetResult();
+
+            var response = JObject.Parse(responseJson);
+            AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
+            AssertEqual("Module1", controller.LastModuleName, "module name");
+            AssertContains(controller.LastModuleCode, "Sub Main", "module code");
         }
 
         private static SkillDefinition CustomTool(string host, string id)
