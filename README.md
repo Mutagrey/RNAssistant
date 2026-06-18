@@ -23,7 +23,28 @@ VSTO AI assistant skeleton for Excel, Word, PowerPoint and Outlook.
 - `packages` - vendored NuGet packages for offline restore.
 - `vendor/webview2-runtime` - optional fixed WebView2 x64 runtime folder.
 
-## Windows Build
+## Windows Quick Start
+
+From a clean checkout on Windows:
+
+```cmd
+install-local.cmd
+```
+
+This creates a CurrentUser ClickOnce certificate, trusts it for the current user, builds all four `Debug | x64` VSTO add-ins, and registers them under `HKCU\Software\Microsoft\Office\...\Addins`. Restart Office apps after it finishes.
+
+Useful variants:
+
+```cmd
+install-local.cmd Word Excel
+install-local.cmd -Configuration Release
+install-local.cmd -NoBuild
+uninstall-local.cmd
+```
+
+Prerequisites are still required: Visual Studio 2022 with the Office/SharePoint development workload, .NET Framework 4.8 targeting pack, VSTO runtime, and x64 Office.
+
+## Visual Studio Build
 
 1. Open `RNAssistant.sln` in Visual Studio 2022.
 2. Select `Debug | x64`.
@@ -33,6 +54,16 @@ VSTO AI assistant skeleton for Excel, Word, PowerPoint and Outlook.
 
 The add-in projects use the VSTO project flavor (`ProjectTypeGuids`) so Visual Studio shows Office/VSTO icons and enables the VSTO property pages. If Visual Studio says the projects are incompatible, install or enable the `Office/SharePoint development` workload and the `Visual Studio Tools for Office` component in Visual Studio Installer.
 
+## Visual Studio Debug
+
+1. Run `install-local.cmd Word` once, replacing `Word` with the host you want to debug.
+2. Open `RNAssistant.sln`.
+3. Select `Debug | x64`.
+4. Right-click `RNAssistant.WordAddIn`, `RNAssistant.ExcelAddIn`, `RNAssistant.PowerPointAddIn`, or `RNAssistant.OutlookAddIn` and choose `Set as Startup Project`.
+5. Press `F5`.
+
+The VSTO project metadata points Visual Studio to the Office host executable through the Office 16.0 registry install path. If F5 says the required Office app is not installed, check that Office is x64 and installed locally, then reload the project in Visual Studio.
+
 ClickOnce/VSTO manifest signing is disabled in the repository because certificate thumbprints are machine-local. If the Visual Studio Signing page is disabled, run the local helper in Windows PowerShell:
 
 ```powershell
@@ -41,6 +72,7 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 ```
 
 The script creates a CurrentUser code-signing certificate and writes ignored `Directory.Build.local.props` with `SignManifests=true` and `ManifestCertificateThumbprint`.
+By default it also imports the public certificate to CurrentUser `Root` and `TrustedPublisher`, so local signed manifests are trusted without recreating the VSTO projects.
 
 If the Signing page is unavailable, unload the project and add a local line manually:
 
