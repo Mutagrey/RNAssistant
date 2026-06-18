@@ -28,13 +28,16 @@ web static UI
 - `src/RNAssistant.Core/Llm`: API client, prompt composition, prompt message trimming, context usage estimates.
 - `src/RNAssistant.Core/Skills`: parsing model text into local `SkillCommand`.
 - `src/RNAssistant.Core/Storage`: JSON file storage under `%AppData%/RNAssistant`.
-- `src/RNAssistant.Office/AssistantController.cs`: high-level orchestration and bridge-facing API.
-- `src/RNAssistant.Office/AssistantController.Chats.cs`: chat/session lifecycle and document-key migration.
-- `src/RNAssistant.Office/AssistantController.Context.cs`: active chat context attachments.
+- `src/RNAssistant.Office/Controller/AssistantController.cs`: high-level orchestration and bridge-facing API.
+- `src/RNAssistant.Office/Controller/AssistantController.Chats.cs`: chat/session lifecycle and document-key migration.
+- `src/RNAssistant.Office/Controller/AssistantController.Context.cs`: active chat context attachments.
+- `src/RNAssistant.Office/Contracts`: shared Office abstractions such as `IOfficeApplicationAdapter`.
+- `src/RNAssistant.Office/Runtime`: add-in runtime helpers that are host-neutral.
+- `src/RNAssistant.Office/Vba`: shared VBA project support.
 - `src/RNAssistant.Office/Agent`: agent transcript/plan formatting and retry policy.
 - `src/RNAssistant.Office/Tools`: tool execution, pipelines, VBA patch/backup workflow.
 - `src/RNAssistant.*AddIn`: host adapters and VSTO wiring.
-- `web`: static HTML/CSS/JS task pane. Pure browser helpers live in `web/js/app-utils.js`; stateful UI orchestration still lives in `web/js/app.js`.
+- `web`: static HTML/CSS/JS task pane. `web/js/app-core.js` owns state and WebView bridge wiring; `app-settings.js`, `app-tools.js`, `app-vba.js`, `app-context.js`, and `app-chat.js` own their feature flows; `app-utils.js` owns pure browser helpers; `app.js` is boot plus shared rendering helpers.
 
 ## Non-Negotiable Boundaries
 
@@ -45,8 +48,8 @@ web static UI
 
 ## Known Oversized Areas
 
-- `web/js/app.js` is still the largest UI file. Split next by stable globals: `bridge/state`, `chat`, `models/settings`, `tools`, `vba`, `context`, `boot`.
-- `web/css/app.css` is also large. Split only after JS split or a UI restyle, because it is currently static and low-risk.
+- `web/css/app.css` is still large. Split by feature only when changing UI styling materially; avoid CSS churn while behavior is moving.
+- `Controller/AssistantController.*` should shrink further into services after the harness exists and constructor dependencies stabilize.
 - Add-in adapters are medium-sized and host-specific; refactor only with Windows/VSTO validation available.
 
 ## Target Harness Pipeline

@@ -154,9 +154,9 @@ namespace RNAssistant.Core.Storage
             }
 
             var sessions = new List<ChatSession>();
-            foreach (var directory in Directory.GetDirectories(_paths.ChatDirectory))
+            foreach (var directory in SafeGetDirectories(_paths.ChatDirectory))
             {
-                sessions.AddRange(Directory.GetFiles(directory, "*.json")
+                sessions.AddRange(SafeGetFiles(directory)
                     .Select(p => _json.Load(p, (ChatSession)null))
                     .Where(s => s != null)
                     .Select(s =>
@@ -179,7 +179,7 @@ namespace RNAssistant.Core.Storage
                 return new List<ChatSession>();
             }
 
-            return Directory.GetFiles(directory, "*.json")
+            return SafeGetFiles(directory)
                 .Select(p => _json.Load(p, (ChatSession)null))
                 .Where(s => s != null)
                 .Select(s =>
@@ -311,5 +311,36 @@ namespace RNAssistant.Core.Storage
             return Path.Combine(GetDocumentDirectory(host, documentKey), "active.txt");
         }
 
+        private static IEnumerable<string> SafeGetDirectories(string directory)
+        {
+            try
+            {
+                return Directory.GetDirectories(directory);
+            }
+            catch (IOException)
+            {
+                return new string[0];
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return new string[0];
+            }
+        }
+
+        private static IEnumerable<string> SafeGetFiles(string directory)
+        {
+            try
+            {
+                return Directory.GetFiles(directory, "*.json");
+            }
+            catch (IOException)
+            {
+                return new string[0];
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return new string[0];
+            }
+        }
     }
 }

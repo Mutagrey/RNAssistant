@@ -51,14 +51,14 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="AssistantController.cs" />
-    <Compile Include="AssistantController.Chats.cs" />
-    <Compile Include="AssistantController.Context.cs" />
-    <Compile Include="AssistantRuntime.cs" />
+    <Compile Include="Controller\AssistantController.cs" />
+    <Compile Include="Controller\AssistantController.Chats.cs" />
+    <Compile Include="Controller\AssistantController.Context.cs" />
+    <Compile Include="Runtime\AssistantRuntime.cs" />
     <Compile Include="Agent\AgentTranscript.cs" />
-    <Compile Include="DocumentIdentity.cs" />
-    <Compile Include="IOfficeApplicationAdapter.cs" />
-    <Compile Include="VbaProjectSupport.cs" />
+    <Compile Include="Runtime\DocumentIdentity.cs" />
+    <Compile Include="Contracts\IOfficeApplicationAdapter.cs" />
+    <Compile Include="Vba\VbaProjectSupport.cs" />
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />
     <Compile Include="Skills\SkillArgumentReader.cs" />
     <Compile Include="Tools\OfficeToolExecutor.cs" />
