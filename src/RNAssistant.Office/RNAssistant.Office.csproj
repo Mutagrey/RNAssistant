@@ -52,12 +52,16 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AssistantController.cs" />
+    <Compile Include="AssistantController.Chats.cs" />
+    <Compile Include="AssistantController.Context.cs" />
     <Compile Include="AssistantRuntime.cs" />
+    <Compile Include="Agent\AgentTranscript.cs" />
     <Compile Include="DocumentIdentity.cs" />
     <Compile Include="IOfficeApplicationAdapter.cs" />
     <Compile Include="VbaProjectSupport.cs" />
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />
     <Compile Include="Skills\SkillArgumentReader.cs" />
+    <Compile Include="Tools\OfficeToolExecutor.cs" />
     <Compile Include="WebView\AssistantPaneControl.cs" />
     <Compile Include="WebView\AssistantWebBridge.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

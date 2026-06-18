@@ -23,6 +23,8 @@ VSTO AI assistant skeleton for Excel, Word, PowerPoint and Outlook.
 - `packages` - vendored NuGet packages for offline restore.
 - `vendor/webview2-runtime` - optional fixed WebView2 x64 runtime folder.
 
+Development rules are in `AGENTS.md`. Architecture boundaries and refactoring targets are in `docs/architecture.md`; review findings and roadmap are in `docs/review-roadmap.md`.
+
 ## Windows Quick Start
 
 From a clean checkout on Windows:
@@ -107,7 +109,9 @@ Runtime data is stored under:
 - `secret.bin` - API key protected with DPAPI CurrentUser.
 - `tools` - central editable tool library.
 - `chats` - per-document chat session folders; each chat stores its own context attachments.
-- `contexts` - legacy per-document context store, migrated into the first loaded chat.
+- `contexts` - legacy context folder; current runtime does not migrate old context files.
+
+Settings has `Clear Chats/Data` for development resets. It clears chats, chat context, VBA backups and WebView user data, while keeping settings, saved API key and custom tools.
 
 Word, Excel and PowerPoint documents are identified by a custom document property named `RNAssistantDocumentId` when available, so chat sessions and context survive file rename/move. If the property cannot be read or written, RNAssistant falls back to the document path.
 
@@ -136,7 +140,7 @@ Agent responses may also use:
 ```
 ````
 
-Pure JSON arrays/objects with `skillId`, `toolId`, `tool`, `action`, or `name` are accepted too. Native API `tool_calls` are not required or used. In Agent mode, built-in Office tools can run automatically; custom tools marked `requiresConfirmation` and VBA mutation tools still require confirmation unless `Auto-confirm tool actions` is enabled.
+Pure JSON arrays/objects with `skillId`, `toolId`, `tool`, `action`, or `name` are accepted too. Native API `tool_calls` are not required; if an endpoint returns them anyway, RNAssistant converts them into the same local text protocol before parsing. In Agent mode, built-in Office tools can run automatically; custom tools marked `requiresConfirmation` and VBA mutation tools still require confirmation unless `Auto-confirm tool actions` is enabled.
 
 `System prompt` in Settings is treated as additional custom instruction. The fixed RNAssistant tool protocol is always appended as mandatory runtime protocol so custom text cannot disable parsing or tool execution rules.
 

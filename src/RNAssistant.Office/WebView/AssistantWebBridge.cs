@@ -75,6 +75,9 @@ namespace RNAssistant.Office.WebView
                             payload["settings"] == null ? "{}" : payload["settings"].ToString(Formatting.None),
                             payload["apiKey"] == null ? null : (string)payload["apiKey"]);
                         break;
+                    case "clearRuntimeData":
+                        payloadJson = _controller.ClearRuntimeDataJson();
+                        break;
                     case "getTools":
                         payloadJson = _controller.GetToolsJson();
                         break;

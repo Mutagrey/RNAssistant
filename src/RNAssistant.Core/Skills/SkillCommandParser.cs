@@ -229,7 +229,17 @@ namespace RNAssistant.Core.Skills
                 return;
             }
 
-            var steps = (obj["steps"] as JArray) ?? (obj["commands"] as JArray) ?? (obj["actions"] as JArray) ?? (obj["tools"] as JArray) ?? (obj["tool_calls"] as JArray);
+            var toolCalls = obj["tool_calls"] as JArray;
+            if (toolCalls != null && toolCalls.Count > 0)
+            {
+                foreach (var call in toolCalls.Children())
+                {
+                    AddToolCall(call, commands);
+                }
+                return;
+            }
+
+            var steps = (obj["steps"] as JArray) ?? (obj["commands"] as JArray) ?? (obj["actions"] as JArray) ?? (obj["tools"] as JArray);
             var argumentToken = obj["arguments"] ?? obj["args"] ?? obj["parameters"] ?? obj["input"];
             var explicitId = (string)(obj["skillId"] ?? obj["skill_id"] ?? obj["toolId"] ?? obj["tool_id"] ?? obj["tool"]);
             var function = obj["function"] as JObject;
@@ -274,6 +284,34 @@ namespace RNAssistant.Core.Skills
             }
 
             commands.Add(command);
+        }
+
+        private static void AddToolCall(JToken token, ICollection<SkillCommand> commands)
+        {
+            var obj = token as JObject;
+            if (obj == null)
+            {
+                return;
+            }
+
+            var function = obj["function"] as JObject;
+            if (function == null)
+            {
+                AddObject(token, commands);
+                return;
+            }
+
+            var id = (string)function["name"];
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return;
+            }
+
+            AddObject(new JObject
+            {
+                ["skillId"] = id,
+                ["arguments"] = function["arguments"] ?? new JObject()
+            }, commands);
         }
 
         private static JObject ReadObject(JToken token)

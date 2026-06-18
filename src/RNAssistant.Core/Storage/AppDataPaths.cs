@@ -44,6 +44,15 @@ namespace RNAssistant.Core.Storage
             Directory.CreateDirectory(WebViewUserDataDirectory);
         }
 
+        public void ClearRuntimeData()
+        {
+            ClearDirectory(ChatDirectory);
+            ClearDirectory(ContextDirectory);
+            ClearDirectory(VbaBackupDirectory);
+            ClearDirectory(WebViewUserDataDirectory);
+            Ensure();
+        }
+
         public static string SafeFileName(string value)
         {
             if (string.IsNullOrWhiteSpace(value))
@@ -55,6 +64,52 @@ namespace RNAssistant.Core.Storage
             {
                 var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(value));
                 return BitConverter.ToString(bytes).Replace("-", string.Empty).ToLowerInvariant();
+            }
+        }
+
+        private static void ClearDirectory(string directory)
+        {
+            if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+            {
+                return;
+            }
+
+            foreach (var file in Directory.GetFiles(directory))
+            {
+                TryDeleteFile(file);
+            }
+
+            foreach (var child in Directory.GetDirectories(directory))
+            {
+                TryDeleteDirectory(child);
+            }
+        }
+
+        private static void TryDeleteFile(string path)
+        {
+            try
+            {
+                File.Delete(path);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+
+        private static void TryDeleteDirectory(string path)
+        {
+            try
+            {
+                Directory.Delete(path, true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
             }
         }
     }

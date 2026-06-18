@@ -24,8 +24,6 @@ namespace RNAssistant.Core.Storage
 
         public ChatSession LoadOrCreateActive(string host, string documentKey, string documentTitle)
         {
-            EnsureMigrated(host, documentKey, documentTitle);
-
             var activeId = LoadActiveSessionId(host, documentKey);
             var session = string.IsNullOrWhiteSpace(activeId) ? null : Load(host, documentKey, activeId);
             if (session == null)
@@ -63,7 +61,6 @@ namespace RNAssistant.Core.Storage
                 return null;
             }
 
-            EnsureMigrated(host, documentKey, null);
             var session = _json.Load(GetSessionPath(host, documentKey, sessionId), (ChatSession)null);
             if (session == null)
             {
@@ -181,8 +178,6 @@ namespace RNAssistant.Core.Storage
 
         public IReadOnlyList<ChatSession> List(string host, string documentKey, string documentTitle)
         {
-            EnsureMigrated(host, documentKey, documentTitle);
-
             var directory = GetDocumentDirectory(host, documentKey);
             if (!Directory.Exists(directory))
             {
@@ -239,43 +234,6 @@ namespace RNAssistant.Core.Storage
             }
 
             return string.IsNullOrWhiteSpace(session.Id) ? string.Empty : session.Id;
-        }
-
-        private void EnsureMigrated(string host, string documentKey, string documentTitle)
-        {
-            var directory = GetDocumentDirectory(host, documentKey);
-            if (Directory.Exists(directory) && Directory.GetFiles(directory, "*.json").Length > 0)
-            {
-                WriteMigrationMarker(host, documentKey);
-                return;
-            }
-
-            if (File.Exists(GetMigrationMarkerPath(host, documentKey)))
-            {
-                return;
-            }
-
-            var legacyPath = GetLegacyPath(host, documentKey);
-            var legacy = _json.Load(legacyPath, (ChatSession)null);
-            if (legacy == null)
-            {
-                return;
-            }
-
-            NormalizeSession(legacy, host, documentKey, documentTitle);
-            if (string.Equals(legacy.Title, documentTitle, StringComparison.OrdinalIgnoreCase))
-            {
-                legacy.Title = "Chat";
-            }
-
-            if (legacy.CreatedUtc == default(DateTime) && legacy.Messages != null && legacy.Messages.Count > 0)
-            {
-                legacy.CreatedUtc = legacy.Messages.Min(m => m == null ? DateTime.UtcNow : m.CreatedUtc);
-            }
-
-            Save(legacy);
-            SaveActiveSessionId(host, documentKey, GetSessionId(legacy));
-            WriteMigrationMarker(host, documentKey);
         }
 
         private static void NormalizeSession(ChatSession session, string host, string documentKey, string documentTitle)
@@ -358,24 +316,5 @@ namespace RNAssistant.Core.Storage
             return Path.Combine(GetDocumentDirectory(host, documentKey), "active.txt");
         }
 
-        private string GetMigrationMarkerPath(string host, string documentKey)
-        {
-            return Path.Combine(GetDocumentDirectory(host, documentKey), "migrated.txt");
-        }
-
-        private void WriteMigrationMarker(string host, string documentKey)
-        {
-            var path = GetMigrationMarkerPath(host, documentKey);
-            Directory.CreateDirectory(Path.GetDirectoryName(path));
-            if (!File.Exists(path))
-            {
-                File.WriteAllText(path, DateTime.UtcNow.ToString("O"));
-            }
-        }
-
-        private string GetLegacyPath(string host, string documentKey)
-        {
-            return Path.Combine(_paths.ChatDirectory, AppDataPaths.SafeFileName((host ?? string.Empty) + "|" + (documentKey ?? string.Empty)) + ".json");
-        }
     }
 }

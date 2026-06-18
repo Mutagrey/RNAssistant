@@ -119,7 +119,7 @@ namespace RNAssistant.Core.Llm
                     }
 
                     var parsed = JObject.Parse(responseJson);
-                    var assistantContent = parsed.SelectToken("choices[0].message.content");
+                    var message = parsed.SelectToken("choices[0].message") as JObject;
                     var usage = parsed["usage"] as JObject;
                     var promptTokens = ReadInt(usage, "prompt_tokens", "input_tokens");
                     var completionTokens = ReadInt(usage, "completion_tokens", "output_tokens");
@@ -130,7 +130,7 @@ namespace RNAssistant.Core.Llm
                     }
                     return new LlmCompletionResult
                     {
-                        Content = assistantContent == null ? string.Empty : assistantContent.Value<string>(),
+                        Content = ReadAssistantContent(message),
                         PromptTokens = promptTokens,
                         CompletionTokens = completionTokens,
                         TotalTokens = totalTokens,
@@ -294,6 +294,30 @@ namespace RNAssistant.Core.Llm
             }
 
             return null;
+        }
+
+        private static string ReadAssistantContent(JObject message)
+        {
+            if (message == null)
+            {
+                return string.Empty;
+            }
+
+            var content = message["content"] == null || message["content"].Type == JTokenType.Null
+                ? string.Empty
+                : message["content"].Value<string>() ?? string.Empty;
+            var toolCalls = message["tool_calls"] as JArray;
+            if (toolCalls == null || toolCalls.Count == 0)
+            {
+                return content;
+            }
+
+            var block = "```rnassistant-agent\n" +
+                new JObject { ["tool_calls"] = toolCalls.DeepClone() }.ToString(Formatting.None) +
+                "\n```";
+            return string.IsNullOrWhiteSpace(content)
+                ? block
+                : content + "\n\n" + block;
         }
 
         private static string DeepestMessage(Exception exception)

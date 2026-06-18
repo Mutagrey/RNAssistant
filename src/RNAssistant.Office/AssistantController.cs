@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -9,19 +8,21 @@ using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Skills;
 using RNAssistant.Core.Storage;
+using RNAssistant.Office.Skills;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office
 {
-    public sealed class AssistantController
+    public sealed partial class AssistantController
     {
         private const int MaxAgentIterations = 3;
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly AppDataPaths _paths;
         private readonly SettingsService _settingsService;
         private readonly ChatStore _chatStore;
-        private readonly ContextStore _contextStore;
         private readonly ToolStore _toolStore;
         private readonly VbaBackupStore _vbaBackupStore;
+        private readonly OfficeToolExecutor _toolExecutor;
         private readonly LlmClient _llmClient;
         private readonly PromptComposer _promptComposer;
         private readonly SkillCommandParser _commandParser;
@@ -38,9 +39,9 @@ namespace RNAssistant.Office
             _paths = AppDataPaths.CreateDefault();
             _settingsService = new SettingsService(_paths);
             _chatStore = new ChatStore(_paths);
-            _contextStore = new ContextStore(_paths);
             _toolStore = new ToolStore(_paths);
             _vbaBackupStore = new VbaBackupStore(_paths);
+            _toolExecutor = new OfficeToolExecutor(_adapter, _vbaBackupStore);
             _llmClient = new LlmClient(() => _settingsService.LoadApiKey());
             _promptComposer = new PromptComposer();
             _commandParser = new SkillCommandParser();
@@ -69,7 +70,7 @@ namespace RNAssistant.Office
                 toolsPath = _paths.ToolsDirectory,
                 context = context,
                 messages = session.Messages,
-                contextUsage = EstimateContextUsage(session, settings),
+                contextUsage = ContextUsageEstimator.FromSession(session, settings),
                 quickAction = DequeueQuickAction()
             };
             return JsonConvert.SerializeObject(state);
@@ -81,7 +82,7 @@ namespace RNAssistant.Office
             {
                 var emptySession = LoadSession(chatId);
                 var emptyId = ChatStore.GetSessionId(emptySession);
-                return JsonConvert.SerializeObject(new { message = string.Empty, skillResults = new SkillResult[0], activeChatId = emptyId, activeChatModel = emptySession.Model, chats = GetChatSummaries(emptyId), context = LoadContext(emptySession), messages = emptySession.Messages, contextUsage = EstimateContextUsage(emptySession, _settingsService.Load()) });
+                return JsonConvert.SerializeObject(new { message = string.Empty, skillResults = new SkillResult[0], activeChatId = emptyId, activeChatModel = emptySession.Model, chats = GetChatSummaries(emptyId), context = LoadContext(emptySession), messages = emptySession.Messages, contextUsage = ContextUsageEstimator.FromSession(emptySession, _settingsService.Load()) });
             }
 
             ReportProgress(progress, "context", "Читаю документ...");
@@ -113,13 +114,13 @@ namespace RNAssistant.Office
             string followUpPrompt = null;
             for (var iteration = 0; iteration < MaxAgentIterations; iteration++)
             {
-                var messages = BuildPromptMessages(systemPrompt, contextPrompt, session.Messages, settings.ContextCharLimit);
+                var messages = PromptMessageBuilder.Build(systemPrompt, contextPrompt, session.Messages, settings.ContextCharLimit);
                 if (!string.IsNullOrWhiteSpace(followUpPrompt))
                 {
                     messages.Add(new ChatMessage { Role = "user", Content = followUpPrompt });
                 }
 
-                contextUsage = CreateContextUsage(messages, settings);
+                contextUsage = ContextUsageEstimator.FromPrompt(messages, settings);
                 ReportProgress(progress, "thinking", iteration == 0 ? "Модель думает..." : "Модель продолжает агентскую задачу...");
                 var completion = await _llmClient.CompleteAsync(settings, messages);
                 assistantText = completion.Content ?? string.Empty;
@@ -128,16 +129,16 @@ namespace RNAssistant.Office
                 var commands = _commandParser.Parse(assistantText).ToList();
                 if (commands.Count == 0)
                 {
-                    if (iteration == 0 && settings.AgentModeEnabled != false && ShouldForceAgentToolUse(text, _adapter.HostName))
+                    if (iteration == 0 && settings.AgentModeEnabled != false && AgentTranscript.ShouldForceAgentToolUse(text, _adapter.HostName))
                     {
                         followUpPrompt = "You are in RNAssistant Agent mode. The user asked for an Office action, so a prose-only answer is not acceptable. Return only one ```rnassistant-agent fenced JSON block with executable steps using available tools. If a tool is missing, say that plainly instead of inventing one.";
                         continue;
                     }
-                    session.Messages.Add(CreateAssistantMessage(assistantText, completion));
+                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, completion));
                     break;
                 }
 
-                session.Messages.Add(CreateAssistantMessage(CreateAgentPlanMessage(commands), completion));
+                session.Messages.Add(AgentTranscript.CreateAssistantMessage(AgentTranscript.CreateAgentPlanMessage(commands), completion));
                 var shouldContinue = settings.AutoRunToolCalls != false;
                 for (var i = 0; i < commands.Count; i++)
                 {
@@ -147,15 +148,15 @@ namespace RNAssistant.Office
                         settings.AutoRunToolCalls != false ? "executing" : "waiting",
                         (settings.AutoRunToolCalls != false ? "Исполняю tool " : "Auto-run отключен для tool ") + (i + 1) + "/" + commands.Count + ": " + command.SkillId);
                     var result = settings.AutoRunToolCalls != false
-                        ? ExecuteCommand(command, tools, settings, 0, false, false)
+                        ? _toolExecutor.Execute(command, tools, settings, false, false)
                         : SkillResult.Fail("Auto tool execution is disabled: " + command.SkillId);
-                    resultLog.Add(DescribeResult(command, result));
-                    AddLocalResultMessage(session, command, result);
+                    resultLog.Add(AgentTranscript.DescribeResult(command, result));
+                    AgentTranscript.AddLocalResultMessage(session, command, result);
                     if (!result.Success)
                     {
                         shouldContinue = false;
                     }
-                    if (!result.Success && settings.AutoRunToolCalls != false && settings.AutoRetryToolErrors != false && CanRetryToolError(result))
+                    if (!result.Success && settings.AutoRunToolCalls != false && settings.AutoRetryToolErrors != false && AgentTranscript.CanRetryToolError(result))
                     {
                         ReportProgress(progress, "repairing", "Tool упал, прошу модель исправить вызов: " + command.SkillId);
                         await RetryFailedToolAsync(systemPrompt, contextPrompt, session, settings, tools, command, result, resultLog, progress);
@@ -173,123 +174,7 @@ namespace RNAssistant.Office
             ReportProgress(progress, "saving", "Сохраняю историю...");
             _chatStore.Save(session);
             var activeId = ChatStore.GetSessionId(session);
-            return JsonConvert.SerializeObject(new { message = assistantText, skillResults = resultLog, activeChatId = activeId, activeChatModel = session.Model, chats = GetChatSummaries(activeId), context = LoadContext(session), messages = session.Messages, contextUsage = contextUsage ?? EstimateContextUsage(session, settings) });
-        }
-
-        public string DeleteMessageJson(string id, int index, string chatId = null)
-        {
-            var session = LoadSession(chatId);
-            var removed = false;
-            if (!string.IsNullOrWhiteSpace(id))
-            {
-                removed = session.Messages.RemoveAll(m => m != null && string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase)) > 0;
-            }
-
-            if (!removed && index >= 0 && index < session.Messages.Count)
-            {
-                session.Messages.RemoveAt(index);
-                removed = true;
-            }
-
-            if (removed)
-            {
-                _chatStore.Save(session);
-            }
-
-            var activeId = ChatStore.GetSessionId(session);
-            return JsonConvert.SerializeObject(new { activeChatId = activeId, activeChatModel = session.Model, chats = GetChatSummaries(activeId), context = LoadContext(session), messages = session.Messages, contextUsage = EstimateContextUsage(session, _settingsService.Load()) });
-        }
-
-        public string ForkChatJson(string id, int index, string chatId = null)
-        {
-            var source = LoadSession(chatId);
-            var sourceMessages = source.Messages ?? new List<ChatMessage>();
-            var targetIndex = -1;
-            if (!string.IsNullOrWhiteSpace(id))
-            {
-                targetIndex = sourceMessages.FindIndex(m => m != null && string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase));
-            }
-            if (targetIndex < 0 && index >= 0 && index < sourceMessages.Count)
-            {
-                targetIndex = index;
-            }
-            if (targetIndex < 0)
-            {
-                targetIndex = sourceMessages.Count - 1;
-            }
-
-            var fork = _chatStore.Create(source.Host, source.DocumentKey, source.DocumentTitle, BuildForkTitle(source));
-            fork.Model = source.Model;
-            fork.Context = CloneJson(LoadContext(source)) ?? CreateEmptyContext();
-            fork.Messages = targetIndex < 0
-                ? new List<ChatMessage>()
-                : CloneJson(sourceMessages.Take(targetIndex + 1).ToList()) ?? new List<ChatMessage>();
-            NormalizeContext(fork.Context, fork);
-            _chatStore.Save(fork);
-            SetActiveSession(fork);
-            return ChatStateJson(fork);
-        }
-
-        public string ListChatsJson()
-        {
-            var session = LoadSession(null);
-            return ChatStateJson(session);
-        }
-
-        public string CreateChatJson(string title)
-        {
-            LoadSession(null);
-            var session = _chatStore.Create(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle, string.IsNullOrWhiteSpace(title) ? "New chat" : title.Trim());
-            SetActiveSession(session);
-            return ChatStateJson(session);
-        }
-
-        public string SelectChatJson(string chatId)
-        {
-            var session = LoadSession(chatId);
-            return ChatStateJson(session);
-        }
-
-        public string RenameChatJson(string chatId, string title)
-        {
-            var session = LoadSession(chatId);
-            if (!string.IsNullOrWhiteSpace(title))
-            {
-                session.Title = title.Trim();
-                _chatStore.Save(session);
-            }
-
-            return ChatStateJson(session);
-        }
-
-        public string SetChatModelJson(string chatId, string model)
-        {
-            var session = LoadSession(chatId);
-            session.Model = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
-            _chatStore.Save(session);
-            return ChatStateJson(session);
-        }
-
-        public string ClearChatJson(string chatId)
-        {
-            var session = LoadSession(chatId);
-            session.Messages.Clear();
-            _chatStore.Save(session);
-            return ChatStateJson(session);
-        }
-
-        public string DeleteChatJson(string chatId)
-        {
-            var current = LoadSession(chatId);
-            _chatStore.Delete(_adapter.HostName, _adapter.DocumentKey, ChatStore.GetSessionId(current));
-            var next = _chatStore.List(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle).FirstOrDefault();
-            if (next == null)
-            {
-                next = _chatStore.Create(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle, "New chat");
-            }
-
-            SetActiveSession(next);
-            return ChatStateJson(next);
+            return JsonConvert.SerializeObject(new { message = assistantText, skillResults = resultLog, activeChatId = activeId, activeChatModel = session.Model, chats = GetChatSummaries(activeId), context = LoadContext(session), messages = session.Messages, contextUsage = contextUsage ?? ContextUsageEstimator.FromSession(session, settings) });
         }
 
         public string GetSettingsJson()
@@ -329,6 +214,16 @@ namespace RNAssistant.Office
             return GetSettingsJson();
         }
 
+        public string ClearRuntimeDataJson()
+        {
+            _paths.ClearRuntimeData();
+            _activeSessionId = null;
+            _activeHost = null;
+            _activeDocumentKey = null;
+            _activeRuntimeDocumentKey = null;
+            return InitializeJson();
+        }
+
         public string GetToolsJson()
         {
             return JsonConvert.SerializeObject(GetVisibleTools());
@@ -346,14 +241,14 @@ namespace RNAssistant.Office
             var settings = _settingsService.Load();
             var tools = GetVisibleTools().Where(s => s.Enabled).ToList();
             var command = new SkillCommand { SkillId = toolId };
-            var args = ParseArguments(argumentsJson);
+            var args = SkillArgumentReader.ParseObject(argumentsJson);
             foreach (var pair in args)
             {
                 command.Arguments[pair.Key] = pair.Value;
             }
 
             ReportProgress(progress, dryRun ? "checking" : "executing", (dryRun ? "Проверяю tool: " : "Исполняю tool: ") + toolId);
-            var result = ExecuteCommand(command, tools, settings, 0, dryRun, true);
+            var result = _toolExecutor.Execute(command, tools, settings, dryRun, true);
             return JsonConvert.SerializeObject(result);
         }
 
@@ -361,9 +256,9 @@ namespace RNAssistant.Office
         {
             var settings = _settingsService.Load();
             var tools = GetVisibleTools().Where(s => s.Enabled).ToList();
-            var command = new SkillCommand { SkillId = VbaToolId("vba_read_project") };
+            var command = new SkillCommand { SkillId = _toolExecutor.VbaToolId("vba_read_project") };
             command.Arguments["maxChars"] = maxChars <= 0 ? settings.VbaContextCharLimit : maxChars;
-            var result = ExecuteCommand(command, tools, settings, 0, false, true);
+            var result = _toolExecutor.Execute(command, tools, settings, false, true);
             return JsonConvert.SerializeObject(new
             {
                 result = result,
@@ -375,11 +270,11 @@ namespace RNAssistant.Office
         {
             var settings = _settingsService.Load();
             var tools = GetVisibleTools().Where(s => s.Enabled).ToList();
-            var command = new SkillCommand { SkillId = VbaToolId("vba_replace_module") };
+            var command = new SkillCommand { SkillId = _toolExecutor.VbaToolId("vba_replace_module") };
             command.Arguments["moduleName"] = moduleName;
             command.Arguments["code"] = code;
             command.Arguments["createIfMissing"] = "true";
-            var result = ExecuteCommand(command, tools, settings, 0, false, true);
+            var result = _toolExecutor.Execute(command, tools, settings, false, true);
             return JsonConvert.SerializeObject(result);
         }
 
@@ -387,9 +282,9 @@ namespace RNAssistant.Office
         {
             var settings = _settingsService.Load();
             var tools = GetVisibleTools().Where(s => s.Enabled).ToList();
-            var result = RestoreVbaBackup(new SkillCommand
+            var result = _toolExecutor.Execute(new SkillCommand
             {
-                SkillId = VbaToolId("vba_restore_backup"),
+                SkillId = _toolExecutor.VbaToolId("vba_restore_backup"),
                 Arguments =
                 {
                     ["backupId"] = backupId ?? string.Empty,
@@ -397,132 +292,6 @@ namespace RNAssistant.Office
                 }
             }, tools, settings, false, true);
             return JsonConvert.SerializeObject(result);
-        }
-
-        public string GetContextJson(string chatId = null)
-        {
-            return JsonConvert.SerializeObject(LoadContext(LoadSession(chatId)));
-        }
-
-        public string AddSelectionContextJson(string mode, string chatId = null)
-        {
-            return JsonConvert.SerializeObject(AddSelectionContext(mode, chatId));
-        }
-
-        public string AddTextContextJson(string kind, string title, string reference, string text, string detailsJson, string chatId = null)
-        {
-            var settings = _settingsService.Load();
-            var session = LoadSession(chatId);
-            var context = AddContextNote(session, new ContextNote
-            {
-                Host = _adapter.HostName,
-                Kind = string.IsNullOrWhiteSpace(kind) ? "context" : kind.Trim(),
-                Title = string.IsNullOrWhiteSpace(title) ? "Context" : title.Trim(),
-                Reference = string.IsNullOrWhiteSpace(reference) ? title : reference.Trim(),
-                Source = string.IsNullOrWhiteSpace(reference) ? title : reference.Trim(),
-                Text = TrimForContext(text ?? string.Empty, Math.Max(1000, settings.ContextCharLimit)),
-                Preview = TrimForContext(text ?? string.Empty, 360),
-                DetailsJson = detailsJson
-            }, kind);
-            return JsonConvert.SerializeObject(context);
-        }
-
-        public string AddVbaContextJson(string chatId = null, int maxChars = 0)
-        {
-            var settings = _settingsService.Load();
-            var session = LoadSession(chatId);
-            var limit = maxChars <= 0 ? settings.VbaContextCharLimit : maxChars;
-            var snapshot = _adapter.GetVbaSnapshot(Math.Max(1000, limit));
-            if (string.IsNullOrWhiteSpace(snapshot) ||
-                snapshot.IndexOf("VBA project could not be read", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                throw new InvalidOperationException(string.IsNullOrWhiteSpace(snapshot) ? "VBA project is empty or unavailable." : snapshot);
-            }
-
-            var text =
-                "Attached VBA project snapshot for this chat. Modules are separated by lines like ===== ModuleName (Type) =====.\n" +
-                "When editing VBA, use `" + VbaToolId("vba_apply_patch") + "` for targeted changes and avoid whole-module replacement unless necessary.\n\n" +
-                snapshot;
-            var context = AddContextNote(session, new ContextNote
-            {
-                Host = _adapter.HostName,
-                Kind = "vba_project",
-                Title = "VBA project",
-                Reference = "vba:project",
-                Source = _adapter.DocumentTitle,
-                Text = TrimForContext(text, Math.Max(1000, limit)),
-                Preview = "VBA project attached for this chat. Use VBA tools to patch modules.",
-                DetailsJson = JsonConvert.SerializeObject(new
-                {
-                    type = "vba_project",
-                    patchTool = VbaToolId("vba_apply_patch"),
-                    replaceModuleTool = VbaToolId("vba_replace_module")
-                })
-            }, "vba_project");
-            return JsonConvert.SerializeObject(context);
-        }
-
-        public DocumentContext AddSelectionContext(string mode, string chatId = null)
-        {
-            var settings = _settingsService.Load();
-            var session = LoadSession(chatId);
-            var context = LoadContext(session);
-            if (context.Notes == null)
-            {
-                context.Notes = new List<ContextNote>();
-            }
-            try
-            {
-                _adapter.PrepareForContextCapture();
-            }
-            catch
-            {
-            }
-            var note = _adapter.CaptureSelectionContext(mode, Math.Min(Math.Max(1000, settings.ContextCharLimit), 12000));
-            if (note == null)
-            {
-                throw new InvalidOperationException("No selectable Office context was found.");
-            }
-
-            NormalizeContextNote(note, mode);
-            UpsertContextNote(context, note);
-            SaveSessionContext(session);
-            return context;
-        }
-
-        private DocumentContext AddContextNote(ChatSession session, ContextNote note, string mode)
-        {
-            var context = LoadContext(session);
-            if (context.Notes == null)
-            {
-                context.Notes = new List<ContextNote>();
-            }
-
-            NormalizeContextNote(note, mode);
-            UpsertContextNote(context, note);
-            SaveSessionContext(session);
-            return context;
-        }
-
-        public string RemoveContextItemJson(string id, string chatId = null)
-        {
-            var session = LoadSession(chatId);
-            var context = LoadContext(session);
-            if (context.Notes != null && !string.IsNullOrWhiteSpace(id))
-            {
-                context.Notes.RemoveAll(n => n != null && string.Equals(n.Id, id, StringComparison.OrdinalIgnoreCase));
-                SaveSessionContext(session);
-            }
-
-            return JsonConvert.SerializeObject(context);
-        }
-
-        public string ClearContextJson(string chatId = null)
-        {
-            var session = LoadSession(chatId);
-            session.Context = CreateEmptyContext();
-            SaveSessionContext(session);
-            return JsonConvert.SerializeObject(session.Context);
         }
 
         public void QueueQuickAction(string action)
@@ -583,23 +352,23 @@ namespace RNAssistant.Office
                 JsonConvert.SerializeObject(failedCommand.Arguments, Formatting.Indented) +
                 "\n```\nError: " + failedResult.Message +
                 (string.IsNullOrWhiteSpace(failedResult.DataJson) ? string.Empty : "\nData:\n```json\n" + failedResult.DataJson + "\n```");
-            var repairMessages = BuildPromptMessages(systemPrompt, contextPrompt, session.Messages, settings.ContextCharLimit);
+            var repairMessages = PromptMessageBuilder.Build(systemPrompt, contextPrompt, session.Messages, settings.ContextCharLimit);
             repairMessages.Add(new ChatMessage { Role = "user", Content = repairPrompt });
 
             var repairCompletion = await _llmClient.CompleteAsync(settings, repairMessages);
             var repairText = repairCompletion.Content ?? string.Empty;
-            session.Messages.Add(CreateAssistantMessage(repairText, repairCompletion));
+            session.Messages.Add(AgentTranscript.CreateAssistantMessage(repairText, repairCompletion));
             var retryCommands = _commandParser.Parse(repairText).ToList();
             for (var i = 0; i < retryCommands.Count; i++)
             {
                 var retry = retryCommands[i];
                 ReportProgress(progress, "retrying", "Повтор tool " + (i + 1) + "/" + retryCommands.Count + ": " + retry.SkillId);
-                var retryResult = ExecuteCommand(retry, tools, settings, 0, false, false);
+                var retryResult = _toolExecutor.Execute(retry, tools, settings, false, false);
                 if (resultLog != null)
                 {
-                    resultLog.Add(DescribeResult(retry, retryResult));
+                    resultLog.Add(AgentTranscript.DescribeResult(retry, retryResult));
                 }
-                AddLocalResultMessage(session, retry, retryResult);
+                AgentTranscript.AddLocalResultMessage(session, retry, retryResult);
             }
 
             if (retryCommands.Count == 0)
@@ -613,79 +382,6 @@ namespace RNAssistant.Office
             }
         }
 
-        private static void AddLocalResultMessage(ChatSession session, SkillCommand command, SkillResult result)
-        {
-            var success = result != null && result.Success;
-            var message = result == null ? string.Empty : result.Message ?? string.Empty;
-            var waiting = !success && message.IndexOf("requires confirmation", StringComparison.OrdinalIgnoreCase) >= 0;
-            var title = string.IsNullOrWhiteSpace(command.Description) ? command.SkillId : command.Description;
-            session.Messages.Add(new ChatMessage
-            {
-                Role = "assistant",
-                Content = "### Agent step: " + title +
-                    "\n- Tool: `" + command.SkillId + "`" +
-                    "\n- Status: " + (success ? "completed" : (waiting ? "waiting for confirmation" : "failed")) +
-                    "\n- Result: " + message +
-                    (string.IsNullOrWhiteSpace(result == null ? null : result.DataJson) ? string.Empty : "\n```json\n" + result.DataJson + "\n```")
-            });
-        }
-
-        private static ChatMessage CreateAssistantMessage(string content, LlmCompletionResult completion)
-        {
-            return new ChatMessage
-            {
-                Role = "assistant",
-                Content = content ?? string.Empty,
-                PromptTokens = completion == null ? null : completion.PromptTokens,
-                CompletionTokens = completion == null ? null : completion.CompletionTokens,
-                TotalTokens = completion == null ? null : completion.TotalTokens,
-                UsageJson = completion == null ? null : completion.UsageJson
-            };
-        }
-
-        private static object DescribeResult(SkillCommand command, SkillResult result)
-        {
-            return new
-            {
-                skillId = command == null ? string.Empty : command.SkillId,
-                description = command == null ? string.Empty : command.Description,
-                success = result != null && result.Success,
-                message = result == null ? string.Empty : result.Message,
-                dataJson = result == null ? null : result.DataJson
-            };
-        }
-
-        private static string CreateAgentPlanMessage(IReadOnlyList<SkillCommand> commands)
-        {
-            var builder = new System.Text.StringBuilder();
-            builder.AppendLine("### Agent plan");
-            if (commands == null || commands.Count == 0)
-            {
-                builder.AppendLine("No executable steps were returned.");
-                return builder.ToString();
-            }
-
-            for (var i = 0; i < commands.Count; i++)
-            {
-                var command = commands[i];
-                var title = command == null || string.IsNullOrWhiteSpace(command.Description)
-                    ? (command == null ? "Tool step" : command.SkillId)
-                    : command.Description;
-                builder.AppendLine((i + 1) + ". " + title + " (`" + (command == null ? string.Empty : command.SkillId) + "`)");
-            }
-
-            builder.AppendLine();
-            builder.AppendLine("```json");
-            builder.AppendLine(JsonConvert.SerializeObject(commands.Select(command => new
-            {
-                description = command == null ? string.Empty : command.Description,
-                skillId = command == null ? string.Empty : command.SkillId,
-                arguments = command == null ? null : command.Arguments
-            }), Formatting.Indented));
-            builder.AppendLine("```");
-            return builder.ToString();
-        }
-
         private string DequeueQuickAction()
         {
             lock (_syncRoot)
@@ -696,352 +392,6 @@ namespace RNAssistant.Office
             }
         }
 
-        private ChatSession LoadSession(string requestedSessionId)
-        {
-            var host = _adapter.HostName;
-            var documentKey = _adapter.DocumentKey;
-            var legacyDocumentKey = _adapter.LegacyDocumentKey;
-            var runtimeKey = _adapter.RuntimeDocumentKey;
-            var title = _adapter.DocumentTitle;
-
-            if (!string.IsNullOrWhiteSpace(_activeSessionId) &&
-                string.Equals(_activeHost, host, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(_activeRuntimeDocumentKey, runtimeKey, StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(_activeDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))
-            {
-                var oldDocumentKey = _activeDocumentKey;
-                _contextStore.Move(_activeHost, oldDocumentKey, host, documentKey, title);
-                _chatStore.MoveDocument(_activeHost, oldDocumentKey, host, documentKey, title);
-                _activeHost = host;
-                _activeDocumentKey = documentKey;
-                _activeRuntimeDocumentKey = runtimeKey;
-            }
-
-            RestoreLegacyDocumentKeyIfNeeded(host, legacyDocumentKey, documentKey, title);
-
-            ChatSession session = null;
-            if (!string.IsNullOrWhiteSpace(requestedSessionId))
-            {
-                session = _chatStore.Load(host, documentKey, requestedSessionId);
-                if (session == null)
-                {
-                    throw new InvalidOperationException("Chat session was not found.");
-                }
-            }
-            else if (!string.IsNullOrWhiteSpace(_activeSessionId) &&
-                     string.Equals(_activeHost, host, StringComparison.OrdinalIgnoreCase) &&
-                     string.Equals(_activeDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))
-            {
-                session = _chatStore.Load(host, documentKey, _activeSessionId);
-            }
-
-            if (session == null)
-            {
-                session = _chatStore.LoadOrCreateActive(host, documentKey, title);
-            }
-
-            SetActiveSession(session);
-            EnsureChatContext(session);
-            return session;
-        }
-
-        private void RestoreLegacyDocumentKeyIfNeeded(string host, string legacyDocumentKey, string documentKey, string title)
-        {
-            if (string.IsNullOrWhiteSpace(legacyDocumentKey) ||
-                string.Equals(legacyDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            if (_chatStore.List(host, documentKey, title).Count > 0)
-            {
-                return;
-            }
-
-            if (_chatStore.List(host, legacyDocumentKey, title).Count > 0)
-            {
-                _chatStore.MoveDocument(host, legacyDocumentKey, host, documentKey, title);
-                _contextStore.Move(host, legacyDocumentKey, host, documentKey, title);
-                return;
-            }
-
-            if (!_contextStore.Exists(host, documentKey) && _contextStore.Exists(host, legacyDocumentKey))
-            {
-                _contextStore.Move(host, legacyDocumentKey, host, documentKey, title);
-            }
-        }
-
-        private DocumentContext LoadContext(ChatSession session)
-        {
-            if (session == null)
-            {
-                session = LoadSession(null);
-            }
-
-            if (session.Context == null)
-            {
-                session.Context = CreateEmptyContext();
-            }
-
-            var context = session.Context;
-            if (string.IsNullOrWhiteSpace(context.Host))
-            {
-                context.Host = session.Host ?? _adapter.HostName;
-            }
-            if (string.IsNullOrWhiteSpace(context.DocumentKey))
-            {
-                context.DocumentKey = session.DocumentKey ?? _adapter.DocumentKey;
-            }
-            if (string.IsNullOrWhiteSpace(context.Title))
-            {
-                context.Title = session.Title ?? _adapter.DocumentTitle;
-            }
-            if (context.Notes == null)
-            {
-                context.Notes = new List<ContextNote>();
-            }
-            return context;
-        }
-
-        private void EnsureChatContext(ChatSession session)
-        {
-            var context = LoadContext(session);
-            NormalizeContext(context, session);
-            if ((context.Notes == null || context.Notes.Count == 0) &&
-                _contextStore.Exists(session.Host, session.DocumentKey))
-            {
-                var legacy = _contextStore.LoadOrCreate(session.Host, session.DocumentKey, session.DocumentTitle);
-                if (legacy != null && legacy.Notes != null && legacy.Notes.Count > 0)
-                {
-                    session.Context = legacy;
-                    NormalizeContext(session.Context, session);
-                    _chatStore.Save(session);
-                    _contextStore.Clear(session.Host, session.DocumentKey);
-                }
-            }
-        }
-
-        private DocumentContext CreateEmptyContext()
-        {
-            return new DocumentContext
-            {
-                Host = _adapter.HostName,
-                DocumentKey = _adapter.DocumentKey,
-                Title = _adapter.DocumentTitle
-            };
-        }
-
-        private void SaveSessionContext(ChatSession session)
-        {
-            NormalizeContext(LoadContext(session), session);
-            _chatStore.Save(session);
-        }
-
-        private void NormalizeContext(DocumentContext context, ChatSession session)
-        {
-            if (context == null || session == null)
-            {
-                return;
-            }
-
-            context.Host = string.IsNullOrWhiteSpace(session.Host) ? _adapter.HostName : session.Host;
-            context.DocumentKey = string.IsNullOrWhiteSpace(session.DocumentKey) ? _adapter.DocumentKey : session.DocumentKey;
-            context.Title = string.IsNullOrWhiteSpace(session.Title) ? _adapter.DocumentTitle : session.Title;
-            context.UpdatedUtc = DateTime.UtcNow;
-            if (context.Notes == null)
-            {
-                context.Notes = new List<ContextNote>();
-            }
-            foreach (var note in context.Notes)
-            {
-                if (note != null)
-                {
-                    NormalizeContextNote(note, note.Kind);
-                }
-            }
-        }
-
-        private static void UpsertContextNote(DocumentContext context, ContextNote note)
-        {
-            if (context == null || note == null)
-            {
-                return;
-            }
-
-            if (context.Notes == null)
-            {
-                context.Notes = new List<ContextNote>();
-            }
-
-            var existing = context.Notes.FirstOrDefault(item => IsSameContextNote(item, note));
-            if (existing == null)
-            {
-                context.Notes.Add(note);
-                return;
-            }
-
-            existing.Host = note.Host;
-            existing.Kind = note.Kind;
-            existing.Title = note.Title;
-            existing.Reference = note.Reference;
-            existing.Source = note.Source;
-            existing.Text = note.Text;
-            existing.Preview = note.Preview;
-            existing.DetailsJson = note.DetailsJson;
-            existing.CreatedUtc = note.CreatedUtc == default(DateTime) ? DateTime.UtcNow : note.CreatedUtc;
-        }
-
-        private static bool IsSameContextNote(ContextNote left, ContextNote right)
-        {
-            if (left == null || right == null)
-            {
-                return false;
-            }
-
-            return string.Equals(left.Host, right.Host, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(left.Kind, right.Kind, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(left.Reference, right.Reference, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(left.DetailsJson, right.DetailsJson, StringComparison.Ordinal);
-        }
-
-        private static T CloneJson<T>(T value) where T : class
-        {
-            return value == null ? null : JsonConvert.DeserializeObject<T>(JsonConvert.SerializeObject(value));
-        }
-
-        private static string BuildForkTitle(ChatSession source)
-        {
-            var title = source == null || string.IsNullOrWhiteSpace(source.Title) ? "Chat" : source.Title.Trim();
-            if (title.EndsWith(" fork", StringComparison.OrdinalIgnoreCase))
-            {
-                return title;
-            }
-
-            return (title.Length > 52 ? title.Substring(0, 52).TrimEnd() : title) + " fork";
-        }
-
-        private void SetActiveSession(ChatSession session)
-        {
-            if (session == null)
-            {
-                return;
-            }
-
-            _activeSessionId = ChatStore.GetSessionId(session);
-            _activeHost = session.Host;
-            _activeDocumentKey = session.DocumentKey;
-            _activeRuntimeDocumentKey = _adapter.RuntimeDocumentKey;
-            _chatStore.SaveActiveSessionId(session.Host, session.DocumentKey, _activeSessionId);
-        }
-
-        private static void ApplyChatModel(AppSettings settings, ChatSession session)
-        {
-            if (settings == null || session == null || string.IsNullOrWhiteSpace(session.Model))
-            {
-                return;
-            }
-
-            settings.Model = session.Model.Trim();
-        }
-
-        private string ChatStateJson(ChatSession session)
-        {
-            var activeId = ChatStore.GetSessionId(session);
-            return JsonConvert.SerializeObject(new
-            {
-                activeChatId = activeId,
-                activeChatModel = session == null ? string.Empty : session.Model,
-                chats = GetChatSummaries(activeId),
-                context = session == null ? CreateEmptyContext() : LoadContext(session),
-                messages = session == null ? new List<ChatMessage>() : session.Messages,
-                contextUsage = EstimateContextUsage(session, _settingsService.Load())
-            });
-        }
-
-        private IReadOnlyList<ChatSessionSummary> GetChatSummaries(string activeId)
-        {
-            return _chatStore.List(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle)
-                .Select(s => new ChatSessionSummary
-                {
-                    Id = ChatStore.GetSessionId(s),
-                    Host = s.Host,
-                    DocumentKey = s.DocumentKey,
-                    DocumentTitle = s.DocumentTitle,
-                    Title = s.Title,
-                    Model = s.Model,
-                    CreatedUtc = s.CreatedUtc,
-                    UpdatedUtc = s.UpdatedUtc,
-                    MessageCount = s.Messages == null ? 0 : s.Messages.Count
-                })
-                .ToList();
-        }
-
-        private static void EnsureSessionTitleFromUserText(ChatSession session, string text)
-        {
-            if (session == null || string.IsNullOrWhiteSpace(text))
-            {
-                return;
-            }
-
-            if (!string.Equals(session.Title, "New chat", StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            var title = Regex.Replace(text.Trim(), "\\s+", " ");
-            session.Title = title.Length <= 64 ? title : title.Substring(0, 61) + "...";
-        }
-
-        private void NormalizeContextNote(ContextNote note, string mode)
-        {
-            if (string.IsNullOrWhiteSpace(note.Id))
-            {
-                note.Id = Guid.NewGuid().ToString("N");
-            }
-            if (note.CreatedUtc == default(DateTime))
-            {
-                note.CreatedUtc = DateTime.UtcNow;
-            }
-            if (string.IsNullOrWhiteSpace(note.Host))
-            {
-                note.Host = _adapter.HostName;
-            }
-            if (string.IsNullOrWhiteSpace(note.Kind))
-            {
-                note.Kind = string.Equals(mode, "reference", StringComparison.OrdinalIgnoreCase) ? "reference" : "selection";
-            }
-            if (string.IsNullOrWhiteSpace(note.Title))
-            {
-                note.Title = _adapter.DocumentTitle;
-            }
-            if (string.IsNullOrWhiteSpace(note.Reference))
-            {
-                note.Reference = note.Source ?? _adapter.DocumentTitle;
-            }
-            if (string.IsNullOrWhiteSpace(note.Source))
-            {
-                note.Source = note.Reference;
-            }
-            if (string.IsNullOrWhiteSpace(note.Preview))
-            {
-                note.Preview = TrimForContext(note.Text, 360);
-            }
-            if (string.IsNullOrWhiteSpace(note.Text))
-            {
-                note.Text = note.Preview;
-            }
-        }
-
-        private static string TrimForContext(string text, int maxChars)
-        {
-            if (string.IsNullOrEmpty(text) || text.Length <= maxChars)
-            {
-                return text ?? string.Empty;
-            }
-
-            return text.Substring(0, maxChars) + "\n...[truncated]";
-        }
-
         private List<SkillDefinition> GetVisibleTools()
         {
             var result = new Dictionary<string, SkillDefinition>(StringComparer.OrdinalIgnoreCase);
@@ -1050,7 +400,7 @@ namespace RNAssistant.Office
                 result[skill.Id] = skill;
             }
 
-            foreach (var tool in GetControllerTools())
+            foreach (var tool in _toolExecutor.GetControllerTools())
             {
                 result[tool.Id] = tool;
             }
@@ -1066,811 +416,6 @@ namespace RNAssistant.Office
             }
 
             return result.Values.OrderBy(s => s.Host).ThenBy(s => s.Id).ToList();
-        }
-
-        private IEnumerable<SkillDefinition> GetControllerTools()
-        {
-            if (HostSupportsVba())
-            {
-                var listId = VbaToolId("vba_list_backups");
-                yield return ControllerTool(listId, "List RNAssistant VBA rollback backups for the current document.", "{}");
-                var restoreId = VbaToolId("vba_restore_backup");
-                yield return ControllerTool(restoreId, "Restore a VBA module from a prior RNAssistant backup by backupId, or latest backup for moduleName.", "{\"backupId\":\"optional\",\"moduleName\":\"Module1\"}");
-                var replaceTextId = VbaToolId("vba_replace_text");
-                yield return ControllerTool(replaceTextId, "Replace an exact text fragment inside one VBA module; safer than replacing the whole module and creates a rollback backup.", "{\"moduleName\":\"Module1\",\"find\":\"old code\",\"replace\":\"new code\"}");
-                var patchId = VbaToolId("vba_apply_patch");
-                yield return ControllerTool(patchId, "Apply structured VBA code patches: replace exact text, insert before/after exact text, or replace line ranges; creates rollback backup.", "{\"moduleName\":\"Module1\",\"patch\":[{\"op\":\"replace\",\"find\":\"old\",\"text\":\"new\"},{\"op\":\"replaceLines\",\"startLine\":10,\"deleteCount\":2,\"text\":\"new code\"}]}");
-            }
-        }
-
-        private SkillDefinition ControllerTool(string id, string description, string schema)
-        {
-            return new SkillDefinition
-            {
-                Id = id,
-                Host = _adapter.HostName,
-                Name = id,
-                Description = description,
-                ArgumentSchemaJson = schema,
-                BuiltIn = true,
-                Enabled = true
-            };
-        }
-
-        private SkillResult ExecuteCommand(SkillCommand command, IReadOnlyList<SkillDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun)
-        {
-            if (command == null || string.IsNullOrWhiteSpace(command.SkillId))
-            {
-                return SkillResult.Fail("Tool command is empty.");
-            }
-
-            if (depth > 8)
-            {
-                return SkillResult.Fail("Pipeline nesting limit exceeded.");
-            }
-
-            var tool = skills.FirstOrDefault(s =>
-                !s.BuiltIn &&
-                s.Enabled &&
-                string.Equals(s.Id, command.SkillId, StringComparison.OrdinalIgnoreCase));
-
-            if (IsMutationTool(command.SkillId) && !settings.AutoConfirmToolActions && !manualRun && !dryRun &&
-                !CanAgentRunBuiltInMutation(command.SkillId, tool, settings))
-            {
-                return SkillResult.Fail("Tool requires confirmation before execution: " + command.SkillId);
-            }
-
-            if (tool != null && tool.RequiresConfirmation && !settings.AutoConfirmToolActions && !manualRun)
-            {
-                return SkillResult.Fail("Tool requires confirmation before execution: " + tool.Id);
-            }
-
-            if (tool != null && string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
-            {
-                return ExecutePipeline(tool, command, skills, settings, depth + 1, dryRun, manualRun);
-            }
-
-            if (tool != null && string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
-            {
-                return ExecuteVbaTool(tool, command, skills, settings, dryRun, manualRun);
-            }
-
-            if (tool != null)
-            {
-                return SkillResult.Fail("Tool executor is not runnable yet: " + tool.Executor);
-            }
-
-            if (string.Equals(command.SkillId, VbaToolId("vba_list_backups"), StringComparison.OrdinalIgnoreCase))
-            {
-                return SkillResult.Ok("VBA backups listed.", JsonConvert.SerializeObject(_vbaBackupStore.List(_adapter.HostName, _adapter.DocumentKey)));
-            }
-
-            if (string.Equals(command.SkillId, VbaToolId("vba_restore_backup"), StringComparison.OrdinalIgnoreCase))
-            {
-                return RestoreVbaBackup(command, skills, settings, dryRun, manualRun);
-            }
-
-            if (string.Equals(command.SkillId, VbaToolId("vba_replace_text"), StringComparison.OrdinalIgnoreCase))
-            {
-                return ReplaceVbaText(command, skills, settings, dryRun, manualRun);
-            }
-
-            if (string.Equals(command.SkillId, VbaToolId("vba_apply_patch"), StringComparison.OrdinalIgnoreCase))
-            {
-                return ApplyVbaPatch(command, skills, settings, dryRun, manualRun);
-            }
-
-            if (dryRun)
-            {
-                return SkillResult.Ok("Dry run: would execute " + command.SkillId, JsonConvert.SerializeObject(command.Arguments));
-            }
-
-            if (string.Equals(command.SkillId, VbaToolId("vba_replace_module"), StringComparison.OrdinalIgnoreCase))
-            {
-                BackupVbaModuleBeforeReplace(command, skills, settings);
-            }
-
-            return _adapter.ExecuteSkill(command);
-        }
-
-        private SkillResult ExecutePipeline(SkillDefinition tool, SkillCommand command, IReadOnlyList<SkillDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun)
-        {
-            if (string.IsNullOrWhiteSpace(tool.PipelineJson))
-            {
-                return SkillResult.Fail("Tool has no pipeline: " + tool.Id);
-            }
-
-            JObject pipeline;
-            try
-            {
-                pipeline = JObject.Parse(tool.PipelineJson);
-            }
-            catch (JsonException ex)
-            {
-                return SkillResult.Fail("Invalid pipeline JSON for " + tool.Id + ": " + ex.Message);
-            }
-
-            var steps = pipeline["steps"] as JArray;
-            if (steps == null || steps.Count == 0)
-            {
-                return SkillResult.Fail("Pipeline has no steps: " + tool.Id);
-            }
-
-            var stepResults = new Dictionary<string, SkillResult>(StringComparer.OrdinalIgnoreCase);
-            var output = new List<object>();
-            foreach (var stepToken in steps)
-            {
-                var step = stepToken as JObject;
-                if (step == null)
-                {
-                    continue;
-                }
-
-                var toolId = (string)(step["toolId"] ?? step["skillId"] ?? step["id"]);
-                if (string.IsNullOrWhiteSpace(toolId))
-                {
-                    return SkillResult.Fail("Pipeline step has no toolId.");
-                }
-
-                var stepId = (string)step["id"];
-                if (string.IsNullOrWhiteSpace(stepId))
-                {
-                    stepId = toolId;
-                }
-
-                var nested = new SkillCommand { SkillId = toolId };
-                var args = step["arguments"] as JObject;
-                if (args != null)
-                {
-                    foreach (var property in args.Properties())
-                    {
-                        nested.Arguments[property.Name] = ResolvePipelineValue(property.Value, command.Arguments, stepResults);
-                    }
-                }
-
-                var result = ExecuteCommand(nested, skills, settings, depth + 1, dryRun, manualRun);
-                stepResults[stepId] = result;
-                output.Add(new { id = stepId, toolId = toolId, success = result.Success, message = result.Message, dataJson = result.DataJson });
-
-                if (!result.Success)
-                {
-                    return SkillResult.Fail("Pipeline step failed: " + stepId + ". " + result.Message);
-                }
-            }
-
-            return SkillResult.Ok((dryRun ? "Dry run completed: " : "Pipeline executed: ") + tool.Id, JsonConvert.SerializeObject(new { toolId = tool.Id, dryRun = dryRun, steps = output }));
-        }
-
-        private SkillResult ExecuteVbaTool(SkillDefinition tool, SkillCommand command, IReadOnlyList<SkillDefinition> skills, AppSettings settings, bool dryRun, bool manualRun)
-        {
-            if (string.IsNullOrWhiteSpace(tool.Code))
-            {
-                return SkillResult.Fail("VBA tool has no code: " + tool.Id);
-            }
-            if (!dryRun && !manualRun && !settings.AutoConfirmToolActions)
-            {
-                return SkillResult.Fail("VBA tool requires confirmation before execution: " + tool.Id);
-            }
-
-            var moduleName = GetArgument(command.Arguments, "moduleName", ToolModuleName(tool.Id));
-            var macroName = GetArgument(command.Arguments, "macroName", string.Empty);
-            if (dryRun)
-            {
-                return SkillResult.Ok("Dry run: would insert VBA module " + moduleName + (string.IsNullOrWhiteSpace(macroName) ? string.Empty : " and run " + macroName), JsonConvert.SerializeObject(new { moduleName = moduleName, macroName = macroName, code = tool.Code }));
-            }
-
-            var insert = new SkillCommand { SkillId = VbaToolId("insert_vba_module") };
-            insert.Arguments["moduleName"] = moduleName;
-            insert.Arguments["code"] = tool.Code;
-            var insertResult = _adapter.ExecuteSkill(insert);
-            if (!insertResult.Success ||
-                string.IsNullOrWhiteSpace(macroName) ||
-                (insertResult.Message ?? string.Empty).StartsWith("VBA insert was blocked", StringComparison.OrdinalIgnoreCase))
-            {
-                return insertResult;
-            }
-
-            var run = new SkillCommand { SkillId = VbaToolId("run_macro") };
-            run.Arguments["macroName"] = macroName;
-            var runResult = _adapter.ExecuteSkill(run);
-            return SkillResult.Ok("VBA tool executed: " + tool.Id, JsonConvert.SerializeObject(new { insert = insertResult, run = runResult }));
-        }
-
-        private void BackupVbaModuleBeforeReplace(SkillCommand command, IReadOnlyList<SkillDefinition> tools, AppSettings settings)
-        {
-            var moduleName = GetArgument(command.Arguments, "moduleName", string.Empty);
-            if (string.IsNullOrWhiteSpace(moduleName) || GetArgument(command.Arguments, "skipBackup", "false").Equals("true", StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            var read = new SkillCommand { SkillId = VbaToolId("vba_read_module") };
-            read.Arguments["moduleName"] = moduleName;
-            read.Arguments["maxChars"] = Math.Max(settings.VbaContextCharLimit, 30000);
-            var existing = _adapter.ExecuteSkill(read);
-            if (!existing.Success || string.IsNullOrWhiteSpace(existing.DataJson))
-            {
-                return;
-            }
-
-            try
-            {
-                var data = JObject.Parse(existing.DataJson);
-                var code = (string)data["code"];
-                var componentType = (string)data["type"];
-                if (code != null)
-                {
-                    _vbaBackupStore.Save(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle, moduleName, componentType, code);
-                }
-            }
-            catch (JsonException)
-            {
-            }
-        }
-
-        private SkillResult RestoreVbaBackup(SkillCommand command, IReadOnlyList<SkillDefinition> tools, AppSettings settings, bool dryRun, bool manualRun)
-        {
-            var backupId = GetArgument(command.Arguments, "backupId", string.Empty);
-            var moduleName = GetArgument(command.Arguments, "moduleName", string.Empty);
-            var backup = _vbaBackupStore.Find(_adapter.HostName, _adapter.DocumentKey, backupId, moduleName);
-            if (backup == null)
-            {
-                return SkillResult.Fail("VBA backup not found.");
-            }
-
-            if (dryRun)
-            {
-                return SkillResult.Ok("Dry run: would restore VBA backup " + backup.BackupId, JsonConvert.SerializeObject(backup));
-            }
-
-            var replace = new SkillCommand { SkillId = VbaToolId("vba_replace_module") };
-            replace.Arguments["moduleName"] = backup.ModuleName;
-            replace.Arguments["code"] = backup.Code;
-            replace.Arguments["createIfMissing"] = "true";
-            var result = ExecuteCommand(replace, tools, settings, 0, false, manualRun);
-            return result.Success
-                ? SkillResult.Ok("VBA backup restored: " + backup.BackupId, JsonConvert.SerializeObject(new { backup = backup, restore = result }))
-                : result;
-        }
-
-        private SkillResult ReplaceVbaText(SkillCommand command, IReadOnlyList<SkillDefinition> tools, AppSettings settings, bool dryRun, bool manualRun)
-        {
-            var moduleName = GetArgument(command.Arguments, "moduleName", string.Empty);
-            var find = GetArgument(command.Arguments, "find", string.Empty);
-            var replace = GetArgument(command.Arguments, "replace", string.Empty);
-            if (string.IsNullOrWhiteSpace(moduleName) || string.IsNullOrEmpty(find))
-            {
-                return SkillResult.Fail("moduleName and find are required.");
-            }
-
-            string code;
-            SkillResult error;
-            if (!TryReadVbaModuleCode(moduleName, out code, out error))
-            {
-                return error;
-            }
-
-            var replacements = CountOccurrences(code, find);
-            if (replacements == 0)
-            {
-                return SkillResult.Fail("Text fragment was not found in VBA module: " + moduleName);
-            }
-
-            var updated = code.Replace(find, replace ?? string.Empty);
-            var preview = JsonConvert.SerializeObject(new
-            {
-                moduleName = moduleName,
-                replacements = replacements,
-                oldLength = code.Length,
-                newLength = updated.Length
-            });
-            if (dryRun)
-            {
-                return SkillResult.Ok("Dry run: would patch VBA module " + moduleName + " (" + replacements + " replacement(s)).", preview);
-            }
-
-            var write = new SkillCommand { SkillId = VbaToolId("vba_replace_module") };
-            write.Arguments["moduleName"] = moduleName;
-            write.Arguments["code"] = updated;
-            write.Arguments["createIfMissing"] = "true";
-            var result = ExecuteCommand(write, tools, settings, 0, false, manualRun);
-            return result.Success
-                ? SkillResult.Ok("VBA text replaced in " + moduleName + ": " + replacements + " replacement(s).", preview)
-                : result;
-        }
-
-        private SkillResult ApplyVbaPatch(SkillCommand command, IReadOnlyList<SkillDefinition> tools, AppSettings settings, bool dryRun, bool manualRun)
-        {
-            var moduleName = GetArgument(command.Arguments, "moduleName", string.Empty);
-            if (string.IsNullOrWhiteSpace(moduleName))
-            {
-                return SkillResult.Fail("moduleName is required.");
-            }
-
-            JArray operations;
-            try
-            {
-                operations = ParsePatchOperations(GetArgument(command.Arguments, "patch", string.Empty));
-            }
-            catch (JsonException ex)
-            {
-                return SkillResult.Fail("Invalid patch JSON: " + ex.Message);
-            }
-
-            if (operations.Count == 0)
-            {
-                return SkillResult.Fail("Patch has no operations.");
-            }
-
-            string code;
-            SkillResult error;
-            if (!TryReadVbaModuleCode(moduleName, out code, out error))
-            {
-                return error;
-            }
-
-            var updated = code;
-            var summary = new List<object>();
-            foreach (JObject operation in operations.OfType<JObject>())
-            {
-                var result = ApplyPatchOperation(updated, operation, out updated);
-                if (!result.Success)
-                {
-                    return result;
-                }
-
-                summary.Add(new { op = (string)(operation["op"] ?? operation["type"]), message = result.Message });
-            }
-            if (summary.Count != operations.Count)
-            {
-                return SkillResult.Fail("Each patch operation must be a JSON object.");
-            }
-
-            var preview = JsonConvert.SerializeObject(new
-            {
-                moduleName = moduleName,
-                operations = summary,
-                oldLength = code.Length,
-                newLength = updated.Length
-            });
-            if (dryRun)
-            {
-                return SkillResult.Ok("Dry run: would apply VBA patch to " + moduleName + ".", preview);
-            }
-
-            var write = new SkillCommand { SkillId = VbaToolId("vba_replace_module") };
-            write.Arguments["moduleName"] = moduleName;
-            write.Arguments["code"] = updated;
-            write.Arguments["createIfMissing"] = "true";
-            var writeResult = ExecuteCommand(write, tools, settings, 0, false, manualRun);
-            return writeResult.Success
-                ? SkillResult.Ok("VBA patch applied to " + moduleName + ".", preview)
-                : writeResult;
-        }
-
-        private bool TryReadVbaModuleCode(string moduleName, out string code, out SkillResult error)
-        {
-            code = string.Empty;
-            error = null;
-            var read = new SkillCommand { SkillId = VbaToolId("vba_read_module") };
-            read.Arguments["moduleName"] = moduleName;
-            read.Arguments["maxChars"] = 1000000;
-            var current = _adapter.ExecuteSkill(read);
-            if (!current.Success || string.IsNullOrWhiteSpace(current.DataJson))
-            {
-                error = current.Success ? SkillResult.Fail("VBA module returned no code.") : current;
-                return false;
-            }
-
-            try
-            {
-                code = (string)JObject.Parse(current.DataJson)["code"] ?? string.Empty;
-            }
-            catch (JsonException ex)
-            {
-                error = SkillResult.Fail("Could not parse VBA module data: " + ex.Message);
-                return false;
-            }
-
-            if (code.EndsWith("\n...[truncated]", StringComparison.Ordinal))
-            {
-                error = SkillResult.Fail("VBA module is too large for a safe patch.");
-                return false;
-            }
-
-            return true;
-        }
-
-        private static object ResolvePipelineValue(JToken token, IDictionary<string, object> inputArgs, IDictionary<string, SkillResult> stepResults)
-        {
-            var value = token.Type == JTokenType.String
-                ? token.Value<string>()
-                : token.ToString(Formatting.None);
-
-            return ReplacePlaceholders(value, inputArgs, stepResults);
-        }
-
-        private static Dictionary<string, object> ParseArguments(string argumentsJson)
-        {
-            var result = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            if (string.IsNullOrWhiteSpace(argumentsJson))
-            {
-                return result;
-            }
-
-            try
-            {
-                var args = JObject.Parse(argumentsJson);
-                foreach (var property in args.Properties())
-                {
-                    result[property.Name] = property.Value.Type == JTokenType.String
-                        ? (object)property.Value.Value<string>()
-                        : property.Value.ToString(Formatting.None);
-                }
-            }
-            catch (JsonException)
-            {
-            }
-
-            return result;
-        }
-
-        private static JArray ParsePatchOperations(string patchJson)
-        {
-            if (string.IsNullOrWhiteSpace(patchJson))
-            {
-                return new JArray();
-            }
-
-            var token = JToken.Parse(patchJson);
-            if (token.Type == JTokenType.Array)
-            {
-                return (JArray)token;
-            }
-
-            return new JArray(token);
-        }
-
-        private static SkillResult ApplyPatchOperation(string current, JObject operation, out string updated)
-        {
-            updated = current;
-            var op = ((string)(operation["op"] ?? operation["type"]) ?? string.Empty).Trim();
-            var find = (string)(operation["find"] ?? operation["anchor"]);
-            var text = (string)(operation["text"] ?? operation["replace"] ?? operation["code"]) ?? string.Empty;
-            switch (op.ToLowerInvariant())
-            {
-                case "replace":
-                case "replaceall":
-                    if (string.IsNullOrEmpty(find))
-                    {
-                        return SkillResult.Fail("Patch replace requires find.");
-                    }
-
-                    var count = CountOccurrences(current, find);
-                    if (count == 0)
-                    {
-                        return SkillResult.Fail("Patch find text was not found.");
-                    }
-
-                    updated = current.Replace(find, text);
-                    return SkillResult.Ok("Replaced " + count + " occurrence(s).");
-                case "replacefirst":
-                    return ReplaceAtMatch(current, find, text, out updated);
-                case "insertbefore":
-                    return ReplaceAtMatch(current, find, text + find, out updated);
-                case "insertafter":
-                    return ReplaceAtMatch(current, find, find + text, out updated);
-                case "replacelines":
-                    return ReplaceLines(current, operation, text, out updated);
-                default:
-                    return SkillResult.Fail("Unsupported patch op: " + op);
-            }
-        }
-
-        private static SkillResult ReplaceAtMatch(string current, string find, string replacement, out string updated)
-        {
-            updated = current;
-            if (string.IsNullOrEmpty(find))
-            {
-                return SkillResult.Fail("Patch operation requires find.");
-            }
-
-            var index = current.IndexOf(find, StringComparison.Ordinal);
-            if (index < 0)
-            {
-                return SkillResult.Fail("Patch find text was not found.");
-            }
-
-            updated = current.Substring(0, index) + replacement + current.Substring(index + find.Length);
-            return SkillResult.Ok("Patched first occurrence.");
-        }
-
-        private static SkillResult ReplaceLines(string current, JObject operation, string text, out string updated)
-        {
-            updated = current;
-            var startLine = (int?)operation["startLine"] ?? 0;
-            var deleteCount = (int?)operation["deleteCount"] ?? 0;
-            if (startLine <= 0 || deleteCount < 0)
-            {
-                return SkillResult.Fail("replaceLines requires startLine >= 1 and deleteCount >= 0.");
-            }
-
-            var newline = current.IndexOf("\r\n", StringComparison.Ordinal) >= 0 ? "\r\n" : "\n";
-            var lines = current.Replace("\r\n", "\n").Split('\n').ToList();
-            var index = startLine - 1;
-            if (index > lines.Count)
-            {
-                return SkillResult.Fail("replaceLines startLine is outside the module.");
-            }
-
-            var remove = Math.Min(deleteCount, lines.Count - index);
-            if (remove > 0)
-            {
-                lines.RemoveRange(index, remove);
-            }
-
-            if (!string.IsNullOrEmpty(text))
-            {
-                lines.InsertRange(index, text.Replace("\r\n", "\n").Split('\n'));
-            }
-
-            updated = string.Join(newline, lines.ToArray());
-            return SkillResult.Ok("Replaced lines at " + startLine + " deleting " + deleteCount + ".");
-        }
-
-        private static string GetArgument(IDictionary<string, object> args, string name, string fallback)
-        {
-            object value;
-            return args != null && args.TryGetValue(name, out value) && value != null
-                ? Convert.ToString(value)
-                : fallback;
-        }
-
-        private static string ToolModuleName(string toolId)
-        {
-            return "RNAssistant_" + Regex.Replace(toolId ?? "Tool", "[^A-Za-z0-9_]", "_");
-        }
-
-        private string VbaToolId(string suffix)
-        {
-            return HostToolPrefix() + "." + suffix;
-        }
-
-        private string HostToolPrefix()
-        {
-            return (_adapter.HostName ?? string.Empty).ToLowerInvariant();
-        }
-
-        private bool HostSupportsVba()
-        {
-            return string.Equals(_adapter.HostName, "Excel", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(_adapter.HostName, "Word", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(_adapter.HostName, "PowerPoint", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool IsMutationTool(string toolId)
-        {
-            return EndsWithTool(toolId, ".write_range") ||
-                EndsWithTool(toolId, ".write_table") ||
-                EndsWithTool(toolId, ".add_chart") ||
-                EndsWithTool(toolId, ".add_sheet") ||
-                EndsWithTool(toolId, ".insert_text") ||
-                EndsWithTool(toolId, ".replace_selection") ||
-                EndsWithTool(toolId, ".add_comment") ||
-                EndsWithTool(toolId, ".add_slide") ||
-                EndsWithTool(toolId, ".replace_selection_text") ||
-                EndsWithTool(toolId, ".draft_reply") ||
-                EndsWithTool(toolId, ".vba_replace_module") ||
-                EndsWithTool(toolId, ".vba_replace_text") ||
-                EndsWithTool(toolId, ".vba_apply_patch") ||
-                EndsWithTool(toolId, ".vba_restore_backup") ||
-                EndsWithTool(toolId, ".insert_vba_module") ||
-                EndsWithTool(toolId, ".run_macro");
-        }
-
-        private static bool CanAgentRunBuiltInMutation(string toolId, SkillDefinition customTool, AppSettings settings)
-        {
-            return settings != null &&
-                settings.AgentModeEnabled != false &&
-                customTool == null &&
-                !IsVbaMutationTool(toolId);
-        }
-
-        private static bool IsVbaMutationTool(string toolId)
-        {
-            return EndsWithTool(toolId, ".vba_replace_module") ||
-                EndsWithTool(toolId, ".vba_replace_text") ||
-                EndsWithTool(toolId, ".vba_apply_patch") ||
-                EndsWithTool(toolId, ".vba_restore_backup") ||
-                EndsWithTool(toolId, ".insert_vba_module") ||
-                EndsWithTool(toolId, ".run_macro");
-        }
-
-        private static bool EndsWithTool(string toolId, string suffix)
-        {
-            return (toolId ?? string.Empty).EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool ShouldForceAgentToolUse(string text, string host)
-        {
-            var value = (text ?? string.Empty).ToLowerInvariant();
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return false;
-            }
-
-            var action = Regex.IsMatch(value, "(создай|создать|сделай|построй|сгенерируй|заполни|вставь|замени|измени|добавь|нарисуй|create|make|add|insert|replace|update|write|generate|build|chart)");
-            if (!action)
-            {
-                return false;
-            }
-
-            return Regex.IsMatch(value, "(лист|таблиц|диапазон|ячейк|график|диаграмм|sheet|table|range|cell|chart|slide|слайд|document|документ|selection|выдел|mail|email|письм)");
-        }
-
-        private static bool CanRetryToolError(SkillResult result)
-        {
-            var message = result == null ? string.Empty : result.Message ?? string.Empty;
-            return message.IndexOf("requires confirmation", StringComparison.OrdinalIgnoreCase) < 0 &&
-                message.IndexOf("Auto tool execution is disabled", StringComparison.OrdinalIgnoreCase) < 0;
-        }
-
-        private static int CountOccurrences(string value, string find)
-        {
-            var count = 0;
-            var index = 0;
-            while ((index = value.IndexOf(find, index, StringComparison.Ordinal)) >= 0)
-            {
-                count++;
-                index += find.Length;
-            }
-
-            return count;
-        }
-
-        private static string ReplacePlaceholders(string value, IDictionary<string, object> inputArgs, IDictionary<string, SkillResult> stepResults)
-        {
-            if (string.IsNullOrEmpty(value))
-            {
-                return value;
-            }
-
-            return Regex.Replace(value, "\\{\\{\\s*([^}]+)\\s*\\}\\}", match =>
-            {
-                var key = match.Groups[1].Value.Trim();
-                if (key.StartsWith("args.", StringComparison.OrdinalIgnoreCase))
-                {
-                    object arg;
-                    return inputArgs != null && inputArgs.TryGetValue(key.Substring(5), out arg) && arg != null
-                        ? Convert.ToString(arg)
-                        : string.Empty;
-                }
-
-                if (key.StartsWith("steps.", StringComparison.OrdinalIgnoreCase))
-                {
-                    var parts = key.Split('.');
-                    SkillResult step;
-                    if (parts.Length >= 3 && stepResults != null && stepResults.TryGetValue(parts[1], out step))
-                    {
-                        if (string.Equals(parts[2], "message", StringComparison.OrdinalIgnoreCase))
-                        {
-                            return step.Message ?? string.Empty;
-                        }
-
-                        if (string.Equals(parts[2], "dataJson", StringComparison.OrdinalIgnoreCase))
-                        {
-                            return step.DataJson ?? string.Empty;
-                        }
-
-                        if (string.Equals(parts[2], "success", StringComparison.OrdinalIgnoreCase))
-                        {
-                            return step.Success ? "true" : "false";
-                        }
-                    }
-                }
-
-                return match.Value;
-            });
-        }
-
-        private static List<ChatMessage> BuildPromptMessages(string systemPrompt, string contextPrompt, IEnumerable<ChatMessage> sessionMessages, int charLimit)
-        {
-            var result = new List<ChatMessage> { new ChatMessage { Role = "system", Content = systemPrompt } };
-            if (!string.IsNullOrWhiteSpace(contextPrompt))
-            {
-                result.Add(new ChatMessage { Role = "user", Content = contextPrompt });
-            }
-
-            var history = new List<ChatMessage>();
-            var remaining = Math.Max(4000, charLimit);
-            foreach (var message in sessionMessages.Reverse())
-            {
-                if (string.IsNullOrEmpty(message.Content))
-                {
-                    continue;
-                }
-
-                remaining -= message.Content.Length;
-                if (remaining < 0)
-                {
-                    break;
-                }
-
-                history.Insert(0, message);
-            }
-
-            result.AddRange(history);
-            return result;
-        }
-
-        private static object CreateContextUsage(IEnumerable<ChatMessage> promptMessages, AppSettings settings)
-        {
-            var limit = Math.Max(4000, settings == null ? 24000 : settings.ContextCharLimit);
-            var used = 0;
-            var count = 0;
-            if (promptMessages != null)
-            {
-                foreach (var message in promptMessages)
-                {
-                    if (message == null)
-                    {
-                        continue;
-                    }
-
-                    used += (message.Content ?? string.Empty).Length;
-                    count += 1;
-                }
-            }
-
-            return new
-            {
-                usedChars = used,
-                limitChars = limit,
-                percent = limit <= 0 ? 0 : Math.Min(100, (int)Math.Round(used * 100.0 / limit)),
-                messageCount = count,
-                actual = true
-            };
-        }
-
-        private static object EstimateContextUsage(ChatSession session, AppSettings settings)
-        {
-            var limit = Math.Max(4000, settings == null ? 24000 : settings.ContextCharLimit);
-            var used = 0;
-            var count = 0;
-            if (session != null && session.Messages != null)
-            {
-                foreach (var message in session.Messages)
-                {
-                    if (message == null)
-                    {
-                        continue;
-                    }
-
-                    used += (message.Content ?? string.Empty).Length;
-                    count += 1;
-                }
-            }
-            if (session != null && session.Context != null && session.Context.Notes != null)
-            {
-                foreach (var note in session.Context.Notes)
-                {
-                    if (note == null)
-                    {
-                        continue;
-                    }
-
-                    used += (note.Text ?? note.Preview ?? string.Empty).Length;
-                }
-            }
-
-            return new
-            {
-                usedChars = used,
-                limitChars = limit,
-                percent = limit <= 0 ? 0 : Math.Min(100, (int)Math.Round(used * 100.0 / limit)),
-                messageCount = count,
-                actual = false
-            };
         }
 
         private static void ReportProgress(Action<string, string> progress, string phase, string message)

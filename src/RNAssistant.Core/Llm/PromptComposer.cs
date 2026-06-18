@@ -22,7 +22,7 @@ namespace RNAssistant.Core.Llm
             builder.AppendLine("Agent mode: " + (settings.AgentModeEnabled != false ? "enabled" : "disabled"));
             builder.AppendLine("Auto-run local tool blocks: " + (settings.AutoRunToolCalls != false ? "enabled" : "disabled"));
             builder.AppendLine("Auto-confirm tool actions: " + (settings.AutoConfirmToolActions ? "enabled" : "disabled"));
-            builder.AppendLine("Native API tool_calls are not available. Local Office actions are executed only when you return parseable RNAssistant JSON in text.");
+            builder.AppendLine("Do not rely on native API tool_calls. Local Office actions are executed through parseable RNAssistant JSON in text; compatibility conversion exists only for endpoints that return tool_calls anyway.");
             if (settings.AgentModeEnabled != false)
             {
                 builder.AppendLine("When the user asks to inspect, create, edit, transform, format, insert, replace, calculate, chart, summarize from the document, or otherwise act on Office content, you MUST use available tools instead of only explaining.");

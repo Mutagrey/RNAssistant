@@ -1952,36 +1952,57 @@
     }
   }
 
+  function applyInitState(init) {
+    state.host = init.host;
+    state.title = init.title;
+    state.settings = init.settings || {};
+    state.tools = init.tools || [];
+    state.toolsPath = init.toolsPath || "";
+    state.context = init.context || {};
+    state.contextUsage = init.contextUsage || {};
+    state.activeChatId = init.activeChatId || "";
+    state.activeChatModel = init.activeChatModel || "";
+    state.chats = init.chats || [];
+    state.messages = init.messages || [];
+    $("docLine").textContent = init.host + " - " + init.title;
+    $("toolsPath").textContent = state.toolsPath ? "Storage: " + state.toolsPath : "";
+    renderSettings();
+    renderTools();
+    renderContext(true);
+    renderChatSessions();
+    renderMessages();
+    renderContextMeter();
+    log("Initialized " + init.host);
+    loadModelCatalog(false);
+    if (init.quickAction) {
+      runQuickAction(init.quickAction);
+    }
+  }
+
   async function initialize() {
     setActivity("loading", "Загружаю состояние...");
     try {
       var init = await send("init");
-      state.host = init.host;
-      state.title = init.title;
-      state.settings = init.settings || {};
-      state.tools = init.tools || [];
-      state.toolsPath = init.toolsPath || "";
-      state.context = init.context || {};
-      state.contextUsage = init.contextUsage || {};
-      state.activeChatId = init.activeChatId || "";
-      state.activeChatModel = init.activeChatModel || "";
-      state.chats = init.chats || [];
-      state.messages = init.messages || [];
-      $("docLine").textContent = init.host + " - " + init.title;
-      $("toolsPath").textContent = state.toolsPath ? "Storage: " + state.toolsPath : "";
-      renderSettings();
-      renderTools();
-      renderContext(true);
-      renderChatSessions();
-      renderMessages();
-      renderContextMeter();
-      log("Initialized " + init.host);
-      loadModelCatalog(false);
-      if (init.quickAction) {
-        runQuickAction(init.quickAction);
-      }
+      applyInitState(init);
     } catch (error) {
       log(error.message);
+    } finally {
+      clearActivity();
+    }
+  }
+
+  async function clearRuntimeData() {
+    if (!window.confirm("Delete all local chats, chat context, VBA backups, and WebView cache for RNAssistant? Settings, API key, and custom tools will stay.")) {
+      return;
+    }
+
+    setActivity("clearing", "Очищаю локальные данные...");
+    try {
+      var init = await send("clearRuntimeData", {});
+      applyInitState(init);
+      log("Runtime data cleared.");
+    } catch (error) {
+      log(error.detail || error.message);
     } finally {
       clearActivity();
     }
@@ -2149,6 +2170,7 @@
         log(error.message);
       }
     });
+    $("clearRuntimeDataButton").addEventListener("click", clearRuntimeData);
 
     $("addToolButton").addEventListener("click", function () {
       syncSelectedToolFromEditor();

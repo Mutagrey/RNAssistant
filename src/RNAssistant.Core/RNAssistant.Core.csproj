@@ -41,6 +41,7 @@
     <Compile Include="Models\SkillModels.cs" />
     <Compile Include="Models\VbaModels.cs" />
     <Compile Include="Llm\LlmClient.cs" />
+    <Compile Include="Llm\PromptMessageBuilder.cs" />
     <Compile Include="Llm\PromptComposer.cs" />
     <Compile Include="Skills\SkillCommandParser.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
