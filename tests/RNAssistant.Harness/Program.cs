@@ -41,6 +41,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "parser: native tool_calls", Run = ParsesNativeToolCalls },
                 new HarnessTest { Name = "parser: noisy embedded json", Run = ParsesNoisyEmbeddedJson },
                 new HarnessTest { Name = "parser: bad json skipped", Run = SkipsBadJson },
+                new HarnessTest { Name = "parser: recovers malformed agent json", Run = RecoversMalformedAgentJson },
                 new HarnessTest { Name = "storage: chat roundtrip", Run = CreatesAndListsChatsInTempRoot },
                 new HarnessTest { Name = "storage: broken chat skipped", Run = SkipsBrokenChatFiles },
                 new HarnessTest { Name = "pipeline: dry-run resolves placeholders", Run = PipelineDryRunResolvesPlaceholders },
@@ -57,12 +58,14 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "tools: safety metadata gates mutations", Run = ToolSafetyMetadataGatesMutations },
                 new HarnessTest { Name = "tools: confirmation matrix covers dry and manual runs", Run = ConfirmationMatrixCoversDryAndManualRuns },
                 new HarnessTest { Name = "vba: replace text backs up module", Run = VbaReplaceTextBacksUpModule },
+                new HarnessTest { Name = "vba: apply patch targets named module", Run = VbaApplyPatchTargetsNamedModule },
                 new HarnessTest { Name = "prompt: trims oldest history", Run = PromptBuilderTrimsOldestHistory },
                 new HarnessTest { Name = "prompt: usage estimator counts context", Run = ContextUsageEstimatorCountsPromptAndSession },
                 new HarnessTest { Name = "chat: completion service records prose", Run = ChatCompletionServiceRecordsProseResponse },
                 new HarnessTest { Name = "chat: executes typical host tasks", Run = ChatExecutesTypicalHostTasks },
                 new HarnessTest { Name = "chat: agent activity transcript", Run = AgentTranscriptCreatesActivityTree },
                 new HarnessTest { Name = "chat: prose action forces tool follow-up", Run = ChatProseActionForcesToolFollowUp },
+                new HarnessTest { Name = "chat: malformed action response forces repair", Run = ChatMalformedActionResponseForcesRepair },
                 new HarnessTest { Name = "chat: failed tool retries corrected call", Run = ChatFailedToolRetriesCorrectedCall },
                 new HarnessTest { Name = "chat: auto-run disabled records failure", Run = ChatAutoRunDisabledRecordsLocalFailure },
                 new HarnessTest { Name = "chat: malformed tool response stays prose", Run = ChatMalformedToolResponseStaysProse },
@@ -154,6 +157,18 @@ namespace RNAssistant.Harness
         {
             var commands = new SkillCommandParser().Parse("```rnassistant-agent\n{\"steps\":[\n```");
             AssertEqual(0, commands.Count, "command count");
+        }
+
+        private static void RecoversMalformedAgentJson()
+        {
+            var result = new SkillCommandParser().ParseWithDiagnostics(
+                "```rnassistant-agent\n" +
+                "{\"steps\":[{\"skillId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"},}\n```");
+
+            AssertEqual(1, result.Commands.Count, "command count");
+            AssertEqual("excel.add_sheet", result.Commands[0].SkillId, "skill id");
+            AssertEqual("Report", result.Commands[0].Arguments["name"], "sheet name");
+            AssertTrue(result.HasRecoveredCommands, "recovery diagnostic");
         }
 
         private static void CreatesAndListsChatsInTempRoot()
@@ -427,6 +442,31 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaApplyPatchTargetsNamedModule()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                adapter.SetVbaModule("Module1", "Sub Main()\nDebug.Print \"untouched\"\nEnd Sub", "StdModule");
+                adapter.SetVbaModule("Module2", "Sub Run()\nDebug.Print \"old\"\nEnd Sub", "StdModule");
+                var backupStore = new VbaBackupStore(paths);
+                var executor = new OfficeToolExecutor(adapter, backupStore);
+                var command = new SkillCommand { SkillId = executor.VbaToolId("vba_apply_patch") };
+                command.Arguments["moduleName"] = "Module2";
+                command.Arguments["patch"] = "[{\"op\":\"replaceFirst\",\"find\":\"\\\"old\\\"\",\"text\":\"\\\"new\\\"\"}]";
+
+                var result = executor.Execute(command, new List<SkillDefinition>(adapter.GetBuiltInSkills()), new AppSettings { AutoConfirmToolActions = true }, false, false);
+
+                AssertTrue(result.Success, "patch result");
+                AssertContains(adapter.GetVbaModuleCode("Module2"), "\"new\"", "module2 updated");
+                AssertContains(adapter.GetVbaModuleCode("Module1"), "\"untouched\"", "module1 untouched");
+                var backups = backupStore.List("Excel", "doc");
+                AssertEqual(1, backups.Count, "backup count");
+                AssertEqual("Module2", backups[0].ModuleName, "backup module");
+                AssertContains(backups[0].Code, "\"old\"", "backup code");
+            });
+        }
+
         private static void PromptBuilderTrimsOldestHistory()
         {
             var messages = PromptMessageBuilder.Build(
@@ -627,6 +667,36 @@ namespace RNAssistant.Harness
                 AssertEqual("Done.", result.AssistantText, "assistant text");
                 AssertEqual(3, calls.Count, "llm call count");
                 AssertTrue(ContainsMessage(calls[1], "prose-only answer is not acceptable"), "forced follow-up prompt");
+                AssertEqual(1, adapter.Executed.Count, "adapter execution count");
+                AssertEqual("excel.add_sheet", adapter.Executed[0].SkillId, "executed tool");
+            });
+        }
+
+        private static void ChatMalformedActionResponseForcesRepair()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    "```rnassistant-agent\n{\"steps\":[\n```",
+                    AgentBlock(Command("excel.add_sheet", "name", "Report")),
+                    "Done.");
+                var session = NewSession(adapter);
+
+                var result = service.ExecuteAsync(
+                    "Create a new sheet named Report.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000 },
+                    new List<SkillDefinition>(adapter.GetBuiltInSkills()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Done.", result.AssistantText, "assistant text");
+                AssertEqual(3, calls.Count, "llm call count");
+                AssertTrue(ContainsMessage(calls[1], "could not recover executable JSON"), "repair prompt");
                 AssertEqual(1, adapter.Executed.Count, "adapter execution count");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].SkillId, "executed tool");
             });
@@ -1215,8 +1285,8 @@ namespace RNAssistant.Harness
         private sealed class FakeOfficeAdapter : IOfficeApplicationAdapter
         {
             public readonly List<SkillCommand> Executed = new List<SkillCommand>();
-            public string VbaModuleCode = string.Empty;
             public string VbaModuleType = "StdModule";
+            public readonly List<string> RanMacros = new List<string>();
             public bool FailUnknownSkills { get; set; }
 
             private readonly string _hostName;
@@ -1224,6 +1294,13 @@ namespace RNAssistant.Harness
             private readonly string _documentSnapshot;
             private readonly List<SkillDefinition> _builtInSkills;
             private readonly Dictionary<string, Queue<SkillResult>> _scriptedResults;
+            private readonly Dictionary<string, FakeVbaModule> _vbaModules;
+
+            public string VbaModuleCode
+            {
+                get { return GetVbaModuleCode("Module1"); }
+                set { SetVbaModule("Module1", value, VbaModuleType); }
+            }
 
             public FakeOfficeAdapter()
                 : this("Excel", "Harness.xlsx", ExcelBuiltIns(), "Harness document")
@@ -1237,6 +1314,7 @@ namespace RNAssistant.Harness
                 _documentSnapshot = documentSnapshot;
                 _builtInSkills = new List<SkillDefinition>((builtInSkills ?? new SkillDefinition[0]).Select(CloneSkill));
                 _scriptedResults = new Dictionary<string, Queue<SkillResult>>(StringComparer.OrdinalIgnoreCase);
+                _vbaModules = new Dictionary<string, FakeVbaModule>(StringComparer.OrdinalIgnoreCase);
             }
 
             public static FakeOfficeAdapter ForHost(string host)
@@ -1272,7 +1350,7 @@ namespace RNAssistant.Harness
 
             public string GetVbaSnapshot(int maxChars)
             {
-                return string.Empty;
+                return string.Join("\n", _vbaModules.Values.Select(module => module.Name + " (" + module.Type + "): " + module.Code.Length + " chars").ToArray());
             }
 
             public void PrepareForContextCapture()
@@ -1301,6 +1379,25 @@ namespace RNAssistant.Harness
                 queue.Enqueue(result);
             }
 
+            public void SetVbaModule(string moduleName, string code, string type)
+            {
+                var name = string.IsNullOrWhiteSpace(moduleName) ? "Module1" : moduleName;
+                _vbaModules[name] = new FakeVbaModule
+                {
+                    Name = name,
+                    Code = code ?? string.Empty,
+                    Type = string.IsNullOrWhiteSpace(type) ? "StdModule" : type
+                };
+            }
+
+            public string GetVbaModuleCode(string moduleName)
+            {
+                FakeVbaModule module;
+                return _vbaModules.TryGetValue(string.IsNullOrWhiteSpace(moduleName) ? "Module1" : moduleName, out module)
+                    ? module.Code
+                    : string.Empty;
+            }
+
             public SkillResult ExecuteSkill(SkillCommand command)
             {
                 Executed.Add(Clone(command));
@@ -1312,18 +1409,32 @@ namespace RNAssistant.Harness
 
                 if ((command.SkillId ?? string.Empty).EndsWith(".vba_read_module", StringComparison.OrdinalIgnoreCase))
                 {
-                    return SkillResult.Ok("read " + command.SkillId, JsonConvert.SerializeObject(new { code = VbaModuleCode, type = VbaModuleType }));
+                    var moduleName = Argument(command, "moduleName", "Module1");
+                    FakeVbaModule module;
+                    if (!_vbaModules.TryGetValue(moduleName, out module))
+                    {
+                        return SkillResult.Fail("VBA module not found: " + moduleName);
+                    }
+
+                    return SkillResult.Ok("read " + command.SkillId, JsonConvert.SerializeObject(new { name = module.Name, code = module.Code, type = module.Type }));
                 }
 
                 if ((command.SkillId ?? string.Empty).EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase))
                 {
-                    object code;
-                    if (command.Arguments.TryGetValue("code", out code))
-                    {
-                        VbaModuleCode = Convert.ToString(code);
-                    }
-
+                    SetVbaModule(Argument(command, "moduleName", "Module1"), Argument(command, "code", string.Empty), VbaModuleType);
                     return SkillResult.Ok("replaced " + command.SkillId);
+                }
+
+                if ((command.SkillId ?? string.Empty).EndsWith(".insert_vba_module", StringComparison.OrdinalIgnoreCase))
+                {
+                    SetVbaModule(Argument(command, "moduleName", "Module1"), Argument(command, "code", string.Empty), VbaModuleType);
+                    return SkillResult.Ok("inserted " + command.SkillId);
+                }
+
+                if ((command.SkillId ?? string.Empty).EndsWith(".run_macro", StringComparison.OrdinalIgnoreCase))
+                {
+                    RanMacros.Add(Argument(command, "macroName", string.Empty));
+                    return SkillResult.Ok("ran " + command.SkillId);
                 }
 
                 if (FailUnknownSkills && !IsKnownSkill(command.SkillId))
@@ -1332,6 +1443,14 @@ namespace RNAssistant.Harness
                 }
 
                 return SkillResult.Ok("executed " + command.SkillId, JsonConvert.SerializeObject(new { host = HostName, skillId = command.SkillId }));
+            }
+
+            private static string Argument(SkillCommand command, string name, string fallback)
+            {
+                object value;
+                return command != null && command.Arguments != null && command.Arguments.TryGetValue(name, out value) && value != null
+                    ? Convert.ToString(value)
+                    : fallback;
             }
 
             private bool TryDequeueResult(string skillId, out SkillResult result)
@@ -1459,6 +1578,13 @@ namespace RNAssistant.Harness
                     clone.Arguments[pair.Key] = pair.Value;
                 }
                 return clone;
+            }
+
+            private sealed class FakeVbaModule
+            {
+                public string Name { get; set; }
+                public string Code { get; set; }
+                public string Type { get; set; }
             }
         }
     }

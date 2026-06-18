@@ -84,12 +84,15 @@ namespace RNAssistant.Office.Services
                 assistantText = completion.Content ?? string.Empty;
 
                 ReportProgress(progress, "processing", "Разбираю ответ...");
-                var commands = _commandParser.Parse(assistantText).ToList();
+                var parseResult = _commandParser.ParseWithDiagnostics(assistantText);
+                var commands = parseResult.Commands.ToList();
                 if (commands.Count == 0)
                 {
                     if (iteration == 0 && settings.AgentModeEnabled != false && AgentTranscript.ShouldForceAgentToolUse(text, _adapter.HostName))
                     {
-                        followUpPrompt = "You are in RNAssistant Agent mode. The user asked for an Office action, so a prose-only answer is not acceptable. Return only one ```rnassistant-agent fenced JSON block with executable steps using available tools. If a tool is missing, say that plainly instead of inventing one.";
+                        followUpPrompt = parseResult.HasProtocolDiagnostics
+                            ? "Your previous response contained an RNAssistant tool block, but the local parser could not recover executable JSON. Return only one corrected ```rnassistant-agent fenced JSON block with executable steps using available tools. No prose."
+                            : "You are in RNAssistant Agent mode. The user asked for an Office action, so a prose-only answer is not acceptable. Return only one ```rnassistant-agent fenced JSON block with executable steps using available tools. If a tool is missing, say that plainly instead of inventing one.";
                         continue;
                     }
                     session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, completion));
