@@ -30,6 +30,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Contracts\IOfficeApplicationAdapter.cs" Link="Office\Contracts\IOfficeApplicationAdapter.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Agent\AgentTranscript.cs" Link="Office\Agent\AgentTranscript.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatCompletionService.cs" Link="Office\Services\ChatCompletionService.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Services\ContextService.cs" Link="Office\Services\ContextService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ToolCatalogService.cs" Link="Office\Services\ToolCatalogService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Skills\SkillArgumentReader.cs" Link="Office\Skills\SkillArgumentReader.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\OfficeToolExecutor.cs" Link="Office\Tools\OfficeToolExecutor.cs" />

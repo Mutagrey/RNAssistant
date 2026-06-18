@@ -35,7 +35,7 @@ web static UI
 - `src/RNAssistant.Office/Runtime`: add-in runtime helpers that are host-neutral.
 - `src/RNAssistant.Office/Vba`: shared VBA project support.
 - `src/RNAssistant.Office/Agent`: agent transcript/plan formatting and retry policy.
-- `src/RNAssistant.Office/Services`: host-neutral application services used by controller orchestration, such as tool catalog composition and chat completion flow.
+- `src/RNAssistant.Office/Services`: host-neutral application services used by controller orchestration, such as tool catalog composition, context normalization, and chat completion flow.
 - `src/RNAssistant.Office/Tools`: tool execution, pipelines, VBA patch/backup workflow.
 - `src/RNAssistant.*AddIn`: host adapters and VSTO wiring.
 - `web`: static HTML/CSS/JS task pane. `web/js/app-core.js` owns state and WebView bridge wiring; `app-settings.js`, `app-tools.js`, `app-vba.js`, `app-context.js`, and `app-chat.js` own their feature flows; `app-utils.js` owns pure browser helpers; `app.js` is boot plus shared rendering helpers.
@@ -69,6 +69,7 @@ Current coverage:
 - confirmation gates for custom tools and Agent Mode built-in mutations;
 - tool catalog service merge/filter behavior;
 - prompt message trimming, context usage estimates, and basic no-network chat completion flow;
+- context normalization/upsert/trim behavior;
 - no Office COM dependency.
 
 Next harness coverage:

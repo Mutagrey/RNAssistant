@@ -38,7 +38,9 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "tools: catalog merges visible tools", Run = ToolCatalogMergesVisibleTools },
                 new HarnessTest { Name = "prompt: trims oldest history", Run = PromptBuilderTrimsOldestHistory },
                 new HarnessTest { Name = "prompt: usage estimator counts context", Run = ContextUsageEstimatorCountsPromptAndSession },
-                new HarnessTest { Name = "chat: completion service records prose", Run = ChatCompletionServiceRecordsProseResponse }
+                new HarnessTest { Name = "chat: completion service records prose", Run = ChatCompletionServiceRecordsProseResponse },
+                new HarnessTest { Name = "context: normalize and upsert", Run = ContextServiceNormalizesAndUpserts },
+                new HarnessTest { Name = "context: trim helper", Run = ContextServiceTrimsText }
             };
 
             var failed = 0;
@@ -340,6 +342,69 @@ namespace RNAssistant.Harness
                 AssertEqual("hello world", session.Title, "session title");
                 AssertTrue(ContainsMessage(capturedMessages, "User-added context attachments"), "context prompt captured");
             });
+        }
+
+        private static void ContextServiceNormalizesAndUpserts()
+        {
+            var adapter = new FakeOfficeAdapter();
+            var service = new ContextService(adapter);
+            var session = new ChatSession
+            {
+                Host = "Excel",
+                DocumentKey = "doc",
+                DocumentTitle = "Harness.xlsx",
+                Title = "Chat title",
+                Context = new DocumentContext { Notes = null }
+            };
+
+            var context = service.LoadContext(session);
+            AssertEqual("Excel", context.Host, "context host");
+            AssertEqual("doc", context.DocumentKey, "context document key");
+            AssertEqual("Chat title", context.Title, "context title");
+            AssertTrue(context.Notes != null, "notes initialized");
+
+            var note = new ContextNote
+            {
+                Id = "",
+                Host = "",
+                Kind = "",
+                Title = "",
+                Reference = "A1",
+                Source = "",
+                Text = "first",
+                Preview = "",
+                DetailsJson = "{\"range\":\"A1\"}"
+            };
+            service.NormalizeContextNote(note, "selection");
+            ContextService.UpsertContextNote(context, note);
+            AssertEqual(1, context.Notes.Count, "note count after insert");
+            AssertEqual("Excel", context.Notes[0].Host, "note host");
+            AssertEqual("selection", context.Notes[0].Kind, "note kind");
+            AssertEqual("Harness.xlsx", context.Notes[0].Title, "note title");
+            AssertEqual("A1", context.Notes[0].Source, "note source");
+
+            var replacement = new ContextNote
+            {
+                Host = "Excel",
+                Kind = "selection",
+                Title = "Changed",
+                Reference = "A1",
+                Source = "A1",
+                Text = "second",
+                Preview = "second",
+                DetailsJson = "{\"range\":\"A1\"}"
+            };
+            ContextService.UpsertContextNote(context, replacement);
+            AssertEqual(1, context.Notes.Count, "note count after update");
+            AssertEqual("Changed", context.Notes[0].Title, "updated note title");
+            AssertEqual("second", context.Notes[0].Text, "updated note text");
+        }
+
+        private static void ContextServiceTrimsText()
+        {
+            AssertEqual("abc", ContextService.TrimForContext("abc", 10), "short trim");
+            AssertEqual("abc\n...[truncated]", ContextService.TrimForContext("abcdef", 3), "long trim");
+            AssertEqual(string.Empty, ContextService.TrimForContext(null, 3), "null trim");
         }
 
         private static SkillDefinition CustomTool(string host, string id)

@@ -24,6 +24,7 @@ namespace RNAssistant.Office
         private readonly OfficeToolExecutor _toolExecutor;
         private readonly ToolCatalogService _toolCatalog;
         private readonly ChatCompletionService _chatCompletionService;
+        private readonly ContextService _contextService;
         private readonly LlmClient _llmClient;
         private readonly object _syncRoot;
         private string _queuedQuickAction;
@@ -44,6 +45,7 @@ namespace RNAssistant.Office
             _toolCatalog = new ToolCatalogService(_adapter, _toolExecutor, _toolStore);
             _llmClient = new LlmClient(() => _settingsService.LoadApiKey());
             _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, _llmClient.CompleteAsync);
+            _contextService = new ContextService(_adapter);
             _syncRoot = new object();
         }
 

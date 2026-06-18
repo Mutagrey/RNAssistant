@@ -16,7 +16,7 @@ RNAssistant - локальный VSTO/WebView2 ассистент для Office,
 
 ## Правила изменений
 
-- Не раздувай `Controller/AssistantController.cs`: orchestration only. Chat/session code - `Controller/AssistantController.Chats.cs`, context - `Controller/AssistantController.Context.cs`, catalogs/services - `Services`, execution - `Tools/OfficeToolExecutor.cs`.
+- Не раздувай `Controller/AssistantController.cs`: orchestration only. Chat/session bridge methods - `Controller/AssistantController.Chats.cs`, context bridge methods - `Controller/AssistantController.Context.cs`, reusable logic - `Services`, execution - `Tools/OfficeToolExecutor.cs`.
 - Не добавляй новые responsibilities в VSTO add-ins. Если код не зависит от конкретного Office host, он должен быть в `Core` или `Office`.
 - Не меняй `*.Designer.cs` и VSTO project metadata без необходимости.
 - Не запускай VSTO/Office validation на этой машине: здесь нет рабочей VSTO-среды. Для COM/VSTO изменений фиксируй, что нужна проверка на Windows + Office x64 + VS 2022.
