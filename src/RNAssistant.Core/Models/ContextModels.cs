@@ -21,14 +21,21 @@ namespace RNAssistant.Core.Models
 
     public sealed class ContextNote
     {
+        public string Id { get; set; }
+        public string Host { get; set; }
+        public string Kind { get; set; }
+        public string Title { get; set; }
+        public string Reference { get; set; }
         public string Source { get; set; }
         public string Text { get; set; }
+        public string Preview { get; set; }
+        public string DetailsJson { get; set; }
         public DateTime CreatedUtc { get; set; }
 
         public ContextNote()
         {
+            Id = Guid.NewGuid().ToString("N");
             CreatedUtc = DateTime.UtcNow;
         }
     }
 }
-

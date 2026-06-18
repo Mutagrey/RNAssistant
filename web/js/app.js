@@ -5,7 +5,9 @@
     settings: {},
     tools: [],
     context: {},
+    contextUsage: {},
     messages: [],
+    failedSend: null,
     selectedToolIndex: -1,
     toolsPath: "",
     vba: { modules: [], backups: [], selectedModule: "" },
@@ -32,6 +34,12 @@
       if (active && active !== document.body && typeof active.blur === "function") {
         active.blur();
       }
+    },
+    refreshContext: function () {
+      refreshContext();
+    },
+    runQuickAction: function (action) {
+      runQuickAction(action);
     }
   };
 
@@ -128,20 +136,140 @@
     return DOMPurify.sanitize(marked.parse(text || ""));
   }
 
+  function messageValue(message, pascal, camel, fallback) {
+    message = message || {};
+    return message[pascal] !== undefined ? message[pascal] : (message[camel] !== undefined ? message[camel] : fallback);
+  }
+
+  function messageId(message) {
+    return messageValue(message, "Id", "id", "");
+  }
+
+  function messageRole(message) {
+    return messageValue(message, "Role", "role", "assistant") || "assistant";
+  }
+
+  function messageContent(message) {
+    return messageValue(message, "Content", "content", "") || "";
+  }
+
+  function messageTotalTokens(message) {
+    return messageValue(message, "TotalTokens", "totalTokens", null);
+  }
+
+  function messagePromptTokens(message) {
+    return messageValue(message, "PromptTokens", "promptTokens", null);
+  }
+
+  function messageCompletionTokens(message) {
+    return messageValue(message, "CompletionTokens", "completionTokens", null);
+  }
+
+  function iconSvg(name) {
+    var icons = {
+      copy: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"9\" y=\"9\" width=\"13\" height=\"13\" rx=\"2\"/><path d=\"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\"/></svg>",
+      trash: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 6h18\"/><path d=\"M8 6V4h8v2\"/><path d=\"M19 6l-1 14H6L5 6\"/><path d=\"M10 11v5\"/><path d=\"M14 11v5\"/></svg>",
+      retry: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M20 6v5h-5\"/><path d=\"M4 18v-5h5\"/><path d=\"M6.1 9A7 7 0 0 1 18.2 6.8L20 11\"/><path d=\"M17.9 15A7 7 0 0 1 5.8 17.2L4 13\"/></svg>",
+      eye: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/></svg>",
+      eyeOff: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 3l18 18\"/><path d=\"M10.6 10.6A3 3 0 0 0 13.4 13.4\"/><path d=\"M9.9 5.2A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a17.9 17.9 0 0 1-3.2 4.2\"/><path d=\"M6.1 6.6C3.4 8.4 2 12 2 12s3.5 7 10 7a10.6 10.6 0 0 0 4.1-.8\"/></svg>"
+    };
+    return icons[name] || "";
+  }
+
+  function smallIconButton(title, icon, onClick) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "message-action";
+    button.title = title;
+    button.setAttribute("aria-label", title);
+    button.innerHTML = iconSvg(icon);
+    button.addEventListener("click", onClick);
+    return button;
+  }
+
+  function messageUsageText(message) {
+    var total = messageTotalTokens(message);
+    var prompt = messagePromptTokens(message);
+    var completion = messageCompletionTokens(message);
+    if (total === null && prompt === null && completion === null) {
+      return "";
+    }
+
+    var parts = [];
+    if (total !== null && total !== undefined) {
+      parts.push(total + " tokens");
+    }
+    if (prompt !== null && prompt !== undefined) {
+      parts.push("in " + prompt);
+    }
+    if (completion !== null && completion !== undefined) {
+      parts.push("out " + completion);
+    }
+    return parts.join(" · ");
+  }
+
+  function renderLatex(root) {
+    if (!window.renderMathInElement) {
+      return;
+    }
+
+    try {
+      window.renderMathInElement(root, {
+        delimiters: [
+          { left: "$$", right: "$$", display: true },
+          { left: "\\[", right: "\\]", display: true },
+          { left: "\\(", right: "\\)", display: false },
+          { left: "$", right: "$", display: false }
+        ],
+        ignoredTags: ["script", "noscript", "style", "textarea", "pre", "code"],
+        throwOnError: false
+      });
+    } catch (error) {
+      logOnce("LaTeX render failed: " + (error.message || error));
+    }
+  }
+
   function renderMessages() {
     var box = $("messages");
     box.innerHTML = "";
-    state.messages.forEach(function (message) {
+    state.messages.forEach(function (message, index) {
       var node = document.createElement("article");
-      node.className = "message " + (message.Role || message.role || "");
+      node.className = "message " + messageRole(message) + (message.Pending ? " pending" : "") + (message.Failed ? " failed" : "");
+
+      var head = document.createElement("div");
+      head.className = "message-head";
+
       var role = document.createElement("div");
       role.className = "role";
-      role.textContent = message.Role || message.role || "assistant";
+      role.textContent = messageRole(message);
+
+      var actions = document.createElement("div");
+      actions.className = "message-actions";
+      actions.appendChild(smallIconButton("Copy message", "copy", function () {
+        copyText(messageContent(message));
+        log("Message copied.");
+      }));
+      actions.appendChild(smallIconButton("Delete message", "trash", function () {
+        deleteMessage(message, index);
+      }));
+
+      head.appendChild(role);
+      head.appendChild(actions);
+
       var body = document.createElement("div");
       body.className = "markdown";
-      body.innerHTML = markdown(message.Content || message.content || "");
-      node.appendChild(role);
+      body.innerHTML = markdown(messageContent(message));
+      node.appendChild(head);
       node.appendChild(body);
+
+      var usage = messageUsageText(message);
+      if (usage || message.Pending || message.Failed) {
+        var meta = document.createElement("div");
+        meta.className = "message-meta";
+        meta.textContent = message.Failed ? "Not sent" : (message.Pending ? "Sending..." : usage);
+        node.appendChild(meta);
+      }
+
       box.appendChild(node);
       enhanceMarkdown(body);
     });
@@ -170,15 +298,17 @@
       }
       var toggle = document.createElement("button");
       toggle.type = "button";
-      toggle.textContent = "Hide code";
+      toggle.className = "block-tool-button";
+      toggle.innerHTML = iconSvg("eyeOff") + "<span>Hide</span>";
       toggle.addEventListener("click", function () {
         var hidden = pre.style.display === "none";
         pre.style.display = hidden ? "" : "none";
-        toggle.textContent = hidden ? "Hide code" : "Show code";
+        toggle.innerHTML = iconSvg(hidden ? "eyeOff" : "eye") + "<span>" + (hidden ? "Hide" : "Show") + "</span>";
       });
       var copy = document.createElement("button");
       copy.type = "button";
-      copy.textContent = "Copy code";
+      copy.className = "block-tool-button";
+      copy.innerHTML = iconSvg("copy") + "<span>Copy</span>";
       copy.addEventListener("click", function () {
         copyText(code ? code.textContent : pre.innerText);
       });
@@ -199,15 +329,17 @@
       tools.className = "block-tools";
       var toggle = document.createElement("button");
       toggle.type = "button";
-      toggle.textContent = "Hide table";
+      toggle.className = "block-tool-button";
+      toggle.innerHTML = iconSvg("eyeOff") + "<span>Hide</span>";
       toggle.addEventListener("click", function () {
         var hidden = table.style.display === "none";
         table.style.display = hidden ? "" : "none";
-        toggle.textContent = hidden ? "Hide table" : "Show table";
+        toggle.innerHTML = iconSvg(hidden ? "eyeOff" : "eye") + "<span>" + (hidden ? "Hide" : "Show") + "</span>";
       });
       var copy = document.createElement("button");
       copy.type = "button";
-      copy.textContent = "Copy table";
+      copy.className = "block-tool-button";
+      copy.innerHTML = iconSvg("copy") + "<span>Copy</span>";
       copy.addEventListener("click", function () {
         copyText(table.innerText);
       });
@@ -217,6 +349,8 @@
       wrap.appendChild(tools);
       wrap.appendChild(table);
     });
+
+    renderLatex(root);
   }
 
   function detectCodeLanguage(code) {
@@ -753,8 +887,220 @@
     $("chatInput").focus();
   }
 
+  function contextNotes() {
+    var context = state.context || {};
+    return (context.Notes || context.notes || []).filter(function (note) { return !!note; });
+  }
+
+  function noteValue(note, pascal, camel, fallback) {
+    note = note || {};
+    return note[pascal] || note[camel] || fallback || "";
+  }
+
+  function noteTitle(note) {
+    return noteValue(note, "Title", "title", noteValue(note, "Source", "source", "Context"));
+  }
+
+  function noteReference(note) {
+    return noteValue(note, "Reference", "reference", noteValue(note, "Source", "source", ""));
+  }
+
+  function notePreview(note) {
+    return noteValue(note, "Preview", "preview", noteValue(note, "Text", "text", ""));
+  }
+
+  function noteKind(note) {
+    return noteValue(note, "Kind", "kind", "context");
+  }
+
+  function noteDetails(note) {
+    return noteValue(note, "DetailsJson", "detailsJson", "");
+  }
+
+  function noteHost(note) {
+    return noteValue(note, "Host", "host", state.host || "");
+  }
+
+  function noteId(note) {
+    return noteValue(note, "Id", "id", "");
+  }
+
+  function hostBadge(note) {
+    var host = noteHost(note).toLowerCase();
+    if (host.indexOf("excel") >= 0) {
+      return "XL";
+    }
+    if (host.indexOf("word") >= 0) {
+      return "W";
+    }
+    if (host.indexOf("powerpoint") >= 0) {
+      return "PPT";
+    }
+    if (host.indexOf("outlook") >= 0) {
+      return "Mail";
+    }
+    return "Ctx";
+  }
+
+  function createRemoveContextButton(note) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "context-chip-remove";
+    button.title = "Remove context";
+    button.setAttribute("aria-label", "Remove context");
+    button.innerHTML = "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/></svg>";
+    button.addEventListener("click", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      removeContextItem(noteId(note));
+    });
+    return button;
+  }
+
+  function appendContextPopover(chip, note) {
+    var popover = document.createElement("div");
+    popover.className = "context-popover";
+
+    var title = document.createElement("div");
+    title.className = "context-popover-title";
+    title.textContent = noteTitle(note);
+
+    var meta = document.createElement("div");
+    meta.className = "context-popover-meta";
+    meta.textContent = noteHost(note) + " - " + noteKind(note) + (noteReference(note) ? " - " + noteReference(note) : "");
+
+    var preview = document.createElement("div");
+    preview.className = "context-popover-preview";
+    preview.textContent = notePreview(note) || "No preview.";
+
+    popover.appendChild(title);
+    popover.appendChild(meta);
+    popover.appendChild(preview);
+    if (noteDetails(note)) {
+      var details = document.createElement("div");
+      details.className = "context-popover-details";
+      details.textContent = noteDetails(note);
+      popover.appendChild(details);
+    }
+    chip.appendChild(popover);
+  }
+
+  function renderContextChips(notes) {
+    var strip = $("contextStrip");
+    var chips = $("contextChips");
+    chips.innerHTML = "";
+    strip.classList.toggle("hidden", notes.length === 0);
+
+    notes.forEach(function (note) {
+      var chip = document.createElement("div");
+      chip.className = "context-chip";
+      chip.tabIndex = 0;
+
+      var main = document.createElement("div");
+      main.className = "context-chip-main";
+
+      var badge = document.createElement("span");
+      badge.className = "context-chip-badge";
+      badge.textContent = hostBadge(note);
+
+      var title = document.createElement("span");
+      title.className = "context-chip-title";
+      title.textContent = noteTitle(note);
+
+      main.appendChild(badge);
+      main.appendChild(title);
+      chip.appendChild(main);
+      chip.appendChild(createRemoveContextButton(note));
+      appendContextPopover(chip, note);
+      chips.appendChild(chip);
+    });
+  }
+
+  function renderContextList(notes) {
+    var list = $("contextList");
+    var summary = $("contextSummary");
+    list.innerHTML = "";
+    summary.textContent = notes.length
+      ? notes.length + " context attachment(s) will be included in the next model request."
+      : "No user-added context. Add a selection from the Office right-click menu or the composer button.";
+
+    notes.forEach(function (note) {
+      var card = document.createElement("article");
+      card.className = "context-card";
+
+      var head = document.createElement("div");
+      head.className = "context-card-head";
+
+      var text = document.createElement("div");
+      var title = document.createElement("div");
+      title.className = "context-card-title";
+      title.textContent = noteTitle(note);
+
+      var meta = document.createElement("div");
+      meta.className = "context-card-meta";
+      meta.textContent = noteHost(note) + " - " + noteKind(note) + (noteReference(note) ? " - " + noteReference(note) : "");
+
+      text.appendChild(title);
+      text.appendChild(meta);
+      head.appendChild(text);
+
+      var remove = createRemoveContextButton(note);
+      remove.classList.add("secondary");
+      head.appendChild(remove);
+
+      var preview = document.createElement("div");
+      preview.className = "context-card-preview";
+      preview.textContent = notePreview(note) || "No preview.";
+
+      card.appendChild(head);
+      card.appendChild(preview);
+      list.appendChild(card);
+    });
+  }
+
   function renderContext() {
+    var notes = contextNotes();
+    renderContextChips(notes);
+    renderContextList(notes);
     $("contextBox").textContent = JSON.stringify(state.context || {}, null, 2);
+    updateEstimatedContextUsage();
+    renderContextMeter();
+  }
+
+  async function refreshContext() {
+    try {
+      state.context = await send("getContext");
+      renderContext();
+    } catch (error) {
+      log(error.detail || error.message);
+    }
+  }
+
+  async function addSelectionContext(mode) {
+    setActivity("context", "Добавляю выделение в контекст...");
+    try {
+      state.context = await send("addSelectionContext", { mode: mode || "full" });
+      renderContext();
+      log("Selection added to context.");
+    } catch (error) {
+      log(error.detail || error.message);
+    } finally {
+      clearActivity();
+    }
+  }
+
+  async function removeContextItem(id) {
+    if (!id) {
+      return;
+    }
+
+    try {
+      state.context = await send("removeContextItem", { id: id });
+      renderContext();
+      log("Context item removed.");
+    } catch (error) {
+      log(error.detail || error.message);
+    }
   }
 
   function logToolResult(prefix, toolId, result) {
@@ -769,6 +1115,113 @@
     });
   }
 
+  function formatNumber(value) {
+    value = Number(value || 0);
+    return value.toLocaleString ? value.toLocaleString() : String(value);
+  }
+
+  function lastTokenUsageText() {
+    for (var i = state.messages.length - 1; i >= 0; i -= 1) {
+      var total = messageTotalTokens(state.messages[i]);
+      if (total !== null && total !== undefined) {
+        return " · last " + total + " tokens";
+      }
+    }
+    return "";
+  }
+
+  function renderContextMeter() {
+    var usage = state.contextUsage || {};
+    var used = Number(usage.usedChars || usage.UsedChars || 0);
+    var limit = Number(usage.limitChars || usage.LimitChars || 0);
+    var percent = Number(usage.percent || usage.Percent || (limit ? Math.round(used * 100 / limit) : 0));
+    var fill = $("contextMeterFill");
+    var value = $("contextMeterValue");
+    var detail = $("contextMeterDetail");
+    if (!fill || !value || !detail) {
+      return;
+    }
+
+    percent = Math.max(0, Math.min(100, percent));
+    fill.style.width = percent + "%";
+    fill.dataset.level = percent >= 90 ? "danger" : (percent >= 70 ? "warn" : "ok");
+    value.textContent = percent + "%";
+    detail.textContent = formatNumber(used) + " / " + formatNumber(limit) + " chars" + (usage.actual || usage.Actual ? "" : " est.") + lastTokenUsageText();
+  }
+
+  function updateEstimatedContextUsage() {
+    var used = 0;
+    state.messages.forEach(function (message) {
+      used += messageContent(message).length;
+    });
+    contextNotes().forEach(function (note) {
+      used += notePreview(note).length;
+    });
+
+    var limit = Number((state.settings && (state.settings.ContextCharLimit || state.settings.contextCharLimit)) || 24000);
+    state.contextUsage = {
+      usedChars: used,
+      limitChars: limit,
+      percent: limit ? Math.min(100, Math.round(used * 100 / limit)) : 0,
+      actual: false
+    };
+  }
+
+  function showSendError(error, text) {
+    state.failedSend = { text: text || "", error: error || "Unknown error" };
+    var box = $("sendError");
+    var message = $("sendErrorText");
+    if (box && message) {
+      message.textContent = state.failedSend.error;
+      box.classList.remove("hidden");
+    }
+  }
+
+  function clearSendError() {
+    state.failedSend = null;
+    var box = $("sendError");
+    if (box) {
+      box.classList.add("hidden");
+    }
+  }
+
+  function markLocalMessage(text, values) {
+    for (var i = state.messages.length - 1; i >= 0; i -= 1) {
+      if (state.messages[i] && state.messages[i].Local && messageContent(state.messages[i]) === text) {
+        Object.keys(values).forEach(function (key) {
+          state.messages[i][key] = values[key];
+        });
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async function deleteMessage(message, index) {
+    if (message && message.Local) {
+      state.messages.splice(index, 1);
+      if (message.Failed) {
+        clearSendError();
+      }
+      updateEstimatedContextUsage();
+      renderMessages();
+      renderContextMeter();
+      return;
+    }
+
+    try {
+      var response = await send("deleteMessage", { id: messageId(message), index: index });
+      state.messages = response.messages || state.messages;
+      state.contextUsage = response.contextUsage || state.contextUsage;
+      renderMessages();
+      renderContextMeter();
+      log("Message deleted.");
+    } catch (error) {
+      showSendError(error.detail || error.message, state.failedSend ? state.failedSend.text : "");
+      log(error.detail || error.message);
+    }
+  }
+
   async function initialize() {
     setActivity("loading", "Загружаю состояние...");
     try {
@@ -779,6 +1232,7 @@
       state.tools = init.tools || [];
       state.toolsPath = init.toolsPath || "";
       state.context = init.context || {};
+      state.contextUsage = init.contextUsage || {};
       state.messages = init.messages || [];
       $("docLine").textContent = init.host + " - " + init.title;
       $("toolsPath").textContent = state.toolsPath ? "Storage: " + state.toolsPath : "";
@@ -786,6 +1240,7 @@
       renderTools();
       renderContext();
       renderMessages();
+      renderContextMeter();
       log("Initialized " + init.host);
       if (init.quickAction) {
         runQuickAction(init.quickAction);
@@ -804,11 +1259,17 @@
     try {
       var response = await send("sendChat", { text: text });
       state.messages = response.messages || state.messages;
+      state.contextUsage = response.contextUsage || state.contextUsage;
+      clearSendError();
       renderMessages();
+      renderContextMeter();
       if (response.skillResults && response.skillResults.length) {
         logSkillResults(response.skillResults);
       }
     } catch (error) {
+      markLocalMessage(text, { Pending: false, Failed: true });
+      renderMessages();
+      showSendError(error.detail || error.message, text);
       log(error.message);
       if (error.detail && error.detail !== error.message) {
         log(error.detail);
@@ -831,8 +1292,25 @@
     }
 
     $("chatInput").value = "";
-    state.messages.push({ Role: "user", Content: text });
+    clearSendError();
+    state.messages.push({ Id: "local-" + Date.now(), Role: "user", Content: text, Local: true, Pending: true });
+    updateEstimatedContextUsage();
     renderMessages();
+    renderContextMeter();
+    sendChat(text);
+  }
+
+  function retryFailedSend() {
+    if (!state.failedSend || !state.failedSend.text) {
+      return;
+    }
+
+    markLocalMessage(state.failedSend.text, { Pending: true, Failed: false });
+    updateEstimatedContextUsage();
+    renderMessages();
+    renderContextMeter();
+    var text = state.failedSend.text;
+    clearSendError();
     sendChat(text);
   }
 
@@ -869,6 +1347,9 @@
     });
 
     $("refreshButton").addEventListener("click", initialize);
+    $("openContextTabButton").addEventListener("click", function () { switchTab("context"); });
+    $("addSelectionContextButton").addEventListener("click", function () { addSelectionContext("full"); });
+    $("retrySendButton").addEventListener("click", retryFailedSend);
     $("refreshVbaButton").addEventListener("click", refreshVbaProject);
     $("vbaModuleSelect").addEventListener("change", renderSelectedVbaModule);
     $("previewVbaDiffButton").addEventListener("click", previewVbaDiff);
@@ -894,6 +1375,8 @@
         state.settings = response.settings;
         $("apiKeyInput").value = "";
         renderSettings();
+        updateEstimatedContextUsage();
+        renderContextMeter();
         log("Settings saved.");
       } catch (error) {
         log(error.message);

@@ -5,6 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RN Assistant</title>
+  <link rel="stylesheet" href="css/vendor/katex.min.css">
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/app.css">
 </head>
@@ -16,8 +17,12 @@
         <div class="docline" id="docLine">Loading...</div>
       </div>
       <div class="top-actions">
-        <button class="icon-button secondary" id="helpButton" title="How it works">?</button>
-        <button class="icon-button" id="refreshButton" title="Refresh">R</button>
+        <button class="icon-button secondary" id="helpButton" title="How it works" aria-label="How it works">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.6 9.1a2.7 2.7 0 1 1 4.7 1.8c-.9.8-1.8 1.4-1.8 2.9"/><path d="M12 17.5h.01"/><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+        </button>
+        <button class="icon-button" id="refreshButton" title="Refresh" aria-label="Refresh">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M6.1 9A7 7 0 0 1 18.2 6.8L20 11"/><path d="M17.9 15A7 7 0 0 1 5.8 17.2L4 13"/></svg>
+        </button>
       </div>
     </header>
 
@@ -39,10 +44,44 @@
       <section class="panel active" id="tab-chat">
         <div class="messages" id="messages"></div>
         <form class="composer" id="chatForm">
-          <textarea id="chatInput" rows="4" placeholder="Ask about the current document..."></textarea>
+          <div class="context-strip hidden" id="contextStrip">
+            <div class="context-strip-head">
+              <span>Context</span>
+              <button type="button" class="link-button" id="openContextTabButton">Manage</button>
+            </div>
+            <div class="context-chips" id="contextChips"></div>
+          </div>
+          <div class="send-error hidden" id="sendError" role="alert">
+            <div>
+              <div class="send-error-title">Message was not sent</div>
+              <div class="send-error-text" id="sendErrorText"></div>
+            </div>
+            <button type="button" class="secondary icon-text-button" id="retrySendButton">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M6.1 9A7 7 0 0 1 18.2 6.8L20 11"/><path d="M17.9 15A7 7 0 0 1 5.8 17.2L4 13"/></svg>
+              <span>Retry</span>
+            </button>
+          </div>
+          <div class="composer-toolbar">
+            <div class="context-meter" id="contextMeter">
+              <span>Context</span>
+              <strong id="contextMeterValue">0%</strong>
+              <div class="context-meter-track"><div id="contextMeterFill"></div></div>
+              <em id="contextMeterDetail">0 / 0 chars</em>
+            </div>
+            <button type="button" class="secondary icon-text-button" id="addSelectionContextButton" title="Add current Office selection to context">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+              <span>Add selection</span>
+            </button>
+          </div>
+          <textarea id="chatInput" rows="3" placeholder="Ask about the current document..."></textarea>
           <div class="composer-actions">
-            <button type="button" class="secondary" id="clearInputButton">Clear</button>
-            <button type="submit" id="sendButton">Send</button>
+            <button type="button" class="icon-button secondary" id="clearInputButton" title="Clear input" aria-label="Clear input">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+            <button type="submit" class="icon-text-button primary" id="sendButton">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4 20-7Z"/><path d="M22 2 11 13"/></svg>
+              <span>Send</span>
+            </button>
           </div>
         </form>
       </section>
@@ -114,7 +153,12 @@
         <div class="toolbar">
           <button class="danger" id="clearContextButton">Clear Context</button>
         </div>
-        <pre class="json-box" id="contextBox">{}</pre>
+        <div class="context-summary" id="contextSummary"></div>
+        <div class="context-list" id="contextList"></div>
+        <details class="context-json">
+          <summary>Raw JSON</summary>
+          <pre class="json-box" id="contextBox">{}</pre>
+        </details>
       </section>
 
       <section class="panel" id="tab-settings">
@@ -149,7 +193,9 @@
     <div class="modal-panel">
       <div class="modal-head">
         <h2 id="helpTitle">How RNAssistant tools work</h2>
-        <button class="icon-button secondary" id="closeHelpButton" title="Close">X</button>
+        <button class="icon-button secondary" id="closeHelpButton" title="Close" aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
       </div>
       <div class="help-content">
         <section>
@@ -179,6 +225,8 @@
 
   <script src="js/vendor/purify.min.js"></script>
   <script src="js/vendor/marked.min.js"></script>
+  <script src="js/vendor/katex.min.js"></script>
+  <script src="js/vendor/auto-render.min.js"></script>
   <script src="js/vendor/highlight.min.js"></script>
   <script src="js/app.js"></script>
 </body>

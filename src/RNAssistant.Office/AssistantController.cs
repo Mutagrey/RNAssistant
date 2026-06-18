@@ -58,6 +58,7 @@ namespace RNAssistant.Office
                 toolsPath = _paths.ToolsDirectory,
                 context = LoadContext(),
                 messages = session.Messages,
+                contextUsage = EstimateContextUsage(session, _settingsService.Load()),
                 quickAction = DequeueQuickAction()
             };
             return JsonConvert.SerializeObject(state);
@@ -67,7 +68,8 @@ namespace RNAssistant.Office
         {
             if (string.IsNullOrWhiteSpace(text))
             {
-                return JsonConvert.SerializeObject(new { message = string.Empty, skillResults = new SkillResult[0], messages = LoadSession().Messages });
+                var emptySession = LoadSession();
+                return JsonConvert.SerializeObject(new { message = string.Empty, skillResults = new SkillResult[0], messages = emptySession.Messages, contextUsage = EstimateContextUsage(emptySession, _settingsService.Load()) });
             }
 
             ReportProgress(progress, "context", "Читаю документ...");
@@ -76,6 +78,7 @@ namespace RNAssistant.Office
             session.Messages.Add(new ChatMessage { Role = "user", Content = text });
 
             var tools = GetVisibleTools().Where(s => s.Enabled).ToList();
+            var documentContext = LoadContext();
             var vbaSnapshot = settings.IncludeVbaContext
                 ? _adapter.GetVbaSnapshot(settings.VbaContextCharLimit)
                 : string.Empty;
@@ -84,12 +87,15 @@ namespace RNAssistant.Office
                 _adapter.HostName,
                 _adapter.GetDocumentSnapshot(settings.ContextCharLimit),
                 vbaSnapshot,
-                tools);
+                tools,
+                documentContext);
 
             var messages = BuildPromptMessages(systemPrompt, session.Messages, settings.ContextCharLimit);
+            var contextUsage = CreateContextUsage(messages, settings);
             ReportProgress(progress, "thinking", "Модель думает...");
-            var assistantText = await _llmClient.CompleteAsync(settings, messages);
-            var assistantMessage = new ChatMessage { Role = "assistant", Content = assistantText };
+            var completion = await _llmClient.CompleteAsync(settings, messages);
+            var assistantText = completion.Content ?? string.Empty;
+            var assistantMessage = CreateAssistantMessage(assistantText, completion);
             session.Messages.Add(assistantMessage);
 
             ReportProgress(progress, "processing", "Разбираю ответ...");
@@ -116,7 +122,30 @@ namespace RNAssistant.Office
 
             ReportProgress(progress, "saving", "Сохраняю историю...");
             _chatStore.Save(session);
-            return JsonConvert.SerializeObject(new { message = assistantText, skillResults = resultLog, messages = session.Messages });
+            return JsonConvert.SerializeObject(new { message = assistantText, skillResults = resultLog, messages = session.Messages, contextUsage = contextUsage });
+        }
+
+        public string DeleteMessageJson(string id, int index)
+        {
+            var session = LoadSession();
+            var removed = false;
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                removed = session.Messages.RemoveAll(m => m != null && string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase)) > 0;
+            }
+
+            if (!removed && index >= 0 && index < session.Messages.Count)
+            {
+                session.Messages.RemoveAt(index);
+                removed = true;
+            }
+
+            if (removed)
+            {
+                _chatStore.Save(session);
+            }
+
+            return JsonConvert.SerializeObject(new { messages = session.Messages, contextUsage = EstimateContextUsage(session, _settingsService.Load()) });
         }
 
         public string GetSettingsJson()
@@ -215,6 +244,43 @@ namespace RNAssistant.Office
             return JsonConvert.SerializeObject(LoadContext());
         }
 
+        public string AddSelectionContextJson(string mode)
+        {
+            return JsonConvert.SerializeObject(AddSelectionContext(mode));
+        }
+
+        public DocumentContext AddSelectionContext(string mode)
+        {
+            var settings = _settingsService.Load();
+            var context = LoadContext();
+            if (context.Notes == null)
+            {
+                context.Notes = new List<ContextNote>();
+            }
+            var note = _adapter.CaptureSelectionContext(mode, Math.Min(Math.Max(1000, settings.ContextCharLimit), 12000));
+            if (note == null)
+            {
+                throw new InvalidOperationException("No selectable Office context was found.");
+            }
+
+            NormalizeContextNote(note, mode);
+            context.Notes.Add(note);
+            _contextStore.Save(context);
+            return context;
+        }
+
+        public string RemoveContextItemJson(string id)
+        {
+            var context = LoadContext();
+            if (context.Notes != null && !string.IsNullOrWhiteSpace(id))
+            {
+                context.Notes.RemoveAll(n => n != null && string.Equals(n.Id, id, StringComparison.OrdinalIgnoreCase));
+                _contextStore.Save(context);
+            }
+
+            return JsonConvert.SerializeObject(context);
+        }
+
         public string ClearContextJson()
         {
             _contextStore.Clear(_adapter.HostName, _adapter.DocumentKey);
@@ -252,6 +318,9 @@ namespace RNAssistant.Office
                 case "context":
                     prompt = "/open-context";
                     break;
+                case "ask-context":
+                    prompt = "Используй добавленный контекст выше как основной объект задачи. Сначала кратко скажи, что именно видишь в контексте, затем ответь на мой вопрос или предложи следующий шаг.";
+                    break;
                 default:
                     prompt = action ?? string.Empty;
                     break;
@@ -278,8 +347,9 @@ namespace RNAssistant.Office
             var repairMessages = BuildPromptMessages(systemPrompt, session.Messages, settings.ContextCharLimit);
             repairMessages.Add(new ChatMessage { Role = "user", Content = repairPrompt });
 
-            var repairText = await _llmClient.CompleteAsync(settings, repairMessages);
-            session.Messages.Add(new ChatMessage { Role = "assistant", Content = repairText });
+            var repairCompletion = await _llmClient.CompleteAsync(settings, repairMessages);
+            var repairText = repairCompletion.Content ?? string.Empty;
+            session.Messages.Add(CreateAssistantMessage(repairText, repairCompletion));
             var retryCommands = _commandParser.Parse(repairText).ToList();
             for (var i = 0; i < retryCommands.Count; i++)
             {
@@ -313,6 +383,19 @@ namespace RNAssistant.Office
             });
         }
 
+        private static ChatMessage CreateAssistantMessage(string content, LlmCompletionResult completion)
+        {
+            return new ChatMessage
+            {
+                Role = "assistant",
+                Content = content ?? string.Empty,
+                PromptTokens = completion == null ? null : completion.PromptTokens,
+                CompletionTokens = completion == null ? null : completion.CompletionTokens,
+                TotalTokens = completion == null ? null : completion.TotalTokens,
+                UsageJson = completion == null ? null : completion.UsageJson
+            };
+        }
+
         private static object DescribeResult(SkillCommand command, SkillResult result)
         {
             return new
@@ -341,7 +424,74 @@ namespace RNAssistant.Office
 
         private DocumentContext LoadContext()
         {
-            return _contextStore.LoadOrCreate(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle);
+            var context = _contextStore.LoadOrCreate(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle);
+            if (string.IsNullOrWhiteSpace(context.Host))
+            {
+                context.Host = _adapter.HostName;
+            }
+            if (string.IsNullOrWhiteSpace(context.DocumentKey))
+            {
+                context.DocumentKey = _adapter.DocumentKey;
+            }
+            if (string.IsNullOrWhiteSpace(context.Title))
+            {
+                context.Title = _adapter.DocumentTitle;
+            }
+            if (context.Notes == null)
+            {
+                context.Notes = new List<ContextNote>();
+            }
+            return context;
+        }
+
+        private void NormalizeContextNote(ContextNote note, string mode)
+        {
+            if (string.IsNullOrWhiteSpace(note.Id))
+            {
+                note.Id = Guid.NewGuid().ToString("N");
+            }
+            if (note.CreatedUtc == default(DateTime))
+            {
+                note.CreatedUtc = DateTime.UtcNow;
+            }
+            if (string.IsNullOrWhiteSpace(note.Host))
+            {
+                note.Host = _adapter.HostName;
+            }
+            if (string.IsNullOrWhiteSpace(note.Kind))
+            {
+                note.Kind = string.Equals(mode, "reference", StringComparison.OrdinalIgnoreCase) ? "reference" : "selection";
+            }
+            if (string.IsNullOrWhiteSpace(note.Title))
+            {
+                note.Title = _adapter.DocumentTitle;
+            }
+            if (string.IsNullOrWhiteSpace(note.Reference))
+            {
+                note.Reference = note.Source ?? _adapter.DocumentTitle;
+            }
+            if (string.IsNullOrWhiteSpace(note.Source))
+            {
+                note.Source = note.Reference;
+            }
+            if (string.IsNullOrWhiteSpace(note.Preview))
+            {
+                note.Preview = TrimForContext(note.Text, 360);
+            }
+            if (string.IsNullOrWhiteSpace(note.Text))
+            {
+                note.Text = note.Preview;
+            }
+        }
+
+        private static string TrimForContext(string text, int maxChars)
+        {
+            if (string.IsNullOrEmpty(text) || text.Length <= maxChars)
+            {
+                return text ?? string.Empty;
+            }
+
+            return text.Substring(0, maxChars) + "\n...[truncated]";
         }
 
         private List<SkillDefinition> GetVisibleTools()
@@ -1050,6 +1200,64 @@ namespace RNAssistant.Office
             }
 
             return result;
+        }
+
+        private static object CreateContextUsage(IEnumerable<ChatMessage> promptMessages, AppSettings settings)
+        {
+            var limit = Math.Max(4000, settings == null ? 24000 : settings.ContextCharLimit);
+            var used = 0;
+            var count = 0;
+            if (promptMessages != null)
+            {
+                foreach (var message in promptMessages)
+                {
+                    if (message == null)
+                    {
+                        continue;
+                    }
+
+                    used += (message.Content ?? string.Empty).Length;
+                    count += 1;
+                }
+            }
+
+            return new
+            {
+                usedChars = used,
+                limitChars = limit,
+                percent = limit <= 0 ? 0 : Math.Min(100, (int)Math.Round(used * 100.0 / limit)),
+                messageCount = count,
+                actual = true
+            };
+        }
+
+        private static object EstimateContextUsage(ChatSession session, AppSettings settings)
+        {
+            var limit = Math.Max(4000, settings == null ? 24000 : settings.ContextCharLimit);
+            var used = 0;
+            var count = 0;
+            if (session != null && session.Messages != null)
+            {
+                foreach (var message in session.Messages)
+                {
+                    if (message == null)
+                    {
+                        continue;
+                    }
+
+                    used += (message.Content ?? string.Empty).Length;
+                    count += 1;
+                }
+            }
+
+            return new
+            {
+                usedChars = used,
+                limitChars = limit,
+                percent = limit <= 0 ? 0 : Math.Min(100, (int)Math.Round(used * 100.0 / limit)),
+                messageCount = count,
+                actual = false
+            };
         }
 
         private static void ReportProgress(Action<string, string> progress, string phase, string message)

@@ -6,7 +6,7 @@ namespace RNAssistant.Core.Llm
 {
     public sealed class PromptComposer
     {
-        public string ComposeSystemPrompt(AppSettings settings, string host, string documentSnapshot, string vbaSnapshot, IEnumerable<SkillDefinition> tools)
+        public string ComposeSystemPrompt(AppSettings settings, string host, string documentSnapshot, string vbaSnapshot, IEnumerable<SkillDefinition> tools, DocumentContext context)
         {
             var builder = new StringBuilder();
             builder.AppendLine(settings.SystemPrompt ?? string.Empty);
@@ -40,6 +40,8 @@ namespace RNAssistant.Core.Llm
                 builder.AppendLine(documentSnapshot);
             }
 
+            AppendUserContext(builder, context);
+
             if (!string.IsNullOrWhiteSpace(vbaSnapshot))
             {
                 builder.AppendLine();
@@ -48,6 +50,60 @@ namespace RNAssistant.Core.Llm
             }
 
             return builder.ToString();
+        }
+
+        private static void AppendUserContext(StringBuilder builder, DocumentContext context)
+        {
+            if (context == null || context.Notes == null || context.Notes.Count == 0)
+            {
+                return;
+            }
+
+            builder.AppendLine();
+            builder.AppendLine("User-added context attachments:");
+            builder.AppendLine("These are explicit references the user added from the Office UI. Treat them as important task context.");
+
+            for (var i = 0; i < context.Notes.Count; i++)
+            {
+                var note = context.Notes[i];
+                if (note == null)
+                {
+                    continue;
+                }
+
+                builder.AppendLine();
+                builder.AppendLine("Attachment " + (i + 1) + ":");
+                builder.AppendLine("- id: " + (note.Id ?? string.Empty));
+                builder.AppendLine("- host: " + FirstNonEmpty(note.Host, context.Host));
+                builder.AppendLine("- kind: " + FirstNonEmpty(note.Kind, "selection"));
+                builder.AppendLine("- title: " + FirstNonEmpty(note.Title, note.Source, "Untitled context"));
+                builder.AppendLine("- reference: " + FirstNonEmpty(note.Reference, note.Source, "n/a"));
+                if (!string.IsNullOrWhiteSpace(note.DetailsJson))
+                {
+                    builder.AppendLine("- details: " + note.DetailsJson);
+                }
+                builder.AppendLine("```text");
+                builder.AppendLine(FirstNonEmpty(note.Text, note.Preview, string.Empty));
+                builder.AppendLine("```");
+            }
+        }
+
+        private static string FirstNonEmpty(params string[] values)
+        {
+            if (values == null)
+            {
+                return string.Empty;
+            }
+
+            foreach (var value in values)
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+
+            return string.Empty;
         }
 
         private static void AppendToolSource(StringBuilder builder, SkillDefinition skill)

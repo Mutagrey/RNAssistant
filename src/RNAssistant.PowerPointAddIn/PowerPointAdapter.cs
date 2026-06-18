@@ -81,6 +81,79 @@ namespace RNAssistant.PowerPointAddIn
             return VbaProjectSupport.GetSnapshot(presentation, presentation.Name, maxChars);
         }
 
+        public ContextNote CaptureSelectionContext(string mode, int maxChars)
+        {
+            var presentation = RequirePresentation();
+            var selection = _application.ActiveWindow == null ? null : _application.ActiveWindow.Selection;
+            if (selection == null)
+            {
+                throw new InvalidOperationException("Select a PowerPoint slide or shape first.");
+            }
+
+            var referenceOnly = string.Equals(mode, "reference", StringComparison.OrdinalIgnoreCase);
+            PowerPoint.Slide slide = null;
+            PowerPoint.Shape shape = null;
+            var text = string.Empty;
+
+            if (selection.Type == PowerPoint.PpSelectionType.ppSelectionShapes && selection.ShapeRange.Count > 0)
+            {
+                shape = selection.ShapeRange[1];
+                slide = shape.Parent as PowerPoint.Slide;
+                if (shape.HasTextFrame == MsoTriState.msoTrue && shape.TextFrame.HasText == MsoTriState.msoTrue)
+                {
+                    text = shape.TextFrame.TextRange.Text;
+                }
+            }
+            else if (selection.Type == PowerPoint.PpSelectionType.ppSelectionSlides && selection.SlideRange.Count > 0)
+            {
+                slide = selection.SlideRange[1];
+                text = ReadSlideText(slide);
+            }
+            else if (_application.ActiveWindow.View != null)
+            {
+                slide = _application.ActiveWindow.View.Slide as PowerPoint.Slide;
+                if (slide != null)
+                {
+                    text = ReadSlideText(slide);
+                }
+            }
+
+            if (slide == null)
+            {
+                throw new InvalidOperationException("Select a PowerPoint slide or shape first.");
+            }
+
+            var reference = "Slide " + slide.SlideIndex + (shape == null ? string.Empty : " / " + shape.Name);
+            if (referenceOnly)
+            {
+                text = "Reference only. Use PowerPoint tools with this slide/shape if exact content is needed.";
+            }
+            else if (string.IsNullOrWhiteSpace(text))
+            {
+                text = "Selected PowerPoint object has no readable text. Use this reference for layout/object tasks.";
+            }
+
+            text = Trim(text, maxChars);
+            return new ContextNote
+            {
+                Host = HostName,
+                Kind = referenceOnly ? "slide-reference" : (shape == null ? "slide" : "shape"),
+                Title = "PowerPoint " + reference,
+                Reference = reference,
+                Source = presentation.Name + " / " + reference,
+                Text = text,
+                Preview = Trim(text, 360),
+                DetailsJson = JsonConvert.SerializeObject(new
+                {
+                    presentation = presentation.Name,
+                    slide = slide.SlideIndex,
+                    shape = shape == null ? string.Empty : shape.Name,
+                    shapeType = shape == null ? string.Empty : shape.Type.ToString(),
+                    mode = referenceOnly ? "reference" : "text"
+                })
+            };
+        }
+
         public SkillResult ExecuteSkill(SkillCommand command)
         {
             try
@@ -209,12 +282,19 @@ namespace RNAssistant.PowerPointAddIn
             {
                 var slide = presentation.Slides[i];
                 builder.AppendLine("Slide " + i + ":");
-                foreach (PowerPoint.Shape shape in slide.Shapes)
+                builder.Append(ReadSlideText(slide));
+            }
+            return builder.ToString();
+        }
+
+        private string ReadSlideText(PowerPoint.Slide slide)
+        {
+            var builder = new StringBuilder();
+            foreach (PowerPoint.Shape shape in slide.Shapes)
+            {
+                if (shape.HasTextFrame == MsoTriState.msoTrue && shape.TextFrame.HasText == MsoTriState.msoTrue)
                 {
-                    if (shape.HasTextFrame == MsoTriState.msoTrue && shape.TextFrame.HasText == MsoTriState.msoTrue)
-                    {
-                        builder.AppendLine(shape.TextFrame.TextRange.Text);
-                    }
+                    builder.AppendLine(shape.TextFrame.TextRange.Text);
                 }
             }
             return builder.ToString();

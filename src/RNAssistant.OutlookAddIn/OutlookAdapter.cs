@@ -77,6 +77,36 @@ namespace RNAssistant.OutlookAddIn
             return string.Empty;
         }
 
+        public ContextNote CaptureSelectionContext(string mode, int maxChars)
+        {
+            var mail = RequireSelectedMail();
+            var referenceOnly = string.Equals(mode, "reference", StringComparison.OrdinalIgnoreCase);
+            var reference = string.IsNullOrWhiteSpace(mail.EntryID) ? mail.Subject : mail.EntryID;
+            var text = referenceOnly
+                ? "Reference only. Use Outlook tools with the selected email if exact body content is needed."
+                : Trim("Subject: " + mail.Subject + "\nFrom: " + mail.SenderName + " <" + mail.SenderEmailAddress + ">\nReceived: " + mail.ReceivedTime + "\n\n" + mail.Body, maxChars);
+
+            return new ContextNote
+            {
+                Host = HostName,
+                Kind = referenceOnly ? "mail-reference" : "mail",
+                Title = "Outlook mail: " + mail.Subject,
+                Reference = reference,
+                Source = mail.Subject,
+                Text = text,
+                Preview = Trim(text, 360),
+                DetailsJson = JsonConvert.SerializeObject(new
+                {
+                    subject = mail.Subject,
+                    sender = mail.SenderName,
+                    senderEmail = mail.SenderEmailAddress,
+                    received = mail.ReceivedTime,
+                    entryId = mail.EntryID,
+                    mode = referenceOnly ? "reference" : "text"
+                })
+            };
+        }
+
         public SkillResult ExecuteSkill(SkillCommand command)
         {
             try

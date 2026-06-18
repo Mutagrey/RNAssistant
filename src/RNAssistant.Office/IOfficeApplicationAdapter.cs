@@ -10,6 +10,7 @@ namespace RNAssistant.Office
         string DocumentTitle { get; }
         string GetDocumentSnapshot(int maxChars);
         string GetVbaSnapshot(int maxChars);
+        ContextNote CaptureSelectionContext(string mode, int maxChars);
         IEnumerable<SkillDefinition> GetBuiltInSkills();
         SkillResult ExecuteSkill(SkillCommand command);
     }

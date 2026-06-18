@@ -5,12 +5,18 @@ namespace RNAssistant.Core.Models
 {
     public sealed class ChatMessage
     {
+        public string Id { get; set; }
         public string Role { get; set; }
         public string Content { get; set; }
+        public int? PromptTokens { get; set; }
+        public int? CompletionTokens { get; set; }
+        public int? TotalTokens { get; set; }
+        public string UsageJson { get; set; }
         public DateTime CreatedUtc { get; set; }
 
         public ChatMessage()
         {
+            Id = Guid.NewGuid().ToString("N");
             CreatedUtc = DateTime.UtcNow;
         }
     }
@@ -32,4 +38,3 @@ namespace RNAssistant.Core.Models
         }
     }
 }
-

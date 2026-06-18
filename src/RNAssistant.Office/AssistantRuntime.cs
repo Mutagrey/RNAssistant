@@ -26,6 +26,10 @@ namespace RNAssistant.Office
         public void RunQuickAction(string action)
         {
             Controller.QueueQuickAction(action);
+            if (_paneControl != null)
+            {
+                _paneControl.RunQuickAction(action);
+            }
         }
 
         public void BlurComposer()
@@ -33,6 +37,15 @@ namespace RNAssistant.Office
             if (_paneControl != null)
             {
                 _paneControl.BlurComposer();
+            }
+        }
+
+        public void AddSelectionContext(string mode)
+        {
+            Controller.AddSelectionContext(mode);
+            if (_paneControl != null)
+            {
+                _paneControl.RefreshContext();
             }
         }
 

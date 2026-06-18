@@ -99,6 +99,49 @@ namespace RNAssistant.ExcelAddIn
             return VbaProjectSupport.GetSnapshot(workbook, workbook.Name, maxChars);
         }
 
+        public ContextNote CaptureSelectionContext(string mode, int maxChars)
+        {
+            var workbook = RequireWorkbook();
+            var range = _application.Selection as Excel.Range;
+            if (range == null)
+            {
+                range = _application.ActiveCell;
+            }
+
+            if (range == null)
+            {
+                throw new InvalidOperationException("Select an Excel range first.");
+            }
+
+            var sheet = range.Worksheet as Excel.Worksheet;
+            var address = range.Address[false, false];
+            var reference = (sheet == null ? string.Empty : sheet.Name + "!") + address;
+            var referenceOnly = string.Equals(mode, "reference", StringComparison.OrdinalIgnoreCase);
+            var text = referenceOnly
+                ? "Reference only. Use Excel tools with this sheet and address if exact cell values are needed."
+                : BuildRangeText(range, maxChars);
+
+            return new ContextNote
+            {
+                Host = HostName,
+                Kind = referenceOnly ? "range-reference" : "range",
+                Title = "Excel " + reference,
+                Reference = reference,
+                Source = workbook.Name + " / " + reference,
+                Text = text,
+                Preview = Trim(text, 360),
+                DetailsJson = JsonConvert.SerializeObject(new
+                {
+                    workbook = workbook.Name,
+                    sheet = sheet == null ? string.Empty : sheet.Name,
+                    address = address,
+                    rows = range.Rows.Count,
+                    columns = range.Columns.Count,
+                    mode = referenceOnly ? "reference" : "text"
+                })
+            };
+        }
+
         public SkillResult ExecuteSkill(SkillCommand command)
         {
             try
@@ -416,6 +459,13 @@ namespace RNAssistant.ExcelAddIn
                     return;
                 }
             }
+        }
+
+        private static string BuildRangeText(Excel.Range range, int maxChars)
+        {
+            var builder = new StringBuilder();
+            AppendRangeValues(builder, range, maxChars);
+            return Trim(builder.ToString(), maxChars);
         }
 
         private static string Trim(string text, int maxChars)

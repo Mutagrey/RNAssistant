@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
+using Newtonsoft.Json;
 
 namespace RNAssistant.Office.WebView
 {
@@ -27,6 +28,16 @@ namespace RNAssistant.Office.WebView
         public void BlurComposer()
         {
             ExecuteScript("window.RNAssistantHost && window.RNAssistantHost.blurComposer && window.RNAssistantHost.blurComposer();");
+        }
+
+        public void RefreshContext()
+        {
+            ExecuteScript("window.RNAssistantHost && window.RNAssistantHost.refreshContext && window.RNAssistantHost.refreshContext();");
+        }
+
+        public void RunQuickAction(string action)
+        {
+            ExecuteScript("window.RNAssistantHost && window.RNAssistantHost.runQuickAction && window.RNAssistantHost.runQuickAction(" + JsonConvert.SerializeObject(action ?? string.Empty) + ");");
         }
 
         private async void OnLoad(object sender, EventArgs e)

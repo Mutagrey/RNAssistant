@@ -11,6 +11,15 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Llm
 {
+    public sealed class LlmCompletionResult
+    {
+        public string Content { get; set; }
+        public int? PromptTokens { get; set; }
+        public int? CompletionTokens { get; set; }
+        public int? TotalTokens { get; set; }
+        public string UsageJson { get; set; }
+    }
+
     public sealed class LlmClient
     {
         private readonly Func<string> _apiKeyProvider;
@@ -20,7 +29,7 @@ namespace RNAssistant.Core.Llm
             _apiKeyProvider = apiKeyProvider;
         }
 
-        public async Task<string> CompleteAsync(AppSettings settings, IEnumerable<ChatMessage> messages)
+        public async Task<LlmCompletionResult> CompleteAsync(AppSettings settings, IEnumerable<ChatMessage> messages)
         {
             if (settings == null)
             {
@@ -110,7 +119,22 @@ namespace RNAssistant.Core.Llm
 
                     var parsed = JObject.Parse(responseJson);
                     var assistantContent = parsed.SelectToken("choices[0].message.content");
-                    return assistantContent == null ? string.Empty : assistantContent.Value<string>();
+                    var usage = parsed["usage"] as JObject;
+                    var promptTokens = ReadInt(usage, "prompt_tokens", "input_tokens");
+                    var completionTokens = ReadInt(usage, "completion_tokens", "output_tokens");
+                    var totalTokens = ReadInt(usage, "total_tokens");
+                    if (totalTokens == null && promptTokens != null && completionTokens != null)
+                    {
+                        totalTokens = promptTokens.Value + completionTokens.Value;
+                    }
+                    return new LlmCompletionResult
+                    {
+                        Content = assistantContent == null ? string.Empty : assistantContent.Value<string>(),
+                        PromptTokens = promptTokens,
+                        CompletionTokens = completionTokens,
+                        TotalTokens = totalTokens,
+                        UsageJson = usage == null ? null : usage.ToString(Formatting.None)
+                    };
                 }
                 catch (TaskCanceledException ex)
                 {
@@ -140,6 +164,25 @@ namespace RNAssistant.Core.Llm
             }
 
             return baseUrl.TrimEnd('/') + path;
+        }
+
+        private static int? ReadInt(JObject obj, params string[] names)
+        {
+            if (obj == null || names == null)
+            {
+                return null;
+            }
+
+            foreach (var name in names)
+            {
+                var token = obj[name];
+                if (token != null && token.Type != JTokenType.Null)
+                {
+                    return token.Value<int>();
+                }
+            }
+
+            return null;
         }
 
         private static string DeepestMessage(Exception exception)

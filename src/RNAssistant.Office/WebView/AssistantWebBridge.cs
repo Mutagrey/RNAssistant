@@ -35,6 +35,9 @@ namespace RNAssistant.Office.WebView
                     case "sendChat":
                         payloadJson = await _controller.SendChatAsync((string)payload["text"], (phase, message) => ReportProgress(id, phase, message));
                         break;
+                    case "deleteMessage":
+                        payloadJson = _controller.DeleteMessageJson((string)payload["id"], payload["index"] == null ? -1 : (int)payload["index"]);
+                        break;
                     case "getSettings":
                         payloadJson = _controller.GetSettingsJson();
                         break;
@@ -67,6 +70,12 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "getContext":
                         payloadJson = _controller.GetContextJson();
+                        break;
+                    case "addSelectionContext":
+                        payloadJson = _controller.AddSelectionContextJson((string)payload["mode"]);
+                        break;
+                    case "removeContextItem":
+                        payloadJson = _controller.RemoveContextItemJson((string)payload["id"]);
                         break;
                     case "clearContext":
                         payloadJson = _controller.ClearContextJson();

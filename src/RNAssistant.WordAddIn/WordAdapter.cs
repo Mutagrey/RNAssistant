@@ -81,6 +81,46 @@ namespace RNAssistant.WordAddIn
             return VbaProjectSupport.GetSnapshot(doc, doc.Name, maxChars);
         }
 
+        public ContextNote CaptureSelectionContext(string mode, int maxChars)
+        {
+            var doc = RequireDocument();
+            if (_application.Selection == null || _application.Selection.Range == null)
+            {
+                throw new InvalidOperationException("Select Word text first.");
+            }
+
+            var range = _application.Selection.Range;
+            var referenceOnly = string.Equals(mode, "reference", StringComparison.OrdinalIgnoreCase);
+            var reference = doc.Name + " chars " + range.Start + "-" + range.End;
+            var selectedText = Trim(range.Text, maxChars);
+            if (string.IsNullOrWhiteSpace(selectedText) && !referenceOnly)
+            {
+                throw new InvalidOperationException("Select Word text first.");
+            }
+
+            var text = referenceOnly
+                ? "Reference only. Use Word tools with the current selection/document if exact text is needed."
+                : selectedText;
+
+            return new ContextNote
+            {
+                Host = HostName,
+                Kind = referenceOnly ? "text-reference" : "text-selection",
+                Title = "Word selection",
+                Reference = reference,
+                Source = reference,
+                Text = text,
+                Preview = Trim(text, 360),
+                DetailsJson = JsonConvert.SerializeObject(new
+                {
+                    document = doc.Name,
+                    start = range.Start,
+                    end = range.End,
+                    mode = referenceOnly ? "reference" : "text"
+                })
+            };
+        }
+
         public SkillResult ExecuteSkill(SkillCommand command)
         {
             try
