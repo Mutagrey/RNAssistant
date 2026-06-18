@@ -68,6 +68,7 @@ Current coverage:
 - chat store fixtures using temp directories, including broken JSON files being skipped;
 - pipeline dry-run and execution fixtures with fake `IOfficeApplicationAdapter`;
 - confirmation gates for custom tools and Agent Mode built-in mutations;
+- VBA replace-text flow with rollback backup using fake `IOfficeApplicationAdapter`;
 - tool catalog service merge/filter behavior;
 - prompt message trimming, context usage estimates, and basic no-network chat completion flow;
 - context normalization/upsert/trim behavior;

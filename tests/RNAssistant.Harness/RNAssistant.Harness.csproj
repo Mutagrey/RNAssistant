@@ -37,6 +37,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Skills\SkillArgumentReader.cs" Link="Office\Skills\SkillArgumentReader.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\OfficeToolExecutor.cs" Link="Office\Tools\OfficeToolExecutor.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\PipelineToolExecutor.cs" Link="Office\Tools\PipelineToolExecutor.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Tools\VbaToolExecutor.cs" Link="Office\Tools\VbaToolExecutor.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.cs" Link="Office\WebView\AssistantWebBridge.cs" />
   </ItemGroup>
 </Project>

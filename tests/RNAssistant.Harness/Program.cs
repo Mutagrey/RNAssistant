@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
@@ -38,6 +39,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "pipeline: custom tool needs confirmation", Run = CustomPipelineNeedsConfirmation },
                 new HarnessTest { Name = "pipeline: agent mode gates built-in mutation", Run = AgentModeGatesBuiltInMutation },
                 new HarnessTest { Name = "tools: catalog merges visible tools", Run = ToolCatalogMergesVisibleTools },
+                new HarnessTest { Name = "vba: replace text backs up module", Run = VbaReplaceTextBacksUpModule },
                 new HarnessTest { Name = "prompt: trims oldest history", Run = PromptBuilderTrimsOldestHistory },
                 new HarnessTest { Name = "prompt: usage estimator counts context", Run = ContextUsageEstimatorCountsPromptAndSession },
                 new HarnessTest { Name = "chat: completion service records prose", Run = ChatCompletionServiceRecordsProseResponse },
@@ -264,6 +266,31 @@ namespace RNAssistant.Harness
                 AssertTrue(HasTool(catalog, "common.inspect"), "common custom tool visible");
                 AssertTrue(HasTool(catalog, "excel.custom"), "host custom tool visible");
                 AssertTrue(!HasTool(catalog, "word.hidden"), "other host custom tool hidden");
+            });
+        }
+
+        private static void VbaReplaceTextBacksUpModule()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"old\"\nEnd Sub";
+                var backupStore = new VbaBackupStore(paths);
+                var executor = new OfficeToolExecutor(adapter, backupStore);
+                var command = new SkillCommand { SkillId = executor.VbaToolId("vba_replace_text") };
+                command.Arguments["moduleName"] = "Module1";
+                command.Arguments["find"] = "\"old\"";
+                command.Arguments["replace"] = "\"new\"";
+
+                var result = executor.Execute(command, new List<SkillDefinition>(adapter.GetBuiltInSkills()), new AppSettings { AutoConfirmToolActions = true }, false, false);
+
+                AssertTrue(result.Success, "replace result");
+                AssertContains(adapter.VbaModuleCode, "\"new\"", "updated module");
+                AssertTrue(adapter.VbaModuleCode.IndexOf("\"old\"", StringComparison.Ordinal) < 0, "old text removed");
+                var backups = backupStore.List("Excel", "doc");
+                AssertEqual(1, backups.Count, "backup count");
+                AssertEqual("Module1", backups[0].ModuleName, "backup module");
+                AssertContains(backups[0].Code, "\"old\"", "backup code");
             });
         }
 
@@ -706,6 +733,8 @@ namespace RNAssistant.Harness
         private sealed class FakeOfficeAdapter : IOfficeApplicationAdapter
         {
             public readonly List<SkillCommand> Executed = new List<SkillCommand>();
+            public string VbaModuleCode = string.Empty;
+            public string VbaModuleType = "StdModule";
 
             public string HostName { get { return "Excel"; } }
             public string DocumentKey { get { return "doc"; } }
@@ -744,6 +773,22 @@ namespace RNAssistant.Harness
             public SkillResult ExecuteSkill(SkillCommand command)
             {
                 Executed.Add(Clone(command));
+                if ((command.SkillId ?? string.Empty).EndsWith(".vba_read_module", StringComparison.OrdinalIgnoreCase))
+                {
+                    return SkillResult.Ok("read " + command.SkillId, JsonConvert.SerializeObject(new { code = VbaModuleCode, type = VbaModuleType }));
+                }
+
+                if ((command.SkillId ?? string.Empty).EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase))
+                {
+                    object code;
+                    if (command.Arguments.TryGetValue("code", out code))
+                    {
+                        VbaModuleCode = Convert.ToString(code);
+                    }
+
+                    return SkillResult.Ok("replaced " + command.SkillId);
+                }
+
                 return SkillResult.Ok("executed " + command.SkillId);
             }
 
