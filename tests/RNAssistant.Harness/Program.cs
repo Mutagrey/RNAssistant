@@ -10,6 +10,7 @@ using RNAssistant.Core.Storage;
 using RNAssistant.Office;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
+using RNAssistant.Office.WebView;
 
 namespace RNAssistant.Harness
 {
@@ -40,7 +41,9 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "prompt: usage estimator counts context", Run = ContextUsageEstimatorCountsPromptAndSession },
                 new HarnessTest { Name = "chat: completion service records prose", Run = ChatCompletionServiceRecordsProseResponse },
                 new HarnessTest { Name = "context: normalize and upsert", Run = ContextServiceNormalizesAndUpserts },
-                new HarnessTest { Name = "context: trim helper", Run = ContextServiceTrimsText }
+                new HarnessTest { Name = "context: trim helper", Run = ContextServiceTrimsText },
+                new HarnessTest { Name = "bridge: typed runTool payload", Run = BridgeUsesTypedRunToolPayload },
+                new HarnessTest { Name = "bridge: typed sendChat progress", Run = BridgeUsesTypedSendChatPayloadAndProgress }
             };
 
             var failed = 0;
@@ -405,6 +408,46 @@ namespace RNAssistant.Harness
             AssertEqual("abc", ContextService.TrimForContext("abc", 10), "short trim");
             AssertEqual("abc\n...[truncated]", ContextService.TrimForContext("abcdef", 3), "long trim");
             AssertEqual(string.Empty, ContextService.TrimForContext(null, 3), "null trim");
+        }
+
+        private static void BridgeUsesTypedRunToolPayload()
+        {
+            var controller = new AssistantController();
+            var progressMessages = new List<string>();
+            var bridge = new AssistantWebBridge(controller, progressMessages.Add);
+            var responseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"b1\",\"type\":\"runTool\",\"payload\":{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"},\"dryRun\":true}}")
+                .GetAwaiter()
+                .GetResult();
+
+            var response = JObject.Parse(responseJson);
+            AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
+            AssertEqual("b1", response["id"].Value<string>(), "bridge response id");
+            AssertTrue(response["payload"]["ran"].Value<bool>(), "bridge payload ran");
+            AssertEqual("excel.add_sheet", controller.LastToolId, "tool id");
+            AssertContains(controller.LastArgumentsJson, "Report", "tool args");
+            AssertTrue(controller.LastDryRun, "dry run");
+            AssertEqual(1, progressMessages.Count, "progress count");
+            AssertEqual("progress", JObject.Parse(progressMessages[0])["type"].Value<string>(), "progress type");
+        }
+
+        private static void BridgeUsesTypedSendChatPayloadAndProgress()
+        {
+            var controller = new AssistantController();
+            var progressMessages = new List<string>();
+            var bridge = new AssistantWebBridge(controller, progressMessages.Add);
+            var responseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"b2\",\"type\":\"sendChat\",\"payload\":{\"chatId\":\"chat-1\",\"text\":\"hello\"}}")
+                .GetAwaiter()
+                .GetResult();
+
+            var response = JObject.Parse(responseJson);
+            AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
+            AssertEqual("ok", response["payload"]["message"].Value<string>(), "chat response message");
+            AssertEqual("hello", controller.LastChatText, "chat text");
+            AssertEqual("chat-1", controller.LastChatId, "chat id");
+            AssertEqual("b2", JObject.Parse(progressMessages[0])["id"].Value<string>(), "progress id");
+            AssertEqual("thinking", JObject.Parse(progressMessages[0])["payload"]["phase"].Value<string>(), "progress phase");
         }
 
         private static SkillDefinition CustomTool(string host, string id)

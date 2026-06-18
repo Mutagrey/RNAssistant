@@ -7,6 +7,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Skills;
 using RNAssistant.Office.Tools;
@@ -57,22 +58,22 @@ namespace RNAssistant.Office
             var activeId = ChatStore.GetSessionId(session);
             var context = LoadContext(session);
             var settings = _settingsService.Load();
-            var state = new
+            var state = new InitResponse
             {
-                host = _adapter.HostName,
-                documentKey = _adapter.DocumentKey,
-                title = _adapter.DocumentTitle,
-                activeChatId = activeId,
-                activeChatModel = session == null ? string.Empty : session.Model,
-                chats = GetChatSummaries(activeId),
-                settings = settings,
-                hasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey()),
-                tools = _toolCatalog.GetVisibleTools(),
-                toolsPath = _paths.ToolsDirectory,
-                context = context,
-                messages = session.Messages,
-                contextUsage = ContextUsageEstimator.FromSession(session, settings),
-                quickAction = DequeueQuickAction()
+                Host = _adapter.HostName,
+                DocumentKey = _adapter.DocumentKey,
+                Title = _adapter.DocumentTitle,
+                ActiveChatId = activeId,
+                ActiveChatModel = session == null ? string.Empty : session.Model,
+                Chats = GetChatSummaries(activeId),
+                Settings = settings,
+                HasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey()),
+                Tools = _toolCatalog.GetVisibleTools(),
+                ToolsPath = _paths.ToolsDirectory,
+                Context = context,
+                Messages = session.Messages,
+                ContextUsage = ContextUsageEstimator.FromSession(session, settings),
+                QuickAction = DequeueQuickAction()
             };
             return JsonConvert.SerializeObject(state);
         }
@@ -83,7 +84,7 @@ namespace RNAssistant.Office
             {
                 var emptySession = LoadSession(chatId);
                 var emptyId = ChatStore.GetSessionId(emptySession);
-                return JsonConvert.SerializeObject(new { message = string.Empty, skillResults = new SkillResult[0], activeChatId = emptyId, activeChatModel = emptySession.Model, chats = GetChatSummaries(emptyId), context = LoadContext(emptySession), messages = emptySession.Messages, contextUsage = ContextUsageEstimator.FromSession(emptySession, _settingsService.Load()) });
+                return JsonConvert.SerializeObject(new SendChatResponse { Message = string.Empty, SkillResults = new object[0], ActiveChatId = emptyId, ActiveChatModel = emptySession.Model, Chats = GetChatSummaries(emptyId), Context = LoadContext(emptySession), Messages = emptySession.Messages, ContextUsage = ContextUsageEstimator.FromSession(emptySession, _settingsService.Load()) });
             }
 
             var settings = _settingsService.Load();
@@ -95,7 +96,7 @@ namespace RNAssistant.Office
             ReportProgress(progress, "saving", "Сохраняю историю...");
             _chatStore.Save(session);
             var activeId = ChatStore.GetSessionId(session);
-            return JsonConvert.SerializeObject(new { message = completion.AssistantText, skillResults = completion.SkillResults, activeChatId = activeId, activeChatModel = session.Model, chats = GetChatSummaries(activeId), context = LoadContext(session), messages = session.Messages, contextUsage = completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings) });
+            return JsonConvert.SerializeObject(new SendChatResponse { Message = completion.AssistantText, SkillResults = completion.SkillResults, ActiveChatId = activeId, ActiveChatModel = session.Model, Chats = GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings) });
         }
 
         public string GetSettingsJson()

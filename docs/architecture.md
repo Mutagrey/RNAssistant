@@ -31,7 +31,7 @@ web static UI
 - `src/RNAssistant.Office/Controller/AssistantController.cs`: high-level orchestration and bridge-facing API.
 - `src/RNAssistant.Office/Controller/AssistantController.Chats.cs`: chat/session lifecycle and document-key migration.
 - `src/RNAssistant.Office/Controller/AssistantController.Context.cs`: active chat context attachments.
-- `src/RNAssistant.Office/Contracts`: shared Office abstractions such as `IOfficeApplicationAdapter`.
+- `src/RNAssistant.Office/Contracts`: shared Office abstractions and bridge DTOs such as `IOfficeApplicationAdapter` and `BridgeDtos`.
 - `src/RNAssistant.Office/Runtime`: add-in runtime helpers that are host-neutral.
 - `src/RNAssistant.Office/Vba`: shared VBA project support.
 - `src/RNAssistant.Office/Agent`: agent transcript/plan formatting and retry policy.
@@ -70,6 +70,7 @@ Current coverage:
 - tool catalog service merge/filter behavior;
 - prompt message trimming, context usage estimates, and basic no-network chat completion flow;
 - context normalization/upsert/trim behavior;
+- typed bridge runTool/sendChat payload parsing and progress envelope;
 - no Office COM dependency.
 
 Next harness coverage:

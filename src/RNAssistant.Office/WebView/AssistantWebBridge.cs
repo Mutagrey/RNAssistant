@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.WebView
 {
@@ -21,10 +22,10 @@ namespace RNAssistant.Office.WebView
             string id = null;
             try
             {
-                var request = JObject.Parse(requestJson);
-                id = (string)request["id"];
-                var type = ((string)request["type"] ?? string.Empty).Trim();
-                var payload = request["payload"] as JObject ?? new JObject();
+                var request = JsonConvert.DeserializeObject<BridgeRequest>(requestJson) ?? new BridgeRequest();
+                id = request.Id;
+                var type = (request.Type ?? string.Empty).Trim();
+                var payload = request.Payload ?? new JObject();
                 string payloadJson;
 
                 switch (type)
@@ -36,31 +37,37 @@ namespace RNAssistant.Office.WebView
                         payloadJson = _controller.ListChatsJson();
                         break;
                     case "createChat":
-                        payloadJson = _controller.CreateChatJson((string)payload["title"]);
+                        var createChat = Payload<CreateChatPayload>(payload);
+                        payloadJson = _controller.CreateChatJson(createChat.Title);
                         break;
                     case "selectChat":
-                        payloadJson = _controller.SelectChatJson((string)payload["chatId"]);
+                        payloadJson = _controller.SelectChatJson(Payload<ChatPayload>(payload).ChatId);
                         break;
                     case "renameChat":
-                        payloadJson = _controller.RenameChatJson((string)payload["chatId"], (string)payload["title"]);
+                        var renameChat = Payload<RenameChatPayload>(payload);
+                        payloadJson = _controller.RenameChatJson(renameChat.ChatId, renameChat.Title);
                         break;
                     case "setChatModel":
-                        payloadJson = _controller.SetChatModelJson((string)payload["chatId"], (string)payload["model"]);
+                        var setChatModel = Payload<SetChatModelPayload>(payload);
+                        payloadJson = _controller.SetChatModelJson(setChatModel.ChatId, setChatModel.Model);
                         break;
                     case "clearChat":
-                        payloadJson = _controller.ClearChatJson((string)payload["chatId"]);
+                        payloadJson = _controller.ClearChatJson(Payload<ChatPayload>(payload).ChatId);
                         break;
                     case "deleteChat":
-                        payloadJson = _controller.DeleteChatJson((string)payload["chatId"]);
+                        payloadJson = _controller.DeleteChatJson(Payload<ChatPayload>(payload).ChatId);
                         break;
                     case "sendChat":
-                        payloadJson = await _controller.SendChatAsync((string)payload["text"], (string)payload["chatId"], (phase, message) => ReportProgress(id, phase, message));
+                        var sendChat = Payload<SendChatPayload>(payload);
+                        payloadJson = await _controller.SendChatAsync(sendChat.Text, sendChat.ChatId, (phase, message) => ReportProgress(id, phase, message));
                         break;
                     case "deleteMessage":
-                        payloadJson = _controller.DeleteMessageJson((string)payload["id"], payload["index"] == null ? -1 : (int)payload["index"], (string)payload["chatId"]);
+                        var deleteMessage = Payload<MessageActionPayload>(payload);
+                        payloadJson = _controller.DeleteMessageJson(deleteMessage.Id, deleteMessage.Index ?? -1, deleteMessage.ChatId);
                         break;
                     case "forkChat":
-                        payloadJson = _controller.ForkChatJson((string)payload["id"], payload["index"] == null ? -1 : (int)payload["index"], (string)payload["chatId"]);
+                        var forkChat = Payload<MessageActionPayload>(payload);
+                        payloadJson = _controller.ForkChatJson(forkChat.Id, forkChat.Index ?? -1, forkChat.ChatId);
                         break;
                     case "getSettings":
                         payloadJson = _controller.GetSettingsJson();
@@ -85,10 +92,11 @@ namespace RNAssistant.Office.WebView
                         payloadJson = _controller.SaveToolsJson(payload["tools"] == null ? "[]" : payload["tools"].ToString(Formatting.None));
                         break;
                     case "runTool":
+                        var runTool = Payload<RunToolPayload>(payload);
                         payloadJson = _controller.RunToolJson(
-                            (string)payload["toolId"],
-                            payload["arguments"] == null ? "{}" : payload["arguments"].ToString(Formatting.None),
-                            payload["dryRun"] != null && (bool)payload["dryRun"],
+                            runTool.ToolId,
+                            runTool.Arguments == null ? "{}" : runTool.Arguments.ToString(Formatting.None),
+                            runTool.DryRun,
                             (phase, message) => ReportProgress(id, phase, message));
                         break;
                     case "getVbaProject":
@@ -127,27 +135,27 @@ namespace RNAssistant.Office.WebView
                         payloadJson = _controller.ClearContextJson((string)payload["chatId"]);
                         break;
                     case "quickAction":
-                        payloadJson = await _controller.RunQuickActionAsync((string)payload["action"]);
+                        payloadJson = await _controller.RunQuickActionAsync(Payload<QuickActionPayload>(payload).Action);
                         break;
                     default:
                         throw new InvalidOperationException("Unknown bridge message: " + type);
                 }
 
-                return JsonConvert.SerializeObject(new
+                return JsonConvert.SerializeObject(new BridgeResponse
                 {
-                    id = id,
-                    ok = true,
-                    payload = JToken.Parse(payloadJson)
+                    Id = id,
+                    Ok = true,
+                    Payload = JToken.Parse(payloadJson)
                 });
             }
             catch (Exception ex)
             {
-                return JsonConvert.SerializeObject(new
+                return JsonConvert.SerializeObject(new BridgeResponse
                 {
-                    id = id,
-                    ok = false,
-                    error = ex.Message,
-                    errorDetail = ex.ToString()
+                    Id = id,
+                    Ok = false,
+                    Error = ex.Message,
+                    ErrorDetail = ex.ToString()
                 });
             }
         }
@@ -159,16 +167,21 @@ namespace RNAssistant.Office.WebView
                 return;
             }
 
-            _postMessageJson(JsonConvert.SerializeObject(new
+            _postMessageJson(JsonConvert.SerializeObject(new ProgressMessage
             {
-                type = "progress",
-                id = id,
-                payload = new
+                Type = "progress",
+                Id = id,
+                Payload = new ProgressPayload
                 {
-                    phase = phase,
-                    message = message
+                    Phase = phase,
+                    Message = message
                 }
             }));
+        }
+
+        private static T Payload<T>(JObject payload) where T : class, new()
+        {
+            return payload == null ? new T() : (payload.ToObject<T>() ?? new T());
         }
     }
 }

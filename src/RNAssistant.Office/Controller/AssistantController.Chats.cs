@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office
 {
@@ -31,7 +32,7 @@ namespace RNAssistant.Office
             }
 
             var activeId = ChatStore.GetSessionId(session);
-            return JsonConvert.SerializeObject(new { activeChatId = activeId, activeChatModel = session.Model, chats = GetChatSummaries(activeId), context = LoadContext(session), messages = session.Messages, contextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load()) });
+            return JsonConvert.SerializeObject(new ChatStateResponse { ActiveChatId = activeId, ActiveChatModel = session.Model, Chats = GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load()) });
         }
 
         public string ForkChatJson(string id, int index, string chatId = null)
@@ -203,14 +204,14 @@ namespace RNAssistant.Office
         private string ChatStateJson(ChatSession session)
         {
             var activeId = ChatStore.GetSessionId(session);
-            return JsonConvert.SerializeObject(new
+            return JsonConvert.SerializeObject(new ChatStateResponse
             {
-                activeChatId = activeId,
-                activeChatModel = session == null ? string.Empty : session.Model,
-                chats = GetChatSummaries(activeId),
-                context = session == null ? CreateEmptyContext() : LoadContext(session),
-                messages = session == null ? new List<ChatMessage>() : session.Messages,
-                contextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load())
+                ActiveChatId = activeId,
+                ActiveChatModel = session == null ? string.Empty : session.Model,
+                Chats = GetChatSummaries(activeId),
+                Context = session == null ? CreateEmptyContext() : LoadContext(session),
+                Messages = session == null ? new List<ChatMessage>() : session.Messages,
+                ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load())
             });
         }
 

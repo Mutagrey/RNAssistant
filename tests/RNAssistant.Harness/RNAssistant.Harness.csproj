@@ -29,10 +29,12 @@
     <Compile Include="..\..\src\RNAssistant.Core\Storage\VbaBackupStore.cs" Link="Core\Storage\VbaBackupStore.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Contracts\IOfficeApplicationAdapter.cs" Link="Office\Contracts\IOfficeApplicationAdapter.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Agent\AgentTranscript.cs" Link="Office\Agent\AgentTranscript.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Contracts\BridgeDtos.cs" Link="Office\Contracts\BridgeDtos.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatCompletionService.cs" Link="Office\Services\ChatCompletionService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ContextService.cs" Link="Office\Services\ContextService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ToolCatalogService.cs" Link="Office\Services\ToolCatalogService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Skills\SkillArgumentReader.cs" Link="Office\Skills\SkillArgumentReader.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\OfficeToolExecutor.cs" Link="Office\Tools\OfficeToolExecutor.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.cs" Link="Office\WebView\AssistantWebBridge.cs" />
   </ItemGroup>
 </Project>
