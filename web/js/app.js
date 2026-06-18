@@ -16,6 +16,7 @@
     activity: { visible: false, phase: "", message: "" },
     pending: {},
     seq: 1,
+    focusReportTimer: null,
     highlightLog: {},
     highlightRetryScheduled: false,
     highlightRetryAttempts: 0,
@@ -107,6 +108,46 @@
       state.pending[id] = { resolve: resolve, reject: reject };
       window.chrome.webview.postMessage({ id: id, type: type, payload: payload || {} });
     });
+  }
+
+  function isKeyboardElement(element) {
+    if (!element) {
+      return false;
+    }
+
+    var tag = (element.tagName || "").toLowerCase();
+    if (element.isContentEditable || tag === "textarea" || tag === "select") {
+      return true;
+    }
+
+    if (tag !== "input") {
+      return false;
+    }
+
+    return ["button", "checkbox", "color", "file", "hidden", "image", "radio", "range", "reset", "submit"].indexOf((element.type || "text").toLowerCase()) === -1;
+  }
+
+  function reportFocusState() {
+    if (!window.chrome || !window.chrome.webview) {
+      return;
+    }
+
+    var selection = window.getSelection ? window.getSelection() : null;
+    var hasSelection = !!(selection && !selection.isCollapsed && String(selection).length > 0);
+    window.chrome.webview.postMessage({
+      type: "focusState",
+      payload: {
+        wantsKeyboard: document.hasFocus() && (isKeyboardElement(document.activeElement) || hasSelection)
+      }
+    });
+  }
+
+  function scheduleFocusStateReport() {
+    if (state.focusReportTimer) {
+      window.clearTimeout(state.focusReportTimer);
+    }
+
+    state.focusReportTimer = window.setTimeout(reportFocusState, 0);
   }
 
   window.chrome.webview.addEventListener("message", function (event) {
@@ -1501,6 +1542,13 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    ["focusin", "focusout", "selectionchange", "mouseup", "keyup"].forEach(function (name) {
+      document.addEventListener(name, scheduleFocusStateReport);
+    });
+    window.addEventListener("focus", scheduleFocusStateReport);
+    window.addEventListener("blur", scheduleFocusStateReport);
+    scheduleFocusStateReport();
+
     Array.prototype.slice.call(document.querySelectorAll(".tab")).forEach(function (tab) {
       tab.addEventListener("click", function () { switchTab(tab.dataset.tab); });
     });

@@ -1,10 +1,13 @@
 using System;
 using System.IO;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace RNAssistant.Office.WebView
 {
@@ -14,6 +17,8 @@ namespace RNAssistant.Office.WebView
         private readonly string _webRoot;
         private readonly WebView2 _webView;
         private readonly AssistantWebBridge _bridge;
+        private bool _webContentWantsKeyboard;
+        private IntPtr _lastExternalFocusWindow;
 
         public AssistantPaneControl(AssistantController controller, string webRoot)
         {
@@ -60,6 +65,8 @@ namespace RNAssistant.Office.WebView
             await _webView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
             _webView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
             _webView.CoreWebView2.Settings.AreDevToolsEnabled = true;
+            _webView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = false;
+            TryAttachAcceleratorFilter();
 
             var indexPath = Path.Combine(_webRoot, "index.html");
             if (!File.Exists(indexPath))
@@ -71,11 +78,54 @@ namespace RNAssistant.Office.WebView
             _webView.Source = new Uri(indexPath);
         }
 
+        private void TryAttachAcceleratorFilter()
+        {
+            var field = typeof(WebView2).GetField("_coreWebView2Controller", BindingFlags.Instance | BindingFlags.NonPublic);
+            var controller = field == null ? null : field.GetValue(_webView) as CoreWebView2Controller;
+            if (controller != null)
+            {
+                // This WebView2 WinForms package keeps the controller internal.
+                controller.AcceleratorKeyPressed += OnAcceleratorKeyPressed;
+            }
+        }
+
+        private void OnAcceleratorKeyPressed(object sender, CoreWebView2AcceleratorKeyPressedEventArgs e)
+        {
+            if (!IsEditOrNavigationAccelerator(e.VirtualKey))
+            {
+                return;
+            }
+
+            var focusedWindow = GetFocus();
+            var focusInsidePane = IsKeyboardFocusInsidePane(focusedWindow);
+            if (focusInsidePane && _webContentWantsKeyboard)
+            {
+                return;
+            }
+
+            if (!focusInsidePane && focusedWindow != IntPtr.Zero)
+            {
+                _lastExternalFocusWindow = focusedWindow;
+            }
+
+            if (!focusInsidePane || !_webContentWantsKeyboard)
+            {
+                var targetWindow = focusInsidePane ? ExternalFocusFallback() : focusedWindow;
+                ForwardKeyToFocusedWindow(targetWindow, e);
+                e.Handled = true;
+            }
+        }
+
         private async void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
             try
             {
                 var requestJson = e.WebMessageAsJson;
+                if (TryHandleHostStateMessage(requestJson))
+                {
+                    return;
+                }
+
                 var responseJson = await _bridge.HandleMessageAsync(requestJson).ConfigureAwait(true);
                 PostBridgeMessage(responseJson);
             }
@@ -83,6 +133,20 @@ namespace RNAssistant.Office.WebView
             {
                 PostBridgeMessage("{\"ok\":false,\"error\":\"" + EscapeJson(ex.Message) + "\"}");
             }
+        }
+
+        private bool TryHandleHostStateMessage(string requestJson)
+        {
+            var request = JObject.Parse(requestJson);
+            var type = ((string)request["type"] ?? string.Empty).Trim();
+            if (!string.Equals(type, "focusState", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var payload = request["payload"] as JObject;
+            _webContentWantsKeyboard = payload != null && payload["wantsKeyboard"] != null && (bool)payload["wantsKeyboard"];
+            return true;
         }
 
         private static string ResolveFixedRuntimeFolder()
@@ -157,5 +221,110 @@ namespace RNAssistant.Office.WebView
         {
             return (value ?? string.Empty).Replace("\\", "\\\\").Replace("\"", "\\\"");
         }
+
+        private bool IsKeyboardFocusInsidePane(IntPtr focusedWindow)
+        {
+            return focusedWindow != IntPtr.Zero && (focusedWindow == Handle || IsChild(Handle, focusedWindow));
+        }
+
+        private IntPtr ExternalFocusFallback()
+        {
+            return _lastExternalFocusWindow != IntPtr.Zero ? _lastExternalFocusWindow : GetAncestor(Handle, 2);
+        }
+
+        private bool ForwardKeyToFocusedWindow(IntPtr focusedWindow, CoreWebView2AcceleratorKeyPressedEventArgs e)
+        {
+            if (focusedWindow == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            var message = KeyEventMessage(e.KeyEventKind);
+            if (message == 0)
+            {
+                return false;
+            }
+
+            return PostMessage(focusedWindow, message, (IntPtr)e.VirtualKey, (IntPtr)e.KeyEventLParam);
+        }
+
+        private static int KeyEventMessage(CoreWebView2KeyEventKind kind)
+        {
+            switch (kind)
+            {
+                case CoreWebView2KeyEventKind.KeyDown:
+                    return 0x0100;
+                case CoreWebView2KeyEventKind.KeyUp:
+                    return 0x0101;
+                case CoreWebView2KeyEventKind.SystemKeyDown:
+                    return 0x0104;
+                case CoreWebView2KeyEventKind.SystemKeyUp:
+                    return 0x0105;
+                default:
+                    return 0;
+            }
+        }
+
+        private static bool IsEditOrNavigationAccelerator(int virtualKey)
+        {
+            var key = (Keys)virtualKey;
+            var ctrl = (GetKeyState((int)Keys.ControlKey) & 0x8000) != 0;
+            var shift = (GetKeyState((int)Keys.ShiftKey) & 0x8000) != 0;
+            var alt = (GetKeyState((int)Keys.Menu) & 0x8000) != 0;
+
+            if (alt)
+            {
+                return false;
+            }
+
+            if (ctrl)
+            {
+                switch (key)
+                {
+                    case Keys.A:
+                    case Keys.C:
+                    case Keys.F:
+                    case Keys.Insert:
+                    case Keys.V:
+                    case Keys.X:
+                    case Keys.Y:
+                    case Keys.Z:
+                        return true;
+                }
+            }
+
+            if (shift)
+            {
+                return key == Keys.Delete || key == Keys.Insert;
+            }
+
+            switch (key)
+            {
+                case Keys.Back:
+                case Keys.Delete:
+                case Keys.Home:
+                case Keys.End:
+                case Keys.PageUp:
+                case Keys.PageDown:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetFocus();
+
+        [DllImport("user32.dll")]
+        private static extern short GetKeyState(int virtualKey);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsChild(IntPtr parentWindow, IntPtr window);
+
+        [DllImport("user32.dll")]
+        private static extern bool PostMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetAncestor(IntPtr window, int flags);
     }
 }
