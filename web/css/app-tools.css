@@ -1,0 +1,110 @@
+.skill-item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  padding: 10px;
+}
+
+.tool-layout {
+  display: grid;
+  grid-template-columns: minmax(150px, 34%) 1fr;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  margin-top: 10px;
+}
+
+.tool-list {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.tool-list-item {
+  display: block;
+  width: 100%;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+}
+
+.tool-list-item:hover,
+.tool-list-item.active {
+  background: #eef4ff;
+  color: var(--text);
+}
+
+.tool-list-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.tool-list-meta {
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.tool-editor {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  padding: 10px;
+}
+
+.tool-form {
+  margin-top: 10px;
+}
+
+.tool-run-output {
+  min-height: 90px;
+  flex: none;
+}
+
+.tool-form select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  background: #fff;
+  color: var(--text);
+}
+
+.skill-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.skill-title {
+  font-weight: 700;
+}
+
+.skill-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.skill-item textarea,
+.skill-item input,
+.skill-item select {
+  width: 100%;
+  margin-top: 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px;
+}

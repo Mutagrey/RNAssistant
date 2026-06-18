@@ -1,0 +1,67 @@
+.context-summary {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.context-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.context-card {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.context-card-head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.context-card-head .context-chip-remove {
+  width: 28px;
+  height: 28px;
+  margin-right: 0;
+  border-radius: 6px;
+}
+
+.context-card-title {
+  font-weight: 800;
+}
+
+.context-card-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.context-card-preview {
+  max-height: 180px;
+  overflow: auto;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--code);
+  color: var(--code-text);
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.context-json {
+  margin-top: 10px;
+}
+
+.context-json summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
