@@ -46,6 +46,7 @@ web static UI
 - Controller coordinates request flow; it should not contain pipeline execution, VBA patch logic, or JS rendering logic.
 - VSTO adapters expose capabilities through `SkillDefinition` and `ExecuteSkill`; they should not know chat/session/storage details.
 - UI sends typed bridge messages; business rules stay in C# unless they are purely presentation behavior.
+- WebView response serialization belongs in `AssistantWebBridge`; controller methods should return DTOs or domain models.
 
 ## Known Oversized Areas
 

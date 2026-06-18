@@ -192,6 +192,39 @@ namespace RNAssistant.Office.Contracts
         public string Action { get; set; }
     }
 
+    public sealed class SettingsResponse
+    {
+        [JsonProperty("settings")]
+        public AppSettings Settings { get; set; }
+
+        [JsonProperty("hasApiKey")]
+        public bool HasApiKey { get; set; }
+    }
+
+    public sealed class ModelCatalogResponse
+    {
+        [JsonProperty("configUrl")]
+        public string ConfigUrl { get; set; }
+
+        [JsonProperty("catalog")]
+        public JToken Catalog { get; set; }
+    }
+
+    public sealed class VbaProjectResponse
+    {
+        [JsonProperty("result")]
+        public SkillResult Result { get; set; }
+
+        [JsonProperty("backups")]
+        public IReadOnlyList<VbaModuleBackup> Backups { get; set; }
+    }
+
+    public sealed class QuickActionResponse
+    {
+        [JsonProperty("prompt")]
+        public string Prompt { get; set; }
+    }
+
     public class ChatStateResponse
     {
         [JsonProperty("activeChatId")]

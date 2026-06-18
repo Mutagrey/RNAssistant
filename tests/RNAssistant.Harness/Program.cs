@@ -426,7 +426,7 @@ namespace RNAssistant.Harness
             var response = JObject.Parse(responseJson);
             AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
             AssertEqual("b1", response["id"].Value<string>(), "bridge response id");
-            AssertTrue(response["payload"]["ran"].Value<bool>(), "bridge payload ran");
+            AssertTrue(response["payload"]["Success"].Value<bool>(), "bridge payload success");
             AssertEqual("excel.add_sheet", controller.LastToolId, "tool id");
             AssertContains(controller.LastArgumentsJson, "Report", "tool args");
             AssertTrue(controller.LastDryRun, "dry run");
@@ -464,7 +464,7 @@ namespace RNAssistant.Harness
 
             var response = JObject.Parse(responseJson);
             AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
-            AssertContains(controller.LastSettingsJson, "gpt-test", "settings json");
+            AssertEqual("gpt-test", controller.LastSettings.Model, "settings model");
             AssertEqual("secret", controller.LastApiKey, "api key");
         }
 

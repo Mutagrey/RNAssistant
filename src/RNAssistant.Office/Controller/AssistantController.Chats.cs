@@ -11,7 +11,7 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
-        public string DeleteMessageJson(string id, int index, string chatId = null)
+        public ChatStateResponse DeleteMessage(string id, int index, string chatId = null)
         {
             var session = LoadSession(chatId);
             var removed = false;
@@ -32,10 +32,10 @@ namespace RNAssistant.Office
             }
 
             var activeId = ChatStore.GetSessionId(session);
-            return JsonConvert.SerializeObject(new ChatStateResponse { ActiveChatId = activeId, ActiveChatModel = session.Model, Chats = GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load()) });
+            return new ChatStateResponse { ActiveChatId = activeId, ActiveChatModel = session.Model, Chats = GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load()) };
         }
 
-        public string ForkChatJson(string id, int index, string chatId = null)
+        public ChatStateResponse ForkChat(string id, int index, string chatId = null)
         {
             var source = LoadSession(chatId);
             var sourceMessages = source.Messages ?? new List<ChatMessage>();
@@ -62,30 +62,30 @@ namespace RNAssistant.Office
             NormalizeContext(fork.Context, fork);
             _chatStore.Save(fork);
             SetActiveSession(fork);
-            return ChatStateJson(fork);
+            return ChatState(fork);
         }
 
-        public string ListChatsJson()
+        public ChatStateResponse ListChats()
         {
             var session = LoadSession(null);
-            return ChatStateJson(session);
+            return ChatState(session);
         }
 
-        public string CreateChatJson(string title)
+        public ChatStateResponse CreateChat(string title)
         {
             LoadSession(null);
             var session = _chatStore.Create(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle, string.IsNullOrWhiteSpace(title) ? "New chat" : title.Trim());
             SetActiveSession(session);
-            return ChatStateJson(session);
+            return ChatState(session);
         }
 
-        public string SelectChatJson(string chatId)
+        public ChatStateResponse SelectChat(string chatId)
         {
             var session = LoadSession(chatId);
-            return ChatStateJson(session);
+            return ChatState(session);
         }
 
-        public string RenameChatJson(string chatId, string title)
+        public ChatStateResponse RenameChat(string chatId, string title)
         {
             var session = LoadSession(chatId);
             if (!string.IsNullOrWhiteSpace(title))
@@ -94,26 +94,26 @@ namespace RNAssistant.Office
                 _chatStore.Save(session);
             }
 
-            return ChatStateJson(session);
+            return ChatState(session);
         }
 
-        public string SetChatModelJson(string chatId, string model)
+        public ChatStateResponse SetChatModel(string chatId, string model)
         {
             var session = LoadSession(chatId);
             session.Model = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
             _chatStore.Save(session);
-            return ChatStateJson(session);
+            return ChatState(session);
         }
 
-        public string ClearChatJson(string chatId)
+        public ChatStateResponse ClearChat(string chatId)
         {
             var session = LoadSession(chatId);
             session.Messages.Clear();
             _chatStore.Save(session);
-            return ChatStateJson(session);
+            return ChatState(session);
         }
 
-        public string DeleteChatJson(string chatId)
+        public ChatStateResponse DeleteChat(string chatId)
         {
             var current = LoadSession(chatId);
             _chatStore.Delete(_adapter.HostName, _adapter.DocumentKey, ChatStore.GetSessionId(current));
@@ -124,7 +124,7 @@ namespace RNAssistant.Office
             }
 
             SetActiveSession(next);
-            return ChatStateJson(next);
+            return ChatState(next);
         }
 
         private ChatSession LoadSession(string requestedSessionId)
@@ -201,10 +201,10 @@ namespace RNAssistant.Office
             _chatStore.SaveActiveSessionId(session.Host, session.DocumentKey, _activeSessionId);
         }
 
-        private string ChatStateJson(ChatSession session)
+        private ChatStateResponse ChatState(ChatSession session)
         {
             var activeId = ChatStore.GetSessionId(session);
-            return JsonConvert.SerializeObject(new ChatStateResponse
+            return new ChatStateResponse
             {
                 ActiveChatId = activeId,
                 ActiveChatModel = session == null ? string.Empty : session.Model,
@@ -212,7 +212,7 @@ namespace RNAssistant.Office
                 Context = session == null ? CreateEmptyContext() : LoadContext(session),
                 Messages = session == null ? new List<ChatMessage>() : session.Messages,
                 ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load())
-            });
+            };
         }
 
         private IReadOnlyList<ChatSessionSummary> GetChatSummaries(string activeId)

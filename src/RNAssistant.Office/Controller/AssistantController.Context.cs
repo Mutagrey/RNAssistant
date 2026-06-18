@@ -7,17 +7,17 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
-        public string GetContextJson(string chatId = null)
+        public DocumentContext GetContext(string chatId = null)
         {
-            return JsonConvert.SerializeObject(LoadContext(LoadSession(chatId)));
+            return LoadContext(LoadSession(chatId));
         }
 
-        public string AddSelectionContextJson(string mode, string chatId = null)
+        public DocumentContext AddSelectionContextFromBridge(string mode, string chatId = null)
         {
-            return JsonConvert.SerializeObject(AddSelectionContext(mode, chatId));
+            return AddSelectionContext(mode, chatId);
         }
 
-        public string AddTextContextJson(string kind, string title, string reference, string text, string detailsJson, string chatId = null)
+        public DocumentContext AddTextContext(string kind, string title, string reference, string text, string detailsJson, string chatId = null)
         {
             var settings = _settingsService.Load();
             var session = LoadSession(chatId);
@@ -32,10 +32,10 @@ namespace RNAssistant.Office
                 Preview = ContextService.TrimForContext(text ?? string.Empty, 360),
                 DetailsJson = detailsJson
             }, kind);
-            return JsonConvert.SerializeObject(context);
+            return context;
         }
 
-        public string AddVbaContextJson(string chatId = null, int maxChars = 0)
+        public DocumentContext AddVbaContext(string chatId = null, int maxChars = 0)
         {
             var settings = _settingsService.Load();
             var session = LoadSession(chatId);
@@ -67,7 +67,7 @@ namespace RNAssistant.Office
                     replaceModuleTool = _toolExecutor.VbaToolId("vba_replace_module")
                 })
             }, "vba_project");
-            return JsonConvert.SerializeObject(context);
+            return context;
         }
 
         public DocumentContext AddSelectionContext(string mode, string chatId = null)
@@ -103,7 +103,7 @@ namespace RNAssistant.Office
             return context;
         }
 
-        public string RemoveContextItemJson(string id, string chatId = null)
+        public DocumentContext RemoveContextItem(string id, string chatId = null)
         {
             var session = LoadSession(chatId);
             var context = LoadContext(session);
@@ -113,15 +113,15 @@ namespace RNAssistant.Office
                 SaveSessionContext(session);
             }
 
-            return JsonConvert.SerializeObject(context);
+            return context;
         }
 
-        public string ClearContextJson(string chatId = null)
+        public DocumentContext ClearContext(string chatId = null)
         {
             var session = LoadSession(chatId);
             session.Context = CreateEmptyContext();
             SaveSessionContext(session);
-            return JsonConvert.SerializeObject(session.Context);
+            return session.Context;
         }
 
         private DocumentContext LoadContext(ChatSession session)

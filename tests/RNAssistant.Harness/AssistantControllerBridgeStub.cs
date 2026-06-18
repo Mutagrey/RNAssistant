@@ -1,5 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Models;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office
 {
@@ -10,7 +15,7 @@ namespace RNAssistant.Office
         public bool LastDryRun { get; private set; }
         public string LastChatText { get; private set; }
         public string LastChatId { get; private set; }
-        public string LastSettingsJson { get; private set; }
+        public AppSettings LastSettings { get; private set; }
         public string LastApiKey { get; private set; }
         public string LastModuleName { get; private set; }
         public string LastModuleCode { get; private set; }
@@ -19,52 +24,58 @@ namespace RNAssistant.Office
         public string LastContextReference { get; private set; }
         public string LastContextText { get; private set; }
 
-        public string InitializeJson() { return "{\"initialized\":true}"; }
-        public string ListChatsJson() { return "{\"chats\":[]}"; }
-        public string CreateChatJson(string title) { return "{\"title\":\"" + Escape(title) + "\"}"; }
-        public string SelectChatJson(string chatId) { return "{\"chatId\":\"" + Escape(chatId) + "\"}"; }
-        public string RenameChatJson(string chatId, string title) { return "{\"chatId\":\"" + Escape(chatId) + "\",\"title\":\"" + Escape(title) + "\"}"; }
-        public string SetChatModelJson(string chatId, string model) { return "{\"chatId\":\"" + Escape(chatId) + "\",\"model\":\"" + Escape(model) + "\"}"; }
-        public string ClearChatJson(string chatId) { return "{\"chatId\":\"" + Escape(chatId) + "\"}"; }
-        public string DeleteChatJson(string chatId) { return "{\"chatId\":\"" + Escape(chatId) + "\"}"; }
-        public string DeleteMessageJson(string id, int index, string chatId = null) { return "{\"id\":\"" + Escape(id) + "\",\"index\":" + index + "}"; }
-        public string ForkChatJson(string id, int index, string chatId = null) { return "{\"id\":\"" + Escape(id) + "\",\"index\":" + index + "}"; }
-        public string GetSettingsJson() { return "{\"settings\":{}}"; }
-        public Task<string> GetModelCatalogJsonAsync(string settingsJson, string apiKey) { return Task.FromResult("{\"catalog\":{}}"); }
-        public string SaveSettingsJson(string settingsJson, string apiKey)
+        public InitResponse Initialize() { return new InitResponse { Host = "Excel", Title = "Harness.xlsx" }; }
+        public ChatStateResponse ListChats() { return ChatState(); }
+        public ChatStateResponse CreateChat(string title) { return ChatState(title); }
+        public ChatStateResponse SelectChat(string chatId) { return ChatState(null, chatId); }
+        public ChatStateResponse RenameChat(string chatId, string title) { return ChatState(title, chatId); }
+        public ChatStateResponse SetChatModel(string chatId, string model) { return ChatState(model, chatId); }
+        public ChatStateResponse ClearChat(string chatId) { return ChatState(null, chatId); }
+        public ChatStateResponse DeleteChat(string chatId) { return ChatState(null, chatId); }
+        public ChatStateResponse DeleteMessage(string id, int index, string chatId = null) { return ChatState(id, chatId); }
+        public ChatStateResponse ForkChat(string id, int index, string chatId = null) { return ChatState(id, chatId); }
+        public SettingsResponse GetSettings() { return new SettingsResponse { Settings = new AppSettings(), HasApiKey = false }; }
+        public Task<ModelCatalogResponse> GetModelCatalogAsync(AppSettings settings, string apiKey) { return Task.FromResult(new ModelCatalogResponse { Catalog = new JObject() }); }
+
+        public SettingsResponse SaveSettings(AppSettings settings, string apiKey)
         {
-            LastSettingsJson = settingsJson;
+            LastSettings = settings;
             LastApiKey = apiKey;
-            return "{\"settings\":{}}";
+            return GetSettings();
         }
-        public string ClearRuntimeDataJson() { return "{\"cleared\":true}"; }
-        public string GetToolsJson() { return "[]"; }
-        public string SaveToolsJson(string toolsJson) { return "[]"; }
-        public string GetVbaProjectJson(int maxChars) { return "{\"maxChars\":" + maxChars + "}"; }
-        public string SaveVbaModuleJson(string moduleName, string code)
+
+        public InitResponse ClearRuntimeData() { return Initialize(); }
+        public IReadOnlyList<SkillDefinition> GetTools() { return new SkillDefinition[0]; }
+        public IReadOnlyList<SkillDefinition> SaveTools(IEnumerable<SkillDefinition> tools) { return new SkillDefinition[0]; }
+        public VbaProjectResponse GetVbaProject(int maxChars) { return new VbaProjectResponse { Result = SkillResult.Ok("ok") }; }
+
+        public SkillResult SaveVbaModule(string moduleName, string code)
         {
             LastModuleName = moduleName;
             LastModuleCode = code;
-            return "{\"moduleName\":\"" + Escape(moduleName) + "\"}";
+            return SkillResult.Ok("saved");
         }
-        public string RestoreVbaBackupJson(string backupId, string moduleName) { return "{\"backupId\":\"" + Escape(backupId) + "\"}"; }
-        public string GetContextJson(string chatId = null) { return "{\"chatId\":\"" + Escape(chatId) + "\"}"; }
-        public string AddSelectionContextJson(string mode, string chatId = null) { return "{\"mode\":\"" + Escape(mode) + "\"}"; }
-        public string AddTextContextJson(string kind, string title, string reference, string text, string detailsJson, string chatId = null)
+
+        public SkillResult RestoreVbaBackup(string backupId, string moduleName) { return SkillResult.Ok("restored"); }
+        public DocumentContext GetContext(string chatId = null) { return new DocumentContext { DocumentKey = chatId ?? string.Empty }; }
+        public DocumentContext AddSelectionContextFromBridge(string mode, string chatId = null) { return new DocumentContext { Title = mode ?? string.Empty }; }
+
+        public DocumentContext AddTextContext(string kind, string title, string reference, string text, string detailsJson, string chatId = null)
         {
             LastContextKind = kind;
             LastContextTitle = title;
             LastContextReference = reference;
             LastContextText = text;
             LastChatId = chatId;
-            return "{\"kind\":\"" + Escape(kind) + "\"}";
+            return new DocumentContext { Title = kind ?? string.Empty };
         }
-        public string AddVbaContextJson(string chatId = null, int maxChars = 0) { return "{\"maxChars\":" + maxChars + "}"; }
-        public string RemoveContextItemJson(string id, string chatId = null) { return "{\"id\":\"" + Escape(id) + "\"}"; }
-        public string ClearContextJson(string chatId = null) { return "{\"chatId\":\"" + Escape(chatId) + "\"}"; }
-        public Task<string> RunQuickActionAsync(string action) { return Task.FromResult("{\"prompt\":\"" + Escape(action) + "\"}"); }
 
-        public Task<string> SendChatAsync(string text, string chatId = null, Action<string, string> progress = null)
+        public DocumentContext AddVbaContext(string chatId = null, int maxChars = 0) { return new DocumentContext { Title = maxChars.ToString() }; }
+        public DocumentContext RemoveContextItem(string id, string chatId = null) { return new DocumentContext { Title = id ?? string.Empty }; }
+        public DocumentContext ClearContext(string chatId = null) { return new DocumentContext { DocumentKey = chatId ?? string.Empty }; }
+        public Task<QuickActionResponse> RunQuickActionAsync(string action) { return Task.FromResult(new QuickActionResponse { Prompt = action }); }
+
+        public Task<SendChatResponse> SendChatAsync(string text, string chatId = null, Action<string, string> progress = null)
         {
             LastChatText = text;
             LastChatId = chatId;
@@ -72,24 +83,31 @@ namespace RNAssistant.Office
             {
                 progress("thinking", "Testing progress");
             }
-            return Task.FromResult("{\"message\":\"ok\"}");
+            return Task.FromResult(new SendChatResponse { Message = "ok" });
         }
 
-        public string RunToolJson(string toolId, string argumentsJson, bool dryRun, Action<string, string> progress = null)
+        public SkillResult RunTool(string toolId, IDictionary<string, object> arguments, bool dryRun, Action<string, string> progress = null)
         {
             LastToolId = toolId;
-            LastArgumentsJson = argumentsJson;
+            LastArgumentsJson = JsonConvert.SerializeObject(arguments ?? new Dictionary<string, object>());
             LastDryRun = dryRun;
             if (progress != null)
             {
                 progress("executing", "Testing tool");
             }
-            return "{\"ran\":true}";
+            return SkillResult.Ok("ran", "{\"ran\":true}");
         }
 
-        private static string Escape(string value)
+        private static ChatStateResponse ChatState(string title = null, string chatId = null)
         {
-            return (value ?? string.Empty).Replace("\\", "\\\\").Replace("\"", "\\\"");
+            return new ChatStateResponse
+            {
+                ActiveChatId = chatId ?? string.Empty,
+                ActiveChatModel = title ?? string.Empty,
+                Chats = new ChatSessionSummary[0],
+                Context = new DocumentContext(),
+                Messages = new ChatMessage[0]
+            };
         }
     }
 }

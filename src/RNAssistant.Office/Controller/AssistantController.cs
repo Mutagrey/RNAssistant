@@ -2,14 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
-using RNAssistant.Office.Skills;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office
@@ -52,13 +50,13 @@ namespace RNAssistant.Office
 
         public string HostName { get { return _adapter.HostName; } }
 
-        public string InitializeJson()
+        public InitResponse Initialize()
         {
             var session = LoadSession(null);
             var activeId = ChatStore.GetSessionId(session);
             var context = LoadContext(session);
             var settings = _settingsService.Load();
-            var state = new InitResponse
+            return new InitResponse
             {
                 Host = _adapter.HostName,
                 DocumentKey = _adapter.DocumentKey,
@@ -75,16 +73,15 @@ namespace RNAssistant.Office
                 ContextUsage = ContextUsageEstimator.FromSession(session, settings),
                 QuickAction = DequeueQuickAction()
             };
-            return JsonConvert.SerializeObject(state);
         }
 
-        public async Task<string> SendChatAsync(string text, string chatId = null, Action<string, string> progress = null)
+        public async Task<SendChatResponse> SendChatAsync(string text, string chatId = null, Action<string, string> progress = null)
         {
             if (string.IsNullOrWhiteSpace(text))
             {
                 var emptySession = LoadSession(chatId);
                 var emptyId = ChatStore.GetSessionId(emptySession);
-                return JsonConvert.SerializeObject(new SendChatResponse { Message = string.Empty, SkillResults = new object[0], ActiveChatId = emptyId, ActiveChatModel = emptySession.Model, Chats = GetChatSummaries(emptyId), Context = LoadContext(emptySession), Messages = emptySession.Messages, ContextUsage = ContextUsageEstimator.FromSession(emptySession, _settingsService.Load()) });
+                return new SendChatResponse { Message = string.Empty, SkillResults = new object[0], ActiveChatId = emptyId, ActiveChatModel = emptySession.Model, Chats = GetChatSummaries(emptyId), Context = LoadContext(emptySession), Messages = emptySession.Messages, ContextUsage = ContextUsageEstimator.FromSession(emptySession, _settingsService.Load()) };
             }
 
             var settings = _settingsService.Load();
@@ -96,99 +93,93 @@ namespace RNAssistant.Office
             ReportProgress(progress, "saving", "Сохраняю историю...");
             _chatStore.Save(session);
             var activeId = ChatStore.GetSessionId(session);
-            return JsonConvert.SerializeObject(new SendChatResponse { Message = completion.AssistantText, SkillResults = completion.SkillResults, ActiveChatId = activeId, ActiveChatModel = session.Model, Chats = GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings) });
+            return new SendChatResponse { Message = completion.AssistantText, SkillResults = completion.SkillResults, ActiveChatId = activeId, ActiveChatModel = session.Model, Chats = GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings) };
         }
 
-        public string GetSettingsJson()
+        public SettingsResponse GetSettings()
         {
-            return JsonConvert.SerializeObject(new
+            return new SettingsResponse
             {
-                settings = _settingsService.Load(),
-                hasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey())
-            });
+                Settings = _settingsService.Load(),
+                HasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey())
+            };
         }
 
-        public async Task<string> GetModelCatalogJsonAsync(string settingsJson, string apiKey)
+        public async Task<ModelCatalogResponse> GetModelCatalogAsync(AppSettings settings, string apiKey)
         {
-            var settings = string.IsNullOrWhiteSpace(settingsJson)
-                ? _settingsService.Load()
-                : (JsonConvert.DeserializeObject<AppSettings>(settingsJson) ?? _settingsService.Load());
+            settings = settings ?? _settingsService.Load();
             var json = await _llmClient.GetModelsConfigJsonAsync(
                 settings,
                 string.IsNullOrWhiteSpace(apiKey) ? null : apiKey).ConfigureAwait(false);
 
-            return JsonConvert.SerializeObject(new
+            return new ModelCatalogResponse
             {
-                configUrl = LlmClient.BuildModelsConfigUrl(settings.BaseUrl),
-                catalog = JToken.Parse(json)
-            });
+                ConfigUrl = LlmClient.BuildModelsConfigUrl(settings.BaseUrl),
+                Catalog = JToken.Parse(json)
+            };
         }
 
-        public string SaveSettingsJson(string settingsJson, string apiKey)
+        public SettingsResponse SaveSettings(AppSettings settings, string apiKey)
         {
-            var settings = JsonConvert.DeserializeObject<AppSettings>(settingsJson) ?? new AppSettings();
             _settingsService.Save(settings);
             if (apiKey != null)
             {
                 _settingsService.SaveApiKey(apiKey);
             }
 
-            return GetSettingsJson();
+            return GetSettings();
         }
 
-        public string ClearRuntimeDataJson()
+        public InitResponse ClearRuntimeData()
         {
             _paths.ClearRuntimeData();
             _activeSessionId = null;
             _activeHost = null;
             _activeDocumentKey = null;
             _activeRuntimeDocumentKey = null;
-            return InitializeJson();
+            return Initialize();
         }
 
-        public string GetToolsJson()
+        public IReadOnlyList<SkillDefinition> GetTools()
         {
-            return JsonConvert.SerializeObject(_toolCatalog.GetVisibleTools());
+            return _toolCatalog.GetVisibleTools();
         }
 
-        public string SaveToolsJson(string toolsJson)
+        public IReadOnlyList<SkillDefinition> SaveTools(IEnumerable<SkillDefinition> tools)
         {
-            var tools = JsonConvert.DeserializeObject<List<SkillDefinition>>(toolsJson) ?? new List<SkillDefinition>();
-            _toolStore.Save(tools.Where(s => !s.BuiltIn), _adapter.HostName);
-            return GetToolsJson();
+            _toolStore.Save((tools ?? new SkillDefinition[0]).Where(s => !s.BuiltIn), _adapter.HostName);
+            return GetTools();
         }
 
-        public string RunToolJson(string toolId, string argumentsJson, bool dryRun, Action<string, string> progress = null)
+        public SkillResult RunTool(string toolId, IDictionary<string, object> arguments, bool dryRun, Action<string, string> progress = null)
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
             var command = new SkillCommand { SkillId = toolId };
-            var args = SkillArgumentReader.ParseObject(argumentsJson);
-            foreach (var pair in args)
+            foreach (var pair in arguments ?? new Dictionary<string, object>())
             {
                 command.Arguments[pair.Key] = pair.Value;
             }
 
             ReportProgress(progress, dryRun ? "checking" : "executing", (dryRun ? "Проверяю tool: " : "Исполняю tool: ") + toolId);
-            var result = _toolExecutor.Execute(command, tools, settings, dryRun, true);
-            return JsonConvert.SerializeObject(result);
+            return _toolExecutor.Execute(command, tools, settings, dryRun, true);
         }
 
-        public string GetVbaProjectJson(int maxChars)
+        public VbaProjectResponse GetVbaProject(int maxChars)
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
             var command = new SkillCommand { SkillId = _toolExecutor.VbaToolId("vba_read_project") };
             command.Arguments["maxChars"] = maxChars <= 0 ? settings.VbaContextCharLimit : maxChars;
             var result = _toolExecutor.Execute(command, tools, settings, false, true);
-            return JsonConvert.SerializeObject(new
+            return new VbaProjectResponse
             {
-                result = result,
-                backups = _vbaBackupStore.List(_adapter.HostName, _adapter.DocumentKey)
-            });
+                Result = result,
+                Backups = _vbaBackupStore.List(_adapter.HostName, _adapter.DocumentKey)
+            };
         }
 
-        public string SaveVbaModuleJson(string moduleName, string code)
+        public SkillResult SaveVbaModule(string moduleName, string code)
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
@@ -196,15 +187,14 @@ namespace RNAssistant.Office
             command.Arguments["moduleName"] = moduleName;
             command.Arguments["code"] = code;
             command.Arguments["createIfMissing"] = "true";
-            var result = _toolExecutor.Execute(command, tools, settings, false, true);
-            return JsonConvert.SerializeObject(result);
+            return _toolExecutor.Execute(command, tools, settings, false, true);
         }
 
-        public string RestoreVbaBackupJson(string backupId, string moduleName)
+        public SkillResult RestoreVbaBackup(string backupId, string moduleName)
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-            var result = _toolExecutor.Execute(new SkillCommand
+            return _toolExecutor.Execute(new SkillCommand
             {
                 SkillId = _toolExecutor.VbaToolId("vba_restore_backup"),
                 Arguments =
@@ -213,7 +203,6 @@ namespace RNAssistant.Office
                     ["moduleName"] = moduleName ?? string.Empty
                 }
             }, tools, settings, false, true);
-            return JsonConvert.SerializeObject(result);
         }
 
         public void QueueQuickAction(string action)
@@ -224,7 +213,7 @@ namespace RNAssistant.Office
             }
         }
 
-        public Task<string> RunQuickActionAsync(string action)
+        public Task<QuickActionResponse> RunQuickActionAsync(string action)
         {
             string prompt;
             switch ((action ?? string.Empty).ToLowerInvariant())
@@ -255,7 +244,7 @@ namespace RNAssistant.Office
                     break;
             }
 
-            return Task.FromResult(JsonConvert.SerializeObject(new { prompt = prompt }));
+            return Task.FromResult(new QuickActionResponse { Prompt = prompt });
         }
 
         private string DequeueQuickAction()
