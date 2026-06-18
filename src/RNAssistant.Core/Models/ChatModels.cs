@@ -29,6 +29,7 @@ namespace RNAssistant.Core.Models
         public string DocumentKey { get; set; }
         public string DocumentTitle { get; set; }
         public string Title { get; set; }
+        public string Model { get; set; }
         public DateTime CreatedUtc { get; set; }
         public DateTime UpdatedUtc { get; set; }
         public DocumentContext Context { get; set; }
@@ -52,6 +53,7 @@ namespace RNAssistant.Core.Models
         public string DocumentKey { get; set; }
         public string DocumentTitle { get; set; }
         public string Title { get; set; }
+        public string Model { get; set; }
         public DateTime CreatedUtc { get; set; }
         public DateTime UpdatedUtc { get; set; }
         public int MessageCount { get; set; }

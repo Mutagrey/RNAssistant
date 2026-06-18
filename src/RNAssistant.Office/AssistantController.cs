@@ -54,20 +54,22 @@ namespace RNAssistant.Office
             var session = LoadSession(null);
             var activeId = ChatStore.GetSessionId(session);
             var context = LoadContext(session);
+            var settings = _settingsService.Load();
             var state = new
             {
                 host = _adapter.HostName,
                 documentKey = _adapter.DocumentKey,
                 title = _adapter.DocumentTitle,
                 activeChatId = activeId,
+                activeChatModel = session == null ? string.Empty : session.Model,
                 chats = GetChatSummaries(activeId),
-                settings = _settingsService.Load(),
+                settings = settings,
                 hasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey()),
                 tools = GetVisibleTools(),
                 toolsPath = _paths.ToolsDirectory,
                 context = context,
                 messages = session.Messages,
-                contextUsage = EstimateContextUsage(session, _settingsService.Load()),
+                contextUsage = EstimateContextUsage(session, settings),
                 quickAction = DequeueQuickAction()
             };
             return JsonConvert.SerializeObject(state);
@@ -79,12 +81,13 @@ namespace RNAssistant.Office
             {
                 var emptySession = LoadSession(chatId);
                 var emptyId = ChatStore.GetSessionId(emptySession);
-                return JsonConvert.SerializeObject(new { message = string.Empty, skillResults = new SkillResult[0], activeChatId = emptyId, chats = GetChatSummaries(emptyId), context = LoadContext(emptySession), messages = emptySession.Messages, contextUsage = EstimateContextUsage(emptySession, _settingsService.Load()) });
+                return JsonConvert.SerializeObject(new { message = string.Empty, skillResults = new SkillResult[0], activeChatId = emptyId, activeChatModel = emptySession.Model, chats = GetChatSummaries(emptyId), context = LoadContext(emptySession), messages = emptySession.Messages, contextUsage = EstimateContextUsage(emptySession, _settingsService.Load()) });
             }
 
             ReportProgress(progress, "context", "Читаю документ...");
             var settings = _settingsService.Load();
             var session = LoadSession(chatId);
+            ApplyChatModel(settings, session);
             session.Messages.Add(new ChatMessage { Role = "user", Content = text });
             EnsureSessionTitleFromUserText(session, text);
 
@@ -162,7 +165,7 @@ namespace RNAssistant.Office
             ReportProgress(progress, "saving", "Сохраняю историю...");
             _chatStore.Save(session);
             var activeId = ChatStore.GetSessionId(session);
-            return JsonConvert.SerializeObject(new { message = assistantText, skillResults = resultLog, activeChatId = activeId, chats = GetChatSummaries(activeId), context = LoadContext(session), messages = session.Messages, contextUsage = contextUsage ?? EstimateContextUsage(session, settings) });
+            return JsonConvert.SerializeObject(new { message = assistantText, skillResults = resultLog, activeChatId = activeId, activeChatModel = session.Model, chats = GetChatSummaries(activeId), context = LoadContext(session), messages = session.Messages, contextUsage = contextUsage ?? EstimateContextUsage(session, settings) });
         }
 
         public string DeleteMessageJson(string id, int index, string chatId = null)
@@ -186,7 +189,7 @@ namespace RNAssistant.Office
             }
 
             var activeId = ChatStore.GetSessionId(session);
-            return JsonConvert.SerializeObject(new { activeChatId = activeId, chats = GetChatSummaries(activeId), context = LoadContext(session), messages = session.Messages, contextUsage = EstimateContextUsage(session, _settingsService.Load()) });
+            return JsonConvert.SerializeObject(new { activeChatId = activeId, activeChatModel = session.Model, chats = GetChatSummaries(activeId), context = LoadContext(session), messages = session.Messages, contextUsage = EstimateContextUsage(session, _settingsService.Load()) });
         }
 
         public string ListChatsJson()
@@ -218,6 +221,14 @@ namespace RNAssistant.Office
                 _chatStore.Save(session);
             }
 
+            return ChatStateJson(session);
+        }
+
+        public string SetChatModelJson(string chatId, string model)
+        {
+            var session = LoadSession(chatId);
+            session.Model = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
+            _chatStore.Save(session);
             return ChatStateJson(session);
         }
 
@@ -711,12 +722,23 @@ namespace RNAssistant.Office
             _chatStore.SaveActiveSessionId(session.Host, session.DocumentKey, _activeSessionId);
         }
 
+        private static void ApplyChatModel(AppSettings settings, ChatSession session)
+        {
+            if (settings == null || session == null || string.IsNullOrWhiteSpace(session.Model))
+            {
+                return;
+            }
+
+            settings.Model = session.Model.Trim();
+        }
+
         private string ChatStateJson(ChatSession session)
         {
             var activeId = ChatStore.GetSessionId(session);
             return JsonConvert.SerializeObject(new
             {
                 activeChatId = activeId,
+                activeChatModel = session == null ? string.Empty : session.Model,
                 chats = GetChatSummaries(activeId),
                 context = session == null ? CreateEmptyContext() : LoadContext(session),
                 messages = session == null ? new List<ChatMessage>() : session.Messages,
@@ -734,6 +756,7 @@ namespace RNAssistant.Office
                     DocumentKey = s.DocumentKey,
                     DocumentTitle = s.DocumentTitle,
                     Title = s.Title,
+                    Model = s.Model,
                     CreatedUtc = s.CreatedUtc,
                     UpdatedUtc = s.UpdatedUtc,
                     MessageCount = s.Messages == null ? 0 : s.Messages.Count

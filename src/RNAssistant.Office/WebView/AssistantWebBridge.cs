@@ -44,6 +44,9 @@ namespace RNAssistant.Office.WebView
                     case "renameChat":
                         payloadJson = _controller.RenameChatJson((string)payload["chatId"], (string)payload["title"]);
                         break;
+                    case "setChatModel":
+                        payloadJson = _controller.SetChatModelJson((string)payload["chatId"], (string)payload["model"]);
+                        break;
                     case "clearChat":
                         payloadJson = _controller.ClearChatJson((string)payload["chatId"]);
                         break;

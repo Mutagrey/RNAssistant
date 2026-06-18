@@ -8,6 +8,7 @@
     contextUsage: {},
     chats: [],
     activeChatId: "",
+    activeChatModel: "",
     messages: [],
     failedSend: null,
     modelCatalog: { configUrl: "", defaultModel: "", models: [], loaded: false, loading: false, error: "" },
@@ -227,6 +228,10 @@
     return Number(chatValue(chat, "MessageCount", "messageCount", 0) || 0);
   }
 
+  function chatModel(chat) {
+    return chatValue(chat, "Model", "model", "") || "";
+  }
+
   function renderChatSessions() {
     var select = $("chatSessionSelect");
     if (!select) {
@@ -237,7 +242,8 @@
     (state.chats || []).forEach(function (chat) {
       var option = document.createElement("option");
       option.value = chatId(chat);
-      option.textContent = chatTitle(chat) + " (" + chatMessageCount(chat) + ")";
+      var model = chatModel(chat);
+      option.textContent = chatTitle(chat) + " (" + chatMessageCount(chat) + ")" + (model ? " - " + model : "");
       select.appendChild(option);
     });
     select.value = state.activeChatId || "";
@@ -251,6 +257,9 @@
   function applyChatState(response) {
     response = response || {};
     state.activeChatId = response.activeChatId || response.ActiveChatId || state.activeChatId || "";
+    if (response.activeChatModel !== undefined || response.ActiveChatModel !== undefined) {
+      state.activeChatModel = response.activeChatModel || response.ActiveChatModel || "";
+    }
     state.chats = response.chats || response.Chats || state.chats || [];
     if (response.context || response.Context) {
       state.context = response.context || response.Context || {};
@@ -261,6 +270,7 @@
     renderMessages();
     renderContext(true);
     renderContextMeter();
+    renderModelControls();
   }
 
   function iconSvg(name) {
@@ -652,6 +662,10 @@
     return input ? input.value.trim() : settingsModel();
   }
 
+  function activeChatModel() {
+    return state.activeChatModel || "";
+  }
+
   function modelField(model, pascal, snake, camel, fallback) {
     model = model || {};
     if (model[pascal] !== undefined) {
@@ -733,22 +747,6 @@
     setInputIfPresent("topPInput", model.topP);
   }
 
-  function applyModelDefaultsToSettings(settings, model) {
-    if (!settings || !model) {
-      return;
-    }
-
-    if (hasModelSettingValue(model.maxTokens)) {
-      settings.MaxTokens = Number(model.maxTokens);
-    }
-    if (hasModelSettingValue(model.temperature)) {
-      settings.Temperature = Number(model.temperature);
-    }
-    if (hasModelSettingValue(model.topP)) {
-      settings.TopP = Number(model.topP);
-    }
-  }
-
   function modelOptionText(model) {
     if (!model) {
       return "";
@@ -811,6 +809,41 @@
     select.disabled = state.modelCatalog.loading || state.modelSaving || models.length === 0;
   }
 
+  function populateChatModelSelect(select) {
+    if (!select) {
+      return;
+    }
+
+    var models = state.modelCatalog.models || [];
+    var selected = activeChatModel();
+    var defaultModel = settingsModel();
+    select.innerHTML = "";
+
+    var defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.textContent = "Default: " + (defaultModel || "not set");
+    select.appendChild(defaultOption);
+
+    if (selected && !findModel(selected)) {
+      var fallback = document.createElement("option");
+      fallback.value = selected;
+      fallback.textContent = selected + " (chat)";
+      select.appendChild(fallback);
+    }
+
+    models.forEach(function (model) {
+      var option = document.createElement("option");
+      option.value = model.value;
+      option.textContent = modelOptionText(model);
+      option.title = modelOptionTitle(model);
+      select.appendChild(option);
+    });
+
+    select.value = selected;
+    select.title = selected ? ("Chat model: " + selected) : ("Using default model: " + (defaultModel || ""));
+    select.disabled = state.modelCatalog.loading || state.modelSaving || !state.activeChatId;
+  }
+
   function appendModelMetric(box, label, value) {
     if (value === null || value === undefined || value === "") {
       return;
@@ -833,7 +866,7 @@
     var title = document.createElement("div");
     title.className = "model-info-title";
     var titleText = document.createElement("span");
-    titleText.textContent = model ? model.title : "Fallback model";
+    titleText.textContent = model ? model.title : "Default model fallback";
     title.appendChild(titleText);
 
     if (model && state.modelCatalog.defaultModel &&
@@ -854,7 +887,7 @@
     description.className = "model-info-description";
     description.textContent = model
       ? (model.description || "No description.")
-      : "Using typed fallback model. Load the model list or choose a model from the dropdown.";
+      : "Typed default model will be used for new chats and chats without their own model.";
     box.appendChild(description);
 
     if (!model) {
@@ -902,7 +935,7 @@
 
   function renderModelControls() {
     populateModelSelect($("modelSelect"), formModel());
-    populateModelSelect($("chatModelSelect"), settingsModel());
+    populateChatModelSelect($("chatModelSelect"));
     renderModelInfo(formModel());
     renderModelStatus();
   }
@@ -928,7 +961,7 @@
 
   async function saveChatModelSelection(value) {
     value = String(value || "").trim();
-    if (!value || value === settingsModel()) {
+    if (value === activeChatModel()) {
       return;
     }
 
@@ -937,18 +970,11 @@
       $("sendButton").disabled = true;
     }
     try {
-      var settings = {};
-      Object.keys(state.settings || {}).forEach(function (key) {
-        settings[key] = state.settings[key];
-      });
-      settings.Model = value;
-      applyModelDefaultsToSettings(settings, findModel(value));
-      var response = await send("saveSettings", { settings: settings, apiKey: null });
-      state.settings = response.settings || settings;
-      renderSettings();
+      var response = await send("setChatModel", { chatId: state.activeChatId, model: value });
+      applyChatState(response);
       updateEstimatedContextUsage();
       renderContextMeter();
-      log("Model selected: " + value);
+      log(value ? ("Chat model selected: " + value) : "Chat model uses default.");
     } catch (error) {
       renderModelControls();
       log(error.detail || error.message);
@@ -1781,6 +1807,7 @@
       state.context = init.context || {};
       state.contextUsage = init.contextUsage || {};
       state.activeChatId = init.activeChatId || "";
+      state.activeChatModel = init.activeChatModel || "";
       state.chats = init.chats || [];
       state.messages = init.messages || [];
       $("docLine").textContent = init.host + " - " + init.title;

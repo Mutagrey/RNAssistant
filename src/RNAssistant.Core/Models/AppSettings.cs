@@ -23,7 +23,7 @@ namespace RNAssistant.Core.Models
 
         public AppSettings()
         {
-            BaseUrl = "https://api.openai.com/v1";
+            BaseUrl = "https://api.openai.com";
             Model = "gpt-4o-mini";
             SystemPrompt = "You are an Office AI assistant. Use provided tools only through rnassistant-skill JSON blocks when document actions are required.";
             MaxTokens = 2048;

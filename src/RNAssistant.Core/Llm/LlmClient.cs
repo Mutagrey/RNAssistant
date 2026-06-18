@@ -37,7 +37,7 @@ namespace RNAssistant.Core.Llm
             }
 
             var apiKey = _apiKeyProvider == null ? null : _apiKeyProvider();
-            var url = CombineUrl(settings.BaseUrl, "/chat/completions");
+            var url = CombineUrl(settings.BaseUrl, "/v1/chat/completions");
             Uri requestUri;
             if (!Uri.TryCreate(url, UriKind.Absolute, out requestUri))
             {
@@ -237,7 +237,7 @@ namespace RNAssistant.Core.Llm
         {
             if (string.IsNullOrWhiteSpace(baseUrl))
             {
-                baseUrl = "https://api.openai.com/v1";
+                baseUrl = "https://api.openai.com";
             }
 
             var url = baseUrl.Trim();
@@ -260,7 +260,7 @@ namespace RNAssistant.Core.Llm
         {
             if (string.IsNullOrWhiteSpace(baseUrl))
             {
-                baseUrl = "https://api.openai.com/v1";
+                baseUrl = "https://api.openai.com";
             }
 
             if (baseUrl.IndexOf("/chat/completions", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -268,7 +268,13 @@ namespace RNAssistant.Core.Llm
                 return baseUrl;
             }
 
-            return baseUrl.TrimEnd('/') + path;
+            var cleanBaseUrl = baseUrl.TrimEnd('/');
+            if (cleanBaseUrl.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
+            {
+                cleanBaseUrl = cleanBaseUrl.Substring(0, cleanBaseUrl.Length - 3).TrimEnd('/');
+            }
+
+            return cleanBaseUrl + path;
         }
 
         private static int? ReadInt(JObject obj, params string[] names)

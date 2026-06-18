@@ -48,6 +48,7 @@ namespace RNAssistant.Core.Storage
             {
                 settings.BaseUrl = defaults.BaseUrl;
             }
+            settings.BaseUrl = NormalizeBaseUrl(settings.BaseUrl);
             if (string.IsNullOrWhiteSpace(settings.Model))
             {
                 settings.Model = defaults.Model;
@@ -93,6 +94,28 @@ namespace RNAssistant.Core.Storage
                 settings.VbaContextCharLimit = defaults.VbaContextCharLimit;
             }
             return settings;
+        }
+
+        private static string NormalizeBaseUrl(string baseUrl)
+        {
+            var value = (baseUrl ?? string.Empty).Trim().TrimEnd('/');
+            if (value.Length == 0)
+            {
+                return new AppSettings().BaseUrl;
+            }
+
+            var completionsIndex = value.IndexOf("/chat/completions", StringComparison.OrdinalIgnoreCase);
+            if (completionsIndex >= 0)
+            {
+                value = value.Substring(0, completionsIndex).TrimEnd('/');
+            }
+
+            if (value.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
+            {
+                value = value.Substring(0, value.Length - 3).TrimEnd('/');
+            }
+
+            return value;
         }
     }
 }
