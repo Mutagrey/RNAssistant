@@ -40,6 +40,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "prompt: trims oldest history", Run = PromptBuilderTrimsOldestHistory },
                 new HarnessTest { Name = "prompt: usage estimator counts context", Run = ContextUsageEstimatorCountsPromptAndSession },
                 new HarnessTest { Name = "chat: completion service records prose", Run = ChatCompletionServiceRecordsProseResponse },
+                new HarnessTest { Name = "chat: explicit clone preserves values", Run = ChatCloneServicePreservesValues },
                 new HarnessTest { Name = "context: normalize and upsert", Run = ContextServiceNormalizesAndUpserts },
                 new HarnessTest { Name = "context: trim helper", Run = ContextServiceTrimsText },
                 new HarnessTest { Name = "bridge: typed runTool payload", Run = BridgeUsesTypedRunToolPayload },
@@ -348,6 +349,59 @@ namespace RNAssistant.Harness
                 AssertEqual("hello world", session.Title, "session title");
                 AssertTrue(ContainsMessage(capturedMessages, "User-added context attachments"), "context prompt captured");
             });
+        }
+
+        private static void ChatCloneServicePreservesValues()
+        {
+            var context = new DocumentContext
+            {
+                Host = "Excel",
+                DocumentKey = "doc",
+                Title = "Harness.xlsx",
+                Summary = "Pinned summary",
+                UpdatedUtc = new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc)
+            };
+            context.Notes.Add(new ContextNote
+            {
+                Id = "note-1",
+                Host = "Excel",
+                Kind = "selection",
+                Title = "Cells",
+                Reference = "A1",
+                Source = "Sheet1!A1",
+                Text = "Original note",
+                Preview = "Original",
+                DetailsJson = "{\"range\":\"A1\"}",
+                CreatedUtc = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            });
+
+            var clonedContext = ChatCloneService.CloneContext(context);
+            AssertTrue(!object.ReferenceEquals(context, clonedContext), "context cloned");
+            AssertTrue(!object.ReferenceEquals(context.Notes[0], clonedContext.Notes[0]), "context note cloned");
+            AssertEqual("Pinned summary", clonedContext.Summary, "context summary");
+            AssertEqual("Original note", clonedContext.Notes[0].Text, "context note text");
+            context.Notes[0].Text = "Changed";
+            AssertEqual("Original note", clonedContext.Notes[0].Text, "context clone independent");
+
+            var sourceMessage = new ChatMessage
+            {
+                Id = "message-1",
+                Role = "assistant",
+                Content = "Done",
+                PromptTokens = 10,
+                CompletionTokens = 2,
+                TotalTokens = 12,
+                UsageJson = "{\"total\":12}",
+                CreatedUtc = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc)
+            };
+            var clonedMessages = ChatCloneService.CloneMessages(new[] { sourceMessage });
+            AssertEqual(1, clonedMessages.Count, "message count");
+            AssertTrue(!object.ReferenceEquals(sourceMessage, clonedMessages[0]), "message cloned");
+            AssertEqual("message-1", clonedMessages[0].Id, "message id");
+            AssertEqual("assistant", clonedMessages[0].Role, "message role");
+            AssertEqual(12, clonedMessages[0].TotalTokens, "message tokens");
+            sourceMessage.Content = "Changed";
+            AssertEqual("Done", clonedMessages[0].Content, "message clone independent");
         }
 
         private static void ContextServiceNormalizesAndUpserts()

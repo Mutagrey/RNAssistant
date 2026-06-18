@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Newtonsoft.Json;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office
 {
@@ -55,10 +55,10 @@ namespace RNAssistant.Office
 
             var fork = _chatStore.Create(source.Host, source.DocumentKey, source.DocumentTitle, BuildForkTitle(source));
             fork.Model = source.Model;
-            fork.Context = CloneJson(LoadContext(source)) ?? CreateEmptyContext();
+            fork.Context = ChatCloneService.CloneContext(LoadContext(source)) ?? CreateEmptyContext();
             fork.Messages = targetIndex < 0
                 ? new List<ChatMessage>()
-                : CloneJson(sourceMessages.Take(targetIndex + 1).ToList()) ?? new List<ChatMessage>();
+                : ChatCloneService.CloneMessages(sourceMessages.Take(targetIndex + 1));
             NormalizeContext(fork.Context, fork);
             _chatStore.Save(fork);
             SetActiveSession(fork);
@@ -169,11 +169,6 @@ namespace RNAssistant.Office
 
             SetActiveSession(session);
             return session;
-        }
-
-        private static T CloneJson<T>(T value) where T : class
-        {
-            return value == null ? null : JsonConvert.DeserializeObject<T>(JsonConvert.SerializeObject(value));
         }
 
         private static string BuildForkTitle(ChatSession source)

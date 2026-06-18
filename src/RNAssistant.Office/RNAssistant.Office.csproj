@@ -61,6 +61,7 @@
     <Compile Include="Contracts\IOfficeApplicationAdapter.cs" />
     <Compile Include="Vba\VbaProjectSupport.cs" />
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />
+    <Compile Include="Services\ChatCloneService.cs" />
     <Compile Include="Services\ChatCompletionService.cs" />
     <Compile Include="Services\ContextService.cs" />
     <Compile Include="Services\ToolCatalogService.cs" />

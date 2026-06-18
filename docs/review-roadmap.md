@@ -6,13 +6,14 @@
 2. `Controller/AssistantController.cs` owned chat state, context normalization, prompt flow, tool catalog composition, pipeline execution, VBA patching and transcript formatting. Split into controller orchestration, chat/session bridge methods, context bridge methods, `ContextService`, `ChatCompletionService`, `ToolCatalogService`, `AgentTranscript`, `OfficeToolExecutor`, and `PromptMessageBuilder`.
 3. The WebView UI no longer has one super-file: bridge/state, settings, tools, VBA, context and chat flows are split across static `web/js/app-*.js` files. `app.js` remains boot plus shared rendering helpers.
 4. Bridge payloads and common controller responses now use DTO/model contracts. JSON serialization for WebView responses is isolated in `AssistantWebBridge`.
-5. A local non-VSTO harness now covers parser, chat storage, fake-adapter pipeline basics, tool catalog composition, context normalization/upsert, prompt trimming/context usage, settings/context/VBA/tool bridge payload parsing, and a no-network chat completion flow.
-6. VSTO adapter code should be treated as Windows-only. Changes there need explicit Office x64 validation.
+5. Chat fork now uses explicit model cloning instead of non-boundary JSON roundtrips.
+6. A local non-VSTO harness now covers parser, chat storage, fake-adapter pipeline basics, tool catalog composition, context normalization/upsert and clone behavior, prompt trimming/context usage, settings/context/VBA/tool bridge payload parsing, and a no-network chat completion flow.
+7. VSTO adapter code should be treated as Windows-only. Changes there need explicit Office x64 validation.
 
 ## Short-Term Plan
 
 - Add more storage edge fixtures where they are reliable cross-platform.
-- Replace remaining non-boundary JSON cloning in chat fork with explicit model cloning.
+- Split `OfficeToolExecutor` into command execution and pipeline execution internals without changing public behavior.
 - Keep new UI responsibilities in the matching `web/js/app-*.js` feature file; do not grow `app.js` back into orchestration.
 
 ## Mid-Term Plan
