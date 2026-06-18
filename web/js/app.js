@@ -107,6 +107,7 @@
     if (response && response.type === "progress") {
       var progress = response.payload || {};
       setActivity(progress.phase || "working", progress.message || "Working...");
+      log("[" + (progress.phase || "working") + "] " + (progress.message || "Working..."));
       return;
     }
     var pending = state.pending[response.id];
@@ -567,7 +568,7 @@
         dryRun: !!dryRun
       });
       $("toolRunOutput").textContent = JSON.stringify(response, null, 2);
-      log((dryRun ? "Dry run finished: " : "Tool run finished: ") + skill.Id);
+      logToolResult(dryRun ? "Dry run" : "Tool run", skill.Id, response);
     } catch (error) {
       $("toolRunOutput").textContent = error.detail || error.message;
       log(error.message);
@@ -756,6 +757,18 @@
     $("contextBox").textContent = JSON.stringify(state.context || {}, null, 2);
   }
 
+  function logToolResult(prefix, toolId, result) {
+    var ok = result && (result.Success === true || result.success === true);
+    var message = result ? (result.Message || result.message || "") : "";
+    log(prefix + " " + (ok ? "OK" : "FAIL") + ": " + toolId + (message ? " - " + message : ""));
+  }
+
+  function logSkillResults(results) {
+    (results || []).forEach(function (result, index) {
+      logToolResult("Skill " + (index + 1), result.skillId || result.SkillId || "tool", result);
+    });
+  }
+
   async function initialize() {
     setActivity("loading", "Загружаю состояние...");
     try {
@@ -793,7 +806,7 @@
       state.messages = response.messages || state.messages;
       renderMessages();
       if (response.skillResults && response.skillResults.length) {
-        log("Executed " + response.skillResults.length + " local skill command(s).");
+        logSkillResults(response.skillResults);
       }
     } catch (error) {
       log(error.message);

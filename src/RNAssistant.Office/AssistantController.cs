@@ -94,7 +94,7 @@ namespace RNAssistant.Office
 
             ReportProgress(progress, "processing", "Разбираю ответ...");
             var commands = _commandParser.Parse(assistantText).ToList();
-            var results = new List<SkillResult>();
+            var resultLog = new List<object>();
             for (var i = 0; i < commands.Count; i++)
             {
                 var command = commands[i];
@@ -105,19 +105,18 @@ namespace RNAssistant.Office
                 var result = settings.AutoRunToolCalls != false
                     ? ExecuteCommand(command, tools, settings, 0, false, false)
                     : SkillResult.Fail("Auto tool execution is disabled: " + command.SkillId);
-                results.Add(result);
+                resultLog.Add(DescribeResult(command, result));
                 AddLocalResultMessage(session, command, result);
                 if (!result.Success && settings.AutoRunToolCalls != false && settings.AutoRetryToolErrors != false && CanRetryToolError(result))
                 {
                     ReportProgress(progress, "repairing", "Tool упал, прошу модель исправить вызов: " + command.SkillId);
-                    var retryResults = await RetryFailedToolAsync(systemPrompt, session, settings, tools, command, result, progress);
-                    results.AddRange(retryResults);
+                    await RetryFailedToolAsync(systemPrompt, session, settings, tools, command, result, resultLog, progress);
                 }
             }
 
             ReportProgress(progress, "saving", "Сохраняю историю...");
             _chatStore.Save(session);
-            return JsonConvert.SerializeObject(new { message = assistantText, skillResults = results, messages = session.Messages });
+            return JsonConvert.SerializeObject(new { message = assistantText, skillResults = resultLog, messages = session.Messages });
         }
 
         public string GetSettingsJson()
@@ -261,13 +260,14 @@ namespace RNAssistant.Office
             return Task.FromResult(JsonConvert.SerializeObject(new { prompt = prompt }));
         }
 
-        private async Task<List<SkillResult>> RetryFailedToolAsync(
+        private async Task RetryFailedToolAsync(
             string systemPrompt,
             ChatSession session,
             AppSettings settings,
             IReadOnlyList<SkillDefinition> tools,
             SkillCommand failedCommand,
             SkillResult failedResult,
+            ICollection<object> resultLog,
             Action<string, string> progress)
         {
             var repairPrompt = "A local tool call failed. Return only corrected rnassistant-skill JSON block(s), no prose. " +
@@ -281,24 +281,27 @@ namespace RNAssistant.Office
             var repairText = await _llmClient.CompleteAsync(settings, repairMessages);
             session.Messages.Add(new ChatMessage { Role = "assistant", Content = repairText });
             var retryCommands = _commandParser.Parse(repairText).ToList();
-            var retryResults = new List<SkillResult>();
             for (var i = 0; i < retryCommands.Count; i++)
             {
                 var retry = retryCommands[i];
                 ReportProgress(progress, "retrying", "Повтор tool " + (i + 1) + "/" + retryCommands.Count + ": " + retry.SkillId);
                 var retryResult = ExecuteCommand(retry, tools, settings, 0, false, false);
-                retryResults.Add(retryResult);
+                if (resultLog != null)
+                {
+                    resultLog.Add(DescribeResult(retry, retryResult));
+                }
                 AddLocalResultMessage(session, retry, retryResult);
             }
 
-            if (retryResults.Count == 0)
+            if (retryCommands.Count == 0)
             {
                 var noCommand = SkillResult.Fail("Auto-retry did not return a corrected tool call.");
-                retryResults.Add(noCommand);
+                if (resultLog != null)
+                {
+                    resultLog.Add(new { skillId = "auto-retry", success = false, message = noCommand.Message, dataJson = noCommand.DataJson });
+                }
                 session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Local skill retry result: " + noCommand.Message });
             }
-
-            return retryResults;
         }
 
         private static void AddLocalResultMessage(ChatSession session, SkillCommand command, SkillResult result)
@@ -308,6 +311,17 @@ namespace RNAssistant.Office
                 Role = "assistant",
                 Content = "Local skill result for `" + command.SkillId + "`: " + result.Message + (string.IsNullOrWhiteSpace(result.DataJson) ? string.Empty : "\n```json\n" + result.DataJson + "\n```")
             });
+        }
+
+        private static object DescribeResult(SkillCommand command, SkillResult result)
+        {
+            return new
+            {
+                skillId = command == null ? string.Empty : command.SkillId,
+                success = result != null && result.Success,
+                message = result == null ? string.Empty : result.Message,
+                dataJson = result == null ? null : result.DataJson
+            };
         }
 
         private string DequeueQuickAction()
@@ -361,50 +375,28 @@ namespace RNAssistant.Office
             if (HostSupportsVba())
             {
                 var listId = VbaToolId("vba_list_backups");
-                yield return new SkillDefinition
-                {
-                    Id = listId,
-                    Host = _adapter.HostName,
-                    Name = listId,
-                    Description = "List RNAssistant VBA rollback backups for the current document.",
-                    ArgumentSchemaJson = "{}",
-                    BuiltIn = true,
-                    Enabled = true
-                };
+                yield return ControllerTool(listId, "List RNAssistant VBA rollback backups for the current document.", "{}");
                 var restoreId = VbaToolId("vba_restore_backup");
-                yield return new SkillDefinition
-                {
-                    Id = restoreId,
-                    Host = _adapter.HostName,
-                    Name = restoreId,
-                    Description = "Restore a VBA module from a prior RNAssistant backup by backupId, or latest backup for moduleName.",
-                    ArgumentSchemaJson = "{\"backupId\":\"optional\",\"moduleName\":\"Module1\"}",
-                    BuiltIn = true,
-                    Enabled = true
-                };
+                yield return ControllerTool(restoreId, "Restore a VBA module from a prior RNAssistant backup by backupId, or latest backup for moduleName.", "{\"backupId\":\"optional\",\"moduleName\":\"Module1\"}");
                 var replaceTextId = VbaToolId("vba_replace_text");
-                yield return new SkillDefinition
-                {
-                    Id = replaceTextId,
-                    Host = _adapter.HostName,
-                    Name = replaceTextId,
-                    Description = "Replace an exact text fragment inside one VBA module; safer than replacing the whole module and creates a rollback backup.",
-                    ArgumentSchemaJson = "{\"moduleName\":\"Module1\",\"find\":\"old code\",\"replace\":\"new code\"}",
-                    BuiltIn = true,
-                    Enabled = true
-                };
+                yield return ControllerTool(replaceTextId, "Replace an exact text fragment inside one VBA module; safer than replacing the whole module and creates a rollback backup.", "{\"moduleName\":\"Module1\",\"find\":\"old code\",\"replace\":\"new code\"}");
                 var patchId = VbaToolId("vba_apply_patch");
-                yield return new SkillDefinition
-                {
-                    Id = patchId,
-                    Host = _adapter.HostName,
-                    Name = patchId,
-                    Description = "Apply structured VBA code patches: replace exact text, insert before/after exact text, or replace line ranges; creates rollback backup.",
-                    ArgumentSchemaJson = "{\"moduleName\":\"Module1\",\"patch\":[{\"op\":\"replace\",\"find\":\"old\",\"text\":\"new\"},{\"op\":\"replaceLines\",\"startLine\":10,\"deleteCount\":2,\"text\":\"new code\"}]}",
-                    BuiltIn = true,
-                    Enabled = true
-                };
+                yield return ControllerTool(patchId, "Apply structured VBA code patches: replace exact text, insert before/after exact text, or replace line ranges; creates rollback backup.", "{\"moduleName\":\"Module1\",\"patch\":[{\"op\":\"replace\",\"find\":\"old\",\"text\":\"new\"},{\"op\":\"replaceLines\",\"startLine\":10,\"deleteCount\":2,\"text\":\"new code\"}]}");
             }
+        }
+
+        private SkillDefinition ControllerTool(string id, string description, string schema)
+        {
+            return new SkillDefinition
+            {
+                Id = id,
+                Host = _adapter.HostName,
+                Name = id,
+                Description = description,
+                ArgumentSchemaJson = schema,
+                BuiltIn = true,
+                Enabled = true
+            };
         }
 
         private SkillResult ExecuteCommand(SkillCommand command, IReadOnlyList<SkillDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun)
