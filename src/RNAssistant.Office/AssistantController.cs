@@ -329,6 +329,16 @@ namespace RNAssistant.Office
                     BuiltIn = true,
                     Enabled = true
                 };
+                yield return new SkillDefinition
+                {
+                    Id = "excel.vba_replace_text",
+                    Host = "Excel",
+                    Name = "excel.vba_replace_text",
+                    Description = "Replace an exact text fragment inside one VBA module; safer than replacing the whole module and creates a rollback backup.",
+                    ArgumentSchemaJson = "{\"moduleName\":\"Module1\",\"find\":\"old code\",\"replace\":\"new code\"}",
+                    BuiltIn = true,
+                    Enabled = true
+                };
             }
         }
 
@@ -382,6 +392,11 @@ namespace RNAssistant.Office
             if (string.Equals(command.SkillId, VbaToolId("vba_restore_backup"), StringComparison.OrdinalIgnoreCase))
             {
                 return RestoreVbaBackup(command, skills, settings, dryRun, manualRun);
+            }
+
+            if (string.Equals(command.SkillId, VbaToolId("vba_replace_text"), StringComparison.OrdinalIgnoreCase))
+            {
+                return ReplaceVbaText(command, skills, settings, dryRun, manualRun);
             }
 
             if (dryRun)
@@ -557,6 +572,69 @@ namespace RNAssistant.Office
                 : result;
         }
 
+        private SkillResult ReplaceVbaText(SkillCommand command, IReadOnlyList<SkillDefinition> tools, AppSettings settings, bool dryRun, bool manualRun)
+        {
+            var moduleName = GetArgument(command.Arguments, "moduleName", string.Empty);
+            var find = GetArgument(command.Arguments, "find", string.Empty);
+            var replace = GetArgument(command.Arguments, "replace", string.Empty);
+            if (string.IsNullOrWhiteSpace(moduleName) || string.IsNullOrEmpty(find))
+            {
+                return SkillResult.Fail("moduleName and find are required.");
+            }
+
+            var read = new SkillCommand { SkillId = VbaToolId("vba_read_module") };
+            read.Arguments["moduleName"] = moduleName;
+            read.Arguments["maxChars"] = 1000000;
+            var current = _adapter.ExecuteSkill(read);
+            if (!current.Success || string.IsNullOrWhiteSpace(current.DataJson))
+            {
+                return current.Success ? SkillResult.Fail("VBA module returned no code.") : current;
+            }
+
+            string code;
+            try
+            {
+                code = (string)JObject.Parse(current.DataJson)["code"] ?? string.Empty;
+            }
+            catch (JsonException ex)
+            {
+                return SkillResult.Fail("Could not parse VBA module data: " + ex.Message);
+            }
+
+            if (code.EndsWith("\n...[truncated]", StringComparison.Ordinal))
+            {
+                return SkillResult.Fail("VBA module is too large for a safe text patch.");
+            }
+
+            var replacements = CountOccurrences(code, find);
+            if (replacements == 0)
+            {
+                return SkillResult.Fail("Text fragment was not found in VBA module: " + moduleName);
+            }
+
+            var updated = code.Replace(find, replace ?? string.Empty);
+            var preview = JsonConvert.SerializeObject(new
+            {
+                moduleName = moduleName,
+                replacements = replacements,
+                oldLength = code.Length,
+                newLength = updated.Length
+            });
+            if (dryRun)
+            {
+                return SkillResult.Ok("Dry run: would patch VBA module " + moduleName + " (" + replacements + " replacement(s)).", preview);
+            }
+
+            var write = new SkillCommand { SkillId = VbaToolId("vba_replace_module") };
+            write.Arguments["moduleName"] = moduleName;
+            write.Arguments["code"] = updated;
+            write.Arguments["createIfMissing"] = "true";
+            var result = ExecuteCommand(write, tools, settings, 0, false, manualRun);
+            return result.Success
+                ? SkillResult.Ok("VBA text replaced in " + moduleName + ": " + replacements + " replacement(s).", preview)
+                : result;
+        }
+
         private static object ResolvePipelineValue(JToken token, IDictionary<string, object> inputArgs, IDictionary<string, SkillResult> stepResults)
         {
             var value = token.Type == JTokenType.String
@@ -612,9 +690,23 @@ namespace RNAssistant.Office
         private static bool IsVbaMutationTool(string toolId)
         {
             return string.Equals(toolId, "excel.vba_replace_module", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, "excel.vba_replace_text", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, "excel.vba_restore_backup", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, "excel.insert_vba_module", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, "excel.run_macro", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static int CountOccurrences(string value, string find)
+        {
+            var count = 0;
+            var index = 0;
+            while ((index = value.IndexOf(find, index, StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                index += find.Length;
+            }
+
+            return count;
         }
 
         private static string ReplacePlaceholders(string value, IDictionary<string, object> inputArgs, IDictionary<string, SkillResult> stepResults)

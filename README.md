@@ -169,11 +169,12 @@ Excel VBA support requires Office setting `Trust access to the VBA project objec
 
 - Settings has `Include VBA code in chat context`; keep it off unless the model needs to review existing VBA.
 - The VBA tab reads workbook modules, shows source code, and lists RNAssistant rollback backups.
+- `Preview Diff` shows the current editor changes before saving.
 - `Save Module` replaces the selected module and stores the previous version under `%AppData%\RNAssistant\vba-backups`.
 - `Restore Backup` restores the selected backup; restoring also backs up the current module first.
 - `Review in Chat` sends loaded VBA modules to chat for review and improvement suggestions.
 
-The model can also call `excel.vba_read_project`, `excel.vba_read_module`, `excel.vba_replace_module`, `excel.vba_list_backups`, and `excel.vba_restore_backup`.
+The model can also call `excel.vba_read_project`, `excel.vba_read_module`, `excel.vba_replace_text`, `excel.vba_replace_module`, `excel.vba_list_backups`, and `excel.vba_restore_backup`. Prefer `excel.vba_replace_text` for small exact patches.
 
 ## Tool Usage
 

@@ -601,21 +601,100 @@
   }
 
   function renderSelectedVbaModule() {
-    var name = $("vbaModuleSelect").value;
-    state.vba.selectedModule = name;
-    var module = null;
-    state.vba.modules.forEach(function (item) {
-      if ((item.name || item.Name) === name) {
-        module = item;
-      }
-    });
-
-    $("vbaCodeInput").value = module ? (module.code || module.Code || "") : "";
+    var module = selectedVbaModule();
+    state.vba.selectedModule = vbaModuleName(module);
+    $("vbaCodeInput").value = module ? vbaModuleCode(module) : "";
     $("vbaMetaBox").textContent = module ? JSON.stringify({
-      name: module.name || module.Name,
+      name: vbaModuleName(module),
       type: module.type || module.Type,
       lineCount: module.lineCount || module.LineCount
     }, null, 2) : "";
+    $("vbaDiffOutput").textContent = "";
+  }
+
+  function selectedVbaModule() {
+    var selectedName = $("vbaModuleSelect").value;
+    var found = null;
+    state.vba.modules.forEach(function (item) {
+      if ((item.name || item.Name) === selectedName) {
+        found = item;
+      }
+    });
+    return found;
+  }
+
+  function vbaModuleName(module) {
+    return module ? (module.name || module.Name || "") : "";
+  }
+
+  function vbaModuleCode(module) {
+    return module ? (module.code || module.Code || "") : "";
+  }
+
+  function formatVbaDiff(before, after) {
+    if (before === after) {
+      return "No changes.";
+    }
+
+    var oldLines = String(before || "").replace(/\r\n/g, "\n").split("\n");
+    var newLines = String(after || "").replace(/\r\n/g, "\n").split("\n");
+    var start = 0;
+    while (start < oldLines.length && start < newLines.length && oldLines[start] === newLines[start]) {
+      start += 1;
+    }
+
+    var oldEnd = oldLines.length - 1;
+    var newEnd = newLines.length - 1;
+    while (oldEnd >= start && newEnd >= start && oldLines[oldEnd] === newLines[newEnd]) {
+      oldEnd -= 1;
+      newEnd -= 1;
+    }
+
+    var oldCount = Math.max(0, oldEnd - start + 1);
+    var newCount = Math.max(0, newEnd - start + 1);
+    var output = ["Changed lines: -" + oldCount + " +" + newCount, ""];
+    var i;
+    for (i = Math.max(0, start - 3); i < start; i += 1) {
+      output.push("  " + oldLines[i]);
+    }
+    oldLines.slice(start, oldEnd + 1).slice(0, 200).forEach(function (line) {
+      output.push("- " + line);
+    });
+    newLines.slice(start, newEnd + 1).slice(0, 200).forEach(function (line) {
+      output.push("+ " + line);
+    });
+    if (oldCount > 200 || newCount > 200) {
+      output.push("...diff truncated...");
+    }
+    for (i = oldEnd + 1; i < Math.min(oldLines.length, oldEnd + 4); i += 1) {
+      output.push("  " + oldLines[i]);
+    }
+    return output.join("\n");
+  }
+
+  function previewVbaDiff() {
+    var module = selectedVbaModule();
+    if (!module) {
+      $("vbaDiffOutput").textContent = "No module selected.";
+      return;
+    }
+
+    $("vbaDiffOutput").textContent = formatVbaDiff(vbaModuleCode(module), $("vbaCodeInput").value);
+    $("vbaStatus").textContent = "Diff preview ready.";
+  }
+
+  async function withVbaActivity(message, work) {
+    setActivity("vba", message);
+    try {
+      await work();
+      return true;
+    } catch (error) {
+      $("vbaStatus").textContent = error.message;
+      log(error.detail || error.message);
+      return false;
+    } finally {
+      clearActivity();
+    }
   }
 
   function readVbaResult(response) {
@@ -629,16 +708,10 @@
   }
 
   async function refreshVbaProject() {
-    setActivity("vba", "Читаю VBA проект...");
-    try {
+    await withVbaActivity("Читаю VBA проект...", async function () {
       var response = await send("getVbaProject", { maxChars: Number($("vbaContextLimitInput").value || 30000) });
       readVbaResult(response);
-    } catch (error) {
-      $("vbaStatus").textContent = error.message;
-      log(error.detail || error.message);
-    } finally {
-      clearActivity();
-    }
+    });
   }
 
   async function saveVbaModule() {
@@ -647,32 +720,23 @@
       return;
     }
 
-    setActivity("vba", "Сохраняю VBA module...");
-    try {
+    previewVbaDiff();
+    if (await withVbaActivity("Сохраняю VBA module...", async function () {
       var response = await send("saveVbaModule", { moduleName: moduleName, code: $("vbaCodeInput").value });
       $("vbaStatus").textContent = response.Message || response.message || "VBA module saved.";
+    })) {
       await refreshVbaProject();
-    } catch (error) {
-      $("vbaStatus").textContent = error.message;
-      log(error.detail || error.message);
-    } finally {
-      clearActivity();
     }
   }
 
   async function restoreVbaBackup() {
     var backupId = $("vbaBackupSelect").value;
     var moduleName = $("vbaModuleSelect").value;
-    setActivity("vba", "Восстанавливаю VBA backup...");
-    try {
+    if (await withVbaActivity("Восстанавливаю VBA backup...", async function () {
       var response = await send("restoreVbaBackup", { backupId: backupId, moduleName: moduleName });
       $("vbaStatus").textContent = response.Message || response.message || "VBA backup restored.";
+    })) {
       await refreshVbaProject();
-    } catch (error) {
-      $("vbaStatus").textContent = error.message;
-      log(error.detail || error.message);
-    } finally {
-      clearActivity();
     }
   }
 
@@ -680,7 +744,7 @@
     var modules = state.vba.modules.map(function (module) {
       return "===== " + (module.name || module.Name) + " =====\n" + (module.code || module.Code || "");
     }).join("\n\n");
-    $("chatInput").value = "Проверь мой VBA код: найди ошибки, риски, места для улучшения, предложи комментарии. Если нужны правки, верни конкретные обновленные модули и объясни, что меняешь.\\n\\n" + modules;
+    $("chatInput").value = "Проверь мой VBA код: найди ошибки, риски, места для улучшения, предложи комментарии. Если нужны небольшие правки, используй excel.vba_replace_text; полную замену модуля предлагай только когда это реально нужно.\\n\\n" + modules;
     switchTab("chat");
     $("chatInput").focus();
   }
@@ -791,6 +855,7 @@
     $("refreshButton").addEventListener("click", initialize);
     $("refreshVbaButton").addEventListener("click", refreshVbaProject);
     $("vbaModuleSelect").addEventListener("change", renderSelectedVbaModule);
+    $("previewVbaDiffButton").addEventListener("click", previewVbaDiff);
     $("saveVbaButton").addEventListener("click", saveVbaModule);
     $("restoreVbaButton").addEventListener("click", restoreVbaBackup);
     $("reviewVbaButton").addEventListener("click", reviewVbaInChat);

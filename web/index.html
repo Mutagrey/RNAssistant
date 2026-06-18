@@ -92,6 +92,7 @@
         <div class="toolbar">
           <button id="refreshVbaButton" type="button">Refresh VBA</button>
           <button class="secondary" id="reviewVbaButton" type="button">Review in Chat</button>
+          <button class="secondary" id="previewVbaDiffButton" type="button">Preview Diff</button>
           <button id="saveVbaButton" type="button">Save Module</button>
           <button class="secondary" id="restoreVbaButton" type="button">Restore Backup</button>
         </div>
@@ -104,6 +105,7 @@
           </aside>
           <section class="vba-editor">
             <textarea id="vbaCodeInput" spellcheck="false" placeholder="Refresh VBA to load modules."></textarea>
+            <pre class="json-box vba-diff" id="vbaDiffOutput"></pre>
           </section>
         </div>
       </section>
@@ -164,7 +166,7 @@
         </section>
         <section>
           <h3>VBA workflow</h3>
-          <p>Use the VBA tab to load workbook modules, review code, save module changes with automatic backup, and restore backups. Enable VBA context in Settings only when chat needs existing VBA code.</p>
+          <p>Use the VBA tab to load workbook modules, preview diffs, save module changes with automatic backup, and restore backups. Enable VBA context in Settings only when chat needs existing VBA code.</p>
         </section>
         <section>
           <h3>Safety switches</h3>
