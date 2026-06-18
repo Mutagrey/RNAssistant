@@ -34,6 +34,12 @@
   border-bottom: 1px solid #edf1f7;
 }
 
+.agent-run-summary {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
 .agent-run-title {
   overflow: hidden;
   color: var(--text);
@@ -41,6 +47,15 @@
   font-weight: 800;
   text-overflow: ellipsis;
   text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.agent-run-current {
+  overflow: hidden;
+  color: #475467;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -76,7 +91,21 @@
 }
 
 .agent-activity {
+  position: relative;
   min-width: 0;
+}
+
+.agent-activity.status-running::before {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: -7px;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(46, 144, 250, 0.25), #2e90fa, rgba(46, 144, 250, 0.25));
+  background-size: 100% 180%;
+  content: "";
+  animation: agent-running-spine 1.1s ease-in-out infinite;
 }
 
 .agent-activity.nested {
@@ -113,6 +142,12 @@
 @keyframes agent-shimmer {
   100% {
     transform: translateX(120%);
+  }
+}
+
+@keyframes agent-running-spine {
+  50% {
+    background-position: 0 100%;
   }
 }
 
@@ -170,6 +205,54 @@
   white-space: nowrap;
 }
 
+.agent-activity-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.agent-data-badge {
+  padding: 2px 6px;
+  border: 1px solid #d8e6f8;
+  border-radius: 999px;
+  background: #f4f8ff;
+  color: #175cd3;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.agent-error-panel {
+  display: grid;
+  gap: 5px;
+  margin: 7px 0 0 20px;
+  padding: 8px;
+  border: 1px solid #f1b8b1;
+  border-radius: 6px;
+  background: #fff7f6;
+  color: #7a271a;
+}
+
+.agent-error-reason {
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.agent-error-meta {
+  color: #8a3a32;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.agent-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
 .agent-activity-details {
   margin: 7px 0 0 20px;
   color: var(--muted);
@@ -183,11 +266,14 @@
 }
 
 .agent-activity-children {
+  display: grid;
+  gap: 6px;
   margin-top: 6px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .agent-live .agent-activity.status-running > .agent-activity-row::after {
+  .agent-live .agent-activity.status-running > .agent-activity-row::after,
+  .agent-activity.status-running::before {
     animation: none;
   }
 }

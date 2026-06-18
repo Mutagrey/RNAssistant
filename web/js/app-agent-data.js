@@ -22,8 +22,71 @@ function tryParseJson(text) {
   }
 }
 
+function createAgentCopyButton(label, text) {
+  var button = document.createElement("button");
+  button.type = "button";
+  button.className = "agent-copy-button";
+  button.textContent = label;
+  button.addEventListener("click", function (event) {
+    event.preventDefault();
+    event.stopPropagation();
+    copyText(text || "");
+  });
+  return button;
+}
+
 function isScalarJson(value) {
   return value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+}
+
+function appendUnique(items, value) {
+  if (value && items.indexOf(value) < 0) {
+    items.push(value);
+  }
+}
+
+function activityDataBadges(activity) {
+  var badges = [];
+  var toolId = activityToolId(activity).toLowerCase();
+  var args = tryParseJson(activityArgumentsJson(activity));
+  var data = tryParseJson(activityDataJson(activity));
+  var combined = toolId + " " + (activityArgumentsJson(activity) || "").toLowerCase() + " " + (activityDataJson(activity) || "").toLowerCase();
+
+  if (combined.indexOf("vba") >= 0 || combined.indexOf("module") >= 0 || combined.indexOf("macro") >= 0) {
+    appendUnique(badges, "vba");
+  }
+  if (combined.indexOf("slide") >= 0 || combined.indexOf("powerpoint") >= 0) {
+    appendUnique(badges, "slide");
+  }
+  if (combined.indexOf("mail") >= 0 || combined.indexOf("email") >= 0 || combined.indexOf("outlook") >= 0) {
+    appendUnique(badges, "mail");
+  }
+  if (combined.indexOf("range") >= 0 || combined.indexOf("address") >= 0 || combined.indexOf("sheet") >= 0 || combined.indexOf("cell") >= 0) {
+    appendUnique(badges, "range");
+  }
+  if (combined.indexOf("table") >= 0 || combined.indexOf("rows") >= 0 || combined.indexOf("values") >= 0) {
+    appendUnique(badges, "table");
+  }
+
+  [args.value, data.value].forEach(function (value) {
+    if (Array.isArray(value)) {
+      appendUnique(badges, "table");
+    }
+    if (value && typeof value === "object") {
+      var keys = objectKeys(value).map(function (key) { return key.toLowerCase(); }).join(" ");
+      if (/(rows|values|cells|table)/.test(keys)) {
+        appendUnique(badges, "table");
+      }
+      if (/(range|address|sheet|cell)/.test(keys)) {
+        appendUnique(badges, "range");
+      }
+    }
+  });
+
+  if (activityDataJson(activity)) {
+    appendUnique(badges, "json");
+  }
+  return badges;
 }
 
 function scalarJsonText(value) {
@@ -102,6 +165,9 @@ function renderJsonArray(value, depth) {
 function renderJsonTable(value, tableKeys) {
   var wrap = document.createElement("div");
   wrap.className = "agent-data-table-wrap";
+  if (value.length > 10) {
+    wrap.className += " collapsed";
+  }
   var table = document.createElement("table");
   table.className = "agent-data-table";
   var thead = document.createElement("thead");
@@ -115,7 +181,7 @@ function renderJsonTable(value, tableKeys) {
   table.appendChild(thead);
 
   var tbody = document.createElement("tbody");
-  value.slice(0, 20).forEach(function (item) {
+  value.forEach(function (item) {
     var row = document.createElement("tr");
     tableKeys.forEach(function (key) {
       var cell = document.createElement("td");
@@ -126,11 +192,16 @@ function renderJsonTable(value, tableKeys) {
   });
   table.appendChild(tbody);
   wrap.appendChild(table);
-  if (value.length > 20) {
-    var note = document.createElement("div");
-    note.className = "agent-data-note";
-    note.textContent = "Showing 20 of " + value.length + " rows";
-    wrap.appendChild(note);
+  if (value.length > 10) {
+    var toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "agent-table-toggle";
+    toggle.textContent = "Show all " + value.length + " rows";
+    toggle.addEventListener("click", function () {
+      var collapsed = wrap.classList.toggle("collapsed");
+      toggle.textContent = collapsed ? "Show all " + value.length + " rows" : "Collapse";
+    });
+    wrap.appendChild(toggle);
   }
   return wrap;
 }
@@ -176,6 +247,11 @@ function appendRawJson(parent, label, text, open) {
   summary.textContent = label;
   details.appendChild(summary);
 
+  var actions = document.createElement("div");
+  actions.className = "agent-detail-actions";
+  actions.appendChild(createAgentCopyButton("Copy raw JSON", prettyJsonText(text)));
+  details.appendChild(actions);
+
   var pre = document.createElement("pre");
   var code = document.createElement("code");
   code.className = "language-json";
@@ -185,7 +261,65 @@ function appendRawJson(parent, label, text, open) {
   parent.appendChild(details);
 }
 
-function appendActivityData(parent, label, text) {
+function renderArgumentChips(value) {
+  var chips = document.createElement("div");
+  chips.className = "agent-input-chips";
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    var fallback = document.createElement("span");
+    fallback.className = "agent-input-chip";
+    fallback.textContent = scalarJsonText(value);
+    chips.appendChild(fallback);
+    return chips;
+  }
+
+  objectKeys(value).forEach(function (key) {
+    var chip = document.createElement("span");
+    chip.className = "agent-input-chip";
+    var label = document.createElement("strong");
+    label.textContent = key + ":";
+    chip.appendChild(label);
+    var chipValue = isScalarJson(value[key]) ? scalarJsonText(value[key]) : JSON.stringify(value[key]);
+    if (chipValue.length > 80) {
+      chipValue = chipValue.substring(0, 77) + "...";
+    }
+    chip.appendChild(document.createTextNode(" " + chipValue));
+    chips.appendChild(chip);
+  });
+  return chips;
+}
+
+function appendArgumentsData(parent, text) {
+  if (!text) {
+    return;
+  }
+
+  var parsed = tryParseJson(text);
+  if (!parsed.ok) {
+    appendRawJson(parent, "Arguments", text, true);
+    return;
+  }
+
+  var details = document.createElement("details");
+  details.className = "agent-data agent-arguments";
+  var summary = document.createElement("summary");
+  summary.textContent = "Arguments";
+  details.appendChild(summary);
+
+  var actions = document.createElement("div");
+  actions.className = "agent-detail-actions";
+  actions.appendChild(createAgentCopyButton("Copy args", prettyJsonText(text)));
+  details.appendChild(actions);
+
+  var view = document.createElement("div");
+  view.className = "agent-data-view";
+  view.appendChild(renderArgumentChips(parsed.value));
+  details.appendChild(view);
+
+  appendRawJson(details, "Raw JSON", text, false);
+  parent.appendChild(details);
+}
+
+function appendActivityData(parent, label, text, copyLabel) {
   if (!text) {
     return;
   }
@@ -201,6 +335,11 @@ function appendActivityData(parent, label, text) {
   var summary = document.createElement("summary");
   summary.textContent = label;
   details.appendChild(summary);
+
+  var actions = document.createElement("div");
+  actions.className = "agent-detail-actions";
+  actions.appendChild(createAgentCopyButton(copyLabel || "Copy result", prettyJsonText(text)));
+  details.appendChild(actions);
 
   var view = document.createElement("div");
   view.className = "agent-data-view";

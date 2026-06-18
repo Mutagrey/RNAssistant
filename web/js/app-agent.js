@@ -22,11 +22,9 @@ function renderActivityNode(activity, nested) {
   var metaParts = [];
   var subtitle = activityValue(activity, "Subtitle", "subtitle", "");
   var toolId = activityToolId(activity);
-  var result = activityValue(activity, "ResultMessage", "resultMessage", "");
+  var result = activityResultMessage(activity);
   metaParts.push(status);
-  if (toolId) {
-    metaParts.push(toolId);
-  } else if (subtitle) {
+  if (!result && subtitle && !toolId) {
     metaParts.push(subtitle);
   }
   if (result) {
@@ -36,17 +34,71 @@ function renderActivityNode(activity, nested) {
   meta.className = "agent-activity-meta";
   meta.textContent = metaParts.join(" · ");
   text.appendChild(meta);
+  appendActivityBadges(text, activity);
   row.appendChild(text);
   node.appendChild(row);
 
+  appendActivityErrorPanel(node, activity);
   appendActivityDetails(node, activity);
   return node;
 }
 
+function appendActivityBadges(parent, activity) {
+  var badges = activityDataBadges(activity);
+  if (!badges.length) {
+    return;
+  }
+
+  var row = document.createElement("div");
+  row.className = "agent-activity-badges";
+  badges.forEach(function (badge) {
+    var item = document.createElement("span");
+    item.className = "agent-data-badge";
+    item.textContent = badge;
+    row.appendChild(item);
+  });
+  parent.appendChild(row);
+}
+
+function appendActivityErrorPanel(node, activity) {
+  if (activityStatus(activity) !== "failed") {
+    return;
+  }
+
+  var result = activityResultMessage(activity);
+  var toolId = activityToolId(activity);
+  var argumentsJson = activityArgumentsJson(activity);
+  var panel = document.createElement("div");
+  panel.className = "agent-error-panel";
+
+  var reason = document.createElement("div");
+  reason.className = "agent-error-reason";
+  reason.textContent = result || "Step failed.";
+  panel.appendChild(reason);
+
+  var meta = document.createElement("div");
+  meta.className = "agent-error-meta";
+  meta.textContent = toolId ? ("Tool: " + toolId) : "Tool step";
+  panel.appendChild(meta);
+
+  var actions = document.createElement("div");
+  actions.className = "agent-inline-actions";
+  actions.appendChild(createAgentCopyButton("Copy diagnostics", [
+    "Title: " + activityTitle(activity),
+    "Tool: " + toolId,
+    "Status: " + activityStatus(activity),
+    "Reason: " + result,
+    "Arguments:",
+    prettyJsonText(argumentsJson)
+  ].join("\n")));
+  panel.appendChild(actions);
+  node.appendChild(panel);
+}
+
 function appendActivityDetails(node, activity) {
   var children = activityChildren(activity);
-  var argumentsJson = activityValue(activity, "ArgumentsJson", "argumentsJson", "");
-  var dataJson = activityValue(activity, "DataJson", "dataJson", "");
+  var argumentsJson = activityArgumentsJson(activity);
+  var dataJson = activityDataJson(activity);
   if (!children.length && !argumentsJson && !dataJson) {
     return;
   }
@@ -54,7 +106,7 @@ function appendActivityDetails(node, activity) {
   var details = document.createElement("details");
   details.className = "agent-activity-details";
   var summary = document.createElement("summary");
-  summary.textContent = children.length ? "Details and nested steps" : "Details";
+  summary.textContent = children.length ? "Nested steps and details" : "Details";
   details.appendChild(summary);
 
   if (children.length) {
@@ -66,8 +118,8 @@ function appendActivityDetails(node, activity) {
     details.appendChild(childList);
   }
 
-  appendActivityData(details, "Arguments", argumentsJson);
-  appendActivityData(details, "Result data", dataJson);
+  appendArgumentsData(details, argumentsJson);
+  appendActivityData(details, "Result data", dataJson, "Copy result");
   node.appendChild(details);
 }
 
@@ -101,10 +153,19 @@ function renderAgentRunArticle(run) {
   var title = document.createElement("div");
   title.className = "agent-run-title";
   title.textContent = "Agent run";
+  var summary = document.createElement("div");
+  summary.className = "agent-run-summary";
+  summary.appendChild(title);
+  if (stats.current) {
+    var current = document.createElement("div");
+    current.className = "agent-run-current";
+    current.textContent = "Current: " + activityTitle(stats.current);
+    summary.appendChild(current);
+  }
   var meta = document.createElement("div");
   meta.className = "agent-run-meta";
   meta.textContent = stats.text;
-  header.appendChild(title);
+  header.appendChild(summary);
   header.appendChild(meta);
   body.appendChild(header);
 

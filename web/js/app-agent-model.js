@@ -48,6 +48,18 @@ function activityToolId(activity) {
   return activityValue(activity, "ToolId", "toolId", "") || "";
 }
 
+function activityArgumentsJson(activity) {
+  return activityValue(activity, "ArgumentsJson", "argumentsJson", "") || "";
+}
+
+function activityDataJson(activity) {
+  return activityValue(activity, "DataJson", "dataJson", "") || "";
+}
+
+function activityResultMessage(activity) {
+  return activityValue(activity, "ResultMessage", "resultMessage", "") || "";
+}
+
 function activityKind(activity) {
   return (activityValue(activity, "Kind", "kind", "") || "").toLowerCase();
 }
@@ -86,31 +98,96 @@ function activityCountStatus(activity, counts) {
   });
 }
 
-function agentRunStats(items) {
-  var counts = { total: 0 };
+function collectRunActivities(items) {
+  var activities = [];
+  if (!items || !items.length) {
+    return activities;
+  }
+
+  function append(activity) {
+    if (!activity) {
+      return;
+    }
+    activities.push(activity);
+    activityChildren(activity).forEach(append);
+  }
+
   var runActivities = items.length > 1
     ? items.slice(1).map(function (item) { return item.activity; })
     : activityChildren(items[0].activity);
+  runActivities.forEach(append);
+  return activities;
+}
 
-  runActivities.forEach(function (activity) {
+function currentRunActivity(activities) {
+  var preferred = ["running", "waiting", "failed"];
+  for (var i = 0; i < preferred.length; i += 1) {
+    for (var j = 0; j < activities.length; j += 1) {
+      if (activityStatus(activities[j]) === preferred[i]) {
+        return activities[j];
+      }
+    }
+  }
+  return activities.length ? activities[activities.length - 1] : null;
+}
+
+function formatElapsedTime(ms) {
+  if (!ms || ms < 1000) {
+    return "";
+  }
+  var seconds = Math.round(ms / 1000);
+  if (seconds < 60) {
+    return seconds + "s";
+  }
+  var minutes = Math.floor(seconds / 60);
+  seconds = seconds % 60;
+  if (minutes < 60) {
+    return minutes + "m" + (seconds ? " " + seconds + "s" : "");
+  }
+  var hours = Math.floor(minutes / 60);
+  minutes = minutes % 60;
+  return hours + "h" + (minutes ? " " + minutes + "m" : "");
+}
+
+function agentRunElapsedText(items) {
+  var dates = (items || []).map(function (item) {
+    var value = messageCreatedUtc(item.message);
+    var time = value ? Date.parse(value) : NaN;
+    return isNaN(time) ? null : time;
+  }).filter(function (time) { return time !== null; });
+  if (dates.length < 2) {
+    return "";
+  }
+  return formatElapsedTime(Math.max.apply(Math, dates) - Math.min.apply(Math, dates));
+}
+
+function agentRunStats(items) {
+  var counts = { total: 0 };
+  var activities = collectRunActivities(items || []);
+  activities.forEach(function (activity) {
     activityCountStatus(activity, counts);
   });
+  var current = currentRunActivity(activities);
+  var elapsed = agentRunElapsedText(items || []);
 
   var parts = [];
   if (counts.total) {
-    parts.push(counts.total + " step" + (counts.total === 1 ? "" : "s"));
-  }
-  if (counts.completed) {
-    parts.push(counts.completed + " completed");
-  }
-  if (counts.running) {
-    parts.push(counts.running + " running");
+    parts.push((counts.completed || 0) + "/" + counts.total + " completed");
   }
   if (counts.failed) {
     parts.push(counts.failed + " failed");
   }
+  if (counts.running) {
+    parts.push(counts.running + " running");
+  }
   if (counts.waiting) {
     parts.push(counts.waiting + " waiting");
+  }
+  if (elapsed) {
+    parts.push("elapsed " + elapsed);
+  }
+  if (current) {
+    parts.push("current: " + activityTitle(current));
   }
   if (!parts.length) {
     parts.push("planned");
@@ -118,6 +195,9 @@ function agentRunStats(items) {
 
   return {
     text: parts.join(" · "),
+    current: current,
+    counts: counts,
+    elapsed: elapsed,
     status: counts.failed ? "failed" : (counts.running ? "running" : (counts.waiting ? "waiting" : "completed"))
   };
 }

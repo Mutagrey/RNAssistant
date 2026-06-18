@@ -32,6 +32,10 @@
     return objectValue(message, "CompletionTokens", "completionTokens", null);
   };
 
+  window.messageCreatedUtc = function (message) {
+    return objectValue(message, "CreatedUtc", "createdUtc", "");
+  };
+
   window.chatId = function (chat) {
     return objectValue(chat, "Id", "id", "");
   };

@@ -22,6 +22,56 @@
   color: #344054;
 }
 
+.agent-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.agent-copy-button,
+.agent-table-toggle {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 7px;
+  border: 1px solid #d8e1ee;
+  border-radius: 999px;
+  background: #fff;
+  color: #344054;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.agent-copy-button:hover,
+.agent-table-toggle:hover {
+  background: #eef4ff;
+  color: var(--accent);
+}
+
+.agent-input-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.agent-input-chip {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 3px 7px;
+  border: 1px solid #d8e1ee;
+  border-radius: 999px;
+  background: #fff;
+  color: #344054;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-input-chip strong {
+  color: #667085;
+}
+
 .agent-data-grid {
   display: grid;
   grid-template-columns: minmax(82px, max-content) minmax(0, 1fr);
@@ -68,6 +118,13 @@
 
 .agent-data-table-wrap {
   overflow: auto;
+  max-height: 360px;
+  border: 1px solid #e3e9f2;
+  border-radius: 6px;
+}
+
+.agent-data-table-wrap.collapsed {
+  max-height: 220px;
 }
 
 .agent-data-table {
@@ -89,10 +146,25 @@
 }
 
 .agent-data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   background: #f1f5f9;
   color: #475467;
   font-size: 11px;
   font-weight: 700;
+}
+
+.agent-data-table tbody tr:nth-child(even) {
+  background: #fbfdff;
+}
+
+.agent-table-toggle {
+  position: sticky;
+  left: 8px;
+  bottom: 8px;
+  margin: 8px;
+  box-shadow: 0 4px 10px rgba(16, 24, 39, 0.08);
 }
 
 .agent-json pre {
