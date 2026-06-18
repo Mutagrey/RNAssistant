@@ -6,7 +6,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Skills;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Skills;
@@ -16,7 +15,6 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
-        private const int MaxAgentIterations = 3;
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly AppDataPaths _paths;
         private readonly SettingsService _settingsService;
@@ -25,9 +23,8 @@ namespace RNAssistant.Office
         private readonly VbaBackupStore _vbaBackupStore;
         private readonly OfficeToolExecutor _toolExecutor;
         private readonly ToolCatalogService _toolCatalog;
+        private readonly ChatCompletionService _chatCompletionService;
         private readonly LlmClient _llmClient;
-        private readonly PromptComposer _promptComposer;
-        private readonly SkillCommandParser _commandParser;
         private readonly object _syncRoot;
         private string _queuedQuickAction;
         private string _activeSessionId;
@@ -46,8 +43,7 @@ namespace RNAssistant.Office
             _toolExecutor = new OfficeToolExecutor(_adapter, _vbaBackupStore);
             _toolCatalog = new ToolCatalogService(_adapter, _toolExecutor, _toolStore);
             _llmClient = new LlmClient(() => _settingsService.LoadApiKey());
-            _promptComposer = new PromptComposer();
-            _commandParser = new SkillCommandParser();
+            _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, _llmClient.CompleteAsync);
             _syncRoot = new object();
         }
 
@@ -88,96 +84,16 @@ namespace RNAssistant.Office
                 return JsonConvert.SerializeObject(new { message = string.Empty, skillResults = new SkillResult[0], activeChatId = emptyId, activeChatModel = emptySession.Model, chats = GetChatSummaries(emptyId), context = LoadContext(emptySession), messages = emptySession.Messages, contextUsage = ContextUsageEstimator.FromSession(emptySession, _settingsService.Load()) });
             }
 
-            ReportProgress(progress, "context", "Читаю документ...");
             var settings = _settingsService.Load();
             var session = LoadSession(chatId);
-            ApplyChatModel(settings, session);
-            session.Messages.Add(new ChatMessage { Role = "user", Content = text });
-            EnsureSessionTitleFromUserText(session, text);
-
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
             var documentContext = LoadContext(session);
-            var vbaSnapshot = string.Empty;
-            var systemPrompt = _promptComposer.ComposeSystemPrompt(
-                settings,
-                _adapter.HostName,
-                _adapter.GetDocumentSnapshot(settings.ContextCharLimit),
-                vbaSnapshot,
-                tools,
-                null);
-            var contextPrompt = _promptComposer.ComposeContextPrompt(documentContext);
-            if (!string.IsNullOrWhiteSpace(contextPrompt))
-            {
-                ReportProgress(progress, "context", "Добавленный контекст включен в запрос: " + documentContext.Notes.Count + " item(s).");
-            }
-
-            object contextUsage = null;
-            var assistantText = string.Empty;
-            var resultLog = new List<object>();
-            string followUpPrompt = null;
-            for (var iteration = 0; iteration < MaxAgentIterations; iteration++)
-            {
-                var messages = PromptMessageBuilder.Build(systemPrompt, contextPrompt, session.Messages, settings.ContextCharLimit);
-                if (!string.IsNullOrWhiteSpace(followUpPrompt))
-                {
-                    messages.Add(new ChatMessage { Role = "user", Content = followUpPrompt });
-                }
-
-                contextUsage = ContextUsageEstimator.FromPrompt(messages, settings);
-                ReportProgress(progress, "thinking", iteration == 0 ? "Модель думает..." : "Модель продолжает агентскую задачу...");
-                var completion = await _llmClient.CompleteAsync(settings, messages);
-                assistantText = completion.Content ?? string.Empty;
-
-                ReportProgress(progress, "processing", "Разбираю ответ...");
-                var commands = _commandParser.Parse(assistantText).ToList();
-                if (commands.Count == 0)
-                {
-                    if (iteration == 0 && settings.AgentModeEnabled != false && AgentTranscript.ShouldForceAgentToolUse(text, _adapter.HostName))
-                    {
-                        followUpPrompt = "You are in RNAssistant Agent mode. The user asked for an Office action, so a prose-only answer is not acceptable. Return only one ```rnassistant-agent fenced JSON block with executable steps using available tools. If a tool is missing, say that plainly instead of inventing one.";
-                        continue;
-                    }
-                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, completion));
-                    break;
-                }
-
-                session.Messages.Add(AgentTranscript.CreateAssistantMessage(AgentTranscript.CreateAgentPlanMessage(commands), completion));
-                var shouldContinue = settings.AutoRunToolCalls != false;
-                for (var i = 0; i < commands.Count; i++)
-                {
-                    var command = commands[i];
-                    ReportProgress(
-                        progress,
-                        settings.AutoRunToolCalls != false ? "executing" : "waiting",
-                        (settings.AutoRunToolCalls != false ? "Исполняю tool " : "Auto-run отключен для tool ") + (i + 1) + "/" + commands.Count + ": " + command.SkillId);
-                    var result = settings.AutoRunToolCalls != false
-                        ? _toolExecutor.Execute(command, tools, settings, false, false)
-                        : SkillResult.Fail("Auto tool execution is disabled: " + command.SkillId);
-                    resultLog.Add(AgentTranscript.DescribeResult(command, result));
-                    AgentTranscript.AddLocalResultMessage(session, command, result);
-                    if (!result.Success)
-                    {
-                        shouldContinue = false;
-                    }
-                    if (!result.Success && settings.AutoRunToolCalls != false && settings.AutoRetryToolErrors != false && AgentTranscript.CanRetryToolError(result))
-                    {
-                        ReportProgress(progress, "repairing", "Tool упал, прошу модель исправить вызов: " + command.SkillId);
-                        await RetryFailedToolAsync(systemPrompt, contextPrompt, session, settings, tools, command, result, resultLog, progress);
-                    }
-                }
-
-                if (!shouldContinue)
-                {
-                    break;
-                }
-
-                followUpPrompt = "Local tool results above are available. If the task is complete, answer the user normally. If more Office/VBA actions are needed, return one rnassistant-agent block with only the next commands.";
-            }
+            var completion = await _chatCompletionService.ExecuteAsync(text, session, documentContext, settings, tools, progress);
 
             ReportProgress(progress, "saving", "Сохраняю историю...");
             _chatStore.Save(session);
             var activeId = ChatStore.GetSessionId(session);
-            return JsonConvert.SerializeObject(new { message = assistantText, skillResults = resultLog, activeChatId = activeId, activeChatModel = session.Model, chats = GetChatSummaries(activeId), context = LoadContext(session), messages = session.Messages, contextUsage = contextUsage ?? ContextUsageEstimator.FromSession(session, settings) });
+            return JsonConvert.SerializeObject(new { message = completion.AssistantText, skillResults = completion.SkillResults, activeChatId = activeId, activeChatModel = session.Model, chats = GetChatSummaries(activeId), context = LoadContext(session), messages = session.Messages, contextUsage = completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings) });
         }
 
         public string GetSettingsJson()
@@ -337,52 +253,6 @@ namespace RNAssistant.Office
             }
 
             return Task.FromResult(JsonConvert.SerializeObject(new { prompt = prompt }));
-        }
-
-        private async Task RetryFailedToolAsync(
-            string systemPrompt,
-            string contextPrompt,
-            ChatSession session,
-            AppSettings settings,
-            IReadOnlyList<SkillDefinition> tools,
-            SkillCommand failedCommand,
-            SkillResult failedResult,
-            ICollection<object> resultLog,
-            Action<string, string> progress)
-        {
-            var repairPrompt = "A local tool call failed. Return only corrected rnassistant-skill JSON block(s), no prose. " +
-                "Original command: `" + failedCommand.SkillId + "` with arguments:\n```json\n" +
-                JsonConvert.SerializeObject(failedCommand.Arguments, Formatting.Indented) +
-                "\n```\nError: " + failedResult.Message +
-                (string.IsNullOrWhiteSpace(failedResult.DataJson) ? string.Empty : "\nData:\n```json\n" + failedResult.DataJson + "\n```");
-            var repairMessages = PromptMessageBuilder.Build(systemPrompt, contextPrompt, session.Messages, settings.ContextCharLimit);
-            repairMessages.Add(new ChatMessage { Role = "user", Content = repairPrompt });
-
-            var repairCompletion = await _llmClient.CompleteAsync(settings, repairMessages);
-            var repairText = repairCompletion.Content ?? string.Empty;
-            session.Messages.Add(AgentTranscript.CreateAssistantMessage(repairText, repairCompletion));
-            var retryCommands = _commandParser.Parse(repairText).ToList();
-            for (var i = 0; i < retryCommands.Count; i++)
-            {
-                var retry = retryCommands[i];
-                ReportProgress(progress, "retrying", "Повтор tool " + (i + 1) + "/" + retryCommands.Count + ": " + retry.SkillId);
-                var retryResult = _toolExecutor.Execute(retry, tools, settings, false, false);
-                if (resultLog != null)
-                {
-                    resultLog.Add(AgentTranscript.DescribeResult(retry, retryResult));
-                }
-                AgentTranscript.AddLocalResultMessage(session, retry, retryResult);
-            }
-
-            if (retryCommands.Count == 0)
-            {
-                var noCommand = SkillResult.Fail("Auto-retry did not return a corrected tool call.");
-                if (resultLog != null)
-                {
-                    resultLog.Add(new { skillId = "auto-retry", success = false, message = noCommand.Message, dataJson = noCommand.DataJson });
-                }
-                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Local skill retry result: " + noCommand.Message });
-            }
         }
 
         private string DequeueQuickAction()

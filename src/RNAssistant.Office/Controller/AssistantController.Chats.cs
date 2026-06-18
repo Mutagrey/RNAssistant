@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
@@ -201,16 +200,6 @@ namespace RNAssistant.Office
             _chatStore.SaveActiveSessionId(session.Host, session.DocumentKey, _activeSessionId);
         }
 
-        private static void ApplyChatModel(AppSettings settings, ChatSession session)
-        {
-            if (settings == null || session == null || string.IsNullOrWhiteSpace(session.Model))
-            {
-                return;
-            }
-
-            settings.Model = session.Model.Trim();
-        }
-
         private string ChatStateJson(ChatSession session)
         {
             var activeId = ChatStore.GetSessionId(session);
@@ -241,22 +230,6 @@ namespace RNAssistant.Office
                     MessageCount = s.Messages == null ? 0 : s.Messages.Count
                 })
                 .ToList();
-        }
-
-        private static void EnsureSessionTitleFromUserText(ChatSession session, string text)
-        {
-            if (session == null || string.IsNullOrWhiteSpace(text))
-            {
-                return;
-            }
-
-            if (!string.Equals(session.Title, "New chat", StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            var title = Regex.Replace(text.Trim(), "\\s+", " ");
-            session.Title = title.Length <= 64 ? title : title.Substring(0, 61) + "...";
         }
     }
 }

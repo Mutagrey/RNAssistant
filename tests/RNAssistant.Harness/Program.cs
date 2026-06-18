@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Skills;
 using RNAssistant.Core.Storage;
@@ -32,7 +35,10 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "pipeline: executes fake adapter steps", Run = PipelineExecutesFakeAdapterSteps },
                 new HarnessTest { Name = "pipeline: custom tool needs confirmation", Run = CustomPipelineNeedsConfirmation },
                 new HarnessTest { Name = "pipeline: agent mode gates built-in mutation", Run = AgentModeGatesBuiltInMutation },
-                new HarnessTest { Name = "tools: catalog merges visible tools", Run = ToolCatalogMergesVisibleTools }
+                new HarnessTest { Name = "tools: catalog merges visible tools", Run = ToolCatalogMergesVisibleTools },
+                new HarnessTest { Name = "prompt: trims oldest history", Run = PromptBuilderTrimsOldestHistory },
+                new HarnessTest { Name = "prompt: usage estimator counts context", Run = ContextUsageEstimatorCountsPromptAndSession },
+                new HarnessTest { Name = "chat: completion service records prose", Run = ChatCompletionServiceRecordsProseResponse }
             };
 
             var failed = 0;
@@ -235,6 +241,107 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void PromptBuilderTrimsOldestHistory()
+        {
+            var messages = PromptMessageBuilder.Build(
+                "system",
+                "context",
+                new[]
+                {
+                    new ChatMessage { Role = "user", Content = "old-" + new string('o', 3000) },
+                    new ChatMessage { Role = "assistant", Content = "middle-" + new string('m', 1500) },
+                    new ChatMessage { Role = "user", Content = "newest-" + new string('n', 1000) }
+                },
+                4000);
+
+            AssertEqual(4, messages.Count, "prompt message count");
+            AssertEqual("system", messages[0].Role, "system role");
+            AssertEqual("context", messages[1].Content, "context content");
+            AssertContains(messages[2].Content, "middle-", "middle message retained");
+            AssertContains(messages[3].Content, "newest-", "newest message retained");
+        }
+
+        private static void ContextUsageEstimatorCountsPromptAndSession()
+        {
+            var settings = new AppSettings { ContextCharLimit = 8000 };
+            var promptUsage = JObject.FromObject(ContextUsageEstimator.FromPrompt(new[]
+            {
+                new ChatMessage { Role = "system", Content = "abc" },
+                new ChatMessage { Role = "user", Content = "defg" }
+            }, settings));
+            AssertEqual(7, promptUsage["usedChars"].Value<int>(), "prompt used chars");
+            AssertEqual(8000, promptUsage["limitChars"].Value<int>(), "prompt limit chars");
+            AssertEqual(2, promptUsage["messageCount"].Value<int>(), "prompt message count");
+            AssertTrue(promptUsage["actual"].Value<bool>(), "prompt actual");
+
+            var session = new ChatSession();
+            session.Messages.Add(new ChatMessage { Role = "user", Content = "hello" });
+            session.Context.Notes.Add(new ContextNote { Text = "selection!" });
+            var sessionUsage = JObject.FromObject(ContextUsageEstimator.FromSession(session, settings));
+            AssertEqual(15, sessionUsage["usedChars"].Value<int>(), "session used chars");
+            AssertEqual(1, sessionUsage["messageCount"].Value<int>(), "session message count");
+            AssertTrue(!sessionUsage["actual"].Value<bool>(), "session actual");
+        }
+
+        private static void ChatCompletionServiceRecordsProseResponse()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var capturedMessages = new List<ChatMessage>();
+                var service = new ChatCompletionService(
+                    adapter,
+                    executor,
+                    delegate(AppSettings settings, IEnumerable<ChatMessage> messages)
+                    {
+                        capturedMessages = new List<ChatMessage>(messages ?? new ChatMessage[0]);
+                        return Task.FromResult(new LlmCompletionResult
+                        {
+                            Content = "Done.",
+                            PromptTokens = 10,
+                            CompletionTokens = 2,
+                            TotalTokens = 12
+                        });
+                    });
+
+                var session = new ChatSession
+                {
+                    Host = "Excel",
+                    DocumentKey = "doc",
+                    DocumentTitle = "Harness.xlsx",
+                    Title = "New chat"
+                };
+                var context = new DocumentContext
+                {
+                    Host = "Excel",
+                    DocumentKey = "doc",
+                    Title = "Harness.xlsx"
+                };
+                context.Notes.Add(new ContextNote
+                {
+                    Host = "Excel",
+                    Kind = "selection",
+                    Title = "Selection",
+                    Reference = "A1",
+                    Text = "Selected cells"
+                });
+
+                var result = service.ExecuteAsync(
+                    "hello world",
+                    session,
+                    context,
+                    new AppSettings { AgentModeEnabled = false, ContextCharLimit = 8000 },
+                    new List<SkillDefinition>(adapter.GetBuiltInSkills()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Done.", result.AssistantText, "assistant text");
+                AssertEqual(2, session.Messages.Count, "session message count");
+                AssertEqual("hello world", session.Messages[0].Content, "user message");
+                AssertEqual("Done.", session.Messages[1].Content, "assistant message");
+                AssertEqual("hello world", session.Title, "session title");
+                AssertTrue(ContainsMessage(capturedMessages, "User-added context attachments"), "context prompt captured");
+            });
+        }
+
         private static SkillDefinition CustomTool(string host, string id)
         {
             return new SkillDefinition
@@ -254,6 +361,19 @@ namespace RNAssistant.Harness
             foreach (var tool in tools)
             {
                 if (tool != null && string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool ContainsMessage(IEnumerable<ChatMessage> messages, string text)
+        {
+            foreach (var message in messages ?? new ChatMessage[0])
+            {
+                if (message != null && (message.Content ?? string.Empty).IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     return true;
                 }
