@@ -8,6 +8,7 @@ using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Skills;
 using RNAssistant.Core.Storage;
+using RNAssistant.Office.Services;
 using RNAssistant.Office.Skills;
 using RNAssistant.Office.Tools;
 
@@ -23,6 +24,7 @@ namespace RNAssistant.Office
         private readonly ToolStore _toolStore;
         private readonly VbaBackupStore _vbaBackupStore;
         private readonly OfficeToolExecutor _toolExecutor;
+        private readonly ToolCatalogService _toolCatalog;
         private readonly LlmClient _llmClient;
         private readonly PromptComposer _promptComposer;
         private readonly SkillCommandParser _commandParser;
@@ -42,6 +44,7 @@ namespace RNAssistant.Office
             _toolStore = new ToolStore(_paths);
             _vbaBackupStore = new VbaBackupStore(_paths);
             _toolExecutor = new OfficeToolExecutor(_adapter, _vbaBackupStore);
+            _toolCatalog = new ToolCatalogService(_adapter, _toolExecutor, _toolStore);
             _llmClient = new LlmClient(() => _settingsService.LoadApiKey());
             _promptComposer = new PromptComposer();
             _commandParser = new SkillCommandParser();
@@ -66,7 +69,7 @@ namespace RNAssistant.Office
                 chats = GetChatSummaries(activeId),
                 settings = settings,
                 hasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey()),
-                tools = GetVisibleTools(),
+                tools = _toolCatalog.GetVisibleTools(),
                 toolsPath = _paths.ToolsDirectory,
                 context = context,
                 messages = session.Messages,
@@ -92,7 +95,7 @@ namespace RNAssistant.Office
             session.Messages.Add(new ChatMessage { Role = "user", Content = text });
             EnsureSessionTitleFromUserText(session, text);
 
-            var tools = GetVisibleTools().Where(s => s.Enabled).ToList();
+            var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
             var documentContext = LoadContext(session);
             var vbaSnapshot = string.Empty;
             var systemPrompt = _promptComposer.ComposeSystemPrompt(
@@ -226,7 +229,7 @@ namespace RNAssistant.Office
 
         public string GetToolsJson()
         {
-            return JsonConvert.SerializeObject(GetVisibleTools());
+            return JsonConvert.SerializeObject(_toolCatalog.GetVisibleTools());
         }
 
         public string SaveToolsJson(string toolsJson)
@@ -239,7 +242,7 @@ namespace RNAssistant.Office
         public string RunToolJson(string toolId, string argumentsJson, bool dryRun, Action<string, string> progress = null)
         {
             var settings = _settingsService.Load();
-            var tools = GetVisibleTools().Where(s => s.Enabled).ToList();
+            var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
             var command = new SkillCommand { SkillId = toolId };
             var args = SkillArgumentReader.ParseObject(argumentsJson);
             foreach (var pair in args)
@@ -255,7 +258,7 @@ namespace RNAssistant.Office
         public string GetVbaProjectJson(int maxChars)
         {
             var settings = _settingsService.Load();
-            var tools = GetVisibleTools().Where(s => s.Enabled).ToList();
+            var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
             var command = new SkillCommand { SkillId = _toolExecutor.VbaToolId("vba_read_project") };
             command.Arguments["maxChars"] = maxChars <= 0 ? settings.VbaContextCharLimit : maxChars;
             var result = _toolExecutor.Execute(command, tools, settings, false, true);
@@ -269,7 +272,7 @@ namespace RNAssistant.Office
         public string SaveVbaModuleJson(string moduleName, string code)
         {
             var settings = _settingsService.Load();
-            var tools = GetVisibleTools().Where(s => s.Enabled).ToList();
+            var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
             var command = new SkillCommand { SkillId = _toolExecutor.VbaToolId("vba_replace_module") };
             command.Arguments["moduleName"] = moduleName;
             command.Arguments["code"] = code;
@@ -281,7 +284,7 @@ namespace RNAssistant.Office
         public string RestoreVbaBackupJson(string backupId, string moduleName)
         {
             var settings = _settingsService.Load();
-            var tools = GetVisibleTools().Where(s => s.Enabled).ToList();
+            var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
             var result = _toolExecutor.Execute(new SkillCommand
             {
                 SkillId = _toolExecutor.VbaToolId("vba_restore_backup"),
@@ -390,32 +393,6 @@ namespace RNAssistant.Office
                 _queuedQuickAction = null;
                 return action;
             }
-        }
-
-        private List<SkillDefinition> GetVisibleTools()
-        {
-            var result = new Dictionary<string, SkillDefinition>(StringComparer.OrdinalIgnoreCase);
-            foreach (var skill in _adapter.GetBuiltInSkills() ?? new SkillDefinition[0])
-            {
-                result[skill.Id] = skill;
-            }
-
-            foreach (var tool in _toolExecutor.GetControllerTools())
-            {
-                result[tool.Id] = tool;
-            }
-
-            foreach (var tool in _toolStore.Load().Where(s =>
-                string.Equals(s.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(s.Host, "Common", StringComparison.OrdinalIgnoreCase)))
-            {
-                if (!string.IsNullOrWhiteSpace(tool.Id))
-                {
-                    result[tool.Id] = tool;
-                }
-            }
-
-            return result.Values.OrderBy(s => s.Host).ThenBy(s => s.Id).ToList();
         }
 
         private static void ReportProgress(Action<string, string> progress, string phase, string message)

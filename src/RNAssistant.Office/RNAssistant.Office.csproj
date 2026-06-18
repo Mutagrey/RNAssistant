@@ -60,6 +60,7 @@
     <Compile Include="Contracts\IOfficeApplicationAdapter.cs" />
     <Compile Include="Vba\VbaProjectSupport.cs" />
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />
+    <Compile Include="Services\ToolCatalogService.cs" />
     <Compile Include="Skills\SkillArgumentReader.cs" />
     <Compile Include="Tools\OfficeToolExecutor.cs" />
     <Compile Include="WebView\AssistantPaneControl.cs" />

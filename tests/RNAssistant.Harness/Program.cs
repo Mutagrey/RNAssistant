@@ -5,6 +5,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Skills;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office;
+using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
@@ -30,7 +31,8 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "pipeline: dry-run resolves placeholders", Run = PipelineDryRunResolvesPlaceholders },
                 new HarnessTest { Name = "pipeline: executes fake adapter steps", Run = PipelineExecutesFakeAdapterSteps },
                 new HarnessTest { Name = "pipeline: custom tool needs confirmation", Run = CustomPipelineNeedsConfirmation },
-                new HarnessTest { Name = "pipeline: agent mode gates built-in mutation", Run = AgentModeGatesBuiltInMutation }
+                new HarnessTest { Name = "pipeline: agent mode gates built-in mutation", Run = AgentModeGatesBuiltInMutation },
+                new HarnessTest { Name = "tools: catalog merges visible tools", Run = ToolCatalogMergesVisibleTools }
             };
 
             var failed = 0;
@@ -208,6 +210,56 @@ namespace RNAssistant.Harness
                 AssertContains(result.Message, "requires confirmation", "confirmation message");
                 AssertEqual(0, adapter.Executed.Count, "adapter execution count");
             });
+        }
+
+        private static void ToolCatalogMergesVisibleTools()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var toolStore = new ToolStore(paths);
+                toolStore.Save(new[]
+                {
+                    CustomTool("Common", "common.inspect"),
+                    CustomTool("Excel", "excel.custom"),
+                    CustomTool("Word", "word.hidden")
+                });
+                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths));
+                var catalog = new ToolCatalogService(adapter, executor, toolStore).GetVisibleTools();
+
+                AssertTrue(HasTool(catalog, "excel.add_sheet"), "built-in tool visible");
+                AssertTrue(HasTool(catalog, "excel.vba_apply_patch"), "controller VBA tool visible");
+                AssertTrue(HasTool(catalog, "common.inspect"), "common custom tool visible");
+                AssertTrue(HasTool(catalog, "excel.custom"), "host custom tool visible");
+                AssertTrue(!HasTool(catalog, "word.hidden"), "other host custom tool hidden");
+            });
+        }
+
+        private static SkillDefinition CustomTool(string host, string id)
+        {
+            return new SkillDefinition
+            {
+                Id = id,
+                Host = host,
+                Name = id,
+                Executor = "pipeline",
+                Enabled = true,
+                BuiltIn = false,
+                PipelineJson = "{\"steps\":[]}"
+            };
+        }
+
+        private static bool HasTool(IEnumerable<SkillDefinition> tools, string id)
+        {
+            foreach (var tool in tools)
+            {
+                if (tool != null && string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static List<SkillDefinition> BuildPipelineTools(bool requiresConfirmation)
