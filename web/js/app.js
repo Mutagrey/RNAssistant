@@ -76,6 +76,20 @@
     status.removeAttribute("data-phase");
   }
 
+  function showHelp() {
+    var modal = $("helpModal");
+    if (modal) {
+      modal.classList.remove("hidden");
+    }
+  }
+
+  function hideHelp() {
+    var modal = $("helpModal");
+    if (modal) {
+      modal.classList.add("hidden");
+    }
+  }
+
   function send(type, payload) {
     return new Promise(function (resolve, reject) {
       var id = String(state.seq++);
@@ -643,6 +657,19 @@
   document.addEventListener("DOMContentLoaded", function () {
     Array.prototype.slice.call(document.querySelectorAll(".tab")).forEach(function (tab) {
       tab.addEventListener("click", function () { switchTab(tab.dataset.tab); });
+    });
+
+    $("helpButton").addEventListener("click", showHelp);
+    $("closeHelpButton").addEventListener("click", hideHelp);
+    $("helpModal").addEventListener("click", function (event) {
+      if (event.target === $("helpModal")) {
+        hideHelp();
+      }
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") {
+        hideHelp();
+      }
     });
 
     $("refreshButton").addEventListener("click", initialize);

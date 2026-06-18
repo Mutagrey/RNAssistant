@@ -15,7 +15,10 @@
         <div class="brand">RN Assistant</div>
         <div class="docline" id="docLine">Loading...</div>
       </div>
-      <button class="icon-button" id="refreshButton" title="Refresh">R</button>
+      <div class="top-actions">
+        <button class="icon-button secondary" id="helpButton" title="How it works">?</button>
+        <button class="icon-button" id="refreshButton" title="Refresh">R</button>
+      </div>
     </header>
 
     <nav class="tabs" aria-label="Assistant tabs">
@@ -114,6 +117,34 @@
         <pre class="log-box" id="logBox"></pre>
       </section>
     </main>
+  </div>
+
+  <div class="modal hidden" id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+    <div class="modal-panel">
+      <div class="modal-head">
+        <h2 id="helpTitle">How RNAssistant tools work</h2>
+        <button class="icon-button secondary" id="closeHelpButton" title="Close">X</button>
+      </div>
+      <div class="help-content">
+        <section>
+          <h3>Chat workflow</h3>
+          <p>Ask for the Office result in normal language. The model sees enabled tools, returns tool calls, and RNAssistant executes them when auto-run is enabled.</p>
+          <pre><code>Создай новый лист Sales Demo, сгенерируй данные продаж по месяцам и построй линейный график.</code></pre>
+        </section>
+        <section>
+          <h3>Tools workflow</h3>
+          <p>Open Tools, select a tool, inspect its schema, pipeline, VBA code, and notes. Use Dry Run before Run for custom tools.</p>
+        </section>
+        <section>
+          <h3>Reusable tools</h3>
+          <p>Custom tools are stored in %AppData%\RNAssistant\tools. Pipeline tools call existing tools in order. VBA tools store editable code in code.vba.</p>
+        </section>
+        <section>
+          <h3>Safety switches</h3>
+          <p>Settings controls whether LLM tool calls auto-run and whether tools marked Requires confirmation can run without manual Run.</p>
+        </section>
+      </div>
+    </div>
   </div>
 
   <script src="js/vendor/purify.min.js"></script>
