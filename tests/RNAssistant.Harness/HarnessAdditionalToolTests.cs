@@ -61,21 +61,21 @@ namespace RNAssistant.Harness
         private static void UnknownAndDisabledToolsFail()
         {
             var adapter = FakeOfficeAdapter.ForHost("Excel");
-            adapter.FailUnknownSkills = true;
             WithTempExecutor(adapter, delegate(OfficeToolExecutor executor, FakeOfficeAdapter fake)
             {
                 var builtIns = new List<ToolDefinition>(fake.GetBuiltInTools());
                 var unknown = executor.Execute(
-                    new ToolCommand { ToolId = "excel.invented_tool" },
+                    new ToolCommand { ToolId = "create_worksheet" },
                     builtIns,
                     new AppSettings(),
                     false,
                     false);
 
                 AssertTrue(!unknown.Success, "unknown tool should fail");
-                AssertContains(unknown.Message, "Unsupported Excel tool", "unknown tool message");
-                AssertEqual(1, fake.Executed.Count, "unknown adapter count");
-                AssertEqual("excel.invented_tool", fake.Executed[0].ToolId, "unknown adapter tool");
+                AssertContains(unknown.Message, "Unknown tool id", "unknown tool message");
+                AssertContains(unknown.Message, "excel.add_sheet", "unknown tool suggestion");
+                AssertContains(unknown.DataJson, "availableToolIds", "unknown tool diagnostics");
+                AssertEqual(0, fake.Executed.Count, "unknown adapter count");
 
                 fake.Executed.Clear();
                 var disabled = CustomTool("Excel", "excel.disabled_pipeline");
@@ -92,10 +92,57 @@ namespace RNAssistant.Harness
                     false);
 
                 AssertTrue(!disabledResult.Success, "disabled tool should fail");
-                AssertContains(disabledResult.Message, "Unsupported Excel tool", "disabled tool message");
-                AssertEqual(1, fake.Executed.Count, "disabled adapter count");
-                AssertEqual("excel.disabled_pipeline", fake.Executed[0].ToolId, "disabled adapter tool");
+                AssertContains(disabledResult.Message, "Tool is disabled", "disabled tool message");
+                AssertEqual(0, fake.Executed.Count, "disabled adapter count");
             });
+        }
+
+        private static void ChatUnknownToolRetriesExactAvailableId()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    AgentBlock(Command("create_worksheet", "name", "Report")),
+                    AgentBlock(Command("excel.add_sheet", "name", "Report")),
+                    "Done.");
+                var session = NewSession(adapter);
+
+                var result = service.ExecuteAsync(
+                    "Create a new worksheet named Report.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000 },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Done.", result.AssistantText, "assistant text");
+                AssertEqual(3, calls.Count, "llm call count");
+                AssertContains(FlattenMessages(calls[1]), "Use only these exact available tool ids", "retry available ids prompt");
+                AssertContains(FlattenMessages(calls[1]), "excel.add_sheet", "retry prompt contains exact tool id");
+                AssertEqual(1, adapter.Executed.Count, "adapter execution count");
+                AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "retry tool");
+                var resultJson = Newtonsoft.Json.JsonConvert.SerializeObject(result.ToolResults);
+                AssertContains(resultJson, "create_worksheet", "unknown tool logged");
+                AssertContains(resultJson, "Unknown tool id", "unknown failure logged");
+            });
+        }
+
+        private static string FlattenMessages(IEnumerable<ChatMessage> messages)
+        {
+            var values = new List<string>();
+            foreach (var message in messages ?? new ChatMessage[0])
+            {
+                if (message != null)
+                {
+                    values.Add(message.Content ?? string.Empty);
+                }
+            }
+
+            return string.Join("\n", values.ToArray());
         }
 
         private static void ConfirmationMatrixCoversDryAndManualRuns()

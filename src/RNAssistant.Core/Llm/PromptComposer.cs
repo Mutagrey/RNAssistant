@@ -45,7 +45,8 @@ namespace RNAssistant.Core.Llm
             builder.AppendLine("```rnassistant-agent");
             builder.AppendLine("{\"description\":\"short plan\",\"steps\":[{\"description\":\"step name\",\"toolId\":\"tool.id\",\"arguments\":{\"name\":\"value\"}}]}");
             builder.AppendLine("```");
-            builder.AppendLine("A JSON array is also accepted inside the fence. Each command must use an available toolId/tool/action/name and an arguments/args/parameters object. Never invent tool ids.");
+            builder.AppendLine("A JSON array is also accepted inside the fence. Each command must use a toolId copied exactly from the Available tools list and an arguments/args/parameters object.");
+            builder.AppendLine("Never invent tool ids or use API-style aliases such as create_worksheet, addWorksheet, create_sheet, worksheet.create, or action names instead of exact tool ids.");
             builder.AppendLine("After tool results are provided, either answer normally if the task is complete or return the next tool block.");
             builder.AppendLine("If no available tool can satisfy the request, say exactly what is missing.");
             builder.AppendLine("For VBA edits, prefer the host vba_apply_patch tool for structured small patches; use vba_replace_module only when replacing the whole module is necessary.");
@@ -53,7 +54,7 @@ namespace RNAssistant.Core.Llm
             builder.AppendLine();
             AppendSkills(builder, skills, SkillBodyLimit(settings));
             builder.AppendLine("Available tools:");
-            builder.AppendLine("Use only these exact tool ids in rnassistant-agent steps. The local app parses this text response and executes matching tools.");
+            builder.AppendLine("Use only these exact tool ids in rnassistant-agent steps. Copy the full id, including the host prefix before the dot.");
             foreach (var tool in tools)
             {
                 builder.AppendLine("- " + tool.Id + " (" + tool.Host + "): " + tool.Description);

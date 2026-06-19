@@ -52,12 +52,17 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Fail("Pipeline nesting limit exceeded.");
             }
 
-            var tool = FindEnabledTool(skills, command.ToolId) ??
-                FindEnabledTool(_adapter.GetBuiltInTools(), command.ToolId);
+            var knownTools = KnownTools(skills).ToList();
+            var tool = FindTool(knownTools, command.ToolId);
             if (tool == null)
             {
-                tool = _vbaExecutor.GetControllerTool(command.ToolId) ?? _skillExecutor.GetControllerTool(command.ToolId);
+                return UnknownTool(command.ToolId, knownTools);
             }
+            if (!tool.Enabled)
+            {
+                return DisabledTool(command.ToolId, knownTools);
+            }
+
             var customTool = tool != null && !tool.BuiltIn ? tool : null;
 
             if (ToolSafetyPolicy.RequiresConfirmation(tool, settings, dryRun, manualRun))
@@ -106,11 +111,183 @@ namespace RNAssistant.Office.Tools
             return _adapter.ExecuteTool(command);
         }
 
-        private static ToolDefinition FindEnabledTool(IEnumerable<ToolDefinition> tools, string toolId)
+        private IEnumerable<ToolDefinition> KnownTools(IEnumerable<ToolDefinition> providedTools)
+        {
+            var result = new List<ToolDefinition>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            AddTools(result, seen, providedTools);
+            AddTools(result, seen, _adapter.GetBuiltInTools());
+            AddTools(result, seen, _vbaExecutor.GetControllerTools());
+            AddTools(result, seen, _skillExecutor.GetControllerTools());
+            return result;
+        }
+
+        private static void AddTools(ICollection<ToolDefinition> result, ISet<string> seen, IEnumerable<ToolDefinition> tools)
+        {
+            foreach (var tool in tools ?? new ToolDefinition[0])
+            {
+                if (tool == null || string.IsNullOrWhiteSpace(tool.Id) || seen.Contains(tool.Id))
+                {
+                    continue;
+                }
+
+                seen.Add(tool.Id);
+                result.Add(tool);
+            }
+        }
+
+        private static ToolDefinition FindTool(IEnumerable<ToolDefinition> tools, string toolId)
         {
             return (tools ?? new ToolDefinition[0]).FirstOrDefault(s =>
-                s.Enabled &&
                 string.Equals(s.Id, toolId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static ToolResult UnknownTool(string requestedToolId, IReadOnlyList<ToolDefinition> knownTools)
+        {
+            var suggestions = SuggestToolIds(requestedToolId, knownTools);
+            var message = "Unknown tool id: " + requestedToolId + ". Use only available tool ids.";
+            if (suggestions.Count > 0)
+            {
+                message += " Did you mean: " + string.Join(", ", suggestions.ToArray()) + "?";
+            }
+
+            return ToolResult.Fail(message, ToolDiagnosticJson(requestedToolId, knownTools, suggestions, false));
+        }
+
+        private static ToolResult DisabledTool(string requestedToolId, IReadOnlyList<ToolDefinition> knownTools)
+        {
+            return ToolResult.Fail(
+                "Tool is disabled: " + requestedToolId + ". Enable it or use another available tool id.",
+                ToolDiagnosticJson(requestedToolId, knownTools, new List<string>(), true));
+        }
+
+        private static string ToolDiagnosticJson(string requestedToolId, IReadOnlyList<ToolDefinition> knownTools, IReadOnlyList<string> suggestions, bool disabled)
+        {
+            return JsonConvert.SerializeObject(new
+            {
+                requestedToolId = requestedToolId,
+                disabled = disabled,
+                suggestions = suggestions ?? new string[0],
+                availableToolIds = (knownTools ?? new ToolDefinition[0])
+                    .Where(tool => tool != null && tool.Enabled && !string.IsNullOrWhiteSpace(tool.Id))
+                    .Select(tool => tool.Id)
+                    .ToArray()
+            });
+        }
+
+        private static List<string> SuggestToolIds(string requestedToolId, IReadOnlyList<ToolDefinition> knownTools)
+        {
+            var requestedTokens = ExpandedTokens(Tokenize(requestedToolId));
+            if (requestedTokens.Count == 0)
+            {
+                return new List<string>();
+            }
+
+            return (knownTools ?? new ToolDefinition[0])
+                .Where(tool => tool != null && tool.Enabled && !string.IsNullOrWhiteSpace(tool.Id))
+                .Select(tool => new { Tool = tool, Score = SuggestionScore(requestedTokens, tool) })
+                .Where(item => item.Score > 0)
+                .OrderByDescending(item => item.Score)
+                .ThenBy(item => item.Tool.Id.Length)
+                .Take(5)
+                .Select(item => item.Tool.Id)
+                .ToList();
+        }
+
+        private static int SuggestionScore(ISet<string> requestedTokens, ToolDefinition tool)
+        {
+            var candidateTokens = ExpandedTokens(Tokenize(
+                (tool.Id ?? string.Empty) + " " +
+                (tool.Name ?? string.Empty) + " " +
+                (tool.Description ?? string.Empty)));
+            var score = 0;
+            foreach (var token in requestedTokens)
+            {
+                if (candidateTokens.Contains(token))
+                {
+                    score += token.Length <= 2 ? 1 : 3;
+                }
+            }
+
+            return score;
+        }
+
+        private static ISet<string> ExpandedTokens(IEnumerable<string> tokens)
+        {
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var token in tokens ?? new string[0])
+            {
+                AddExpandedToken(result, token);
+            }
+
+            return result;
+        }
+
+        private static void AddExpandedToken(ISet<string> result, string token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return;
+            }
+
+            var value = token.Trim().ToLowerInvariant();
+            result.Add(value);
+            if (value.EndsWith("s", StringComparison.OrdinalIgnoreCase) && value.Length > 3)
+            {
+                result.Add(value.Substring(0, value.Length - 1));
+            }
+
+            if (string.Equals(value, "create", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "make", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "new", StringComparison.OrdinalIgnoreCase))
+            {
+                result.Add("add");
+            }
+            if (string.Equals(value, "worksheet", StringComparison.OrdinalIgnoreCase))
+            {
+                result.Add("sheet");
+            }
+            if (string.Equals(value, "diagram", StringComparison.OrdinalIgnoreCase))
+            {
+                result.Add("chart");
+            }
+            if (string.Equals(value, "delete", StringComparison.OrdinalIgnoreCase))
+            {
+                result.Add("remove");
+            }
+        }
+
+        private static IEnumerable<string> Tokenize(string value)
+        {
+            var token = string.Empty;
+            var previousWasLower = false;
+            foreach (var ch in value ?? string.Empty)
+            {
+                if (char.IsLetterOrDigit(ch))
+                {
+                    if (char.IsUpper(ch) && previousWasLower && token.Length > 0)
+                    {
+                        yield return token;
+                        token = string.Empty;
+                    }
+
+                    token += char.ToLowerInvariant(ch);
+                    previousWasLower = char.IsLower(ch);
+                    continue;
+                }
+
+                if (token.Length > 0)
+                {
+                    yield return token;
+                    token = string.Empty;
+                }
+                previousWasLower = false;
+            }
+
+            if (token.Length > 0)
+            {
+                yield return token;
+            }
         }
     }
 }

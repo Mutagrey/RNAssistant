@@ -103,8 +103,8 @@ namespace RNAssistant.Office.Services
                     if (iteration == 0 && settings.AgentModeEnabled != false && AgentTranscript.ShouldForceAgentToolUse(text, _adapter.HostName))
                     {
                         followUpPrompt = parseResult.HasProtocolDiagnostics
-                            ? "Your previous response contained an RNAssistant tool block, but the local parser could not recover executable JSON. Return only one corrected ```rnassistant-agent fenced JSON block with executable steps using available tools. No prose."
-                            : "You are in RNAssistant Agent mode. The user asked for an Office action, so a prose-only answer is not acceptable. Return only one ```rnassistant-agent fenced JSON block with executable steps using available tools. If a tool is missing, say that plainly instead of inventing one.";
+                            ? "Your previous response contained an RNAssistant tool block, but the local parser could not recover executable JSON. Return only one corrected ```rnassistant-agent fenced JSON block with executable steps. Copy toolId values exactly from the Available tools list. No prose."
+                            : "You are in RNAssistant Agent mode. The user asked for an Office action, so a prose-only answer is not acceptable. Return only one ```rnassistant-agent fenced JSON block with executable steps. Copy toolId values exactly from the Available tools list. If a tool is missing, say that plainly instead of inventing one.";
                         continue;
                     }
                     session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, completion));
@@ -195,6 +195,7 @@ namespace RNAssistant.Office.Services
         {
             cancellationToken.ThrowIfCancellationRequested();
             var repairPrompt = "A local tool call failed. Return only corrected rnassistant-agent JSON block(s), no prose. " +
+                "Use only these exact available tool ids: " + AvailableToolIdsText(tools) + "\n" +
                 "Original command: `" + failedCommand.ToolId + "` with arguments:\n```json\n" +
                 JsonConvert.SerializeObject(failedCommand.Arguments, Formatting.Indented) +
                 "\n```\nError: " + failedResult.Message +
@@ -248,6 +249,18 @@ namespace RNAssistant.Office.Services
             }
 
             return anySuccess && allSucceeded;
+        }
+
+        private static string AvailableToolIdsText(IEnumerable<ToolDefinition> tools)
+        {
+            var ids = (tools ?? new ToolDefinition[0])
+                .Where(tool => tool != null && tool.Enabled && !string.IsNullOrWhiteSpace(tool.Id))
+                .Select(tool => tool.Id)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(id => id)
+                .ToArray();
+
+            return ids.Length == 0 ? "none" : string.Join(", ", ids);
         }
 
         private static void AttachPendingId(ChatSession session, ToolCommand command, ToolResult result, PendingToolRegistrar pendingToolRegistrar)

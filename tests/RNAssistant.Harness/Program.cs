@@ -82,6 +82,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "chat: prose action forces tool follow-up", Run = ChatProseActionForcesToolFollowUp },
                 new HarnessTest { Name = "chat: malformed action response forces repair", Run = ChatMalformedActionResponseForcesRepair },
                 new HarnessTest { Name = "chat: failed tool retries corrected call", Run = ChatFailedToolRetriesCorrectedCall },
+                new HarnessTest { Name = "chat: unknown tool retries exact available id", Run = ChatUnknownToolRetriesExactAvailableId },
                 new HarnessTest { Name = "chat: retry success continues", Run = ChatRetrySuccessContinuesToFinalAnswer },
                 new HarnessTest { Name = "chat: agent disabled skips tool block", Run = ChatAgentDisabledSkipsToolBlock },
                 new HarnessTest { Name = "chat: waiting tool gets pending id", Run = ChatWaitingToolGetsPendingId },
