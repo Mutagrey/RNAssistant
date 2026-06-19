@@ -45,9 +45,7 @@ namespace RNAssistant.Core.Tools
 
     public sealed class ToolCommandParser
     {
-        private static readonly string[] Fences = { "```rnassistant-skill", "```rnassistant-agent" };
-        private const string XmlStart = "<rnassistant-skill>";
-        private const string XmlEnd = "</rnassistant-skill>";
+        private const string Fence = "```rnassistant-agent";
         private const string AgentXmlStart = "<rnassistant-agent>";
         private const string AgentXmlEnd = "</rnassistant-agent>";
 
@@ -80,28 +78,24 @@ namespace RNAssistant.Core.Tools
 
         private static void ExtractFenced(string text, ToolCommandParseResult result)
         {
-            foreach (var fence in Fences)
+            var index = 0;
+            while ((index = text.IndexOf(Fence, index, StringComparison.OrdinalIgnoreCase)) >= 0)
             {
-                var index = 0;
-                while ((index = text.IndexOf(fence, index, StringComparison.OrdinalIgnoreCase)) >= 0)
+                var jsonStart = index + Fence.Length;
+                var end = text.IndexOf("```", jsonStart, StringComparison.OrdinalIgnoreCase);
+                if (end < 0)
                 {
-                    var jsonStart = index + fence.Length;
-                    var end = text.IndexOf("```", jsonStart, StringComparison.OrdinalIgnoreCase);
-                    if (end < 0)
-                    {
-                        TryAdd(text.Substring(jsonStart), result, "tool_fence_unclosed", true);
-                        break;
-                    }
-
-                    TryAdd(text.Substring(jsonStart, end - jsonStart), result, "tool_fence_invalid_json", true);
-                    index = end + 3;
+                    TryAdd(text.Substring(jsonStart), result, "tool_fence_unclosed", true);
+                    break;
                 }
+
+                TryAdd(text.Substring(jsonStart, end - jsonStart), result, "tool_fence_invalid_json", true);
+                index = end + 3;
             }
         }
 
         private static void ExtractXml(string text, ToolCommandParseResult result)
         {
-            ExtractXml(text, XmlStart, XmlEnd, result);
             ExtractXml(text, AgentXmlStart, AgentXmlEnd, result);
         }
 
@@ -533,7 +527,7 @@ namespace RNAssistant.Core.Tools
 
             var steps = (obj["steps"] as JArray) ?? (obj["commands"] as JArray) ?? (obj["actions"] as JArray) ?? (obj["tools"] as JArray);
             var argumentToken = obj["arguments"] ?? obj["args"] ?? obj["parameters"] ?? obj["input"];
-            var explicitId = (string)(obj["skillId"] ?? obj["skill_id"] ?? obj["toolId"] ?? obj["tool_id"] ?? obj["tool"]);
+            var explicitId = (string)(obj["toolId"] ?? obj["tool_id"] ?? obj["tool"]);
             var function = obj["function"] as JObject;
             if (string.IsNullOrWhiteSpace(explicitId) && function != null)
             {

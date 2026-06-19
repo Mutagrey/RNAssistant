@@ -6,7 +6,7 @@ function logToolResult(prefix, toolId, result) {
 
 function logToolResults(results) {
   (results || []).forEach(function (result, index) {
-    logToolResult("Tool " + (index + 1), result.toolId || result.ToolId || result.skillId || result.SkillId || "tool", result);
+    logToolResult("Tool " + (index + 1), result.toolId || result.ToolId || "tool", result);
   });
 }
 

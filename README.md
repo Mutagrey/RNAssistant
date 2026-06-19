@@ -141,7 +141,7 @@ Agent responses may also use:
 ```
 ````
 
-Pure JSON arrays/objects with `toolId`, `tool`, `action`, or `name` (`skillId` remains a legacy alias) are accepted too. Native API `tool_calls` are not required; if an endpoint returns them anyway, RNAssistant converts them into the same local text protocol before parsing. In Agent mode, built-in Office tools can run automatically; custom tools marked `requiresConfirmation` and VBA mutation tools still require confirmation unless `Auto-confirm tool actions` is enabled. Waiting agent steps carry typed statuses such as `waiting_confirmation` or `skipped_auto_run`; the task pane can confirm or cancel the exact pending command.
+Pure JSON arrays/objects with `toolId`, `tool`, `action`, or `name` are accepted too. Native API `tool_calls` are not required; if an endpoint returns them anyway, RNAssistant converts them into the same local text protocol before parsing. In Agent mode, built-in Office tools can run automatically; custom tools marked `requiresConfirmation` and VBA mutation tools still require confirmation unless `Auto-confirm tool actions` is enabled. Waiting agent steps carry typed statuses such as `waiting_confirmation` or `skipped_auto_run`; the task pane can confirm or cancel the exact pending command.
 
 `System prompt` in Settings is treated as additional custom instruction. The fixed RNAssistant tool protocol is always appended as mandatory runtime protocol so custom text cannot disable parsing or tool execution rules.
 
@@ -181,7 +181,7 @@ Pipeline tools use:
 }
 ```
 
-Each pipeline step must set `toolId`; legacy `skillId` is accepted as an input alias only. `id` is only the step label used for placeholders. Supported placeholders are `{{args.name}}`, `{{steps.stepId.message}}`, `{{steps.stepId.dataJson}}`, and `{{steps.stepId.success}}`.
+Each pipeline step must set `toolId`. `id` is only the step label used for placeholders. Supported placeholders are `{{args.name}}`, `{{steps.stepId.message}}`, `{{steps.stepId.dataJson}}`, and `{{steps.stepId.success}}`.
 
 The Tools tab can run a selected tool with ad hoc JSON arguments. `Dry Run` resolves the planned calls without changing the Office document. `Run` is treated as explicit user confirmation.
 

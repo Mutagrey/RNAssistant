@@ -52,7 +52,7 @@ namespace RNAssistant.Office.Tools
                     continue;
                 }
 
-                var toolId = (string)(step["toolId"] ?? step["skillId"]);
+                var toolId = (string)step["toolId"];
                 if (string.IsNullOrWhiteSpace(toolId))
                 {
                     return ToolResult.Fail("Pipeline step has no toolId.");

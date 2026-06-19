@@ -111,7 +111,7 @@ namespace RNAssistant.Harness
             var commands = new ToolCommandParser().Parse(
                 "```rnassistant-agent\n" +
                 "{\"steps\":[" +
-                "{\"description\":\"Add sheet\",\"skillId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}," +
+                "{\"description\":\"Add sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}," +
                 "{\"toolId\":\"excel.add_chart\",\"args\":{\"title\":\"Sales\"}}" +
                 "]}" +
                 "\n```");
@@ -171,7 +171,7 @@ namespace RNAssistant.Harness
         {
             var result = new ToolCommandParser().ParseWithDiagnostics(
                 "```rnassistant-agent\n" +
-                "{\"steps\":[{\"skillId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"},}\n```");
+                "{\"steps\":[{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"},}\n```");
 
             AssertEqual(1, result.Commands.Count, "command count");
             AssertEqual("excel.add_sheet", result.Commands[0].ToolId, "tool id");
@@ -1548,7 +1548,7 @@ namespace RNAssistant.Harness
             private readonly string _hostName;
             private readonly string _documentTitle;
             private readonly string _documentSnapshot;
-            private readonly List<ToolDefinition> _builtInSkills;
+            private readonly List<ToolDefinition> _builtInTools;
             private readonly Dictionary<string, Queue<ToolResult>> _scriptedResults;
             private readonly Dictionary<string, FakeVbaModule> _vbaModules;
 
@@ -1568,7 +1568,7 @@ namespace RNAssistant.Harness
                 _hostName = hostName;
                 _documentTitle = documentTitle;
                 _documentSnapshot = documentSnapshot;
-                _builtInSkills = new List<ToolDefinition>((builtInSkills ?? new ToolDefinition[0]).Select(CloneSkill));
+                _builtInTools = new List<ToolDefinition>((builtInSkills ?? new ToolDefinition[0]).Select(CloneTool));
                 _scriptedResults = new Dictionary<string, Queue<ToolResult>>(StringComparer.OrdinalIgnoreCase);
                 _vbaModules = new Dictionary<string, FakeVbaModule>(StringComparer.OrdinalIgnoreCase);
             }
@@ -1620,16 +1620,16 @@ namespace RNAssistant.Harness
 
             public IEnumerable<ToolDefinition> GetBuiltInTools()
             {
-                return _builtInSkills.Select(CloneSkill).ToArray();
+                return _builtInTools.Select(CloneTool).ToArray();
             }
 
-            public void QueueResult(string skillId, ToolResult result)
+            public void QueueResult(string toolId, ToolResult result)
             {
                 Queue<ToolResult> queue;
-                if (!_scriptedResults.TryGetValue(skillId, out queue))
+                if (!_scriptedResults.TryGetValue(toolId, out queue))
                 {
                     queue = new Queue<ToolResult>();
-                    _scriptedResults[skillId] = queue;
+                    _scriptedResults[toolId] = queue;
                 }
 
                 queue.Enqueue(result);
@@ -1693,7 +1693,7 @@ namespace RNAssistant.Harness
                     return ToolResult.Ok("ran " + command.ToolId);
                 }
 
-                if (FailUnknownSkills && !IsKnownSkill(command.ToolId))
+                if (FailUnknownSkills && !IsKnownTool(command.ToolId))
                 {
                     return ToolResult.Fail("Unsupported " + HostName + " tool: " + command.ToolId);
                 }
@@ -1709,11 +1709,11 @@ namespace RNAssistant.Harness
                     : fallback;
             }
 
-            private bool TryDequeueResult(string skillId, out ToolResult result)
+            private bool TryDequeueResult(string toolId, out ToolResult result)
             {
                 result = null;
                 Queue<ToolResult> queue;
-                if (!_scriptedResults.TryGetValue(skillId ?? string.Empty, out queue) || queue.Count == 0)
+                if (!_scriptedResults.TryGetValue(toolId ?? string.Empty, out queue) || queue.Count == 0)
                 {
                     return false;
                 }
@@ -1722,9 +1722,9 @@ namespace RNAssistant.Harness
                 return true;
             }
 
-            private bool IsKnownSkill(string skillId)
+            private bool IsKnownTool(string toolId)
             {
-                return _builtInSkills.Any(skill => string.Equals(skill.Id, skillId, StringComparison.OrdinalIgnoreCase));
+                return _builtInTools.Any(tool => string.Equals(tool.Id, toolId, StringComparison.OrdinalIgnoreCase));
             }
 
             private static IEnumerable<ToolDefinition> ExcelBuiltIns()
@@ -1804,7 +1804,7 @@ namespace RNAssistant.Harness
                 };
             }
 
-            private static ToolDefinition CloneSkill(ToolDefinition skill)
+            private static ToolDefinition CloneTool(ToolDefinition skill)
             {
                 return new ToolDefinition
                 {

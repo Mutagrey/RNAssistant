@@ -41,7 +41,7 @@ namespace RNAssistant.Core.Llm
             builder.AppendLine("```rnassistant-agent");
             builder.AppendLine("{\"description\":\"short plan\",\"steps\":[{\"description\":\"step name\",\"toolId\":\"tool.id\",\"arguments\":{\"name\":\"value\"}}]}");
             builder.AppendLine("```");
-            builder.AppendLine("A JSON array is also accepted inside the fence. Each command must use an available toolId/tool/action/name and an arguments/args/parameters object. Never invent tool ids. Legacy skillId is accepted only as an input alias.");
+            builder.AppendLine("A JSON array is also accepted inside the fence. Each command must use an available toolId/tool/action/name and an arguments/args/parameters object. Never invent tool ids.");
             builder.AppendLine("After tool results are provided, either answer normally if the task is complete or return the next tool block.");
             builder.AppendLine("If no available tool can satisfy the request, say exactly what is missing.");
             builder.AppendLine("For VBA edits, prefer the host vba_apply_patch tool for structured small patches; use vba_replace_module only when replacing the whole module is necessary.");
