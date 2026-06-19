@@ -157,7 +157,7 @@ button.danger {
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   border-bottom: 1px solid var(--line);
   background: #fff;
 }
@@ -236,4 +236,3 @@ button.danger {
   display: flex;
   flex-direction: column;
 }
-
