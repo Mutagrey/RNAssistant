@@ -182,15 +182,19 @@ if (window.chrome && window.chrome.webview) {
     if (response && response.type === "progress") {
       var progress = response.payload || {};
       var progressPending = state.pending[response.id];
-    setActivity(progress.phase || "working", progress.message || "Working...");
-    if (progressPending && progressPending.type === "sendChat") {
-      state.liveActivity = normalizeProgressActivity(progress);
-      if (typeof recordLiveAgentActivity === "function") {
-        recordLiveAgentActivity(state.liveActivity);
+      setActivity(progress.phase || "working", progress.message || "Working...");
+      if (progressPending && progressPending.type === "sendChat") {
+        state.liveActivity = normalizeProgressActivity(progress);
+        if (typeof recordLiveAgentActivity === "function") {
+          recordLiveAgentActivity(state.liveActivity);
+        }
+        renderMessages();
       }
-      renderMessages();
-    }
       log("[" + (progress.phase || "working") + "] " + (progress.message || "Working..."));
+      return;
+    }
+    if (response && response.type === "chatState") {
+      applyChatState(response.payload || {});
       return;
     }
     var pending = state.pending[response.id];

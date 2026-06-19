@@ -170,8 +170,6 @@ namespace RNAssistant.Office.Services
                 assistantText = AgentTranscript.CreateRunSummary(resultLog);
             }
 
-            ChatTitleBuilder.ApplyDeferred(settings, session, text, assistantText);
-
             return new ChatCompletionResult
             {
                 AssistantText = assistantText,

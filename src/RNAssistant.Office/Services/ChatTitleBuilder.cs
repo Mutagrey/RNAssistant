@@ -2,29 +2,70 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Services
 {
     internal static class ChatTitleBuilder
     {
-        public static void ApplyDeferred(AppSettings settings, ChatSession session, string userText, string assistantText)
+        public static void ApplyFallback(ChatSession session, string userText, string assistantText)
         {
             if (!ShouldAssign(session))
             {
                 return;
             }
 
-            var title = settings != null && settings.SmartChatTitles == false
-                ? BuildFallback(assistantText, userText)
-                : BuildSmart(userText, assistantText);
+            var title = BuildFallback(assistantText, userText);
             if (!string.IsNullOrWhiteSpace(title))
             {
                 session.Title = title;
             }
         }
 
-        private static bool ShouldAssign(ChatSession session)
+        public static async Task<string> GenerateLlmTitleAsync(
+            AppSettings settings,
+            string userText,
+            string assistantText,
+            Func<AppSettings, IEnumerable<ChatMessage>, CancellationToken, Task<LlmCompletionResult>> completeAsync,
+            CancellationToken cancellationToken)
+        {
+            if (settings == null || completeAsync == null)
+            {
+                return BuildFallback(assistantText, userText);
+            }
+
+            var messages = new[]
+            {
+                new ChatMessage
+                {
+                    Role = "system",
+                    Content = "Ты называешь чаты. Верни только короткое название на языке пользователя: 2-6 слов, без кавычек, точки, markdown и пояснений."
+                },
+                new ChatMessage
+                {
+                    Role = "user",
+                    Content =
+                        "Запрос пользователя:\n" + Clip(CleanSource(userText), 1400) +
+                        "\n\nОтвет ассистента:\n" + Clip(CleanSource(assistantText), 1800)
+                }
+            };
+
+            var completion = await completeAsync(CreateTitleSettings(settings), messages, cancellationToken).ConfigureAwait(false);
+            var title = CleanLlmTitle(completion == null ? null : completion.Content);
+            return string.IsNullOrWhiteSpace(title)
+                ? BuildFallback(assistantText, userText)
+                : title;
+        }
+
+        public static string BuildFallbackTitle(string userText, string assistantText)
+        {
+            return BuildFallback(assistantText, userText);
+        }
+
+        public static bool ShouldAssign(ChatSession session)
         {
             if (session == null)
             {
@@ -33,17 +74,6 @@ namespace RNAssistant.Office.Services
 
             return string.IsNullOrWhiteSpace(session.Title)
                 || string.Equals(session.Title.Trim(), "New chat", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static string BuildSmart(string userText, string assistantText)
-        {
-            var title = FirstCandidate(userText, true);
-            if (string.IsNullOrWhiteSpace(title))
-            {
-                title = FirstCandidate(assistantText, true);
-            }
-
-            return Limit(title);
         }
 
         private static string BuildFallback(string assistantText, string userText)
@@ -55,6 +85,52 @@ namespace RNAssistant.Office.Services
             }
 
             return Limit(title);
+        }
+
+        private static AppSettings CreateTitleSettings(AppSettings source)
+        {
+            return new AppSettings
+            {
+                BaseUrl = source.BaseUrl,
+                Model = source.Model,
+                SystemPrompt = source.SystemPrompt,
+                AgentPrompt = source.AgentPrompt,
+                MaxTokens = 32,
+                RequestTimeoutSeconds = Math.Max(30, Math.Min(source.RequestTimeoutSeconds <= 0 ? 300 : source.RequestTimeoutSeconds, 60)),
+                Temperature = Math.Min(Math.Max(source.Temperature, 0), 0.2),
+                TopP = source.TopP <= 0 ? 1.0 : Math.Min(source.TopP, 1.0),
+                ContextCharLimit = source.ContextCharLimit,
+                StreamResponses = false,
+                AgentModeEnabled = source.AgentModeEnabled,
+                AutoRunToolCalls = source.AutoRunToolCalls,
+                AutoConfirmToolActions = source.AutoConfirmToolActions,
+                AutoRetryToolErrors = source.AutoRetryToolErrors,
+                SmartChatTitles = source.SmartChatTitles,
+                IncludeVbaContext = source.IncludeVbaContext,
+                VbaContextCharLimit = source.VbaContextCharLimit,
+                UiFontScale = source.UiFontScale,
+                CustomHeaders = source.CustomHeaders == null
+                    ? null
+                    : new Dictionary<string, string>(source.CustomHeaders, StringComparer.OrdinalIgnoreCase)
+            };
+        }
+
+        private static string CleanLlmTitle(string text)
+        {
+            var title = FirstCandidate(text, false);
+            title = Regex.Replace(title, "^(название|title)\\s*[:\\-]\\s*", string.Empty, RegexOptions.IgnoreCase);
+            return Limit(title);
+        }
+
+        private static string Clip(string text, int maxChars)
+        {
+            text = Normalize(text);
+            if (string.IsNullOrWhiteSpace(text) || maxChars <= 0 || text.Length <= maxChars)
+            {
+                return text;
+            }
+
+            return text.Substring(0, maxChars).TrimEnd();
         }
 
         private static string FirstCandidate(string text, bool removeRequestPrefix)

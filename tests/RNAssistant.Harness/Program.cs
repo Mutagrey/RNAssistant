@@ -908,71 +908,36 @@ namespace RNAssistant.Harness
                 AssertEqual(2, session.Messages.Count, "session message count");
                 AssertEqual("hello world", session.Messages[0].Content, "user message");
                 AssertEqual("Done.", session.Messages[1].Content, "assistant message");
-                AssertEqual("Hello world", session.Title, "session title");
+                AssertEqual("New chat", session.Title, "session title");
                 AssertTrue(ContainsMessage(capturedMessages, "User-added context attachments"), "context prompt captured");
             });
         }
 
         private static void ChatCompletionServiceUsesDeferredSmartTitleSetting()
         {
-            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                var service = new ChatCompletionService(
-                    adapter,
-                    executor,
-                    delegate(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        return Task.FromResult(new LlmCompletionResult
-                        {
-                            Content = "Отчет по продажам создан и сохранен.",
-                            PromptTokens = 10,
-                            CompletionTokens = 6,
-                            TotalTokens = 16
-                        });
-                    });
-
-                var context = new DocumentContext
+            var requestedMessages = new List<ChatMessage>();
+            var title = ChatTitleBuilder.GenerateLlmTitleAsync(
+                new AppSettings { ContextCharLimit = 8000 },
+                "Нужно сделать отчет по продажам.",
+                "Отчет по продажам создан и сохранен.",
+                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
                 {
-                    Host = "Excel",
-                    DocumentKey = "doc",
-                    Title = "Harness.xlsx"
-                };
-                var tools = new List<ToolDefinition>(adapter.GetBuiltInTools());
-                var smartSession = new ChatSession
-                {
-                    Host = "Excel",
-                    DocumentKey = "doc",
-                    DocumentTitle = "Harness.xlsx",
-                    Title = "New chat"
-                };
-                service.ExecuteAsync(
-                    "Нужно сделать отчет по продажам.",
-                    smartSession,
-                    context,
-                    new AppSettings { ContextCharLimit = 8000 },
-                    tools,
-                    null).GetAwaiter().GetResult();
+                    cancellationToken.ThrowIfCancellationRequested();
+                    requestedMessages = new List<ChatMessage>(messages ?? new ChatMessage[0]);
+                    AssertEqual(32, settings.MaxTokens, "title max tokens");
+                    return Task.FromResult(new LlmCompletionResult { Content = "Продажи по месяцам." });
+                },
+                CancellationToken.None).GetAwaiter().GetResult();
 
-                AssertEqual("Сделать отчет по продажам", smartSession.Title, "smart title");
+            AssertEqual("Продажи по месяцам", title, "llm title");
+            AssertTrue(ContainsMessage(requestedMessages, "Запрос пользователя"), "title prompt contains user label");
 
-                var fallbackSession = new ChatSession
-                {
-                    Host = "Excel",
-                    DocumentKey = "doc",
-                    DocumentTitle = "Harness.xlsx",
-                    Title = "New chat"
-                };
-                service.ExecuteAsync(
-                    "Нужно сделать отчет по продажам.",
-                    fallbackSession,
-                    context,
-                    new AppSettings { ContextCharLimit = 8000, SmartChatTitles = false },
-                    tools,
-                    null).GetAwaiter().GetResult();
-
-                AssertEqual("Отчет по продажам создан и сохранен", fallbackSession.Title, "fallback title");
-            });
+            var fallbackSession = new ChatSession { Title = "New chat" };
+            ChatTitleBuilder.ApplyFallback(
+                fallbackSession,
+                "Нужно сделать отчет по продажам.",
+                "Отчет по продажам создан и сохранен.");
+            AssertEqual("Отчет по продажам создан и сохранен", fallbackSession.Title, "fallback title");
         }
 
         private static void ChatExecutesTypicalHostTasks()
@@ -1568,6 +1533,10 @@ namespace RNAssistant.Harness
             AssertEqual("b2", progress["id"].Value<string>(), "progress id");
             AssertEqual("thinking", progress["payload"]["phase"].Value<string>(), "progress phase");
             AssertEqual("Testing progress", progress["payload"]["activity"]["Title"].Value<string>(), "progress activity title");
+            AssertEqual(2, progressMessages.Count, "send chat event count");
+            var chatState = JObject.Parse(progressMessages[1]);
+            AssertEqual("chatState", chatState["type"].Value<string>(), "chat state event type");
+            AssertEqual("chat-1", chatState["payload"]["activeChatId"].Value<string>(), "chat state active id");
         }
 
         private static void BridgeUsesTypedSettingsPayload()

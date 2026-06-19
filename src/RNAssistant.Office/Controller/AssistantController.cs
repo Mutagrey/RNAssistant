@@ -82,7 +82,12 @@ namespace RNAssistant.Office
             };
         }
 
-        public async Task<SendChatResponse> SendChatAsync(string text, string chatId = null, Action<string, string, ChatActivity> progress = null, CancellationToken cancellationToken = default(CancellationToken))
+        public async Task<SendChatResponse> SendChatAsync(
+            string text,
+            string chatId = null,
+            Action<string, string, ChatActivity> progress = null,
+            Action<ChatStateResponse> chatStateChanged = null,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
             if (string.IsNullOrWhiteSpace(text))
             {
@@ -96,13 +101,99 @@ namespace RNAssistant.Office
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
             var documentContext = LoadContext(session);
             var skills = _skillCatalog.SelectRelevantSkills(text, documentContext, 5);
+            var shouldGenerateLlmTitle = settings.SmartChatTitles != false && ChatTitleBuilder.ShouldAssign(session);
             var completion = await _chatCompletionService.ExecuteAsync(text, session, documentContext, settings, tools, progress, RegisterPendingAgentTool, skills, cancellationToken);
+            if (settings.SmartChatTitles == false)
+            {
+                ChatTitleBuilder.ApplyFallback(session, text, completion.AssistantText);
+            }
 
             ReportProgress(progress, "saving", "Сохраняю историю...");
             cancellationToken.ThrowIfCancellationRequested();
             _chatStore.Save(session);
             var activeId = ChatStore.GetSessionId(session);
+            if (shouldGenerateLlmTitle)
+            {
+                StartChatTitleGeneration(session, text, completion.AssistantText, settings, chatStateChanged);
+            }
+
             return new SendChatResponse { Message = completion.AssistantText, ToolResults = completion.ToolResults, ActiveChatId = activeId, ActiveChatModel = session.Model, Chats = _chatSessions.GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings) };
+        }
+
+        private void StartChatTitleGeneration(ChatSession session, string userText, string assistantText, AppSettings settings, Action<ChatStateResponse> chatStateChanged)
+        {
+            if (session == null || !ChatTitleBuilder.ShouldAssign(session))
+            {
+                return;
+            }
+
+            var host = session.Host;
+            var documentKey = session.DocumentKey;
+            var documentTitle = session.DocumentTitle;
+            var sessionId = ChatStore.GetSessionId(session);
+            Task.Run(async delegate
+            {
+                var title = string.Empty;
+                try
+                {
+                    title = await ChatTitleBuilder.GenerateLlmTitleAsync(settings, userText, assistantText, _llmClient.CompleteAsync, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch
+                {
+                    title = ChatTitleBuilder.BuildFallbackTitle(userText, assistantText);
+                }
+
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    return;
+                }
+
+                ChatStateResponse state;
+                lock (_syncRoot)
+                {
+                    var current = _chatStore.Load(host, documentKey, sessionId);
+                    if (!ChatTitleBuilder.ShouldAssign(current))
+                    {
+                        return;
+                    }
+
+                    current.Title = title;
+                    _chatStore.Save(current);
+                    state = CreateStoredChatState(host, documentKey, documentTitle);
+                }
+
+                if (chatStateChanged != null)
+                {
+                    chatStateChanged(state);
+                }
+            });
+        }
+
+        private ChatStateResponse CreateStoredChatState(string host, string documentKey, string documentTitle)
+        {
+            var activeId = _chatStore.LoadActiveSessionId(host, documentKey);
+            var active = string.IsNullOrWhiteSpace(activeId) ? null : _chatStore.Load(host, documentKey, activeId);
+            var chats = _chatStore.List(host, documentKey, documentTitle)
+                .Select(s => new ChatSessionSummary
+                {
+                    Id = ChatStore.GetSessionId(s),
+                    Host = s.Host,
+                    DocumentKey = s.DocumentKey,
+                    DocumentTitle = s.DocumentTitle,
+                    Title = s.Title,
+                    Model = s.Model,
+                    CreatedUtc = s.CreatedUtc,
+                    UpdatedUtc = s.UpdatedUtc,
+                    MessageCount = s.Messages == null ? 0 : s.Messages.Count
+                })
+                .ToList();
+
+            return new ChatStateResponse
+            {
+                ActiveChatId = activeId,
+                ActiveChatModel = active == null ? string.Empty : active.Model,
+                Chats = chats
+            };
         }
 
         public SettingsResponse GetSettings()

@@ -26,15 +26,19 @@ function applyChatState(response) {
   if (response.activeChatModel !== undefined || response.ActiveChatModel !== undefined) {
     state.activeChatModel = response.activeChatModel || response.ActiveChatModel || "";
   }
-  state.chats = response.chats || response.Chats || state.chats || [];
+  if (response.chats || response.Chats) {
+    state.chats = response.chats || response.Chats || [];
+  }
   if (response.context || response.Context) {
     state.context = response.context || response.Context || {};
   }
   if (response.messages || response.Messages) {
     state.liveActivity = null;
+    state.messages = response.messages || response.Messages || [];
   }
-  state.messages = response.messages || response.Messages || [];
-  state.contextUsage = response.contextUsage || response.ContextUsage || state.contextUsage || {};
+  if (response.contextUsage || response.ContextUsage) {
+    state.contextUsage = response.contextUsage || response.ContextUsage || {};
+  }
   renderChatSessions();
   renderMessages();
   renderContext(true);

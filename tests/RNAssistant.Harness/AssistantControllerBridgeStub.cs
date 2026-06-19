@@ -92,7 +92,12 @@ namespace RNAssistant.Office
         public DocumentContext ClearContext(string chatId = null) { return new DocumentContext { DocumentKey = chatId ?? string.Empty }; }
         public Task<QuickActionResponse> RunQuickActionAsync(string action) { return Task.FromResult(new QuickActionResponse { Prompt = action }); }
 
-        public Task<SendChatResponse> SendChatAsync(string text, string chatId = null, Action<string, string, ChatActivity> progress = null, CancellationToken cancellationToken = default(CancellationToken))
+        public Task<SendChatResponse> SendChatAsync(
+            string text,
+            string chatId = null,
+            Action<string, string, ChatActivity> progress = null,
+            Action<ChatStateResponse> chatStateChanged = null,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
             LastChatText = text;
@@ -100,6 +105,10 @@ namespace RNAssistant.Office
             if (progress != null)
             {
                 progress("thinking", "Testing progress", new ChatActivity { Kind = "notice", Title = "Testing progress", Status = "running" });
+            }
+            if (chatStateChanged != null)
+            {
+                chatStateChanged(ChatState("Generated title", chatId));
             }
             return Task.FromResult(new SendChatResponse { Message = "ok" });
         }

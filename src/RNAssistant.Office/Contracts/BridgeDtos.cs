@@ -77,6 +77,15 @@ namespace RNAssistant.Office.Contracts
         public ChatActivity Activity { get; set; }
     }
 
+    public sealed class ChatStateMessage
+    {
+        [JsonProperty("type")]
+        public string Type { get; set; }
+
+        [JsonProperty("payload")]
+        public ChatStateResponse Payload { get; set; }
+    }
+
     public class ChatPayload
     {
         [JsonProperty("chatId")]
