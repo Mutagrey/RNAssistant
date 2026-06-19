@@ -29,6 +29,7 @@ web static UI
 - `src/RNAssistant.Core/Llm`: API client, prompt composition, prompt message trimming, context usage estimates.
 - `src/RNAssistant.Core/Tools`: parsing model text into local `ToolCommand`.
 - `src/RNAssistant.Core/Skills`: built-in markdown skill provider.
+- `src/RNAssistant.Core/Services`: Office-agnostic model services such as context normalization.
 - `src/RNAssistant.Core/Storage`: JSON file storage under `%AppData%/RNAssistant`.
 - `src/RNAssistant.Office/Controller/AssistantController.cs`: high-level orchestration and bridge-facing API.
 - `src/RNAssistant.Office/Controller/AssistantController.Agent.cs`: agent pending-tool confirmation and resume/cancel bridge flow.
@@ -79,7 +80,7 @@ Current coverage:
 - VBA replace-text flow with rollback backup using fake `IOfficeApplicationAdapter`;
 - tool catalog service merge/filter behavior;
 - prompt message trimming, context usage estimates, and basic no-network chat completion flow;
-- context normalization/upsert/trim behavior;
+- Core context normalization/upsert/trim behavior;
 - typed bridge settings/context/VBA/tool/chat payload parsing, agent pending-tool status, and progress envelope;
 - no Office COM dependency.
 

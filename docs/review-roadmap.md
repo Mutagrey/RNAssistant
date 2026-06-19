@@ -3,7 +3,7 @@
 ## Findings
 
 1. `ToolCommandParser` mixed native `tool_calls` wrappers with local command objects. A native-style call could be parsed as `call_xxx` instead of `function.name`. Fixed by handling `tool_calls` explicitly.
-2. `Controller/AssistantController.cs` owned chat state, context normalization, prompt flow, tool catalog composition, pipeline execution, VBA patching and transcript formatting. Split into controller orchestration, chat/session bridge methods, context bridge methods, `ChatSessionService`, `ContextService`, `ChatCompletionService`, `ToolCatalogService`, `AgentTranscript`, `OfficeToolExecutor`, `PipelineToolExecutor`, `VbaToolExecutor`, and `PromptMessageBuilder`.
+2. `Controller/AssistantController.cs` owned chat state, context normalization, prompt flow, tool catalog composition, pipeline execution, VBA patching and transcript formatting. Split into controller orchestration, chat/session bridge methods, context bridge methods, Core `ContextNormalizer`, `ChatSessionService`, `ContextService`, `ChatCompletionService`, `ToolCatalogService`, `AgentTranscript`, `OfficeToolExecutor`, `PipelineToolExecutor`, `VbaToolExecutor`, and `PromptMessageBuilder`.
 3. The WebView UI no longer has one super-file: bridge/state, settings, tools, VBA, context and chat flows are split across static `web/js/app-*.js` files. `app.js` remains boot plus shared rendering helpers.
 4. Bridge payloads and common controller responses now use DTO/model contracts, including settings, tool, skill, context, VBA and focus-state messages. JSON serialization for WebView responses is isolated in `AssistantWebBridge`.
 5. Chat fork now uses explicit model cloning instead of non-boundary JSON roundtrips.
@@ -18,7 +18,6 @@
 
 ## Mid-Term Plan
 
-- Move context normalization into a Core-level service if it stays Office-agnostic.
 - Introduce typed bridge request/response DTOs instead of large switch payload parsing.
 - Add a small compatibility matrix for model endpoint variants.
 

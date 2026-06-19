@@ -46,6 +46,7 @@
     <Compile Include="Llm\PromptComposer.cs" />
     <Compile Include="Tools\ToolCommandParser.cs" />
     <Compile Include="Skills\BuiltInSkillProvider.cs" />
+    <Compile Include="Services\ContextNormalizer.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
     <Compile Include="Storage\ChatStore.cs" />
     <Compile Include="Storage\JsonFileStore.cs" />

@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office;
@@ -82,6 +83,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "chat: auto-run disabled records failure", Run = ChatAutoRunDisabledRecordsLocalFailure },
                 new HarnessTest { Name = "chat: malformed tool response stays prose", Run = ChatMalformedToolResponseStaysProse },
                 new HarnessTest { Name = "chat: explicit clone preserves values", Run = ChatCloneServicePreservesValues },
+                new HarnessTest { Name = "context: core normalizer", Run = ContextNormalizerUsesCoreModelsOnly },
                 new HarnessTest { Name = "context: normalize and upsert", Run = ContextServiceNormalizesAndUpserts },
                 new HarnessTest { Name = "context: trim helper", Run = ContextServiceTrimsText },
                 new HarnessTest { Name = "bridge: typed runTool payload", Run = BridgeUsesTypedRunToolPayload },
@@ -1270,6 +1272,33 @@ namespace RNAssistant.Harness
             AssertEqual(1, context.Notes.Count, "note count after update");
             AssertEqual("Changed", context.Notes[0].Title, "updated note title");
             AssertEqual("second", context.Notes[0].Text, "updated note text");
+        }
+
+        private static void ContextNormalizerUsesCoreModelsOnly()
+        {
+            var normalizer = new ContextNormalizer("Excel", "doc", "Harness.xlsx");
+            var session = new ChatSession
+            {
+                Host = "",
+                DocumentKey = "",
+                DocumentTitle = "Harness.xlsx",
+                Title = "Chat title",
+                Context = new DocumentContext { Notes = null }
+            };
+
+            var context = normalizer.LoadContext(session);
+            AssertEqual("Excel", context.Host, "context host fallback");
+            AssertEqual("doc", context.DocumentKey, "context document key fallback");
+            AssertEqual("Chat title", context.Title, "context title fallback");
+            AssertTrue(context.Notes != null, "notes initialized");
+
+            var note = new ContextNote { Reference = "A1", Text = "abcdef" };
+            normalizer.NormalizeContextNote(note, "selection");
+            AssertEqual("Excel", note.Host, "note host fallback");
+            AssertEqual("selection", note.Kind, "note kind fallback");
+            AssertEqual("Harness.xlsx", note.Title, "note title fallback");
+            AssertEqual("abcdef", ContextNormalizer.TrimForContext("abcdef", 10), "core trim short");
+            AssertEqual("abc\n...[truncated]", ContextNormalizer.TrimForContext("abcdef", 3), "core trim long");
         }
 
         private static void ContextServiceTrimsText()

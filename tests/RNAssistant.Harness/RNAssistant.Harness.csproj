@@ -24,6 +24,7 @@
     <Compile Include="..\..\src\RNAssistant.Core\Llm\PromptMessageBuilder.cs" Link="Core\Llm\PromptMessageBuilder.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Tools\ToolCommandParser.cs" Link="Core\Tools\ToolCommandParser.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Skills\BuiltInSkillProvider.cs" Link="Core\Skills\BuiltInSkillProvider.cs" />
+    <Compile Include="..\..\src\RNAssistant.Core\Services\ContextNormalizer.cs" Link="Core\Services\ContextNormalizer.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Storage\SkillStore.cs" Link="Core\Storage\SkillStore.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Storage\AppDataPaths.cs" Link="Core\Storage\AppDataPaths.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Storage\ChatStore.cs" Link="Core\Storage\ChatStore.cs" />
