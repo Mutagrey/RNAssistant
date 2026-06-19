@@ -24,7 +24,7 @@ namespace RNAssistant.Office.WebView
         {
             _controller = controller;
             _webRoot = webRoot;
-            _webView = new WebView2 { Dock = DockStyle.Fill };
+            _webView = new WebView2 { Dock = DockStyle.Fill, TabStop = false };
             _bridge = new AssistantWebBridge(controller, PostBridgeMessage);
             Controls.Add(_webView);
             Load += OnLoad;
@@ -33,6 +33,29 @@ namespace RNAssistant.Office.WebView
         public void BlurComposer()
         {
             ExecuteScript("window.RNAssistantHost && window.RNAssistantHost.blurComposer && window.RNAssistantHost.blurComposer();");
+        }
+
+        public void ReleaseKeyboardFocusToHost(Action activateHost)
+        {
+            BlurComposer();
+            if (activateHost == null)
+            {
+                return;
+            }
+
+            if (IsDisposed || !IsHandleCreated)
+            {
+                activateHost();
+                RememberExternalFocusWindow();
+                return;
+            }
+
+            BeginInvoke(new Action(() =>
+            {
+                BlurComposer();
+                activateHost();
+                RememberExternalFocusWindow();
+            }));
         }
 
         public void RefreshContext()
@@ -86,7 +109,18 @@ namespace RNAssistant.Office.WebView
             {
                 // This WebView2 WinForms package keeps the controller internal.
                 controller.AcceleratorKeyPressed += OnAcceleratorKeyPressed;
+                controller.LostFocus += OnControllerLostFocus;
             }
+        }
+
+        private void OnControllerLostFocus(object sender, object e)
+        {
+            if (IsDisposed || !IsHandleCreated)
+            {
+                return;
+            }
+
+            BeginInvoke(new Action(RememberExternalFocusWindow));
         }
 
         private void OnAcceleratorKeyPressed(object sender, CoreWebView2AcceleratorKeyPressedEventArgs e)
@@ -105,7 +139,7 @@ namespace RNAssistant.Office.WebView
 
             if (!focusInsidePane && focusedWindow != IntPtr.Zero)
             {
-                _lastExternalFocusWindow = focusedWindow;
+                RememberExternalFocusWindow(focusedWindow);
             }
 
             if (!focusInsidePane || !_webContentWantsKeyboard)
@@ -224,6 +258,19 @@ namespace RNAssistant.Office.WebView
         private bool IsKeyboardFocusInsidePane(IntPtr focusedWindow)
         {
             return focusedWindow != IntPtr.Zero && (focusedWindow == Handle || IsChild(Handle, focusedWindow));
+        }
+
+        private void RememberExternalFocusWindow()
+        {
+            RememberExternalFocusWindow(GetFocus());
+        }
+
+        private void RememberExternalFocusWindow(IntPtr focusedWindow)
+        {
+            if (focusedWindow != IntPtr.Zero && !IsKeyboardFocusInsidePane(focusedWindow))
+            {
+                _lastExternalFocusWindow = focusedWindow;
+            }
         }
 
         private IntPtr ExternalFocusFallback()

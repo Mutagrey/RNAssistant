@@ -40,6 +40,17 @@ namespace RNAssistant.Office
             }
         }
 
+        public void ReleaseKeyboardFocusToHost()
+        {
+            if (_paneControl != null)
+            {
+                _paneControl.ReleaseKeyboardFocusToHost(_adapter.PrepareForContextCapture);
+                return;
+            }
+
+            _adapter.PrepareForContextCapture();
+        }
+
         public void AddSelectionContext(string mode)
         {
             Controller.AddSelectionContext(mode);

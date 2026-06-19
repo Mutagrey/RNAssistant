@@ -36,6 +36,7 @@ namespace RNAssistant.PowerPointAddIn
             }
 
             _pane.Visible = true;
+            _runtime.ReleaseKeyboardFocusToHost();
         }
 
         protected override IRibbonExtensibility CreateRibbonExtensibilityObject()

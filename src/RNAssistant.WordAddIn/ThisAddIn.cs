@@ -36,6 +36,7 @@ namespace RNAssistant.WordAddIn
             }
 
             _pane.Visible = true;
+            _runtime.ReleaseKeyboardFocusToHost();
         }
 
         protected override IRibbonExtensibility CreateRibbonExtensibilityObject()
