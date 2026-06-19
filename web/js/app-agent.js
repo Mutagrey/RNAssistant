@@ -1,7 +1,7 @@
-function renderActivityNode(activity, nested) {
+function renderActivityNode(activity, nested, current) {
   var node = document.createElement("div");
   var status = activityStatus(activity);
-  node.className = "agent-activity" + (nested ? " nested" : "") + " status-" + status;
+  node.className = "agent-activity" + (nested ? " nested" : "") + (current ? " current" : "") + " status-" + status;
 
   var row = document.createElement("div");
   row.className = "agent-activity-row";
@@ -149,7 +149,7 @@ function appendActivityDetails(node, activity) {
     var childList = document.createElement("div");
     childList.className = "agent-activity-children";
     children.forEach(function (child) {
-      childList.appendChild(renderActivityNode(child, true));
+      childList.appendChild(renderActivityNode(child, true, false));
     });
     details.appendChild(childList);
   }
@@ -179,7 +179,7 @@ function renderAgentRunArticle(run) {
   var items = run.items || [];
   var stats = agentRunStats(items);
   var node = document.createElement("article");
-  node.className = "message assistant agent-run status-" + stats.status;
+  node.className = "message assistant agent-run status-" + stats.status + (run.live ? " live" : "");
 
   var body = document.createElement("div");
   body.className = "agent-run-wrap";
@@ -208,12 +208,15 @@ function renderAgentRunArticle(run) {
   var steps = document.createElement("div");
   steps.className = "agent-run-steps";
   items.forEach(function (item) {
-    steps.appendChild(renderActivityNode(item.activity, false));
+    var isCurrent = stats.current && item.activity === stats.current;
+    steps.appendChild(renderActivityNode(item.activity, false, isCurrent));
   });
   body.appendChild(steps);
   node.appendChild(body);
 
-  appendAgentRunFooter(node, items);
+  if (!run.live) {
+    appendAgentRunFooter(node, items);
+  }
   enhanceActivity(body);
   return node;
 }

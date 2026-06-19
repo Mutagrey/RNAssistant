@@ -93,6 +93,55 @@ function activityText(activity) {
   return lines.join("\n");
 }
 
+function activityTimelineKey(activity) {
+  var pendingId = activityPendingId(activity);
+  if (pendingId) {
+    return "pending:" + pendingId;
+  }
+
+  var kind = activityKind(activity);
+  if (kind === "plan") {
+    return "plan";
+  }
+
+  return [
+    kind || "activity",
+    activityToolId(activity),
+    activityTitle(activity),
+    activityArgumentsJson(activity)
+  ].join("|");
+}
+
+function cloneActivity(activity) {
+  if (!activity) {
+    return null;
+  }
+
+  return JSON.parse(JSON.stringify(activity));
+}
+
+function recordLiveAgentActivity(activity) {
+  if (!activity) {
+    return;
+  }
+
+  if (!state.liveAgentRun) {
+    state.liveAgentRun = [];
+  }
+
+  var key = activityTimelineKey(activity);
+  var copy = cloneActivity(activity);
+  copy.__timelineKey = key;
+  for (var i = state.liveAgentRun.length - 1; i >= 0; i -= 1) {
+    if (state.liveAgentRun[i] && state.liveAgentRun[i].__timelineKey === key) {
+      state.liveAgentRun[i] = copy;
+      return;
+    }
+  }
+
+  state.liveAgentRun.push(copy);
+}
+
 function activityCountStatus(activity, counts) {
   if (!activity || !counts) {
     return;
@@ -120,9 +169,10 @@ function collectRunActivities(items) {
     activityChildren(activity).forEach(append);
   }
 
-  var runActivities = items.length > 1
+  var first = items[0].activity;
+  var runActivities = items.length > 1 && activityKind(first) === "plan"
     ? items.slice(1).map(function (item) { return item.activity; })
-    : activityChildren(items[0].activity);
+    : (activityKind(first) === "plan" ? activityChildren(first) : items.map(function (item) { return item.activity; }));
   runActivities.forEach(append);
   return activities;
 }

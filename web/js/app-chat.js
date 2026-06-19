@@ -231,6 +231,7 @@ async function sendChat(text) {
   setActivity("thinking", "Модель думает...");
   var request = send("sendChat", { chatId: state.activeChatId, text: text });
   state.activeSend = { requestId: request.requestId, text: text, canceling: false };
+  state.liveAgentRun = [];
   renderSendControls();
   try {
     var response = await request;
@@ -262,6 +263,7 @@ async function sendChat(text) {
   } finally {
     state.activeSend = null;
     state.liveActivity = null;
+    state.liveAgentRun = null;
     renderSendControls();
     renderMessages();
     renderModelControls();

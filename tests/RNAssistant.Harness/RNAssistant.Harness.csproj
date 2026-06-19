@@ -37,6 +37,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Contracts\BridgeDtos.cs" Link="Office\Contracts\BridgeDtos.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatCloneService.cs" Link="Office\Services\ChatCloneService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatCompletionService.cs" Link="Office\Services\ChatCompletionService.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Services\ChatTitleBuilder.cs" Link="Office\Services\ChatTitleBuilder.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatSessionService.cs" Link="Office\Services\ChatSessionService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ContextService.cs" Link="Office\Services\ContextService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\SkillCatalogService.cs" Link="Office\Services\SkillCatalogService.cs" />

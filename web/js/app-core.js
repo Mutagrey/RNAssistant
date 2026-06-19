@@ -13,6 +13,7 @@ var state = {
   failedSend: null,
   activeSend: null,
   liveActivity: null,
+  liveAgentRun: null,
   modelCatalog: { configUrl: "", defaultModel: "", models: [], loaded: false, loading: false, error: "" },
   modelSaving: false,
   selectedToolIndex: -1,
@@ -181,11 +182,14 @@ if (window.chrome && window.chrome.webview) {
     if (response && response.type === "progress") {
       var progress = response.payload || {};
       var progressPending = state.pending[response.id];
-      setActivity(progress.phase || "working", progress.message || "Working...");
-      if (progressPending && progressPending.type === "sendChat") {
-        state.liveActivity = normalizeProgressActivity(progress);
-        renderMessages();
+    setActivity(progress.phase || "working", progress.message || "Working...");
+    if (progressPending && progressPending.type === "sendChat") {
+      state.liveActivity = normalizeProgressActivity(progress);
+      if (typeof recordLiveAgentActivity === "function") {
+        recordLiveAgentActivity(state.liveActivity);
       }
+      renderMessages();
+    }
       log("[" + (progress.phase || "working") + "] " + (progress.message || "Working..."));
       return;
     }

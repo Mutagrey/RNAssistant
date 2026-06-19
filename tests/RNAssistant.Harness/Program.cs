@@ -77,6 +77,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "prompt: trims oldest history", Run = PromptBuilderTrimsOldestHistory },
                 new HarnessTest { Name = "prompt: usage estimator counts context", Run = ContextUsageEstimatorCountsPromptAndSession },
                 new HarnessTest { Name = "chat: completion service records prose", Run = ChatCompletionServiceRecordsProseResponse },
+                new HarnessTest { Name = "chat: deferred smart title setting", Run = ChatCompletionServiceUsesDeferredSmartTitleSetting },
                 new HarnessTest { Name = "chat: executes typical host tasks", Run = ChatExecutesTypicalHostTasks },
                 new HarnessTest { Name = "chat: agent activity transcript", Run = AgentTranscriptCreatesActivityTree },
                 new HarnessTest { Name = "chat: prose action forces tool follow-up", Run = ChatProseActionForcesToolFollowUp },
@@ -907,8 +908,70 @@ namespace RNAssistant.Harness
                 AssertEqual(2, session.Messages.Count, "session message count");
                 AssertEqual("hello world", session.Messages[0].Content, "user message");
                 AssertEqual("Done.", session.Messages[1].Content, "assistant message");
-                AssertEqual("hello world", session.Title, "session title");
+                AssertEqual("Hello world", session.Title, "session title");
                 AssertTrue(ContainsMessage(capturedMessages, "User-added context attachments"), "context prompt captured");
+            });
+        }
+
+        private static void ChatCompletionServiceUsesDeferredSmartTitleSetting()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var service = new ChatCompletionService(
+                    adapter,
+                    executor,
+                    delegate(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        return Task.FromResult(new LlmCompletionResult
+                        {
+                            Content = "Отчет по продажам создан и сохранен.",
+                            PromptTokens = 10,
+                            CompletionTokens = 6,
+                            TotalTokens = 16
+                        });
+                    });
+
+                var context = new DocumentContext
+                {
+                    Host = "Excel",
+                    DocumentKey = "doc",
+                    Title = "Harness.xlsx"
+                };
+                var tools = new List<ToolDefinition>(adapter.GetBuiltInTools());
+                var smartSession = new ChatSession
+                {
+                    Host = "Excel",
+                    DocumentKey = "doc",
+                    DocumentTitle = "Harness.xlsx",
+                    Title = "New chat"
+                };
+                service.ExecuteAsync(
+                    "Нужно сделать отчет по продажам.",
+                    smartSession,
+                    context,
+                    new AppSettings { ContextCharLimit = 8000 },
+                    tools,
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Сделать отчет по продажам", smartSession.Title, "smart title");
+
+                var fallbackSession = new ChatSession
+                {
+                    Host = "Excel",
+                    DocumentKey = "doc",
+                    DocumentTitle = "Harness.xlsx",
+                    Title = "New chat"
+                };
+                service.ExecuteAsync(
+                    "Нужно сделать отчет по продажам.",
+                    fallbackSession,
+                    context,
+                    new AppSettings { ContextCharLimit = 8000, SmartChatTitles = false },
+                    tools,
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Отчет по продажам создан и сохранен", fallbackSession.Title, "fallback title");
             });
         }
 

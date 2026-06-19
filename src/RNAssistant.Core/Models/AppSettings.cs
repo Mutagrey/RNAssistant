@@ -19,6 +19,7 @@ namespace RNAssistant.Core.Models
         public bool? AutoRunToolCalls { get; set; }
         public bool AutoConfirmToolActions { get; set; }
         public bool? AutoRetryToolErrors { get; set; }
+        public bool? SmartChatTitles { get; set; }
         public bool IncludeVbaContext { get; set; }
         public int VbaContextCharLimit { get; set; }
         public double UiFontScale { get; set; }
@@ -40,6 +41,7 @@ namespace RNAssistant.Core.Models
             AutoRunToolCalls = true;
             AutoConfirmToolActions = false;
             AutoRetryToolErrors = true;
+            SmartChatTitles = true;
             IncludeVbaContext = false;
             VbaContextCharLimit = 30000;
             UiFontScale = 1.0;

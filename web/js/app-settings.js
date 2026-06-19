@@ -28,6 +28,7 @@ function renderSettings() {
   $("autoRunToolsInput").checked = (s.AutoRunToolCalls !== false && s.autoRunToolCalls !== false);
   $("autoConfirmToolsInput").checked = !!(s.AutoConfirmToolActions || s.autoConfirmToolActions);
   $("autoRetryToolsInput").checked = (s.AutoRetryToolErrors !== false && s.autoRetryToolErrors !== false);
+  $("smartChatTitlesInput").checked = (s.SmartChatTitles !== false && s.smartChatTitles !== false);
   $("includeVbaContextInput").checked = !!(s.IncludeVbaContext || s.includeVbaContext);
   $("vbaContextLimitInput").value = s.VbaContextCharLimit || s.vbaContextCharLimit || 30000;
   $("systemPromptInput").value = s.SystemPrompt || s.systemPrompt || "";
@@ -51,6 +52,7 @@ function readSettings() {
     AutoRunToolCalls: $("autoRunToolsInput").checked,
     AutoConfirmToolActions: $("autoConfirmToolsInput").checked,
     AutoRetryToolErrors: $("autoRetryToolsInput").checked,
+    SmartChatTitles: $("smartChatTitlesInput").checked,
     IncludeVbaContext: $("includeVbaContextInput").checked,
     VbaContextCharLimit: Number($("vbaContextLimitInput").value || 30000),
     SystemPrompt: $("systemPromptInput").value,
@@ -60,6 +62,18 @@ function readSettings() {
 }
 
 function bindSettingsActions() {
+  Array.prototype.slice.call(document.querySelectorAll(".settings-nav-button")).forEach(function (button) {
+    button.addEventListener("click", function () {
+      var page = button.getAttribute("data-settings-page");
+      Array.prototype.slice.call(document.querySelectorAll(".settings-nav-button")).forEach(function (item) {
+        item.classList.toggle("active", item === button);
+      });
+      Array.prototype.slice.call(document.querySelectorAll(".settings-page")).forEach(function (item) {
+        item.classList.toggle("active", item.getAttribute("data-settings-page") === page);
+      });
+    });
+  });
+
   $("uiFontScaleInput").addEventListener("input", function () {
     applyUiFontScale({ UiFontScale: Number($("uiFontScaleInput").value || 100) / 100 });
   });

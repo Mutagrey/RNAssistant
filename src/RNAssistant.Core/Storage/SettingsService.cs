@@ -97,6 +97,10 @@ namespace RNAssistant.Core.Storage
             {
                 settings.AutoRetryToolErrors = defaults.AutoRetryToolErrors;
             }
+            if (!settings.SmartChatTitles.HasValue)
+            {
+                settings.SmartChatTitles = defaults.SmartChatTitles;
+            }
             if (settings.VbaContextCharLimit <= 0)
             {
                 settings.VbaContextCharLimit = defaults.VbaContextCharLimit;

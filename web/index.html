@@ -7,19 +7,19 @@
   <title>RN Assistant</title>
   <link rel="stylesheet" href="css/vendor/katex.min.css">
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
-  <link rel="stylesheet" href="css/app.css?v=chatui-20260619-3">
-  <link rel="stylesheet" href="css/app-chat.css?v=chatui-20260619-3">
+  <link rel="stylesheet" href="css/app.css?v=chatui-20260619-4">
+  <link rel="stylesheet" href="css/app-chat.css?v=chatui-20260619-4">
   <link rel="stylesheet" href="css/app-markdown.css">
-  <link rel="stylesheet" href="css/app-composer.css?v=chatui-20260619-3">
+  <link rel="stylesheet" href="css/app-composer.css?v=chatui-20260619-4">
   <link rel="stylesheet" href="css/app-context-chips.css">
   <link rel="stylesheet" href="css/app-models.css">
-  <link rel="stylesheet" href="css/app-workspace.css">
+  <link rel="stylesheet" href="css/app-workspace.css?v=chatui-20260619-5">
   <link rel="stylesheet" href="css/app-tools.css">
   <link rel="stylesheet" href="css/app-vba.css">
   <link rel="stylesheet" href="css/app-context-panel.css">
   <link rel="stylesheet" href="css/app-dialogs.css">
-  <link rel="stylesheet" href="css/app-responsive.css?v=chatui-20260619-3">
-  <link rel="stylesheet" href="css/app-agent.css">
+  <link rel="stylesheet" href="css/app-responsive.css?v=chatui-20260619-4">
+  <link rel="stylesheet" href="css/app-agent.css?v=chatui-20260619-5">
   <link rel="stylesheet" href="css/app-agent-data.css">
 </head>
 <body>
@@ -238,41 +238,107 @@
       </section>
 
       <section class="panel" id="tab-settings">
-        <div class="form-grid">
-          <label>Base URL<input id="baseUrlInput" autocomplete="off" placeholder="https://host"></label>
-          <label>Default model<select id="modelSelect"></select></label>
-          <label>Default model fallback<input id="modelInput" autocomplete="off"></label>
-          <div class="model-info" id="modelInfo"></div>
-          <label>API key<input id="apiKeyInput" type="password" autocomplete="off" placeholder="Leave empty to keep saved key"></label>
-          <label>Max tokens<input id="maxTokensInput" type="number" min="1" max="200000"></label>
-          <label>Request timeout seconds<input id="requestTimeoutInput" type="number" min="30" max="3600"></label>
-          <label>Temperature<input id="temperatureInput" type="number" min="0" max="2" step="0.1"></label>
-          <label>Top P<input id="topPInput" type="number" min="0" max="1" step="0.01"></label>
-          <label>Interface font size (%)<input id="uiFontScaleInput" type="number" min="85" max="130" step="5"></label>
-          <label>Context chars<input id="contextLimitInput" type="number" min="1000" max="200000"></label>
-          <label class="checkline"><input id="streamInput" type="checkbox"> Stream responses</label>
-          <label class="checkline"><input id="agentModeInput" type="checkbox"> Agent mode for Office actions</label>
-          <label class="checkline"><input id="autoRunToolsInput" type="checkbox"> Auto-run tool calls from LLM</label>
-          <label class="checkline"><input id="autoConfirmToolsInput" type="checkbox"> Auto-confirm tool actions</label>
-          <label class="checkline"><input id="autoRetryToolsInput" type="checkbox"> Auto-retry failed tool calls</label>
-          <label class="checkline hidden"><input id="includeVbaContextInput" type="checkbox"> Legacy VBA auto-context</label>
-          <label>VBA context chars<input id="vbaContextLimitInput" type="number" min="1000" max="200000"></label>
-          <label>Custom headers<textarea id="headersInput" rows="4" placeholder="Header-Name: value"></textarea></label>
-          <label>System prompt<textarea id="systemPromptInput" rows="7"></textarea></label>
-          <label>Agent prompt<textarea id="agentPromptInput" rows="7"></textarea></label>
-          <div class="status">System prompt controls style/general behavior. Agent prompt controls decomposition and tool use. RNAssistant still appends the required parser protocol.</div>
-        </div>
-        <div class="toolbar">
-          <button class="secondary" id="loadModelsButton" type="button">Load Models</button>
-          <button id="saveSettingsButton">Save Settings</button>
-        </div>
-        <div class="status" id="modelStatus"></div>
-        <div class="danger-zone">
-          <div>
-            <div class="danger-zone-title">Development reset</div>
-            <div class="danger-zone-text">Clears local chats, chat context, VBA backups, and WebView cache. Settings, API key, and custom tools and skills stay.</div>
+        <div class="settings-shell">
+          <nav class="settings-nav" aria-label="Settings sections">
+            <button class="settings-nav-button active" type="button" data-settings-page="connection">Подключение</button>
+            <button class="settings-nav-button" type="button" data-settings-page="model">Модель</button>
+            <button class="settings-nav-button" type="button" data-settings-page="agent">Агент</button>
+            <button class="settings-nav-button" type="button" data-settings-page="interface">Интерфейс</button>
+            <button class="settings-nav-button" type="button" data-settings-page="prompts">Промпты</button>
+            <button class="settings-nav-button" type="button" data-settings-page="service">Сервис</button>
+          </nav>
+
+          <div class="settings-pages">
+            <section class="settings-page active" data-settings-page="connection">
+              <div class="settings-heading">
+                <h2>Подключение</h2>
+                <p>Адрес API, ключ и дополнительные HTTP headers.</p>
+              </div>
+              <div class="form-grid two-columns">
+                <label><span>Адрес API</span><input id="baseUrlInput" autocomplete="off" placeholder="https://host"></label>
+                <label><span>API key</span><input id="apiKeyInput" type="password" autocomplete="off" placeholder="Оставьте пустым, чтобы не менять"></label>
+                <label class="wide"><span>HTTP headers</span><textarea id="headersInput" rows="4" placeholder="Header-Name: value"></textarea></label>
+              </div>
+            </section>
+
+            <section class="settings-page" data-settings-page="model">
+              <div class="settings-heading">
+                <h2>Модель</h2>
+                <p>Основная модель, лимиты ответа и параметры генерации.</p>
+              </div>
+              <div class="form-grid two-columns">
+                <label><span>Модель по умолчанию</span><select id="modelSelect"></select></label>
+                <label><span>Fallback model</span><input id="modelInput" autocomplete="off"></label>
+                <div class="model-info wide" id="modelInfo"></div>
+                <label><span>Макс. токены ответа</span><input id="maxTokensInput" type="number" min="1" max="200000"></label>
+                <label><span>Таймаут запроса, сек</span><input id="requestTimeoutInput" type="number" min="30" max="3600"></label>
+                <label><span>Temperature</span><input id="temperatureInput" type="number" min="0" max="2" step="0.1"></label>
+                <label><span>Top P</span><input id="topPInput" type="number" min="0" max="1" step="0.01"></label>
+                <label><span>Лимит контекста, символы</span><input id="contextLimitInput" type="number" min="1000" max="200000"></label>
+                <label class="checkline"><input id="streamInput" type="checkbox"><span>Потоковые ответы</span></label>
+              </div>
+              <div class="toolbar compact-toolbar">
+                <button class="secondary" id="loadModelsButton" type="button">Обновить список моделей</button>
+              </div>
+              <div class="status" id="modelStatus"></div>
+            </section>
+
+            <section class="settings-page" data-settings-page="agent">
+              <div class="settings-heading">
+                <h2>Агент</h2>
+                <p>Управляет выполнением tool calls и поведением при ошибках.</p>
+              </div>
+              <div class="form-grid">
+                <label class="checkline"><input id="agentModeInput" type="checkbox"><span>Agent mode для Office-действий</span></label>
+                <label class="checkline"><input id="autoRunToolsInput" type="checkbox"><span>Автозапуск tool calls</span></label>
+                <label class="checkline"><input id="autoConfirmToolsInput" type="checkbox"><span>Автоподтверждение действий</span></label>
+                <label class="checkline"><input id="autoRetryToolsInput" type="checkbox"><span>Авторемонт tool errors</span></label>
+                <label class="checkline hidden"><input id="includeVbaContextInput" type="checkbox"><span>Legacy VBA auto-context</span></label>
+                <label><span>VBA context, символы</span><input id="vbaContextLimitInput" type="number" min="1000" max="200000"></label>
+              </div>
+            </section>
+
+            <section class="settings-page" data-settings-page="interface">
+              <div class="settings-heading">
+                <h2>Интерфейс</h2>
+                <p>Размер интерфейса и автоматические названия новых чатов.</p>
+              </div>
+              <div class="form-grid two-columns">
+                <label><span>Размер шрифта, %</span><input id="uiFontScaleInput" type="number" min="85" max="130" step="5"></label>
+                <label class="checkline"><input id="smartChatTitlesInput" type="checkbox"><span>Умные названия чатов</span></label>
+              </div>
+              <div class="setting-note">Если выключить, новый чат получает название из первых символов ответа модели.</div>
+            </section>
+
+            <section class="settings-page" data-settings-page="prompts">
+              <div class="settings-heading">
+                <h2>Промпты</h2>
+                <p>System prompt отвечает за стиль, Agent prompt - за планирование и tools.</p>
+              </div>
+              <div class="form-grid">
+                <label><span>System prompt</span><textarea id="systemPromptInput" rows="7"></textarea></label>
+                <label><span>Agent prompt</span><textarea id="agentPromptInput" rows="7"></textarea></label>
+              </div>
+              <div class="status">RNAssistant всегда добавляет обязательный protocol для parser/runtime.</div>
+            </section>
+
+            <section class="settings-page" data-settings-page="service">
+              <div class="settings-heading">
+                <h2>Сервис</h2>
+                <p>Очистка локального runtime без удаления настроек, API key, tools и skills.</p>
+              </div>
+              <div class="danger-zone">
+                <div>
+                  <div class="danger-zone-title">Development reset</div>
+                  <div class="danger-zone-text">Удаляет chats, context, VBA backups и WebView cache.</div>
+                </div>
+                <button class="danger" id="clearRuntimeDataButton" type="button">Clear Chats/Data</button>
+              </div>
+            </section>
           </div>
-          <button class="danger" id="clearRuntimeDataButton" type="button">Clear Chats/Data</button>
+        </div>
+        <div class="toolbar settings-actions">
+          <button id="saveSettingsButton">Сохранить</button>
         </div>
       </section>
 
@@ -336,12 +402,12 @@
   <script src="js/vendor/katex.min.js"></script>
   <script src="js/vendor/auto-render.min.js"></script>
   <script src="js/vendor/highlight.min.js"></script>
-  <script src="js/app-core.js?v=chatui-20260619-3"></script>
+  <script src="js/app-core.js?v=chatui-20260619-5"></script>
   <script src="js/app-utils.js"></script>
   <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js?v=chatui-20260619-3"></script>
+  <script src="js/app-settings.js?v=chatui-20260619-5"></script>
   <script src="js/app-model-data.js"></script>
-  <script src="js/app-model-render.js?v=chatui-20260619-3"></script>
+  <script src="js/app-model-render.js?v=chatui-20260619-4"></script>
   <script src="js/app-models.js"></script>
   <script src="js/app-context-data.js"></script>
   <script src="js/app-chat-state.js"></script>
@@ -350,10 +416,10 @@
   <script src="js/app-vba.js"></script>
   <script src="js/app-context.js"></script>
   <script src="js/app-agent-data.js"></script>
-  <script src="js/app-agent-model.js"></script>
-  <script src="js/app-agent.js"></script>
-  <script src="js/app-messages.js"></script>
-  <script src="js/app-chat.js?v=chatui-20260619-3"></script>
+  <script src="js/app-agent-model.js?v=chatui-20260619-5"></script>
+  <script src="js/app-agent.js?v=chatui-20260619-5"></script>
+  <script src="js/app-messages.js?v=chatui-20260619-5"></script>
+  <script src="js/app-chat.js?v=chatui-20260619-5"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

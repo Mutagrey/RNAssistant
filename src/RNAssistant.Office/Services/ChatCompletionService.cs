@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -57,7 +56,6 @@ namespace RNAssistant.Office.Services
             ReportProgress(progress, "context", "Читаю документ...");
             ApplyChatModel(settings, session);
             session.Messages.Add(new ChatMessage { Role = "user", Content = text });
-            EnsureSessionTitleFromUserText(session, text);
 
             var vbaSnapshot = string.Empty;
             var systemPrompt = _promptComposer.ComposeSystemPrompt(
@@ -172,6 +170,8 @@ namespace RNAssistant.Office.Services
                 assistantText = AgentTranscript.CreateRunSummary(resultLog);
             }
 
+            ChatTitleBuilder.ApplyDeferred(settings, session, text, assistantText);
+
             return new ChatCompletionResult
             {
                 AssistantText = assistantText,
@@ -281,22 +281,6 @@ namespace RNAssistant.Office.Services
             }
 
             settings.Model = session.Model.Trim();
-        }
-
-        private static void EnsureSessionTitleFromUserText(ChatSession session, string text)
-        {
-            if (session == null || string.IsNullOrWhiteSpace(text))
-            {
-                return;
-            }
-
-            if (!string.Equals(session.Title, "New chat", StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            var title = Regex.Replace(text.Trim(), "\\s+", " ");
-            session.Title = title.Length <= 64 ? title : title.Substring(0, 61) + "...";
         }
 
         private static ChatActivity CreateRunningActivity(ToolCommand command, string status, string kind)

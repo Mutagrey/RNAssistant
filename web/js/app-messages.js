@@ -83,6 +83,19 @@ function renderMessageArticle(message, index) {
 }
 
 function renderLiveActivity() {
+  if (state.liveAgentRun && state.liveAgentRun.length) {
+    return renderAgentRunArticle({
+      live: true,
+      items: state.liveAgentRun.map(function (activity) {
+        return {
+          message: { Role: "assistant", Content: "", Activity: activity },
+          index: -1,
+          activity: activity
+        };
+      })
+    });
+  }
+
   if (!state.liveActivity) {
     return null;
   }
