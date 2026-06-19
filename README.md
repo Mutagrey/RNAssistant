@@ -119,6 +119,7 @@ Word, Excel and PowerPoint documents are identified by a custom document propert
 ## Tool Protocol
 
 The API is OpenAI-compatible chat completions: `/v1/chat/completions`.
+Endpoint compatibility details are in `docs/model-endpoint-compatibility.md`.
 
 Native tool calling is not required. The model is prompted to return local actions as:
 

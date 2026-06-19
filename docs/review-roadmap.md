@@ -9,6 +9,7 @@
 5. Chat fork now uses explicit model cloning instead of non-boundary JSON roundtrips.
 6. A local non-VSTO harness now covers parser, chat storage, storage recovery for broken tool/skill/VBA files, fake-adapter pipeline basics, metadata-driven tool safety, tool catalog composition, VBA patch/backup flow, context normalization/upsert and clone behavior, prompt trimming/context usage, settings/context/VBA/tool bridge payload parsing, and a no-network chat completion flow.
 7. VSTO adapter code should be treated as Windows-only. Changes there need explicit Office x64 validation.
+8. Model endpoint compatibility expectations are documented in `docs/model-endpoint-compatibility.md`.
 
 ## Short-Term Plan
 
@@ -19,7 +20,6 @@
 ## Mid-Term Plan
 
 - Introduce typed bridge request/response DTOs instead of large switch payload parsing.
-- Add a small compatibility matrix for model endpoint variants.
 
 ## Project Criteria
 
