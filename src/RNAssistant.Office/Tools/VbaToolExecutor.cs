@@ -6,13 +6,13 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
-using RNAssistant.Office.Skills;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Tools
 {
     internal sealed class VbaToolExecutor
     {
-        internal delegate SkillResult CommandRunner(SkillCommand command, IReadOnlyList<SkillDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun);
+        internal delegate ToolResult CommandRunner(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun);
 
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly VbaBackupStore _vbaBackupStore;
@@ -23,7 +23,7 @@ namespace RNAssistant.Office.Tools
             _vbaBackupStore = vbaBackupStore;
         }
 
-        public IEnumerable<SkillDefinition> GetControllerTools()
+        public IEnumerable<ToolDefinition> GetControllerTools()
         {
             if (!HostSupportsVba())
             {
@@ -46,7 +46,7 @@ namespace RNAssistant.Office.Tools
             return GetControllerTool(toolId) != null;
         }
 
-        public SkillDefinition GetControllerTool(string toolId)
+        public ToolDefinition GetControllerTool(string toolId)
         {
             if (string.IsNullOrWhiteSpace(toolId))
             {
@@ -56,53 +56,53 @@ namespace RNAssistant.Office.Tools
             return GetControllerTools().FirstOrDefault(tool => string.Equals(tool.Id, toolId, StringComparison.OrdinalIgnoreCase));
         }
 
-        public SkillResult ExecuteControllerTool(SkillCommand command, IReadOnlyList<SkillDefinition> skills, AppSettings settings, bool dryRun, bool manualRun, CommandRunner runCommand)
+        public ToolResult ExecuteControllerTool(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, bool dryRun, bool manualRun, CommandRunner runCommand)
         {
-            if (string.Equals(command.SkillId, ToolId("vba_list_backups"), StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, ToolId("vba_list_backups"), StringComparison.OrdinalIgnoreCase))
             {
-                return SkillResult.Ok("VBA backups listed.", JsonConvert.SerializeObject(_vbaBackupStore.List(_adapter.HostName, _adapter.DocumentKey)));
+                return ToolResult.Ok("VBA backups listed.", JsonConvert.SerializeObject(_vbaBackupStore.List(_adapter.HostName, _adapter.DocumentKey)));
             }
 
-            if (string.Equals(command.SkillId, ToolId("vba_restore_backup"), StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, ToolId("vba_restore_backup"), StringComparison.OrdinalIgnoreCase))
             {
                 return RestoreVbaBackup(command, skills, settings, dryRun, manualRun, runCommand);
             }
 
-            if (string.Equals(command.SkillId, ToolId("vba_replace_text"), StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, ToolId("vba_replace_text"), StringComparison.OrdinalIgnoreCase))
             {
                 return ReplaceVbaText(command, skills, settings, dryRun, manualRun, runCommand);
             }
 
-            if (string.Equals(command.SkillId, ToolId("vba_apply_patch"), StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, ToolId("vba_apply_patch"), StringComparison.OrdinalIgnoreCase))
             {
                 return ApplyVbaPatch(command, skills, settings, dryRun, manualRun, runCommand);
             }
 
-            return SkillResult.Fail("Unknown VBA controller tool: " + command.SkillId);
+            return ToolResult.Fail("Unknown VBA controller tool: " + command.ToolId);
         }
 
-        public SkillResult ExecuteCustomTool(SkillDefinition tool, SkillCommand command, AppSettings settings, bool dryRun, bool manualRun)
+        public ToolResult ExecuteCustomTool(ToolDefinition tool, ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)
         {
             if (string.IsNullOrWhiteSpace(tool.Code))
             {
-                return SkillResult.Fail("VBA tool has no code: " + tool.Id);
+                return ToolResult.Fail("VBA tool has no code: " + tool.Id);
             }
             if (!dryRun && !manualRun && !settings.AutoConfirmToolActions)
             {
-                return SkillResult.Fail("VBA tool requires confirmation before execution: " + tool.Id);
+                return ToolResult.WaitingConfirmation("VBA tool requires confirmation before execution: " + tool.Id);
             }
 
-            var moduleName = SkillArgumentReader.String(command.Arguments, "moduleName", ToolModuleName(tool.Id));
-            var macroName = SkillArgumentReader.String(command.Arguments, "macroName", string.Empty);
+            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", ToolModuleName(tool.Id));
+            var macroName = ToolArgumentReader.String(command.Arguments, "macroName", string.Empty);
             if (dryRun)
             {
-                return SkillResult.Ok("Dry run: would insert VBA module " + moduleName + (string.IsNullOrWhiteSpace(macroName) ? string.Empty : " and run " + macroName), JsonConvert.SerializeObject(new { moduleName = moduleName, macroName = macroName, code = tool.Code }));
+                return ToolResult.Ok("Dry run: would insert VBA module " + moduleName + (string.IsNullOrWhiteSpace(macroName) ? string.Empty : " and run " + macroName), JsonConvert.SerializeObject(new { moduleName = moduleName, macroName = macroName, code = tool.Code }));
             }
 
-            var insert = new SkillCommand { SkillId = ToolId("insert_vba_module") };
+            var insert = new ToolCommand { ToolId = ToolId("insert_vba_module") };
             insert.Arguments["moduleName"] = moduleName;
             insert.Arguments["code"] = tool.Code;
-            var insertResult = _adapter.ExecuteSkill(insert);
+            var insertResult = _adapter.ExecuteTool(insert);
             if (!insertResult.Success ||
                 string.IsNullOrWhiteSpace(macroName) ||
                 (insertResult.Message ?? string.Empty).StartsWith("VBA insert was blocked", StringComparison.OrdinalIgnoreCase))
@@ -110,24 +110,24 @@ namespace RNAssistant.Office.Tools
                 return insertResult;
             }
 
-            var run = new SkillCommand { SkillId = ToolId("run_macro") };
+            var run = new ToolCommand { ToolId = ToolId("run_macro") };
             run.Arguments["macroName"] = macroName;
-            var runResult = _adapter.ExecuteSkill(run);
-            return SkillResult.Ok("VBA tool executed: " + tool.Id, JsonConvert.SerializeObject(new { insert = insertResult, run = runResult }));
+            var runResult = _adapter.ExecuteTool(run);
+            return ToolResult.Ok("VBA tool executed: " + tool.Id, JsonConvert.SerializeObject(new { insert = insertResult, run = runResult }));
         }
 
-        public void BackupModuleBeforeReplace(SkillCommand command, AppSettings settings)
+        public void BackupModuleBeforeReplace(ToolCommand command, AppSettings settings)
         {
-            var moduleName = SkillArgumentReader.String(command.Arguments, "moduleName", string.Empty);
-            if (string.IsNullOrWhiteSpace(moduleName) || SkillArgumentReader.String(command.Arguments, "skipBackup", "false").Equals("true", StringComparison.OrdinalIgnoreCase))
+            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
+            if (string.IsNullOrWhiteSpace(moduleName) || ToolArgumentReader.String(command.Arguments, "skipBackup", "false").Equals("true", StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
 
-            var read = new SkillCommand { SkillId = ToolId("vba_read_module") };
+            var read = new ToolCommand { ToolId = ToolId("vba_read_module") };
             read.Arguments["moduleName"] = moduleName;
             read.Arguments["maxChars"] = Math.Max(settings.VbaContextCharLimit, 30000);
-            var existing = _adapter.ExecuteSkill(read);
+            var existing = _adapter.ExecuteTool(read);
             if (!existing.Success || string.IsNullOrWhiteSpace(existing.DataJson))
             {
                 return;
@@ -148,43 +148,43 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private SkillResult RestoreVbaBackup(SkillCommand command, IReadOnlyList<SkillDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, CommandRunner runCommand)
+        private ToolResult RestoreVbaBackup(ToolCommand command, IReadOnlyList<ToolDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, CommandRunner runCommand)
         {
-            var backupId = SkillArgumentReader.String(command.Arguments, "backupId", string.Empty);
-            var moduleName = SkillArgumentReader.String(command.Arguments, "moduleName", string.Empty);
+            var backupId = ToolArgumentReader.String(command.Arguments, "backupId", string.Empty);
+            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
             var backup = _vbaBackupStore.Find(_adapter.HostName, _adapter.DocumentKey, backupId, moduleName);
             if (backup == null)
             {
-                return SkillResult.Fail("VBA backup not found.");
+                return ToolResult.Fail("VBA backup not found.");
             }
 
             if (dryRun)
             {
-                return SkillResult.Ok("Dry run: would restore VBA backup " + backup.BackupId, JsonConvert.SerializeObject(backup));
+                return ToolResult.Ok("Dry run: would restore VBA backup " + backup.BackupId, JsonConvert.SerializeObject(backup));
             }
 
-            var replace = new SkillCommand { SkillId = ToolId("vba_replace_module") };
+            var replace = new ToolCommand { ToolId = ToolId("vba_replace_module") };
             replace.Arguments["moduleName"] = backup.ModuleName;
             replace.Arguments["code"] = backup.Code;
             replace.Arguments["createIfMissing"] = "true";
             var result = runCommand(replace, tools, settings, 0, false, manualRun);
             return result.Success
-                ? SkillResult.Ok("VBA backup restored: " + backup.BackupId, JsonConvert.SerializeObject(new { backup = backup, restore = result }))
+                ? ToolResult.Ok("VBA backup restored: " + backup.BackupId, JsonConvert.SerializeObject(new { backup = backup, restore = result }))
                 : result;
         }
 
-        private SkillResult ReplaceVbaText(SkillCommand command, IReadOnlyList<SkillDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, CommandRunner runCommand)
+        private ToolResult ReplaceVbaText(ToolCommand command, IReadOnlyList<ToolDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, CommandRunner runCommand)
         {
-            var moduleName = SkillArgumentReader.String(command.Arguments, "moduleName", string.Empty);
-            var find = SkillArgumentReader.String(command.Arguments, "find", string.Empty);
-            var replace = SkillArgumentReader.String(command.Arguments, "replace", string.Empty);
+            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
+            var find = ToolArgumentReader.String(command.Arguments, "find", string.Empty);
+            var replace = ToolArgumentReader.String(command.Arguments, "replace", string.Empty);
             if (string.IsNullOrWhiteSpace(moduleName) || string.IsNullOrEmpty(find))
             {
-                return SkillResult.Fail("moduleName and find are required.");
+                return ToolResult.Fail("moduleName and find are required.");
             }
 
             string code;
-            SkillResult error;
+            ToolResult error;
             if (!TryReadVbaModuleCode(moduleName, out code, out error))
             {
                 return error;
@@ -193,7 +193,7 @@ namespace RNAssistant.Office.Tools
             var replacements = CountOccurrences(code, find);
             if (replacements == 0)
             {
-                return SkillResult.Fail("Text fragment was not found in VBA module: " + moduleName);
+                return ToolResult.Fail("Text fragment was not found in VBA module: " + moduleName);
             }
 
             var updated = code.Replace(find, replace ?? string.Empty);
@@ -206,44 +206,44 @@ namespace RNAssistant.Office.Tools
             });
             if (dryRun)
             {
-                return SkillResult.Ok("Dry run: would patch VBA module " + moduleName + " (" + replacements + " replacement(s)).", preview);
+                return ToolResult.Ok("Dry run: would patch VBA module " + moduleName + " (" + replacements + " replacement(s)).", preview);
             }
 
-            var write = new SkillCommand { SkillId = ToolId("vba_replace_module") };
+            var write = new ToolCommand { ToolId = ToolId("vba_replace_module") };
             write.Arguments["moduleName"] = moduleName;
             write.Arguments["code"] = updated;
             write.Arguments["createIfMissing"] = "true";
             var result = runCommand(write, tools, settings, 0, false, manualRun);
             return result.Success
-                ? SkillResult.Ok("VBA text replaced in " + moduleName + ": " + replacements + " replacement(s).", preview)
+                ? ToolResult.Ok("VBA text replaced in " + moduleName + ": " + replacements + " replacement(s).", preview)
                 : result;
         }
 
-        private SkillResult ApplyVbaPatch(SkillCommand command, IReadOnlyList<SkillDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, CommandRunner runCommand)
+        private ToolResult ApplyVbaPatch(ToolCommand command, IReadOnlyList<ToolDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, CommandRunner runCommand)
         {
-            var moduleName = SkillArgumentReader.String(command.Arguments, "moduleName", string.Empty);
+            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
             if (string.IsNullOrWhiteSpace(moduleName))
             {
-                return SkillResult.Fail("moduleName is required.");
+                return ToolResult.Fail("moduleName is required.");
             }
 
             JArray operations;
             try
             {
-                operations = ParsePatchOperations(SkillArgumentReader.String(command.Arguments, "patch", string.Empty));
+                operations = ParsePatchOperations(ToolArgumentReader.String(command.Arguments, "patch", string.Empty));
             }
             catch (JsonException ex)
             {
-                return SkillResult.Fail("Invalid patch JSON: " + ex.Message);
+                return ToolResult.Fail("Invalid patch JSON: " + ex.Message);
             }
 
             if (operations.Count == 0)
             {
-                return SkillResult.Fail("Patch has no operations.");
+                return ToolResult.Fail("Patch has no operations.");
             }
 
             string code;
-            SkillResult error;
+            ToolResult error;
             if (!TryReadVbaModuleCode(moduleName, out code, out error))
             {
                 return error;
@@ -263,7 +263,7 @@ namespace RNAssistant.Office.Tools
             }
             if (summary.Count != operations.Count)
             {
-                return SkillResult.Fail("Each patch operation must be a JSON object.");
+                return ToolResult.Fail("Each patch operation must be a JSON object.");
             }
 
             var preview = JsonConvert.SerializeObject(new
@@ -275,30 +275,30 @@ namespace RNAssistant.Office.Tools
             });
             if (dryRun)
             {
-                return SkillResult.Ok("Dry run: would apply VBA patch to " + moduleName + ".", preview);
+                return ToolResult.Ok("Dry run: would apply VBA patch to " + moduleName + ".", preview);
             }
 
-            var write = new SkillCommand { SkillId = ToolId("vba_replace_module") };
+            var write = new ToolCommand { ToolId = ToolId("vba_replace_module") };
             write.Arguments["moduleName"] = moduleName;
             write.Arguments["code"] = updated;
             write.Arguments["createIfMissing"] = "true";
             var writeResult = runCommand(write, tools, settings, 0, false, manualRun);
             return writeResult.Success
-                ? SkillResult.Ok("VBA patch applied to " + moduleName + ".", preview)
+                ? ToolResult.Ok("VBA patch applied to " + moduleName + ".", preview)
                 : writeResult;
         }
 
-        private bool TryReadVbaModuleCode(string moduleName, out string code, out SkillResult error)
+        private bool TryReadVbaModuleCode(string moduleName, out string code, out ToolResult error)
         {
             code = string.Empty;
             error = null;
-            var read = new SkillCommand { SkillId = ToolId("vba_read_module") };
+            var read = new ToolCommand { ToolId = ToolId("vba_read_module") };
             read.Arguments["moduleName"] = moduleName;
             read.Arguments["maxChars"] = 1000000;
-            var current = _adapter.ExecuteSkill(read);
+            var current = _adapter.ExecuteTool(read);
             if (!current.Success || string.IsNullOrWhiteSpace(current.DataJson))
             {
-                error = current.Success ? SkillResult.Fail("VBA module returned no code.") : current;
+                error = current.Success ? ToolResult.Fail("VBA module returned no code.") : current;
                 return false;
             }
 
@@ -308,13 +308,13 @@ namespace RNAssistant.Office.Tools
             }
             catch (JsonException ex)
             {
-                error = SkillResult.Fail("Could not parse VBA module data: " + ex.Message);
+                error = ToolResult.Fail("Could not parse VBA module data: " + ex.Message);
                 return false;
             }
 
             if (code.EndsWith("\n...[truncated]", StringComparison.Ordinal))
             {
-                error = SkillResult.Fail("VBA module is too large for a safe patch.");
+                error = ToolResult.Fail("VBA module is too large for a safe patch.");
                 return false;
             }
 
@@ -337,7 +337,7 @@ namespace RNAssistant.Office.Tools
             return new JArray(token);
         }
 
-        private static SkillResult ApplyPatchOperation(string current, JObject operation, out string updated)
+        private static ToolResult ApplyPatchOperation(string current, JObject operation, out string updated)
         {
             updated = current;
             var op = ((string)(operation["op"] ?? operation["type"]) ?? string.Empty).Trim();
@@ -349,17 +349,17 @@ namespace RNAssistant.Office.Tools
                 case "replaceall":
                     if (string.IsNullOrEmpty(find))
                     {
-                        return SkillResult.Fail("Patch replace requires find.");
+                        return ToolResult.Fail("Patch replace requires find.");
                     }
 
                     var count = CountOccurrences(current, find);
                     if (count == 0)
                     {
-                        return SkillResult.Fail("Patch find text was not found.");
+                        return ToolResult.Fail("Patch find text was not found.");
                     }
 
                     updated = current.Replace(find, text);
-                    return SkillResult.Ok("Replaced " + count + " occurrence(s).");
+                    return ToolResult.Ok("Replaced " + count + " occurrence(s).");
                 case "replacefirst":
                     return ReplaceAtMatch(current, find, text, out updated);
                 case "insertbefore":
@@ -369,36 +369,36 @@ namespace RNAssistant.Office.Tools
                 case "replacelines":
                     return ReplaceLines(current, operation, text, out updated);
                 default:
-                    return SkillResult.Fail("Unsupported patch op: " + op);
+                    return ToolResult.Fail("Unsupported patch op: " + op);
             }
         }
 
-        private static SkillResult ReplaceAtMatch(string current, string find, string replacement, out string updated)
+        private static ToolResult ReplaceAtMatch(string current, string find, string replacement, out string updated)
         {
             updated = current;
             if (string.IsNullOrEmpty(find))
             {
-                return SkillResult.Fail("Patch operation requires find.");
+                return ToolResult.Fail("Patch operation requires find.");
             }
 
             var index = current.IndexOf(find, StringComparison.Ordinal);
             if (index < 0)
             {
-                return SkillResult.Fail("Patch find text was not found.");
+                return ToolResult.Fail("Patch find text was not found.");
             }
 
             updated = current.Substring(0, index) + replacement + current.Substring(index + find.Length);
-            return SkillResult.Ok("Patched first occurrence.");
+            return ToolResult.Ok("Patched first occurrence.");
         }
 
-        private static SkillResult ReplaceLines(string current, JObject operation, string text, out string updated)
+        private static ToolResult ReplaceLines(string current, JObject operation, string text, out string updated)
         {
             updated = current;
             var startLine = (int?)operation["startLine"] ?? 0;
             var deleteCount = (int?)operation["deleteCount"] ?? 0;
             if (startLine <= 0 || deleteCount < 0)
             {
-                return SkillResult.Fail("replaceLines requires startLine >= 1 and deleteCount >= 0.");
+                return ToolResult.Fail("replaceLines requires startLine >= 1 and deleteCount >= 0.");
             }
 
             var newline = current.IndexOf("\r\n", StringComparison.Ordinal) >= 0 ? "\r\n" : "\n";
@@ -406,7 +406,7 @@ namespace RNAssistant.Office.Tools
             var index = startLine - 1;
             if (index > lines.Count)
             {
-                return SkillResult.Fail("replaceLines startLine is outside the module.");
+                return ToolResult.Fail("replaceLines startLine is outside the module.");
             }
 
             var remove = Math.Min(deleteCount, lines.Count - index);
@@ -421,12 +421,12 @@ namespace RNAssistant.Office.Tools
             }
 
             updated = string.Join(newline, lines.ToArray());
-            return SkillResult.Ok("Replaced lines at " + startLine + " deleting " + deleteCount + ".");
+            return ToolResult.Ok("Replaced lines at " + startLine + " deleting " + deleteCount + ".");
         }
 
-        private SkillDefinition ControllerTool(string id, string description, string schema, bool mutatesDocument)
+        private ToolDefinition ControllerTool(string id, string description, string schema, bool mutatesDocument)
         {
-            return new SkillDefinition
+            return new ToolDefinition
             {
                 Id = id,
                 Host = _adapter.HostName,

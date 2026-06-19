@@ -6,7 +6,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Office;
-using RNAssistant.Office.Skills;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.ExcelAddIn
 {
@@ -71,7 +71,7 @@ namespace RNAssistant.ExcelAddIn
             }
         }
 
-        public IEnumerable<SkillDefinition> GetBuiltInSkills()
+        public IEnumerable<ToolDefinition> GetBuiltInTools()
         {
             return new[]
             {
@@ -183,11 +183,11 @@ namespace RNAssistant.ExcelAddIn
             };
         }
 
-        public SkillResult ExecuteSkill(SkillCommand command)
+        public ToolResult ExecuteTool(ToolCommand command)
         {
             try
             {
-                switch (command.SkillId)
+                switch (command.ToolId)
                 {
                     case "excel.workbook_summary":
                         return WorkbookSummary();
@@ -214,16 +214,16 @@ namespace RNAssistant.ExcelAddIn
                     case "excel.run_macro":
                         return RunMacro(command);
                     default:
-                        return SkillResult.Fail("Unsupported Excel skill: " + command.SkillId);
+                        return ToolResult.Fail("Unsupported Excel tool: " + command.ToolId);
                 }
             }
             catch (Exception ex)
             {
-                return SkillResult.Fail(ex.Message);
+                return ToolResult.Fail(ex.Message);
             }
         }
 
-        private SkillResult WorkbookSummary()
+        private ToolResult WorkbookSummary()
         {
             var workbook = RequireWorkbook();
             var sheets = new List<object>();
@@ -232,7 +232,7 @@ namespace RNAssistant.ExcelAddIn
                 sheets.Add(new { name = sheet.Name, usedRange = sheet.UsedRange.Address[false, false] });
             }
 
-            return SkillResult.Ok("Workbook summary collected.", JsonConvert.SerializeObject(new
+            return ToolResult.Ok("Workbook summary collected.", JsonConvert.SerializeObject(new
             {
                 name = workbook.Name,
                 fullName = workbook.FullName,
@@ -240,7 +240,7 @@ namespace RNAssistant.ExcelAddIn
             }));
         }
 
-        private SkillResult ListSheets()
+        private ToolResult ListSheets()
         {
             var workbook = RequireWorkbook();
             var names = new List<string>();
@@ -249,36 +249,36 @@ namespace RNAssistant.ExcelAddIn
                 names.Add(sheet.Name);
             }
 
-            return SkillResult.Ok("Sheets listed.", JsonConvert.SerializeObject(names));
+            return ToolResult.Ok("Sheets listed.", JsonConvert.SerializeObject(names));
         }
 
-        private SkillResult ReadRange(SkillCommand command)
+        private ToolResult ReadRange(ToolCommand command)
         {
-            var sheet = ResolveSheet(SkillArgumentReader.String(command.Arguments, "sheet", null));
-            var address = SkillArgumentReader.String(command.Arguments, "address", "A1");
+            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
+            var address = ToolArgumentReader.String(command.Arguments, "address", "A1");
             var range = sheet.Range[address];
             var rows = RangeToRows(range);
-            return SkillResult.Ok("Range read: " + sheet.Name + "!" + address, JsonConvert.SerializeObject(rows));
+            return ToolResult.Ok("Range read: " + sheet.Name + "!" + address, JsonConvert.SerializeObject(rows));
         }
 
-        private SkillResult WriteRange(SkillCommand command)
+        private ToolResult WriteRange(ToolCommand command)
         {
-            var sheet = ResolveSheet(SkillArgumentReader.String(command.Arguments, "sheet", null));
-            var address = SkillArgumentReader.String(command.Arguments, "address", "A1");
-            var value = SkillArgumentReader.String(command.Arguments, "value", string.Empty);
+            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
+            var address = ToolArgumentReader.String(command.Arguments, "address", "A1");
+            var value = ToolArgumentReader.String(command.Arguments, "value", string.Empty);
             sheet.Range[address].Value2 = value;
-            return SkillResult.Ok("Wrote value to " + sheet.Name + "!" + address);
+            return ToolResult.Ok("Wrote value to " + sheet.Name + "!" + address);
         }
 
-        private SkillResult WriteTable(SkillCommand command)
+        private ToolResult WriteTable(ToolCommand command)
         {
-            var sheet = ResolveSheet(SkillArgumentReader.String(command.Arguments, "sheet", null));
-            var startAddress = SkillArgumentReader.String(command.Arguments, "startAddress", "A1");
-            var valuesJson = SkillArgumentReader.String(command.Arguments, "values", "[]");
+            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
+            var startAddress = ToolArgumentReader.String(command.Arguments, "startAddress", "A1");
+            var valuesJson = ToolArgumentReader.String(command.Arguments, "values", "[]");
             var values = JArray.Parse(valuesJson);
             if (values.Count == 0)
             {
-                return SkillResult.Fail("No table values provided.");
+                return ToolResult.Fail("No table values provided.");
             }
 
             var rows = values.Count;
@@ -288,13 +288,13 @@ namespace RNAssistant.ExcelAddIn
                 var row = rowToken as JArray;
                 if (row == null)
                 {
-                    return SkillResult.Fail("Table values must be a 2D JSON array.");
+                    return ToolResult.Fail("Table values must be a 2D JSON array.");
                 }
                 columns = Math.Max(columns, row.Count);
             }
             if (columns == 0)
             {
-                return SkillResult.Fail("No table columns provided.");
+                return ToolResult.Fail("No table columns provided.");
             }
 
             var data = new object[rows, columns];
@@ -310,19 +310,19 @@ namespace RNAssistant.ExcelAddIn
             var start = sheet.Range[startAddress];
             var target = start.Resize[rows, columns];
             target.Value2 = data;
-            return SkillResult.Ok("Wrote table to " + sheet.Name + "!" + target.Address[false, false], JsonConvert.SerializeObject(new { sheet = sheet.Name, range = target.Address[false, false], rows = rows, columns = columns }));
+            return ToolResult.Ok("Wrote table to " + sheet.Name + "!" + target.Address[false, false], JsonConvert.SerializeObject(new { sheet = sheet.Name, range = target.Address[false, false], rows = rows, columns = columns }));
         }
 
-        private SkillResult AddChart(SkillCommand command)
+        private ToolResult AddChart(ToolCommand command)
         {
-            var sheet = ResolveSheet(SkillArgumentReader.String(command.Arguments, "sheet", null));
-            var sourceRange = SkillArgumentReader.String(command.Arguments, "sourceRange", "A1:B6");
-            var title = SkillArgumentReader.String(command.Arguments, "title", "Chart");
-            var chartType = SkillArgumentReader.String(command.Arguments, "chartType", "line");
-            var left = SkillArgumentReader.Int32(command.Arguments, "left", 300);
-            var top = SkillArgumentReader.Int32(command.Arguments, "top", 20);
-            var width = SkillArgumentReader.Int32(command.Arguments, "width", 480);
-            var height = SkillArgumentReader.Int32(command.Arguments, "height", 300);
+            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
+            var sourceRange = ToolArgumentReader.String(command.Arguments, "sourceRange", "A1:B6");
+            var title = ToolArgumentReader.String(command.Arguments, "title", "Chart");
+            var chartType = ToolArgumentReader.String(command.Arguments, "chartType", "line");
+            var left = ToolArgumentReader.Int32(command.Arguments, "left", 300);
+            var top = ToolArgumentReader.Int32(command.Arguments, "top", 20);
+            var width = ToolArgumentReader.Int32(command.Arguments, "width", 480);
+            var height = ToolArgumentReader.Int32(command.Arguments, "height", 300);
 
             var source = sheet.Range[sourceRange];
             var chartObjects = (Excel.ChartObjects)sheet.ChartObjects(Type.Missing);
@@ -332,50 +332,50 @@ namespace RNAssistant.ExcelAddIn
             chart.ChartType = ResolveChartType(chartType);
             chart.HasTitle = true;
             chart.ChartTitle.Text = title;
-            return SkillResult.Ok("Chart added: " + title, JsonConvert.SerializeObject(new { sheet = sheet.Name, sourceRange = sourceRange, chartType = chartType, title = title }));
+            return ToolResult.Ok("Chart added: " + title, JsonConvert.SerializeObject(new { sheet = sheet.Name, sourceRange = sourceRange, chartType = chartType, title = title }));
         }
 
-        private SkillResult AddSheet(SkillCommand command)
+        private ToolResult AddSheet(ToolCommand command)
         {
             var workbook = RequireWorkbook();
-            var name = SkillArgumentReader.String(command.Arguments, "name", "AI Sheet");
+            var name = ToolArgumentReader.String(command.Arguments, "name", "AI Sheet");
             var sheet = (Excel.Worksheet)workbook.Worksheets.Add();
             sheet.Name = name;
-            return SkillResult.Ok("Added sheet: " + name);
+            return ToolResult.Ok("Added sheet: " + name);
         }
 
-        private SkillResult ReadVbaProject(SkillCommand command)
+        private ToolResult ReadVbaProject(ToolCommand command)
         {
             var workbook = RequireWorkbook();
-            var maxChars = SkillArgumentReader.Int32(command.Arguments, "maxChars", 30000);
+            var maxChars = ToolArgumentReader.Int32(command.Arguments, "maxChars", 30000);
             return VbaProjectSupport.ReadProject(workbook, workbook.Name, maxChars);
         }
 
-        private SkillResult ReadVbaModule(SkillCommand command)
+        private ToolResult ReadVbaModule(ToolCommand command)
         {
             var workbook = RequireWorkbook();
-            var moduleName = SkillArgumentReader.String(command.Arguments, "moduleName", string.Empty);
-            var maxChars = SkillArgumentReader.Int32(command.Arguments, "maxChars", 30000);
+            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
+            var maxChars = ToolArgumentReader.Int32(command.Arguments, "maxChars", 30000);
             return VbaProjectSupport.ReadModule(workbook, moduleName, maxChars);
         }
 
-        private SkillResult ReplaceVbaModule(SkillCommand command)
+        private ToolResult ReplaceVbaModule(ToolCommand command)
         {
             var workbook = RequireWorkbook();
-            var moduleName = SkillArgumentReader.String(command.Arguments, "moduleName", string.Empty);
-            var code = SkillArgumentReader.String(command.Arguments, "code", string.Empty);
-            var createIfMissing = SkillArgumentReader.Boolean(command.Arguments, "createIfMissing", true);
+            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
+            var code = ToolArgumentReader.String(command.Arguments, "code", string.Empty);
+            var createIfMissing = ToolArgumentReader.Boolean(command.Arguments, "createIfMissing", true);
             return VbaProjectSupport.ReplaceModule(workbook, moduleName, code, createIfMissing);
         }
 
-        private SkillResult InsertVbaModule(SkillCommand command)
+        private ToolResult InsertVbaModule(ToolCommand command)
         {
             var workbook = RequireWorkbook();
-            var moduleName = SkillArgumentReader.String(command.Arguments, "moduleName", "RNAssistantModule");
-            var code = SkillArgumentReader.String(command.Arguments, "code", string.Empty);
+            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", "RNAssistantModule");
+            var code = ToolArgumentReader.String(command.Arguments, "code", string.Empty);
             if (string.IsNullOrWhiteSpace(code))
             {
-                return SkillResult.Fail("No VBA code provided.");
+                return ToolResult.Fail("No VBA code provided.");
             }
 
             try
@@ -384,20 +384,20 @@ namespace RNAssistant.ExcelAddIn
             }
             catch (Exception ex)
             {
-                return SkillResult.Ok("VBA insert was blocked. Enable 'Trust access to the VBA project object model' or copy the code manually. " + ex.Message, JsonConvert.SerializeObject(new { moduleName = moduleName, code = code }));
+                return ToolResult.Ok("VBA insert was blocked. Enable 'Trust access to the VBA project object model' or copy the code manually. " + ex.Message, JsonConvert.SerializeObject(new { moduleName = moduleName, code = code }));
             }
         }
 
-        private SkillResult RunMacro(SkillCommand command)
+        private ToolResult RunMacro(ToolCommand command)
         {
-            var macroName = SkillArgumentReader.String(command.Arguments, "macroName", string.Empty);
+            var macroName = ToolArgumentReader.String(command.Arguments, "macroName", string.Empty);
             if (string.IsNullOrWhiteSpace(macroName))
             {
-                return SkillResult.Fail("No macroName provided.");
+                return ToolResult.Fail("No macroName provided.");
             }
 
             _application.Run(macroName);
-            return SkillResult.Ok("Macro ran: " + macroName);
+            return ToolResult.Ok("Macro ran: " + macroName);
         }
 
         private Excel.Workbook ActiveWorkbook()
@@ -428,9 +428,9 @@ namespace RNAssistant.ExcelAddIn
             return (Excel.Worksheet)workbook.Worksheets[name];
         }
 
-        private static SkillDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)
+        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)
         {
-            return new SkillDefinition { Id = id, Host = "Excel", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun };
+            return new ToolDefinition { Id = id, Host = "Excel", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun };
         }
 
         private static List<List<object>> RangeToRows(Excel.Range range)

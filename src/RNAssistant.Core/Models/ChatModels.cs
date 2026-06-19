@@ -28,6 +28,8 @@ namespace RNAssistant.Core.Models
         public string Title { get; set; }
         public string Subtitle { get; set; }
         public string Status { get; set; }
+        public string ExecutionStatus { get; set; }
+        public string PendingId { get; set; }
         public string ToolId { get; set; }
         public string ArgumentsJson { get; set; }
         public string ResultMessage { get; set; }

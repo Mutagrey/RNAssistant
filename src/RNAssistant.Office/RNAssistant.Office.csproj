@@ -53,6 +53,7 @@
   <ItemGroup>
     <Compile Include="Contracts\BridgeDtos.cs" />
     <Compile Include="Controller\AssistantController.cs" />
+    <Compile Include="Controller\AssistantController.Agent.cs" />
     <Compile Include="Controller\AssistantController.Chats.cs" />
     <Compile Include="Controller\AssistantController.Context.cs" />
     <Compile Include="Runtime\AssistantRuntime.cs" />
@@ -64,10 +65,12 @@
     <Compile Include="Services\ChatCloneService.cs" />
     <Compile Include="Services\ChatCompletionService.cs" />
     <Compile Include="Services\ContextService.cs" />
+    <Compile Include="Services\SkillCatalogService.cs" />
     <Compile Include="Services\ToolCatalogService.cs" />
-    <Compile Include="Skills\SkillArgumentReader.cs" />
+    <Compile Include="Tools\ToolArgumentReader.cs" />
     <Compile Include="Tools\OfficeToolExecutor.cs" />
     <Compile Include="Tools\PipelineToolExecutor.cs" />
+    <Compile Include="Tools\SkillToolExecutor.cs" />
     <Compile Include="Tools\ToolSafetyPolicy.cs" />
     <Compile Include="Tools\VbaToolExecutor.cs" />
     <Compile Include="WebView\AssistantPaneControl.cs" />

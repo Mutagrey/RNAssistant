@@ -6,24 +6,24 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 
-namespace RNAssistant.Core.Skills
+namespace RNAssistant.Core.Tools
 {
-    public sealed class SkillCommandParseDiagnostic
+    public sealed class ToolCommandParseDiagnostic
     {
         public string Code { get; set; }
         public string Message { get; set; }
         public bool Recovered { get; set; }
     }
 
-    public sealed class SkillCommandParseResult
+    public sealed class ToolCommandParseResult
     {
-        public List<SkillCommand> Commands { get; private set; }
-        public List<SkillCommandParseDiagnostic> Diagnostics { get; private set; }
+        public List<ToolCommand> Commands { get; private set; }
+        public List<ToolCommandParseDiagnostic> Diagnostics { get; private set; }
 
-        public SkillCommandParseResult()
+        public ToolCommandParseResult()
         {
-            Commands = new List<SkillCommand>();
-            Diagnostics = new List<SkillCommandParseDiagnostic>();
+            Commands = new List<ToolCommand>();
+            Diagnostics = new List<ToolCommandParseDiagnostic>();
         }
 
         public bool HasProtocolDiagnostics
@@ -43,7 +43,7 @@ namespace RNAssistant.Core.Skills
         }
     }
 
-    public sealed class SkillCommandParser
+    public sealed class ToolCommandParser
     {
         private static readonly string[] Fences = { "```rnassistant-skill", "```rnassistant-agent" };
         private const string XmlStart = "<rnassistant-skill>";
@@ -51,14 +51,14 @@ namespace RNAssistant.Core.Skills
         private const string AgentXmlStart = "<rnassistant-agent>";
         private const string AgentXmlEnd = "</rnassistant-agent>";
 
-        public IReadOnlyList<SkillCommand> Parse(string assistantText)
+        public IReadOnlyList<ToolCommand> Parse(string assistantText)
         {
             return ParseWithDiagnostics(assistantText).Commands;
         }
 
-        public SkillCommandParseResult ParseWithDiagnostics(string assistantText)
+        public ToolCommandParseResult ParseWithDiagnostics(string assistantText)
         {
-            var result = new SkillCommandParseResult();
+            var result = new ToolCommandParseResult();
             if (string.IsNullOrWhiteSpace(assistantText))
             {
                 return result;
@@ -78,7 +78,7 @@ namespace RNAssistant.Core.Skills
             return result;
         }
 
-        private static void ExtractFenced(string text, SkillCommandParseResult result)
+        private static void ExtractFenced(string text, ToolCommandParseResult result)
         {
             foreach (var fence in Fences)
             {
@@ -99,13 +99,13 @@ namespace RNAssistant.Core.Skills
             }
         }
 
-        private static void ExtractXml(string text, SkillCommandParseResult result)
+        private static void ExtractXml(string text, ToolCommandParseResult result)
         {
             ExtractXml(text, XmlStart, XmlEnd, result);
             ExtractXml(text, AgentXmlStart, AgentXmlEnd, result);
         }
 
-        private static void ExtractXml(string text, string startTag, string endTag, SkillCommandParseResult result)
+        private static void ExtractXml(string text, string startTag, string endTag, ToolCommandParseResult result)
         {
             var index = 0;
             while ((index = text.IndexOf(startTag, index, StringComparison.OrdinalIgnoreCase)) >= 0)
@@ -123,7 +123,7 @@ namespace RNAssistant.Core.Skills
             }
         }
 
-        private static void ExtractBareJson(string text, SkillCommandParseResult result)
+        private static void ExtractBareJson(string text, ToolCommandParseResult result)
         {
             var trimmed = (text ?? string.Empty).Trim();
             if (!trimmed.StartsWith("{", StringComparison.Ordinal) && !trimmed.StartsWith("[", StringComparison.Ordinal))
@@ -134,7 +134,7 @@ namespace RNAssistant.Core.Skills
             TryAdd(trimmed, result, "bare_json_invalid", false);
         }
 
-        private static void ExtractGenericJsonFences(string text, SkillCommandParseResult result)
+        private static void ExtractGenericJsonFences(string text, ToolCommandParseResult result)
         {
             var index = 0;
             while ((index = text.IndexOf("```", index, StringComparison.OrdinalIgnoreCase)) >= 0)
@@ -161,7 +161,7 @@ namespace RNAssistant.Core.Skills
             }
         }
 
-        private static void ExtractEmbeddedJson(string text, SkillCommandParseResult result)
+        private static void ExtractEmbeddedJson(string text, ToolCommandParseResult result)
         {
             foreach (var start in FindJsonStarts(text))
             {
@@ -248,7 +248,7 @@ namespace RNAssistant.Core.Skills
             return null;
         }
 
-        private static void TryAdd(string json, SkillCommandParseResult result, string diagnosticCode, bool reportFailure)
+        private static void TryAdd(string json, ToolCommandParseResult result, string diagnosticCode, bool reportFailure)
         {
             var before = result.Commands.Count;
             if (TryAddToken(json, result.Commands))
@@ -272,7 +272,7 @@ namespace RNAssistant.Core.Skills
             }
         }
 
-        private static bool TryAddToken(string json, ICollection<SkillCommand> commands)
+        private static bool TryAddToken(string json, ICollection<ToolCommand> commands)
         {
             if (string.IsNullOrWhiteSpace(json) || commands == null)
             {
@@ -498,14 +498,14 @@ namespace RNAssistant.Core.Skills
             return '\0';
         }
 
-        private static void AddDiagnostic(SkillCommandParseResult result, string code, string message, bool recovered)
+        private static void AddDiagnostic(ToolCommandParseResult result, string code, string message, bool recovered)
         {
             if (result == null)
             {
                 return;
             }
 
-            result.Diagnostics.Add(new SkillCommandParseDiagnostic
+            result.Diagnostics.Add(new ToolCommandParseDiagnostic
             {
                 Code = code,
                 Message = message,
@@ -513,7 +513,7 @@ namespace RNAssistant.Core.Skills
             });
         }
 
-        private static void AddObject(JToken token, ICollection<SkillCommand> commands)
+        private static void AddObject(JToken token, ICollection<ToolCommand> commands)
         {
             var obj = token as JObject;
             if (obj == null)
@@ -559,9 +559,9 @@ namespace RNAssistant.Core.Skills
                 return;
             }
 
-            var command = new SkillCommand
+            var command = new ToolCommand
             {
-                SkillId = id,
+                ToolId = id,
                 Description = (string)(obj["description"] ?? obj["title"] ?? obj["reason"])
             };
             var args = ReadObject(argumentToken);
@@ -578,7 +578,7 @@ namespace RNAssistant.Core.Skills
             commands.Add(command);
         }
 
-        private static void AddToolCall(JToken token, ICollection<SkillCommand> commands)
+        private static void AddToolCall(JToken token, ICollection<ToolCommand> commands)
         {
             var obj = token as JObject;
             if (obj == null)
@@ -601,7 +601,7 @@ namespace RNAssistant.Core.Skills
 
             AddObject(new JObject
             {
-                ["skillId"] = id,
+                ["toolId"] = id,
                 ["arguments"] = function["arguments"] ?? new JObject()
             }, commands);
         }

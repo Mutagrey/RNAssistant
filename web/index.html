@@ -42,6 +42,7 @@
     <nav class="tabs" aria-label="Assistant tabs">
       <button class="tab active" data-tab="chat">Chat</button>
       <button class="tab" data-tab="tools">Tools</button>
+      <button class="tab" data-tab="skills">Skills</button>
       <button class="tab" data-tab="vba">VBA</button>
       <button class="tab" data-tab="context">Context</button>
       <button class="tab" data-tab="settings">Settings</button>
@@ -162,6 +163,39 @@
         </div>
       </section>
 
+      <section class="panel" id="tab-skills">
+        <div class="toolbar">
+          <button id="addSkillButton">New Skill</button>
+          <button class="secondary" id="cloneSkillButton">Clone</button>
+          <button class="secondary" id="saveSkillsButton">Save Skills</button>
+        </div>
+        <div class="status" id="skillsPath"></div>
+        <div class="tool-layout">
+          <aside class="tool-list" id="skillsList"></aside>
+          <section class="tool-editor">
+            <div class="skill-head">
+              <div>
+                <div class="skill-title" id="skillEditorTitle">No skill selected</div>
+                <div class="skill-meta" id="skillEditorMeta"></div>
+              </div>
+              <label class="checkline"><input type="checkbox" id="skillEnabledInput"> Enabled</label>
+            </div>
+            <div class="form-grid tool-form">
+              <label>Skill ID<input id="skillIdInput" placeholder="common.review_contract"></label>
+              <label>Host<select id="skillHostInput"><option>Common</option><option>Excel</option><option>Word</option><option>PowerPoint</option><option>Outlook</option></select></label>
+              <label>Description<textarea id="skillDescriptionInput" rows="3" placeholder="When this skill should be used"></textarea></label>
+              <label>Tags<input id="skillTagsInput" placeholder="review, writing, word"></label>
+              <label>SKILL.md<textarea id="skillBodyInput" rows="18" spellcheck="false" placeholder="# Skill name&#10;&#10;Use this skill when..."></textarea></label>
+            </div>
+            <div class="toolbar">
+              <button class="secondary" id="copySkillContextButton" type="button">Copy Context</button>
+              <button class="secondary" id="askSkillBuilderButton" type="button">Edit in Chat</button>
+              <button class="danger" id="deleteSkillButton" type="button">Delete</button>
+            </div>
+          </section>
+        </div>
+      </section>
+
       <section class="panel" id="tab-vba">
         <div class="toolbar">
           <button id="refreshVbaButton" type="button">Refresh VBA</button>
@@ -231,7 +265,7 @@
         <div class="danger-zone">
           <div>
             <div class="danger-zone-title">Development reset</div>
-            <div class="danger-zone-text">Clears local chats, chat context, VBA backups, and WebView cache. Settings, API key, and custom tools stay.</div>
+            <div class="danger-zone-text">Clears local chats, chat context, VBA backups, and WebView cache. Settings, API key, and custom tools and skills stay.</div>
           </div>
           <button class="danger" id="clearRuntimeDataButton" type="button">Clear Chats/Data</button>
         </div>
@@ -259,22 +293,26 @@
         </section>
         <section>
           <h3>Agent format</h3>
-          <p>Models should return one fenced rnassistant-agent block. RNAssistant parses skillId/toolId/tool/action/name plus arguments/args/parameters.</p>
+          <p>Models should return one fenced rnassistant-agent block. RNAssistant parses toolId/tool/action/name plus arguments/args/parameters.</p>
           <pre><code>```rnassistant-agent
 {"description":"Create sales demo","steps":[
-  {"description":"Add sheet","skillId":"excel.add_sheet","arguments":{"name":"Sales Demo"}},
-  {"description":"Write data","skillId":"excel.write_table","arguments":{"sheet":"Sales Demo","startAddress":"A1","values":[["Month","Sales"],["Jan",120]]}},
-  {"description":"Create chart","skillId":"excel.add_chart","arguments":{"sheet":"Sales Demo","sourceRange":"A1:B2","chartType":"line","title":"Sales"}}
+  {"description":"Add sheet","toolId":"excel.add_sheet","arguments":{"name":"Sales Demo"}},
+  {"description":"Write data","toolId":"excel.write_table","arguments":{"sheet":"Sales Demo","startAddress":"A1","values":[["Month","Sales"],["Jan",120]]}},
+  {"description":"Create chart","toolId":"excel.add_chart","arguments":{"sheet":"Sales Demo","sourceRange":"A1:B2","chartType":"line","title":"Sales"}}
 ]}
 ```</code></pre>
         </section>
         <section>
           <h3>Tools workflow</h3>
-          <p>Open Tools, select a tool, inspect its schema, pipeline, VBA code, and notes. Use Dry Run before Run for custom tools. Agent VBA code should be written as VBA for the current Office host.</p>
+          <p>Open Tools, select a tool, inspect its schema, pipeline, VBA code, and notes. Use Dry Run before Run for custom tools and skills. Agent VBA code should be written as VBA for the current Office host.</p>
         </section>
         <section>
           <h3>Reusable tools</h3>
           <p>Custom tools are stored in %AppData%\RNAssistant\tools. Pipeline tools call existing tools in order. VBA tools store editable code in code.vba.</p>
+        </section>
+        <section>
+          <h3>Markdown skills</h3>
+          <p>Skills are guidance files stored in %AppData%\RNAssistant\skills. They help the agent choose an approach, but executable actions still use tools.</p>
         </section>
         <section>
           <h3>VBA workflow</h3>
@@ -303,6 +341,7 @@
   <script src="js/app-context-data.js"></script>
   <script src="js/app-chat-state.js"></script>
   <script src="js/app-tools.js"></script>
+  <script src="js/app-skills.js"></script>
   <script src="js/app-vba.js"></script>
   <script src="js/app-context.js"></script>
   <script src="js/app-agent-data.js"></script>

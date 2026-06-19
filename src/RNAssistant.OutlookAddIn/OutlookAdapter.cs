@@ -4,7 +4,7 @@ using Newtonsoft.Json;
 using Outlook = Microsoft.Office.Interop.Outlook;
 using RNAssistant.Core.Models;
 using RNAssistant.Office;
-using RNAssistant.Office.Skills;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.OutlookAddIn
 {
@@ -59,7 +59,7 @@ namespace RNAssistant.OutlookAddIn
             }
         }
 
-        public IEnumerable<SkillDefinition> GetBuiltInSkills()
+        public IEnumerable<ToolDefinition> GetBuiltInTools()
         {
             return new[]
             {
@@ -139,11 +139,11 @@ namespace RNAssistant.OutlookAddIn
             };
         }
 
-        public SkillResult ExecuteSkill(SkillCommand command)
+        public ToolResult ExecuteTool(ToolCommand command)
         {
             try
             {
-                switch (command.SkillId)
+                switch (command.ToolId)
                 {
                     case "outlook.read_selection":
                         return ReadSelection(command);
@@ -154,20 +154,20 @@ namespace RNAssistant.OutlookAddIn
                     case "outlook.collect_monthly_summary_data":
                         return CollectFolderMail(command, true);
                     default:
-                        return SkillResult.Fail("Unsupported Outlook skill: " + command.SkillId);
+                        return ToolResult.Fail("Unsupported Outlook tool: " + command.ToolId);
                 }
             }
             catch (Exception ex)
             {
-                return SkillResult.Fail(ex.Message);
+                return ToolResult.Fail(ex.Message);
             }
         }
 
-        private SkillResult ReadSelection(SkillCommand command)
+        private ToolResult ReadSelection(ToolCommand command)
         {
             var mail = RequireSelectedMail();
-            var maxChars = SkillArgumentReader.Int32(command.Arguments, "maxChars", 12000);
-            return SkillResult.Ok("Selected email read.", JsonConvert.SerializeObject(new
+            var maxChars = ToolArgumentReader.Int32(command.Arguments, "maxChars", 12000);
+            return ToolResult.Ok("Selected email read.", JsonConvert.SerializeObject(new
             {
                 subject = mail.Subject,
                 sender = mail.SenderName,
@@ -177,31 +177,31 @@ namespace RNAssistant.OutlookAddIn
             }));
         }
 
-        private SkillResult DraftReply(SkillCommand command)
+        private ToolResult DraftReply(ToolCommand command)
         {
             var mail = RequireSelectedMail();
-            var body = SkillArgumentReader.String(command.Arguments, "body", string.Empty);
+            var body = ToolArgumentReader.String(command.Arguments, "body", string.Empty);
             var reply = mail.Reply() as Outlook.MailItem;
             if (reply == null)
             {
-                return SkillResult.Fail("Could not create reply.");
+                return ToolResult.Fail("Could not create reply.");
             }
 
             reply.Body = body + "\n\n" + reply.Body;
             reply.Display(false);
-            return SkillResult.Ok("Reply draft displayed.");
+            return ToolResult.Ok("Reply draft displayed.");
         }
 
-        private SkillResult CollectFolderMail(SkillCommand command, bool groupedByMonth)
+        private ToolResult CollectFolderMail(ToolCommand command, bool groupedByMonth)
         {
             var folder = CurrentFolder();
             if (folder == null)
             {
-                return SkillResult.Fail("No current Outlook folder.");
+                return ToolResult.Fail("No current Outlook folder.");
             }
 
-            var maxItems = SkillArgumentReader.Int32(command.Arguments, "maxItems", groupedByMonth ? 500 : 100);
-            var maxBodyChars = SkillArgumentReader.Int32(command.Arguments, "maxBodyChars", groupedByMonth ? 500 : 1000);
+            var maxItems = ToolArgumentReader.Int32(command.Arguments, "maxItems", groupedByMonth ? 500 : 100);
+            var maxBodyChars = ToolArgumentReader.Int32(command.Arguments, "maxBodyChars", groupedByMonth ? 500 : 1000);
             var rows = new List<object>();
             var monthly = new Dictionary<string, List<object>>();
             var items = folder.Items;
@@ -242,7 +242,7 @@ namespace RNAssistant.OutlookAddIn
             var data = groupedByMonth
                 ? JsonConvert.SerializeObject(new { folder = folder.FolderPath, months = monthly })
                 : JsonConvert.SerializeObject(new { folder = folder.FolderPath, messages = rows });
-            return SkillResult.Ok("Mail data collected.", data);
+            return ToolResult.Ok("Mail data collected.", data);
         }
 
         private Outlook.MailItem SelectedMail()
@@ -286,9 +286,9 @@ namespace RNAssistant.OutlookAddIn
             }
         }
 
-        private static SkillDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)
+        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)
         {
-            return new SkillDefinition { Id = id, Host = "Outlook", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun };
+            return new ToolDefinition { Id = id, Host = "Outlook", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun };
         }
 
         private static string Trim(string text, int maxChars)

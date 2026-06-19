@@ -65,6 +65,8 @@ namespace RNAssistant.Office.Services
                 Title = activity.Title,
                 Subtitle = activity.Subtitle,
                 Status = activity.Status,
+                ExecutionStatus = activity.ExecutionStatus,
+                PendingId = activity.PendingId,
                 ToolId = activity.ToolId,
                 ArgumentsJson = activity.ArgumentsJson,
                 ResultMessage = activity.ResultMessage,

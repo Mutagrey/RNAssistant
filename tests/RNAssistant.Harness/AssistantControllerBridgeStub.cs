@@ -45,18 +45,22 @@ namespace RNAssistant.Office
         }
 
         public InitResponse ClearRuntimeData() { return Initialize(); }
-        public IReadOnlyList<SkillDefinition> GetTools() { return new SkillDefinition[0]; }
-        public IReadOnlyList<SkillDefinition> SaveTools(IEnumerable<SkillDefinition> tools) { return new SkillDefinition[0]; }
-        public VbaProjectResponse GetVbaProject(int maxChars) { return new VbaProjectResponse { Result = SkillResult.Ok("ok") }; }
+        public IReadOnlyList<ToolDefinition> GetTools() { return new ToolDefinition[0]; }
+        public IReadOnlyList<ToolDefinition> SaveTools(IEnumerable<ToolDefinition> tools) { return new ToolDefinition[0]; }
+        public IReadOnlyList<SkillDefinition> GetSkills() { return new SkillDefinition[0]; }
+        public IReadOnlyList<SkillDefinition> SaveSkills(IEnumerable<SkillDefinition> skills) { return new SkillDefinition[0]; }
+        public ChatStateResponse ConfirmAgentTool(string pendingId, string chatId = null) { return ChatState(pendingId, chatId); }
+        public ChatStateResponse CancelAgentTool(string pendingId, string chatId = null) { return ChatState(pendingId, chatId); }
+        public VbaProjectResponse GetVbaProject(int maxChars) { return new VbaProjectResponse { Result = ToolResult.Ok("ok") }; }
 
-        public SkillResult SaveVbaModule(string moduleName, string code)
+        public ToolResult SaveVbaModule(string moduleName, string code)
         {
             LastModuleName = moduleName;
             LastModuleCode = code;
-            return SkillResult.Ok("saved");
+            return ToolResult.Ok("saved");
         }
 
-        public SkillResult RestoreVbaBackup(string backupId, string moduleName) { return SkillResult.Ok("restored"); }
+        public ToolResult RestoreVbaBackup(string backupId, string moduleName) { return ToolResult.Ok("restored"); }
         public DocumentContext GetContext(string chatId = null) { return new DocumentContext { DocumentKey = chatId ?? string.Empty }; }
         public DocumentContext AddSelectionContextFromBridge(string mode, string chatId = null) { return new DocumentContext { Title = mode ?? string.Empty }; }
 
@@ -86,7 +90,7 @@ namespace RNAssistant.Office
             return Task.FromResult(new SendChatResponse { Message = "ok" });
         }
 
-        public SkillResult RunTool(string toolId, IDictionary<string, object> arguments, bool dryRun, Action<string, string> progress = null)
+        public ToolResult RunTool(string toolId, IDictionary<string, object> arguments, bool dryRun, Action<string, string> progress = null)
         {
             LastToolId = toolId;
             LastArgumentsJson = JsonConvert.SerializeObject(arguments ?? new Dictionary<string, object>());
@@ -95,7 +99,7 @@ namespace RNAssistant.Office
             {
                 progress("executing", "Testing tool");
             }
-            return SkillResult.Ok("ran", "{\"ran\":true}");
+            return ToolResult.Ok("ran", "{\"ran\":true}");
         }
 
         private static ChatStateResponse ChatState(string title = null, string chatId = null)

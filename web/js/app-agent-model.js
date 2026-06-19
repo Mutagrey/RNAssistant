@@ -48,6 +48,14 @@ function activityToolId(activity) {
   return activityValue(activity, "ToolId", "toolId", "") || "";
 }
 
+function activityPendingId(activity) {
+  return activityValue(activity, "PendingId", "pendingId", "") || "";
+}
+
+function activityExecutionStatus(activity) {
+  return activityValue(activity, "ExecutionStatus", "executionStatus", "") || "";
+}
+
 function activityArgumentsJson(activity) {
   return activityValue(activity, "ArgumentsJson", "argumentsJson", "") || "";
 }
@@ -120,7 +128,7 @@ function collectRunActivities(items) {
 }
 
 function currentRunActivity(activities) {
-  var preferred = ["running", "waiting", "failed"];
+  var preferred = ["running", "waiting", "failed", "cancelled"];
   for (var i = 0; i < preferred.length; i += 1) {
     for (var j = 0; j < activities.length; j += 1) {
       if (activityStatus(activities[j]) === preferred[i]) {
@@ -177,6 +185,9 @@ function agentRunStats(items) {
   if (counts.failed) {
     parts.push(counts.failed + " failed");
   }
+  if (counts.cancelled) {
+    parts.push(counts.cancelled + " cancelled");
+  }
   if (counts.running) {
     parts.push(counts.running + " running");
   }
@@ -198,7 +209,7 @@ function agentRunStats(items) {
     current: current,
     counts: counts,
     elapsed: elapsed,
-    status: counts.failed ? "failed" : (counts.running ? "running" : (counts.waiting ? "waiting" : "completed"))
+    status: counts.failed ? "failed" : (counts.running ? "running" : (counts.waiting ? "waiting" : (counts.cancelled ? "cancelled" : "completed")))
   };
 }
 

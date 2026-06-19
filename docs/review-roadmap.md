@@ -2,7 +2,7 @@
 
 ## Findings
 
-1. `SkillCommandParser` mixed native `tool_calls` wrappers with local command objects. A native-style call could be parsed as `call_xxx` instead of `function.name`. Fixed by handling `tool_calls` explicitly.
+1. `ToolCommandParser` mixed native `tool_calls` wrappers with local command objects. A native-style call could be parsed as `call_xxx` instead of `function.name`. Fixed by handling `tool_calls` explicitly.
 2. `Controller/AssistantController.cs` owned chat state, context normalization, prompt flow, tool catalog composition, pipeline execution, VBA patching and transcript formatting. Split into controller orchestration, chat/session bridge methods, context bridge methods, `ContextService`, `ChatCompletionService`, `ToolCatalogService`, `AgentTranscript`, `OfficeToolExecutor`, `PipelineToolExecutor`, `VbaToolExecutor`, and `PromptMessageBuilder`.
 3. The WebView UI no longer has one super-file: bridge/state, settings, tools, VBA, context and chat flows are split across static `web/js/app-*.js` files. `app.js` remains boot plus shared rendering helpers.
 4. Bridge payloads and common controller responses now use DTO/model contracts. JSON serialization for WebView responses is isolated in `AssistantWebBridge`.

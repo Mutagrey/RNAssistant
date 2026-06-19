@@ -5,7 +5,7 @@ using Newtonsoft.Json;
 using Word = Microsoft.Office.Interop.Word;
 using RNAssistant.Core.Models;
 using RNAssistant.Office;
-using RNAssistant.Office.Skills;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.WordAddIn
 {
@@ -70,7 +70,7 @@ namespace RNAssistant.WordAddIn
             }
         }
 
-        public IEnumerable<SkillDefinition> GetBuiltInSkills()
+        public IEnumerable<ToolDefinition> GetBuiltInTools()
         {
             return new[]
             {
@@ -160,25 +160,25 @@ namespace RNAssistant.WordAddIn
             };
         }
 
-        public SkillResult ExecuteSkill(SkillCommand command)
+        public ToolResult ExecuteTool(ToolCommand command)
         {
             try
             {
-                switch (command.SkillId)
+                switch (command.ToolId)
                 {
                     case "word.read_document":
                         return ReadDocument(command);
                     case "word.read_selection":
-                        return SkillResult.Ok("Selection read.", JsonConvert.SerializeObject(new { text = SelectionText() }));
+                        return ToolResult.Ok("Selection read.", JsonConvert.SerializeObject(new { text = SelectionText() }));
                     case "word.insert_text":
-                        _application.Selection.TypeText(SkillArgumentReader.String(command.Arguments, "text", string.Empty));
-                        return SkillResult.Ok("Text inserted.");
+                        _application.Selection.TypeText(ToolArgumentReader.String(command.Arguments, "text", string.Empty));
+                        return ToolResult.Ok("Text inserted.");
                     case "word.replace_selection":
-                        _application.Selection.Range.Text = SkillArgumentReader.String(command.Arguments, "text", string.Empty);
-                        return SkillResult.Ok("Selection replaced.");
+                        _application.Selection.Range.Text = ToolArgumentReader.String(command.Arguments, "text", string.Empty);
+                        return ToolResult.Ok("Selection replaced.");
                     case "word.add_comment":
-                        _application.ActiveDocument.Comments.Add(_application.Selection.Range, SkillArgumentReader.String(command.Arguments, "text", string.Empty));
-                        return SkillResult.Ok("Comment added.");
+                        _application.ActiveDocument.Comments.Add(_application.Selection.Range, ToolArgumentReader.String(command.Arguments, "text", string.Empty));
+                        return ToolResult.Ok("Comment added.");
                     case "word.vba_read_project":
                         return ReadVbaProject(command);
                     case "word.vba_read_module":
@@ -190,65 +190,65 @@ namespace RNAssistant.WordAddIn
                     case "word.run_macro":
                         return RunMacro(command);
                     default:
-                        return SkillResult.Fail("Unsupported Word skill: " + command.SkillId);
+                        return ToolResult.Fail("Unsupported Word tool: " + command.ToolId);
                 }
             }
             catch (Exception ex)
             {
-                return SkillResult.Fail(ex.Message);
+                return ToolResult.Fail(ex.Message);
             }
         }
 
-        private SkillResult ReadDocument(SkillCommand command)
+        private ToolResult ReadDocument(ToolCommand command)
         {
-            var maxChars = SkillArgumentReader.Int32(command.Arguments, "maxChars", 12000);
+            var maxChars = ToolArgumentReader.Int32(command.Arguments, "maxChars", 12000);
             var doc = RequireDocument();
-            return SkillResult.Ok("Document read.", JsonConvert.SerializeObject(new { text = Trim(doc.Range().Text, maxChars) }));
+            return ToolResult.Ok("Document read.", JsonConvert.SerializeObject(new { text = Trim(doc.Range().Text, maxChars) }));
         }
 
-        private SkillResult ReadVbaProject(SkillCommand command)
+        private ToolResult ReadVbaProject(ToolCommand command)
         {
             var doc = RequireDocument();
-            return VbaProjectSupport.ReadProject(doc, doc.Name, SkillArgumentReader.Int32(command.Arguments, "maxChars", 30000));
+            return VbaProjectSupport.ReadProject(doc, doc.Name, ToolArgumentReader.Int32(command.Arguments, "maxChars", 30000));
         }
 
-        private SkillResult ReadVbaModule(SkillCommand command)
+        private ToolResult ReadVbaModule(ToolCommand command)
         {
             return VbaProjectSupport.ReadModule(
                 RequireDocument(),
-                SkillArgumentReader.String(command.Arguments, "moduleName", string.Empty),
-                SkillArgumentReader.Int32(command.Arguments, "maxChars", 30000));
+                ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
+                ToolArgumentReader.Int32(command.Arguments, "maxChars", 30000));
         }
 
-        private SkillResult ReplaceVbaModule(SkillCommand command)
+        private ToolResult ReplaceVbaModule(ToolCommand command)
         {
             return VbaProjectSupport.ReplaceModule(
                 RequireDocument(),
-                SkillArgumentReader.String(command.Arguments, "moduleName", string.Empty),
-                SkillArgumentReader.String(command.Arguments, "code", string.Empty),
-                SkillArgumentReader.Boolean(command.Arguments, "createIfMissing", true));
+                ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
+                ToolArgumentReader.String(command.Arguments, "code", string.Empty),
+                ToolArgumentReader.Boolean(command.Arguments, "createIfMissing", true));
         }
 
-        private SkillResult InsertVbaModule(SkillCommand command)
+        private ToolResult InsertVbaModule(ToolCommand command)
         {
-            var moduleName = SkillArgumentReader.String(command.Arguments, "moduleName", "RNAssistantModule");
-            var code = SkillArgumentReader.String(command.Arguments, "code", string.Empty);
+            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", "RNAssistantModule");
+            var code = ToolArgumentReader.String(command.Arguments, "code", string.Empty);
             try
             {
                 return VbaProjectSupport.InsertModule(RequireDocument(), moduleName, code);
             }
             catch (Exception ex)
             {
-                return SkillResult.Ok("VBA insert was blocked. Enable 'Trust access to the VBA project object model' or copy the code manually. " + ex.Message, JsonConvert.SerializeObject(new { moduleName = moduleName, code = code }));
+                return ToolResult.Ok("VBA insert was blocked. Enable 'Trust access to the VBA project object model' or copy the code manually. " + ex.Message, JsonConvert.SerializeObject(new { moduleName = moduleName, code = code }));
             }
         }
 
-        private SkillResult RunMacro(SkillCommand command)
+        private ToolResult RunMacro(ToolCommand command)
         {
-            var macroName = SkillArgumentReader.String(command.Arguments, "macroName", string.Empty);
+            var macroName = ToolArgumentReader.String(command.Arguments, "macroName", string.Empty);
             if (string.IsNullOrWhiteSpace(macroName))
             {
-                return SkillResult.Fail("No macroName provided.");
+                return ToolResult.Fail("No macroName provided.");
             }
 
             _application.GetType().InvokeMember(
@@ -257,7 +257,7 @@ namespace RNAssistant.WordAddIn
                 null,
                 _application,
                 new object[] { macroName });
-            return SkillResult.Ok("Macro ran: " + macroName);
+            return ToolResult.Ok("Macro ran: " + macroName);
         }
 
         private string SelectionText()
@@ -288,9 +288,9 @@ namespace RNAssistant.WordAddIn
             return doc;
         }
 
-        private static SkillDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)
+        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)
         {
-            return new SkillDefinition { Id = id, Host = "Word", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun };
+            return new ToolDefinition { Id = id, Host = "Word", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun };
         }
 
         private static string Trim(string text, int maxChars)

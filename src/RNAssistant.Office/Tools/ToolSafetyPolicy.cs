@@ -4,9 +4,9 @@ namespace RNAssistant.Office.Tools
 {
     internal static class ToolSafetyPolicy
     {
-        public static bool RequiresConfirmation(SkillDefinition tool, AppSettings settings, bool dryRun, bool manualRun)
+        public static bool RequiresConfirmation(ToolDefinition tool, AppSettings settings, bool dryRun, bool manualRun)
         {
-            if (dryRun || manualRun || tool == null || !tool.MutatesDocument)
+            if (dryRun || manualRun || tool == null)
             {
                 return false;
             }
@@ -17,10 +17,20 @@ namespace RNAssistant.Office.Tools
                 return false;
             }
 
+            if (tool.RequiresConfirmation)
+            {
+                return true;
+            }
+
+            if (!tool.MutatesDocument)
+            {
+                return false;
+            }
+
             return !CanAgentRunMutation(tool, effectiveSettings);
         }
 
-        public static bool CanAgentRunMutation(SkillDefinition tool, AppSettings settings)
+        public static bool CanAgentRunMutation(ToolDefinition tool, AppSettings settings)
         {
             return settings != null &&
                 settings.AgentModeEnabled != false &&

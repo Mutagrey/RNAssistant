@@ -14,7 +14,7 @@ namespace RNAssistant.Office
         string GetVbaSnapshot(int maxChars);
         void PrepareForContextCapture();
         ContextNote CaptureSelectionContext(string mode, int maxChars);
-        IEnumerable<SkillDefinition> GetBuiltInSkills();
-        SkillResult ExecuteSkill(SkillCommand command);
+        IEnumerable<ToolDefinition> GetBuiltInTools();
+        ToolResult ExecuteTool(ToolCommand command);
     }
 }

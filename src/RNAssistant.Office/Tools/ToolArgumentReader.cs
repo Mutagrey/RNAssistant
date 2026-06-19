@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace RNAssistant.Office.Skills
+namespace RNAssistant.Office.Tools
 {
-    public static class SkillArgumentReader
+    public static class ToolArgumentReader
     {
         public static string String(IDictionary<string, object> args, string name, string fallback = "")
         {

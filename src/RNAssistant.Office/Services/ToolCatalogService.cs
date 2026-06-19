@@ -20,10 +20,10 @@ namespace RNAssistant.Office.Services
             _toolStore = toolStore;
         }
 
-        public List<SkillDefinition> GetVisibleTools()
+        public List<ToolDefinition> GetVisibleTools()
         {
-            var result = new Dictionary<string, SkillDefinition>(StringComparer.OrdinalIgnoreCase);
-            foreach (var skill in _adapter.GetBuiltInSkills() ?? new SkillDefinition[0])
+            var result = new Dictionary<string, ToolDefinition>(StringComparer.OrdinalIgnoreCase);
+            foreach (var skill in _adapter.GetBuiltInTools() ?? new ToolDefinition[0])
             {
                 result[skill.Id] = skill;
             }

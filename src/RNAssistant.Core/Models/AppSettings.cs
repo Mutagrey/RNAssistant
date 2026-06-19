@@ -27,7 +27,7 @@ namespace RNAssistant.Core.Models
         {
             BaseUrl = "https://api.openai.com";
             Model = "gpt-4o-mini";
-            SystemPrompt = "You are an Office AI assistant. Use provided tools only through rnassistant-skill JSON blocks when document actions are required.";
+            SystemPrompt = "You are an Office AI assistant. Use provided tools only through rnassistant-agent JSON blocks when document actions are required.";
             AgentPrompt = "For Office actions, act as an agent: decompose the task into small executable steps, use available tools, return parseable rnassistant-agent JSON, and after tool results summarize what was done. Use VBA only for agent-created executable code or VBA-specific tasks.";
             MaxTokens = 2048;
             RequestTimeoutSeconds = 300;

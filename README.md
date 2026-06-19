@@ -107,11 +107,12 @@ Runtime data is stored under:
 
 - `settings.json` - API base URL, model, headers, token limits, prompt.
 - `secret.bin` - API key protected with DPAPI CurrentUser.
-- `tools` - central editable tool library.
+- `tools` - central editable executable tool library.
+- `skills` - markdown guidance files used by the agent when choosing an approach.
 - `chats` - per-document chat session folders; each chat stores its own context attachments.
 - `contexts` - legacy context folder; current runtime does not migrate old context files.
 
-Settings has `Clear Chats/Data` for development resets. It clears chats, chat context, VBA backups and WebView user data, while keeping settings, saved API key and custom tools.
+Settings has `Clear Chats/Data` for development resets. It clears chats, chat context, VBA backups and WebView user data, while keeping settings, saved API key and custom tools and skills.
 
 Word, Excel and PowerPoint documents are identified by a custom document property named `RNAssistantDocumentId` when available, so chat sessions and context survive file rename/move. If the property cannot be read or written, RNAssistant falls back to the document path.
 
@@ -122,8 +123,8 @@ The API is OpenAI-compatible chat completions: `/v1/chat/completions`.
 Native tool calling is not required. The model is prompted to return local actions as:
 
 ````
-```rnassistant-skill
-{"skillId":"excel.read_range","arguments":{"address":"A1:D20"}}
+```rnassistant-agent
+{"toolId":"excel.read_range","arguments":{"address":"A1:D20"}}
 ```
 ````
 
@@ -134,13 +135,13 @@ Agent responses may also use:
 ````
 ```rnassistant-agent
 [
-  {"skillId":"excel.read_range","arguments":{"address":"A1:D20"}},
-  {"skillId":"excel.add_chart","arguments":{"sourceRange":"A1:B20","chartType":"line","title":"Sales"}}
+  {"toolId":"excel.read_range","arguments":{"address":"A1:D20"}},
+  {"toolId":"excel.add_chart","arguments":{"sourceRange":"A1:B20","chartType":"line","title":"Sales"}}
 ]
 ```
 ````
 
-Pure JSON arrays/objects with `skillId`, `toolId`, `tool`, `action`, or `name` are accepted too. Native API `tool_calls` are not required; if an endpoint returns them anyway, RNAssistant converts them into the same local text protocol before parsing. In Agent mode, built-in Office tools can run automatically; custom tools marked `requiresConfirmation` and VBA mutation tools still require confirmation unless `Auto-confirm tool actions` is enabled.
+Pure JSON arrays/objects with `toolId`, `tool`, `action`, or `name` (`skillId` remains a legacy alias) are accepted too. Native API `tool_calls` are not required; if an endpoint returns them anyway, RNAssistant converts them into the same local text protocol before parsing. In Agent mode, built-in Office tools can run automatically; custom tools marked `requiresConfirmation` and VBA mutation tools still require confirmation unless `Auto-confirm tool actions` is enabled. Waiting agent steps carry typed statuses such as `waiting_confirmation` or `skipped_auto_run`; the task pane can confirm or cancel the exact pending command.
 
 `System prompt` in Settings is treated as additional custom instruction. The fixed RNAssistant tool protocol is always appended as mandatory runtime protocol so custom text cannot disable parsing or tool execution rules.
 
@@ -180,12 +181,20 @@ Pipeline tools use:
 }
 ```
 
-Supported placeholders are `{{args.name}}`, `{{steps.stepId.message}}`, `{{steps.stepId.dataJson}}`, and `{{steps.stepId.success}}`.
+Each pipeline step must set `toolId`; legacy `skillId` is accepted as an input alias only. `id` is only the step label used for placeholders. Supported placeholders are `{{args.name}}`, `{{steps.stepId.message}}`, `{{steps.stepId.dataJson}}`, and `{{steps.stepId.success}}`.
 
 The Tools tab can run a selected tool with ad hoc JSON arguments. `Dry Run` resolves the planned calls without changing the Office document. `Run` is treated as explicit user confirmation.
 
 For Excel, Word, and PowerPoint, `executor: "vba"` inserts `code.vba` through the current host `insert_vba_module`; if the run arguments include `macroName`, it then calls the current host `run_macro`.
 Agent-generated executable code should be VBA for the current Office host.
+
+## Skill Library
+
+Markdown skills are stored under:
+
+`%AppData%\RNAssistant\skills`
+
+Each custom skill is a `SKILL.md` guidance file with a simple header (`id`, `host`, `description`, `tags`, `enabled`) plus markdown instructions. Skills are not executable actions; they are selected into the prompt to help the agent choose the right approach and tools. The Skills tab can create, edit, clone, delete, and add a skill definition to chat context. Agent mode can also use `common.skills_list`, `common.skills_read`, `common.skills_save`, and `common.skills_delete`; save/delete requires confirmation unless auto-confirm is enabled.
 
 ## VBA Workflow
 
@@ -216,7 +225,7 @@ In chat, ask for the desired Office action in normal language. For example:
 
 `Создай новый лист Sales Demo, сгенерируй таблицу продаж по месяцам и построй линейный график.`
 
-The model can respond with one `rnassistant-skill` block containing an ordered JSON array, for example `excel.add_sheet`, `excel.write_table`, and `excel.add_chart`. If `Auto-run tool calls from LLM` is enabled, the add-in executes those tools in order. If `Auto-retry failed tool calls` is enabled, one failed tool call is sent back to the LLM once so it can return a corrected tool call.
+The model can respond with one `rnassistant-agent` block containing ordered `toolId` calls, for example `excel.add_sheet`, `excel.write_table`, and `excel.add_chart`. If `Auto-run tool calls from LLM` is enabled, the add-in executes those tools in order. If `Auto-retry failed tool calls` is enabled, one failed tool call is sent back to the LLM once so it can return a corrected tool call.
 
 Use the Tools tab to create or edit reusable tools:
 

@@ -12,20 +12,22 @@ namespace RNAssistant.Office.Tools
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly PipelineToolExecutor _pipelineExecutor;
         private readonly VbaToolExecutor _vbaExecutor;
+        private readonly SkillToolExecutor _skillExecutor;
 
-        public OfficeToolExecutor(IOfficeApplicationAdapter adapter, VbaBackupStore vbaBackupStore)
+        public OfficeToolExecutor(IOfficeApplicationAdapter adapter, VbaBackupStore vbaBackupStore, SkillStore skillStore)
         {
             _adapter = adapter;
             _pipelineExecutor = new PipelineToolExecutor();
             _vbaExecutor = new VbaToolExecutor(adapter, vbaBackupStore);
+            _skillExecutor = new SkillToolExecutor(adapter, skillStore);
         }
 
-        public IEnumerable<SkillDefinition> GetControllerTools()
+        public IEnumerable<ToolDefinition> GetControllerTools()
         {
-            return _vbaExecutor.GetControllerTools();
+            return _vbaExecutor.GetControllerTools().Concat(_skillExecutor.GetControllerTools());
         }
 
-        public SkillResult Execute(SkillCommand command, IReadOnlyList<SkillDefinition> skills, AppSettings settings, bool dryRun, bool manualRun)
+        public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, bool dryRun, bool manualRun)
         {
             return ExecuteCommand(command, skills, settings, 0, dryRun, manualRun);
         }
@@ -35,35 +37,35 @@ namespace RNAssistant.Office.Tools
             return _vbaExecutor.ToolId(suffix);
         }
 
-        private SkillResult ExecuteCommand(SkillCommand command, IReadOnlyList<SkillDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun)
+        private ToolResult ExecuteCommand(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun)
         {
             settings = settings ?? new AppSettings();
-            if (command == null || string.IsNullOrWhiteSpace(command.SkillId))
+            if (command == null || string.IsNullOrWhiteSpace(command.ToolId))
             {
-                return SkillResult.Fail("Tool command is empty.");
+                return ToolResult.Fail("Tool command is empty.");
             }
 
             if (depth > 8)
             {
-                return SkillResult.Fail("Pipeline nesting limit exceeded.");
+                return ToolResult.Fail("Pipeline nesting limit exceeded.");
             }
 
-            var tool = FindEnabledTool(skills, command.SkillId) ??
-                FindEnabledTool(_adapter.GetBuiltInSkills(), command.SkillId);
+            var tool = FindEnabledTool(skills, command.ToolId) ??
+                FindEnabledTool(_adapter.GetBuiltInTools(), command.ToolId);
             if (tool == null)
             {
-                tool = _vbaExecutor.GetControllerTool(command.SkillId);
+                tool = _vbaExecutor.GetControllerTool(command.ToolId) ?? _skillExecutor.GetControllerTool(command.ToolId);
             }
             var customTool = tool != null && !tool.BuiltIn ? tool : null;
 
             if (ToolSafetyPolicy.RequiresConfirmation(tool, settings, dryRun, manualRun))
             {
-                return SkillResult.Fail("Tool requires confirmation before execution: " + command.SkillId);
+                return ToolResult.WaitingConfirmation("Tool requires confirmation before execution: " + command.ToolId);
             }
 
             if (customTool != null && customTool.RequiresConfirmation && !settings.AutoConfirmToolActions && !dryRun && !manualRun)
             {
-                return SkillResult.Fail("Tool requires confirmation before execution: " + customTool.Id);
+                return ToolResult.WaitingConfirmation("Tool requires confirmation before execution: " + customTool.Id);
             }
 
             if (customTool != null && string.Equals(customTool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
@@ -78,30 +80,35 @@ namespace RNAssistant.Office.Tools
 
             if (customTool != null)
             {
-                return SkillResult.Fail("Tool executor is not runnable yet: " + customTool.Executor);
+                return ToolResult.Fail("Tool executor is not runnable yet: " + customTool.Executor);
             }
 
-            if (_vbaExecutor.IsControllerTool(command.SkillId))
+            if (_vbaExecutor.IsControllerTool(command.ToolId))
             {
                 return _vbaExecutor.ExecuteControllerTool(command, skills, settings, dryRun, manualRun, ExecuteCommand);
             }
 
-            if (dryRun)
+            if (_skillExecutor.IsControllerTool(command.ToolId))
             {
-                return SkillResult.Ok("Dry run: would execute " + command.SkillId, JsonConvert.SerializeObject(command.Arguments));
+                return _skillExecutor.ExecuteControllerTool(command, settings, dryRun, manualRun);
             }
 
-            if (string.Equals(command.SkillId, VbaToolId("vba_replace_module"), StringComparison.OrdinalIgnoreCase))
+            if (dryRun)
+            {
+                return ToolResult.Ok("Dry run: would execute " + command.ToolId, JsonConvert.SerializeObject(command.Arguments));
+            }
+
+            if (string.Equals(command.ToolId, VbaToolId("vba_replace_module"), StringComparison.OrdinalIgnoreCase))
             {
                 _vbaExecutor.BackupModuleBeforeReplace(command, settings);
             }
 
-            return _adapter.ExecuteSkill(command);
+            return _adapter.ExecuteTool(command);
         }
 
-        private static SkillDefinition FindEnabledTool(IEnumerable<SkillDefinition> tools, string toolId)
+        private static ToolDefinition FindEnabledTool(IEnumerable<ToolDefinition> tools, string toolId)
         {
-            return (tools ?? new SkillDefinition[0]).FirstOrDefault(s =>
+            return (tools ?? new ToolDefinition[0]).FirstOrDefault(s =>
                 s.Enabled &&
                 string.Equals(s.Id, toolId, StringComparison.OrdinalIgnoreCase));
         }

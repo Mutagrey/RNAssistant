@@ -19,13 +19,16 @@ namespace RNAssistant.Office
         private readonly SettingsService _settingsService;
         private readonly ChatStore _chatStore;
         private readonly ToolStore _toolStore;
+        private readonly SkillStore _skillStore;
         private readonly VbaBackupStore _vbaBackupStore;
         private readonly OfficeToolExecutor _toolExecutor;
         private readonly ToolCatalogService _toolCatalog;
+        private readonly SkillCatalogService _skillCatalog;
         private readonly ChatCompletionService _chatCompletionService;
         private readonly ContextService _contextService;
         private readonly LlmClient _llmClient;
         private readonly object _syncRoot;
+        private readonly Dictionary<string, PendingAgentTool> _pendingAgentTools;
         private string _queuedQuickAction;
         private string _activeSessionId;
         private string _activeHost;
@@ -39,13 +42,16 @@ namespace RNAssistant.Office
             _settingsService = new SettingsService(_paths);
             _chatStore = new ChatStore(_paths);
             _toolStore = new ToolStore(_paths);
+            _skillStore = new SkillStore(_paths);
             _vbaBackupStore = new VbaBackupStore(_paths);
-            _toolExecutor = new OfficeToolExecutor(_adapter, _vbaBackupStore);
+            _toolExecutor = new OfficeToolExecutor(_adapter, _vbaBackupStore, _skillStore);
             _toolCatalog = new ToolCatalogService(_adapter, _toolExecutor, _toolStore);
+            _skillCatalog = new SkillCatalogService(_adapter, _skillStore);
             _llmClient = new LlmClient(() => _settingsService.LoadApiKey());
             _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, _llmClient.CompleteAsync);
             _contextService = new ContextService(_adapter);
             _syncRoot = new object();
+            _pendingAgentTools = new Dictionary<string, PendingAgentTool>(StringComparer.OrdinalIgnoreCase);
         }
 
         public string HostName { get { return _adapter.HostName; } }
@@ -68,6 +74,8 @@ namespace RNAssistant.Office
                 HasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey()),
                 Tools = _toolCatalog.GetVisibleTools(),
                 ToolsPath = _paths.ToolsDirectory,
+                Skills = _skillCatalog.GetVisibleSkills(),
+                SkillsPath = _paths.SkillsDirectory,
                 Context = context,
                 Messages = session.Messages,
                 ContextUsage = ContextUsageEstimator.FromSession(session, settings),
@@ -81,19 +89,20 @@ namespace RNAssistant.Office
             {
                 var emptySession = LoadSession(chatId);
                 var emptyId = ChatStore.GetSessionId(emptySession);
-                return new SendChatResponse { Message = string.Empty, SkillResults = new object[0], ActiveChatId = emptyId, ActiveChatModel = emptySession.Model, Chats = GetChatSummaries(emptyId), Context = LoadContext(emptySession), Messages = emptySession.Messages, ContextUsage = ContextUsageEstimator.FromSession(emptySession, _settingsService.Load()) };
+                return new SendChatResponse { Message = string.Empty, ToolResults = new object[0], ActiveChatId = emptyId, ActiveChatModel = emptySession.Model, Chats = GetChatSummaries(emptyId), Context = LoadContext(emptySession), Messages = emptySession.Messages, ContextUsage = ContextUsageEstimator.FromSession(emptySession, _settingsService.Load()) };
             }
 
             var settings = _settingsService.Load();
             var session = LoadSession(chatId);
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
             var documentContext = LoadContext(session);
-            var completion = await _chatCompletionService.ExecuteAsync(text, session, documentContext, settings, tools, progress);
+            var skills = _skillCatalog.SelectRelevantSkills(text, documentContext, 5);
+            var completion = await _chatCompletionService.ExecuteAsync(text, session, documentContext, settings, tools, progress, RegisterPendingAgentTool, skills);
 
             ReportProgress(progress, "saving", "Сохраняю историю...");
             _chatStore.Save(session);
             var activeId = ChatStore.GetSessionId(session);
-            return new SendChatResponse { Message = completion.AssistantText, SkillResults = completion.SkillResults, ActiveChatId = activeId, ActiveChatModel = session.Model, Chats = GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings) };
+            return new SendChatResponse { Message = completion.AssistantText, ToolResults = completion.ToolResults, ActiveChatId = activeId, ActiveChatModel = session.Model, Chats = GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings) };
         }
 
         public SettingsResponse GetSettings()
@@ -137,25 +146,40 @@ namespace RNAssistant.Office
             _activeHost = null;
             _activeDocumentKey = null;
             _activeRuntimeDocumentKey = null;
+            lock (_syncRoot)
+            {
+                _pendingAgentTools.Clear();
+            }
             return Initialize();
         }
 
-        public IReadOnlyList<SkillDefinition> GetTools()
+        public IReadOnlyList<ToolDefinition> GetTools()
         {
             return _toolCatalog.GetVisibleTools();
         }
 
-        public IReadOnlyList<SkillDefinition> SaveTools(IEnumerable<SkillDefinition> tools)
+        public IReadOnlyList<ToolDefinition> SaveTools(IEnumerable<ToolDefinition> tools)
         {
-            _toolStore.Save((tools ?? new SkillDefinition[0]).Where(s => !s.BuiltIn), _adapter.HostName);
+            _toolStore.Save((tools ?? new ToolDefinition[0]).Where(s => !s.BuiltIn), _adapter.HostName);
             return GetTools();
         }
 
-        public SkillResult RunTool(string toolId, IDictionary<string, object> arguments, bool dryRun, Action<string, string> progress = null)
+        public IReadOnlyList<SkillDefinition> GetSkills()
+        {
+            return _skillCatalog.GetVisibleSkills();
+        }
+
+        public IReadOnlyList<SkillDefinition> SaveSkills(IEnumerable<SkillDefinition> skills)
+        {
+            _skillStore.Save((skills ?? new SkillDefinition[0]).Where(s => !s.BuiltIn), _adapter.HostName);
+            return GetSkills();
+        }
+
+        public ToolResult RunTool(string toolId, IDictionary<string, object> arguments, bool dryRun, Action<string, string> progress = null)
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-            var command = new SkillCommand { SkillId = toolId };
+            var command = new ToolCommand { ToolId = toolId };
             foreach (var pair in arguments ?? new Dictionary<string, object>())
             {
                 command.Arguments[pair.Key] = pair.Value;
@@ -169,7 +193,7 @@ namespace RNAssistant.Office
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-            var command = new SkillCommand { SkillId = _toolExecutor.VbaToolId("vba_read_project") };
+            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_read_project") };
             command.Arguments["maxChars"] = maxChars <= 0 ? settings.VbaContextCharLimit : maxChars;
             var result = _toolExecutor.Execute(command, tools, settings, false, true);
             return new VbaProjectResponse
@@ -179,24 +203,24 @@ namespace RNAssistant.Office
             };
         }
 
-        public SkillResult SaveVbaModule(string moduleName, string code)
+        public ToolResult SaveVbaModule(string moduleName, string code)
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-            var command = new SkillCommand { SkillId = _toolExecutor.VbaToolId("vba_replace_module") };
+            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_replace_module") };
             command.Arguments["moduleName"] = moduleName;
             command.Arguments["code"] = code;
             command.Arguments["createIfMissing"] = "true";
             return _toolExecutor.Execute(command, tools, settings, false, true);
         }
 
-        public SkillResult RestoreVbaBackup(string backupId, string moduleName)
+        public ToolResult RestoreVbaBackup(string backupId, string moduleName)
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-            return _toolExecutor.Execute(new SkillCommand
+            return _toolExecutor.Execute(new ToolCommand
             {
-                SkillId = _toolExecutor.VbaToolId("vba_restore_backup"),
+                ToolId = _toolExecutor.VbaToolId("vba_restore_backup"),
                 Arguments =
                 {
                     ["backupId"] = backupId ?? string.Empty,

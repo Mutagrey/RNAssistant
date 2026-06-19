@@ -18,9 +18,9 @@ namespace RNAssistant.Core.Storage
             _json = new JsonFileStore();
         }
 
-        public List<SkillDefinition> Load()
+        public List<ToolDefinition> Load()
         {
-            var result = new List<SkillDefinition>();
+            var result = new List<ToolDefinition>();
             if (!Directory.Exists(_paths.ToolsDirectory))
             {
                 return result;
@@ -28,7 +28,7 @@ namespace RNAssistant.Core.Storage
 
             foreach (var file in Directory.GetFiles(_paths.ToolsDirectory, "tool.json", SearchOption.AllDirectories))
             {
-                var tool = _json.Load(file, (SkillDefinition)null);
+                var tool = _json.Load(file, (ToolDefinition)null);
                 if (tool == null || string.IsNullOrWhiteSpace(tool.Id))
                 {
                     continue;
@@ -48,14 +48,14 @@ namespace RNAssistant.Core.Storage
             return result.OrderBy(t => t.Host).ThenBy(t => t.Id).ToList();
         }
 
-        public void Save(IEnumerable<SkillDefinition> tools)
+        public void Save(IEnumerable<ToolDefinition> tools)
         {
             SaveAll(tools);
         }
 
-        public void Save(IEnumerable<SkillDefinition> tools, string host)
+        public void Save(IEnumerable<ToolDefinition> tools, string host)
         {
-            var incoming = new List<SkillDefinition>((tools ?? new SkillDefinition[0])
+            var incoming = new List<ToolDefinition>((tools ?? new ToolDefinition[0])
                 .Where(t => t != null && !t.BuiltIn && !string.IsNullOrWhiteSpace(t.Id)));
             var keep = Load().Where(t =>
                 !string.Equals(t.Host, "Common", StringComparison.OrdinalIgnoreCase) &&
@@ -64,7 +64,7 @@ namespace RNAssistant.Core.Storage
             SaveAll(keep.Concat(incoming));
         }
 
-        private void SaveAll(IEnumerable<SkillDefinition> tools)
+        private void SaveAll(IEnumerable<ToolDefinition> tools)
         {
             if (Directory.Exists(_paths.ToolsDirectory))
             {
@@ -72,7 +72,7 @@ namespace RNAssistant.Core.Storage
             }
 
             Directory.CreateDirectory(_paths.ToolsDirectory);
-            foreach (var tool in tools ?? new SkillDefinition[0])
+            foreach (var tool in tools ?? new ToolDefinition[0])
             {
                 if (tool == null || tool.BuiltIn || string.IsNullOrWhiteSpace(tool.Id))
                 {
@@ -83,12 +83,12 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private void SaveTool(SkillDefinition tool)
+        private void SaveTool(ToolDefinition tool)
         {
             var directory = Path.Combine(_paths.ToolsDirectory, HostFolder(tool.Host), ToolFolder(tool.Id));
             Directory.CreateDirectory(directory);
 
-            var metadata = new SkillDefinition
+            var metadata = new ToolDefinition
             {
                 Id = tool.Id,
                 Host = string.IsNullOrWhiteSpace(tool.Host) ? "Common" : tool.Host,

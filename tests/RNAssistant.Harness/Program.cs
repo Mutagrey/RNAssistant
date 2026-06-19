@@ -7,7 +7,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Skills;
+using RNAssistant.Core.Tools;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office;
 using RNAssistant.Office.Services;
@@ -48,6 +48,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "pipeline: executes fake adapter steps", Run = PipelineExecutesFakeAdapterSteps },
                 new HarnessTest { Name = "pipeline: resolves step output placeholders", Run = PipelineResolvesStepOutputPlaceholders },
                 new HarnessTest { Name = "pipeline: stops after failed step", Run = PipelineStopsAfterFailedStep },
+                new HarnessTest { Name = "pipeline: rejects missing step tool id", Run = PipelineRejectsMissingStepToolId },
                 new HarnessTest { Name = "pipeline: rejects invalid definitions", Run = PipelineRejectsInvalidDefinitions },
                 new HarnessTest { Name = "pipeline: enforces nesting limit", Run = PipelineEnforcesNestingLimit },
                 new HarnessTest { Name = "pipeline: custom tool needs confirmation", Run = CustomPipelineNeedsConfirmation },
@@ -57,6 +58,10 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "tools: unknown and disabled tools fail", Run = UnknownAndDisabledToolsFail },
                 new HarnessTest { Name = "tools: safety metadata gates mutations", Run = ToolSafetyMetadataGatesMutations },
                 new HarnessTest { Name = "tools: confirmation matrix covers dry and manual runs", Run = ConfirmationMatrixCoversDryAndManualRuns },
+                new HarnessTest { Name = "skills: store saves markdown skills", Run = SkillStoreSavesMarkdownSkills },
+                new HarnessTest { Name = "skills: catalog selects relevant skills", Run = SkillCatalogSelectsRelevantSkills },
+                new HarnessTest { Name = "skills: prompt separates skills from tools", Run = PromptSeparatesSkillsFromTools },
+                new HarnessTest { Name = "skills: agent can save skills with confirmation", Run = AgentCanSaveSkillsWithConfirmation },
                 new HarnessTest { Name = "vba: replace text backs up module", Run = VbaReplaceTextBacksUpModule },
                 new HarnessTest { Name = "vba: apply patch targets named module", Run = VbaApplyPatchTargetsNamedModule },
                 new HarnessTest { Name = "prompt: trims oldest history", Run = PromptBuilderTrimsOldestHistory },
@@ -67,6 +72,9 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "chat: prose action forces tool follow-up", Run = ChatProseActionForcesToolFollowUp },
                 new HarnessTest { Name = "chat: malformed action response forces repair", Run = ChatMalformedActionResponseForcesRepair },
                 new HarnessTest { Name = "chat: failed tool retries corrected call", Run = ChatFailedToolRetriesCorrectedCall },
+                new HarnessTest { Name = "chat: retry success continues", Run = ChatRetrySuccessContinuesToFinalAnswer },
+                new HarnessTest { Name = "chat: waiting tool gets pending id", Run = ChatWaitingToolGetsPendingId },
+                new HarnessTest { Name = "chat: max iterations returns summary", Run = ChatMaxIterationsReturnsRuntimeSummary },
                 new HarnessTest { Name = "chat: auto-run disabled records failure", Run = ChatAutoRunDisabledRecordsLocalFailure },
                 new HarnessTest { Name = "chat: malformed tool response stays prose", Run = ChatMalformedToolResponseStaysProse },
                 new HarnessTest { Name = "chat: explicit clone preserves values", Run = ChatCloneServicePreservesValues },
@@ -100,7 +108,7 @@ namespace RNAssistant.Harness
 
         private static void ParsesFencedAgentSteps()
         {
-            var commands = new SkillCommandParser().Parse(
+            var commands = new ToolCommandParser().Parse(
                 "```rnassistant-agent\n" +
                 "{\"steps\":[" +
                 "{\"description\":\"Add sheet\",\"skillId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}," +
@@ -109,64 +117,64 @@ namespace RNAssistant.Harness
                 "\n```");
 
             AssertEqual(2, commands.Count, "command count");
-            AssertEqual("excel.add_sheet", commands[0].SkillId, "first skill id");
+            AssertEqual("excel.add_sheet", commands[0].ToolId, "first tool id");
             AssertEqual("Report", commands[0].Arguments["name"], "first arg");
-            AssertEqual("excel.add_chart", commands[1].SkillId, "second skill id");
+            AssertEqual("excel.add_chart", commands[1].ToolId, "second tool id");
         }
 
         private static void ParsesNativeToolCalls()
         {
-            var commands = new SkillCommandParser().Parse(
+            var commands = new ToolCommandParser().Parse(
                 "```rnassistant-agent\n" +
                 "{\"tool_calls\":[{\"id\":\"call_abc\",\"type\":\"function\",\"function\":{\"name\":\"excel.write_table\",\"arguments\":\"{\\\"sheet\\\":\\\"Data\\\",\\\"startAddress\\\":\\\"A1\\\"}\"}}]}" +
                 "\n```");
 
             AssertEqual(1, commands.Count, "command count");
-            AssertEqual("excel.write_table", commands[0].SkillId, "skill id");
+            AssertEqual("excel.write_table", commands[0].ToolId, "tool id");
             AssertEqual("Data", commands[0].Arguments["sheet"], "sheet arg");
             AssertEqual("A1", commands[0].Arguments["startAddress"], "address arg");
         }
 
         private static void ParsesBareJsonArray()
         {
-            var commands = new SkillCommandParser().Parse(
+            var commands = new ToolCommandParser().Parse(
                 "[" +
                 "{\"tool\":\"word.insert_text\",\"parameters\":{\"text\":\"Hello\"}}," +
                 "{\"action\":\"excel.autofit\",\"input\":{\"sheet\":\"Data\"}}" +
                 "]");
 
             AssertEqual(2, commands.Count, "command count");
-            AssertEqual("word.insert_text", commands[0].SkillId, "first skill id");
+            AssertEqual("word.insert_text", commands[0].ToolId, "first tool id");
             AssertEqual("Hello", commands[0].Arguments["text"], "text arg");
-            AssertEqual("excel.autofit", commands[1].SkillId, "second skill id");
+            AssertEqual("excel.autofit", commands[1].ToolId, "second tool id");
         }
 
         private static void ParsesNoisyEmbeddedJson()
         {
-            var commands = new SkillCommandParser().Parse(
+            var commands = new ToolCommandParser().Parse(
                 "I will handle it. First, here is the plan: " +
                 "{\"steps\":[{\"toolId\":\"powerpoint.add_slide\",\"arguments\":{\"title\":\"Q1\",\"body\":\"Revenue grew\"}}]} " +
                 "Then I will summarize.");
 
             AssertEqual(1, commands.Count, "command count");
-            AssertEqual("powerpoint.add_slide", commands[0].SkillId, "skill id");
+            AssertEqual("powerpoint.add_slide", commands[0].ToolId, "tool id");
             AssertEqual("Q1", commands[0].Arguments["title"], "title arg");
         }
 
         private static void SkipsBadJson()
         {
-            var commands = new SkillCommandParser().Parse("```rnassistant-agent\n{\"steps\":[\n```");
+            var commands = new ToolCommandParser().Parse("```rnassistant-agent\n{\"steps\":[\n```");
             AssertEqual(0, commands.Count, "command count");
         }
 
         private static void RecoversMalformedAgentJson()
         {
-            var result = new SkillCommandParser().ParseWithDiagnostics(
+            var result = new ToolCommandParser().ParseWithDiagnostics(
                 "```rnassistant-agent\n" +
                 "{\"steps\":[{\"skillId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"},}\n```");
 
             AssertEqual(1, result.Commands.Count, "command count");
-            AssertEqual("excel.add_sheet", result.Commands[0].SkillId, "skill id");
+            AssertEqual("excel.add_sheet", result.Commands[0].ToolId, "tool id");
             AssertEqual("Report", result.Commands[0].Arguments["name"], "sheet name");
             AssertTrue(result.HasRecoveredCommands, "recovery diagnostic");
         }
@@ -228,7 +236,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var tools = BuildPipelineTools(false);
-                var command = new SkillCommand { SkillId = "excel.make_report" };
+                var command = new ToolCommand { ToolId = "excel.make_report" };
                 command.Arguments["sheet"] = "Report";
 
                 var result = executor.Execute(command, tools, new AppSettings(), true, false);
@@ -245,16 +253,16 @@ namespace RNAssistant.Harness
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var tools = BuildPipelineTools(false);
-                var command = new SkillCommand { SkillId = "excel.make_report" };
+                var command = new ToolCommand { ToolId = "excel.make_report" };
                 command.Arguments["sheet"] = "Report";
 
                 var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
 
                 AssertTrue(result.Success, "pipeline result");
                 AssertEqual(2, adapter.Executed.Count, "adapter execution count");
-                AssertEqual("excel.add_sheet", adapter.Executed[0].SkillId, "first tool");
+                AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "first tool");
                 AssertEqual("Report", adapter.Executed[0].Arguments["name"], "first arg");
-                AssertEqual("excel.write_table", adapter.Executed[1].SkillId, "second tool");
+                AssertEqual("excel.write_table", adapter.Executed[1].ToolId, "second tool");
                 AssertEqual("Report", adapter.Executed[1].Arguments["sheet"], "second arg");
             });
         }
@@ -264,7 +272,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var tools = BuildStepPlaceholderPipelineTools();
-                var command = new SkillCommand { SkillId = "excel.chain_report" };
+                var command = new ToolCommand { ToolId = "excel.chain_report" };
 
                 var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
 
@@ -279,18 +287,44 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                adapter.QueueResult("excel.write_table", SkillResult.Fail("No table values provided."));
+                adapter.QueueResult("excel.write_table", ToolResult.Fail("No table values provided."));
                 var tools = BuildThreeStepPipelineTools();
-                var command = new SkillCommand { SkillId = "excel.full_report" };
+                var command = new ToolCommand { ToolId = "excel.full_report" };
                 command.Arguments["sheet"] = "Report";
 
                 var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
 
                 AssertTrue(!result.Success, "pipeline should fail");
                 AssertContains(result.Message, "Pipeline step failed: table", "failure message");
+                AssertContains(result.DataJson, "\"id\":\"table\"", "failure data keeps failed step");
                 AssertEqual(2, adapter.Executed.Count, "adapter execution count");
-                AssertEqual("excel.add_sheet", adapter.Executed[0].SkillId, "first tool");
-                AssertEqual("excel.write_table", adapter.Executed[1].SkillId, "failed tool");
+                AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "first tool");
+                AssertEqual("excel.write_table", adapter.Executed[1].ToolId, "failed tool");
+            });
+        }
+
+        private static void PipelineRejectsMissingStepToolId()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var tools = new List<ToolDefinition>
+                {
+                    new ToolDefinition
+                    {
+                        Id = "excel.bad_step",
+                        Host = "Excel",
+                        Name = "Bad step",
+                        Executor = "pipeline",
+                        Enabled = true,
+                        PipelineJson = "{\"steps\":[{\"id\":\"prepare\",\"arguments\":{\"name\":\"Report\"}}]}"
+                    }
+                };
+
+                var result = executor.Execute(new ToolCommand { ToolId = "excel.bad_step" }, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+
+                AssertTrue(!result.Success, "pipeline should fail");
+                AssertContains(result.Message, "Pipeline step has no toolId", "missing tool id message");
+                AssertEqual(0, adapter.Executed.Count, "adapter execution count");
             });
         }
 
@@ -299,7 +333,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var tools = BuildPipelineTools(true);
-                var command = new SkillCommand { SkillId = "excel.make_report" };
+                var command = new ToolCommand { ToolId = "excel.make_report" };
                 command.Arguments["sheet"] = "Report";
 
                 var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = false }, false, false);
@@ -315,7 +349,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var tools = BuildPipelineTools(false);
-                var command = new SkillCommand { SkillId = "excel.make_report" };
+                var command = new ToolCommand { ToolId = "excel.make_report" };
                 command.Arguments["sheet"] = "Report";
 
                 var result = executor.Execute(command, tools, new AppSettings { AgentModeEnabled = false, AutoConfirmToolActions = false }, false, false);
@@ -338,7 +372,7 @@ namespace RNAssistant.Harness
                     CustomTool("Excel", "excel.custom"),
                     CustomTool("Word", "word.hidden")
                 });
-                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths));
+                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths));
                 var catalog = new ToolCatalogService(adapter, executor, toolStore).GetVisibleTools();
 
                 AssertTrue(HasTool(catalog, "excel.add_sheet"), "built-in tool visible");
@@ -389,8 +423,8 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var tools = new List<SkillDefinition>(adapter.GetBuiltInSkills());
-                tools.Add(new SkillDefinition
+                var tools = new List<ToolDefinition>(adapter.GetBuiltInTools());
+                tools.Add(new ToolDefinition
                 {
                     Id = "excel.metadata_mutation",
                     Host = "Excel",
@@ -400,7 +434,7 @@ namespace RNAssistant.Harness
                     MutatesDocument = true,
                     AgentCanRun = true
                 });
-                var command = new SkillCommand { SkillId = "excel.metadata_mutation" };
+                var command = new ToolCommand { ToolId = "excel.metadata_mutation" };
 
                 var blocked = executor.Execute(command, tools, new AppSettings { AgentModeEnabled = false, AutoConfirmToolActions = false }, false, false);
                 AssertTrue(!blocked.Success, "metadata mutation blocked");
@@ -413,6 +447,127 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void SkillStoreSavesMarkdownSkills()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var store = new SkillStore(paths);
+                store.Save(new[]
+                {
+                    new SkillDefinition
+                    {
+                        Id = "common.review_note",
+                        Host = "Common",
+                        Name = "Review note",
+                        Description = "Review short notes.",
+                        Tags = new List<string> { "review", "writing" },
+                        BodyMarkdown = "# Review note\n\nUse this skill for concise review.",
+                        Enabled = true
+                    }
+                });
+
+                var loaded = store.Load();
+
+                AssertEqual(1, loaded.Count, "loaded skill count");
+                AssertEqual("common.review_note", loaded[0].Id, "skill id");
+                AssertContains(loaded[0].BodyMarkdown, "# Review note", "skill markdown");
+                AssertTrue(File.Exists(Path.Combine(loaded[0].StoragePath, "SKILL.md")), "skill md file");
+            });
+        }
+
+        private static void SkillCatalogSelectsRelevantSkills()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var store = new SkillStore(paths);
+                store.Save(new[]
+                {
+                    new SkillDefinition
+                    {
+                        Id = "word.hidden_review",
+                        Host = "Word",
+                        Name = "Hidden review",
+                        Description = "Word-only review.",
+                        Tags = new List<string> { "review" },
+                        BodyMarkdown = "# Hidden",
+                        Enabled = true
+                    }
+                });
+                var catalog = new SkillCatalogService(adapter, store);
+
+                var visible = catalog.GetVisibleSkills();
+                var selected = catalog.SelectRelevantSkills("Create an Excel chart report.", NewContext(adapter), 5);
+
+                AssertTrue(HasSkill(visible, "common.task_planning"), "common built-in visible");
+                AssertTrue(HasSkill(visible, "excel.analysis_reporting"), "excel built-in visible");
+                AssertTrue(!HasSkill(visible, "word.hidden_review"), "other host custom skill hidden");
+                AssertTrue(HasSkill(selected, "excel.analysis_reporting"), "excel analysis selected");
+            });
+        }
+
+        private static void PromptSeparatesSkillsFromTools()
+        {
+            var prompt = new PromptComposer().ComposeSystemPrompt(
+                new AppSettings { AgentModeEnabled = true },
+                "Excel",
+                string.Empty,
+                string.Empty,
+                new[]
+                {
+                    new ToolDefinition
+                    {
+                        Id = "excel.add_sheet",
+                        Host = "Excel",
+                        Description = "Add a worksheet.",
+                        ArgumentSchemaJson = "{\"name\":\"Report\"}",
+                        BuiltIn = true,
+                        Enabled = true
+                    }
+                },
+                new[]
+                {
+                    new SkillDefinition
+                    {
+                        Id = "common.test_skill",
+                        Host = "Common",
+                        Description = "Test guidance.",
+                        BodyMarkdown = "# Test skill\n\nUse guidance only.",
+                        Enabled = true
+                    }
+                },
+                null);
+
+            AssertContains(prompt, "Relevant markdown skills", "skills section");
+            AssertContains(prompt, "Available tools", "tools section");
+            AssertContains(prompt, "\"toolId\":\"tool.id\"", "tool id protocol");
+            AssertContains(prompt, "Skills are guidance documents only", "skill guidance boundary");
+        }
+
+        private static void AgentCanSaveSkillsWithConfirmation()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var command = new ToolCommand { ToolId = "common.skills_save" };
+                command.Arguments["id"] = "common.generated_skill";
+                command.Arguments["host"] = "Common";
+                command.Arguments["name"] = "Generated skill";
+                command.Arguments["description"] = "Generated by agent.";
+                command.Arguments["tags"] = "generated, test";
+                command.Arguments["bodyMarkdown"] = "# Generated skill\n\nUse this skill in tests.";
+
+                var blocked = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = false }, false, false);
+                var saved = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
+                var read = executor.Execute(new ToolCommand { ToolId = "common.skills_read", Arguments = { ["id"] = "common.generated_skill" } }, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings(), false, false);
+
+                AssertTrue(!blocked.Success, "skill save waits for confirmation");
+                AssertContains(blocked.Status, "waiting_confirmation", "blocked status");
+                AssertTrue(saved.Success, "skill save succeeds after confirmation");
+                AssertTrue(read.Success, "saved skill readable");
+                AssertContains(read.DataJson, "Generated skill", "saved skill data");
+            });
+        }
+
         private static void VbaReplaceTextBacksUpModule()
         {
             WithTempPaths(delegate(AppDataPaths paths)
@@ -420,17 +575,17 @@ namespace RNAssistant.Harness
                 var adapter = new FakeOfficeAdapter();
                 adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"old\"\nEnd Sub";
                 var backupStore = new VbaBackupStore(paths);
-                var executor = new OfficeToolExecutor(adapter, backupStore);
-                var command = new SkillCommand { SkillId = executor.VbaToolId("vba_replace_text") };
+                var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
+                var command = new ToolCommand { ToolId = executor.VbaToolId("vba_replace_text") };
                 command.Arguments["moduleName"] = "Module1";
                 command.Arguments["find"] = "\"old\"";
                 command.Arguments["replace"] = "\"new\"";
 
-                var blocked = executor.Execute(command, new List<SkillDefinition>(adapter.GetBuiltInSkills()), new AppSettings { AgentModeEnabled = true, AutoConfirmToolActions = false }, false, false);
+                var blocked = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AgentModeEnabled = true, AutoConfirmToolActions = false }, false, false);
                 AssertTrue(!blocked.Success, "vba replace blocked");
                 AssertEqual(0, adapter.Executed.Count, "blocked vba adapter execution count");
 
-                var result = executor.Execute(command, new List<SkillDefinition>(adapter.GetBuiltInSkills()), new AppSettings { AutoConfirmToolActions = true }, false, false);
+                var result = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
 
                 AssertTrue(result.Success, "replace result");
                 AssertContains(adapter.VbaModuleCode, "\"new\"", "updated module");
@@ -450,12 +605,12 @@ namespace RNAssistant.Harness
                 adapter.SetVbaModule("Module1", "Sub Main()\nDebug.Print \"untouched\"\nEnd Sub", "StdModule");
                 adapter.SetVbaModule("Module2", "Sub Run()\nDebug.Print \"old\"\nEnd Sub", "StdModule");
                 var backupStore = new VbaBackupStore(paths);
-                var executor = new OfficeToolExecutor(adapter, backupStore);
-                var command = new SkillCommand { SkillId = executor.VbaToolId("vba_apply_patch") };
+                var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
+                var command = new ToolCommand { ToolId = executor.VbaToolId("vba_apply_patch") };
                 command.Arguments["moduleName"] = "Module2";
                 command.Arguments["patch"] = "[{\"op\":\"replaceFirst\",\"find\":\"\\\"old\\\"\",\"text\":\"\\\"new\\\"\"}]";
 
-                var result = executor.Execute(command, new List<SkillDefinition>(adapter.GetBuiltInSkills()), new AppSettings { AutoConfirmToolActions = true }, false, false);
+                var result = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
 
                 AssertTrue(result.Success, "patch result");
                 AssertContains(adapter.GetVbaModuleCode("Module2"), "\"new\"", "module2 updated");
@@ -556,7 +711,7 @@ namespace RNAssistant.Harness
                     session,
                     context,
                     new AppSettings { AgentModeEnabled = false, ContextCharLimit = 8000 },
-                    new List<SkillDefinition>(adapter.GetBuiltInSkills()),
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("Done.", result.AssistantText, "assistant text");
@@ -626,14 +781,14 @@ namespace RNAssistant.Harness
                         session,
                         context,
                         new AppSettings { ContextCharLimit = 8000 },
-                        new List<SkillDefinition>(adapter.GetBuiltInSkills()),
+                        new List<ToolDefinition>(adapter.GetBuiltInTools()),
                         null).GetAwaiter().GetResult();
 
                     AssertEqual("Done.", result.AssistantText, scenario.Host + " assistant text");
                     AssertEqual(scenario.ExpectedTools.Length, adapter.Executed.Count, scenario.Host + " executed count");
                     for (var toolIndex = 0; toolIndex < scenario.ExpectedTools.Length; toolIndex++)
                     {
-                        AssertEqual(scenario.ExpectedTools[toolIndex], adapter.Executed[toolIndex].SkillId, scenario.Host + " tool " + toolIndex);
+                        AssertEqual(scenario.ExpectedTools[toolIndex], adapter.Executed[toolIndex].ToolId, scenario.Host + " tool " + toolIndex);
                     }
                     AssertTrue(ContainsMessage(calls[0], "User-added context attachments"), scenario.Host + " context prompt");
                     AssertTrue(ContainsMessage(session.Messages, "Agent plan"), scenario.Host + " plan recorded");
@@ -661,14 +816,14 @@ namespace RNAssistant.Harness
                     session,
                     NewContext(adapter),
                     new AppSettings { ContextCharLimit = 8000 },
-                    new List<SkillDefinition>(adapter.GetBuiltInSkills()),
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("Done.", result.AssistantText, "assistant text");
                 AssertEqual(3, calls.Count, "llm call count");
                 AssertTrue(ContainsMessage(calls[1], "prose-only answer is not acceptable"), "forced follow-up prompt");
                 AssertEqual(1, adapter.Executed.Count, "adapter execution count");
-                AssertEqual("excel.add_sheet", adapter.Executed[0].SkillId, "executed tool");
+                AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "executed tool");
             });
         }
 
@@ -691,14 +846,14 @@ namespace RNAssistant.Harness
                     session,
                     NewContext(adapter),
                     new AppSettings { ContextCharLimit = 8000 },
-                    new List<SkillDefinition>(adapter.GetBuiltInSkills()),
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("Done.", result.AssistantText, "assistant text");
                 AssertEqual(3, calls.Count, "llm call count");
                 AssertTrue(ContainsMessage(calls[1], "could not recover executable JSON"), "repair prompt");
                 AssertEqual(1, adapter.Executed.Count, "adapter execution count");
-                AssertEqual("excel.add_sheet", adapter.Executed[0].SkillId, "executed tool");
+                AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "executed tool");
             });
         }
 
@@ -710,9 +865,9 @@ namespace RNAssistant.Harness
             AssertEqual("excel.add_sheet", plan.Children[0].ToolId, "plan child tool");
             AssertContains(plan.Children[0].ArgumentsJson, "Report", "plan child args");
 
-            var command = new SkillCommand { SkillId = "excel.make_report" };
+            var command = new ToolCommand { ToolId = "excel.make_report" };
             command.Arguments["sheet"] = "Report";
-            var result = SkillResult.Ok(
+            var result = ToolResult.Ok(
                 "Pipeline executed: excel.make_report",
                 "{\"toolId\":\"excel.make_report\",\"steps\":[{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"success\":true,\"message\":\"Added sheet\"},{\"id\":\"table\",\"toolId\":\"excel.write_table\",\"success\":false,\"message\":\"No table\"}]}");
             var activity = AgentTranscript.CreateToolActivity(command, result, "tool");
@@ -737,7 +892,7 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                adapter.QueueResult("excel.write_table", SkillResult.Fail("No table values provided."));
+                adapter.QueueResult("excel.write_table", ToolResult.Fail("No table values provided."));
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 var service = ChatServiceWithResponses(
                     adapter,
@@ -752,18 +907,106 @@ namespace RNAssistant.Harness
                     session,
                     NewContext(adapter),
                     new AppSettings { ContextCharLimit = 8000 },
-                    new List<SkillDefinition>(adapter.GetBuiltInSkills()),
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
-                AssertEqual(2, calls.Count, "llm call count");
+                AssertEqual(3, calls.Count, "llm call count");
+                AssertEqual("Done.", result.AssistantText, "assistant text");
                 AssertEqual(2, adapter.Executed.Count, "adapter execution count");
-                AssertEqual("excel.write_table", adapter.Executed[0].SkillId, "first tool");
+                AssertEqual("excel.write_table", adapter.Executed[0].ToolId, "first tool");
                 AssertTrue(!adapter.Executed[0].Arguments.ContainsKey("values"), "first command missing values");
                 AssertEqual("[[\"Month\",\"Sales\"]]", adapter.Executed[1].Arguments["values"], "retry values");
-                var resultJson = JsonConvert.SerializeObject(result.SkillResults);
+                var resultJson = JsonConvert.SerializeObject(result.ToolResults);
                 AssertContains(resultJson, "No table values provided", "failed result logged");
                 AssertContains(resultJson, "executed excel.write_table", "retry result logged");
                 AssertTrue(ContainsMessage(session.Messages, "Local skill retry result") || ContainsMessage(session.Messages, "Agent step"), "retry transcript recorded");
+            });
+        }
+
+        private static void ChatRetrySuccessContinuesToFinalAnswer()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.QueueResult("excel.write_table", ToolResult.Fail("No table values provided."));
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    AgentBlock(Command("excel.write_table", "sheet", "Report", "startAddress", "A1")),
+                    AgentBlock(Command("excel.write_table", "sheet", "Report", "startAddress", "A1", "values", "[[\"Month\",\"Sales\"]]")),
+                    "Finished.");
+                var session = NewSession(adapter);
+
+                var result = service.ExecuteAsync(
+                    "Write a report table.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000 },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual(3, calls.Count, "llm call count");
+                AssertEqual("Finished.", result.AssistantText, "assistant text");
+                AssertTrue(ContainsMessage(session.Messages, "Finished."), "final assistant message");
+            });
+        }
+
+        private static void ChatWaitingToolGetsPendingId()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var pendingIds = new List<string>();
+                var service = ChatServiceWithResponses(adapter, executor, null, AgentBlock(Command("word.insert_text", "text", "Hello")));
+                var session = NewSession(adapter);
+
+                var result = service.ExecuteAsync(
+                    "Insert text into the document.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { AgentModeEnabled = false, AutoConfirmToolActions = false, ContextCharLimit = 8000 },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null,
+                    delegate(ChatSession pendingSession, ToolCommand pendingCommand, ToolResult pendingResult)
+                    {
+                        AssertEqual(ChatStore.GetSessionId(session), ChatStore.GetSessionId(pendingSession), "pending session id");
+                        AssertEqual("word.insert_text", pendingCommand.ToolId, "pending tool id");
+                        pendingIds.Add("pending-1");
+                        return "pending-1";
+                    }).GetAwaiter().GetResult();
+
+                AssertEqual(0, adapter.Executed.Count, "adapter execution count");
+                AssertEqual(1, pendingIds.Count, "pending count");
+                var resultJson = JsonConvert.SerializeObject(result.ToolResults);
+                AssertContains(resultJson, "waiting_confirmation", "waiting status");
+                AssertContains(resultJson, "pending-1", "pending id");
+                AssertTrue(session.Messages.Any(m => m != null && m.Activity != null && string.Equals(m.Activity.PendingId, "pending-1", StringComparison.OrdinalIgnoreCase)), "pending activity");
+            });
+        }
+
+        private static void ChatMaxIterationsReturnsRuntimeSummary()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    null,
+                    AgentBlock(Command("excel.list_sheets")),
+                    AgentBlock(Command("excel.list_sheets")),
+                    AgentBlock(Command("excel.list_sheets")));
+                var session = NewSession(adapter);
+
+                var result = service.ExecuteAsync(
+                    "List sheets repeatedly.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000 },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertContains(result.AssistantText, "Agent executed", "summary text");
+                AssertTrue(result.AssistantText.IndexOf("rnassistant-agent", StringComparison.OrdinalIgnoreCase) < 0, "no raw agent block");
             });
         }
 
@@ -780,13 +1023,13 @@ namespace RNAssistant.Harness
                     session,
                     NewContext(adapter),
                     new AppSettings { AutoRunToolCalls = false, ContextCharLimit = 8000 },
-                    new List<SkillDefinition>(adapter.GetBuiltInSkills()),
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
                 AssertEqual(0, adapter.Executed.Count, "adapter execution count");
-                AssertContains(JsonConvert.SerializeObject(result.SkillResults), "Auto tool execution is disabled", "auto-run result");
+                AssertContains(JsonConvert.SerializeObject(result.ToolResults), "Auto tool execution is disabled", "auto-run result");
                 AssertTrue(ContainsMessage(session.Messages, "Agent plan"), "plan recorded");
-                AssertTrue(ContainsMessage(session.Messages, "failed"), "failure recorded");
+                AssertTrue(ContainsMessage(session.Messages, "waiting"), "waiting recorded");
             });
         }
 
@@ -804,7 +1047,7 @@ namespace RNAssistant.Harness
                     session,
                     NewContext(adapter),
                     new AppSettings { AgentModeEnabled = false, ContextCharLimit = 8000 },
-                    new List<SkillDefinition>(adapter.GetBuiltInSkills()),
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
                 AssertEqual(malformed, result.AssistantText, "assistant text");
@@ -1036,9 +1279,9 @@ namespace RNAssistant.Harness
             AssertContains(controller.LastModuleCode, "Sub Main", "module code");
         }
 
-        private static SkillDefinition CustomTool(string host, string id)
+        private static ToolDefinition CustomTool(string host, string id)
         {
-            return new SkillDefinition
+            return new ToolDefinition
             {
                 Id = id,
                 Host = host,
@@ -1050,7 +1293,7 @@ namespace RNAssistant.Harness
             };
         }
 
-        private static bool HasTool(IEnumerable<SkillDefinition> tools, string id)
+        private static bool HasTool(IEnumerable<ToolDefinition> tools, string id)
         {
             foreach (var tool in tools)
             {
@@ -1063,9 +1306,22 @@ namespace RNAssistant.Harness
             return false;
         }
 
-        private static SkillDefinition FindTool(IEnumerable<SkillDefinition> tools, string id)
+        private static bool HasSkill(IEnumerable<SkillDefinition> skills, string id)
         {
-            foreach (var tool in tools ?? new SkillDefinition[0])
+            foreach (var skill in skills)
+            {
+                if (skill != null && string.Equals(skill.Id, id, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static ToolDefinition FindTool(IEnumerable<ToolDefinition> tools, string id)
+        {
+            foreach (var tool in tools ?? new ToolDefinition[0])
             {
                 if (tool != null && string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase))
                 {
@@ -1089,11 +1345,11 @@ namespace RNAssistant.Harness
             return false;
         }
 
-        private static List<SkillDefinition> BuildPipelineTools(bool requiresConfirmation)
+        private static List<ToolDefinition> BuildPipelineTools(bool requiresConfirmation)
         {
-            return new List<SkillDefinition>
+            return new List<ToolDefinition>
             {
-                new SkillDefinition
+                new ToolDefinition
                 {
                     Id = "excel.make_report",
                     Host = "Excel",
@@ -1110,11 +1366,11 @@ namespace RNAssistant.Harness
             };
         }
 
-        private static List<SkillDefinition> BuildStepPlaceholderPipelineTools()
+        private static List<ToolDefinition> BuildStepPlaceholderPipelineTools()
         {
-            return new List<SkillDefinition>
+            return new List<ToolDefinition>
             {
-                new SkillDefinition
+                new ToolDefinition
                 {
                     Id = "excel.chain_report",
                     Host = "Excel",
@@ -1130,11 +1386,11 @@ namespace RNAssistant.Harness
             };
         }
 
-        private static List<SkillDefinition> BuildThreeStepPipelineTools()
+        private static List<ToolDefinition> BuildThreeStepPipelineTools()
         {
-            return new List<SkillDefinition>
+            return new List<ToolDefinition>
             {
-                new SkillDefinition
+                new ToolDefinition
                 {
                     Id = "excel.full_report",
                     Host = "Excel",
@@ -1151,9 +1407,9 @@ namespace RNAssistant.Harness
             };
         }
 
-        private static SkillCommand Command(string id, params object[] keyValues)
+        private static ToolCommand Command(string id, params object[] keyValues)
         {
-            var command = new SkillCommand { SkillId = id };
+            var command = new ToolCommand { ToolId = id };
             for (var i = 0; i + 1 < (keyValues == null ? 0 : keyValues.Length); i += 2)
             {
                 command.Arguments[Convert.ToString(keyValues[i])] = keyValues[i + 1];
@@ -1162,14 +1418,14 @@ namespace RNAssistant.Harness
             return command;
         }
 
-        private static string AgentBlock(params SkillCommand[] commands)
+        private static string AgentBlock(params ToolCommand[] commands)
         {
             return "```rnassistant-agent\n" +
                 JsonConvert.SerializeObject(new
                 {
-                    steps = (commands ?? new SkillCommand[0]).Select(command => new
+                    steps = (commands ?? new ToolCommand[0]).Select(command => new
                     {
-                        skillId = command.SkillId,
+                        toolId = command.ToolId,
                         arguments = command.Arguments
                     }).ToArray()
                 }) +
@@ -1237,7 +1493,7 @@ namespace RNAssistant.Harness
         {
             WithTempPaths(delegate(AppDataPaths paths)
             {
-                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths));
+                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths));
                 action(executor, adapter);
             });
         }
@@ -1284,7 +1540,7 @@ namespace RNAssistant.Harness
 
         private sealed class FakeOfficeAdapter : IOfficeApplicationAdapter
         {
-            public readonly List<SkillCommand> Executed = new List<SkillCommand>();
+            public readonly List<ToolCommand> Executed = new List<ToolCommand>();
             public string VbaModuleType = "StdModule";
             public readonly List<string> RanMacros = new List<string>();
             public bool FailUnknownSkills { get; set; }
@@ -1292,8 +1548,8 @@ namespace RNAssistant.Harness
             private readonly string _hostName;
             private readonly string _documentTitle;
             private readonly string _documentSnapshot;
-            private readonly List<SkillDefinition> _builtInSkills;
-            private readonly Dictionary<string, Queue<SkillResult>> _scriptedResults;
+            private readonly List<ToolDefinition> _builtInSkills;
+            private readonly Dictionary<string, Queue<ToolResult>> _scriptedResults;
             private readonly Dictionary<string, FakeVbaModule> _vbaModules;
 
             public string VbaModuleCode
@@ -1307,13 +1563,13 @@ namespace RNAssistant.Harness
             {
             }
 
-            private FakeOfficeAdapter(string hostName, string documentTitle, IEnumerable<SkillDefinition> builtInSkills, string documentSnapshot)
+            private FakeOfficeAdapter(string hostName, string documentTitle, IEnumerable<ToolDefinition> builtInSkills, string documentSnapshot)
             {
                 _hostName = hostName;
                 _documentTitle = documentTitle;
                 _documentSnapshot = documentSnapshot;
-                _builtInSkills = new List<SkillDefinition>((builtInSkills ?? new SkillDefinition[0]).Select(CloneSkill));
-                _scriptedResults = new Dictionary<string, Queue<SkillResult>>(StringComparer.OrdinalIgnoreCase);
+                _builtInSkills = new List<ToolDefinition>((builtInSkills ?? new ToolDefinition[0]).Select(CloneSkill));
+                _scriptedResults = new Dictionary<string, Queue<ToolResult>>(StringComparer.OrdinalIgnoreCase);
                 _vbaModules = new Dictionary<string, FakeVbaModule>(StringComparer.OrdinalIgnoreCase);
             }
 
@@ -1362,17 +1618,17 @@ namespace RNAssistant.Harness
                 return null;
             }
 
-            public IEnumerable<SkillDefinition> GetBuiltInSkills()
+            public IEnumerable<ToolDefinition> GetBuiltInTools()
             {
                 return _builtInSkills.Select(CloneSkill).ToArray();
             }
 
-            public void QueueResult(string skillId, SkillResult result)
+            public void QueueResult(string skillId, ToolResult result)
             {
-                Queue<SkillResult> queue;
+                Queue<ToolResult> queue;
                 if (!_scriptedResults.TryGetValue(skillId, out queue))
                 {
-                    queue = new Queue<SkillResult>();
+                    queue = new Queue<ToolResult>();
                     _scriptedResults[skillId] = queue;
                 }
 
@@ -1398,54 +1654,54 @@ namespace RNAssistant.Harness
                     : string.Empty;
             }
 
-            public SkillResult ExecuteSkill(SkillCommand command)
+            public ToolResult ExecuteTool(ToolCommand command)
             {
                 Executed.Add(Clone(command));
-                SkillResult scripted;
-                if (TryDequeueResult(command.SkillId, out scripted))
+                ToolResult scripted;
+                if (TryDequeueResult(command.ToolId, out scripted))
                 {
                     return scripted;
                 }
 
-                if ((command.SkillId ?? string.Empty).EndsWith(".vba_read_module", StringComparison.OrdinalIgnoreCase))
+                if ((command.ToolId ?? string.Empty).EndsWith(".vba_read_module", StringComparison.OrdinalIgnoreCase))
                 {
                     var moduleName = Argument(command, "moduleName", "Module1");
                     FakeVbaModule module;
                     if (!_vbaModules.TryGetValue(moduleName, out module))
                     {
-                        return SkillResult.Fail("VBA module not found: " + moduleName);
+                        return ToolResult.Fail("VBA module not found: " + moduleName);
                     }
 
-                    return SkillResult.Ok("read " + command.SkillId, JsonConvert.SerializeObject(new { name = module.Name, code = module.Code, type = module.Type }));
+                    return ToolResult.Ok("read " + command.ToolId, JsonConvert.SerializeObject(new { name = module.Name, code = module.Code, type = module.Type }));
                 }
 
-                if ((command.SkillId ?? string.Empty).EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase))
+                if ((command.ToolId ?? string.Empty).EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase))
                 {
                     SetVbaModule(Argument(command, "moduleName", "Module1"), Argument(command, "code", string.Empty), VbaModuleType);
-                    return SkillResult.Ok("replaced " + command.SkillId);
+                    return ToolResult.Ok("replaced " + command.ToolId);
                 }
 
-                if ((command.SkillId ?? string.Empty).EndsWith(".insert_vba_module", StringComparison.OrdinalIgnoreCase))
+                if ((command.ToolId ?? string.Empty).EndsWith(".insert_vba_module", StringComparison.OrdinalIgnoreCase))
                 {
                     SetVbaModule(Argument(command, "moduleName", "Module1"), Argument(command, "code", string.Empty), VbaModuleType);
-                    return SkillResult.Ok("inserted " + command.SkillId);
+                    return ToolResult.Ok("inserted " + command.ToolId);
                 }
 
-                if ((command.SkillId ?? string.Empty).EndsWith(".run_macro", StringComparison.OrdinalIgnoreCase))
+                if ((command.ToolId ?? string.Empty).EndsWith(".run_macro", StringComparison.OrdinalIgnoreCase))
                 {
                     RanMacros.Add(Argument(command, "macroName", string.Empty));
-                    return SkillResult.Ok("ran " + command.SkillId);
+                    return ToolResult.Ok("ran " + command.ToolId);
                 }
 
-                if (FailUnknownSkills && !IsKnownSkill(command.SkillId))
+                if (FailUnknownSkills && !IsKnownSkill(command.ToolId))
                 {
-                    return SkillResult.Fail("Unsupported " + HostName + " skill: " + command.SkillId);
+                    return ToolResult.Fail("Unsupported " + HostName + " tool: " + command.ToolId);
                 }
 
-                return SkillResult.Ok("executed " + command.SkillId, JsonConvert.SerializeObject(new { host = HostName, skillId = command.SkillId }));
+                return ToolResult.Ok("executed " + command.ToolId, JsonConvert.SerializeObject(new { host = HostName, toolId = command.ToolId }));
             }
 
-            private static string Argument(SkillCommand command, string name, string fallback)
+            private static string Argument(ToolCommand command, string name, string fallback)
             {
                 object value;
                 return command != null && command.Arguments != null && command.Arguments.TryGetValue(name, out value) && value != null
@@ -1453,10 +1709,10 @@ namespace RNAssistant.Harness
                     : fallback;
             }
 
-            private bool TryDequeueResult(string skillId, out SkillResult result)
+            private bool TryDequeueResult(string skillId, out ToolResult result)
             {
                 result = null;
-                Queue<SkillResult> queue;
+                Queue<ToolResult> queue;
                 if (!_scriptedResults.TryGetValue(skillId ?? string.Empty, out queue) || queue.Count == 0)
                 {
                     return false;
@@ -1471,7 +1727,7 @@ namespace RNAssistant.Harness
                 return _builtInSkills.Any(skill => string.Equals(skill.Id, skillId, StringComparison.OrdinalIgnoreCase));
             }
 
-            private static IEnumerable<SkillDefinition> ExcelBuiltIns()
+            private static IEnumerable<ToolDefinition> ExcelBuiltIns()
             {
                 return new[]
                 {
@@ -1490,7 +1746,7 @@ namespace RNAssistant.Harness
                 };
             }
 
-            private static IEnumerable<SkillDefinition> WordBuiltIns()
+            private static IEnumerable<ToolDefinition> WordBuiltIns()
             {
                 return new[]
                 {
@@ -1507,7 +1763,7 @@ namespace RNAssistant.Harness
                 };
             }
 
-            private static IEnumerable<SkillDefinition> PowerPointBuiltIns()
+            private static IEnumerable<ToolDefinition> PowerPointBuiltIns()
             {
                 return new[]
                 {
@@ -1522,7 +1778,7 @@ namespace RNAssistant.Harness
                 };
             }
 
-            private static IEnumerable<SkillDefinition> OutlookBuiltIns()
+            private static IEnumerable<ToolDefinition> OutlookBuiltIns()
             {
                 return new[]
                 {
@@ -1533,9 +1789,9 @@ namespace RNAssistant.Harness
                 };
             }
 
-            private static SkillDefinition BuiltIn(string host, string id, bool requiresConfirmation, bool mutatesDocument, bool agentCanRun)
+            private static ToolDefinition BuiltIn(string host, string id, bool requiresConfirmation, bool mutatesDocument, bool agentCanRun)
             {
-                return new SkillDefinition
+                return new ToolDefinition
                 {
                     Id = id,
                     Host = host,
@@ -1548,9 +1804,9 @@ namespace RNAssistant.Harness
                 };
             }
 
-            private static SkillDefinition CloneSkill(SkillDefinition skill)
+            private static ToolDefinition CloneSkill(ToolDefinition skill)
             {
-                return new SkillDefinition
+                return new ToolDefinition
                 {
                     Id = skill.Id,
                     Host = skill.Host,
@@ -1570,9 +1826,9 @@ namespace RNAssistant.Harness
                 };
             }
 
-            private static SkillCommand Clone(SkillCommand command)
+            private static ToolCommand Clone(ToolCommand command)
             {
-                var clone = new SkillCommand { SkillId = command.SkillId, Description = command.Description };
+                var clone = new ToolCommand { ToolId = command.ToolId, Description = command.Description };
                 foreach (var pair in command.Arguments)
                 {
                     clone.Arguments[pair.Key] = pair.Value;

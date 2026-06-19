@@ -9,12 +9,12 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed class PipelineToolExecutor
     {
-        internal delegate SkillResult CommandRunner(SkillCommand command, IReadOnlyList<SkillDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun);
+        internal delegate ToolResult CommandRunner(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun);
 
-        public SkillResult Execute(
-            SkillDefinition tool,
-            SkillCommand command,
-            IReadOnlyList<SkillDefinition> skills,
+        public ToolResult Execute(
+            ToolDefinition tool,
+            ToolCommand command,
+            IReadOnlyList<ToolDefinition> skills,
             AppSettings settings,
             int depth,
             bool dryRun,
@@ -23,7 +23,7 @@ namespace RNAssistant.Office.Tools
         {
             if (string.IsNullOrWhiteSpace(tool.PipelineJson))
             {
-                return SkillResult.Fail("Tool has no pipeline: " + tool.Id);
+                return ToolResult.Fail("Tool has no pipeline: " + tool.Id);
             }
 
             JObject pipeline;
@@ -33,16 +33,16 @@ namespace RNAssistant.Office.Tools
             }
             catch (JsonException ex)
             {
-                return SkillResult.Fail("Invalid pipeline JSON for " + tool.Id + ": " + ex.Message);
+                return ToolResult.Fail("Invalid pipeline JSON for " + tool.Id + ": " + ex.Message);
             }
 
             var steps = pipeline["steps"] as JArray;
             if (steps == null || steps.Count == 0)
             {
-                return SkillResult.Fail("Pipeline has no steps: " + tool.Id);
+                return ToolResult.Fail("Pipeline has no steps: " + tool.Id);
             }
 
-            var stepResults = new Dictionary<string, SkillResult>(StringComparer.OrdinalIgnoreCase);
+            var stepResults = new Dictionary<string, ToolResult>(StringComparer.OrdinalIgnoreCase);
             var output = new List<object>();
             foreach (var stepToken in steps)
             {
@@ -52,10 +52,10 @@ namespace RNAssistant.Office.Tools
                     continue;
                 }
 
-                var toolId = (string)(step["toolId"] ?? step["skillId"] ?? step["id"]);
+                var toolId = (string)(step["toolId"] ?? step["skillId"]);
                 if (string.IsNullOrWhiteSpace(toolId))
                 {
-                    return SkillResult.Fail("Pipeline step has no toolId.");
+                    return ToolResult.Fail("Pipeline step has no toolId.");
                 }
 
                 var stepId = (string)step["id"];
@@ -64,7 +64,7 @@ namespace RNAssistant.Office.Tools
                     stepId = toolId;
                 }
 
-                var nested = new SkillCommand { SkillId = toolId };
+                var nested = new ToolCommand { ToolId = toolId };
                 var args = step["arguments"] as JObject;
                 if (args != null)
                 {
@@ -74,20 +74,22 @@ namespace RNAssistant.Office.Tools
                     }
                 }
 
-                var result = runCommand(nested, skills, settings, depth + 1, dryRun, manualRun);
+                var result = runCommand(nested, skills, settings, depth + 1, dryRun, manualRun) ?? ToolResult.Fail("Pipeline step returned no result.");
                 stepResults[stepId] = result;
-                output.Add(new { id = stepId, toolId = toolId, success = result.Success, message = result.Message, dataJson = result.DataJson });
+                output.Add(new { id = stepId, toolId = toolId, success = result.Success, status = result.Status, message = result.Message, dataJson = result.DataJson });
 
                 if (!result.Success)
                 {
-                    return SkillResult.Fail("Pipeline step failed: " + stepId + ". " + result.Message);
+                    return ToolResult.Fail(
+                        "Pipeline step failed: " + stepId + ". " + result.Message,
+                        JsonConvert.SerializeObject(new { toolId = tool.Id, dryRun = dryRun, steps = output }));
                 }
             }
 
-            return SkillResult.Ok((dryRun ? "Dry run completed: " : "Pipeline executed: ") + tool.Id, JsonConvert.SerializeObject(new { toolId = tool.Id, dryRun = dryRun, steps = output }));
+            return ToolResult.Ok((dryRun ? "Dry run completed: " : "Pipeline executed: ") + tool.Id, JsonConvert.SerializeObject(new { toolId = tool.Id, dryRun = dryRun, steps = output }));
         }
 
-        private static object ResolvePipelineValue(JToken token, IDictionary<string, object> inputArgs, IDictionary<string, SkillResult> stepResults)
+        private static object ResolvePipelineValue(JToken token, IDictionary<string, object> inputArgs, IDictionary<string, ToolResult> stepResults)
         {
             var value = token.Type == JTokenType.String
                 ? token.Value<string>()
@@ -96,7 +98,7 @@ namespace RNAssistant.Office.Tools
             return ReplacePlaceholders(value, inputArgs, stepResults);
         }
 
-        private static string ReplacePlaceholders(string value, IDictionary<string, object> inputArgs, IDictionary<string, SkillResult> stepResults)
+        private static string ReplacePlaceholders(string value, IDictionary<string, object> inputArgs, IDictionary<string, ToolResult> stepResults)
         {
             if (string.IsNullOrEmpty(value))
             {
@@ -117,7 +119,7 @@ namespace RNAssistant.Office.Tools
                 if (key.StartsWith("steps.", StringComparison.OrdinalIgnoreCase))
                 {
                     var parts = key.Split('.');
-                    SkillResult step;
+                    ToolResult step;
                     if (parts.Length >= 3 && stepResults != null && stepResults.TryGetValue(parts[1], out step))
                     {
                         if (string.Equals(parts[2], "message", StringComparison.OrdinalIgnoreCase))

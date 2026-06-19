@@ -38,6 +38,7 @@ function renderActivityNode(activity, nested) {
   row.appendChild(text);
   node.appendChild(row);
 
+  appendActivityConfirmationPanel(node, activity);
   appendActivityErrorPanel(node, activity);
   appendActivityDetails(node, activity);
   return node;
@@ -58,6 +59,41 @@ function appendActivityBadges(parent, activity) {
     row.appendChild(item);
   });
   parent.appendChild(row);
+}
+
+function createAgentTextButton(label, className, onClick) {
+  var button = document.createElement("button");
+  button.type = "button";
+  button.className = "agent-action-button " + (className || "secondary");
+  button.textContent = label;
+  button.addEventListener("click", onClick);
+  return button;
+}
+
+function appendActivityConfirmationPanel(node, activity) {
+  var pendingId = activityPendingId(activity);
+  if (!pendingId || activityStatus(activity) !== "waiting") {
+    return;
+  }
+
+  var panel = document.createElement("div");
+  panel.className = "agent-confirm-panel";
+
+  var reason = document.createElement("div");
+  reason.className = "agent-confirm-reason";
+  reason.textContent = activityResultMessage(activity) || "Tool waits for confirmation.";
+  panel.appendChild(reason);
+
+  var actions = document.createElement("div");
+  actions.className = "agent-inline-actions";
+  actions.appendChild(createAgentTextButton("Confirm", "primary", function () {
+    confirmAgentTool(pendingId);
+  }));
+  actions.appendChild(createAgentTextButton("Cancel", "secondary", function () {
+    cancelAgentTool(pendingId);
+  }));
+  panel.appendChild(actions);
+  node.appendChild(panel);
 }
 
 function appendActivityErrorPanel(node, activity) {

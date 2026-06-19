@@ -95,9 +95,19 @@ namespace RNAssistant.Office.WebView
                     case "saveTools":
                         var saveTools = Payload<SaveToolsPayload>(payload);
                         var toolsToSave = saveTools.Tools == null
-                            ? (IEnumerable<SkillDefinition>)new SkillDefinition[0]
-                            : saveTools.Tools.ToObject<List<SkillDefinition>>();
+                            ? (IEnumerable<ToolDefinition>)new ToolDefinition[0]
+                            : saveTools.Tools.ToObject<List<ToolDefinition>>();
                         responsePayload = _controller.SaveTools(toolsToSave);
+                        break;
+                    case "getSkills":
+                        responsePayload = _controller.GetSkills();
+                        break;
+                    case "saveSkills":
+                        var saveSkills = Payload<SaveSkillsPayload>(payload);
+                        var skillsToSave = saveSkills.Skills == null
+                            ? (IEnumerable<SkillDefinition>)new SkillDefinition[0]
+                            : saveSkills.Skills.ToObject<List<SkillDefinition>>();
+                        responsePayload = _controller.SaveSkills(skillsToSave);
                         break;
                     case "runTool":
                         var runTool = Payload<RunToolPayload>(payload);
@@ -106,6 +116,14 @@ namespace RNAssistant.Office.WebView
                             ToArguments(runTool.Arguments),
                             runTool.DryRun,
                             (phase, message) => ReportProgress(id, phase, message));
+                        break;
+                    case "confirmAgentTool":
+                        var confirmAgentTool = Payload<PendingAgentToolPayload>(payload);
+                        responsePayload = _controller.ConfirmAgentTool(confirmAgentTool.PendingId, confirmAgentTool.ChatId);
+                        break;
+                    case "cancelAgentTool":
+                        var cancelAgentTool = Payload<PendingAgentToolPayload>(payload);
+                        responsePayload = _controller.CancelAgentTool(cancelAgentTool.PendingId, cancelAgentTool.ChatId);
                         break;
                     case "getVbaProject":
                         responsePayload = _controller.GetVbaProject(Payload<VbaProjectPayload>(payload).MaxChars ?? 30000);

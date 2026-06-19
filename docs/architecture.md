@@ -8,6 +8,7 @@
 - пер-документные чаты и контекст;
 - OpenAI-compatible chat completions endpoint;
 - локальные Office tools, pipelines и VBA rollback workflow;
+- markdown skills для выбора подхода агентом;
 - работа без backend и без admin rights.
 
 ## Dependency Direction
@@ -26,26 +27,29 @@ web static UI
 ## Current Code Zones
 
 - `src/RNAssistant.Core/Llm`: API client, prompt composition, prompt message trimming, context usage estimates.
-- `src/RNAssistant.Core/Skills`: parsing model text into local `SkillCommand`.
+- `src/RNAssistant.Core/Tools`: parsing model text into local `ToolCommand`.
+- `src/RNAssistant.Core/Skills`: built-in markdown skill provider.
 - `src/RNAssistant.Core/Storage`: JSON file storage under `%AppData%/RNAssistant`.
 - `src/RNAssistant.Office/Controller/AssistantController.cs`: high-level orchestration and bridge-facing API.
+- `src/RNAssistant.Office/Controller/AssistantController.Agent.cs`: agent pending-tool confirmation and resume/cancel bridge flow.
 - `src/RNAssistant.Office/Controller/AssistantController.Chats.cs`: chat/session lifecycle and document-key migration.
 - `src/RNAssistant.Office/Controller/AssistantController.Context.cs`: active chat context attachments.
 - `src/RNAssistant.Office/Contracts`: shared Office abstractions and bridge DTOs such as `IOfficeApplicationAdapter` and `BridgeDtos`.
 - `src/RNAssistant.Office/Runtime`: add-in runtime helpers that are host-neutral.
 - `src/RNAssistant.Office/Vba`: shared VBA project support.
 - `src/RNAssistant.Office/Agent`: agent transcript/plan formatting and retry policy.
-- `src/RNAssistant.Office/Services`: host-neutral application services used by controller orchestration, such as tool catalog composition, context normalization, and chat completion flow.
-- `src/RNAssistant.Office/Tools`: tool execution, pipelines, VBA patch/backup workflow.
+- `src/RNAssistant.Office/Services`: host-neutral application services used by controller orchestration, such as tool/skill catalog composition, context normalization, and chat completion flow.
+- `src/RNAssistant.Office/Tools`: tool execution, pipelines, skill CRUD tools, VBA patch/backup workflow.
 - `src/RNAssistant.*AddIn`: host adapters and VSTO wiring.
-- `web`: static HTML/CSS/JS task pane. `web/js/app-core.js` owns state and WebView bridge wiring; `app-settings.js`, `app-tools.js`, `app-vba.js`, `app-context.js`, and `app-chat.js` own their feature flows; `app-utils.js` owns pure browser helpers; `app.js` is boot plus shared rendering helpers.
+- `web`: static HTML/CSS/JS task pane. `web/js/app-core.js` owns state and WebView bridge wiring; `app-settings.js`, `app-tools.js`, `app-skills.js`, `app-vba.js`, `app-context.js`, and `app-chat.js` own their feature flows; `app-utils.js` owns pure browser helpers; `app.js` is boot plus shared rendering helpers.
 
 ## Non-Negotiable Boundaries
 
-- Parser converts text/native-compatible shapes to `SkillCommand`; executor decides whether command may run.
-- Tool safety belongs to `SkillDefinition` metadata: `MutatesDocument`, `AgentCanRun`, and `RequiresConfirmation`.
+- Parser converts text/native-compatible shapes to `ToolCommand`; executor decides whether command may run.
+- Tools are executable actions described by `ToolDefinition`; skills are markdown guidance described by `SkillDefinition`.
+- Tool safety belongs to `ToolDefinition` metadata: `MutatesDocument`, `AgentCanRun`, and `RequiresConfirmation`.
 - Controller coordinates request flow; it should not contain pipeline execution, VBA patch logic, or JS rendering logic.
-- VSTO adapters expose capabilities through `SkillDefinition` and `ExecuteSkill`; they should not know chat/session/storage details.
+- VSTO adapters expose executable capabilities through `ToolDefinition` and `ExecuteTool`; they should not know chat/session/storage details.
 - UI sends typed bridge messages; business rules stay in C# unless they are purely presentation behavior.
 - WebView response serialization belongs in `AssistantWebBridge`; controller methods should return DTOs or domain models.
 
@@ -68,13 +72,14 @@ Current coverage:
 - parser fixtures: fenced `rnassistant-agent`, bare JSON arrays, native `tool_calls`, malformed JSON;
 - chat store fixtures using temp directories, including broken JSON files being skipped;
 - pipeline dry-run and execution fixtures with fake `IOfficeApplicationAdapter`;
-- confirmation gates for custom tools and Agent Mode built-in mutations;
+- pipeline failure diagnostics and confirmation gates for custom tools and Agent Mode built-in mutations;
+- markdown skill store/catalog/prompt separation and agent skill-save confirmation;
 - metadata-driven mutation safety gates;
 - VBA replace-text flow with rollback backup using fake `IOfficeApplicationAdapter`;
 - tool catalog service merge/filter behavior;
 - prompt message trimming, context usage estimates, and basic no-network chat completion flow;
 - context normalization/upsert/trim behavior;
-- typed bridge settings/context/VBA/tool/chat payload parsing and progress envelope;
+- typed bridge settings/context/VBA/tool/chat payload parsing, agent pending-tool status, and progress envelope;
 - no Office COM dependency.
 
 Next harness coverage:

@@ -6,7 +6,7 @@ namespace RNAssistant.Core.Llm
 {
     public sealed class PromptComposer
     {
-        public string ComposeSystemPrompt(AppSettings settings, string host, string documentSnapshot, string vbaSnapshot, IEnumerable<SkillDefinition> tools, DocumentContext context)
+        public string ComposeSystemPrompt(AppSettings settings, string host, string documentSnapshot, string vbaSnapshot, IEnumerable<ToolDefinition> tools, IEnumerable<SkillDefinition> skills, DocumentContext context)
         {
             var builder = new StringBuilder();
             if (!string.IsNullOrWhiteSpace(settings.SystemPrompt))
@@ -39,25 +39,26 @@ namespace RNAssistant.Core.Llm
             }
             builder.AppendLine("Required tool response format:");
             builder.AppendLine("```rnassistant-agent");
-            builder.AppendLine("{\"description\":\"short plan\",\"steps\":[{\"description\":\"step name\",\"skillId\":\"skill.id\",\"arguments\":{\"name\":\"value\"}}]}");
+            builder.AppendLine("{\"description\":\"short plan\",\"steps\":[{\"description\":\"step name\",\"toolId\":\"tool.id\",\"arguments\":{\"name\":\"value\"}}]}");
             builder.AppendLine("```");
-            builder.AppendLine("A JSON array is also accepted inside the fence. Each command must use an available skillId/toolId/tool/action/name and an arguments/args/parameters object. Never invent tool ids.");
+            builder.AppendLine("A JSON array is also accepted inside the fence. Each command must use an available toolId/tool/action/name and an arguments/args/parameters object. Never invent tool ids. Legacy skillId is accepted only as an input alias.");
             builder.AppendLine("After tool results are provided, either answer normally if the task is complete or return the next tool block.");
             builder.AppendLine("If no available tool can satisfy the request, say exactly what is missing.");
             builder.AppendLine("For VBA edits, prefer the host vba_apply_patch tool for structured small patches; use vba_replace_module only when replacing the whole module is necessary.");
             builder.AppendLine("For agent-created executable code, write VBA code for the current Office host.");
             builder.AppendLine();
+            AppendSkills(builder, skills);
             builder.AppendLine("Available tools:");
             builder.AppendLine("Use only these exact tool ids in rnassistant-agent steps. The local app parses this text response and executes matching tools.");
-            foreach (var skill in tools)
+            foreach (var tool in tools)
             {
-                builder.AppendLine("- " + skill.Id + " (" + skill.Host + "): " + skill.Description);
-                builder.AppendLine("  args: " + skill.ArgumentSchemaJson);
-                if (!skill.BuiltIn)
+                builder.AppendLine("- " + tool.Id + " (" + tool.Host + "): " + tool.Description);
+                builder.AppendLine("  args: " + tool.ArgumentSchemaJson);
+                if (!tool.BuiltIn)
                 {
-                    builder.AppendLine("  executor: " + (string.IsNullOrWhiteSpace(skill.Executor) ? "pipeline" : skill.Executor));
-                    builder.AppendLine("  requiresConfirmation: " + skill.RequiresConfirmation);
-                    AppendToolSource(builder, skill);
+                    builder.AppendLine("  executor: " + (string.IsNullOrWhiteSpace(tool.Executor) ? "pipeline" : tool.Executor));
+                    builder.AppendLine("  requiresConfirmation: " + tool.RequiresConfirmation);
+                    AppendToolSource(builder, tool);
                 }
             }
 
@@ -76,6 +77,37 @@ namespace RNAssistant.Core.Llm
             }
 
             return builder.ToString();
+        }
+
+        private static void AppendSkills(StringBuilder builder, IEnumerable<SkillDefinition> skills)
+        {
+            var any = false;
+            foreach (var skill in skills ?? new SkillDefinition[0])
+            {
+                if (skill == null || !skill.Enabled)
+                {
+                    continue;
+                }
+
+                if (!any)
+                {
+                    builder.AppendLine("Relevant markdown skills:");
+                    builder.AppendLine("Skills are guidance documents only. They are not executable tool ids. Follow them when they match the user task.");
+                    any = true;
+                }
+
+                builder.AppendLine();
+                builder.AppendLine("Skill: " + skill.Id + " (" + skill.Host + ")");
+                builder.AppendLine("Description: " + (skill.Description ?? string.Empty));
+                builder.AppendLine("```markdown");
+                builder.AppendLine(skill.BodyMarkdown ?? string.Empty);
+                builder.AppendLine("```");
+            }
+
+            if (any)
+            {
+                builder.AppendLine();
+            }
         }
 
         public string ComposeContextPrompt(DocumentContext context)
@@ -144,7 +176,7 @@ namespace RNAssistant.Core.Llm
             return string.Empty;
         }
 
-        private static void AppendToolSource(StringBuilder builder, SkillDefinition skill)
+        private static void AppendToolSource(StringBuilder builder, ToolDefinition skill)
         {
             if (!string.IsNullOrWhiteSpace(skill.Readme))
             {

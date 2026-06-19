@@ -110,6 +110,12 @@ namespace RNAssistant.Office.Contracts
         public bool DryRun { get; set; }
     }
 
+    public sealed class PendingAgentToolPayload : ChatPayload
+    {
+        [JsonProperty("pendingId")]
+        public string PendingId { get; set; }
+    }
+
     public class ModelCatalogPayload
     {
         [JsonProperty("settings")]
@@ -127,6 +133,12 @@ namespace RNAssistant.Office.Contracts
     {
         [JsonProperty("tools")]
         public JArray Tools { get; set; }
+    }
+
+    public sealed class SaveSkillsPayload
+    {
+        [JsonProperty("skills")]
+        public JArray Skills { get; set; }
     }
 
     public sealed class VbaProjectPayload
@@ -216,7 +228,7 @@ namespace RNAssistant.Office.Contracts
     public sealed class VbaProjectResponse
     {
         [JsonProperty("result")]
-        public SkillResult Result { get; set; }
+        public ToolResult Result { get; set; }
 
         [JsonProperty("backups")]
         public IReadOnlyList<VbaModuleBackup> Backups { get; set; }
@@ -276,10 +288,16 @@ namespace RNAssistant.Office.Contracts
         public bool HasApiKey { get; set; }
 
         [JsonProperty("tools")]
-        public IReadOnlyList<SkillDefinition> Tools { get; set; }
+        public IReadOnlyList<ToolDefinition> Tools { get; set; }
 
         [JsonProperty("toolsPath")]
         public string ToolsPath { get; set; }
+
+        [JsonProperty("skills")]
+        public IReadOnlyList<SkillDefinition> Skills { get; set; }
+
+        [JsonProperty("skillsPath")]
+        public string SkillsPath { get; set; }
 
         [JsonProperty("context")]
         public DocumentContext Context { get; set; }
@@ -299,7 +317,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("message")]
         public string Message { get; set; }
 
-        [JsonProperty("skillResults")]
-        public IReadOnlyList<object> SkillResults { get; set; }
+        [JsonProperty("toolResults")]
+        public IReadOnlyList<object> ToolResults { get; set; }
     }
 }

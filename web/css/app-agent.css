@@ -24,6 +24,11 @@
   background: #fffafa;
 }
 
+.agent-run.status-cancelled .agent-run-wrap {
+  border-color: #d0d5dd;
+  background: #f9fafb;
+}
+
 .agent-run-header {
   display: flex;
   gap: 8px;
@@ -175,6 +180,11 @@
   box-shadow: 0 0 0 3px #fee4e2;
 }
 
+.agent-activity.status-cancelled > .agent-activity-row > .agent-activity-mark {
+  background: #667085;
+  box-shadow: 0 0 0 3px #eef2f7;
+}
+
 .agent-activity.status-waiting > .agent-activity-row > .agent-activity-mark,
 .agent-activity.status-planned > .agent-activity-row > .agent-activity-mark {
   background: #f79009;
@@ -235,6 +245,23 @@
   color: #7a271a;
 }
 
+.agent-confirm-panel {
+  display: grid;
+  gap: 7px;
+  margin: 7px 0 0 20px;
+  padding: 8px;
+  border: 1px solid #fedf89;
+  border-radius: 6px;
+  background: #fffcf5;
+  color: #7a2e0e;
+}
+
+.agent-confirm-reason {
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .agent-error-reason {
   font-size: 12px;
   font-weight: 800;
@@ -251,6 +278,23 @@
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
+}
+
+.agent-action-button {
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.agent-action-button.primary {
+  border-color: #1570ef;
+  background: #1570ef;
+  color: #fff;
 }
 
 .agent-activity-details {

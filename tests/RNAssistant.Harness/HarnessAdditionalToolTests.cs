@@ -13,8 +13,8 @@ namespace RNAssistant.Harness
                 var invalid = CustomTool("Excel", "excel.bad_pipeline");
                 invalid.PipelineJson = "{ bad json";
                 var invalidResult = executor.Execute(
-                    new SkillCommand { SkillId = "excel.bad_pipeline" },
-                    new List<SkillDefinition> { invalid },
+                    new ToolCommand { ToolId = "excel.bad_pipeline" },
+                    new List<ToolDefinition> { invalid },
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
                     false);
@@ -26,8 +26,8 @@ namespace RNAssistant.Harness
                 var empty = CustomTool("Excel", "excel.empty_pipeline");
                 empty.PipelineJson = "{\"steps\":[]}";
                 var emptyResult = executor.Execute(
-                    new SkillCommand { SkillId = "excel.empty_pipeline" },
-                    new List<SkillDefinition> { empty },
+                    new ToolCommand { ToolId = "excel.empty_pipeline" },
+                    new List<ToolDefinition> { empty },
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
                     false);
@@ -46,8 +46,8 @@ namespace RNAssistant.Harness
                 recursive.PipelineJson = "{\"steps\":[{\"id\":\"self\",\"toolId\":\"excel.recursive_pipeline\"}]}";
 
                 var result = executor.Execute(
-                    new SkillCommand { SkillId = "excel.recursive_pipeline" },
-                    new List<SkillDefinition> { recursive },
+                    new ToolCommand { ToolId = "excel.recursive_pipeline" },
+                    new List<ToolDefinition> { recursive },
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
                     false);
@@ -64,37 +64,37 @@ namespace RNAssistant.Harness
             adapter.FailUnknownSkills = true;
             WithTempExecutor(adapter, delegate(OfficeToolExecutor executor, FakeOfficeAdapter fake)
             {
-                var builtIns = new List<SkillDefinition>(fake.GetBuiltInSkills());
+                var builtIns = new List<ToolDefinition>(fake.GetBuiltInTools());
                 var unknown = executor.Execute(
-                    new SkillCommand { SkillId = "excel.invented_tool" },
+                    new ToolCommand { ToolId = "excel.invented_tool" },
                     builtIns,
                     new AppSettings(),
                     false,
                     false);
 
                 AssertTrue(!unknown.Success, "unknown tool should fail");
-                AssertContains(unknown.Message, "Unsupported Excel skill", "unknown tool message");
+                AssertContains(unknown.Message, "Unsupported Excel tool", "unknown tool message");
                 AssertEqual(1, fake.Executed.Count, "unknown adapter count");
-                AssertEqual("excel.invented_tool", fake.Executed[0].SkillId, "unknown adapter tool");
+                AssertEqual("excel.invented_tool", fake.Executed[0].ToolId, "unknown adapter tool");
 
                 fake.Executed.Clear();
                 var disabled = CustomTool("Excel", "excel.disabled_pipeline");
                 disabled.Enabled = false;
                 disabled.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Disabled\"}}]}";
-                var tools = new List<SkillDefinition>(builtIns);
+                var tools = new List<ToolDefinition>(builtIns);
                 tools.Add(disabled);
 
                 var disabledResult = executor.Execute(
-                    new SkillCommand { SkillId = "excel.disabled_pipeline" },
+                    new ToolCommand { ToolId = "excel.disabled_pipeline" },
                     tools,
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
                     false);
 
                 AssertTrue(!disabledResult.Success, "disabled tool should fail");
-                AssertContains(disabledResult.Message, "Unsupported Excel skill", "disabled tool message");
+                AssertContains(disabledResult.Message, "Unsupported Excel tool", "disabled tool message");
                 AssertEqual(1, fake.Executed.Count, "disabled adapter count");
-                AssertEqual("excel.disabled_pipeline", fake.Executed[0].SkillId, "disabled adapter tool");
+                AssertEqual("excel.disabled_pipeline", fake.Executed[0].ToolId, "disabled adapter tool");
             });
         }
 
@@ -103,7 +103,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var tools = BuildPipelineTools(true);
-                var command = new SkillCommand { SkillId = "excel.make_report" };
+                var command = new ToolCommand { ToolId = "excel.make_report" };
                 command.Arguments["sheet"] = "Report";
 
                 var blocked = executor.Execute(
@@ -134,8 +134,8 @@ namespace RNAssistant.Harness
                     true);
                 AssertTrue(manualRun.Success, "manual custom tool should be allowed");
                 AssertEqual(2, adapter.Executed.Count, "manual adapter count");
-                AssertEqual("excel.add_sheet", adapter.Executed[0].SkillId, "manual first tool");
-                AssertEqual("excel.write_table", adapter.Executed[1].SkillId, "manual second tool");
+                AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "manual first tool");
+                AssertEqual("excel.write_table", adapter.Executed[1].ToolId, "manual second tool");
             });
         }
     }

@@ -4,9 +4,9 @@ function logToolResult(prefix, toolId, result) {
   log(prefix + " " + (ok ? "OK" : "FAIL") + ": " + toolId + (message ? " - " + message : ""));
 }
 
-function logSkillResults(results) {
+function logToolResults(results) {
   (results || []).forEach(function (result, index) {
-    logToolResult("Skill " + (index + 1), result.skillId || result.SkillId || "tool", result);
+    logToolResult("Tool " + (index + 1), result.toolId || result.ToolId || result.skillId || result.SkillId || "tool", result);
   });
 }
 

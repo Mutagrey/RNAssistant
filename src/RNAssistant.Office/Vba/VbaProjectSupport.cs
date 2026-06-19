@@ -41,7 +41,7 @@ namespace RNAssistant.Office
             }
         }
 
-        public static SkillResult ReadProject(object documentObject, string title, int maxChars)
+        public static ToolResult ReadProject(object documentObject, string title, int maxChars)
         {
             dynamic vbProject = GetVbaProject(documentObject);
             var modules = new List<object>();
@@ -57,19 +57,19 @@ namespace RNAssistant.Office
                 });
             }
 
-            return SkillResult.Ok("VBA project read.", JsonConvert.SerializeObject(new { title = title, modules = modules }));
+            return ToolResult.Ok("VBA project read.", JsonConvert.SerializeObject(new { title = title, modules = modules }));
         }
 
-        public static SkillResult ReadModule(object documentObject, string moduleName, int maxChars)
+        public static ToolResult ReadModule(object documentObject, string moduleName, int maxChars)
         {
             dynamic component = FindComponent(GetVbaProject(documentObject), moduleName);
             if (component == null)
             {
-                return SkillResult.Fail("VBA module not found: " + moduleName);
+                return ToolResult.Fail("VBA module not found: " + moduleName);
             }
 
             var code = Trim(ReadComponentCode(component), maxChars);
-            return SkillResult.Ok("VBA module read: " + component.Name, JsonConvert.SerializeObject(new
+            return ToolResult.Ok("VBA module read: " + component.Name, JsonConvert.SerializeObject(new
             {
                 name = (string)component.Name,
                 type = ComponentTypeName((int)component.Type),
@@ -78,15 +78,15 @@ namespace RNAssistant.Office
             }));
         }
 
-        public static SkillResult ReplaceModule(object documentObject, string moduleName, string code, bool createIfMissing)
+        public static ToolResult ReplaceModule(object documentObject, string moduleName, string code, bool createIfMissing)
         {
             if (string.IsNullOrWhiteSpace(moduleName))
             {
-                return SkillResult.Fail("No moduleName provided.");
+                return ToolResult.Fail("No moduleName provided.");
             }
             if (string.IsNullOrWhiteSpace(code))
             {
-                return SkillResult.Fail("No VBA code provided.");
+                return ToolResult.Fail("No VBA code provided.");
             }
 
             dynamic vbProject = GetVbaProject(documentObject);
@@ -95,7 +95,7 @@ namespace RNAssistant.Office
             {
                 if (!createIfMissing)
                 {
-                    return SkillResult.Fail("VBA module not found: " + moduleName);
+                    return ToolResult.Fail("VBA module not found: " + moduleName);
                 }
 
                 component = vbProject.VBComponents.Add(StdModuleType);
@@ -109,21 +109,21 @@ namespace RNAssistant.Office
             }
 
             module.AddFromString(code);
-            return SkillResult.Ok("VBA module replaced: " + component.Name, JsonConvert.SerializeObject(new { moduleName = (string)component.Name, lineCount = (int)component.CodeModule.CountOfLines }));
+            return ToolResult.Ok("VBA module replaced: " + component.Name, JsonConvert.SerializeObject(new { moduleName = (string)component.Name, lineCount = (int)component.CodeModule.CountOfLines }));
         }
 
-        public static SkillResult InsertModule(object documentObject, string moduleName, string code)
+        public static ToolResult InsertModule(object documentObject, string moduleName, string code)
         {
             if (string.IsNullOrWhiteSpace(code))
             {
-                return SkillResult.Fail("No VBA code provided.");
+                return ToolResult.Fail("No VBA code provided.");
             }
 
             dynamic vbProject = GetVbaProject(documentObject);
             dynamic component = vbProject.VBComponents.Add(StdModuleType);
             component.Name = moduleName;
             component.CodeModule.AddFromString(code);
-            return SkillResult.Ok("Inserted VBA module: " + moduleName);
+            return ToolResult.Ok("Inserted VBA module: " + moduleName);
         }
 
         private static object FindComponent(object vbProjectObject, string moduleName)

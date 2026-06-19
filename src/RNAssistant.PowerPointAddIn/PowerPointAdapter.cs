@@ -6,7 +6,7 @@ using Newtonsoft.Json;
 using PowerPoint = Microsoft.Office.Interop.PowerPoint;
 using RNAssistant.Core.Models;
 using RNAssistant.Office;
-using RNAssistant.Office.Skills;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.PowerPointAddIn
 {
@@ -71,7 +71,7 @@ namespace RNAssistant.PowerPointAddIn
             }
         }
 
-        public IEnumerable<SkillDefinition> GetBuiltInSkills()
+        public IEnumerable<ToolDefinition> GetBuiltInTools()
         {
             return new[]
             {
@@ -192,11 +192,11 @@ namespace RNAssistant.PowerPointAddIn
             };
         }
 
-        public SkillResult ExecuteSkill(SkillCommand command)
+        public ToolResult ExecuteTool(ToolCommand command)
         {
             try
             {
-                switch (command.SkillId)
+                switch (command.ToolId)
                 {
                     case "powerpoint.read_slides":
                         return ReadSlides(command);
@@ -215,101 +215,101 @@ namespace RNAssistant.PowerPointAddIn
                     case "powerpoint.run_macro":
                         return RunMacro(command);
                     default:
-                        return SkillResult.Fail("Unsupported PowerPoint skill: " + command.SkillId);
+                        return ToolResult.Fail("Unsupported PowerPoint tool: " + command.ToolId);
                 }
             }
             catch (Exception ex)
             {
-                return SkillResult.Fail(ex.Message);
+                return ToolResult.Fail(ex.Message);
             }
         }
 
-        private SkillResult ReadSlides(SkillCommand command)
+        private ToolResult ReadSlides(ToolCommand command)
         {
-            var maxSlides = SkillArgumentReader.Int32(command.Arguments, "maxSlides", 20);
-            return SkillResult.Ok("Slides read.", JsonConvert.SerializeObject(new { text = ReadSlidesText(RequirePresentation(), maxSlides) }));
+            var maxSlides = ToolArgumentReader.Int32(command.Arguments, "maxSlides", 20);
+            return ToolResult.Ok("Slides read.", JsonConvert.SerializeObject(new { text = ReadSlidesText(RequirePresentation(), maxSlides) }));
         }
 
-        private SkillResult AddSlide(SkillCommand command)
+        private ToolResult AddSlide(ToolCommand command)
         {
             var presentation = RequirePresentation();
-            var title = SkillArgumentReader.String(command.Arguments, "title", "AI slide");
-            var body = SkillArgumentReader.String(command.Arguments, "body", string.Empty);
+            var title = ToolArgumentReader.String(command.Arguments, "title", "AI slide");
+            var body = ToolArgumentReader.String(command.Arguments, "body", string.Empty);
             var slide = presentation.Slides.Add(presentation.Slides.Count + 1, PowerPoint.PpSlideLayout.ppLayoutText);
             slide.Shapes.Title.TextFrame.TextRange.Text = title;
             if (slide.Shapes.Count >= 2)
             {
                 slide.Shapes[2].TextFrame.TextRange.Text = body;
             }
-            return SkillResult.Ok("Slide added: " + title);
+            return ToolResult.Ok("Slide added: " + title);
         }
 
-        private SkillResult ReplaceSelectionText(SkillCommand command)
+        private ToolResult ReplaceSelectionText(ToolCommand command)
         {
-            var text = SkillArgumentReader.String(command.Arguments, "text", string.Empty);
+            var text = ToolArgumentReader.String(command.Arguments, "text", string.Empty);
             var selection = _application.ActiveWindow.Selection;
             if (selection == null || selection.Type != PowerPoint.PpSelectionType.ppSelectionShapes)
             {
-                return SkillResult.Fail("Select a text shape first.");
+                return ToolResult.Fail("Select a text shape first.");
             }
 
             var shape = selection.ShapeRange[1];
             if (shape.HasTextFrame != MsoTriState.msoTrue)
             {
-                return SkillResult.Fail("Selected shape has no text frame.");
+                return ToolResult.Fail("Selected shape has no text frame.");
             }
 
             shape.TextFrame.TextRange.Text = text;
-            return SkillResult.Ok("Selected shape text replaced.");
+            return ToolResult.Ok("Selected shape text replaced.");
         }
 
-        private SkillResult ReadVbaProject(SkillCommand command)
+        private ToolResult ReadVbaProject(ToolCommand command)
         {
             var presentation = RequirePresentation();
-            return VbaProjectSupport.ReadProject(presentation, presentation.Name, SkillArgumentReader.Int32(command.Arguments, "maxChars", 30000));
+            return VbaProjectSupport.ReadProject(presentation, presentation.Name, ToolArgumentReader.Int32(command.Arguments, "maxChars", 30000));
         }
 
-        private SkillResult ReadVbaModule(SkillCommand command)
+        private ToolResult ReadVbaModule(ToolCommand command)
         {
             return VbaProjectSupport.ReadModule(
                 RequirePresentation(),
-                SkillArgumentReader.String(command.Arguments, "moduleName", string.Empty),
-                SkillArgumentReader.Int32(command.Arguments, "maxChars", 30000));
+                ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
+                ToolArgumentReader.Int32(command.Arguments, "maxChars", 30000));
         }
 
-        private SkillResult ReplaceVbaModule(SkillCommand command)
+        private ToolResult ReplaceVbaModule(ToolCommand command)
         {
             return VbaProjectSupport.ReplaceModule(
                 RequirePresentation(),
-                SkillArgumentReader.String(command.Arguments, "moduleName", string.Empty),
-                SkillArgumentReader.String(command.Arguments, "code", string.Empty),
-                SkillArgumentReader.Boolean(command.Arguments, "createIfMissing", true));
+                ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
+                ToolArgumentReader.String(command.Arguments, "code", string.Empty),
+                ToolArgumentReader.Boolean(command.Arguments, "createIfMissing", true));
         }
 
-        private SkillResult InsertVbaModule(SkillCommand command)
+        private ToolResult InsertVbaModule(ToolCommand command)
         {
-            var moduleName = SkillArgumentReader.String(command.Arguments, "moduleName", "RNAssistantModule");
-            var code = SkillArgumentReader.String(command.Arguments, "code", string.Empty);
+            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", "RNAssistantModule");
+            var code = ToolArgumentReader.String(command.Arguments, "code", string.Empty);
             try
             {
                 return VbaProjectSupport.InsertModule(RequirePresentation(), moduleName, code);
             }
             catch (Exception ex)
             {
-                return SkillResult.Ok("VBA insert was blocked. Enable 'Trust access to the VBA project object model' or copy the code manually. " + ex.Message, JsonConvert.SerializeObject(new { moduleName = moduleName, code = code }));
+                return ToolResult.Ok("VBA insert was blocked. Enable 'Trust access to the VBA project object model' or copy the code manually. " + ex.Message, JsonConvert.SerializeObject(new { moduleName = moduleName, code = code }));
             }
         }
 
-        private SkillResult RunMacro(SkillCommand command)
+        private ToolResult RunMacro(ToolCommand command)
         {
-            var macroName = SkillArgumentReader.String(command.Arguments, "macroName", string.Empty);
+            var macroName = ToolArgumentReader.String(command.Arguments, "macroName", string.Empty);
             if (string.IsNullOrWhiteSpace(macroName))
             {
-                return SkillResult.Fail("No macroName provided.");
+                return ToolResult.Fail("No macroName provided.");
             }
 
             _application.Run(macroName);
-            return SkillResult.Ok("Macro ran: " + macroName);
+            return ToolResult.Ok("Macro ran: " + macroName);
         }
 
         private string ReadSlidesText(PowerPoint.Presentation presentation, int maxSlides)
@@ -354,9 +354,9 @@ namespace RNAssistant.PowerPointAddIn
             return presentation;
         }
 
-        private static SkillDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)
+        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)
         {
-            return new SkillDefinition { Id = id, Host = "PowerPoint", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun };
+            return new ToolDefinition { Id = id, Host = "PowerPoint", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun };
         }
 
         private static string Trim(string text, int maxChars)

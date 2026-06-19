@@ -130,7 +130,9 @@ function applyInitState(init) {
   state.title = init.title;
   state.settings = init.settings || {};
   state.tools = init.tools || [];
+  state.skills = init.skills || [];
   state.toolsPath = init.toolsPath || "";
+  state.skillsPath = init.skillsPath || "";
   state.context = init.context || {};
   state.contextUsage = init.contextUsage || {};
   state.activeChatId = init.activeChatId || "";
@@ -139,8 +141,10 @@ function applyInitState(init) {
   state.messages = init.messages || [];
   $("docLine").textContent = init.host + " - " + init.title;
   $("toolsPath").textContent = state.toolsPath ? "Storage: " + state.toolsPath : "";
+  $("skillsPath").textContent = state.skillsPath ? "Storage: " + state.skillsPath : "";
   renderSettings();
   renderTools();
+  renderSkills();
   renderContext(true);
   renderChatSessions();
   renderMessages();
@@ -165,7 +169,7 @@ async function initialize() {
 }
 
 async function clearRuntimeData() {
-  if (!window.confirm("Delete all local chats, chat context, VBA backups, and WebView cache for RNAssistant? Settings, API key, and custom tools will stay.")) {
+  if (!window.confirm("Delete all local chats, chat context, VBA backups, and WebView cache for RNAssistant? Settings, API key, and custom tools and skills will stay.")) {
     return;
   }
 
@@ -192,8 +196,8 @@ async function sendChat(text) {
     var response = await send("sendChat", { chatId: state.activeChatId, text: text });
     applyChatState(response);
     clearSendError();
-    if (response.skillResults && response.skillResults.length) {
-      logSkillResults(response.skillResults);
+    if (response.toolResults && response.toolResults.length) {
+      logToolResults(response.toolResults);
     }
   } catch (error) {
     markLocalMessage(text, { Pending: false, Failed: true });
@@ -246,6 +250,38 @@ function retryFailedSend() {
   var text = state.failedSend.text;
   clearSendError();
   sendChat(text);
+}
+
+async function confirmAgentTool(pendingId) {
+  if (!pendingId) {
+    return;
+  }
+
+  setActivity("executing", "Исполняю подтвержденный tool...");
+  try {
+    applyChatState(await send("confirmAgentTool", { chatId: state.activeChatId, pendingId: pendingId }));
+    log("Agent tool confirmed.");
+  } catch (error) {
+    log(error.detail || error.message);
+  } finally {
+    clearActivity();
+  }
+}
+
+async function cancelAgentTool(pendingId) {
+  if (!pendingId) {
+    return;
+  }
+
+  setActivity("canceling", "Отменяю tool...");
+  try {
+    applyChatState(await send("cancelAgentTool", { chatId: state.activeChatId, pendingId: pendingId }));
+    log("Agent tool cancelled.");
+  } catch (error) {
+    log(error.detail || error.message);
+  } finally {
+    clearActivity();
+  }
 }
 
 async function runQuickAction(action) {
