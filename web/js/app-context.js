@@ -138,10 +138,13 @@ function renderContext(skipUsageEstimate) {
   renderContextMeter();
 }
 
+async function syncActiveChatState() {
+  applyChatState(await send("listChats", {}));
+}
+
 async function refreshContext() {
   try {
-    state.context = await send("getContext", { chatId: state.activeChatId });
-    renderContext();
+    await syncActiveChatState();
   } catch (error) {
     log(error.detail || error.message);
   }
@@ -154,8 +157,8 @@ async function addSelectionContext(mode) {
       document.activeElement.blur();
     }
     reportFocusState();
-    state.context = await send("addSelectionContext", { chatId: state.activeChatId, mode: mode || "full" });
-    renderContext();
+    await send("addSelectionContext", { chatId: state.activeChatId, mode: mode || "full" });
+    await syncActiveChatState();
     log("Selection added to context.");
   } catch (error) {
     log(error.detail || error.message);
@@ -165,7 +168,7 @@ async function addSelectionContext(mode) {
 }
 
 async function addTextContext(kind, title, reference, text, details) {
-  state.context = await send("addTextContext", {
+  await send("addTextContext", {
     chatId: state.activeChatId,
     kind: kind,
     title: title,
@@ -173,7 +176,7 @@ async function addTextContext(kind, title, reference, text, details) {
     text: text,
     detailsJson: typeof details === "string" ? details : JSON.stringify(details || {})
   });
-  renderContext();
+  await syncActiveChatState();
 }
 
 async function addSelectedToolContextToContext() {
@@ -208,11 +211,11 @@ async function ensureVbaContextAttached() {
 async function addVbaContext() {
   setActivity("context", "Добавляю VBA в контекст...");
   try {
-    state.context = await send("addVbaContext", {
+    await send("addVbaContext", {
       chatId: state.activeChatId,
       maxChars: Number($("vbaContextLimitInput").value || 30000)
     });
-    renderContext();
+    await syncActiveChatState();
     log("VBA context added.");
   } finally {
     clearActivity();
@@ -224,9 +227,9 @@ async function toggleVbaContext() {
   try {
     if (notes.length) {
       for (var i = 0; i < notes.length; i += 1) {
-        state.context = await send("removeContextItem", { chatId: state.activeChatId, id: noteId(notes[i]) });
+        await send("removeContextItem", { chatId: state.activeChatId, id: noteId(notes[i]) });
       }
-      renderContext();
+      await syncActiveChatState();
       log("VBA context removed.");
       return;
     }
@@ -243,8 +246,8 @@ async function removeContextItem(id) {
   }
 
   try {
-    state.context = await send("removeContextItem", { chatId: state.activeChatId, id: id });
-    renderContext();
+    await send("removeContextItem", { chatId: state.activeChatId, id: id });
+    await syncActiveChatState();
     log("Context item removed.");
   } catch (error) {
     log(error.detail || error.message);
@@ -258,8 +261,8 @@ function bindContextActions() {
   $("clearContextButton").addEventListener("click", async function () {
     setActivity("clearing", "Очищаю контекст...");
     try {
-      state.context = await send("clearContext", { chatId: state.activeChatId });
-      renderContext();
+      await send("clearContext", { chatId: state.activeChatId });
+      await syncActiveChatState();
       log("Context cleared.");
     } catch (error) {
       log(error.message);

@@ -120,7 +120,12 @@ namespace RNAssistant.Office
 
         private ChatSession LoadSession(string requestedSessionId)
         {
-            return _chatSessions.LoadSession(requestedSessionId);
+            return LoadSession(requestedSessionId, false);
+        }
+
+        private ChatSession LoadSession(string requestedSessionId, bool allowMissingRequestedFallback)
+        {
+            return _chatSessions.LoadSession(requestedSessionId, allowMissingRequestedFallback);
         }
 
         private ChatStateResponse ChatState(ChatSession session)

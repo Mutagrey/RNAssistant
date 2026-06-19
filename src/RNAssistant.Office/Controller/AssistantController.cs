@@ -86,13 +86,13 @@ namespace RNAssistant.Office
         {
             if (string.IsNullOrWhiteSpace(text))
             {
-                var emptySession = LoadSession(chatId);
+                var emptySession = LoadSession(chatId, true);
                 var emptyId = ChatStore.GetSessionId(emptySession);
                 return new SendChatResponse { Message = string.Empty, ToolResults = new object[0], ActiveChatId = emptyId, ActiveChatModel = emptySession.Model, Chats = _chatSessions.GetChatSummaries(emptyId), Context = LoadContext(emptySession), Messages = emptySession.Messages, ContextUsage = ContextUsageEstimator.FromSession(emptySession, _settingsService.Load()) };
             }
 
             var settings = _settingsService.Load();
-            var session = LoadSession(chatId);
+            var session = LoadSession(chatId, true);
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
             var documentContext = LoadContext(session);
             var skills = _skillCatalog.SelectRelevantSkills(text, documentContext, 5);

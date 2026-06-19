@@ -48,6 +48,8 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "storage: chat roundtrip", Run = CreatesAndListsChatsInTempRoot },
                 new HarnessTest { Name = "storage: broken chat skipped", Run = SkipsBrokenChatFiles },
                 new HarnessTest { Name = "chat sessions: document key migration", Run = ChatSessionServiceMigratesDocumentKey },
+                new HarnessTest { Name = "chat sessions: legacy document key migration", Run = ChatSessionServiceMigratesLegacyDocumentKey },
+                new HarnessTest { Name = "chat sessions: stale requested id fallback", Run = ChatSessionServiceFallsBackForStaleRequestedId },
                 new HarnessTest { Name = "pipeline: dry-run resolves placeholders", Run = PipelineDryRunResolvesPlaceholders },
                 new HarnessTest { Name = "pipeline: executes fake adapter steps", Run = PipelineExecutesFakeAdapterSteps },
                 new HarnessTest { Name = "pipeline: resolves step output placeholders", Run = PipelineResolvesStepOutputPlaceholders },
@@ -277,6 +279,52 @@ namespace RNAssistant.Harness
                 AssertEqual(1, migrated.Messages.Count, "migrated message count");
                 AssertEqual(0, store.List("Excel", "doc", "Harness.xlsx").Count, "old document sessions");
                 AssertEqual(1, store.List("Excel", "saved-doc", "Harness.xlsx").Count, "new document sessions");
+            });
+        }
+
+        private static void ChatSessionServiceMigratesLegacyDocumentKey()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var legacy = store.Create(adapter.HostName, adapter.LegacyDocumentKey, adapter.DocumentTitle, "Legacy");
+                legacy.Messages.Add(new ChatMessage { Role = "user", Content = "legacy chat" });
+                store.Save(legacy);
+
+                var service = new ChatSessionService(adapter, store);
+                var loaded = service.LoadSession(null);
+
+                AssertEqual(ChatStore.GetSessionId(legacy), ChatStore.GetSessionId(loaded), "legacy session id");
+                AssertEqual(adapter.DocumentKey, loaded.DocumentKey, "legacy migrated document key");
+                AssertEqual(1, loaded.Messages.Count, "legacy message count");
+                AssertEqual(0, store.List(adapter.HostName, adapter.LegacyDocumentKey, adapter.DocumentTitle).Count, "legacy sessions moved");
+                AssertEqual(1, store.List(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle).Count, "current sessions");
+            });
+        }
+
+        private static void ChatSessionServiceFallsBackForStaleRequestedId()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var service = new ChatSessionService(adapter, store);
+                var oldSession = service.LoadSession(null);
+                var oldId = ChatStore.GetSessionId(oldSession);
+                oldSession.Messages.Add(new ChatMessage { Role = "user", Content = "old doc" });
+                store.Save(oldSession);
+
+                adapter.DocumentKeyValue = "other-doc";
+                adapter.RuntimeDocumentKeyValue = "other-runtime-doc";
+
+                var current = service.LoadSession(oldId, true);
+
+                AssertTrue(!string.Equals(oldId, ChatStore.GetSessionId(current), StringComparison.OrdinalIgnoreCase), "fallback created current session");
+                AssertEqual("other-doc", current.DocumentKey, "fallback document key");
+                AssertEqual(0, current.Messages.Count, "fallback message count");
+                AssertEqual(1, store.List("Excel", "doc", "Harness.xlsx").Count, "old document preserved");
+                AssertEqual(1, store.List("Excel", "other-doc", "Harness.xlsx").Count, "new document session");
             });
         }
 
