@@ -64,6 +64,7 @@
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />
     <Compile Include="Services\ChatCloneService.cs" />
     <Compile Include="Services\ChatCompletionService.cs" />
+    <Compile Include="Services\ChatSessionService.cs" />
     <Compile Include="Services\ContextService.cs" />
     <Compile Include="Services\SkillCatalogService.cs" />
     <Compile Include="Services\ToolCatalogService.cs" />

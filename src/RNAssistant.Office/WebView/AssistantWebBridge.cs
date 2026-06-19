@@ -27,7 +27,7 @@ namespace RNAssistant.Office.WebView
                 var request = JsonConvert.DeserializeObject<BridgeRequest>(requestJson) ?? new BridgeRequest();
                 id = request.Id;
                 var type = (request.Type ?? string.Empty).Trim();
-                var payload = request.Payload ?? new JObject();
+                var payload = request.Payload ?? JValue.CreateNull();
                 object responsePayload;
 
                 switch (type)
@@ -77,13 +77,13 @@ namespace RNAssistant.Office.WebView
                     case "getModelCatalog":
                         var modelCatalog = Payload<ModelCatalogPayload>(payload);
                         responsePayload = await _controller.GetModelCatalogAsync(
-                            modelCatalog.Settings == null ? null : modelCatalog.Settings.ToObject<AppSettings>(),
+                            modelCatalog.Settings,
                             modelCatalog.ApiKey);
                         break;
                     case "saveSettings":
                         var saveSettings = Payload<SaveSettingsPayload>(payload);
                         responsePayload = _controller.SaveSettings(
-                            saveSettings.Settings == null ? new AppSettings() : saveSettings.Settings.ToObject<AppSettings>(),
+                            saveSettings.Settings ?? new AppSettings(),
                             saveSettings.ApiKey);
                         break;
                     case "clearRuntimeData":
@@ -94,20 +94,14 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "saveTools":
                         var saveTools = Payload<SaveToolsPayload>(payload);
-                        var toolsToSave = saveTools.Tools == null
-                            ? (IEnumerable<ToolDefinition>)new ToolDefinition[0]
-                            : saveTools.Tools.ToObject<List<ToolDefinition>>();
-                        responsePayload = _controller.SaveTools(toolsToSave);
+                        responsePayload = _controller.SaveTools(saveTools.Tools ?? new List<ToolDefinition>());
                         break;
                     case "getSkills":
                         responsePayload = _controller.GetSkills();
                         break;
                     case "saveSkills":
                         var saveSkills = Payload<SaveSkillsPayload>(payload);
-                        var skillsToSave = saveSkills.Skills == null
-                            ? (IEnumerable<SkillDefinition>)new SkillDefinition[0]
-                            : saveSkills.Skills.ToObject<List<SkillDefinition>>();
-                        responsePayload = _controller.SaveSkills(skillsToSave);
+                        responsePayload = _controller.SaveSkills(saveSkills.Skills ?? new List<SkillDefinition>());
                         break;
                     case "runTool":
                         var runTool = Payload<RunToolPayload>(payload);
@@ -217,7 +211,7 @@ namespace RNAssistant.Office.WebView
             }));
         }
 
-        private static T Payload<T>(JObject payload) where T : class, new()
+        private static T Payload<T>(JToken payload) where T : class, new()
         {
             return payload == null ? new T() : (payload.ToObject<T>() ?? new T());
         }
@@ -233,7 +227,7 @@ namespace RNAssistant.Office.WebView
             return token ?? JToken.FromObject(payload);
         }
 
-        private static Dictionary<string, object> ToArguments(JObject arguments)
+        private static Dictionary<string, object> ToArguments(IDictionary<string, object> arguments)
         {
             var result = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
             if (arguments == null)
@@ -241,14 +235,33 @@ namespace RNAssistant.Office.WebView
                 return result;
             }
 
-            foreach (var property in arguments.Properties())
+            foreach (var pair in arguments)
             {
-                result[property.Name] = property.Value.Type == JTokenType.String
-                    ? (object)property.Value.Value<string>()
-                    : property.Value.ToString(Formatting.None);
+                result[pair.Key] = NormalizeArgumentValue(pair.Value);
             }
 
             return result;
+        }
+
+        private static object NormalizeArgumentValue(object value)
+        {
+            if (value == null)
+            {
+                return null;
+            }
+
+            var token = value as JToken;
+            if (token == null)
+            {
+                return value;
+            }
+
+            if (token.Type == JTokenType.String)
+            {
+                return token.Value<string>();
+            }
+
+            return token.ToString(Formatting.None);
         }
     }
 }

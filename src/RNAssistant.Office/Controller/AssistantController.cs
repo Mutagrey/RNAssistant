@@ -24,16 +24,13 @@ namespace RNAssistant.Office
         private readonly OfficeToolExecutor _toolExecutor;
         private readonly ToolCatalogService _toolCatalog;
         private readonly SkillCatalogService _skillCatalog;
+        private readonly ChatSessionService _chatSessions;
         private readonly ChatCompletionService _chatCompletionService;
         private readonly ContextService _contextService;
         private readonly LlmClient _llmClient;
         private readonly object _syncRoot;
         private readonly Dictionary<string, PendingAgentTool> _pendingAgentTools;
         private string _queuedQuickAction;
-        private string _activeSessionId;
-        private string _activeHost;
-        private string _activeDocumentKey;
-        private string _activeRuntimeDocumentKey;
 
         public AssistantController(IOfficeApplicationAdapter adapter)
         {
@@ -47,6 +44,7 @@ namespace RNAssistant.Office
             _toolExecutor = new OfficeToolExecutor(_adapter, _vbaBackupStore, _skillStore);
             _toolCatalog = new ToolCatalogService(_adapter, _toolExecutor, _toolStore);
             _skillCatalog = new SkillCatalogService(_adapter, _skillStore);
+            _chatSessions = new ChatSessionService(_adapter, _chatStore);
             _llmClient = new LlmClient(() => _settingsService.LoadApiKey());
             _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, _llmClient.CompleteAsync);
             _contextService = new ContextService(_adapter);
@@ -69,7 +67,7 @@ namespace RNAssistant.Office
                 Title = _adapter.DocumentTitle,
                 ActiveChatId = activeId,
                 ActiveChatModel = session == null ? string.Empty : session.Model,
-                Chats = GetChatSummaries(activeId),
+                Chats = _chatSessions.GetChatSummaries(activeId),
                 Settings = settings,
                 HasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey()),
                 Tools = _toolCatalog.GetVisibleTools(),
@@ -89,7 +87,7 @@ namespace RNAssistant.Office
             {
                 var emptySession = LoadSession(chatId);
                 var emptyId = ChatStore.GetSessionId(emptySession);
-                return new SendChatResponse { Message = string.Empty, ToolResults = new object[0], ActiveChatId = emptyId, ActiveChatModel = emptySession.Model, Chats = GetChatSummaries(emptyId), Context = LoadContext(emptySession), Messages = emptySession.Messages, ContextUsage = ContextUsageEstimator.FromSession(emptySession, _settingsService.Load()) };
+                return new SendChatResponse { Message = string.Empty, ToolResults = new object[0], ActiveChatId = emptyId, ActiveChatModel = emptySession.Model, Chats = _chatSessions.GetChatSummaries(emptyId), Context = LoadContext(emptySession), Messages = emptySession.Messages, ContextUsage = ContextUsageEstimator.FromSession(emptySession, _settingsService.Load()) };
             }
 
             var settings = _settingsService.Load();
@@ -102,7 +100,7 @@ namespace RNAssistant.Office
             ReportProgress(progress, "saving", "Сохраняю историю...");
             _chatStore.Save(session);
             var activeId = ChatStore.GetSessionId(session);
-            return new SendChatResponse { Message = completion.AssistantText, ToolResults = completion.ToolResults, ActiveChatId = activeId, ActiveChatModel = session.Model, Chats = GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings) };
+            return new SendChatResponse { Message = completion.AssistantText, ToolResults = completion.ToolResults, ActiveChatId = activeId, ActiveChatModel = session.Model, Chats = _chatSessions.GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings) };
         }
 
         public SettingsResponse GetSettings()
@@ -142,10 +140,7 @@ namespace RNAssistant.Office
         public InitResponse ClearRuntimeData()
         {
             _paths.ClearRuntimeData();
-            _activeSessionId = null;
-            _activeHost = null;
-            _activeDocumentKey = null;
-            _activeRuntimeDocumentKey = null;
+            _chatSessions.Reset();
             lock (_syncRoot)
             {
                 _pendingAgentTools.Clear();

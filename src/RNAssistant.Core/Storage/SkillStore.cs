@@ -24,7 +24,7 @@ namespace RNAssistant.Core.Storage
                 return result;
             }
 
-            foreach (var file in Directory.GetFiles(_paths.SkillsDirectory, "SKILL.md", SearchOption.AllDirectories))
+            foreach (var file in SafeGetFiles(_paths.SkillsDirectory, "SKILL.md"))
             {
                 var skill = LoadSkill(file);
                 if (skill == null || string.IsNullOrWhiteSpace(skill.Id))
@@ -248,6 +248,38 @@ namespace RNAssistant.Core.Storage
             }
             catch (UnauthorizedAccessException)
             {
+            }
+        }
+
+        private static IEnumerable<string> SafeGetFiles(string directory, string pattern)
+        {
+            var files = new List<string>();
+            AddFiles(directory, pattern, files);
+            return files;
+        }
+
+        private static void AddFiles(string directory, string pattern, List<string> files)
+        {
+            string[] localFiles;
+            string[] childDirectories;
+            try
+            {
+                localFiles = Directory.GetFiles(directory, pattern);
+                childDirectories = Directory.GetDirectories(directory);
+            }
+            catch (IOException)
+            {
+                return;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return;
+            }
+
+            files.AddRange(localFiles);
+            foreach (var childDirectory in childDirectories)
+            {
+                AddFiles(childDirectory, pattern, files);
             }
         }
     }

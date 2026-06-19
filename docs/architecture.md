@@ -32,13 +32,13 @@ web static UI
 - `src/RNAssistant.Core/Storage`: JSON file storage under `%AppData%/RNAssistant`.
 - `src/RNAssistant.Office/Controller/AssistantController.cs`: high-level orchestration and bridge-facing API.
 - `src/RNAssistant.Office/Controller/AssistantController.Agent.cs`: agent pending-tool confirmation and resume/cancel bridge flow.
-- `src/RNAssistant.Office/Controller/AssistantController.Chats.cs`: chat/session lifecycle and document-key migration.
+- `src/RNAssistant.Office/Controller/AssistantController.Chats.cs`: chat/session bridge methods; lifecycle and document-key migration live in `ChatSessionService`.
 - `src/RNAssistant.Office/Controller/AssistantController.Context.cs`: active chat context attachments.
 - `src/RNAssistant.Office/Contracts`: shared Office abstractions and bridge DTOs such as `IOfficeApplicationAdapter` and `BridgeDtos`.
 - `src/RNAssistant.Office/Runtime`: add-in runtime helpers that are host-neutral.
 - `src/RNAssistant.Office/Vba`: shared VBA project support.
 - `src/RNAssistant.Office/Agent`: agent transcript/plan formatting and retry policy.
-- `src/RNAssistant.Office/Services`: host-neutral application services used by controller orchestration, such as tool/skill catalog composition, context normalization, and chat completion flow.
+- `src/RNAssistant.Office/Services`: host-neutral application services used by controller orchestration, such as chat/session lifecycle, tool/skill catalog composition, context normalization, and chat completion flow.
 - `src/RNAssistant.Office/Tools`: tool execution, pipelines, skill CRUD tools, VBA patch/backup workflow.
 - `src/RNAssistant.*AddIn`: host adapters and VSTO wiring.
 - `web`: static HTML/CSS/JS task pane. `web/js/app-core.js` owns state and WebView bridge wiring; `app-settings.js`, `app-tools.js`, `app-skills.js`, `app-vba.js`, `app-context.js`, and `app-chat.js` own their feature flows; `app-utils.js` owns pure browser helpers; `app.js` is boot plus shared rendering helpers.
@@ -56,7 +56,7 @@ web static UI
 ## Known Oversized Areas
 
 - `web/css/app.css` is still large. Split by feature only when changing UI styling materially; avoid CSS churn while behavior is moving.
-- `Controller/AssistantController.*` should shrink further into services after the harness exists and constructor dependencies stabilize.
+- `Controller/AssistantController.*` should stay bridge-facing orchestration; move remaining reusable behavior into services when dependencies are stable.
 - Add-in adapters are medium-sized and host-specific; refactor only with Windows/VSTO validation available.
 
 ## Harness Pipeline
@@ -70,7 +70,8 @@ dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj
 Current coverage:
 
 - parser fixtures: fenced `rnassistant-agent`, bare JSON arrays, native `tool_calls`, malformed JSON;
-- chat store fixtures using temp directories, including broken JSON files being skipped;
+- chat/tool/skill/VBA store fixtures using temp directories, including broken files being skipped;
+- chat session lifecycle fixtures, including document-key migration;
 - pipeline dry-run and execution fixtures with fake `IOfficeApplicationAdapter`;
 - pipeline failure diagnostics and confirmation gates for custom tools and Agent Mode built-in mutations;
 - markdown skill store/catalog/prompt separation and agent skill-save confirmation;

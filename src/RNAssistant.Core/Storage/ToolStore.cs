@@ -26,7 +26,7 @@ namespace RNAssistant.Core.Storage
                 return result;
             }
 
-            foreach (var file in Directory.GetFiles(_paths.ToolsDirectory, "tool.json", SearchOption.AllDirectories))
+            foreach (var file in SafeGetFiles(_paths.ToolsDirectory, "tool.json"))
             {
                 var tool = _json.Load(file, (ToolDefinition)null);
                 if (tool == null || string.IsNullOrWhiteSpace(tool.Id))
@@ -119,6 +119,10 @@ namespace RNAssistant.Core.Storage
             {
                 return fallback ?? string.Empty;
             }
+            catch (UnauthorizedAccessException)
+            {
+                return fallback ?? string.Empty;
+            }
         }
 
         private static void WriteOptional(string path, string value)
@@ -147,6 +151,38 @@ namespace RNAssistant.Core.Storage
                 char.IsLetterOrDigit(c) || c == '-' || c == '_' ? c : '_').ToArray();
             var result = new string(chars).Trim('_');
             return string.IsNullOrWhiteSpace(result) ? "tool" : result;
+        }
+
+        private static IEnumerable<string> SafeGetFiles(string directory, string pattern)
+        {
+            var files = new List<string>();
+            AddFiles(directory, pattern, files);
+            return files;
+        }
+
+        private static void AddFiles(string directory, string pattern, List<string> files)
+        {
+            string[] localFiles;
+            string[] childDirectories;
+            try
+            {
+                localFiles = Directory.GetFiles(directory, pattern);
+                childDirectories = Directory.GetDirectories(directory);
+            }
+            catch (IOException)
+            {
+                return;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return;
+            }
+
+            files.AddRange(localFiles);
+            foreach (var childDirectory in childDirectories)
+            {
+                AddFiles(childDirectory, pattern, files);
+            }
         }
     }
 }

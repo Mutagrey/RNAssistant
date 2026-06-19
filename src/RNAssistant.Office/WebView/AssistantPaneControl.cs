@@ -7,7 +7,7 @@ using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.WebView
 {
@@ -137,15 +137,14 @@ namespace RNAssistant.Office.WebView
 
         private bool TryHandleHostStateMessage(string requestJson)
         {
-            var request = JObject.Parse(requestJson);
-            var type = ((string)request["type"] ?? string.Empty).Trim();
+            var request = JsonConvert.DeserializeObject<FocusStateMessage>(requestJson);
+            var type = request == null ? string.Empty : (request.Type ?? string.Empty).Trim();
             if (!string.Equals(type, "focusState", StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }
 
-            var payload = request["payload"] as JObject;
-            _webContentWantsKeyboard = payload != null && payload["wantsKeyboard"] != null && (bool)payload["wantsKeyboard"];
+            _webContentWantsKeyboard = request.Payload != null && request.Payload.WantsKeyboard;
             return true;
         }
 

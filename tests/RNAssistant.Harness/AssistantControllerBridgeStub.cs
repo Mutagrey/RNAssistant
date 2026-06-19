@@ -23,6 +23,8 @@ namespace RNAssistant.Office
         public string LastContextTitle { get; private set; }
         public string LastContextReference { get; private set; }
         public string LastContextText { get; private set; }
+        public string LastToolsJson { get; private set; }
+        public string LastSkillsJson { get; private set; }
 
         public InitResponse Initialize() { return new InitResponse { Host = "Excel", Title = "Harness.xlsx" }; }
         public ChatStateResponse ListChats() { return ChatState(); }
@@ -46,9 +48,19 @@ namespace RNAssistant.Office
 
         public InitResponse ClearRuntimeData() { return Initialize(); }
         public IReadOnlyList<ToolDefinition> GetTools() { return new ToolDefinition[0]; }
-        public IReadOnlyList<ToolDefinition> SaveTools(IEnumerable<ToolDefinition> tools) { return new ToolDefinition[0]; }
+        public IReadOnlyList<ToolDefinition> SaveTools(IEnumerable<ToolDefinition> tools)
+        {
+            LastToolsJson = JsonConvert.SerializeObject(tools ?? new ToolDefinition[0]);
+            return new ToolDefinition[0];
+        }
+
         public IReadOnlyList<SkillDefinition> GetSkills() { return new SkillDefinition[0]; }
-        public IReadOnlyList<SkillDefinition> SaveSkills(IEnumerable<SkillDefinition> skills) { return new SkillDefinition[0]; }
+
+        public IReadOnlyList<SkillDefinition> SaveSkills(IEnumerable<SkillDefinition> skills)
+        {
+            LastSkillsJson = JsonConvert.SerializeObject(skills ?? new SkillDefinition[0]);
+            return new SkillDefinition[0];
+        }
         public ChatStateResponse ConfirmAgentTool(string pendingId, string chatId = null) { return ChatState(pendingId, chatId); }
         public ChatStateResponse CancelAgentTool(string pendingId, string chatId = null) { return ChatState(pendingId, chatId); }
         public VbaProjectResponse GetVbaProject(int maxChars) { return new VbaProjectResponse { Result = ToolResult.Ok("ok") }; }

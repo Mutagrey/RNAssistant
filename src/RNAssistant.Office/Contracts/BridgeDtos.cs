@@ -14,7 +14,22 @@ namespace RNAssistant.Office.Contracts
         public string Type { get; set; }
 
         [JsonProperty("payload")]
-        public JObject Payload { get; set; }
+        public JToken Payload { get; set; }
+    }
+
+    public sealed class FocusStateMessage
+    {
+        [JsonProperty("type")]
+        public string Type { get; set; }
+
+        [JsonProperty("payload")]
+        public FocusStatePayload Payload { get; set; }
+    }
+
+    public sealed class FocusStatePayload
+    {
+        [JsonProperty("wantsKeyboard")]
+        public bool WantsKeyboard { get; set; }
     }
 
     public sealed class BridgeResponse
@@ -104,7 +119,7 @@ namespace RNAssistant.Office.Contracts
         public string ToolId { get; set; }
 
         [JsonProperty("arguments")]
-        public JObject Arguments { get; set; }
+        public IDictionary<string, object> Arguments { get; set; }
 
         [JsonProperty("dryRun")]
         public bool DryRun { get; set; }
@@ -119,7 +134,7 @@ namespace RNAssistant.Office.Contracts
     public class ModelCatalogPayload
     {
         [JsonProperty("settings")]
-        public JObject Settings { get; set; }
+        public AppSettings Settings { get; set; }
 
         [JsonProperty("apiKey")]
         public string ApiKey { get; set; }
@@ -132,13 +147,13 @@ namespace RNAssistant.Office.Contracts
     public sealed class SaveToolsPayload
     {
         [JsonProperty("tools")]
-        public JArray Tools { get; set; }
+        public List<ToolDefinition> Tools { get; set; }
     }
 
     public sealed class SaveSkillsPayload
     {
         [JsonProperty("skills")]
-        public JArray Skills { get; set; }
+        public List<SkillDefinition> Skills { get; set; }
     }
 
     public sealed class VbaProjectPayload

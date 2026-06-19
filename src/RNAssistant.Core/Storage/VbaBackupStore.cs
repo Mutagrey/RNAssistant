@@ -43,7 +43,7 @@ namespace RNAssistant.Core.Storage
                 return new List<VbaModuleBackup>();
             }
 
-            return Directory.GetFiles(directory, "*.json")
+            return SafeGetFiles(directory, "*.json")
                 .Select(path => _json.Load(path, (VbaModuleBackup)null))
                 .Where(backup => backup != null)
                 .OrderByDescending(backup => backup.CreatedUtc)
@@ -64,6 +64,22 @@ namespace RNAssistant.Core.Storage
         private string DocumentDirectory(string host, string documentKey)
         {
             return Path.Combine(_paths.VbaBackupDirectory, AppDataPaths.SafeFileName((host ?? string.Empty) + "|" + (documentKey ?? string.Empty)));
+        }
+
+        private static IEnumerable<string> SafeGetFiles(string directory, string pattern)
+        {
+            try
+            {
+                return Directory.GetFiles(directory, pattern);
+            }
+            catch (IOException)
+            {
+                return new string[0];
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return new string[0];
+            }
         }
     }
 }

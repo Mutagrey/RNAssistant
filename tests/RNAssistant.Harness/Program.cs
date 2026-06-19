@@ -44,6 +44,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "parser: recovers malformed agent json", Run = RecoversMalformedAgentJson },
                 new HarnessTest { Name = "storage: chat roundtrip", Run = CreatesAndListsChatsInTempRoot },
                 new HarnessTest { Name = "storage: broken chat skipped", Run = SkipsBrokenChatFiles },
+                new HarnessTest { Name = "chat sessions: document key migration", Run = ChatSessionServiceMigratesDocumentKey },
                 new HarnessTest { Name = "pipeline: dry-run resolves placeholders", Run = PipelineDryRunResolvesPlaceholders },
                 new HarnessTest { Name = "pipeline: executes fake adapter steps", Run = PipelineExecutesFakeAdapterSteps },
                 new HarnessTest { Name = "pipeline: resolves step output placeholders", Run = PipelineResolvesStepOutputPlaceholders },
@@ -55,15 +56,18 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "pipeline: agent mode gates built-in mutation", Run = AgentModeGatesBuiltInMutation },
                 new HarnessTest { Name = "tools: catalog merges visible tools", Run = ToolCatalogMergesVisibleTools },
                 new HarnessTest { Name = "tools: store saves and updates custom tools", Run = ToolStoreSavesAndUpdatesCustomTools },
+                new HarnessTest { Name = "tools: store skips broken custom tool files", Run = ToolStoreSkipsBrokenCustomToolFiles },
                 new HarnessTest { Name = "tools: unknown and disabled tools fail", Run = UnknownAndDisabledToolsFail },
                 new HarnessTest { Name = "tools: safety metadata gates mutations", Run = ToolSafetyMetadataGatesMutations },
                 new HarnessTest { Name = "tools: confirmation matrix covers dry and manual runs", Run = ConfirmationMatrixCoversDryAndManualRuns },
                 new HarnessTest { Name = "skills: store saves markdown skills", Run = SkillStoreSavesMarkdownSkills },
+                new HarnessTest { Name = "skills: store skips broken markdown skills", Run = SkillStoreSkipsBrokenMarkdownSkills },
                 new HarnessTest { Name = "skills: catalog selects relevant skills", Run = SkillCatalogSelectsRelevantSkills },
                 new HarnessTest { Name = "skills: prompt separates skills from tools", Run = PromptSeparatesSkillsFromTools },
                 new HarnessTest { Name = "skills: agent can save skills with confirmation", Run = AgentCanSaveSkillsWithConfirmation },
                 new HarnessTest { Name = "vba: replace text backs up module", Run = VbaReplaceTextBacksUpModule },
                 new HarnessTest { Name = "vba: apply patch targets named module", Run = VbaApplyPatchTargetsNamedModule },
+                new HarnessTest { Name = "vba: backup store skips broken files", Run = VbaBackupStoreSkipsBrokenFiles },
                 new HarnessTest { Name = "prompt: trims oldest history", Run = PromptBuilderTrimsOldestHistory },
                 new HarnessTest { Name = "prompt: usage estimator counts context", Run = ContextUsageEstimatorCountsPromptAndSession },
                 new HarnessTest { Name = "chat: completion service records prose", Run = ChatCompletionServiceRecordsProseResponse },
@@ -83,6 +87,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "bridge: typed runTool payload", Run = BridgeUsesTypedRunToolPayload },
                 new HarnessTest { Name = "bridge: typed sendChat progress", Run = BridgeUsesTypedSendChatPayloadAndProgress },
                 new HarnessTest { Name = "bridge: typed settings payload", Run = BridgeUsesTypedSettingsPayload },
+                new HarnessTest { Name = "bridge: typed tool and skill payloads", Run = BridgeUsesTypedToolAndSkillPayloads },
                 new HarnessTest { Name = "bridge: typed context payload", Run = BridgeUsesTypedContextPayload },
                 new HarnessTest { Name = "bridge: typed vba payload", Run = BridgeUsesTypedVbaPayload }
             };
@@ -228,6 +233,28 @@ namespace RNAssistant.Harness
 
                 var allSessions = store.List();
                 AssertEqual(1, allSessions.Count, "global session count");
+            });
+        }
+
+        private static void ChatSessionServiceMigratesDocumentKey()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var service = new ChatSessionService(adapter, store);
+                var session = service.LoadSession(null);
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "before save" });
+                store.Save(session);
+
+                adapter.DocumentKeyValue = "saved-doc";
+                var migrated = service.LoadSession(null);
+
+                AssertEqual(ChatStore.GetSessionId(session), ChatStore.GetSessionId(migrated), "migrated session id");
+                AssertEqual("saved-doc", migrated.DocumentKey, "migrated document key");
+                AssertEqual(1, migrated.Messages.Count, "migrated message count");
+                AssertEqual(0, store.List("Excel", "doc", "Harness.xlsx").Count, "old document sessions");
+                AssertEqual(1, store.List("Excel", "saved-doc", "Harness.xlsx").Count, "new document sessions");
             });
         }
 
@@ -419,6 +446,26 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ToolStoreSkipsBrokenCustomToolFiles()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var validDirectory = Path.Combine(paths.ToolsDirectory, "excel", "valid");
+                var brokenDirectory = Path.Combine(paths.ToolsDirectory, "excel", "broken");
+                Directory.CreateDirectory(validDirectory);
+                Directory.CreateDirectory(brokenDirectory);
+                File.WriteAllText(Path.Combine(validDirectory, "tool.json"), JsonConvert.SerializeObject(CustomTool("Excel", "excel.valid")));
+                File.WriteAllText(Path.Combine(validDirectory, "pipeline.json"), "{\"steps\":[]}");
+                File.WriteAllText(Path.Combine(brokenDirectory, "tool.json"), "{ broken");
+
+                var loaded = new ToolStore(paths).Load();
+
+                AssertEqual(1, loaded.Count, "loaded tool count");
+                AssertEqual("excel.valid", loaded[0].Id, "loaded tool id");
+                AssertContains(loaded[0].PipelineJson, "steps", "sidecar loaded");
+            });
+        }
+
         private static void ToolSafetyMetadataGatesMutations()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
@@ -472,6 +519,33 @@ namespace RNAssistant.Harness
                 AssertEqual("common.review_note", loaded[0].Id, "skill id");
                 AssertContains(loaded[0].BodyMarkdown, "# Review note", "skill markdown");
                 AssertTrue(File.Exists(Path.Combine(loaded[0].StoragePath, "SKILL.md")), "skill md file");
+            });
+        }
+
+        private static void SkillStoreSkipsBrokenMarkdownSkills()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var validDirectory = Path.Combine(paths.SkillsDirectory, "common", "valid");
+                var brokenDirectory = Path.Combine(paths.SkillsDirectory, "common", "broken");
+                Directory.CreateDirectory(validDirectory);
+                Directory.CreateDirectory(brokenDirectory);
+                File.WriteAllText(
+                    Path.Combine(validDirectory, "SKILL.md"),
+                    "---\n" +
+                    "id: common.valid\n" +
+                    "host: Common\n" +
+                    "name: Valid\n" +
+                    "enabled: true\n" +
+                    "---\n" +
+                    "\n" +
+                    "# Valid skill");
+                File.WriteAllText(Path.Combine(brokenDirectory, "SKILL.md"), "# Missing id");
+
+                var loaded = new SkillStore(paths).Load();
+
+                AssertEqual(1, loaded.Count, "loaded skill count");
+                AssertEqual("common.valid", loaded[0].Id, "loaded skill id");
             });
         }
 
@@ -619,6 +693,22 @@ namespace RNAssistant.Harness
                 AssertEqual(1, backups.Count, "backup count");
                 AssertEqual("Module2", backups[0].ModuleName, "backup module");
                 AssertContains(backups[0].Code, "\"old\"", "backup code");
+            });
+        }
+
+        private static void VbaBackupStoreSkipsBrokenFiles()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var store = new VbaBackupStore(paths);
+                var backup = store.Save("Excel", "doc", "Harness.xlsx", "Module1", "StdModule", "Sub Main()\nEnd Sub");
+                var directory = Path.Combine(paths.VbaBackupDirectory, AppDataPaths.SafeFileName("Excel|doc"));
+                File.WriteAllText(Path.Combine(directory, "broken.json"), "{ broken");
+
+                var backups = store.List("Excel", "doc");
+
+                AssertEqual(1, backups.Count, "backup count");
+                AssertEqual(backup.BackupId, backups[0].BackupId, "backup id");
             });
         }
 
@@ -1195,7 +1285,7 @@ namespace RNAssistant.Harness
             var progressMessages = new List<string>();
             var bridge = new AssistantWebBridge(controller, progressMessages.Add);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b1\",\"type\":\"runTool\",\"payload\":{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"},\"dryRun\":true}}")
+                "{\"id\":\"b1\",\"type\":\"runTool\",\"payload\":{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\",\"values\":[[\"A\"]]},\"dryRun\":true}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -1205,6 +1295,7 @@ namespace RNAssistant.Harness
             AssertTrue(response["payload"]["Success"].Value<bool>(), "bridge payload success");
             AssertEqual("excel.add_sheet", controller.LastToolId, "tool id");
             AssertContains(controller.LastArgumentsJson, "Report", "tool args");
+            AssertEqual("[[\"A\"]]", JObject.Parse(controller.LastArgumentsJson)["values"].Value<string>(), "nested tool arg");
             AssertTrue(controller.LastDryRun, "dry run");
             AssertEqual(1, progressMessages.Count, "progress count");
             AssertEqual("progress", JObject.Parse(progressMessages[0])["type"].Value<string>(), "progress type");
@@ -1244,6 +1335,25 @@ namespace RNAssistant.Harness
             AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
             AssertEqual("gpt-test", controller.LastSettings.Model, "settings model");
             AssertEqual("secret", controller.LastApiKey, "api key");
+        }
+
+        private static void BridgeUsesTypedToolAndSkillPayloads()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var toolsResponseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"b6\",\"type\":\"saveTools\",\"payload\":{\"tools\":[{\"Id\":\"excel.custom\",\"Host\":\"Excel\",\"Executor\":\"pipeline\",\"Enabled\":true}]}}")
+                .GetAwaiter()
+                .GetResult();
+            var skillsResponseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"b7\",\"type\":\"saveSkills\",\"payload\":{\"skills\":[{\"Id\":\"common.review\",\"Host\":\"Common\",\"BodyMarkdown\":\"# Review\",\"Enabled\":true}]}}")
+                .GetAwaiter()
+                .GetResult();
+
+            AssertTrue(JObject.Parse(toolsResponseJson)["ok"].Value<bool>(), "tools bridge response ok");
+            AssertTrue(JObject.Parse(skillsResponseJson)["ok"].Value<bool>(), "skills bridge response ok");
+            AssertEqual("excel.custom", JArray.Parse(controller.LastToolsJson)[0]["Id"].Value<string>(), "tool id");
+            AssertEqual("common.review", JArray.Parse(controller.LastSkillsJson)[0]["Id"].Value<string>(), "skill id");
         }
 
         private static void BridgeUsesTypedContextPayload()
@@ -1544,6 +1654,8 @@ namespace RNAssistant.Harness
             public string VbaModuleType = "StdModule";
             public readonly List<string> RanMacros = new List<string>();
             public bool FailUnknownSkills { get; set; }
+            public string DocumentKeyValue { get; set; }
+            public string RuntimeDocumentKeyValue { get; set; }
 
             private readonly string _hostName;
             private readonly string _documentTitle;
@@ -1571,6 +1683,8 @@ namespace RNAssistant.Harness
                 _builtInTools = new List<ToolDefinition>((builtInSkills ?? new ToolDefinition[0]).Select(CloneTool));
                 _scriptedResults = new Dictionary<string, Queue<ToolResult>>(StringComparer.OrdinalIgnoreCase);
                 _vbaModules = new Dictionary<string, FakeVbaModule>(StringComparer.OrdinalIgnoreCase);
+                DocumentKeyValue = "doc";
+                RuntimeDocumentKeyValue = "runtime-doc";
             }
 
             public static FakeOfficeAdapter ForHost(string host)
@@ -1594,9 +1708,9 @@ namespace RNAssistant.Harness
             }
 
             public string HostName { get { return _hostName; } }
-            public string DocumentKey { get { return "doc"; } }
+            public string DocumentKey { get { return DocumentKeyValue; } }
             public string LegacyDocumentKey { get { return "legacy-doc"; } }
-            public string RuntimeDocumentKey { get { return "runtime-doc"; } }
+            public string RuntimeDocumentKey { get { return RuntimeDocumentKeyValue; } }
             public string DocumentTitle { get { return _documentTitle; } }
 
             public string GetDocumentSnapshot(int maxChars)

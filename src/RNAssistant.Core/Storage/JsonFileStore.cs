@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using Newtonsoft.Json;
 
@@ -19,6 +20,10 @@ namespace RNAssistant.Core.Storage
                 return value == null ? fallback : value;
             }
             catch (IOException)
+            {
+                return fallback;
+            }
+            catch (UnauthorizedAccessException)
             {
                 return fallback;
             }
