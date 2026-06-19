@@ -112,7 +112,7 @@ function populateChatModelSelect(select) {
 
   select.value = selected;
   select.title = selected ? ("Chat model: " + selected) : ("Using default model: " + (defaultModel || ""));
-  select.disabled = state.modelCatalog.loading || state.modelSaving || !state.activeChatId;
+  select.disabled = state.modelCatalog.loading || state.modelSaving || !!state.activeSend || !state.activeChatId;
 }
 
 function appendModelMetric(box, label, value) {

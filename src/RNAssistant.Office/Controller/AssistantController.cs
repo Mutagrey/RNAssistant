@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
@@ -81,7 +82,7 @@ namespace RNAssistant.Office
             };
         }
 
-        public async Task<SendChatResponse> SendChatAsync(string text, string chatId = null, Action<string, string, ChatActivity> progress = null)
+        public async Task<SendChatResponse> SendChatAsync(string text, string chatId = null, Action<string, string, ChatActivity> progress = null, CancellationToken cancellationToken = default(CancellationToken))
         {
             if (string.IsNullOrWhiteSpace(text))
             {
@@ -95,9 +96,10 @@ namespace RNAssistant.Office
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
             var documentContext = LoadContext(session);
             var skills = _skillCatalog.SelectRelevantSkills(text, documentContext, 5);
-            var completion = await _chatCompletionService.ExecuteAsync(text, session, documentContext, settings, tools, progress, RegisterPendingAgentTool, skills);
+            var completion = await _chatCompletionService.ExecuteAsync(text, session, documentContext, settings, tools, progress, RegisterPendingAgentTool, skills, cancellationToken);
 
             ReportProgress(progress, "saving", "Сохраняю историю...");
+            cancellationToken.ThrowIfCancellationRequested();
             _chatStore.Save(session);
             var activeId = ChatStore.GetSessionId(session);
             return new SendChatResponse { Message = completion.AssistantText, ToolResults = completion.ToolResults, ActiveChatId = activeId, ActiveChatModel = session.Model, Chats = _chatSessions.GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings) };
@@ -170,7 +172,7 @@ namespace RNAssistant.Office
             return GetSkills();
         }
 
-        public ToolResult RunTool(string toolId, IDictionary<string, object> arguments, bool dryRun, Action<string, string> progress = null)
+        public ToolResult RunTool(string toolId, IDictionary<string, object> arguments, bool dryRun, Action<string, string> progress = null, CancellationToken cancellationToken = default(CancellationToken))
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
@@ -181,7 +183,7 @@ namespace RNAssistant.Office
             }
 
             ReportProgress(progress, dryRun ? "checking" : "executing", (dryRun ? "Проверяю tool: " : "Исполняю tool: ") + toolId);
-            return _toolExecutor.Execute(command, tools, settings, dryRun, true);
+            return _toolExecutor.Execute(command, tools, settings, dryRun, true, cancellationToken);
         }
 
         public VbaProjectResponse GetVbaProject(int maxChars)

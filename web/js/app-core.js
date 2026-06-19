@@ -11,6 +11,7 @@ var state = {
   activeChatModel: "",
   messages: [],
   failedSend: null,
+  activeSend: null,
   liveActivity: null,
   modelCatalog: { configUrl: "", defaultModel: "", models: [], loaded: false, loading: false, error: "" },
   modelSaving: false,
@@ -109,11 +110,26 @@ function hideHelp() {
 }
 
 function send(type, payload) {
-  return new Promise(function (resolve, reject) {
-    var id = String(state.seq++);
+  var id = String(state.seq++);
+  var promise = new Promise(function (resolve, reject) {
+    if (!window.chrome || !window.chrome.webview) {
+      reject(new Error("WebView bridge is not available."));
+      return;
+    }
+
     state.pending[id] = { resolve: resolve, reject: reject, type: type };
     window.chrome.webview.postMessage({ id: id, type: type, payload: payload || {} });
   });
+  promise.requestId = id;
+  return promise;
+}
+
+function cancelBridgeRequest(requestId) {
+  if (!requestId) {
+    return Promise.resolve({ cancelled: false });
+  }
+
+  return send("cancelRequest", { requestId: requestId });
 }
 
 function isKeyboardElement(element) {
@@ -156,32 +172,35 @@ function scheduleFocusStateReport() {
   state.focusReportTimer = window.setTimeout(reportFocusState, 0);
 }
 
-window.chrome.webview.addEventListener("message", function (event) {
-  var response = event.data;
-  if (typeof response === "string") {
-    response = JSON.parse(response);
-  }
-  if (response && response.type === "progress") {
-    var progress = response.payload || {};
-    var progressPending = state.pending[response.id];
-    setActivity(progress.phase || "working", progress.message || "Working...");
-    if (progressPending && progressPending.type === "sendChat") {
-      state.liveActivity = normalizeProgressActivity(progress);
-      renderMessages();
+if (window.chrome && window.chrome.webview) {
+  window.chrome.webview.addEventListener("message", function (event) {
+    var response = event.data;
+    if (typeof response === "string") {
+      response = JSON.parse(response);
     }
-    log("[" + (progress.phase || "working") + "] " + (progress.message || "Working..."));
-    return;
-  }
-  var pending = state.pending[response.id];
-  if (!pending) {
-    return;
-  }
-  delete state.pending[response.id];
-  if (response.ok) {
-    pending.resolve(response.payload);
-  } else {
-    var error = new Error(response.error || "Bridge error");
-    error.detail = response.errorDetail || response.error || "";
-    pending.reject(error);
-  }
-});
+    if (response && response.type === "progress") {
+      var progress = response.payload || {};
+      var progressPending = state.pending[response.id];
+      setActivity(progress.phase || "working", progress.message || "Working...");
+      if (progressPending && progressPending.type === "sendChat") {
+        state.liveActivity = normalizeProgressActivity(progress);
+        renderMessages();
+      }
+      log("[" + (progress.phase || "working") + "] " + (progress.message || "Working..."));
+      return;
+    }
+    var pending = state.pending[response.id];
+    if (!pending) {
+      return;
+    }
+    delete state.pending[response.id];
+    if (response.ok) {
+      pending.resolve(response.payload);
+    } else {
+      var error = new Error(response.error || "Bridge error");
+      error.detail = response.errorDetail || response.error || "";
+      error.cancelled = !!response.cancelled;
+      pending.reject(error);
+    }
+  });
+}

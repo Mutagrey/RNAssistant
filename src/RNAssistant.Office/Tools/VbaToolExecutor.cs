@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
@@ -12,7 +13,7 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed class VbaToolExecutor
     {
-        internal delegate ToolResult CommandRunner(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun);
+        internal delegate ToolResult CommandRunner(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun, CancellationToken cancellationToken);
 
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly VbaBackupStore _vbaBackupStore;
@@ -56,8 +57,9 @@ namespace RNAssistant.Office.Tools
             return GetControllerTools().FirstOrDefault(tool => string.Equals(tool.Id, toolId, StringComparison.OrdinalIgnoreCase));
         }
 
-        public ToolResult ExecuteControllerTool(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, bool dryRun, bool manualRun, CommandRunner runCommand)
+        public ToolResult ExecuteControllerTool(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, bool dryRun, bool manualRun, CommandRunner runCommand, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (string.Equals(command.ToolId, ToolId("vba_list_backups"), StringComparison.OrdinalIgnoreCase))
             {
                 return ToolResult.Ok("VBA backups listed.", JsonConvert.SerializeObject(_vbaBackupStore.List(_adapter.HostName, _adapter.DocumentKey)));
@@ -65,17 +67,17 @@ namespace RNAssistant.Office.Tools
 
             if (string.Equals(command.ToolId, ToolId("vba_restore_backup"), StringComparison.OrdinalIgnoreCase))
             {
-                return RestoreVbaBackup(command, skills, settings, dryRun, manualRun, runCommand);
+                return RestoreVbaBackup(command, skills, settings, dryRun, manualRun, runCommand, cancellationToken);
             }
 
             if (string.Equals(command.ToolId, ToolId("vba_replace_text"), StringComparison.OrdinalIgnoreCase))
             {
-                return ReplaceVbaText(command, skills, settings, dryRun, manualRun, runCommand);
+                return ReplaceVbaText(command, skills, settings, dryRun, manualRun, runCommand, cancellationToken);
             }
 
             if (string.Equals(command.ToolId, ToolId("vba_apply_patch"), StringComparison.OrdinalIgnoreCase))
             {
-                return ApplyVbaPatch(command, skills, settings, dryRun, manualRun, runCommand);
+                return ApplyVbaPatch(command, skills, settings, dryRun, manualRun, runCommand, cancellationToken);
             }
 
             return ToolResult.Fail("Unknown VBA controller tool: " + command.ToolId);
@@ -148,8 +150,9 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private ToolResult RestoreVbaBackup(ToolCommand command, IReadOnlyList<ToolDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, CommandRunner runCommand)
+        private ToolResult RestoreVbaBackup(ToolCommand command, IReadOnlyList<ToolDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, CommandRunner runCommand, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var backupId = ToolArgumentReader.String(command.Arguments, "backupId", string.Empty);
             var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
             var backup = _vbaBackupStore.Find(_adapter.HostName, _adapter.DocumentKey, backupId, moduleName);
@@ -167,14 +170,15 @@ namespace RNAssistant.Office.Tools
             replace.Arguments["moduleName"] = backup.ModuleName;
             replace.Arguments["code"] = backup.Code;
             replace.Arguments["createIfMissing"] = "true";
-            var result = runCommand(replace, tools, settings, 0, false, manualRun);
+            var result = runCommand(replace, tools, settings, 0, false, manualRun, cancellationToken);
             return result.Success
                 ? ToolResult.Ok("VBA backup restored: " + backup.BackupId, JsonConvert.SerializeObject(new { backup = backup, restore = result }))
                 : result;
         }
 
-        private ToolResult ReplaceVbaText(ToolCommand command, IReadOnlyList<ToolDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, CommandRunner runCommand)
+        private ToolResult ReplaceVbaText(ToolCommand command, IReadOnlyList<ToolDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, CommandRunner runCommand, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
             var find = ToolArgumentReader.String(command.Arguments, "find", string.Empty);
             var replace = ToolArgumentReader.String(command.Arguments, "replace", string.Empty);
@@ -213,14 +217,15 @@ namespace RNAssistant.Office.Tools
             write.Arguments["moduleName"] = moduleName;
             write.Arguments["code"] = updated;
             write.Arguments["createIfMissing"] = "true";
-            var result = runCommand(write, tools, settings, 0, false, manualRun);
+            var result = runCommand(write, tools, settings, 0, false, manualRun, cancellationToken);
             return result.Success
                 ? ToolResult.Ok("VBA text replaced in " + moduleName + ": " + replacements + " replacement(s).", preview)
                 : result;
         }
 
-        private ToolResult ApplyVbaPatch(ToolCommand command, IReadOnlyList<ToolDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, CommandRunner runCommand)
+        private ToolResult ApplyVbaPatch(ToolCommand command, IReadOnlyList<ToolDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, CommandRunner runCommand, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
             if (string.IsNullOrWhiteSpace(moduleName))
             {
@@ -253,6 +258,7 @@ namespace RNAssistant.Office.Tools
             var summary = new List<object>();
             foreach (JObject operation in operations.OfType<JObject>())
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var result = ApplyPatchOperation(updated, operation, out updated);
                 if (!result.Success)
                 {
@@ -282,7 +288,7 @@ namespace RNAssistant.Office.Tools
             write.Arguments["moduleName"] = moduleName;
             write.Arguments["code"] = updated;
             write.Arguments["createIfMissing"] = "true";
-            var writeResult = runCommand(write, tools, settings, 0, false, manualRun);
+            var writeResult = runCommand(write, tools, settings, 0, false, manualRun, cancellationToken);
             return writeResult.Success
                 ? ToolResult.Ok("VBA patch applied to " + moduleName + ".", preview)
                 : writeResult;

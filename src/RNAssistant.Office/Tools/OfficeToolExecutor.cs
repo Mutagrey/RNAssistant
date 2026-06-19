@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
@@ -27,9 +28,9 @@ namespace RNAssistant.Office.Tools
             return _vbaExecutor.GetControllerTools().Concat(_skillExecutor.GetControllerTools());
         }
 
-        public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, bool dryRun, bool manualRun)
+        public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, bool dryRun, bool manualRun, CancellationToken cancellationToken = default(CancellationToken))
         {
-            return ExecuteCommand(command, skills, settings, 0, dryRun, manualRun);
+            return ExecuteCommand(command, skills, settings, 0, dryRun, manualRun, cancellationToken);
         }
 
         public string VbaToolId(string suffix)
@@ -37,8 +38,9 @@ namespace RNAssistant.Office.Tools
             return _vbaExecutor.ToolId(suffix);
         }
 
-        private ToolResult ExecuteCommand(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun)
+        private ToolResult ExecuteCommand(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             settings = settings ?? new AppSettings();
             if (command == null || string.IsNullOrWhiteSpace(command.ToolId))
             {
@@ -65,11 +67,12 @@ namespace RNAssistant.Office.Tools
 
             if (customTool != null && string.Equals(customTool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
             {
-                return _pipelineExecutor.Execute(customTool, command, skills, settings, depth + 1, dryRun, manualRun, ExecuteCommand);
+                return _pipelineExecutor.Execute(customTool, command, skills, settings, depth + 1, dryRun, manualRun, ExecuteCommand, cancellationToken);
             }
 
             if (customTool != null && string.Equals(customTool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 return _vbaExecutor.ExecuteCustomTool(customTool, command, settings, dryRun, manualRun);
             }
 
@@ -80,11 +83,12 @@ namespace RNAssistant.Office.Tools
 
             if (_vbaExecutor.IsControllerTool(command.ToolId))
             {
-                return _vbaExecutor.ExecuteControllerTool(command, skills, settings, dryRun, manualRun, ExecuteCommand);
+                return _vbaExecutor.ExecuteControllerTool(command, skills, settings, dryRun, manualRun, ExecuteCommand, cancellationToken);
             }
 
             if (_skillExecutor.IsControllerTool(command.ToolId))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 return _skillExecutor.ExecuteControllerTool(command, settings, dryRun, manualRun);
             }
 
@@ -98,6 +102,7 @@ namespace RNAssistant.Office.Tools
                 _vbaExecutor.BackupModuleBeforeReplace(command, settings);
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             return _adapter.ExecuteTool(command);
         }
 

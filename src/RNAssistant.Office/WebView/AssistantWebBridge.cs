@@ -129,7 +129,8 @@ namespace RNAssistant.Office.WebView
                             runTool.ToolId,
                             ToArguments(runTool.Arguments),
                             runTool.DryRun,
-                            (phase, message) => ReportProgress(id, phase, message));
+                            (phase, message) => ReportProgress(id, phase, message),
+                            cancellationToken);
                         break;
                     case "confirmAgentTool":
                         var confirmAgentTool = Payload<PendingAgentToolPayload>(payload);
@@ -223,7 +224,9 @@ namespace RNAssistant.Office.WebView
 
         private CancellationTokenSource CreateCancellationSource(string id, string type)
         {
-            if (string.IsNullOrWhiteSpace(id) || !string.Equals(type, "sendChat", StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrWhiteSpace(id) ||
+                (!string.Equals(type, "sendChat", StringComparison.OrdinalIgnoreCase) &&
+                 !string.Equals(type, "runTool", StringComparison.OrdinalIgnoreCase)))
             {
                 return null;
             }

@@ -7,10 +7,10 @@
   <title>RN Assistant</title>
   <link rel="stylesheet" href="css/vendor/katex.min.css">
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
-  <link rel="stylesheet" href="css/app.css">
-  <link rel="stylesheet" href="css/app-chat.css">
+  <link rel="stylesheet" href="css/app.css?v=chatui-20260619-3">
+  <link rel="stylesheet" href="css/app-chat.css?v=chatui-20260619-3">
   <link rel="stylesheet" href="css/app-markdown.css">
-  <link rel="stylesheet" href="css/app-composer.css">
+  <link rel="stylesheet" href="css/app-composer.css?v=chatui-20260619-3">
   <link rel="stylesheet" href="css/app-context-chips.css">
   <link rel="stylesheet" href="css/app-models.css">
   <link rel="stylesheet" href="css/app-workspace.css">
@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="css/app-vba.css">
   <link rel="stylesheet" href="css/app-context-panel.css">
   <link rel="stylesheet" href="css/app-dialogs.css">
-  <link rel="stylesheet" href="css/app-responsive.css">
+  <link rel="stylesheet" href="css/app-responsive.css?v=chatui-20260619-3">
   <link rel="stylesheet" href="css/app-agent.css">
   <link rel="stylesheet" href="css/app-agent-data.css">
 </head>
@@ -117,6 +117,10 @@
             <button type="submit" class="icon-text-button primary" id="sendButton">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4 20-7Z"/><path d="M22 2 11 13"/></svg>
               <span>Send</span>
+            </button>
+            <button type="button" class="icon-text-button danger hidden" id="stopButton">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
+              <span id="stopButtonText">Stop</span>
             </button>
           </div>
         </form>
@@ -244,6 +248,7 @@
           <label>Request timeout seconds<input id="requestTimeoutInput" type="number" min="30" max="3600"></label>
           <label>Temperature<input id="temperatureInput" type="number" min="0" max="2" step="0.1"></label>
           <label>Top P<input id="topPInput" type="number" min="0" max="1" step="0.01"></label>
+          <label>Interface font size (%)<input id="uiFontScaleInput" type="number" min="85" max="130" step="5"></label>
           <label>Context chars<input id="contextLimitInput" type="number" min="1000" max="200000"></label>
           <label class="checkline"><input id="streamInput" type="checkbox"> Stream responses</label>
           <label class="checkline"><input id="agentModeInput" type="checkbox"> Agent mode for Office actions</label>
@@ -331,12 +336,12 @@
   <script src="js/vendor/katex.min.js"></script>
   <script src="js/vendor/auto-render.min.js"></script>
   <script src="js/vendor/highlight.min.js"></script>
-  <script src="js/app-core.js"></script>
+  <script src="js/app-core.js?v=chatui-20260619-3"></script>
   <script src="js/app-utils.js"></script>
   <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js"></script>
+  <script src="js/app-settings.js?v=chatui-20260619-3"></script>
   <script src="js/app-model-data.js"></script>
-  <script src="js/app-model-render.js"></script>
+  <script src="js/app-model-render.js?v=chatui-20260619-3"></script>
   <script src="js/app-models.js"></script>
   <script src="js/app-context-data.js"></script>
   <script src="js/app-chat-state.js"></script>
@@ -348,7 +353,7 @@
   <script src="js/app-agent-model.js"></script>
   <script src="js/app-agent.js"></script>
   <script src="js/app-messages.js"></script>
-  <script src="js/app-chat.js"></script>
+  <script src="js/app-chat.js?v=chatui-20260619-3"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

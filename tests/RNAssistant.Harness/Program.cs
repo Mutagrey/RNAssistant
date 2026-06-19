@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -810,8 +811,9 @@ namespace RNAssistant.Harness
                 var service = new ChatCompletionService(
                     adapter,
                     executor,
-                    delegate(AppSettings settings, IEnumerable<ChatMessage> messages)
+                    delegate(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         capturedMessages = new List<ChatMessage>(messages ?? new ChatMessage[0]);
                         return Task.FromResult(new LlmCompletionResult
                         {
@@ -1686,8 +1688,9 @@ namespace RNAssistant.Harness
             return new ChatCompletionService(
                 adapter,
                 executor,
-                delegate(AppSettings settings, IEnumerable<ChatMessage> messages)
+                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     if (calls != null)
                     {
                         calls.Add(new List<ChatMessage>(messages ?? new ChatMessage[0]));

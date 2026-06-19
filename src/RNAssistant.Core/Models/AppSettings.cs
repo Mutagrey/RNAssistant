@@ -21,6 +21,7 @@ namespace RNAssistant.Core.Models
         public bool? AutoRetryToolErrors { get; set; }
         public bool IncludeVbaContext { get; set; }
         public int VbaContextCharLimit { get; set; }
+        public double UiFontScale { get; set; }
         public Dictionary<string, string> CustomHeaders { get; set; }
 
         public AppSettings()
@@ -41,6 +42,7 @@ namespace RNAssistant.Core.Models
             AutoRetryToolErrors = true;
             IncludeVbaContext = false;
             VbaContextCharLimit = 30000;
+            UiFontScale = 1.0;
             CustomHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
     }

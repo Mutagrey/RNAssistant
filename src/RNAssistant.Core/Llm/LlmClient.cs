@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -29,7 +30,7 @@ namespace RNAssistant.Core.Llm
             _apiKeyProvider = apiKeyProvider;
         }
 
-        public async Task<LlmCompletionResult> CompleteAsync(AppSettings settings, IEnumerable<ChatMessage> messages)
+        public async Task<LlmCompletionResult> CompleteAsync(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken = default(CancellationToken))
         {
             if (settings == null)
             {
@@ -105,13 +106,14 @@ namespace RNAssistant.Core.Llm
                 var diagnostics = CreateDiagnostics(requestUri, settings, apiMessages.Count, !string.IsNullOrWhiteSpace(apiKey));
                 try
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var requestContent = new StringContent(json, Encoding.UTF8, "application/json");
                     if (!string.IsNullOrWhiteSpace(contentTypeOverride))
                     {
                         requestContent.Headers.ContentType = MediaTypeHeaderValue.Parse(contentTypeOverride);
                     }
 
-                    var response = await client.PostAsync(requestUri, requestContent).ConfigureAwait(false);
+                    var response = await client.PostAsync(requestUri, requestContent, cancellationToken).ConfigureAwait(false);
                     var responseJson = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                     if (!response.IsSuccessStatusCode)
                     {
@@ -139,6 +141,11 @@ namespace RNAssistant.Core.Llm
                 }
                 catch (TaskCanceledException ex)
                 {
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        throw new OperationCanceledException("LLM request cancelled.", ex, cancellationToken);
+                    }
+
                     throw new InvalidOperationException("LLM request timed out after " + client.Timeout.TotalSeconds + " seconds. " + diagnostics + ". " + DeepestMessage(ex), ex);
                 }
                 catch (HttpRequestException ex)

@@ -1,22 +1,31 @@
-@media (max-width: 520px) {
+@media (max-width: 1200px) {
+  .panel {
+    padding: 10px;
+  }
+
   .composer-toolbar {
-    align-items: stretch;
-    flex-direction: column;
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
   }
 
   .composer-toolbar #addSelectionContextButton,
   .composer-toolbar #toggleVbaContextButton {
-    width: 100%;
+    flex: 1 1 calc(50% - 3px);
+    width: auto;
     margin-right: 0;
   }
 
   .composer-left {
+    flex: 1 1 100%;
     width: 100%;
     flex-wrap: wrap;
+    gap: 6px;
   }
 
   .context-meter {
-    flex: 1 1 180px;
+    flex: 1 1 100%;
     grid-template-columns: auto auto 1fr;
   }
 
@@ -27,7 +36,16 @@
   }
 
   .context-meter em {
-    grid-column: 1 / -1;
+    display: none;
+  }
+
+  .composer textarea {
+    min-height: 68px;
+  }
+
+  .message.user .markdown,
+  .message.user .message-footer {
+    max-width: 92%;
   }
 
   .tool-layout {

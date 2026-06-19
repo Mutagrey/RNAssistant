@@ -48,6 +48,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("errorDetail", NullValueHandling = NullValueHandling.Ignore)]
         public string ErrorDetail { get; set; }
+
+        [JsonProperty("cancelled", NullValueHandling = NullValueHandling.Ignore)]
+        public bool? Cancelled { get; set; }
     }
 
     public sealed class ProgressMessage
@@ -102,6 +105,12 @@ namespace RNAssistant.Office.Contracts
     {
         [JsonProperty("text")]
         public string Text { get; set; }
+    }
+
+    public sealed class CancelRequestPayload
+    {
+        [JsonProperty("requestId")]
+        public string RequestId { get; set; }
     }
 
     public sealed class MessageActionPayload : ChatPayload

@@ -185,40 +185,93 @@ async function clearRuntimeData() {
   }
 }
 
+function renderSendControls() {
+  var isSending = !!state.activeSend;
+  var isCanceling = isSending && !!state.activeSend.canceling;
+  var sendButton = $("sendButton");
+  var stopButton = $("stopButton");
+  var stopText = $("stopButtonText");
+  var input = $("chatInput");
+  var clearButton = $("clearInputButton");
+  var modelSelect = $("chatModelSelect");
+
+  if (sendButton) {
+    sendButton.classList.toggle("hidden", isSending);
+    sendButton.disabled = isSending || state.modelSaving;
+  }
+  if (stopButton) {
+    stopButton.classList.toggle("hidden", !isSending);
+    stopButton.disabled = isCanceling;
+  }
+  if (stopText) {
+    stopText.textContent = isCanceling ? "Canceling" : "Stop";
+  }
+  if (input) {
+    input.readOnly = isSending;
+  }
+  if (clearButton) {
+    clearButton.disabled = isSending;
+  }
+  if (modelSelect) {
+    modelSelect.disabled = isSending || state.modelCatalog.loading || state.modelSaving || !state.activeChatId;
+  }
+}
+
+function removeLocalMessage(text) {
+  for (var i = state.messages.length - 1; i >= 0; i -= 1) {
+    if (state.messages[i] && state.messages[i].Local && messageContent(state.messages[i]) === text) {
+      state.messages.splice(i, 1);
+      return true;
+    }
+  }
+  return false;
+}
+
 async function sendChat(text) {
   setActivity("thinking", "Модель думает...");
-  $("sendButton").disabled = true;
-  $("chatInput").readOnly = true;
-  if ($("chatModelSelect")) {
-    $("chatModelSelect").disabled = true;
-  }
+  var request = send("sendChat", { chatId: state.activeChatId, text: text });
+  state.activeSend = { requestId: request.requestId, text: text, canceling: false };
+  renderSendControls();
   try {
-    var response = await send("sendChat", { chatId: state.activeChatId, text: text });
+    var response = await request;
     applyChatState(response);
     clearSendError();
     if (response.toolResults && response.toolResults.length) {
       logToolResults(response.toolResults);
     }
   } catch (error) {
-    markLocalMessage(text, { Pending: false, Failed: true });
-    renderMessages();
-    showSendError(error.detail || error.message, text);
-    log(error.message);
-    if (error.detail && error.detail !== error.message) {
-      log(error.detail);
+    if (error.cancelled) {
+      removeLocalMessage(text);
+      if (!$("chatInput").value.trim()) {
+        $("chatInput").value = text;
+      }
+      updateEstimatedContextUsage();
+      renderChatSessions();
+      renderContextMeter();
+      clearSendError();
+      log("Chat request cancelled.");
+    } else {
+      markLocalMessage(text, { Pending: false, Failed: true });
+      renderMessages();
+      showSendError(error.detail || error.message, text);
+      log(error.message);
+      if (error.detail && error.detail !== error.message) {
+        log(error.detail);
+      }
     }
   } finally {
-    $("sendButton").disabled = false;
-    $("chatInput").readOnly = false;
+    state.activeSend = null;
     state.liveActivity = null;
+    renderSendControls();
     renderMessages();
     renderModelControls();
+    renderSendControls();
     clearActivity();
   }
 }
 
 function submitChatInput() {
-  if ($("sendButton").disabled || state.modelSaving) {
+  if (state.activeSend || state.modelSaving) {
     return;
   }
 
@@ -238,7 +291,7 @@ function submitChatInput() {
 }
 
 function retryFailedSend() {
-  if (!state.failedSend || !state.failedSend.text) {
+  if (state.activeSend || !state.failedSend || !state.failedSend.text) {
     return;
   }
 
@@ -250,6 +303,19 @@ function retryFailedSend() {
   var text = state.failedSend.text;
   clearSendError();
   sendChat(text);
+}
+
+function stopActiveSend() {
+  if (!state.activeSend || state.activeSend.canceling) {
+    return;
+  }
+
+  state.activeSend.canceling = true;
+  setActivity("canceling", "Отменяю ответ...");
+  renderSendControls();
+  cancelBridgeRequest(state.activeSend.requestId).catch(function (error) {
+    log(error.detail || error.message);
+  });
 }
 
 async function confirmAgentTool(pendingId) {
@@ -306,6 +372,7 @@ function bindChatActions() {
   $("clearChatButton").addEventListener("click", clearChat);
   $("deleteChatButton").addEventListener("click", deleteChat);
   $("retrySendButton").addEventListener("click", retryFailedSend);
+  $("stopButton").addEventListener("click", stopActiveSend);
   $("clearInputButton").addEventListener("click", function () { $("chatInput").value = ""; });
   $("chatInput").addEventListener("keydown", function (event) {
     if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {

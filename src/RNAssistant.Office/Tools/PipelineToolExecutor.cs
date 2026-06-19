@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
@@ -9,7 +10,7 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed class PipelineToolExecutor
     {
-        internal delegate ToolResult CommandRunner(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun);
+        internal delegate ToolResult CommandRunner(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun, CancellationToken cancellationToken);
 
         public ToolResult Execute(
             ToolDefinition tool,
@@ -19,8 +20,10 @@ namespace RNAssistant.Office.Tools
             int depth,
             bool dryRun,
             bool manualRun,
-            CommandRunner runCommand)
+            CommandRunner runCommand,
+            CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(tool.PipelineJson))
             {
                 return ToolResult.Fail("Tool has no pipeline: " + tool.Id);
@@ -46,6 +49,7 @@ namespace RNAssistant.Office.Tools
             var output = new List<object>();
             foreach (var stepToken in steps)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var step = stepToken as JObject;
                 if (step == null)
                 {
@@ -74,7 +78,7 @@ namespace RNAssistant.Office.Tools
                     }
                 }
 
-                var result = runCommand(nested, skills, settings, depth + 1, dryRun, manualRun) ?? ToolResult.Fail("Pipeline step returned no result.");
+                var result = runCommand(nested, skills, settings, depth + 1, dryRun, manualRun, cancellationToken) ?? ToolResult.Fail("Pipeline step returned no result.");
                 stepResults[stepId] = result;
                 output.Add(new { id = stepId, toolId = toolId, success = result.Success, status = result.Status, message = result.Message, dataJson = result.DataJson });
 

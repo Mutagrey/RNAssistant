@@ -1,4 +1,5 @@
 :root {
+  --ui-font-scale: 1;
   --bg: #f7f8fb;
   --panel: #ffffff;
   --text: #1d2430;
@@ -27,7 +28,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: "Segoe UI", Arial, sans-serif;
-  font-size: 14px;
+  font-size: calc(14px * var(--ui-font-scale));
 }
 
 button,
@@ -235,4 +236,38 @@ button.danger {
 .panel.active {
   display: flex;
   flex-direction: column;
+}
+
+body[data-ui-font-scale] .brand {
+  font-size: calc(15px * var(--ui-font-scale)) !important;
+}
+
+body[data-ui-font-scale] .docline,
+body[data-ui-font-scale] .activity,
+body[data-ui-font-scale] .link-button,
+body[data-ui-font-scale] .form-grid label,
+body[data-ui-font-scale] .status,
+body[data-ui-font-scale] .danger-zone-text,
+body[data-ui-font-scale] .message .role,
+body[data-ui-font-scale] .message-footer-meta,
+body[data-ui-font-scale] .message-meta,
+body[data-ui-font-scale] .composer-toolbar .icon-text-button,
+body[data-ui-font-scale] .context-meter,
+body[data-ui-font-scale] .composer-model,
+body[data-ui-font-scale] .send-error-title,
+body[data-ui-font-scale] .send-error-text,
+body[data-ui-font-scale] .workspace-note,
+body[data-ui-font-scale] .context-panel-meta,
+body[data-ui-font-scale] .model-info-description,
+body[data-ui-font-scale] .model-info-value,
+body[data-ui-font-scale] .agent-run-subtitle,
+body[data-ui-font-scale] .agent-activity-subtitle {
+  font-size: calc(12px * var(--ui-font-scale)) !important;
+}
+
+body[data-ui-font-scale] .markdown pre code,
+body[data-ui-font-scale] .markdown pre code.hljs,
+body[data-ui-font-scale] .vba-code-input,
+body[data-ui-font-scale] .vba-code-preview {
+  font-size: calc(12.5px * var(--ui-font-scale)) !important;
 }

@@ -1,11 +1,27 @@
+function clampUiFontScale(value) {
+  value = Number(value || 1);
+  if (!isFinite(value) || value <= 0) {
+    value = 1;
+  }
+  return Math.max(0.85, Math.min(1.3, value));
+}
+
+function applyUiFontScale(settings) {
+  var scale = clampUiFontScale((settings || {}).UiFontScale || (settings || {}).uiFontScale || 1);
+  document.documentElement.style.setProperty("--ui-font-scale", String(scale));
+  document.body.setAttribute("data-ui-font-scale", String(scale));
+}
+
 function renderSettings() {
   var s = state.settings || {};
+  applyUiFontScale(s);
   $("baseUrlInput").value = s.BaseUrl || s.baseUrl || "";
   $("modelInput").value = s.Model || s.model || "";
   $("maxTokensInput").value = s.MaxTokens || s.maxTokens || 2048;
   $("requestTimeoutInput").value = s.RequestTimeoutSeconds || s.requestTimeoutSeconds || 300;
   $("temperatureInput").value = s.Temperature || s.temperature || 0.2;
   $("topPInput").value = s.TopP || s.topP || 1;
+  $("uiFontScaleInput").value = Math.round(clampUiFontScale(s.UiFontScale || s.uiFontScale || 1) * 100);
   $("contextLimitInput").value = s.ContextCharLimit || s.contextCharLimit || 24000;
   $("streamInput").checked = !!(s.StreamResponses || s.streamResponses);
   $("agentModeInput").checked = (s.AgentModeEnabled !== false && s.agentModeEnabled !== false);
@@ -28,6 +44,7 @@ function readSettings() {
     RequestTimeoutSeconds: Number($("requestTimeoutInput").value || 300),
     Temperature: Number($("temperatureInput").value || 0.2),
     TopP: Number($("topPInput").value || 1),
+    UiFontScale: clampUiFontScale(Number($("uiFontScaleInput").value || 100) / 100),
     ContextCharLimit: Number($("contextLimitInput").value || 24000),
     StreamResponses: $("streamInput").checked,
     AgentModeEnabled: $("agentModeInput").checked,
@@ -43,6 +60,10 @@ function readSettings() {
 }
 
 function bindSettingsActions() {
+  $("uiFontScaleInput").addEventListener("input", function () {
+    applyUiFontScale({ UiFontScale: Number($("uiFontScaleInput").value || 100) / 100 });
+  });
+
   $("saveSettingsButton").addEventListener("click", async function () {
     try {
       var apiKey = $("apiKeyInput").value;
