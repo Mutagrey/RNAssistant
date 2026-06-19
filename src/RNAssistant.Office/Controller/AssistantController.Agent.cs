@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office
@@ -198,12 +199,7 @@ namespace RNAssistant.Office
             try
             {
                 var args = JObject.Parse(activity.ArgumentsJson);
-                foreach (var property in args.Properties())
-                {
-                    command.Arguments[property.Name] = property.Value.Type == JTokenType.String
-                        ? (object)property.Value.Value<string>()
-                        : property.Value.ToString(Formatting.None);
-                }
+                ToolArgumentNormalizer.AddProperties(args, command.Arguments);
             }
             catch (JsonException)
             {

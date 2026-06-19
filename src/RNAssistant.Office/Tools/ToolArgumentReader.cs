@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Tools
 {
@@ -34,27 +33,7 @@ namespace RNAssistant.Office.Tools
 
         public static Dictionary<string, object> ParseObject(string argumentsJson)
         {
-            var result = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            if (string.IsNullOrWhiteSpace(argumentsJson))
-            {
-                return result;
-            }
-
-            try
-            {
-                var args = JObject.Parse(argumentsJson);
-                foreach (var property in args.Properties())
-                {
-                    result[property.Name] = property.Value.Type == JTokenType.String
-                        ? (object)property.Value.Value<string>()
-                        : property.Value.ToString(Formatting.None);
-                }
-            }
-            catch (JsonException)
-            {
-            }
-
-            return result;
+            return ToolArgumentNormalizer.ParseObject(argumentsJson);
         }
     }
 }

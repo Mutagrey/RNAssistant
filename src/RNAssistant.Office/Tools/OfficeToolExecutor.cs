@@ -63,11 +63,6 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.WaitingConfirmation("Tool requires confirmation before execution: " + command.ToolId);
             }
 
-            if (customTool != null && customTool.RequiresConfirmation && !settings.AutoConfirmToolActions && !dryRun && !manualRun)
-            {
-                return ToolResult.WaitingConfirmation("Tool requires confirmation before execution: " + customTool.Id);
-            }
-
             if (customTool != null && string.Equals(customTool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
             {
                 return _pipelineExecutor.Execute(customTool, command, skills, settings, depth + 1, dryRun, manualRun, ExecuteCommand);

@@ -561,12 +561,7 @@ namespace RNAssistant.Core.Tools
             var args = ReadObject(argumentToken);
             if (args != null)
             {
-                foreach (var property in args.Properties())
-                {
-                    command.Arguments[property.Name] = property.Value.Type == JTokenType.String
-                        ? (object)property.Value.Value<string>()
-                        : property.Value.ToString(Formatting.None);
-                }
+                ToolArgumentNormalizer.AddProperties(args, command.Arguments);
             }
 
             commands.Add(command);

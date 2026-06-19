@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.WebView
@@ -12,16 +14,21 @@ namespace RNAssistant.Office.WebView
     {
         private readonly AssistantController _controller;
         private readonly Action<string> _postMessageJson;
+        private readonly object _cancellationSync;
+        private readonly Dictionary<string, CancellationTokenSource> _requestCancellations;
 
         public AssistantWebBridge(AssistantController controller, Action<string> postMessageJson)
         {
             _controller = controller;
             _postMessageJson = postMessageJson;
+            _cancellationSync = new object();
+            _requestCancellations = new Dictionary<string, CancellationTokenSource>(StringComparer.OrdinalIgnoreCase);
         }
 
         public async Task<string> HandleMessageAsync(string requestJson)
         {
             string id = null;
+            CancellationTokenSource cancellationSource = null;
             try
             {
                 var request = JsonConvert.DeserializeObject<BridgeRequest>(requestJson) ?? new BridgeRequest();
@@ -29,6 +36,19 @@ namespace RNAssistant.Office.WebView
                 var type = (request.Type ?? string.Empty).Trim();
                 var payload = request.Payload ?? JValue.CreateNull();
                 object responsePayload;
+                if (string.Equals(type, "cancelRequest", StringComparison.OrdinalIgnoreCase))
+                {
+                    responsePayload = CancelRequest(Payload<CancelRequestPayload>(payload).RequestId);
+                    return JsonConvert.SerializeObject(new BridgeResponse
+                    {
+                        Id = id,
+                        Ok = true,
+                        Payload = ToPayloadToken(responsePayload)
+                    });
+                }
+
+                cancellationSource = CreateCancellationSource(id, type);
+                var cancellationToken = cancellationSource == null ? CancellationToken.None : cancellationSource.Token;
 
                 switch (type)
                 {
@@ -61,7 +81,7 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "sendChat":
                         var sendChat = Payload<SendChatPayload>(payload);
-                        responsePayload = await _controller.SendChatAsync(sendChat.Text, sendChat.ChatId, (phase, message, activity) => ReportProgress(id, phase, message, activity));
+                        responsePayload = await _controller.SendChatAsync(sendChat.Text, sendChat.ChatId, (phase, message, activity) => ReportProgress(id, phase, message, activity), cancellationToken);
                         break;
                     case "deleteMessage":
                         var deleteMessage = Payload<MessageActionPayload>(payload);
@@ -174,6 +194,17 @@ namespace RNAssistant.Office.WebView
                     Payload = ToPayloadToken(responsePayload)
                 });
             }
+            catch (OperationCanceledException ex)
+            {
+                return JsonConvert.SerializeObject(new BridgeResponse
+                {
+                    Id = id,
+                    Ok = false,
+                    Error = "Request cancelled.",
+                    ErrorDetail = string.IsNullOrWhiteSpace(ex.Message) ? "Request cancelled." : ex.Message,
+                    Cancelled = true
+                });
+            }
             catch (Exception ex)
             {
                 return JsonConvert.SerializeObject(new BridgeResponse
@@ -184,6 +215,62 @@ namespace RNAssistant.Office.WebView
                     ErrorDetail = ex.ToString()
                 });
             }
+            finally
+            {
+                ReleaseCancellationSource(id, cancellationSource);
+            }
+        }
+
+        private CancellationTokenSource CreateCancellationSource(string id, string type)
+        {
+            if (string.IsNullOrWhiteSpace(id) || !string.Equals(type, "sendChat", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            var source = new CancellationTokenSource();
+            lock (_cancellationSync)
+            {
+                _requestCancellations[id] = source;
+            }
+
+            return source;
+        }
+
+        private object CancelRequest(string requestId)
+        {
+            var cancelled = false;
+            lock (_cancellationSync)
+            {
+                CancellationTokenSource source;
+                _requestCancellations.TryGetValue(requestId ?? string.Empty, out source);
+                if (source != null)
+                {
+                    source.Cancel();
+                    cancelled = true;
+                }
+            }
+
+            return new { cancelled = cancelled };
+        }
+
+        private void ReleaseCancellationSource(string id, CancellationTokenSource source)
+        {
+            if (source == null)
+            {
+                return;
+            }
+
+            lock (_cancellationSync)
+            {
+                CancellationTokenSource current;
+                if (_requestCancellations.TryGetValue(id ?? string.Empty, out current) && object.ReferenceEquals(current, source))
+                {
+                    _requestCancellations.Remove(id ?? string.Empty);
+                }
+            }
+
+            source.Dispose();
         }
 
         private void ReportProgress(string id, string phase, string message)
@@ -229,39 +316,7 @@ namespace RNAssistant.Office.WebView
 
         private static Dictionary<string, object> ToArguments(IDictionary<string, object> arguments)
         {
-            var result = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            if (arguments == null)
-            {
-                return result;
-            }
-
-            foreach (var pair in arguments)
-            {
-                result[pair.Key] = NormalizeArgumentValue(pair.Value);
-            }
-
-            return result;
-        }
-
-        private static object NormalizeArgumentValue(object value)
-        {
-            if (value == null)
-            {
-                return null;
-            }
-
-            var token = value as JToken;
-            if (token == null)
-            {
-                return value;
-            }
-
-            if (token.Type == JTokenType.String)
-            {
-                return token.Value<string>();
-            }
-
-            return token.ToString(Formatting.None);
+            return ToolArgumentNormalizer.NormalizeDictionary(arguments);
         }
     }
 }

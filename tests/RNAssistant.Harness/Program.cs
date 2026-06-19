@@ -40,6 +40,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "parser: fenced agent steps", Run = ParsesFencedAgentSteps },
                 new HarnessTest { Name = "parser: bare json array", Run = ParsesBareJsonArray },
                 new HarnessTest { Name = "parser: native tool_calls", Run = ParsesNativeToolCalls },
+                new HarnessTest { Name = "parser: normalizes primitive and complex args", Run = ParserNormalizesPrimitiveAndComplexArgs },
                 new HarnessTest { Name = "parser: noisy embedded json", Run = ParsesNoisyEmbeddedJson },
                 new HarnessTest { Name = "parser: bad json skipped", Run = SkipsBadJson },
                 new HarnessTest { Name = "parser: recovers malformed agent json", Run = RecoversMalformedAgentJson },
@@ -65,6 +66,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "skills: store skips broken markdown skills", Run = SkillStoreSkipsBrokenMarkdownSkills },
                 new HarnessTest { Name = "skills: catalog selects relevant skills", Run = SkillCatalogSelectsRelevantSkills },
                 new HarnessTest { Name = "skills: prompt separates skills from tools", Run = PromptSeparatesSkillsFromTools },
+                new HarnessTest { Name = "skills: prompt limits skill bodies", Run = PromptLimitsSkillBodies },
                 new HarnessTest { Name = "skills: agent can save skills with confirmation", Run = AgentCanSaveSkillsWithConfirmation },
                 new HarnessTest { Name = "vba: replace text backs up module", Run = VbaReplaceTextBacksUpModule },
                 new HarnessTest { Name = "vba: apply patch targets named module", Run = VbaApplyPatchTargetsNamedModule },
@@ -78,7 +80,9 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "chat: malformed action response forces repair", Run = ChatMalformedActionResponseForcesRepair },
                 new HarnessTest { Name = "chat: failed tool retries corrected call", Run = ChatFailedToolRetriesCorrectedCall },
                 new HarnessTest { Name = "chat: retry success continues", Run = ChatRetrySuccessContinuesToFinalAnswer },
+                new HarnessTest { Name = "chat: agent disabled skips tool block", Run = ChatAgentDisabledSkipsToolBlock },
                 new HarnessTest { Name = "chat: waiting tool gets pending id", Run = ChatWaitingToolGetsPendingId },
+                new HarnessTest { Name = "chat: waiting tool stops batch", Run = ChatWaitingToolStopsBatch },
                 new HarnessTest { Name = "chat: max iterations returns summary", Run = ChatMaxIterationsReturnsRuntimeSummary },
                 new HarnessTest { Name = "chat: auto-run disabled records failure", Run = ChatAutoRunDisabledRecordsLocalFailure },
                 new HarnessTest { Name = "chat: malformed tool response stays prose", Run = ChatMalformedToolResponseStaysProse },
@@ -140,6 +144,21 @@ namespace RNAssistant.Harness
             AssertEqual("excel.write_table", commands[0].ToolId, "tool id");
             AssertEqual("Data", commands[0].Arguments["sheet"], "sheet arg");
             AssertEqual("A1", commands[0].Arguments["startAddress"], "address arg");
+        }
+
+        private static void ParserNormalizesPrimitiveAndComplexArgs()
+        {
+            var commands = new ToolCommandParser().Parse(
+                "```rnassistant-agent\n" +
+                "{\"toolId\":\"excel.write_table\",\"arguments\":{\"sheet\":\"Data\",\"count\":2,\"enabled\":true,\"values\":[[\"Month\",\"Sales\"]],\"meta\":{\"source\":\"test\"}}}" +
+                "\n```");
+
+            AssertEqual(1, commands.Count, "command count");
+            AssertEqual("Data", commands[0].Arguments["sheet"], "string arg");
+            AssertEqual(2L, commands[0].Arguments["count"], "integer arg");
+            AssertEqual(true, commands[0].Arguments["enabled"], "bool arg");
+            AssertEqual("[[\"Month\",\"Sales\"]]", commands[0].Arguments["values"], "array arg");
+            AssertEqual("{\"source\":\"test\"}", commands[0].Arguments["meta"], "object arg");
         }
 
         private static void ParsesBareJsonArray()
@@ -620,6 +639,33 @@ namespace RNAssistant.Harness
             AssertContains(prompt, "Skills are guidance documents only", "skill guidance boundary");
         }
 
+        private static void PromptLimitsSkillBodies()
+        {
+            var longBody = "# Long skill\n" + new string('a', 2500) + "TAIL_MARKER";
+            var prompt = new PromptComposer().ComposeSystemPrompt(
+                new AppSettings { AgentModeEnabled = true, ContextCharLimit = 4000 },
+                "Excel",
+                string.Empty,
+                string.Empty,
+                new ToolDefinition[0],
+                new[]
+                {
+                    new SkillDefinition
+                    {
+                        Id = "common.long_skill",
+                        Host = "Common",
+                        Description = "Long guidance.",
+                        BodyMarkdown = longBody,
+                        Enabled = true
+                    }
+                },
+                null);
+
+            AssertContains(prompt, "common.long_skill", "skill id");
+            AssertContains(prompt, "[truncated]", "skill body truncated");
+            AssertTrue(prompt.IndexOf("TAIL_MARKER", StringComparison.OrdinalIgnoreCase) < 0, "skill tail omitted");
+        }
+
         private static void AgentCanSaveSkillsWithConfirmation()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
@@ -1044,11 +1090,10 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void ChatWaitingToolGetsPendingId()
+        private static void ChatAgentDisabledSkipsToolBlock()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var pendingIds = new List<string>();
                 var service = ChatServiceWithResponses(adapter, executor, null, AgentBlock(Command("word.insert_text", "text", "Hello")));
                 var session = NewSession(adapter);
 
@@ -1056,13 +1101,36 @@ namespace RNAssistant.Harness
                     "Insert text into the document.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { AgentModeEnabled = false, AutoConfirmToolActions = false, ContextCharLimit = 8000 },
+                    new AppSettings { AgentModeEnabled = false, AutoConfirmToolActions = true, ContextCharLimit = 8000 },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual(0, adapter.Executed.Count, "adapter execution count");
+                AssertEqual(0, result.ToolResults.Count, "tool result count");
+                AssertContains(result.AssistantText, "Agent mode is disabled", "assistant text");
+                AssertTrue(ContainsMessage(session.Messages, "Agent mode is disabled"), "disabled message recorded");
+            });
+        }
+
+        private static void ChatWaitingToolGetsPendingId()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var pendingIds = new List<string>();
+                var service = ChatServiceWithResponses(adapter, executor, null, AgentBlock(Command("word.vba_replace_module", "moduleName", "Module1", "code", "Sub Test()\nEnd Sub")));
+                var session = NewSession(adapter);
+
+                var result = service.ExecuteAsync(
+                    "Replace a VBA module.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { AgentModeEnabled = true, AutoConfirmToolActions = false, ContextCharLimit = 8000 },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null,
                     delegate(ChatSession pendingSession, ToolCommand pendingCommand, ToolResult pendingResult)
                     {
                         AssertEqual(ChatStore.GetSessionId(session), ChatStore.GetSessionId(pendingSession), "pending session id");
-                        AssertEqual("word.insert_text", pendingCommand.ToolId, "pending tool id");
+                        AssertEqual("word.vba_replace_module", pendingCommand.ToolId, "pending tool id");
                         pendingIds.Add("pending-1");
                         return "pending-1";
                     }).GetAwaiter().GetResult();
@@ -1073,6 +1141,41 @@ namespace RNAssistant.Harness
                 AssertContains(resultJson, "waiting_confirmation", "waiting status");
                 AssertContains(resultJson, "pending-1", "pending id");
                 AssertTrue(session.Messages.Any(m => m != null && m.Activity != null && string.Equals(m.Activity.PendingId, "pending-1", StringComparison.OrdinalIgnoreCase)), "pending activity");
+            });
+        }
+
+        private static void ChatWaitingToolStopsBatch()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var pendingIds = new List<string>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    null,
+                    AgentBlock(
+                        Command("word.vba_replace_module", "moduleName", "Module1", "code", "Sub Test()\nEnd Sub"),
+                        Command("word.insert_text", "text", "Should not run")));
+                var session = NewSession(adapter);
+
+                var result = service.ExecuteAsync(
+                    "Replace VBA and then insert text.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { AgentModeEnabled = true, AutoConfirmToolActions = false, ContextCharLimit = 8000 },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null,
+                    delegate(ChatSession pendingSession, ToolCommand pendingCommand, ToolResult pendingResult)
+                    {
+                        pendingIds.Add("pending-" + (pendingIds.Count + 1));
+                        return pendingIds[pendingIds.Count - 1];
+                    }).GetAwaiter().GetResult();
+
+                AssertEqual(0, adapter.Executed.Count, "adapter execution count");
+                AssertEqual(1, pendingIds.Count, "pending count");
+                AssertEqual(1, result.ToolResults.Count, "tool result count");
+                AssertContains(JsonConvert.SerializeObject(result.ToolResults), "word.vba_replace_module", "first tool logged");
+                AssertTrue(JsonConvert.SerializeObject(result.ToolResults).IndexOf("word.insert_text", StringComparison.OrdinalIgnoreCase) < 0, "second tool skipped");
             });
         }
 
@@ -1314,7 +1417,7 @@ namespace RNAssistant.Harness
             var progressMessages = new List<string>();
             var bridge = new AssistantWebBridge(controller, progressMessages.Add);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b1\",\"type\":\"runTool\",\"payload\":{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\",\"values\":[[\"A\"]]},\"dryRun\":true}}")
+                "{\"id\":\"b1\",\"type\":\"runTool\",\"payload\":{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\",\"count\":2,\"enabled\":true,\"values\":[[\"A\"]]},\"dryRun\":true}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -1324,6 +1427,8 @@ namespace RNAssistant.Harness
             AssertTrue(response["payload"]["Success"].Value<bool>(), "bridge payload success");
             AssertEqual("excel.add_sheet", controller.LastToolId, "tool id");
             AssertContains(controller.LastArgumentsJson, "Report", "tool args");
+            AssertEqual(2, JObject.Parse(controller.LastArgumentsJson)["count"].Value<int>(), "integer tool arg");
+            AssertEqual(true, JObject.Parse(controller.LastArgumentsJson)["enabled"].Value<bool>(), "bool tool arg");
             AssertEqual("[[\"A\"]]", JObject.Parse(controller.LastArgumentsJson)["values"].Value<string>(), "nested tool arg");
             AssertTrue(controller.LastDryRun, "dry run");
             AssertEqual(1, progressMessages.Count, "progress count");

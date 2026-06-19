@@ -75,7 +75,8 @@ Current coverage:
 - chat session lifecycle fixtures, including document-key migration;
 - pipeline dry-run and execution fixtures with fake `IOfficeApplicationAdapter`;
 - pipeline failure diagnostics and confirmation gates for custom tools and Agent Mode built-in mutations;
-- markdown skill store/catalog/prompt separation and agent skill-save confirmation;
+- agent runtime guards for disabled Agent mode, waiting confirmations, and stopped batches;
+- markdown skill store/catalog/prompt separation, prompt body limiting, and agent skill-save confirmation;
 - metadata-driven mutation safety gates;
 - VBA replace-text flow with rollback backup using fake `IOfficeApplicationAdapter`;
 - tool catalog service merge/filter behavior;

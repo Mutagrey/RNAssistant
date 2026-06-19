@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using RNAssistant.Core.Llm;
@@ -25,14 +26,14 @@ namespace RNAssistant.Office.Services
 
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly OfficeToolExecutor _toolExecutor;
-        private readonly Func<AppSettings, IEnumerable<ChatMessage>, Task<LlmCompletionResult>> _completeAsync;
+        private readonly Func<AppSettings, IEnumerable<ChatMessage>, CancellationToken, Task<LlmCompletionResult>> _completeAsync;
         private readonly PromptComposer _promptComposer;
         private readonly ToolCommandParser _commandParser;
 
         public ChatCompletionService(
             IOfficeApplicationAdapter adapter,
             OfficeToolExecutor toolExecutor,
-            Func<AppSettings, IEnumerable<ChatMessage>, Task<LlmCompletionResult>> completeAsync)
+            Func<AppSettings, IEnumerable<ChatMessage>, CancellationToken, Task<LlmCompletionResult>> completeAsync)
         {
             _adapter = adapter;
             _toolExecutor = toolExecutor;
@@ -49,8 +50,10 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<ToolDefinition> tools,
             Action<string, string, ChatActivity> progress,
             PendingToolRegistrar pendingToolRegistrar = null,
-            IReadOnlyList<SkillDefinition> skills = null)
+            IReadOnlyList<SkillDefinition> skills = null,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             ReportProgress(progress, "context", "Читаю документ...");
             ApplyChatModel(settings, session);
             session.Messages.Add(new ChatMessage { Role = "user", Content = text });
@@ -78,6 +81,7 @@ namespace RNAssistant.Office.Services
             var lastResponseWasToolBlock = false;
             for (var iteration = 0; iteration < MaxAgentIterations; iteration++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var messages = PromptMessageBuilder.Build(systemPrompt, contextPrompt, session.Messages, settings.ContextCharLimit);
                 if (!string.IsNullOrWhiteSpace(followUpPrompt))
                 {
@@ -86,7 +90,8 @@ namespace RNAssistant.Office.Services
 
                 contextUsage = ContextUsageEstimator.FromPrompt(messages, settings);
                 ReportProgress(progress, "thinking", iteration == 0 ? "Модель думает..." : "Модель продолжает агентскую задачу...");
-                var completion = await _completeAsync(settings, messages).ConfigureAwait(false);
+                var completion = await _completeAsync(settings, messages, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
                 assistantText = completion.Content ?? string.Empty;
 
                 ReportProgress(progress, "processing", "Разбираю ответ...");
@@ -106,6 +111,19 @@ namespace RNAssistant.Office.Services
                     break;
                 }
 
+                if (settings.AgentModeEnabled == false)
+                {
+                    assistantText = "Agent mode is disabled; returned tool block was not executed.";
+                    var disabledActivity = AgentTranscript.CreateAgentPlanActivity(commands, parseResult.Diagnostics);
+                    disabledActivity.Title = "Agent mode disabled";
+                    disabledActivity.Status = "skipped";
+                    disabledActivity.ExecutionStatus = "agent_disabled";
+                    disabledActivity.ResultMessage = assistantText;
+                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, completion, disabledActivity));
+                    lastResponseWasToolBlock = false;
+                    break;
+                }
+
                 lastResponseWasToolBlock = true;
                 var planActivity = AgentTranscript.CreateAgentPlanActivity(commands, parseResult.Diagnostics);
                 ReportProgress(progress, "plan", "Агент подготовил план: " + commands.Count + " step(s).", planActivity);
@@ -113,6 +131,7 @@ namespace RNAssistant.Office.Services
                 var shouldContinue = settings.AutoRunToolCalls != false;
                 for (var i = 0; i < commands.Count; i++)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var command = commands[i];
                     ReportProgress(
                         progress,
@@ -130,11 +149,12 @@ namespace RNAssistant.Office.Services
                     if (!result.Success && settings.AutoRunToolCalls != false && settings.AutoRetryToolErrors != false && AgentTranscript.CanRetryToolError(result))
                     {
                         ReportProgress(progress, "repairing", "Tool упал, прошу модель исправить вызов: " + command.ToolId);
-                        commandCompleted = await RetryFailedToolAsync(systemPrompt, contextPrompt, session, settings, tools, command, result, resultLog, progress, pendingToolRegistrar).ConfigureAwait(false);
+                        commandCompleted = await RetryFailedToolAsync(systemPrompt, contextPrompt, session, settings, tools, command, result, resultLog, progress, pendingToolRegistrar, cancellationToken).ConfigureAwait(false);
                     }
                     if (!commandCompleted)
                     {
                         shouldContinue = false;
+                        break;
                     }
                 }
 
@@ -169,8 +189,10 @@ namespace RNAssistant.Office.Services
             ToolResult failedResult,
             ICollection<object> resultLog,
             Action<string, string, ChatActivity> progress,
-            PendingToolRegistrar pendingToolRegistrar)
+            PendingToolRegistrar pendingToolRegistrar,
+            CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var repairPrompt = "A local tool call failed. Return only corrected rnassistant-agent JSON block(s), no prose. " +
                 "Original command: `" + failedCommand.ToolId + "` with arguments:\n```json\n" +
                 JsonConvert.SerializeObject(failedCommand.Arguments, Formatting.Indented) +
@@ -179,7 +201,8 @@ namespace RNAssistant.Office.Services
             var repairMessages = PromptMessageBuilder.Build(systemPrompt, contextPrompt, session.Messages, settings.ContextCharLimit);
             repairMessages.Add(new ChatMessage { Role = "user", Content = repairPrompt });
 
-            var repairCompletion = await _completeAsync(settings, repairMessages).ConfigureAwait(false);
+            var repairCompletion = await _completeAsync(settings, repairMessages, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             var repairText = repairCompletion.Content ?? string.Empty;
             var retryCommands = _commandParser.Parse(repairText).ToList();
             session.Messages.Add(AgentTranscript.CreateAssistantMessage(
@@ -191,6 +214,7 @@ namespace RNAssistant.Office.Services
             var allSucceeded = retryCommands.Count > 0;
             for (var i = 0; i < retryCommands.Count; i++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var retry = retryCommands[i];
                 ReportProgress(progress, "retrying", "Повтор tool " + (i + 1) + "/" + retryCommands.Count + ": " + retry.ToolId, CreateRunningActivity(retry, "running", "retry"));
                 var retryResult = _toolExecutor.Execute(retry, tools, settings, false, false);
@@ -208,6 +232,7 @@ namespace RNAssistant.Office.Services
                 else
                 {
                     allSucceeded = false;
+                    break;
                 }
             }
 

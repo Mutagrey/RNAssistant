@@ -27,8 +27,8 @@ RNAssistant talks to an OpenAI-compatible Chat Completions endpoint and keeps it
 | Endpoint behavior | RNAssistant behavior |
 | --- | --- |
 | Returns plain assistant text | Shows text in chat. |
-| Returns `rnassistant-agent` fenced JSON | Parses and runs local tools if auto-run policy allows it. |
-| Returns native `tool_calls` | Converts to fenced RNAssistant JSON and runs the same parser. |
+| Returns `rnassistant-agent` fenced JSON | Parses and runs local tools only when Agent mode is enabled and auto-run policy allows it. |
+| Returns native `tool_calls` | Converts to fenced RNAssistant JSON and applies the same Agent mode and auto-run policy. |
 | Returns malformed tool JSON | Records diagnostics; Agent mode may ask the model once for repaired executable JSON. |
 | Omits token usage | Chat still works; token counters show estimated/context-side data only. |
 | Lacks `/config/models.json` | Model catalog load fails, but manually entered model IDs can still be saved. |

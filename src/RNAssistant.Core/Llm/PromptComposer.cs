@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
 using RNAssistant.Core.Models;
@@ -6,8 +7,11 @@ namespace RNAssistant.Core.Llm
 {
     public sealed class PromptComposer
     {
+        private const int DefaultSkillBodyLimit = 6000;
+
         public string ComposeSystemPrompt(AppSettings settings, string host, string documentSnapshot, string vbaSnapshot, IEnumerable<ToolDefinition> tools, IEnumerable<SkillDefinition> skills, DocumentContext context)
         {
+            settings = settings ?? new AppSettings();
             var builder = new StringBuilder();
             if (!string.IsNullOrWhiteSpace(settings.SystemPrompt))
             {
@@ -47,7 +51,7 @@ namespace RNAssistant.Core.Llm
             builder.AppendLine("For VBA edits, prefer the host vba_apply_patch tool for structured small patches; use vba_replace_module only when replacing the whole module is necessary.");
             builder.AppendLine("For agent-created executable code, write VBA code for the current Office host.");
             builder.AppendLine();
-            AppendSkills(builder, skills);
+            AppendSkills(builder, skills, SkillBodyLimit(settings));
             builder.AppendLine("Available tools:");
             builder.AppendLine("Use only these exact tool ids in rnassistant-agent steps. The local app parses this text response and executes matching tools.");
             foreach (var tool in tools)
@@ -79,9 +83,10 @@ namespace RNAssistant.Core.Llm
             return builder.ToString();
         }
 
-        private static void AppendSkills(StringBuilder builder, IEnumerable<SkillDefinition> skills)
+        private static void AppendSkills(StringBuilder builder, IEnumerable<SkillDefinition> skills, int bodyCharLimit)
         {
             var any = false;
+            var remainingBodyChars = Math.Max(0, bodyCharLimit);
             foreach (var skill in skills ?? new SkillDefinition[0])
             {
                 if (skill == null || !skill.Enabled)
@@ -99,8 +104,32 @@ namespace RNAssistant.Core.Llm
                 builder.AppendLine();
                 builder.AppendLine("Skill: " + skill.Id + " (" + skill.Host + ")");
                 builder.AppendLine("Description: " + (skill.Description ?? string.Empty));
+                var body = skill.BodyMarkdown ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(body))
+                {
+                    continue;
+                }
+
+                if (remainingBodyChars <= 0)
+                {
+                    builder.AppendLine("Skill body omitted due to prompt budget.");
+                    continue;
+                }
+
+                if (body.Length > remainingBodyChars)
+                {
+                    body = body.Substring(0, remainingBodyChars);
+                    remainingBodyChars = 0;
+                    builder.AppendLine("```markdown");
+                    builder.AppendLine(body);
+                    builder.AppendLine("[truncated]");
+                    builder.AppendLine("```");
+                    continue;
+                }
+
+                remainingBodyChars -= body.Length;
                 builder.AppendLine("```markdown");
-                builder.AppendLine(skill.BodyMarkdown ?? string.Empty);
+                builder.AppendLine(body);
                 builder.AppendLine("```");
             }
 
@@ -108,6 +137,12 @@ namespace RNAssistant.Core.Llm
             {
                 builder.AppendLine();
             }
+        }
+
+        private static int SkillBodyLimit(AppSettings settings)
+        {
+            var contextLimit = Math.Max(4000, settings == null ? 24000 : settings.ContextCharLimit);
+            return Math.Max(2000, Math.Min(DefaultSkillBodyLimit, contextLimit / 4));
         }
 
         public string ComposeContextPrompt(DocumentContext context)
