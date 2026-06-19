@@ -297,3 +297,24 @@ async function runQuickAction(action) {
   $("chatInput").value = response.prompt || "";
   switchTab("chat");
 }
+
+function bindChatActions() {
+  $("refreshButton").addEventListener("click", initialize);
+  $("chatSessionSelect").addEventListener("change", function () { selectChat($("chatSessionSelect").value); });
+  $("newChatButton").addEventListener("click", createChat);
+  $("renameChatButton").addEventListener("click", renameChat);
+  $("clearChatButton").addEventListener("click", clearChat);
+  $("deleteChatButton").addEventListener("click", deleteChat);
+  $("retrySendButton").addEventListener("click", retryFailedSend);
+  $("clearInputButton").addEventListener("click", function () { $("chatInput").value = ""; });
+  $("chatInput").addEventListener("keydown", function (event) {
+    if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      event.preventDefault();
+      submitChatInput();
+    }
+  });
+  $("chatForm").addEventListener("submit", function (event) {
+    event.preventDefault();
+    submitChatInput();
+  });
+}

@@ -250,3 +250,21 @@ async function removeContextItem(id) {
     log(error.detail || error.message);
   }
 }
+
+function bindContextActions() {
+  $("openContextTabButton").addEventListener("click", function () { switchTab("context"); });
+  $("addSelectionContextButton").addEventListener("click", function () { addSelectionContext("full"); });
+  $("toggleVbaContextButton").addEventListener("click", toggleVbaContext);
+  $("clearContextButton").addEventListener("click", async function () {
+    setActivity("clearing", "Очищаю контекст...");
+    try {
+      state.context = await send("clearContext", { chatId: state.activeChatId });
+      renderContext();
+      log("Context cleared.");
+    } catch (error) {
+      log(error.message);
+    } finally {
+      clearActivity();
+    }
+  });
+}

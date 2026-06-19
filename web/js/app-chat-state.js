@@ -1,3 +1,47 @@
+function renderChatSessions() {
+  var select = $("chatSessionSelect");
+  if (!select) {
+    return;
+  }
+
+  select.innerHTML = "";
+  (state.chats || []).forEach(function (chat) {
+    var option = document.createElement("option");
+    option.value = chatId(chat);
+    var model = chatModel(chat);
+    option.textContent = chatTitle(chat) + " (" + chatMessageCount(chat) + ")" + (model ? " - " + model : "");
+    select.appendChild(option);
+  });
+  select.value = state.activeChatId || "";
+
+  var hasActive = !!state.activeChatId;
+  $("renameChatButton").disabled = !hasActive;
+  $("clearChatButton").disabled = !hasActive || !state.messages.length;
+  $("deleteChatButton").disabled = !hasActive;
+}
+
+function applyChatState(response) {
+  response = response || {};
+  state.activeChatId = response.activeChatId || response.ActiveChatId || state.activeChatId || "";
+  if (response.activeChatModel !== undefined || response.ActiveChatModel !== undefined) {
+    state.activeChatModel = response.activeChatModel || response.ActiveChatModel || "";
+  }
+  state.chats = response.chats || response.Chats || state.chats || [];
+  if (response.context || response.Context) {
+    state.context = response.context || response.Context || {};
+  }
+  if (response.messages || response.Messages) {
+    state.liveActivity = null;
+  }
+  state.messages = response.messages || response.Messages || [];
+  state.contextUsage = response.contextUsage || response.ContextUsage || state.contextUsage || {};
+  renderChatSessions();
+  renderMessages();
+  renderContext(true);
+  renderContextMeter();
+  renderModelControls();
+}
+
 function logToolResult(prefix, toolId, result) {
   var ok = result && (result.Success === true || result.success === true);
   var message = result ? (result.Message || result.message || "") : "";

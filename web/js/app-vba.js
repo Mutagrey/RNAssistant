@@ -208,3 +208,13 @@ function reviewVbaInChat() {
     log(error.detail || error.message);
   });
 }
+
+function bindVbaActions() {
+  $("refreshVbaButton").addEventListener("click", refreshVbaProject);
+  $("vbaModuleSelect").addEventListener("change", renderSelectedVbaModule);
+  $("vbaCodeInput").addEventListener("input", renderVbaCodePreview);
+  $("previewVbaDiffButton").addEventListener("click", previewVbaDiff);
+  $("saveVbaButton").addEventListener("click", saveVbaModule);
+  $("restoreVbaButton").addEventListener("click", restoreVbaBackup);
+  $("reviewVbaButton").addEventListener("click", reviewVbaInChat);
+}
