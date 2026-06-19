@@ -183,3 +183,102 @@ async function runSelectedTool(dryRun) {
     clearActivity();
   }
 }
+
+function bindToolActions() {
+  $("addToolButton").addEventListener("click", function () {
+    syncSelectedToolFromEditor();
+    state.tools.push({
+      Id: (state.host || "common").toLowerCase() + ".new_tool",
+      Host: state.host || "Common",
+      Name: "new_tool",
+      Description: "",
+      ArgumentSchemaJson: "{}",
+      Executor: "pipeline",
+      RequiresConfirmation: true,
+      PipelineJson: "{\n  \"version\": 1,\n  \"steps\": []\n}",
+      Code: "",
+      Readme: "",
+      Enabled: true,
+      BuiltIn: false
+    });
+    state.selectedToolIndex = state.tools.length - 1;
+    renderTools();
+  });
+
+  $("cloneToolButton").addEventListener("click", function () {
+    syncSelectedToolFromEditor();
+    var source = state.tools[state.selectedToolIndex];
+    if (!source) {
+      return;
+    }
+
+    var id = (source.Id || "tool") + ".copy";
+    state.tools.push({
+      Id: id,
+      Host: source.Host || state.host || "Common",
+      Name: id,
+      Description: source.Description || "",
+      ArgumentSchemaJson: source.ArgumentSchemaJson || "{}",
+      Executor: source.BuiltIn ? "pipeline" : (source.Executor || "pipeline"),
+      RequiresConfirmation: source.BuiltIn ? true : !!source.RequiresConfirmation,
+      PipelineJson: source.PipelineJson || "{\n  \"version\": 1,\n  \"steps\": []\n}",
+      Code: source.Code || "",
+      Readme: source.Readme || "",
+      Enabled: true,
+      BuiltIn: false
+    });
+    state.selectedToolIndex = state.tools.length - 1;
+    renderTools();
+  });
+
+  $("saveToolsButton").addEventListener("click", async function () {
+    try {
+      var response = await send("saveTools", { tools: readTools() });
+      state.tools = response || [];
+      renderTools();
+      log("Tools saved.");
+    } catch (error) {
+      log(error.message);
+    }
+  });
+
+  $("deleteToolButton").addEventListener("click", function () {
+    var skill = state.tools[state.selectedToolIndex];
+    if (!skill || skill.BuiltIn) {
+      return;
+    }
+
+    state.tools.splice(state.selectedToolIndex, 1);
+    if (state.selectedToolIndex >= state.tools.length) {
+      state.selectedToolIndex = state.tools.length - 1;
+    }
+    renderTools();
+  });
+
+  $("dryRunToolButton").addEventListener("click", function () {
+    runSelectedTool(true);
+  });
+
+  $("runToolButton").addEventListener("click", function () {
+    runSelectedTool(false);
+  });
+
+  $("copyToolContextButton").addEventListener("click", function () {
+    copyText(selectedToolContext());
+    log("Tool context copied.");
+  });
+
+  $("askToolBuilderButton").addEventListener("click", function () {
+    addSelectedToolContextToContext().then(function (added) {
+      if (!added) {
+        return;
+      }
+
+      $("chatInput").value = "Отредактируй RNAssistant tool из добавленного контекста. Верни обновленные tool.json/pipeline/code блоки, не выполняй действия без подтверждения.";
+      switchTab("chat");
+      $("chatInput").focus();
+    }).catch(function (error) {
+      log(error.detail || error.message);
+    });
+  });
+}

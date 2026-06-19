@@ -44,3 +44,20 @@ async function saveChatModelSelection(value) {
     renderModelControls();
   }
 }
+
+function bindModelActions() {
+  $("modelSelect").addEventListener("change", function () {
+    if ($("modelSelect").value) {
+      $("modelInput").value = $("modelSelect").value;
+      applyModelDefaultsToForm(findModel($("modelSelect").value));
+      renderModelControls();
+    }
+  });
+  $("modelInput").addEventListener("input", renderModelControls);
+  $("chatModelSelect").addEventListener("change", function () {
+    saveChatModelSelection($("chatModelSelect").value);
+  });
+  $("loadModelsButton").addEventListener("click", function () {
+    loadModelCatalog(true);
+  });
+}

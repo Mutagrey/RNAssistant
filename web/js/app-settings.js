@@ -41,3 +41,22 @@ function readSettings() {
     CustomHeaders: textToHeaders($("headersInput").value)
   };
 }
+
+function bindSettingsActions() {
+  $("saveSettingsButton").addEventListener("click", async function () {
+    try {
+      var apiKey = $("apiKeyInput").value;
+      var response = await send("saveSettings", { settings: readSettings(), apiKey: apiKey || null });
+      state.settings = response.settings;
+      $("apiKeyInput").value = "";
+      renderSettings();
+      updateEstimatedContextUsage();
+      renderContextMeter();
+      await loadModelCatalog(false);
+      log("Settings saved.");
+    } catch (error) {
+      log(error.message);
+    }
+  });
+  $("clearRuntimeDataButton").addEventListener("click", clearRuntimeData);
+}

@@ -146,3 +146,86 @@ async function addSelectedSkillContextToContext() {
   log("Skill context added to chat context.");
   return true;
 }
+
+function bindSkillActions() {
+  $("addSkillButton").addEventListener("click", function () {
+    syncSelectedSkillFromEditor();
+    state.skills.push({
+      Id: "common.new_skill",
+      Host: "Common",
+      Name: "new_skill",
+      Description: "",
+      Tags: [],
+      BodyMarkdown: "# New skill\n\nUse this skill when...\n",
+      Enabled: true,
+      BuiltIn: false
+    });
+    state.selectedSkillIndex = state.skills.length - 1;
+    renderSkills();
+  });
+
+  $("cloneSkillButton").addEventListener("click", function () {
+    syncSelectedSkillFromEditor();
+    var source = state.skills[state.selectedSkillIndex];
+    if (!source) {
+      return;
+    }
+
+    var id = (source.Id || "skill") + ".copy";
+    state.skills.push({
+      Id: id,
+      Host: source.Host || "Common",
+      Name: id,
+      Description: source.Description || "",
+      Tags: (source.Tags || []).slice(),
+      BodyMarkdown: source.BodyMarkdown || "",
+      Enabled: true,
+      BuiltIn: false
+    });
+    state.selectedSkillIndex = state.skills.length - 1;
+    renderSkills();
+  });
+
+  $("saveSkillsButton").addEventListener("click", async function () {
+    try {
+      var response = await send("saveSkills", { skills: readSkills() });
+      state.skills = response || [];
+      renderSkills();
+      log("Skills saved.");
+    } catch (error) {
+      log(error.message);
+    }
+  });
+
+  $("deleteSkillButton").addEventListener("click", function () {
+    var skill = state.skills[state.selectedSkillIndex];
+    if (!skill || skill.BuiltIn) {
+      return;
+    }
+
+    state.skills.splice(state.selectedSkillIndex, 1);
+    if (state.selectedSkillIndex >= state.skills.length) {
+      state.selectedSkillIndex = state.skills.length - 1;
+    }
+    renderSkills();
+  });
+
+  $("copySkillContextButton").addEventListener("click", function () {
+    copyText(selectedSkillContext());
+    log("Skill context copied.");
+  });
+
+  $("askSkillBuilderButton").addEventListener("click", function () {
+    addSelectedSkillContextToContext().then(function (added) {
+      if (!added) {
+        return;
+      }
+
+      $("chatInput").value = "Отредактируй RNAssistant skill из добавленного контекста. Верни обновленный SKILL.md и при необходимости вызови common.skills_save после подтверждения.";
+      switchTab("chat");
+      $("chatInput").focus();
+    }).catch(function (error) {
+      log(error.detail || error.message);
+    });
+  });
+}
