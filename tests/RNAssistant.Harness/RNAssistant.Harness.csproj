@@ -35,6 +35,8 @@
     <Compile Include="..\..\src\RNAssistant.Office\Contracts\IOfficeApplicationAdapter.cs" Link="Office\Contracts\IOfficeApplicationAdapter.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Agent\AgentTranscript.cs" Link="Office\Agent\AgentTranscript.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Contracts\BridgeDtos.cs" Link="Office\Contracts\BridgeDtos.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Runtime\DispatchedOfficeApplicationAdapter.cs" Link="Office\Runtime\DispatchedOfficeApplicationAdapter.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Runtime\OfficeStaDispatcher.cs" Link="Office\Runtime\OfficeStaDispatcher.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatCloneService.cs" Link="Office\Services\ChatCloneService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatCompletionService.cs" Link="Office\Services\ChatCompletionService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatTitleBuilder.cs" Link="Office\Services\ChatTitleBuilder.cs" />

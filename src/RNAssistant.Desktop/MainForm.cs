@@ -14,6 +14,7 @@ namespace RNAssistant.Desktop
         private readonly Panel _content;
         private Label _placeholder;
         private AssistantRuntime _runtime;
+        private IDisposable _currentAdapter;
 
         public MainForm()
         {
@@ -89,16 +90,25 @@ namespace RNAssistant.Desktop
                 return;
             }
 
+            DispatchedOfficeApplicationAdapter adapter = null;
             try
             {
                 DesktopLog.Info("Attach requested. Target=" + entry.DisplayName + ", hwnd=" + entry.Target.Hwnd + ", pid=" + entry.Target.ProcessId);
-                var adapter = _adapterProvider.Create(entry.Target.Host, entry.Target);
-                _runtime = new AssistantRuntime(adapter);
+                var target = CloneTarget(entry.Target);
+                adapter = new DispatchedOfficeApplicationAdapter(delegate
+                {
+                    return _adapterProvider.Create(target.Host, target);
+                });
+                var runtime = new AssistantRuntime(adapter);
                 ClearContent();
+                DisposeCurrentAdapter();
+                _runtime = runtime;
+                _currentAdapter = adapter;
+                adapter = null;
                 var pane = _runtime.CreatePaneControl();
                 pane.Dock = DockStyle.Fill;
                 _content.Controls.Add(pane);
-                Text = "RN Assistant - " + adapter.HostName;
+                Text = "RN Assistant - " + _runtime.Controller.HostName;
                 if (!string.IsNullOrWhiteSpace(action))
                 {
                     _runtime.RunQuickAction(action);
@@ -110,11 +120,24 @@ namespace RNAssistant.Desktop
             }
             catch (Exception ex)
             {
+                if (adapter != null)
+                {
+                    adapter.Dispose();
+                }
                 DesktopLog.Error("Attach failed.", ex);
                 RefreshTargetUi("Attach failed: " + ex.Message);
                 ShowPlaceholder(ex.Message, true);
+                DisposeCurrentAdapter();
+                _runtime = null;
                 MessageBox.Show(this, ex.Message, "RN Assistant", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            ClearContent();
+            DisposeCurrentAdapter();
+            base.OnFormClosed(e);
         }
 
         private void AttachForegroundOffice()
@@ -218,6 +241,35 @@ namespace RNAssistant.Desktop
                 _content.Controls.RemoveAt(0);
                 control.Dispose();
             }
+        }
+
+        private void DisposeCurrentAdapter()
+        {
+            if (_currentAdapter == null)
+            {
+                return;
+            }
+
+            _currentAdapter.Dispose();
+            _currentAdapter = null;
+        }
+
+        private static OfficeTargetDescriptor CloneTarget(OfficeTargetDescriptor source)
+        {
+            return new OfficeTargetDescriptor
+            {
+                Host = source.Host,
+                FullName = source.FullName,
+                Path = source.Path,
+                Name = source.Name,
+                DocumentKey = source.DocumentKey,
+                EntryId = source.EntryId,
+                FolderPath = source.FolderPath,
+                Selection = source.Selection,
+                Action = source.Action,
+                Hwnd = source.Hwnd,
+                ProcessId = source.ProcessId
+            };
         }
 
     }

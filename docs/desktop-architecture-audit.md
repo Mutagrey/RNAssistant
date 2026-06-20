@@ -17,6 +17,7 @@ Office launcher or manual attach
     -> RNAssistant.Desktop.exe
     -> WinForms shell + WebView2
     -> RNAssistant.Office controller
+    -> RNAssistant.Office STA dispatcher
     -> RNAssistant.OfficeHosts COM adapter
     -> Office object model
 ```
@@ -62,6 +63,7 @@ Default behavior is `Manual`:
 - If the resolved COM object does not match the requested window/process, attach fails instead of silently operating on a different Office instance.
 - Full Excel multi-instance ROT enumeration is still not implemented.
 - `Refresh` target enumeration is best-effort and based on currently available ROT objects; launchers remain the more precise source for hwnd/document metadata.
+- Desktop COM calls now flow through `DispatchedOfficeApplicationAdapter` and a dedicated STA thread before they reach host COM adapters.
 - Mutating tools still flow through existing confirmation policy.
 - Outlook now follows the Inspector-first, Explorer-selection-second rule.
 
@@ -75,10 +77,10 @@ Default behavior is `Manual`:
 
 ## Remaining Work
 
-- Add a real Office STA dispatcher for all COM automation.
 - Add exact ROT/window matching for multiple Excel instances; the current picker can show known descriptors but cannot always resolve a non-ROT Excel instance.
 - Add Named Pipe direct messages from wrappers, not only single-instance command-line forwarding.
 - Add DockingService floating/pinned modes.
 - Broaden typed C# tools to the full target list.
 - Add controlled temp macro injection fallback with explicit user confirmation and Trust Access detection.
+- Validate the Desktop STA dispatcher against real Office modal/busy states on Windows.
 - Validate on Windows + Office x64 + VS 2022.

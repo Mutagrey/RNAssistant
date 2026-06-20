@@ -57,8 +57,10 @@
     <Compile Include="Controller\AssistantController.Chats.cs" />
     <Compile Include="Controller\AssistantController.Context.cs" />
     <Compile Include="Runtime\AssistantRuntime.cs" />
+    <Compile Include="Runtime\DispatchedOfficeApplicationAdapter.cs" />
     <Compile Include="Agent\AgentTranscript.cs" />
     <Compile Include="Runtime\DocumentIdentity.cs" />
+    <Compile Include="Runtime\OfficeStaDispatcher.cs" />
     <Compile Include="Contracts\IOfficeApplicationAdapter.cs" />
     <Compile Include="Vba\VbaProjectSupport.cs" />
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />

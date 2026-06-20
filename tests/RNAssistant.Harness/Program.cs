@@ -52,6 +52,8 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "desktop target: ignores utf8 bom", Run = OfficeTargetIgnoresUtf8Bom },
                 new HarnessTest { Name = "desktop target: registry manual mode", Run = TargetRegistryManualModeKeepsSelection },
                 new HarnessTest { Name = "desktop target: registry auto mode", Run = TargetRegistryAutoModeCanSwitchSelection },
+                new HarnessTest { Name = "desktop com: dispatcher runs STA", Run = OfficeStaDispatcherRunsSta },
+                new HarnessTest { Name = "desktop com: adapter dispatches calls", Run = DispatchedAdapterDelegatesCalls },
                 new HarnessTest { Name = "storage: chat roundtrip", Run = CreatesAndListsChatsInTempRoot },
                 new HarnessTest { Name = "storage: broken chat skipped", Run = SkipsBrokenChatFiles },
                 new HarnessTest { Name = "chat sessions: document key migration", Run = ChatSessionServiceMigratesDocumentKey },
@@ -273,6 +275,47 @@ namespace RNAssistant.Harness
             AssertEqual(second.Id, registry.SelectedTargetId, "auto selected id");
             AssertEqual("B.docx", registry.SelectedTarget.Target.Name, "auto selected target");
             AssertEqual(1, registry.ForHost("Word").Count, "word count");
+        }
+
+        private static void OfficeStaDispatcherRunsSta()
+        {
+            using (var dispatcher = new OfficeStaDispatcher())
+            {
+                var firstThreadId = dispatcher.Invoke(delegate { return Thread.CurrentThread.ManagedThreadId; });
+                var secondThreadId = dispatcher.Invoke(delegate { return Thread.CurrentThread.ManagedThreadId; });
+
+                AssertEqual(firstThreadId, secondThreadId, "dispatcher thread id");
+                if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                {
+                    var apartment = dispatcher.Invoke(delegate { return Thread.CurrentThread.GetApartmentState(); });
+                    AssertEqual(ApartmentState.STA, apartment, "dispatcher apartment");
+                }
+            }
+        }
+
+        private static void DispatchedAdapterDelegatesCalls()
+        {
+            var createdOnThread = 0;
+            var executeOnThread = 0;
+            var adapter = new FakeOfficeAdapter();
+
+            using (var dispatched = new DispatchedOfficeApplicationAdapter(delegate
+            {
+                createdOnThread = Thread.CurrentThread.ManagedThreadId;
+                return new ThreadRecordingOfficeAdapter(adapter, delegate
+                {
+                    executeOnThread = Thread.CurrentThread.ManagedThreadId;
+                });
+            }))
+            {
+                AssertEqual("Excel", dispatched.HostName, "host name");
+                var result = dispatched.ExecuteTool(new ToolCommand { ToolId = "excel.read_range" });
+                AssertTrue(result.Success, "tool success");
+                AssertEqual(1, adapter.Executed.Count, "executed count");
+            }
+
+            AssertTrue(createdOnThread != 0, "created thread");
+            AssertEqual(createdOnThread, executeOnThread, "execute thread");
         }
 
         private static void CreatesAndListsChatsInTempRoot()
@@ -1928,6 +1971,60 @@ namespace RNAssistant.Harness
             if ((value ?? string.Empty).IndexOf(expected, StringComparison.OrdinalIgnoreCase) < 0)
             {
                 throw new InvalidOperationException(name + ": expected '" + value + "' to contain '" + expected + "'");
+            }
+        }
+
+        private sealed class ThreadRecordingOfficeAdapter : IOfficeApplicationAdapter
+        {
+            private readonly IOfficeApplicationAdapter _inner;
+            private readonly Action _record;
+
+            public ThreadRecordingOfficeAdapter(IOfficeApplicationAdapter inner, Action record)
+            {
+                _inner = inner;
+                _record = record;
+            }
+
+            public string HostName { get { _record(); return _inner.HostName; } }
+            public string DocumentKey { get { _record(); return _inner.DocumentKey; } }
+            public string LegacyDocumentKey { get { _record(); return _inner.LegacyDocumentKey; } }
+            public string RuntimeDocumentKey { get { _record(); return _inner.RuntimeDocumentKey; } }
+            public string DocumentTitle { get { _record(); return _inner.DocumentTitle; } }
+
+            public string GetDocumentSnapshot(int maxChars)
+            {
+                _record();
+                return _inner.GetDocumentSnapshot(maxChars);
+            }
+
+            public string GetVbaSnapshot(int maxChars)
+            {
+                _record();
+                return _inner.GetVbaSnapshot(maxChars);
+            }
+
+            public void PrepareForContextCapture()
+            {
+                _record();
+                _inner.PrepareForContextCapture();
+            }
+
+            public ContextNote CaptureSelectionContext(string mode, int maxChars)
+            {
+                _record();
+                return _inner.CaptureSelectionContext(mode, maxChars);
+            }
+
+            public IEnumerable<ToolDefinition> GetBuiltInTools()
+            {
+                _record();
+                return _inner.GetBuiltInTools();
+            }
+
+            public ToolResult ExecuteTool(ToolCommand command)
+            {
+                _record();
+                return _inner.ExecuteTool(command);
             }
         }
 

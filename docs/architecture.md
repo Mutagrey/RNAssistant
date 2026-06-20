@@ -37,7 +37,7 @@ web static UI
 - `src/RNAssistant.Office/Controller/AssistantController.Chats.cs`: chat/session bridge methods; lifecycle and document-key migration live in `ChatSessionService`.
 - `src/RNAssistant.Office/Controller/AssistantController.Context.cs`: active chat context attachments.
 - `src/RNAssistant.Office/Contracts`: shared Office abstractions and bridge DTOs such as `IOfficeApplicationAdapter` and `BridgeDtos`.
-- `src/RNAssistant.Office/Runtime`: add-in runtime helpers that are host-neutral.
+- `src/RNAssistant.Office/Runtime`: add-in/runtime helpers that are host-neutral, including the Desktop STA dispatcher used before COM adapter calls.
 - `src/RNAssistant.Office/Vba`: shared VBA project support.
 - `src/RNAssistant.Office/Agent`: agent transcript/plan formatting and retry policy.
 - `src/RNAssistant.Office/Services`: host-neutral application services used by controller orchestration, such as chat/session lifecycle, tool/skill catalog composition, context normalization, and chat completion flow.
@@ -57,6 +57,7 @@ web static UI
 - Office host adapters expose executable capabilities through `ToolDefinition` and `ExecuteTool`; they should not know chat/session/storage details.
 - Desktop target descriptors must be validated before tool execution; a closed or mismatched target should fail instead of falling back to an unrelated active document.
 - `OfficeContext` is a Core DTO. Host adapters may implement `IOfficeContextProvider`; bridge responses can expose this without requiring every adapter/fake to implement it.
+- Desktop COM automation must enter host adapters through `DispatchedOfficeApplicationAdapter`/`OfficeStaDispatcher`; VSTO task panes already run inside their Office host process and remain Windows-validation-only.
 - Desktop target selection is explicit by default. `Manual` mode keeps the selected working target stable when the user switches Office windows; `Auto follow` may switch from launcher activation.
 - The Desktop target registry stores only lightweight descriptors, not long-lived Office COM objects.
 - UI sends typed bridge messages; business rules stay in C# unless they are purely presentation behavior.
