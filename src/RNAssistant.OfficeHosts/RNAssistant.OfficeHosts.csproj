@@ -94,6 +94,7 @@
     <Compile Include="ExcelAdapter.cs" />
     <Compile Include="OutlookAdapter.cs" />
     <Compile Include="PowerPointAdapter.cs" />
+    <Compile Include="Targets\ExcelNativeObjectResolver.cs" />
     <Compile Include="Targets\NativeWindowInfo.cs" />
     <Compile Include="Targets\OfficeComAdapterProvider.cs" />
     <Compile Include="Targets\OfficeTargetEnumerator.cs" />

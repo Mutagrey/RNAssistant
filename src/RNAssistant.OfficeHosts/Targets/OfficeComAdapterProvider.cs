@@ -21,7 +21,7 @@ namespace RNAssistant.OfficeHosts
             host = NormalizeHost(host, target);
             if (string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase))
             {
-                var application = (Excel.Application)GetActiveOfficeObject("Excel.Application");
+                var application = ResolveExcelApplication(target);
                 ValidateTargetWindow("Excel", application, target);
                 return new ExcelAdapter(application, target);
             }
@@ -106,6 +106,12 @@ namespace RNAssistant.OfficeHosts
             {
                 throw new InvalidOperationException("Office host is not running: " + progId, ex);
             }
+        }
+
+        private static Excel.Application ResolveExcelApplication(OfficeTargetDescriptor target)
+        {
+            var application = target == null ? null : ExcelNativeObjectResolver.ResolveApplication(target.Hwnd);
+            return application ?? (Excel.Application)GetActiveOfficeObject("Excel.Application");
         }
 
         private static string NormalizeHost(string host, OfficeTargetDescriptor target)

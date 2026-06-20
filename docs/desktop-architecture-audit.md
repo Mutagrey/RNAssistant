@@ -61,7 +61,8 @@ Default behavior is `Manual`:
 
 - `Marshal.GetActiveObject` is still used for ROT attach, but explicit `hwnd` now validates the resolved COM object before adapter creation.
 - If the resolved COM object does not match the requested window/process, attach fails instead of silently operating on a different Office instance.
-- Full Excel multi-instance ROT enumeration is still not implemented.
+- Excel attach first tries to resolve `Excel.Application` from the launcher `hwnd` through the native Office window object, then falls back to ROT attach.
+- Full Excel multi-instance enumeration is still best-effort; exact attach depends on a launcher/foreground `hwnd`.
 - `Refresh` target enumeration is best-effort and based on currently available ROT objects; launchers remain the more precise source for hwnd/document metadata.
 - Desktop COM calls now flow through `DispatchedOfficeApplicationAdapter` and a dedicated STA thread before they reach host COM adapters.
 - Mutating tools still flow through existing confirmation policy.
@@ -77,7 +78,7 @@ Default behavior is `Manual`:
 
 ## Remaining Work
 
-- Add exact ROT/window matching for multiple Excel instances; the current picker can show known descriptors but cannot always resolve a non-ROT Excel instance.
+- Validate Excel `hwnd` native-object attach across multiple Excel instances on Windows.
 - Add Named Pipe direct messages from wrappers, not only single-instance command-line forwarding.
 - Add DockingService floating/pinned modes.
 - Broaden typed C# tools to the full target list.
