@@ -67,8 +67,12 @@
     <Compile Include="MainForm.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="OfficeTargetRegistry.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="SingleInstanceManager.cs" />
+    <Compile Include="TargetSelectionBar.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

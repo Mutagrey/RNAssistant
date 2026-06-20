@@ -43,7 +43,7 @@ web static UI
 - `src/RNAssistant.Office/Services`: host-neutral application services used by controller orchestration, such as chat/session lifecycle, tool/skill catalog composition, context normalization, and chat completion flow.
 - `src/RNAssistant.Office/Tools`: tool execution, pipelines, skill CRUD tools, VBA patch/backup workflow.
 - `src/RNAssistant.OfficeHosts`: shared Excel/Word/PowerPoint/Outlook COM adapters and desktop target descriptors.
-- `src/RNAssistant.Desktop`: standalone WinForms shell, manual foreground attach, single-instance JSON pipe activation, and ROT-based adapter creation with hwnd validation.
+- `src/RNAssistant.Desktop`: standalone WinForms shell, explicit Office target picker, manual foreground attach, single-instance JSON pipe activation, and ROT-based adapter creation with hwnd validation.
 - `src/RNAssistant.*AddIn`: VSTO compatibility wiring; no host adapter ownership.
 - `wrappers/native`: VBA source modules for Office-native launchers.
 - `web`: static HTML/CSS/JS task pane. `web/js/app-core.js` owns state and WebView bridge wiring; `app-settings.js`, `app-tools.js`, `app-skills.js`, `app-vba.js`, `app-context.js`, and `app-chat.js` own their feature flows; `app-utils.js` owns pure browser helpers; `app.js` is boot plus shared rendering helpers.
@@ -57,6 +57,8 @@ web static UI
 - Office host adapters expose executable capabilities through `ToolDefinition` and `ExecuteTool`; they should not know chat/session/storage details.
 - Desktop target descriptors must be validated before tool execution; a closed or mismatched target should fail instead of falling back to an unrelated active document.
 - `OfficeContext` is a Core DTO. Host adapters may implement `IOfficeContextProvider`; bridge responses can expose this without requiring every adapter/fake to implement it.
+- Desktop target selection is explicit by default. `Manual` mode keeps the selected working target stable when the user switches Office windows; `Auto follow` may switch from launcher activation.
+- The Desktop target registry stores only lightweight descriptors, not long-lived Office COM objects.
 - UI sends typed bridge messages; business rules stay in C# unless they are purely presentation behavior.
 - WebView response serialization belongs in `AssistantWebBridge`; controller methods should return DTOs or domain models.
 

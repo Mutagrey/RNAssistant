@@ -34,11 +34,34 @@ Desktop activation supports:
 
 The native wrappers pass `--hwnd` and target JSON with `Hwnd`. The desktop app is single-instance; later launches send a JSON activation message to the user-scoped named pipe.
 
+## Target Selection Model
+
+Desktop owns a lightweight target registry:
+
+- mode: `Manual` or `Auto follow`;
+- known targets from launcher activation, `Use active`, or explicit `Refresh`;
+- selected working target independent from the currently focused Office document;
+- target records store only descriptors: host, hwnd, process id, document path/title, folder/mail id, and selection reference.
+
+No long-lived `Workbook`, `Range`, `Document`, `Presentation`, `MailItem`, or other COM object is stored in the registry. Adapters resolve live COM objects from the selected descriptor only when a tool runs.
+
+Default behavior is `Manual`:
+
+- the first detected target is selected;
+- later launcher events add/update targets but do not switch the working document;
+- the user switches documents through the Desktop target dropdown or `Use active`.
+
+`Auto follow` is opt-in:
+
+- incoming launcher activation switches the working target immediately;
+- this is useful for users who want the assistant to follow Office focus.
+
 ## Safety Findings
 
 - `Marshal.GetActiveObject` is still used for ROT attach, but explicit `hwnd` now validates the resolved COM object before adapter creation.
 - If the resolved COM object does not match the requested window/process, attach fails instead of silently operating on a different Office instance.
 - Full Excel multi-instance ROT enumeration is still not implemented.
+- `Refresh` target enumeration is best-effort and based on currently available ROT objects; launchers remain the more precise source for hwnd/document metadata.
 - Mutating tools still flow through existing confirmation policy.
 - Outlook now follows the Inspector-first, Explorer-selection-second rule.
 
@@ -53,7 +76,7 @@ The native wrappers pass `--hwnd` and target JSON with `Hwnd`. The desktop app i
 ## Remaining Work
 
 - Add a real Office STA dispatcher for all COM automation.
-- Add exact ROT/window matching for multiple Excel instances, or a user picker when exact match is unavailable.
+- Add exact ROT/window matching for multiple Excel instances; the current picker can show known descriptors but cannot always resolve a non-ROT Excel instance.
 - Add Named Pipe direct messages from wrappers, not only single-instance command-line forwarding.
 - Add DockingService floating/pinned modes.
 - Broaden typed C# tools to the full target list.

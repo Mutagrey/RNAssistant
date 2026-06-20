@@ -49,6 +49,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Tools\ToolSafetyPolicy.cs" Link="Office\Tools\ToolSafetyPolicy.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\VbaToolExecutor.cs" Link="Office\Tools\VbaToolExecutor.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.cs" Link="Office\WebView\AssistantWebBridge.cs" />
+    <Compile Include="..\..\src\RNAssistant.Desktop\OfficeTargetRegistry.cs" Link="Desktop\OfficeTargetRegistry.cs" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Targets\OfficeTargetDescriptor.cs" Link="OfficeHosts\Targets\OfficeTargetDescriptor.cs" />
   </ItemGroup>
 </Project>

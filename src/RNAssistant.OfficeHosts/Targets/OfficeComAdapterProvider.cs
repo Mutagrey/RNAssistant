@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using RNAssistant.Office;
 using Excel = Microsoft.Office.Interop.Excel;
@@ -10,6 +11,11 @@ namespace RNAssistant.OfficeHosts
 {
     public sealed class OfficeComAdapterProvider
     {
+        public IReadOnlyList<OfficeTargetDescriptor> ListOpenTargets(string host)
+        {
+            return OfficeTargetEnumerator.ListOpenTargets(host, GetActiveOfficeObject);
+        }
+
         public IOfficeApplicationAdapter Create(string host, OfficeTargetDescriptor target)
         {
             host = NormalizeHost(host, target);

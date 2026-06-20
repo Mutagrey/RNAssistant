@@ -54,6 +54,11 @@ If launched without arguments, the desktop shell can attach to the foreground
 Office window as an MVP fallback. Logs are written under
 `%LOCALAPPDATA%\OfficeAssistant\logs`.
 
+The desktop shell includes a target picker. `Manual` mode keeps the chosen
+working document locked even if the user switches Office windows. `Auto follow`
+switches the working target from launcher activation. The picker stores only
+lightweight target descriptors and resolves live COM objects on demand.
+
 Current architecture audit: `docs/desktop-architecture-audit.md`.
 
 ## VSTO Quick Start

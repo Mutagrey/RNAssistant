@@ -15,6 +15,7 @@ using RNAssistant.Office;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 using RNAssistant.Office.WebView;
+using RNAssistant.Desktop;
 using RNAssistant.OfficeHosts;
 
 namespace RNAssistant.Harness
@@ -49,6 +50,8 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "desktop target: parses json descriptor", Run = ParsesOfficeTargetJsonDescriptor },
                 new HarnessTest { Name = "desktop target: parses base64 descriptor", Run = ParsesOfficeTargetBase64Descriptor },
                 new HarnessTest { Name = "desktop target: ignores utf8 bom", Run = OfficeTargetIgnoresUtf8Bom },
+                new HarnessTest { Name = "desktop target: registry manual mode", Run = TargetRegistryManualModeKeepsSelection },
+                new HarnessTest { Name = "desktop target: registry auto mode", Run = TargetRegistryAutoModeCanSwitchSelection },
                 new HarnessTest { Name = "storage: chat roundtrip", Run = CreatesAndListsChatsInTempRoot },
                 new HarnessTest { Name = "storage: broken chat skipped", Run = SkipsBrokenChatFiles },
                 new HarnessTest { Name = "chat sessions: document key migration", Run = ChatSessionServiceMigratesDocumentKey },
@@ -244,6 +247,32 @@ namespace RNAssistant.Harness
             var target = OfficeTargetDescriptor.FromBase64Json(base64);
             AssertEqual("Word", target.Host, "host");
             AssertEqual("C:\\Docs\\Doc.docx", target.FullName, "full name");
+        }
+
+        private static void TargetRegistryManualModeKeepsSelection()
+        {
+            var registry = new OfficeTargetRegistry();
+            var first = registry.Select(new OfficeTargetDescriptor { Host = "Excel", Hwnd = 1, FullName = "C:\\Docs\\A.xlsx", Name = "A.xlsx" });
+            var second = registry.Upsert(new OfficeTargetDescriptor { Host = "Word", Hwnd = 2, FullName = "C:\\Docs\\B.docx", Name = "B.docx" });
+
+            AssertEqual(TargetSelectionMode.Manual, registry.Mode, "default mode");
+            AssertEqual(first.Id, registry.SelectedTargetId, "manual selected id");
+            AssertEqual("A.xlsx", registry.SelectedTarget.Target.Name, "manual selected target");
+            AssertTrue(second != null, "second target added");
+            AssertEqual(2, registry.Targets.Count, "registry count");
+        }
+
+        private static void TargetRegistryAutoModeCanSwitchSelection()
+        {
+            var registry = new OfficeTargetRegistry();
+            registry.Mode = TargetSelectionMode.AutoFollow;
+            registry.Select(new OfficeTargetDescriptor { Host = "Excel", Hwnd = 1, FullName = "C:\\Docs\\A.xlsx", Name = "A.xlsx" });
+            var second = registry.Select(new OfficeTargetDescriptor { Host = "Word", Hwnd = 2, FullName = "C:\\Docs\\B.docx", Name = "B.docx" });
+
+            AssertEqual(TargetSelectionMode.AutoFollow, registry.Mode, "mode");
+            AssertEqual(second.Id, registry.SelectedTargetId, "auto selected id");
+            AssertEqual("B.docx", registry.SelectedTarget.Target.Name, "auto selected target");
+            AssertEqual(1, registry.ForHost("Word").Count, "word count");
         }
 
         private static void CreatesAndListsChatsInTempRoot()

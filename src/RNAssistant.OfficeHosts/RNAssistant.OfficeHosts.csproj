@@ -96,6 +96,7 @@
     <Compile Include="PowerPointAdapter.cs" />
     <Compile Include="Targets\NativeWindowInfo.cs" />
     <Compile Include="Targets\OfficeComAdapterProvider.cs" />
+    <Compile Include="Targets\OfficeTargetEnumerator.cs" />
     <Compile Include="Targets\OfficeTargetDescriptor.cs" />
     <Compile Include="WordAdapter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
