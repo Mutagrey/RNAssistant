@@ -38,6 +38,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\DispatchedOfficeApplicationAdapter.cs" Link="Office\Runtime\DispatchedOfficeApplicationAdapter.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\OfficeStaDispatcher.cs" Link="Office\Runtime\OfficeStaDispatcher.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatCloneService.cs" Link="Office\Services\ChatCloneService.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Services\AgentRunService.cs" Link="Office\Services\AgentRunService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatCompletionService.cs" Link="Office\Services\ChatCompletionService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatTitleBuilder.cs" Link="Office\Services\ChatTitleBuilder.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatSessionService.cs" Link="Office\Services\ChatSessionService.cs" />
@@ -48,6 +49,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Tools\OfficeToolExecutor.cs" Link="Office\Tools\OfficeToolExecutor.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\PipelineToolExecutor.cs" Link="Office\Tools\PipelineToolExecutor.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\SkillToolExecutor.cs" Link="Office\Tools\SkillToolExecutor.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Tools\ToolAuthoringExecutor.cs" Link="Office\Tools\ToolAuthoringExecutor.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\ToolSafetyPolicy.cs" Link="Office\Tools\ToolSafetyPolicy.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\VbaToolExecutor.cs" Link="Office\Tools\VbaToolExecutor.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.cs" Link="Office\WebView\AssistantWebBridge.cs" />

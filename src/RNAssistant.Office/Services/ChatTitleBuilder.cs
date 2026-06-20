@@ -108,6 +108,10 @@ namespace RNAssistant.Office.Services
                 SmartChatTitles = source.SmartChatTitles,
                 IncludeVbaContext = source.IncludeVbaContext,
                 VbaContextCharLimit = source.VbaContextCharLimit,
+                MaxAgentIterations = source.MaxAgentIterations,
+                MaxAgentToolSteps = source.MaxAgentToolSteps,
+                RequireVerificationForMutations = source.RequireVerificationForMutations,
+                AutoContinueAfterConfirmation = source.AutoContinueAfterConfirmation,
                 UiFontScale = source.UiFontScale,
                 CustomHeaders = source.CustomHeaders == null
                     ? null

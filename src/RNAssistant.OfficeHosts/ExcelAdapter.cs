@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Excel = Microsoft.Office.Interop.Excel;
 using Newtonsoft.Json;
@@ -122,9 +123,12 @@ namespace RNAssistant.OfficeHosts
                 Skill("excel.workbook_summary", "Return workbook metadata, sheets and used ranges.", "{}"),
                 Skill("excel.list_sheets", "List workbook sheet names.", "{}"),
                 Skill("excel.read_range", "Read a worksheet range.", "{\"sheet\":\"optional\",\"address\":\"A1:D20\"}"),
+                Skill("excel.profile_range", "Profile an Excel range or current selection: dimensions, blanks, formulas, inferred headers, and numeric columns.", "{\"sheet\":\"optional\",\"address\":\"optional A1:D20\"}"),
+                Skill("excel.list_charts", "List chart objects in the workbook or one sheet, including title, type, position, and size.", "{\"sheet\":\"optional\"}"),
                 Skill("excel.write_range", "Write a scalar value to a worksheet range.", "{\"sheet\":\"optional\",\"address\":\"A1\",\"value\":\"text\"}", true, true),
                 Skill("excel.write_table", "Write a 2D JSON array to a worksheet starting at a cell.", "{\"sheet\":\"optional\",\"startAddress\":\"A1\",\"values\":[[\"Header\", \"Value\"],[\"A\", 1]]}", true, true),
                 Skill("excel.add_chart", "Create a chart from a worksheet source range.", "{\"sheet\":\"optional\",\"sourceRange\":\"A1:B6\",\"chartType\":\"line|column|bar|pie\",\"title\":\"Chart title\",\"left\":300,\"top\":20,\"width\":480,\"height\":300}", true, true),
+                Skill("excel.autofit", "Autofit rows and columns for a worksheet range or used range.", "{\"sheet\":\"optional\",\"address\":\"optional A1:D20\"}", true, true),
                 Skill("excel.add_sheet", "Add a new worksheet.", "{\"name\":\"Sheet name\"}", true, true),
                 Skill("excel.vba_read_project", "Read VBA project modules and source code when Trust Access to VBA project is enabled.", "{\"maxChars\":30000}"),
                 Skill("excel.vba_read_module", "Read one VBA module by name.", "{\"moduleName\":\"Module1\",\"maxChars\":30000}"),
@@ -245,12 +249,18 @@ namespace RNAssistant.OfficeHosts
                         return ListSheets();
                     case "excel.read_range":
                         return ReadRange(command);
+                    case "excel.profile_range":
+                        return ProfileRange(command);
+                    case "excel.list_charts":
+                        return ListCharts(command);
                     case "excel.write_range":
                         return WriteRange(command);
                     case "excel.write_table":
                         return WriteTable(command);
                     case "excel.add_chart":
                         return AddChart(command);
+                    case "excel.autofit":
+                        return Autofit(command);
                     case "excel.add_sheet":
                         return AddSheet(command);
                     case "excel.vba_read_project":
@@ -335,6 +345,113 @@ namespace RNAssistant.OfficeHosts
             return ToolResult.Ok("Range read: " + sheet.Name + "!" + address, JsonConvert.SerializeObject(rows));
         }
 
+        private ToolResult ProfileRange(ToolCommand command)
+        {
+            var sheetName = ToolArgumentReader.String(command.Arguments, "sheet", null);
+            var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
+            var sheet = ResolveSheet(sheetName);
+            var range = string.IsNullOrWhiteSpace(address)
+                ? ResolveSelectionRange(RequireWorkbook()) ?? sheet.UsedRange
+                : sheet.Range[address];
+            var rows = RangeToRows(range);
+            var formulaRows = RangeToFormulaRows(range);
+            var rowCount = rows.Count;
+            var columnCount = rows.Count == 0 ? 0 : rows.Max(r => r.Count);
+            var blankCells = 0;
+            var formulaCells = 0;
+            var numericColumns = new List<object>();
+            for (var c = 0; c < columnCount; c++)
+            {
+                var numeric = 0;
+                var nonBlank = 0;
+                for (var r = 0; r < rowCount; r++)
+                {
+                    var value = c < rows[r].Count ? rows[r][c] : null;
+                    if (IsBlank(value))
+                    {
+                        blankCells += 1;
+                        continue;
+                    }
+
+                    nonBlank += 1;
+                    if (IsNumeric(value))
+                    {
+                        numeric += 1;
+                    }
+                }
+
+                if (nonBlank > 0 && numeric == nonBlank)
+                {
+                    numericColumns.Add(new
+                    {
+                        index = c + 1,
+                        header = HeaderAt(rows, c),
+                        nonBlank = nonBlank
+                    });
+                }
+            }
+
+            for (var r = 0; r < formulaRows.Count; r++)
+            {
+                for (var c = 0; c < formulaRows[r].Count; c++)
+                {
+                    var formula = Convert.ToString(formulaRows[r][c]);
+                    if (!string.IsNullOrWhiteSpace(formula) && formula.StartsWith("=", StringComparison.Ordinal))
+                    {
+                        formulaCells += 1;
+                    }
+                }
+            }
+
+            return ToolResult.Ok("Range profiled: " + sheet.Name + "!" + range.Address[false, false], JsonConvert.SerializeObject(new
+            {
+                sheet = sheet.Name,
+                address = range.Address[false, false],
+                rows = rowCount,
+                columns = columnCount,
+                blankCells = blankCells,
+                formulaCells = formulaCells,
+                headers = rows.Count == 0 ? new string[0] : rows[0].Select(v => Convert.ToString(v)).ToArray(),
+                numericColumns = numericColumns,
+                sample = rows.Take(10).ToArray()
+            }));
+        }
+
+        private ToolResult ListCharts(ToolCommand command)
+        {
+            var workbook = RequireWorkbook();
+            var sheetFilter = ToolArgumentReader.String(command.Arguments, "sheet", string.Empty);
+            var charts = new List<object>();
+            foreach (Excel.Worksheet sheet in workbook.Worksheets)
+            {
+                if (!string.IsNullOrWhiteSpace(sheetFilter) &&
+                    !string.Equals(sheet.Name, sheetFilter, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var chartObjects = (Excel.ChartObjects)sheet.ChartObjects(Type.Missing);
+                for (var i = 1; i <= chartObjects.Count; i++)
+                {
+                    var chartObject = (Excel.ChartObject)chartObjects.Item(i);
+                    var chart = chartObject.Chart;
+                    charts.Add(new
+                    {
+                        sheet = sheet.Name,
+                        name = chartObject.Name,
+                        title = ChartTitle(chart),
+                        chartType = chart.ChartType.ToString(),
+                        left = chartObject.Left,
+                        top = chartObject.Top,
+                        width = chartObject.Width,
+                        height = chartObject.Height
+                    });
+                }
+            }
+
+            return ToolResult.Ok("Charts listed: " + charts.Count, JsonConvert.SerializeObject(charts));
+        }
+
         private ToolResult WriteRange(ToolCommand command)
         {
             var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
@@ -407,6 +524,16 @@ namespace RNAssistant.OfficeHosts
             chart.HasTitle = true;
             chart.ChartTitle.Text = title;
             return ToolResult.Ok("Chart added: " + title, JsonConvert.SerializeObject(new { sheet = sheet.Name, sourceRange = sourceRange, chartType = chartType, title = title }));
+        }
+
+        private ToolResult Autofit(ToolCommand command)
+        {
+            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
+            var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
+            var range = string.IsNullOrWhiteSpace(address) ? sheet.UsedRange : sheet.Range[address];
+            range.Columns.AutoFit();
+            range.Rows.AutoFit();
+            return ToolResult.Ok("Autofit applied to " + sheet.Name + "!" + range.Address[false, false], JsonConvert.SerializeObject(new { sheet = sheet.Name, range = range.Address[false, false] }));
         }
 
         private ToolResult AddSheet(ToolCommand command)
@@ -697,6 +824,64 @@ namespace RNAssistant.OfficeHosts
                 rows.Add(row);
             }
             return rows;
+        }
+
+        private static List<List<object>> RangeToFormulaRows(Excel.Range range)
+        {
+            var rows = new List<List<object>>();
+            object value = range.Formula;
+            var array = value as object[,];
+            if (array == null)
+            {
+                rows.Add(new List<object> { value });
+                return rows;
+            }
+
+            for (var r = array.GetLowerBound(0); r <= array.GetUpperBound(0); r++)
+            {
+                var row = new List<object>();
+                for (var c = array.GetLowerBound(1); c <= array.GetUpperBound(1); c++)
+                {
+                    row.Add(array[r, c]);
+                }
+                rows.Add(row);
+            }
+            return rows;
+        }
+
+        private static string HeaderAt(IReadOnlyList<List<object>> rows, int columnIndex)
+        {
+            return rows != null && rows.Count > 0 && columnIndex >= 0 && columnIndex < rows[0].Count
+                ? Convert.ToString(rows[0][columnIndex])
+                : string.Empty;
+        }
+
+        private static bool IsBlank(object value)
+        {
+            return value == null || string.IsNullOrWhiteSpace(Convert.ToString(value));
+        }
+
+        private static bool IsNumeric(object value)
+        {
+            if (value == null)
+            {
+                return false;
+            }
+
+            return value is byte || value is short || value is int || value is long ||
+                value is float || value is double || value is decimal;
+        }
+
+        private static string ChartTitle(Excel.Chart chart)
+        {
+            try
+            {
+                return chart != null && chart.HasTitle ? chart.ChartTitle.Text : string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
         }
 
         private static object ToCellValue(JToken token)

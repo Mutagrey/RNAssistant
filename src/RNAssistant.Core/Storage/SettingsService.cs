@@ -101,9 +101,41 @@ namespace RNAssistant.Core.Storage
             {
                 settings.SmartChatTitles = defaults.SmartChatTitles;
             }
+            if (!settings.RequireVerificationForMutations.HasValue)
+            {
+                settings.RequireVerificationForMutations = defaults.RequireVerificationForMutations;
+            }
+            if (!settings.AutoContinueAfterConfirmation.HasValue)
+            {
+                settings.AutoContinueAfterConfirmation = defaults.AutoContinueAfterConfirmation;
+            }
             if (settings.VbaContextCharLimit <= 0)
             {
                 settings.VbaContextCharLimit = defaults.VbaContextCharLimit;
+            }
+            if (settings.MaxAgentIterations <= 0)
+            {
+                settings.MaxAgentIterations = defaults.MaxAgentIterations;
+            }
+            if (settings.MaxAgentIterations < 1)
+            {
+                settings.MaxAgentIterations = 1;
+            }
+            if (settings.MaxAgentIterations > 50)
+            {
+                settings.MaxAgentIterations = 50;
+            }
+            if (settings.MaxAgentToolSteps <= 0)
+            {
+                settings.MaxAgentToolSteps = defaults.MaxAgentToolSteps;
+            }
+            if (settings.MaxAgentToolSteps < 1)
+            {
+                settings.MaxAgentToolSteps = 1;
+            }
+            if (settings.MaxAgentToolSteps > 200)
+            {
+                settings.MaxAgentToolSteps = 200;
             }
             return settings;
         }

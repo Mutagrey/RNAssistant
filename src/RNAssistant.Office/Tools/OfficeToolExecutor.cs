@@ -14,18 +14,22 @@ namespace RNAssistant.Office.Tools
         private readonly PipelineToolExecutor _pipelineExecutor;
         private readonly VbaToolExecutor _vbaExecutor;
         private readonly SkillToolExecutor _skillExecutor;
+        private readonly ToolAuthoringExecutor _toolAuthoringExecutor;
 
-        public OfficeToolExecutor(IOfficeApplicationAdapter adapter, VbaBackupStore vbaBackupStore, SkillStore skillStore)
+        public OfficeToolExecutor(IOfficeApplicationAdapter adapter, VbaBackupStore vbaBackupStore, SkillStore skillStore, ToolStore toolStore = null)
         {
             _adapter = adapter;
             _pipelineExecutor = new PipelineToolExecutor();
             _vbaExecutor = new VbaToolExecutor(adapter, vbaBackupStore);
             _skillExecutor = new SkillToolExecutor(adapter, skillStore);
+            _toolAuthoringExecutor = new ToolAuthoringExecutor(adapter, toolStore);
         }
 
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
-            return _vbaExecutor.GetControllerTools().Concat(_skillExecutor.GetControllerTools());
+            return _vbaExecutor.GetControllerTools()
+                .Concat(_skillExecutor.GetControllerTools())
+                .Concat(_toolAuthoringExecutor.GetControllerTools());
         }
 
         public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, bool dryRun, bool manualRun, CancellationToken cancellationToken = default(CancellationToken))
@@ -97,6 +101,12 @@ namespace RNAssistant.Office.Tools
                 return _skillExecutor.ExecuteControllerTool(command, settings, dryRun, manualRun);
             }
 
+            if (_toolAuthoringExecutor.IsControllerTool(command.ToolId))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return _toolAuthoringExecutor.ExecuteControllerTool(command, settings, dryRun, manualRun);
+            }
+
             if (dryRun)
             {
                 return ToolResult.Ok("Dry run: would execute " + command.ToolId, JsonConvert.SerializeObject(command.Arguments));
@@ -119,6 +129,7 @@ namespace RNAssistant.Office.Tools
             AddTools(result, seen, _adapter.GetBuiltInTools());
             AddTools(result, seen, _vbaExecutor.GetControllerTools());
             AddTools(result, seen, _skillExecutor.GetControllerTools());
+            AddTools(result, seen, _toolAuthoringExecutor.GetControllerTools());
             return result;
         }
 

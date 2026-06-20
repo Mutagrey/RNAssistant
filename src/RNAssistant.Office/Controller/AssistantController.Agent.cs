@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
@@ -14,13 +16,38 @@ namespace RNAssistant.Office
     {
         public ChatStateResponse ConfirmAgentTool(string pendingId, string chatId = null)
         {
+            return ConfirmAgentToolAsync(pendingId, chatId, null, CancellationToken.None).GetAwaiter().GetResult();
+        }
+
+        public async Task<ChatStateResponse> ConfirmAgentToolAsync(
+            string pendingId,
+            string chatId = null,
+            Action<string, string, ChatActivity> progress = null,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
             PendingAgentTool pending;
             var session = ResolvePendingAgentTool(pendingId, chatId, out pending);
             RemovePendingAgentTool(pendingId);
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
+            cancellationToken.ThrowIfCancellationRequested();
             var result = _toolExecutor.Execute(CloneCommand(pending.Command), tools, settings, false, true);
             UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
+            if (result.Success && settings.AutoContinueAfterConfirmation != false)
+            {
+                var context = LoadContext(session);
+                var skills = _skillCatalog.SelectRelevantSkills("continue confirmed agent task", context, 5);
+                await _chatCompletionService.ContinueAfterToolAsync(
+                    CloneCommand(pending.Command),
+                    session,
+                    context,
+                    settings,
+                    tools,
+                    progress,
+                    RegisterPendingAgentTool,
+                    skills,
+                    cancellationToken).ConfigureAwait(false);
+            }
             _chatStore.Save(session);
             return ChatState(session);
         }

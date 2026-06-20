@@ -180,7 +180,7 @@ Agent responses may also use:
 ```
 ````
 
-Pure JSON arrays/objects with `toolId`, `tool`, `action`, or `name` are accepted too. Native API `tool_calls` are not required; if an endpoint returns them anyway, RNAssistant converts them into the same local text protocol before parsing. In Agent mode, built-in Office tools can run automatically; custom tools marked `requiresConfirmation` and VBA mutation tools still require confirmation unless `Auto-confirm tool actions` is enabled. Waiting agent steps carry typed statuses such as `waiting_confirmation` or `skipped_auto_run`; the task pane can confirm or cancel the exact pending command.
+Pure JSON arrays/objects with `toolId`, `tool`, `action`, or `name` are accepted too. Native API `tool_calls` are not required; if an endpoint returns them anyway, RNAssistant converts them into the same local text protocol before parsing. In Agent mode, built-in Office tools can run automatically; custom tools marked `requiresConfirmation` and VBA mutation tools still require confirmation unless `Auto-confirm tool actions` is enabled. Waiting agent steps carry typed statuses such as `waiting_confirmation` or `skipped_auto_run`; the task pane can confirm or cancel the exact pending command. Confirmed tools can continue the same run, and mutation runs ask the model to verify results with read-only tools before the final answer.
 
 `System prompt` in Settings is treated as additional custom instruction. The fixed RNAssistant tool protocol is always appended as mandatory runtime protocol so custom text cannot disable parsing or tool execution rules.
 
@@ -226,6 +226,8 @@ The Tools tab can run a selected tool with ad hoc JSON arguments. `Dry Run` reso
 
 For Excel, Word, and PowerPoint, `executor: "vba"` inserts `code.vba` through the current host `insert_vba_module`; if the run arguments include `macroName`, it then calls the current host `run_macro`.
 Agent-generated executable code should be VBA for the current Office host.
+
+Agent mode can also use `common.tools_list`, `common.tools_read`, `common.tools_save`, and `common.tools_delete` to manage custom tools. Save/delete requires confirmation unless auto-confirm is enabled. Pipeline tools are validated before save; VBA tools must include code.
 
 ## Skill Library
 

@@ -41,7 +41,8 @@ web static UI
 - `src/RNAssistant.Office/Vba`: shared VBA project support.
 - `src/RNAssistant.Office/Agent`: agent transcript/plan formatting and retry policy.
 - `src/RNAssistant.Office/Services`: host-neutral application services used by controller orchestration, such as chat/session lifecycle, tool/skill catalog composition, context normalization, and chat completion flow.
-- `src/RNAssistant.Office/Tools`: tool execution, pipelines, skill CRUD tools, VBA patch/backup workflow.
+- `src/RNAssistant.Office/Services/AgentRunService.cs`: iterative agent loop, tool observations, retries, mutation verification prompts, VBA context capture, and confirmation resume continuation.
+- `src/RNAssistant.Office/Tools`: tool execution, pipelines, tool/skill CRUD tools, VBA patch/backup workflow.
 - `src/RNAssistant.OfficeHosts`: shared Excel/Word/PowerPoint/Outlook COM adapters and desktop target descriptors.
 - `src/RNAssistant.Desktop`: standalone WinForms shell, explicit Office target picker, manual foreground attach, single-instance JSON pipe activation, and ROT-based adapter creation with hwnd validation.
 - `src/RNAssistant.*AddIn`: VSTO compatibility wiring; no host adapter ownership.
@@ -53,6 +54,7 @@ web static UI
 - Parser converts text/native-compatible shapes to `ToolCommand`; executor decides whether command may run.
 - Tools are executable actions described by `ToolDefinition`; skills are markdown guidance described by `SkillDefinition`.
 - Tool safety belongs to `ToolDefinition` metadata: `MutatesDocument`, `AgentCanRun`, and `RequiresConfirmation`.
+- Agent runs are bounded by settings for max iterations and max tool steps; confirmed pending tools may resume the same run, and mutation runs ask for read-only verification before final prose.
 - Controller coordinates request flow; it should not contain pipeline execution, VBA patch logic, or JS rendering logic.
 - Office host adapters expose executable capabilities through `ToolDefinition` and `ExecuteTool`; they should not know chat/session/storage details.
 - Desktop target descriptors must be validated before tool execution; a closed or mismatched target should fail instead of falling back to an unrelated active document.
@@ -84,8 +86,9 @@ Current coverage:
 - chat session lifecycle fixtures, including document-key migration;
 - pipeline dry-run and execution fixtures with fake `IOfficeApplicationAdapter`;
 - pipeline failure diagnostics and confirmation gates for custom tools and Agent Mode built-in mutations;
-- agent runtime guards for disabled Agent mode, waiting confirmations, and stopped batches;
+- agent runtime guards for disabled Agent mode, waiting confirmations, stopped batches, max iterations, max tool steps, mutation verification follow-up, and VBA context prompt inclusion;
 - markdown skill store/catalog/prompt separation, prompt body limiting, and agent skill-save confirmation;
+- agent custom tool save/read confirmation and validation;
 - metadata-driven mutation safety gates;
 - VBA replace-text flow with rollback backup using fake `IOfficeApplicationAdapter`;
 - tool catalog service merge/filter behavior;

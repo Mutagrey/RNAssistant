@@ -65,6 +65,7 @@
     <Compile Include="Vba\VbaProjectSupport.cs" />
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />
     <Compile Include="Services\ChatCloneService.cs" />
+    <Compile Include="Services\AgentRunService.cs" />
     <Compile Include="Services\ChatCompletionService.cs" />
     <Compile Include="Services\ChatTitleBuilder.cs" />
     <Compile Include="Services\ChatSessionService.cs" />
@@ -75,6 +76,7 @@
     <Compile Include="Tools\OfficeToolExecutor.cs" />
     <Compile Include="Tools\PipelineToolExecutor.cs" />
     <Compile Include="Tools\SkillToolExecutor.cs" />
+    <Compile Include="Tools\ToolAuthoringExecutor.cs" />
     <Compile Include="Tools\ToolSafetyPolicy.cs" />
     <Compile Include="Tools\VbaToolExecutor.cs" />
     <Compile Include="WebView\AssistantPaneControl.cs" />

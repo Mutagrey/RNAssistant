@@ -22,6 +22,10 @@ namespace RNAssistant.Core.Models
         public bool? SmartChatTitles { get; set; }
         public bool IncludeVbaContext { get; set; }
         public int VbaContextCharLimit { get; set; }
+        public int MaxAgentIterations { get; set; }
+        public int MaxAgentToolSteps { get; set; }
+        public bool? RequireVerificationForMutations { get; set; }
+        public bool? AutoContinueAfterConfirmation { get; set; }
         public double UiFontScale { get; set; }
         public Dictionary<string, string> CustomHeaders { get; set; }
 
@@ -44,6 +48,10 @@ namespace RNAssistant.Core.Models
             SmartChatTitles = true;
             IncludeVbaContext = false;
             VbaContextCharLimit = 30000;
+            MaxAgentIterations = 8;
+            MaxAgentToolSteps = 40;
+            RequireVerificationForMutations = true;
+            AutoContinueAfterConfirmation = true;
             UiFontScale = 1.0;
             CustomHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }

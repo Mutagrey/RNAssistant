@@ -293,7 +293,11 @@
                 <label class="checkline"><input id="autoRunToolsInput" type="checkbox"><span>Автозапуск tool calls</span></label>
                 <label class="checkline"><input id="autoConfirmToolsInput" type="checkbox"><span>Автоподтверждение действий</span></label>
                 <label class="checkline"><input id="autoRetryToolsInput" type="checkbox"><span>Авторемонт tool errors</span></label>
-                <label class="checkline hidden"><input id="includeVbaContextInput" type="checkbox"><span>Legacy VBA auto-context</span></label>
+                <label class="checkline"><input id="requireVerificationInput" type="checkbox"><span>Проверять результат мутаций</span></label>
+                <label class="checkline"><input id="autoContinueAfterConfirmationInput" type="checkbox"><span>Продолжать после подтверждения tool</span></label>
+                <label class="checkline"><input id="includeVbaContextInput" type="checkbox"><span>Включать VBA context автоматически</span></label>
+                <label><span>Макс. итераций агента</span><input id="maxAgentIterationsInput" type="number" min="1" max="50"></label>
+                <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1" max="200"></label>
                 <label><span>VBA context, символы</span><input id="vbaContextLimitInput" type="number" min="1000" max="200000"></label>
               </div>
             </section>

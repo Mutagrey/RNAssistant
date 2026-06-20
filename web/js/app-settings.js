@@ -28,8 +28,12 @@ function renderSettings() {
   $("autoRunToolsInput").checked = (s.AutoRunToolCalls !== false && s.autoRunToolCalls !== false);
   $("autoConfirmToolsInput").checked = !!(s.AutoConfirmToolActions || s.autoConfirmToolActions);
   $("autoRetryToolsInput").checked = (s.AutoRetryToolErrors !== false && s.autoRetryToolErrors !== false);
+  $("requireVerificationInput").checked = (s.RequireVerificationForMutations !== false && s.requireVerificationForMutations !== false);
+  $("autoContinueAfterConfirmationInput").checked = (s.AutoContinueAfterConfirmation !== false && s.autoContinueAfterConfirmation !== false);
   $("smartChatTitlesInput").checked = (s.SmartChatTitles !== false && s.smartChatTitles !== false);
   $("includeVbaContextInput").checked = !!(s.IncludeVbaContext || s.includeVbaContext);
+  $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || 8;
+  $("maxAgentToolStepsInput").value = s.MaxAgentToolSteps || s.maxAgentToolSteps || 40;
   $("vbaContextLimitInput").value = s.VbaContextCharLimit || s.vbaContextCharLimit || 30000;
   $("systemPromptInput").value = s.SystemPrompt || s.systemPrompt || "";
   $("agentPromptInput").value = s.AgentPrompt || s.agentPrompt || "";
@@ -52,8 +56,12 @@ function readSettings() {
     AutoRunToolCalls: $("autoRunToolsInput").checked,
     AutoConfirmToolActions: $("autoConfirmToolsInput").checked,
     AutoRetryToolErrors: $("autoRetryToolsInput").checked,
+    RequireVerificationForMutations: $("requireVerificationInput").checked,
+    AutoContinueAfterConfirmation: $("autoContinueAfterConfirmationInput").checked,
     SmartChatTitles: $("smartChatTitlesInput").checked,
     IncludeVbaContext: $("includeVbaContextInput").checked,
+    MaxAgentIterations: Number($("maxAgentIterationsInput").value || 8),
+    MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || 40),
     VbaContextCharLimit: Number($("vbaContextLimitInput").value || 30000),
     SystemPrompt: $("systemPromptInput").value,
     AgentPrompt: $("agentPromptInput").value,

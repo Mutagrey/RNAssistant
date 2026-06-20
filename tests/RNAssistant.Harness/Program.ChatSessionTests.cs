@@ -1,0 +1,145 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Llm;
+using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
+using RNAssistant.Core.Tools;
+using RNAssistant.Core.Storage;
+using RNAssistant.Office;
+using RNAssistant.Office.Services;
+using RNAssistant.Office.Tools;
+using RNAssistant.Office.WebView;
+using RNAssistant.Desktop;
+using RNAssistant.OfficeHosts;
+
+namespace RNAssistant.Harness
+{
+    internal static partial class Program
+    {
+        private static void CreatesAndListsChatsInTempRoot()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Word", "doc-key", "Doc", "First");
+                session.Messages.Add(new ChatMessage
+                {
+                    Role = "user",
+                    Content = "hello",
+                    Activity = new ChatActivity
+                    {
+                        Kind = "notice",
+                        Title = "Stored activity",
+                        Status = "completed"
+                    }
+                });
+                store.Save(session);
+
+                var loaded = store.Load("Word", "doc-key", ChatStore.GetSessionId(session));
+                AssertTrue(loaded != null, "loaded session");
+                AssertEqual("First", loaded.Title, "title");
+                AssertEqual(1, loaded.Messages.Count, "message count");
+                AssertEqual("hello", loaded.Messages[0].Content, "message content");
+                AssertEqual("Stored activity", loaded.Messages[0].Activity.Title, "message activity title");
+
+                var sessions = store.List("Word", "doc-key", "Doc");
+                AssertEqual(1, sessions.Count, "document session count");
+                AssertEqual(ChatStore.GetSessionId(session), ChatStore.GetSessionId(sessions[0]), "session id");
+                AssertEqual(ChatStore.GetSessionId(session), store.LoadActiveSessionId("Word", "doc-key"), "active id");
+            });
+        }
+
+        private static void SkipsBrokenChatFiles()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var store = new ChatStore(paths);
+                var documentDirectory = Path.Combine(paths.ChatDirectory, AppDataPaths.SafeFileName("Excel|book"));
+                Directory.CreateDirectory(documentDirectory);
+                File.WriteAllText(Path.Combine(documentDirectory, "broken.json"), "{ broken");
+
+                var session = store.Create("Excel", "book", "Book", "Good");
+                var sessions = store.List("Excel", "book", "Book");
+                AssertEqual(1, sessions.Count, "document session count");
+                AssertEqual(ChatStore.GetSessionId(session), ChatStore.GetSessionId(sessions[0]), "session id");
+
+                var allSessions = store.List();
+                AssertEqual(1, allSessions.Count, "global session count");
+            });
+        }
+
+        private static void ChatSessionServiceMigratesDocumentKey()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var service = new ChatSessionService(adapter, store);
+                var session = service.LoadSession(null);
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "before save" });
+                store.Save(session);
+
+                adapter.DocumentKeyValue = "saved-doc";
+                var migrated = service.LoadSession(null);
+
+                AssertEqual(ChatStore.GetSessionId(session), ChatStore.GetSessionId(migrated), "migrated session id");
+                AssertEqual("saved-doc", migrated.DocumentKey, "migrated document key");
+                AssertEqual(1, migrated.Messages.Count, "migrated message count");
+                AssertEqual(0, store.List("Excel", "doc", "Harness.xlsx").Count, "old document sessions");
+                AssertEqual(1, store.List("Excel", "saved-doc", "Harness.xlsx").Count, "new document sessions");
+            });
+        }
+
+        private static void ChatSessionServiceMigratesLegacyDocumentKey()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var legacy = store.Create(adapter.HostName, adapter.LegacyDocumentKey, adapter.DocumentTitle, "Legacy");
+                legacy.Messages.Add(new ChatMessage { Role = "user", Content = "legacy chat" });
+                store.Save(legacy);
+
+                var service = new ChatSessionService(adapter, store);
+                var loaded = service.LoadSession(null);
+
+                AssertEqual(ChatStore.GetSessionId(legacy), ChatStore.GetSessionId(loaded), "legacy session id");
+                AssertEqual(adapter.DocumentKey, loaded.DocumentKey, "legacy migrated document key");
+                AssertEqual(1, loaded.Messages.Count, "legacy message count");
+                AssertEqual(0, store.List(adapter.HostName, adapter.LegacyDocumentKey, adapter.DocumentTitle).Count, "legacy sessions moved");
+                AssertEqual(1, store.List(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle).Count, "current sessions");
+            });
+        }
+
+        private static void ChatSessionServiceFallsBackForStaleRequestedId()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var service = new ChatSessionService(adapter, store);
+                var oldSession = service.LoadSession(null);
+                var oldId = ChatStore.GetSessionId(oldSession);
+                oldSession.Messages.Add(new ChatMessage { Role = "user", Content = "old doc" });
+                store.Save(oldSession);
+
+                adapter.DocumentKeyValue = "other-doc";
+                adapter.RuntimeDocumentKeyValue = "other-runtime-doc";
+
+                var current = service.LoadSession(oldId, true);
+
+                AssertTrue(!string.Equals(oldId, ChatStore.GetSessionId(current), StringComparison.OrdinalIgnoreCase), "fallback created current session");
+                AssertEqual("other-doc", current.DocumentKey, "fallback document key");
+                AssertEqual(0, current.Messages.Count, "fallback message count");
+                AssertEqual(1, store.List("Excel", "doc", "Harness.xlsx").Count, "old document preserved");
+                AssertEqual(1, store.List("Excel", "other-doc", "Harness.xlsx").Count, "new document session");
+            });
+        }
+    }
+}

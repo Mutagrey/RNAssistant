@@ -63,6 +63,19 @@ namespace RNAssistant.Office
             return new SkillDefinition[0];
         }
         public ChatStateResponse ConfirmAgentTool(string pendingId, string chatId = null) { return ChatState(pendingId, chatId); }
+        public Task<ChatStateResponse> ConfirmAgentToolAsync(
+            string pendingId,
+            string chatId = null,
+            Action<string, string, ChatActivity> progress = null,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (progress != null)
+            {
+                progress("executing", "Testing confirm", new ChatActivity { Kind = "tool", Title = pendingId, Status = "running" });
+            }
+            return Task.FromResult(ChatState(pendingId, chatId));
+        }
         public ChatStateResponse CancelAgentTool(string pendingId, string chatId = null) { return ChatState(pendingId, chatId); }
         public VbaProjectResponse GetVbaProject(int maxChars) { return new VbaProjectResponse { Result = ToolResult.Ok("ok") }; }
 

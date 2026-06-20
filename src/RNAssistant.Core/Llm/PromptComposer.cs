@@ -26,10 +26,12 @@ namespace RNAssistant.Core.Llm
             builder.AppendLine("Agent mode: " + (settings.AgentModeEnabled != false ? "enabled" : "disabled"));
             builder.AppendLine("Auto-run local tool blocks: " + (settings.AutoRunToolCalls != false ? "enabled" : "disabled"));
             builder.AppendLine("Auto-confirm tool actions: " + (settings.AutoConfirmToolActions ? "enabled" : "disabled"));
+            builder.AppendLine("Mutation verification: " + (settings.RequireVerificationForMutations != false ? "required" : "not required"));
             builder.AppendLine("Do not rely on native API tool_calls. Local Office actions are executed through parseable RNAssistant JSON in text; compatibility conversion exists only for endpoints that return tool_calls anyway.");
             if (settings.AgentModeEnabled != false)
             {
-                builder.AppendLine("When the user asks to inspect, create, edit, transform, format, insert, replace, calculate, chart, summarize from the document, or otherwise act on Office content, you MUST use available tools instead of only explaining.");
+                builder.AppendLine("When the user asks only to analyze, review, explain, or suggest improvements, inspect the Office context if needed and answer in chat without mutating the document.");
+                builder.AppendLine("When the user explicitly approves implementation or asks to create, edit, transform, format, insert, replace, calculate, chart, or otherwise change Office content, you MUST use available tools instead of only explaining.");
                 builder.AppendLine("Break the task into small steps. Return one fenced rnassistant-agent block containing only the next executable tool calls.");
                 if (!string.IsNullOrWhiteSpace(settings.AgentPrompt))
                 {
@@ -49,8 +51,10 @@ namespace RNAssistant.Core.Llm
             builder.AppendLine("Never invent tool ids or use API-style aliases such as create_worksheet, addWorksheet, create_sheet, worksheet.create, or action names instead of exact tool ids.");
             builder.AppendLine("After tool results are provided, either answer normally if the task is complete or return the next tool block.");
             builder.AppendLine("If no available tool can satisfy the request, say exactly what is missing.");
+            builder.AppendLine("After any document or VBA mutation, verify the result with read-only tools before the final answer. If verification shows a problem, correct it with another small tool step.");
             builder.AppendLine("For VBA edits, prefer the host vba_apply_patch tool for structured small patches; use vba_replace_module only when replacing the whole module is necessary.");
-            builder.AppendLine("For agent-created executable code, write VBA code for the current Office host.");
+            builder.AppendLine("Use VBA only when built-in tools cannot solve the task cleanly, or when the user specifically asks for macros/VBA. For agent-created executable code, write VBA code for the current Office host.");
+            builder.AppendLine("When creating reusable automations, use common.tools_save for executable tools and common.skills_save for markdown guidance. Validate generated pipeline/VBA tool definitions before saving.");
             builder.AppendLine();
             AppendSkills(builder, skills, SkillBodyLimit(settings));
             builder.AppendLine("Available tools:");

@@ -16,10 +16,12 @@
 - Add unreadable-directory storage fixtures only where the OS can simulate them reliably cross-platform.
 - Review WebView CSS/UX for low-risk cleanup without adding a build pipeline.
 - Keep new UI responsibilities in the matching `web/js/app-*.js` feature file; do not grow `app.js` back into orchestration.
+- Continue broadening host-specific read-only inspection tools, especially Excel charts/shapes and post-mutation verification surfaces.
 
 ## Mid-Term Plan
 
 - Introduce typed bridge request/response DTOs instead of large switch payload parsing.
+- Add richer pipeline semantics only when concrete scenarios require them: conditions, typed outputs, and reusable verification steps.
 
 ## Project Criteria
 

@@ -64,6 +64,39 @@ namespace RNAssistant.Core.Storage
             SaveAll(keep.Concat(incoming));
         }
 
+        public ToolDefinition SaveOne(ToolDefinition tool)
+        {
+            if (tool == null || tool.BuiltIn || string.IsNullOrWhiteSpace(tool.Id))
+            {
+                return null;
+            }
+
+            var tools = Load()
+                .Where(t => !string.Equals(t.Id, tool.Id, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            tools.Add(tool);
+            SaveAll(tools);
+            return Load().FirstOrDefault(t => string.Equals(t.Id, tool.Id, StringComparison.OrdinalIgnoreCase));
+        }
+
+        public bool Delete(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return false;
+            }
+
+            var tools = Load();
+            var kept = tools.Where(t => !string.Equals(t.Id, id, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (kept.Count == tools.Count)
+            {
+                return false;
+            }
+
+            SaveAll(kept);
+            return true;
+        }
+
         private void SaveAll(IEnumerable<ToolDefinition> tools)
         {
             if (Directory.Exists(_paths.ToolsDirectory))
