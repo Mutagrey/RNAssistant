@@ -17,7 +17,9 @@ Suggested wrapper containers:
 - Outlook: import `outlook/RNAssistantOutlook.bas` into Outlook VBA or a local macro project.
 
 The modules pass target metadata through `--target-base64`, so paths and
-non-ASCII document names do not need command-line quote escaping.
+non-ASCII document names do not need command-line quote escaping. They also pass
+`--hwnd` so `RNAssistant.Desktop.exe` can validate that COM attach did not land
+on a different Office window.
 
 Ribbon XML can call the public macros such as `RNAssistant_Open`,
 `RNAssistant_Summarize`, `RNAssistant_ExplainSelection`, `RNAssistant_DraftRewrite`,

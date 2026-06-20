@@ -216,8 +216,10 @@ namespace RNAssistant.Harness
 
         private static void ParsesOfficeTargetJsonDescriptor()
         {
-            var target = OfficeTargetDescriptor.FromJson("{\"Host\":\"Excel\",\"FullName\":\"C:\\\\Docs\\\\Book.xlsx\",\"Name\":\"Book.xlsx\",\"Selection\":\"Sheet1!A1:B2\"}");
+            var target = OfficeTargetDescriptor.FromJson("{\"Host\":\"Excel\",\"Hwnd\":123456,\"ProcessId\":4321,\"FullName\":\"C:\\\\Docs\\\\Book.xlsx\",\"Name\":\"Book.xlsx\",\"Selection\":\"Sheet1!A1:B2\"}");
             AssertEqual("Excel", target.Host, "host");
+            AssertEqual(123456L, target.Hwnd, "hwnd");
+            AssertEqual(4321, target.ProcessId, "process id");
             AssertEqual("C:\\Docs\\Book.xlsx", target.FullName, "full name");
             AssertEqual("Book.xlsx", target.Name, "name");
             AssertEqual("Sheet1!A1:B2", target.Selection, "selection");

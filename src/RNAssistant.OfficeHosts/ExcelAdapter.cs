@@ -10,7 +10,7 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.OfficeHosts
 {
-    public sealed class ExcelAdapter : IOfficeApplicationAdapter
+    public sealed class ExcelAdapter : IOfficeApplicationAdapter, IOfficeContextProvider
     {
         private readonly Excel.Application _application;
         private readonly OfficeTargetDescriptor _target;
@@ -78,10 +78,47 @@ namespace RNAssistant.OfficeHosts
             }
         }
 
+        public OfficeContext GetOfficeContext()
+        {
+            var context = new OfficeContext { Host = HostName };
+            try
+            {
+                var hwnd = NativeWindowInfo.ReadLongMemberPath(_application, "Hwnd");
+                context.AppHwnd = new IntPtr(hwnd);
+                context.ProcessId = NativeWindowInfo.GetProcessId(hwnd);
+            }
+            catch
+            {
+            }
+
+            var workbook = ActiveWorkbook();
+            if (workbook != null)
+            {
+                context.DocumentPath = SafeString(delegate { return workbook.FullName; });
+                context.DocumentTitle = SafeString(delegate { return workbook.Name; });
+            }
+
+            try
+            {
+                var range = workbook == null ? null : ResolveSelectionRange(workbook);
+                var sheet = range == null ? null : range.Worksheet as Excel.Worksheet;
+                context.ContainerName = sheet == null ? null : sheet.Name;
+                context.SelectionAddress = range == null ? null : range.Address[false, false];
+                context.SelectionText = range == null ? null : Trim(BuildRangeText(range, 2000), 2000);
+            }
+            catch
+            {
+            }
+
+            return context;
+        }
+
         public IEnumerable<ToolDefinition> GetBuiltInTools()
         {
             return new[]
             {
+                Skill("excel.get_context", "Return active Excel workbook, sheet and selection context.", "{}"),
+                Skill("excel.get_selection", "Read the current or launcher-captured Excel selection.", "{}"),
                 Skill("excel.workbook_summary", "Return workbook metadata, sheets and used ranges.", "{}"),
                 Skill("excel.list_sheets", "List workbook sheet names.", "{}"),
                 Skill("excel.read_range", "Read a worksheet range.", "{\"sheet\":\"optional\",\"address\":\"A1:D20\"}"),
@@ -198,6 +235,10 @@ namespace RNAssistant.OfficeHosts
             {
                 switch (command.ToolId)
                 {
+                    case "excel.get_context":
+                        return GetContextTool();
+                    case "excel.get_selection":
+                        return GetSelectionTool();
                     case "excel.workbook_summary":
                         return WorkbookSummary();
                     case "excel.list_sheets":
@@ -230,6 +271,30 @@ namespace RNAssistant.OfficeHosts
             {
                 return ToolResult.Fail(ex.Message);
             }
+        }
+
+        private ToolResult GetContextTool()
+        {
+            return ToolResult.Ok("Excel context collected.", JsonConvert.SerializeObject(GetOfficeContext()));
+        }
+
+        private ToolResult GetSelectionTool()
+        {
+            var workbook = RequireWorkbook();
+            var range = ResolveSelectionRange(workbook);
+            if (range == null)
+            {
+                return ToolResult.Fail("Select an Excel range first.");
+            }
+
+            var sheet = range.Worksheet as Excel.Worksheet;
+            return ToolResult.Ok("Selection read.", JsonConvert.SerializeObject(new
+            {
+                workbook = workbook.Name,
+                sheet = sheet == null ? string.Empty : sheet.Name,
+                address = range.Address[false, false],
+                values = RangeToRows(range)
+            }));
         }
 
         private ToolResult WorkbookSummary()

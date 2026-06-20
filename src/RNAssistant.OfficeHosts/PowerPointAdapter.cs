@@ -10,7 +10,7 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.OfficeHosts
 {
-    public sealed class PowerPointAdapter : IOfficeApplicationAdapter
+    public sealed class PowerPointAdapter : IOfficeApplicationAdapter, IOfficeContextProvider
     {
         private readonly PowerPoint.Application _application;
         private readonly OfficeTargetDescriptor _target;
@@ -78,10 +78,56 @@ namespace RNAssistant.OfficeHosts
             }
         }
 
+        public OfficeContext GetOfficeContext()
+        {
+            var context = new OfficeContext { Host = HostName };
+            try
+            {
+                var hwnd = NativeWindowInfo.ReadLongMemberPath(_application, "HWND");
+                context.AppHwnd = new IntPtr(hwnd);
+                context.ProcessId = NativeWindowInfo.GetProcessId(hwnd);
+            }
+            catch
+            {
+            }
+
+            var presentation = ActivePresentation();
+            if (presentation != null)
+            {
+                context.DocumentPath = SafeString(delegate { return presentation.FullName; });
+                context.DocumentTitle = SafeString(delegate { return presentation.Name; });
+            }
+
+            try
+            {
+                var window = _application.ActiveWindow;
+                var selection = window == null ? null : window.Selection;
+                if (selection != null && selection.Type == PowerPoint.PpSelectionType.ppSelectionSlides)
+                {
+                    context.ContainerName = selection.SlideRange.Count > 0 ? "Slide " + selection.SlideRange[1].SlideIndex : null;
+                }
+                if (string.IsNullOrWhiteSpace(context.ContainerName) && window != null && window.View != null && window.View.Slide != null)
+                {
+                    context.ContainerName = "Slide " + window.View.Slide.SlideIndex;
+                }
+
+                if (selection != null && selection.Type == PowerPoint.PpSelectionType.ppSelectionShapes && selection.ShapeRange.Count > 0)
+                {
+                    context.SelectionAddress = selection.ShapeRange.Count + " shape(s)";
+                }
+            }
+            catch
+            {
+            }
+
+            return context;
+        }
+
         public IEnumerable<ToolDefinition> GetBuiltInTools()
         {
             return new[]
             {
+                Skill("powerpoint.get_context", "Return active PowerPoint presentation and slide context.", "{}"),
                 Skill("powerpoint.read_slides", "Read text from slides.", "{\"maxSlides\":20}"),
                 Skill("powerpoint.add_slide", "Add a text slide.", "{\"title\":\"Slide title\",\"body\":\"Slide body\"}", true, true),
                 Skill("powerpoint.replace_selection_text", "Replace text in selected shape.", "{\"text\":\"Replacement text\"}", true, true),
@@ -216,6 +262,8 @@ namespace RNAssistant.OfficeHosts
             {
                 switch (command.ToolId)
                 {
+                    case "powerpoint.get_context":
+                        return ToolResult.Ok("PowerPoint context collected.", JsonConvert.SerializeObject(GetOfficeContext()));
                     case "powerpoint.read_slides":
                         return ReadSlides(command);
                     case "powerpoint.add_slide":

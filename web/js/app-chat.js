@@ -128,6 +128,7 @@ async function forkChatAtMessage(message, index) {
 function applyInitState(init) {
   state.host = init.host;
   state.title = init.title;
+  state.officeContext = init.officeContext || null;
   state.settings = init.settings || {};
   state.tools = init.tools || [];
   state.skills = init.skills || [];
@@ -139,7 +140,7 @@ function applyInitState(init) {
   state.activeChatModel = init.activeChatModel || "";
   state.chats = init.chats || [];
   state.messages = init.messages || [];
-  $("docLine").textContent = init.host + " - " + init.title;
+  $("docLine").textContent = formatOfficeContextLine(init.officeContext, init.host, init.title);
   $("toolsPath").textContent = state.toolsPath ? "Storage: " + state.toolsPath : "";
   $("skillsPath").textContent = state.skillsPath ? "Storage: " + state.skillsPath : "";
   renderSettings();
@@ -154,6 +155,30 @@ function applyInitState(init) {
   if (init.quickAction) {
     runQuickAction(init.quickAction);
   }
+}
+
+function formatOfficeContextLine(context, host, title) {
+  if (!context) {
+    return (host || "") + " - " + (title || "");
+  }
+
+  var parts = [];
+  parts.push(context.Host || context.host || host || "");
+  parts.push(context.DocumentTitle || context.documentTitle || title || "");
+
+  var container = context.ContainerName || context.containerName || "";
+  var selection = context.SelectionAddress || context.selectionAddress || "";
+  if (container && selection && parts[0].toLowerCase() === "excel") {
+    parts.push(container + "!" + selection);
+  } else if (container && selection) {
+    parts.push(container + " · " + selection);
+  } else if (selection) {
+    parts.push(selection);
+  } else if (container) {
+    parts.push(container);
+  }
+
+  return parts.filter(function (part) { return !!part; }).join(" · ");
 }
 
 async function initialize() {

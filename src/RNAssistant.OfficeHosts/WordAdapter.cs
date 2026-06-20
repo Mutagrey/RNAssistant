@@ -9,7 +9,7 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.OfficeHosts
 {
-    public sealed class WordAdapter : IOfficeApplicationAdapter
+    public sealed class WordAdapter : IOfficeApplicationAdapter, IOfficeContextProvider
     {
         private readonly Word.Application _application;
         private readonly OfficeTargetDescriptor _target;
@@ -77,10 +77,45 @@ namespace RNAssistant.OfficeHosts
             }
         }
 
+        public OfficeContext GetOfficeContext()
+        {
+            var context = new OfficeContext { Host = HostName };
+            try
+            {
+                var hwnd = NativeWindowInfo.ReadLongMemberPath(_application, "ActiveWindow", "Hwnd");
+                context.AppHwnd = new IntPtr(hwnd);
+                context.ProcessId = NativeWindowInfo.GetProcessId(hwnd);
+            }
+            catch
+            {
+            }
+
+            var doc = ActiveDocument();
+            if (doc != null)
+            {
+                context.DocumentPath = SafeString(delegate { return doc.FullName; });
+                context.DocumentTitle = SafeString(delegate { return doc.Name; });
+            }
+
+            try
+            {
+                var range = doc == null ? null : ResolveSelectionRange(doc);
+                context.SelectionAddress = range == null ? null : range.Start + ":" + range.End;
+                context.SelectionText = range == null ? null : Trim(range.Text, 2000);
+            }
+            catch
+            {
+            }
+
+            return context;
+        }
+
         public IEnumerable<ToolDefinition> GetBuiltInTools()
         {
             return new[]
             {
+                Skill("word.get_context", "Return active Word document and selection context.", "{}"),
+                Skill("word.get_selection_text", "Read current Word selection text.", "{}"),
                 Skill("word.read_document", "Read current document text.", "{\"maxChars\":12000}"),
                 Skill("word.read_selection", "Read current Word selection.", "{}"),
                 Skill("word.insert_text", "Insert text at current cursor position.", "{\"text\":\"Text to insert\"}", true, true),
@@ -175,8 +210,11 @@ namespace RNAssistant.OfficeHosts
             {
                 switch (command.ToolId)
                 {
+                    case "word.get_context":
+                        return ToolResult.Ok("Word context collected.", JsonConvert.SerializeObject(GetOfficeContext()));
                     case "word.read_document":
                         return ReadDocument(command);
+                    case "word.get_selection_text":
                     case "word.read_selection":
                         return ToolResult.Ok("Selection read.", JsonConvert.SerializeObject(new { text = SelectionText() }));
                     case "word.insert_text":

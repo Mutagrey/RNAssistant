@@ -17,4 +17,9 @@ namespace RNAssistant.Office
         IEnumerable<ToolDefinition> GetBuiltInTools();
         ToolResult ExecuteTool(ToolCommand command);
     }
+
+    public interface IOfficeContextProvider
+    {
+        OfficeContext GetOfficeContext();
+    }
 }

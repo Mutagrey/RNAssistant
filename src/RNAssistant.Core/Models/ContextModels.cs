@@ -38,4 +38,22 @@ namespace RNAssistant.Core.Models
             CreatedUtc = DateTime.UtcNow;
         }
     }
+
+    public sealed class OfficeContext
+    {
+        public string Host { get; set; }
+        public IntPtr AppHwnd { get; set; }
+        public int ProcessId { get; set; }
+        public string DocumentPath { get; set; }
+        public string DocumentTitle { get; set; }
+        public string ContainerName { get; set; }
+        public string SelectionAddress { get; set; }
+        public string SelectionText { get; set; }
+        public DateTime CapturedAt { get; set; }
+
+        public OfficeContext()
+        {
+            CapturedAt = DateTime.UtcNow;
+        }
+    }
 }

@@ -305,6 +305,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("title")]
         public string Title { get; set; }
 
+        [JsonProperty("officeContext")]
+        public OfficeContext OfficeContext { get; set; }
+
         [JsonProperty("activeChatId")]
         public string ActiveChatId { get; set; }
 

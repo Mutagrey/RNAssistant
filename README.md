@@ -44,10 +44,17 @@ The desktop shell accepts:
 ```cmd
 RNAssistant.Desktop.exe --host Excel --target "{...json...}" --action summarize
 RNAssistant.Desktop.exe --host Word --target-base64 eyJIb3N0IjoiV29yZCJ9
+RNAssistant.Desktop.exe --host Excel --hwnd 123456 --action attach
 ```
 
 It is single-instance: later wrapper clicks send activation to the existing
 window through a named pipe and switch the active Office target.
+
+If launched without arguments, the desktop shell can attach to the foreground
+Office window as an MVP fallback. Logs are written under
+`%LOCALAPPDATA%\OfficeAssistant\logs`.
+
+Current architecture audit: `docs/desktop-architecture-audit.md`.
 
 ## VSTO Quick Start
 

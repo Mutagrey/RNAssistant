@@ -38,20 +38,26 @@ Private Sub LaunchRNAssistant(ByVal actionName As String)
     End If
 
     Dim command As String
-    command = QuoteArg(exePath) & " --host Word --target-base64 " & QuoteArg(Base64Utf8(BuildTargetJson()))
+    command = QuoteArg(exePath) & " --host Word --hwnd " & CStr(CurrentHwnd()) & " --target-base64 " & QuoteArg(Base64Utf8(BuildTargetJson()))
     If Len(actionName) > 0 Then command = command & " --action " & QuoteArg(actionName)
     CreateObject("WScript.Shell").Run command, 1, False
 End Sub
 
 Private Function BuildTargetJson() As String
     If Documents.Count = 0 Then
-        BuildTargetJson = "{""Host"":""Word""}"
+        BuildTargetJson = "{""Host"":""Word"",""Hwnd"":" & CStr(CurrentHwnd()) & "}"
         Exit Function
     End If
 
     Dim doc As Document
     Set doc = ActiveDocument
-    BuildTargetJson = "{""Host"":""Word"",""FullName"":""" & JsonEscape(doc.FullName) & """,""Path"":""" & JsonEscape(doc.FullName) & """,""Name"":""" & JsonEscape(doc.Name) & """,""Selection"":""" & JsonEscape(CStr(Selection.Start) & ":" & CStr(Selection.End)) & """}"
+    BuildTargetJson = "{""Host"":""Word"",""Hwnd"":" & CStr(CurrentHwnd()) & ",""FullName"":""" & JsonEscape(doc.FullName) & """,""Path"":""" & JsonEscape(doc.FullName) & """,""Name"":""" & JsonEscape(doc.Name) & """,""Selection"":""" & JsonEscape(CStr(Selection.Start) & ":" & CStr(Selection.End)) & """}"
+End Function
+
+Private Function CurrentHwnd() As Long
+    On Error Resume Next
+    CurrentHwnd = Application.ActiveWindow.Hwnd
+    On Error GoTo 0
 End Function
 
 Private Function QuoteArg(ByVal value As String) As String

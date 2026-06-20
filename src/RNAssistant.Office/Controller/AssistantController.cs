@@ -66,6 +66,7 @@ namespace RNAssistant.Office
                 Host = _adapter.HostName,
                 DocumentKey = _adapter.DocumentKey,
                 Title = _adapter.DocumentTitle,
+                OfficeContext = CaptureOfficeContext(),
                 ActiveChatId = activeId,
                 ActiveChatModel = session == null ? string.Empty : session.Model,
                 Chats = _chatSessions.GetChatSummaries(activeId),
@@ -80,6 +81,24 @@ namespace RNAssistant.Office
                 ContextUsage = ContextUsageEstimator.FromSession(session, settings),
                 QuickAction = DequeueQuickAction()
             };
+        }
+
+        private OfficeContext CaptureOfficeContext()
+        {
+            var provider = _adapter as IOfficeContextProvider;
+            if (provider == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                return provider.GetOfficeContext();
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         public async Task<SendChatResponse> SendChatAsync(

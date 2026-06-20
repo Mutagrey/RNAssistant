@@ -22,7 +22,7 @@ namespace RNAssistant.Desktop
             StartPosition = FormStartPosition.CenterScreen;
             _content = new Panel { Dock = DockStyle.Fill };
             Controls.Add(_content);
-            ShowPlaceholder("Open RN Assistant from an Office wrapper ribbon.");
+            ShowPlaceholder("No Office attached.", true);
         }
 
         public void ApplyActivation(string[] args)
@@ -34,14 +34,20 @@ namespace RNAssistant.Desktop
             }
 
             var activation = DesktopActivation.Parse(args);
+            ApplyActivation(activation);
+        }
+
+        private void ApplyActivation(DesktopActivation activation)
+        {
             if (string.IsNullOrWhiteSpace(activation.Host))
             {
-                ShowPlaceholder("Office host was not specified.");
+                ShowPlaceholder("No Office attached.", true);
                 return;
             }
 
             try
             {
+                DesktopLog.Info("Attach requested. Host=" + activation.Host + ", hwnd=" + activation.Target.Hwnd + ", pid=" + activation.Target.ProcessId);
                 var adapter = _adapterProvider.Create(activation.Host, activation.Target);
                 _runtime = new AssistantRuntime(adapter);
                 ClearContent();
@@ -59,14 +65,42 @@ namespace RNAssistant.Desktop
             }
             catch (Exception ex)
             {
-                ShowPlaceholder(ex.Message);
+                DesktopLog.Error("Attach failed.", ex);
+                ShowPlaceholder(ex.Message, true);
                 MessageBox.Show(this, ex.Message, "RN Assistant", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
-        private void ShowPlaceholder(string text)
+        private void AttachForegroundOffice()
+        {
+            try
+            {
+                ApplyActivation(ForegroundOfficeDetector.Detect());
+            }
+            catch (Exception ex)
+            {
+                DesktopLog.Error("Foreground attach failed.", ex);
+                ShowPlaceholder(ex.Message, true);
+                MessageBox.Show(this, ex.Message, "RN Assistant", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void ShowPlaceholder(string text, bool showAttach = false)
         {
             ClearContent();
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = showAttach ? 2 : 1,
+                Padding = new Padding(24)
+            };
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            if (showAttach)
+            {
+                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48f));
+            }
+
             _placeholder = new Label
             {
                 Dock = DockStyle.Fill,
@@ -75,7 +109,22 @@ namespace RNAssistant.Desktop
                 Font = new Font("Segoe UI", 10f),
                 Padding = new Padding(24)
             };
-            _content.Controls.Add(_placeholder);
+            layout.Controls.Add(_placeholder, 0, 0);
+
+            if (showAttach)
+            {
+                var button = new Button
+                {
+                    Dock = DockStyle.Top,
+                    Height = 36,
+                    Text = "Attach to active Office",
+                    Font = new Font("Segoe UI", 9f)
+                };
+                button.Click += delegate { AttachForegroundOffice(); };
+                layout.Controls.Add(button, 0, 1);
+            }
+
+            _content.Controls.Add(layout);
         }
 
         private void ClearContent()

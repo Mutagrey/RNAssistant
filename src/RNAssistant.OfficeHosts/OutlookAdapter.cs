@@ -8,7 +8,7 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.OfficeHosts
 {
-    public sealed class OutlookAdapter : IOfficeApplicationAdapter
+    public sealed class OutlookAdapter : IOfficeApplicationAdapter, IOfficeContextProvider
     {
         private readonly Outlook.Application _application;
         private readonly OfficeTargetDescriptor _target;
@@ -66,11 +66,57 @@ namespace RNAssistant.OfficeHosts
             }
         }
 
+        public OfficeContext GetOfficeContext()
+        {
+            var context = new OfficeContext { Host = HostName };
+            var hwnd = ActiveOutlookHwnd();
+            context.AppHwnd = new IntPtr(hwnd);
+            context.ProcessId = NativeWindowInfo.GetProcessId(hwnd);
+
+            var mail = SelectedMail();
+            if (mail != null)
+            {
+                context.DocumentTitle = SafeString(delegate { return mail.Subject; });
+                context.SelectionAddress = SafeString(delegate { return mail.EntryID; });
+                context.SelectionText = Trim(SafeString(delegate { return mail.Body; }), 2000);
+                try
+                {
+                    var folder = mail.Parent as Outlook.MAPIFolder;
+                    if (folder != null)
+                    {
+                        context.ContainerName = folder.Name;
+                        context.DocumentPath = folder.FolderPath;
+                    }
+                }
+                catch
+                {
+                }
+                return context;
+            }
+
+            var currentFolder = CurrentFolder();
+            if (currentFolder != null)
+            {
+                context.DocumentTitle = SafeString(delegate { return currentFolder.Name; });
+                context.DocumentPath = SafeString(delegate { return currentFolder.FolderPath; });
+                context.ContainerName = context.DocumentTitle;
+            }
+            else
+            {
+                context.DocumentTitle = "Outlook";
+            }
+
+            return context;
+        }
+
         public IEnumerable<ToolDefinition> GetBuiltInTools()
         {
             return new[]
             {
+                Skill("outlook.get_context", "Return active Outlook mail or folder context.", "{}"),
+                Skill("outlook.read_current_mail", "Read selected or open Outlook mail.", "{\"maxChars\":12000}"),
                 Skill("outlook.read_selection", "Read selected email metadata and body.", "{\"maxChars\":12000}"),
+                Skill("outlook.create_reply_draft", "Create and display a reply draft for selected email.", "{\"body\":\"Reply body\"}", true, true),
                 Skill("outlook.draft_reply", "Create and display a reply draft for selected email.", "{\"body\":\"Reply body\"}", true, true),
                 Skill("outlook.collect_folder_mail", "Collect recent mail metadata from current folder for LLM analysis.", "{\"maxItems\":100,\"maxBodyChars\":1000}"),
                 Skill("outlook.collect_monthly_summary_data", "Collect current folder mail grouped by month for archive summary.", "{\"maxItems\":500,\"maxBodyChars\":500}")
@@ -152,8 +198,12 @@ namespace RNAssistant.OfficeHosts
             {
                 switch (command.ToolId)
                 {
+                    case "outlook.get_context":
+                        return ToolResult.Ok("Outlook context collected.", JsonConvert.SerializeObject(GetOfficeContext()));
+                    case "outlook.read_current_mail":
                     case "outlook.read_selection":
                         return ReadSelection(command);
+                    case "outlook.create_reply_draft":
                     case "outlook.draft_reply":
                         return DraftReply(command);
                     case "outlook.collect_folder_mail":
@@ -262,6 +312,22 @@ namespace RNAssistant.OfficeHosts
             if (HasTargetFolder())
             {
                 return null;
+            }
+
+            try
+            {
+                var inspector = _application.ActiveInspector();
+                if (inspector != null)
+                {
+                    var currentItem = inspector.CurrentItem as Outlook.MailItem;
+                    if (currentItem != null)
+                    {
+                        return currentItem;
+                    }
+                }
+            }
+            catch
+            {
             }
 
             try
@@ -389,6 +455,39 @@ namespace RNAssistant.OfficeHosts
             }
 
             return null;
+        }
+
+        private long ActiveOutlookHwnd()
+        {
+            try
+            {
+                var inspector = _application.ActiveInspector();
+                var hwnd = NativeWindowInfo.ReadLongMemberPath(inspector, "HWND");
+                if (hwnd != 0)
+                {
+                    return hwnd;
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                return NativeWindowInfo.ReadLongMemberPath(_application.ActiveExplorer(), "HWND");
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private delegate string StringGetter();
+
+        private static string SafeString(StringGetter getter)
+        {
+            try { return getter(); }
+            catch { return string.Empty; }
         }
 
         private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)

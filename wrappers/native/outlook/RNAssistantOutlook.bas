@@ -38,7 +38,7 @@ Private Sub LaunchRNAssistant(ByVal actionName As String)
     End If
 
     Dim command As String
-    command = QuoteArg(exePath) & " --host Outlook --target-base64 " & QuoteArg(Base64Utf8(BuildTargetJson()))
+    command = QuoteArg(exePath) & " --host Outlook --hwnd " & CStr(CurrentHwnd()) & " --target-base64 " & QuoteArg(Base64Utf8(BuildTargetJson()))
     If Len(actionName) > 0 Then command = command & " --action " & QuoteArg(actionName)
     CreateObject("WScript.Shell").Run command, 1, False
 End Sub
@@ -52,18 +52,30 @@ Private Function BuildTargetJson() As String
             If TypeOf explorer.Selection.Item(1) Is MailItem Then
                 Dim mail As MailItem
                 Set mail = explorer.Selection.Item(1)
-                BuildTargetJson = "{""Host"":""Outlook"",""EntryId"":""" & JsonEscape(mail.EntryID) & """,""Name"":""" & JsonEscape(mail.Subject) & """}"
+                BuildTargetJson = "{""Host"":""Outlook"",""Hwnd"":" & CStr(CurrentHwnd()) & ",""EntryId"":""" & JsonEscape(mail.EntryID) & """,""Name"":""" & JsonEscape(mail.Subject) & """}"
                 Exit Function
             End If
         End If
 
         If Not explorer.CurrentFolder Is Nothing Then
-            BuildTargetJson = "{""Host"":""Outlook"",""FolderPath"":""" & JsonEscape(explorer.CurrentFolder.FolderPath) & """,""Name"":""" & JsonEscape(explorer.CurrentFolder.Name) & """}"
+            BuildTargetJson = "{""Host"":""Outlook"",""Hwnd"":" & CStr(CurrentHwnd()) & ",""FolderPath"":""" & JsonEscape(explorer.CurrentFolder.FolderPath) & """,""Name"":""" & JsonEscape(explorer.CurrentFolder.Name) & """}"
             Exit Function
         End If
     End If
 
-    BuildTargetJson = "{""Host"":""Outlook""}"
+    BuildTargetJson = "{""Host"":""Outlook"",""Hwnd"":" & CStr(CurrentHwnd()) & "}"
+End Function
+
+Private Function CurrentHwnd() As Long
+    On Error Resume Next
+    If Not Application.ActiveInspector Is Nothing Then
+        CurrentHwnd = Application.ActiveInspector.HWND
+        If CurrentHwnd <> 0 Then Exit Function
+    End If
+    If Not Application.ActiveExplorer Is Nothing Then
+        CurrentHwnd = Application.ActiveExplorer.HWND
+    End If
+    On Error GoTo 0
 End Function
 
 Private Function QuoteArg(ByVal value As String) As String

@@ -38,20 +38,26 @@ Private Sub LaunchRNAssistant(ByVal actionName As String)
     End If
 
     Dim command As String
-    command = QuoteArg(exePath) & " --host PowerPoint --target-base64 " & QuoteArg(Base64Utf8(BuildTargetJson()))
+    command = QuoteArg(exePath) & " --host PowerPoint --hwnd " & CStr(CurrentHwnd()) & " --target-base64 " & QuoteArg(Base64Utf8(BuildTargetJson()))
     If Len(actionName) > 0 Then command = command & " --action " & QuoteArg(actionName)
     CreateObject("WScript.Shell").Run command, 1, False
 End Sub
 
 Private Function BuildTargetJson() As String
     If Presentations.Count = 0 Then
-        BuildTargetJson = "{""Host"":""PowerPoint""}"
+        BuildTargetJson = "{""Host"":""PowerPoint"",""Hwnd"":" & CStr(CurrentHwnd()) & "}"
         Exit Function
     End If
 
     Dim pres As Presentation
     Set pres = ActivePresentation
-    BuildTargetJson = "{""Host"":""PowerPoint"",""FullName"":""" & JsonEscape(pres.FullName) & """,""Path"":""" & JsonEscape(pres.FullName) & """,""Name"":""" & JsonEscape(pres.Name) & """}"
+    BuildTargetJson = "{""Host"":""PowerPoint"",""Hwnd"":" & CStr(CurrentHwnd()) & ",""FullName"":""" & JsonEscape(pres.FullName) & """,""Path"":""" & JsonEscape(pres.FullName) & """,""Name"":""" & JsonEscape(pres.Name) & """}"
+End Function
+
+Private Function CurrentHwnd() As Long
+    On Error Resume Next
+    CurrentHwnd = Application.HWND
+    On Error GoTo 0
 End Function
 
 Private Function QuoteArg(ByVal value As String) As String

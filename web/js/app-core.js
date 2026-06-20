@@ -1,6 +1,7 @@
 var state = {
   host: "",
   title: "",
+  officeContext: null,
   settings: {},
   tools: [],
   skills: [],

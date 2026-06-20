@@ -43,7 +43,7 @@ web static UI
 - `src/RNAssistant.Office/Services`: host-neutral application services used by controller orchestration, such as chat/session lifecycle, tool/skill catalog composition, context normalization, and chat completion flow.
 - `src/RNAssistant.Office/Tools`: tool execution, pipelines, skill CRUD tools, VBA patch/backup workflow.
 - `src/RNAssistant.OfficeHosts`: shared Excel/Word/PowerPoint/Outlook COM adapters and desktop target descriptors.
-- `src/RNAssistant.Desktop`: standalone WinForms shell, single-instance activation, and ROT-based adapter creation.
+- `src/RNAssistant.Desktop`: standalone WinForms shell, manual foreground attach, single-instance JSON pipe activation, and ROT-based adapter creation with hwnd validation.
 - `src/RNAssistant.*AddIn`: VSTO compatibility wiring; no host adapter ownership.
 - `wrappers/native`: VBA source modules for Office-native launchers.
 - `web`: static HTML/CSS/JS task pane. `web/js/app-core.js` owns state and WebView bridge wiring; `app-settings.js`, `app-tools.js`, `app-skills.js`, `app-vba.js`, `app-context.js`, and `app-chat.js` own their feature flows; `app-utils.js` owns pure browser helpers; `app.js` is boot plus shared rendering helpers.
@@ -56,6 +56,7 @@ web static UI
 - Controller coordinates request flow; it should not contain pipeline execution, VBA patch logic, or JS rendering logic.
 - Office host adapters expose executable capabilities through `ToolDefinition` and `ExecuteTool`; they should not know chat/session/storage details.
 - Desktop target descriptors must be validated before tool execution; a closed or mismatched target should fail instead of falling back to an unrelated active document.
+- `OfficeContext` is a Core DTO. Host adapters may implement `IOfficeContextProvider`; bridge responses can expose this without requiring every adapter/fake to implement it.
 - UI sends typed bridge messages; business rules stay in C# unless they are purely presentation behavior.
 - WebView response serialization belongs in `AssistantWebBridge`; controller methods should return DTOs or domain models.
 
@@ -99,5 +100,6 @@ Windows-only validation remains separate:
 - open solution in VS 2022;
 - build `Debug | x64`;
 - smoke-test each Office host;
+- smoke-test Desktop attach from foreground Office and native wrapper `--hwnd` launch;
 - test WebView2 fixed runtime fallback;
 - test VBA trust-disabled path and rollback restore.

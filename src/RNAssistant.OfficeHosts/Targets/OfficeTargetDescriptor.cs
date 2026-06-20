@@ -14,6 +14,8 @@ namespace RNAssistant.OfficeHosts
         public string FolderPath { get; set; }
         public string Selection { get; set; }
         public string Action { get; set; }
+        public long Hwnd { get; set; }
+        public int ProcessId { get; set; }
 
         public bool HasDocumentIdentity
         {

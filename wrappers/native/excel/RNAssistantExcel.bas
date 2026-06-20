@@ -38,7 +38,7 @@ Private Sub LaunchRNAssistant(ByVal actionName As String)
     End If
 
     Dim command As String
-    command = QuoteArg(exePath) & " --host Excel --target-base64 " & QuoteArg(Base64Utf8(BuildTargetJson()))
+    command = QuoteArg(exePath) & " --host Excel --hwnd " & CStr(Application.Hwnd) & " --target-base64 " & QuoteArg(Base64Utf8(BuildTargetJson()))
     If Len(actionName) > 0 Then command = command & " --action " & QuoteArg(actionName)
     CreateObject("WScript.Shell").Run command, 1, False
 End Sub
@@ -47,7 +47,7 @@ Private Function BuildTargetJson() As String
     Dim wb As Workbook
     Set wb = ActiveWorkbook
     If wb Is Nothing Then
-        BuildTargetJson = "{""Host"":""Excel""}"
+        BuildTargetJson = "{""Host"":""Excel"",""Hwnd"":" & CStr(Application.Hwnd) & "}"
         Exit Function
     End If
 
@@ -56,7 +56,7 @@ Private Function BuildTargetJson() As String
     selectionRef = Selection.Worksheet.Name & "!" & Selection.Address(False, False)
     On Error GoTo 0
 
-    BuildTargetJson = "{""Host"":""Excel"",""FullName"":""" & JsonEscape(wb.FullName) & """,""Path"":""" & JsonEscape(wb.FullName) & """,""Name"":""" & JsonEscape(wb.Name) & """,""Selection"":""" & JsonEscape(selectionRef) & """}"
+    BuildTargetJson = "{""Host"":""Excel"",""Hwnd"":" & CStr(Application.Hwnd) & ",""FullName"":""" & JsonEscape(wb.FullName) & """,""Path"":""" & JsonEscape(wb.FullName) & """,""Name"":""" & JsonEscape(wb.Name) & """,""Selection"":""" & JsonEscape(selectionRef) & """}"
 End Function
 
 Private Function QuoteArg(ByVal value As String) As String

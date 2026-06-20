@@ -8,6 +8,7 @@ namespace RNAssistant.Desktop
         [STAThread]
         private static void Main(string[] args)
         {
+            DesktopLog.Info("Desktop start. Args=" + string.Join(" ", args ?? new string[0]));
             using (var instance = new SingleInstanceManager())
             {
                 if (!instance.IsFirstInstance)
@@ -15,19 +16,22 @@ namespace RNAssistant.Desktop
                     try
                     {
                         SingleInstanceManager.SendActivation(args);
+                        return;
                     }
                     catch (Exception ex)
                     {
-                        MessageBox.Show(ex.Message, "RN Assistant", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        DesktopLog.Error("Could not send activation to existing instance.", ex);
                     }
-                    return;
                 }
 
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
 
                 var form = new MainForm();
-                instance.StartServer(form.ApplyActivation);
+                if (instance.IsFirstInstance)
+                {
+                    instance.StartServer(form.ApplyActivation);
+                }
                 if (args != null && args.Length > 0)
                 {
                     form.ApplyActivation(args);
