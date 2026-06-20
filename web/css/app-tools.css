@@ -7,8 +7,8 @@
 
 .tool-layout {
   display: grid;
-  grid-template-columns: minmax(150px, 34%) 1fr;
-  gap: 10px;
+  grid-template-columns: minmax(190px, var(--split-left, 25%)) 8px minmax(0, 1fr);
+  gap: 8px;
   flex: 1;
   min-height: 0;
   margin-top: 10px;
@@ -18,7 +18,7 @@
   min-height: 0;
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: 7px;
   background: #fff;
 }
 
@@ -35,8 +35,12 @@
 
 .tool-list-item:hover,
 .tool-list-item.active {
-  background: #eef4ff;
+  background: #f2f6ff;
   color: var(--text);
+}
+
+.tool-list-item.active {
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .tool-list-title {
@@ -60,9 +64,9 @@
   min-height: 0;
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: 7px;
   background: #fff;
-  padding: 10px;
+  padding: 12px;
 }
 
 .tool-form {
@@ -72,6 +76,7 @@
 .tool-run-output {
   min-height: 90px;
   flex: none;
+  background: #fbfcfe;
 }
 
 .tool-form select {
@@ -88,6 +93,8 @@
   justify-content: space-between;
   gap: 8px;
   align-items: center;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #edf1f6;
 }
 
 .skill-title {
@@ -107,4 +114,17 @@
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 7px;
+}
+
+.tool-form .rn-code-editor {
+  margin-top: 2px;
+}
+
+.rn-code-editor-toolCodeInput,
+.rn-code-editor-toolPipelineInput {
+  min-height: 220px !important;
+}
+
+.rn-code-editor-skillBodyInput {
+  min-height: 390px !important;
 }

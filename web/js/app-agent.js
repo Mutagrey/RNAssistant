@@ -226,10 +226,6 @@ function appendAgentRunFooter(node, items) {
   footer.className = "message-footer";
   var footerMeta = document.createElement("div");
   footerMeta.className = "message-footer-meta";
-  var role = document.createElement("span");
-  role.className = "role";
-  role.textContent = "assistant";
-  footerMeta.appendChild(role);
   var count = document.createElement("span");
   count.className = "message-usage";
   count.textContent = items.length + " messages";

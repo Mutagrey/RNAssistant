@@ -5,6 +5,12 @@ function switchTab(name) {
   Array.prototype.slice.call(document.querySelectorAll(".panel")).forEach(function (panel) {
     panel.classList.toggle("active", panel.id === "tab-" + name);
   });
+  if (typeof refreshCodeEditors === "function") {
+    refreshCodeEditors();
+  }
+  if (typeof refreshSplitPanes === "function") {
+    refreshSplitPanes();
+  }
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -39,6 +45,12 @@ document.addEventListener("DOMContentLoaded", function () {
   bindSettingsActions();
   bindToolActions();
   bindSkillActions();
+  if (typeof initializeSplitPanes === "function") {
+    initializeSplitPanes();
+  }
+  if (typeof initializeCodeEditors === "function") {
+    initializeCodeEditors();
+  }
 
   window.addEventListener("load", function () {
     if (window.hljs) {

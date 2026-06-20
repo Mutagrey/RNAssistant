@@ -26,11 +26,6 @@ function appendMessageFooter(node, message, index, activity) {
   var meta = document.createElement("div");
   meta.className = "message-footer-meta";
 
-  var role = document.createElement("span");
-  role.className = "role";
-  role.textContent = messageRole(message);
-  meta.appendChild(role);
-
   var usage = messageUsageText(message);
   if (usage || message.Pending || message.Failed) {
     var usageNode = document.createElement("span");
@@ -52,7 +47,9 @@ function appendMessageFooter(node, message, index, activity) {
     deleteMessage(message, index);
   }));
 
-  footer.appendChild(meta);
+  if (meta.childNodes.length) {
+    footer.appendChild(meta);
+  }
   footer.appendChild(actions);
   node.appendChild(footer);
 }

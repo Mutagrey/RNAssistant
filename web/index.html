@@ -7,6 +7,7 @@
   <title>RN Assistant</title>
   <link rel="stylesheet" href="css/vendor/katex.min.css">
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
+  <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
   <link rel="stylesheet" href="css/app.css?v=chatui-20260619-4">
   <link rel="stylesheet" href="css/app-chat.css?v=chatui-20260619-4">
   <link rel="stylesheet" href="css/app-markdown.css">
@@ -133,8 +134,9 @@
           <button class="secondary" id="saveToolsButton">Save Tools</button>
         </div>
         <div class="status" id="toolsPath"></div>
-        <div class="tool-layout">
+        <div class="tool-layout split-layout" id="toolsLayout" data-split-key="tools" data-default-ratio="0.25" data-min-left="210" data-min-ratio="0.16" data-max-ratio="0.42">
           <aside class="tool-list" id="toolsList"></aside>
+          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Resize tools list"></div>
           <section class="tool-editor">
             <div class="skill-head">
               <div>
@@ -174,8 +176,9 @@
           <button class="secondary" id="saveSkillsButton">Save Skills</button>
         </div>
         <div class="status" id="skillsPath"></div>
-        <div class="tool-layout">
+        <div class="tool-layout split-layout" id="skillsLayout" data-split-key="skills" data-default-ratio="0.25" data-min-left="210" data-min-ratio="0.16" data-max-ratio="0.42">
           <aside class="tool-list" id="skillsList"></aside>
+          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Resize skills list"></div>
           <section class="tool-editor">
             <div class="skill-head">
               <div>
@@ -201,26 +204,30 @@
       </section>
 
       <section class="panel" id="tab-vba">
-        <div class="toolbar">
+        <div class="toolbar vba-commandbar">
           <button id="refreshVbaButton" type="button">Refresh VBA</button>
           <button class="secondary" id="reviewVbaButton" type="button">Review in Chat</button>
           <button class="secondary" id="previewVbaDiffButton" type="button">Preview Diff</button>
           <button id="saveVbaButton" type="button">Save Module</button>
           <button class="secondary" id="restoreVbaButton" type="button">Restore Backup</button>
+          <span class="toolbar-spacer"></span>
+          <label class="inline-field">Macro<input id="vbaMacroInput" autocomplete="off" placeholder="Module1.Main"></label>
+          <button class="secondary" id="runVbaMacroButton" type="button">Run Macro</button>
         </div>
         <div class="status" id="vbaStatus">VBA context is optional. Use the VBA toggle next to Add selection to attach it to the active chat.</div>
-        <div class="vba-layout">
+        <div class="vba-layout split-layout" id="vbaLayout" data-split-key="vba" data-default-ratio="0.22" data-min-left="210" data-min-ratio="0.16" data-max-ratio="0.38">
           <aside class="vba-sidebar">
             <label>Module<select id="vbaModuleSelect"></select></label>
             <label>Backup<select id="vbaBackupSelect"></select></label>
+            <div class="vba-macro-status" id="vbaMacroStatus"></div>
             <pre class="json-box vba-meta" id="vbaMetaBox"></pre>
           </aside>
+          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Resize VBA sidebar"></div>
           <section class="vba-editor">
             <div class="vba-code-pane">
               <textarea id="vbaCodeInput" spellcheck="false" placeholder="Refresh VBA to load modules."></textarea>
-              <div class="vba-code-preview" id="vbaCodePreview" aria-label="Highlighted VBA preview"></div>
             </div>
-            <pre class="json-box vba-diff" id="vbaDiffOutput"></pre>
+            <div class="vba-diff" id="vbaDiffOutput" aria-live="polite"></div>
           </section>
         </div>
       </section>
@@ -406,8 +413,17 @@
   <script src="js/vendor/katex.min.js"></script>
   <script src="js/vendor/auto-render.min.js"></script>
   <script src="js/vendor/highlight.min.js"></script>
+  <script src="js/vendor/codemirror/codemirror.min.js"></script>
+  <script src="js/vendor/codemirror/mode/vb/vb.min.js"></script>
+  <script src="js/vendor/codemirror/mode/javascript/javascript.min.js"></script>
+  <script src="js/vendor/codemirror/mode/markdown/markdown.min.js"></script>
+  <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
+  <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
+  <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
   <script src="js/app-core.js?v=chatui-20260619-6"></script>
   <script src="js/app-utils.js"></script>
+  <script src="js/app-layout.js"></script>
+  <script src="js/app-editors.js"></script>
   <script src="js/app-markdown.js"></script>
   <script src="js/app-settings.js?v=chatui-20260619-5"></script>
   <script src="js/app-model-data.js"></script>

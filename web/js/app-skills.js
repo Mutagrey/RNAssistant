@@ -45,6 +45,9 @@ function renderSkillEditor() {
   $("skillDescriptionInput").value = skill ? (skill.Description || "") : "";
   $("skillTagsInput").value = skill ? ((skill.Tags || []).join(", ")) : "";
   $("skillBodyInput").value = skill ? (skill.BodyMarkdown || "") : "";
+  if (typeof setCodeEditorValue === "function") {
+    setCodeEditorValue("skillBodyInput", $("skillBodyInput").value);
+  }
 
   [
     "skillEnabledInput",
@@ -56,6 +59,9 @@ function renderSkillEditor() {
   ].forEach(function (id) {
     $(id).disabled = disabled || builtIn;
   });
+  if (typeof setCodeEditorReadOnly === "function") {
+    setCodeEditorReadOnly("skillBodyInput", disabled || builtIn);
+  }
 
   $("deleteSkillButton").disabled = disabled || builtIn;
   $("cloneSkillButton").disabled = disabled;
@@ -64,6 +70,9 @@ function renderSkillEditor() {
 }
 
 function syncSelectedSkillFromEditor() {
+  if (typeof syncCodeEditors === "function") {
+    syncCodeEditors(["skillBodyInput"]);
+  }
   var skill = state.skills[state.selectedSkillIndex];
   if (!skill || skill.BuiltIn) {
     return;

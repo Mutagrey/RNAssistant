@@ -1,12 +1,13 @@
 :root {
   --ui-font-scale: 1;
-  --bg: #f7f8fb;
+  --bg: #f6f7f9;
   --panel: #ffffff;
-  --text: #1d2430;
-  --muted: #647084;
-  --line: #dfe4ec;
-  --accent: #2264d1;
-  --accent-strong: #174ea6;
+  --text: #17202e;
+  --muted: #6b7482;
+  --line: #e2e7ef;
+  --line-strong: #cbd3df;
+  --accent: #2563eb;
+  --accent-strong: #1d4ed8;
   --danger: #b42318;
   --success: #16835d;
   --code: #f6f8fb;
@@ -39,14 +40,14 @@ textarea {
 }
 
 button {
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 6px;
   background: var(--accent);
   color: #fff;
   padding: 8px 12px;
   cursor: pointer;
   font-weight: 600;
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease, opacity 0.12s ease, box-shadow 0.12s ease;
 }
 
 button svg {
@@ -64,18 +65,28 @@ button:hover {
   background: var(--accent-strong);
 }
 
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.18);
+  outline-offset: 1px;
+}
+
 button:disabled {
   cursor: default;
   opacity: 0.55;
 }
 
 button.secondary {
-  background: #eef2f7;
+  border-color: #d9e0ea;
+  background: #f7f9fc;
   color: var(--text);
 }
 
 button.secondary:hover {
-  background: #e2e8f0;
+  border-color: #cbd5e1;
+  background: #eef2f7;
 }
 
 button.danger {
@@ -96,7 +107,7 @@ button.danger {
   align-items: center;
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
-  background: #fff;
+  background: rgba(255, 255, 255, 0.96);
 }
 
 .top-actions {
@@ -160,7 +171,7 @@ button.danger {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   border-bottom: 1px solid var(--line);
-  background: #fff;
+  background: rgba(255, 255, 255, 0.96);
 }
 
 .tab {
@@ -180,7 +191,7 @@ button.danger {
 .tab.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
-  background: #f8fbff;
+  background: #fff;
 }
 
 .activity {
@@ -229,8 +240,87 @@ button.danger {
   display: none;
   height: 100%;
   min-height: 0;
-  padding: 12px;
+  padding: 12px 14px;
   overflow: auto;
+}
+
+.toolbar-spacer {
+  flex: 1 1 auto;
+}
+
+.inline-field {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 180px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.inline-field input {
+  width: 170px;
+  min-width: 0;
+  height: 32px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: var(--text);
+  font-weight: 400;
+}
+
+.split-layout {
+  --split-left: 25%;
+}
+
+.splitter {
+  width: 8px;
+  min-width: 8px;
+  cursor: col-resize;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent 0, transparent 3px, #d9e0ea 3px, #d9e0ea 5px, transparent 5px);
+}
+
+.splitter:hover,
+.resizing-pane .splitter {
+  background: linear-gradient(90deg, transparent 0, transparent 3px, var(--accent) 3px, var(--accent) 5px, transparent 5px);
+}
+
+.resizing-pane {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.rn-code-editor.CodeMirror {
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fbfcfe;
+  color: var(--code-text);
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.rn-code-editor .CodeMirror-scroll {
+  min-height: inherit;
+}
+
+.rn-code-editor .CodeMirror-gutters {
+  border-right: 1px solid #e6ebf2;
+  background: #f4f7fb;
+}
+
+.rn-code-editor .CodeMirror-linenumber {
+  color: #98a2b3;
+}
+
+.rn-code-editor .CodeMirror-activeline-background {
+  background: rgba(37, 99, 235, 0.06);
+}
+
+.rn-code-editor.cm-readonly {
+  opacity: 0.72;
 }
 
 .panel.active {
@@ -248,7 +338,6 @@ body[data-ui-font-scale] .link-button,
 body[data-ui-font-scale] .form-grid label,
 body[data-ui-font-scale] .status,
 body[data-ui-font-scale] .danger-zone-text,
-body[data-ui-font-scale] .message .role,
 body[data-ui-font-scale] .message-footer-meta,
 body[data-ui-font-scale] .message-meta,
 body[data-ui-font-scale] .composer-toolbar .icon-text-button,
@@ -267,7 +356,6 @@ body[data-ui-font-scale] .agent-activity-subtitle {
 
 body[data-ui-font-scale] .markdown pre code,
 body[data-ui-font-scale] .markdown pre code.hljs,
-body[data-ui-font-scale] .vba-code-input,
-body[data-ui-font-scale] .vba-code-preview {
+body[data-ui-font-scale] .rn-code-editor {
   font-size: calc(12.5px * var(--ui-font-scale)) !important;
 }

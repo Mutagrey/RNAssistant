@@ -46,6 +46,13 @@ function renderToolEditor() {
   $("toolPipelineInput").value = skill ? (skill.PipelineJson || "") : "";
   $("toolCodeInput").value = skill ? (skill.Code || "") : "";
   $("toolReadmeInput").value = skill ? (skill.Readme || "") : "";
+  if (typeof setCodeEditorValue === "function") {
+    setCodeEditorValue("toolSchemaInput", $("toolSchemaInput").value);
+    setCodeEditorValue("toolRunArgsInput", $("toolRunArgsInput").value);
+    setCodeEditorValue("toolPipelineInput", $("toolPipelineInput").value);
+    setCodeEditorValue("toolCodeInput", $("toolCodeInput").value);
+    setCodeEditorValue("toolReadmeInput", $("toolReadmeInput").value);
+  }
   $("toolRunOutput").textContent = "";
 
   [
@@ -64,6 +71,13 @@ function renderToolEditor() {
     $(id).disabled = disabled || builtIn;
   });
   $("toolRunArgsInput").disabled = disabled;
+  if (typeof setCodeEditorReadOnly === "function") {
+    setCodeEditorReadOnly("toolSchemaInput", disabled || builtIn);
+    setCodeEditorReadOnly("toolRunArgsInput", disabled);
+    setCodeEditorReadOnly("toolPipelineInput", disabled || builtIn);
+    setCodeEditorReadOnly("toolCodeInput", disabled || builtIn);
+    setCodeEditorReadOnly("toolReadmeInput", disabled || builtIn);
+  }
 
   $("deleteToolButton").disabled = disabled || builtIn;
   $("dryRunToolButton").disabled = disabled;
@@ -74,6 +88,9 @@ function renderToolEditor() {
 }
 
 function syncSelectedToolFromEditor() {
+  if (typeof syncCodeEditors === "function") {
+    syncCodeEditors(["toolSchemaInput", "toolRunArgsInput", "toolPipelineInput", "toolCodeInput", "toolReadmeInput"]);
+  }
   var skill = state.tools[state.selectedToolIndex];
   if (!skill || skill.BuiltIn) {
     return;
@@ -151,7 +168,10 @@ function selectedToolContext() {
 }
 
 function parseRunArguments() {
-  var text = $("toolRunArgsInput").value.trim();
+  if (typeof syncCodeEditors === "function") {
+    syncCodeEditors(["toolRunArgsInput"]);
+  }
+  var text = (typeof getCodeEditorValue === "function" ? getCodeEditorValue("toolRunArgsInput") : $("toolRunArgsInput").value).trim();
   if (!text) {
     return {};
   }

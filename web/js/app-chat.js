@@ -150,6 +150,9 @@ function applyInitState(init) {
   renderChatSessions();
   renderMessages();
   renderContextMeter();
+  if (typeof updateVbaMacroRunState === "function") {
+    updateVbaMacroRunState();
+  }
   log("Initialized " + init.host);
   loadModelCatalog(false);
   if (init.quickAction) {

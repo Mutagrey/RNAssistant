@@ -52,6 +52,10 @@
     grid-template-columns: 1fr;
   }
 
+  .splitter {
+    display: none;
+  }
+
   .vba-layout {
     grid-template-columns: 1fr;
   }
@@ -60,11 +64,13 @@
     grid-template-columns: 1fr;
   }
 
-  .vba-code-preview {
-    border-left: 0;
-    border-top: 1px solid var(--line);
-    padding-left: 0;
-    padding-top: 10px;
+  .vba-commandbar .toolbar-spacer {
+    display: none;
+  }
+
+  .inline-field,
+  .inline-field input {
+    width: 100%;
   }
 
   .danger-zone {
