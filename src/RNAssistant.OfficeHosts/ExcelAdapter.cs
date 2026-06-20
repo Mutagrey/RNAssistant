@@ -8,15 +8,22 @@ using RNAssistant.Core.Models;
 using RNAssistant.Office;
 using RNAssistant.Office.Tools;
 
-namespace RNAssistant.ExcelAddIn
+namespace RNAssistant.OfficeHosts
 {
     public sealed class ExcelAdapter : IOfficeApplicationAdapter
     {
         private readonly Excel.Application _application;
+        private readonly OfficeTargetDescriptor _target;
 
         public ExcelAdapter(Excel.Application application)
+            : this(application, null)
+        {
+        }
+
+        public ExcelAdapter(Excel.Application application, OfficeTargetDescriptor target)
         {
             _application = application;
+            _target = target;
         }
 
         public string HostName { get { return "Excel"; } }
@@ -130,6 +137,13 @@ namespace RNAssistant.ExcelAddIn
         {
             try
             {
+                var workbook = ActiveWorkbook();
+                if (workbook != null)
+                {
+                    workbook.Activate();
+                    return;
+                }
+
                 if (_application.ActiveWindow != null)
                 {
                     _application.ActiveWindow.Activate();
@@ -143,12 +157,7 @@ namespace RNAssistant.ExcelAddIn
         public ContextNote CaptureSelectionContext(string mode, int maxChars)
         {
             var workbook = RequireWorkbook();
-            var range = _application.Selection as Excel.Range;
-            if (range == null)
-            {
-                range = _application.ActiveCell;
-            }
-
+            var range = ResolveSelectionRange(workbook);
             if (range == null)
             {
                 throw new InvalidOperationException("Select an Excel range first.");
@@ -402,8 +411,61 @@ namespace RNAssistant.ExcelAddIn
 
         private Excel.Workbook ActiveWorkbook()
         {
+            if (HasTargetDocument())
+            {
+                return TargetWorkbook();
+            }
+
             try { return _application.ActiveWorkbook; }
             catch { return null; }
+        }
+
+        private Excel.Workbook TargetWorkbook()
+        {
+            if (!HasTargetDocument())
+            {
+                return null;
+            }
+
+            foreach (Excel.Workbook workbook in _application.Workbooks)
+            {
+                if (MatchesWorkbook(workbook))
+                {
+                    return workbook;
+                }
+            }
+
+            return null;
+        }
+
+        private bool HasTargetDocument()
+        {
+            return _target != null && _target.HasDocumentIdentity;
+        }
+
+        private bool MatchesWorkbook(Excel.Workbook workbook)
+        {
+            if (workbook == null)
+            {
+                return false;
+            }
+
+            var fullName = SafeString(delegate { return workbook.FullName; });
+            if (!string.IsNullOrWhiteSpace(_target.FullName) && SamePath(fullName, _target.FullName))
+            {
+                return true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_target.Path) && SamePath(fullName, _target.Path))
+            {
+                return true;
+            }
+
+            var name = SafeString(delegate { return workbook.Name; });
+            return string.IsNullOrWhiteSpace(_target.FullName)
+                && string.IsNullOrWhiteSpace(_target.Path)
+                && !string.IsNullOrWhiteSpace(_target.Name)
+                && string.Equals(name, _target.Name, StringComparison.OrdinalIgnoreCase);
         }
 
         private Excel.Workbook RequireWorkbook()
@@ -411,7 +473,9 @@ namespace RNAssistant.ExcelAddIn
             var workbook = ActiveWorkbook();
             if (workbook == null)
             {
-                throw new InvalidOperationException("No active workbook.");
+                throw new InvalidOperationException(_target == null || !_target.HasDocumentIdentity
+                    ? "No active workbook."
+                    : "Target Excel workbook is not open.");
             }
 
             return workbook;
@@ -422,10 +486,124 @@ namespace RNAssistant.ExcelAddIn
             var workbook = RequireWorkbook();
             if (string.IsNullOrWhiteSpace(name))
             {
+                try
+                {
+                    var activeSheet = _application.ActiveSheet as Excel.Worksheet;
+                    if (activeSheet != null && SameWorkbook(activeSheet.Parent as Excel.Workbook, workbook))
+                    {
+                        return activeSheet;
+                    }
+                }
+                catch
+                {
+                }
+
+                workbook.Activate();
                 return (Excel.Worksheet)_application.ActiveSheet;
             }
 
             return (Excel.Worksheet)workbook.Worksheets[name];
+        }
+
+        private Excel.Range ResolveSelectionRange(Excel.Workbook workbook)
+        {
+            try
+            {
+                var range = _application.Selection as Excel.Range;
+                if (RangeBelongsToWorkbook(range, workbook))
+                {
+                    return range;
+                }
+            }
+            catch
+            {
+            }
+
+            var targetRange = ResolveTargetSelectionRange(workbook);
+            if (targetRange != null)
+            {
+                return targetRange;
+            }
+
+            try
+            {
+                var activeCell = _application.ActiveCell as Excel.Range;
+                return RangeBelongsToWorkbook(activeCell, workbook) ? activeCell : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private Excel.Range ResolveTargetSelectionRange(Excel.Workbook workbook)
+        {
+            if (_target == null || string.IsNullOrWhiteSpace(_target.Selection))
+            {
+                return null;
+            }
+
+            var reference = _target.Selection.Trim();
+            var separator = reference.LastIndexOf('!');
+            if (separator <= 0 || separator >= reference.Length - 1)
+            {
+                return null;
+            }
+
+            var sheetName = reference.Substring(0, separator).Trim('\'');
+            var address = reference.Substring(separator + 1);
+            try
+            {
+                return ((Excel.Worksheet)workbook.Worksheets[sheetName]).Range[address];
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static bool RangeBelongsToWorkbook(Excel.Range range, Excel.Workbook workbook)
+        {
+            if (range == null || workbook == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                var sheet = range.Worksheet as Excel.Worksheet;
+                return sheet != null && SameWorkbook(sheet.Parent as Excel.Workbook, workbook);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool SameWorkbook(Excel.Workbook left, Excel.Workbook right)
+        {
+            if (left == null || right == null)
+            {
+                return false;
+            }
+
+            return SamePath(SafeString(delegate { return left.FullName; }), SafeString(delegate { return right.FullName; }))
+                || string.Equals(SafeString(delegate { return left.Name; }), SafeString(delegate { return right.Name; }), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private delegate string StringGetter();
+
+        private static string SafeString(StringGetter getter)
+        {
+            try { return getter(); }
+            catch { return string.Empty; }
+        }
+
+        private static bool SamePath(string left, string right)
+        {
+            return !string.IsNullOrWhiteSpace(left)
+                && !string.IsNullOrWhiteSpace(right)
+                && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
         private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)

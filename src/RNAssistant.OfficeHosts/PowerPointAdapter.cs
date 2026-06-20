@@ -8,15 +8,22 @@ using RNAssistant.Core.Models;
 using RNAssistant.Office;
 using RNAssistant.Office.Tools;
 
-namespace RNAssistant.PowerPointAddIn
+namespace RNAssistant.OfficeHosts
 {
     public sealed class PowerPointAdapter : IOfficeApplicationAdapter
     {
         private readonly PowerPoint.Application _application;
+        private readonly OfficeTargetDescriptor _target;
 
         public PowerPointAdapter(PowerPoint.Application application)
+            : this(application, null)
+        {
+        }
+
+        public PowerPointAdapter(PowerPoint.Application application, OfficeTargetDescriptor target)
         {
             _application = application;
+            _target = target;
         }
 
         public string HostName { get { return "PowerPoint"; } }
@@ -112,6 +119,13 @@ namespace RNAssistant.PowerPointAddIn
         {
             try
             {
+                var presentation = ActivePresentation();
+                if (presentation != null)
+                {
+                    presentation.Application.Activate();
+                    return;
+                }
+
                 _application.Activate();
             }
             catch
@@ -159,6 +173,10 @@ namespace RNAssistant.PowerPointAddIn
             if (slide == null)
             {
                 throw new InvalidOperationException("Select a PowerPoint slide or shape first.");
+            }
+            if (!SlideBelongsToPresentation(slide, presentation))
+            {
+                throw new InvalidOperationException("Selected PowerPoint object is not in the target presentation.");
             }
 
             var reference = "Slide " + slide.SlideIndex + (shape == null ? string.Empty : " / " + shape.Name);
@@ -246,6 +264,7 @@ namespace RNAssistant.PowerPointAddIn
 
         private ToolResult ReplaceSelectionText(ToolCommand command)
         {
+            var presentation = RequirePresentation();
             var text = ToolArgumentReader.String(command.Arguments, "text", string.Empty);
             var selection = _application.ActiveWindow.Selection;
             if (selection == null || selection.Type != PowerPoint.PpSelectionType.ppSelectionShapes)
@@ -254,6 +273,10 @@ namespace RNAssistant.PowerPointAddIn
             }
 
             var shape = selection.ShapeRange[1];
+            if (!ShapeBelongsToPresentation(shape, presentation))
+            {
+                return ToolResult.Fail("Selected shape is not in the target presentation.");
+            }
             if (shape.HasTextFrame != MsoTriState.msoTrue)
             {
                 return ToolResult.Fail("Selected shape has no text frame.");
@@ -340,8 +363,61 @@ namespace RNAssistant.PowerPointAddIn
 
         private PowerPoint.Presentation ActivePresentation()
         {
+            if (HasTargetDocument())
+            {
+                return TargetPresentation();
+            }
+
             try { return _application.ActivePresentation; }
             catch { return null; }
+        }
+
+        private PowerPoint.Presentation TargetPresentation()
+        {
+            if (!HasTargetDocument())
+            {
+                return null;
+            }
+
+            foreach (PowerPoint.Presentation presentation in _application.Presentations)
+            {
+                if (MatchesPresentation(presentation))
+                {
+                    return presentation;
+                }
+            }
+
+            return null;
+        }
+
+        private bool HasTargetDocument()
+        {
+            return _target != null && _target.HasDocumentIdentity;
+        }
+
+        private bool MatchesPresentation(PowerPoint.Presentation presentation)
+        {
+            if (presentation == null)
+            {
+                return false;
+            }
+
+            var fullName = SafeString(delegate { return presentation.FullName; });
+            if (!string.IsNullOrWhiteSpace(_target.FullName) && SamePath(fullName, _target.FullName))
+            {
+                return true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_target.Path) && SamePath(fullName, _target.Path))
+            {
+                return true;
+            }
+
+            var name = SafeString(delegate { return presentation.Name; });
+            return string.IsNullOrWhiteSpace(_target.FullName)
+                && string.IsNullOrWhiteSpace(_target.Path)
+                && !string.IsNullOrWhiteSpace(_target.Name)
+                && string.Equals(name, _target.Name, StringComparison.OrdinalIgnoreCase);
         }
 
         private PowerPoint.Presentation RequirePresentation()
@@ -349,9 +425,62 @@ namespace RNAssistant.PowerPointAddIn
             var presentation = ActivePresentation();
             if (presentation == null)
             {
-                throw new InvalidOperationException("No active presentation.");
+                throw new InvalidOperationException(_target == null || !_target.HasDocumentIdentity
+                    ? "No active presentation."
+                    : "Target PowerPoint presentation is not open.");
             }
             return presentation;
+        }
+
+        private static bool ShapeBelongsToPresentation(PowerPoint.Shape shape, PowerPoint.Presentation presentation)
+        {
+            if (shape == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                return SlideBelongsToPresentation(shape.Parent as PowerPoint.Slide, presentation);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool SlideBelongsToPresentation(PowerPoint.Slide slide, PowerPoint.Presentation presentation)
+        {
+            if (slide == null || presentation == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                var parent = slide.Parent as PowerPoint.Presentation;
+                return SamePath(SafeString(delegate { return parent.FullName; }), SafeString(delegate { return presentation.FullName; }))
+                    || string.Equals(SafeString(delegate { return parent.Name; }), SafeString(delegate { return presentation.Name; }), StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private delegate string StringGetter();
+
+        private static string SafeString(StringGetter getter)
+        {
+            try { return getter(); }
+            catch { return string.Empty; }
+        }
+
+        private static bool SamePath(string left, string right)
+        {
+            return !string.IsNullOrWhiteSpace(left)
+                && !string.IsNullOrWhiteSpace(right)
+                && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
         private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)

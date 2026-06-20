@@ -4,7 +4,7 @@
 
 Локальный Office assistant для Word, Excel, PowerPoint и Outlook:
 
-- общая WebView2 task pane UI;
+- standalone desktop WebView2 UI плюс VSTO task pane compatibility mode;
 - пер-документные чаты и контекст;
 - OpenAI-compatible chat completions endpoint;
 - локальные Office tools, pipelines и VBA rollback workflow;
@@ -19,10 +19,11 @@ web static UI
         -> RNAssistant.Office controller/orchestration
             -> RNAssistant.Core models/storage/LLM/parser
             -> IOfficeApplicationAdapter
-                -> concrete VSTO add-in adapters
+                -> RNAssistant.OfficeHosts COM adapters
+                    -> VSTO add-ins or RNAssistant.Desktop target provider
 ```
 
-`Core` не знает про Office. `Office` не знает про Word/Excel COM types. Add-in projects знают про конкретный host и реализуют `IOfficeApplicationAdapter`.
+`Core` не знает про Office. `Office` не знает про Word/Excel COM types. `OfficeHosts` знает про host-specific COM и реализует `IOfficeApplicationAdapter`. VSTO projects и desktop exe только выбирают shell/target.
 
 ## Current Code Zones
 
@@ -41,7 +42,10 @@ web static UI
 - `src/RNAssistant.Office/Agent`: agent transcript/plan formatting and retry policy.
 - `src/RNAssistant.Office/Services`: host-neutral application services used by controller orchestration, such as chat/session lifecycle, tool/skill catalog composition, context normalization, and chat completion flow.
 - `src/RNAssistant.Office/Tools`: tool execution, pipelines, skill CRUD tools, VBA patch/backup workflow.
-- `src/RNAssistant.*AddIn`: host adapters and VSTO wiring.
+- `src/RNAssistant.OfficeHosts`: shared Excel/Word/PowerPoint/Outlook COM adapters and desktop target descriptors.
+- `src/RNAssistant.Desktop`: standalone WinForms shell, single-instance activation, and ROT-based adapter creation.
+- `src/RNAssistant.*AddIn`: VSTO compatibility wiring; no host adapter ownership.
+- `wrappers/native`: VBA source modules for Office-native launchers.
 - `web`: static HTML/CSS/JS task pane. `web/js/app-core.js` owns state and WebView bridge wiring; `app-settings.js`, `app-tools.js`, `app-skills.js`, `app-vba.js`, `app-context.js`, and `app-chat.js` own their feature flows; `app-utils.js` owns pure browser helpers; `app.js` is boot plus shared rendering helpers.
 
 ## Non-Negotiable Boundaries
@@ -50,7 +54,8 @@ web static UI
 - Tools are executable actions described by `ToolDefinition`; skills are markdown guidance described by `SkillDefinition`.
 - Tool safety belongs to `ToolDefinition` metadata: `MutatesDocument`, `AgentCanRun`, and `RequiresConfirmation`.
 - Controller coordinates request flow; it should not contain pipeline execution, VBA patch logic, or JS rendering logic.
-- VSTO adapters expose executable capabilities through `ToolDefinition` and `ExecuteTool`; they should not know chat/session/storage details.
+- Office host adapters expose executable capabilities through `ToolDefinition` and `ExecuteTool`; they should not know chat/session/storage details.
+- Desktop target descriptors must be validated before tool execution; a closed or mismatched target should fail instead of falling back to an unrelated active document.
 - UI sends typed bridge messages; business rules stay in C# unless they are purely presentation behavior.
 - WebView response serialization belongs in `AssistantWebBridge`; controller methods should return DTOs or domain models.
 

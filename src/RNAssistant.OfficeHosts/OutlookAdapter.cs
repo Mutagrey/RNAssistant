@@ -6,15 +6,22 @@ using RNAssistant.Core.Models;
 using RNAssistant.Office;
 using RNAssistant.Office.Tools;
 
-namespace RNAssistant.OutlookAddIn
+namespace RNAssistant.OfficeHosts
 {
     public sealed class OutlookAdapter : IOfficeApplicationAdapter
     {
         private readonly Outlook.Application _application;
+        private readonly OfficeTargetDescriptor _target;
 
         public OutlookAdapter(Outlook.Application application)
+            : this(application, null)
+        {
+        }
+
+        public OutlookAdapter(Outlook.Application application, OfficeTargetDescriptor target)
         {
             _application = application;
+            _target = target;
         }
 
         public string HostName { get { return "Outlook"; } }
@@ -247,6 +254,16 @@ namespace RNAssistant.OutlookAddIn
 
         private Outlook.MailItem SelectedMail()
         {
+            if (HasTargetMail())
+            {
+                return TargetMail();
+            }
+
+            if (HasTargetFolder())
+            {
+                return null;
+            }
+
             try
             {
                 var explorer = _application.ActiveExplorer();
@@ -268,13 +285,42 @@ namespace RNAssistant.OutlookAddIn
             var mail = SelectedMail();
             if (mail == null)
             {
-                throw new InvalidOperationException("Select an email first.");
+                throw new InvalidOperationException(_target != null && !string.IsNullOrWhiteSpace(_target.EntryId)
+                    ? "Target Outlook mail item is not available."
+                    : "Select an email first.");
             }
             return mail;
         }
 
+        private Outlook.MailItem TargetMail()
+        {
+            if (!HasTargetMail())
+            {
+                return null;
+            }
+
+            try
+            {
+                return _application.Session.GetItemFromID(_target.EntryId, Type.Missing) as Outlook.MailItem;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private Outlook.MAPIFolder CurrentFolder()
         {
+            if (HasTargetFolder())
+            {
+                return TargetFolder();
+            }
+
+            if (HasTargetMail())
+            {
+                return null;
+            }
+
             try
             {
                 var explorer = _application.ActiveExplorer();
@@ -284,6 +330,65 @@ namespace RNAssistant.OutlookAddIn
             {
                 return null;
             }
+        }
+
+        private Outlook.MAPIFolder TargetFolder()
+        {
+            if (!HasTargetFolder())
+            {
+                return null;
+            }
+
+            try
+            {
+                foreach (Outlook.MAPIFolder root in _application.Session.Folders)
+                {
+                    var found = FindFolder(root, _target.FolderPath);
+                    if (found != null)
+                    {
+                        return found;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
+        private bool HasTargetMail()
+        {
+            return _target != null && !string.IsNullOrWhiteSpace(_target.EntryId);
+        }
+
+        private bool HasTargetFolder()
+        {
+            return _target != null && !string.IsNullOrWhiteSpace(_target.FolderPath);
+        }
+
+        private static Outlook.MAPIFolder FindFolder(Outlook.MAPIFolder folder, string folderPath)
+        {
+            if (folder == null)
+            {
+                return null;
+            }
+
+            if (string.Equals(folder.FolderPath, folderPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return folder;
+            }
+
+            foreach (Outlook.MAPIFolder child in folder.Folders)
+            {
+                var found = FindFolder(child, folderPath);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+
+            return null;
         }
 
         private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)

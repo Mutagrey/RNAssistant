@@ -7,15 +7,22 @@ using RNAssistant.Core.Models;
 using RNAssistant.Office;
 using RNAssistant.Office.Tools;
 
-namespace RNAssistant.WordAddIn
+namespace RNAssistant.OfficeHosts
 {
     public sealed class WordAdapter : IOfficeApplicationAdapter
     {
         private readonly Word.Application _application;
+        private readonly OfficeTargetDescriptor _target;
 
         public WordAdapter(Word.Application application)
+            : this(application, null)
+        {
+        }
+
+        public WordAdapter(Word.Application application, OfficeTargetDescriptor target)
         {
             _application = application;
+            _target = target;
         }
 
         public string HostName { get { return "Word"; } }
@@ -113,6 +120,13 @@ namespace RNAssistant.WordAddIn
         {
             try
             {
+                var doc = ActiveDocument();
+                if (doc != null)
+                {
+                    doc.Activate();
+                    return;
+                }
+
                 _application.Activate();
             }
             catch
@@ -123,12 +137,7 @@ namespace RNAssistant.WordAddIn
         public ContextNote CaptureSelectionContext(string mode, int maxChars)
         {
             var doc = RequireDocument();
-            if (_application.Selection == null || _application.Selection.Range == null)
-            {
-                throw new InvalidOperationException("Select Word text first.");
-            }
-
-            var range = _application.Selection.Range;
+            var range = ResolveSelectionRange(doc);
             var referenceOnly = string.Equals(mode, "reference", StringComparison.OrdinalIgnoreCase);
             var reference = doc.Name + " chars " + range.Start + "-" + range.End;
             var selectedText = Trim(range.Text, maxChars);
@@ -171,13 +180,14 @@ namespace RNAssistant.WordAddIn
                     case "word.read_selection":
                         return ToolResult.Ok("Selection read.", JsonConvert.SerializeObject(new { text = SelectionText() }));
                     case "word.insert_text":
-                        _application.Selection.TypeText(ToolArgumentReader.String(command.Arguments, "text", string.Empty));
+                        InsertText(ToolArgumentReader.String(command.Arguments, "text", string.Empty));
                         return ToolResult.Ok("Text inserted.");
                     case "word.replace_selection":
-                        _application.Selection.Range.Text = ToolArgumentReader.String(command.Arguments, "text", string.Empty);
+                        ResolveSelectionRange(RequireDocument()).Text = ToolArgumentReader.String(command.Arguments, "text", string.Empty);
                         return ToolResult.Ok("Selection replaced.");
                     case "word.add_comment":
-                        _application.ActiveDocument.Comments.Add(_application.Selection.Range, ToolArgumentReader.String(command.Arguments, "text", string.Empty));
+                        var doc = RequireDocument();
+                        doc.Comments.Add(ResolveSelectionRange(doc), ToolArgumentReader.String(command.Arguments, "text", string.Empty));
                         return ToolResult.Ok("Comment added.");
                     case "word.vba_read_project":
                         return ReadVbaProject(command);
@@ -264,7 +274,7 @@ namespace RNAssistant.WordAddIn
         {
             try
             {
-                return _application.Selection == null ? string.Empty : _application.Selection.Text;
+                return ResolveSelectionRange(RequireDocument()).Text;
             }
             catch
             {
@@ -274,8 +284,61 @@ namespace RNAssistant.WordAddIn
 
         private Word.Document ActiveDocument()
         {
+            if (HasTargetDocument())
+            {
+                return TargetDocument();
+            }
+
             try { return _application.ActiveDocument; }
             catch { return null; }
+        }
+
+        private Word.Document TargetDocument()
+        {
+            if (!HasTargetDocument())
+            {
+                return null;
+            }
+
+            foreach (Word.Document document in _application.Documents)
+            {
+                if (MatchesDocument(document))
+                {
+                    return document;
+                }
+            }
+
+            return null;
+        }
+
+        private bool HasTargetDocument()
+        {
+            return _target != null && _target.HasDocumentIdentity;
+        }
+
+        private bool MatchesDocument(Word.Document document)
+        {
+            if (document == null)
+            {
+                return false;
+            }
+
+            var fullName = SafeString(delegate { return document.FullName; });
+            if (!string.IsNullOrWhiteSpace(_target.FullName) && SamePath(fullName, _target.FullName))
+            {
+                return true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_target.Path) && SamePath(fullName, _target.Path))
+            {
+                return true;
+            }
+
+            var name = SafeString(delegate { return document.Name; });
+            return string.IsNullOrWhiteSpace(_target.FullName)
+                && string.IsNullOrWhiteSpace(_target.Path)
+                && !string.IsNullOrWhiteSpace(_target.Name)
+                && string.Equals(name, _target.Name, StringComparison.OrdinalIgnoreCase);
         }
 
         private Word.Document RequireDocument()
@@ -283,9 +346,131 @@ namespace RNAssistant.WordAddIn
             var doc = ActiveDocument();
             if (doc == null)
             {
-                throw new InvalidOperationException("No active Word document.");
+                throw new InvalidOperationException(_target == null || !_target.HasDocumentIdentity
+                    ? "No active Word document."
+                    : "Target Word document is not open.");
             }
             return doc;
+        }
+
+        private void InsertText(string text)
+        {
+            var doc = RequireDocument();
+            var range = ResolveSelectionRange(doc);
+            if (IsLiveSelectionRange(range, doc))
+            {
+                doc.Activate();
+                _application.Selection.TypeText(text);
+                return;
+            }
+
+            range.Text = text;
+        }
+
+        private Word.Range ResolveSelectionRange(Word.Document doc)
+        {
+            try
+            {
+                if (_application.Selection != null && _application.Selection.Range != null)
+                {
+                    var range = _application.Selection.Range;
+                    if (RangeBelongsToDocument(range, doc))
+                    {
+                        return range;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            var targetRange = ResolveTargetSelectionRange(doc);
+            if (targetRange != null)
+            {
+                return targetRange;
+            }
+
+            throw new InvalidOperationException("Select Word text first.");
+        }
+
+        private Word.Range ResolveTargetSelectionRange(Word.Document doc)
+        {
+            if (_target == null || string.IsNullOrWhiteSpace(_target.Selection))
+            {
+                return null;
+            }
+
+            var parts = _target.Selection.Split(':');
+            if (parts.Length != 2)
+            {
+                return null;
+            }
+
+            int start;
+            int end;
+            if (!int.TryParse(parts[0], out start) || !int.TryParse(parts[1], out end))
+            {
+                return null;
+            }
+
+            try
+            {
+                return doc.Range(start, end);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private bool IsLiveSelectionRange(Word.Range range, Word.Document doc)
+        {
+            try
+            {
+                return range != null
+                    && _application.Selection != null
+                    && _application.Selection.Range != null
+                    && _application.Selection.Range.Start == range.Start
+                    && _application.Selection.Range.End == range.End
+                    && RangeBelongsToDocument(range, doc);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool RangeBelongsToDocument(Word.Range range, Word.Document doc)
+        {
+            if (range == null || doc == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                return SamePath(SafeString(delegate { return range.Document.FullName; }), SafeString(delegate { return doc.FullName; }))
+                    || string.Equals(SafeString(delegate { return range.Document.Name; }), SafeString(delegate { return doc.Name; }), StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private delegate string StringGetter();
+
+        private static string SafeString(StringGetter getter)
+        {
+            try { return getter(); }
+            catch { return string.Empty; }
+        }
+
+        private static bool SamePath(string left, string right)
+        {
+            return !string.IsNullOrWhiteSpace(left)
+                && !string.IsNullOrWhiteSpace(right)
+                && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
         private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)

@@ -15,6 +15,7 @@ using RNAssistant.Office;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 using RNAssistant.Office.WebView;
+using RNAssistant.OfficeHosts;
 
 namespace RNAssistant.Harness
 {
@@ -45,6 +46,9 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "parser: noisy embedded json", Run = ParsesNoisyEmbeddedJson },
                 new HarnessTest { Name = "parser: bad json skipped", Run = SkipsBadJson },
                 new HarnessTest { Name = "parser: recovers malformed agent json", Run = RecoversMalformedAgentJson },
+                new HarnessTest { Name = "desktop target: parses json descriptor", Run = ParsesOfficeTargetJsonDescriptor },
+                new HarnessTest { Name = "desktop target: parses base64 descriptor", Run = ParsesOfficeTargetBase64Descriptor },
+                new HarnessTest { Name = "desktop target: ignores utf8 bom", Run = OfficeTargetIgnoresUtf8Bom },
                 new HarnessTest { Name = "storage: chat roundtrip", Run = CreatesAndListsChatsInTempRoot },
                 new HarnessTest { Name = "storage: broken chat skipped", Run = SkipsBrokenChatFiles },
                 new HarnessTest { Name = "chat sessions: document key migration", Run = ChatSessionServiceMigratesDocumentKey },
@@ -208,6 +212,36 @@ namespace RNAssistant.Harness
             AssertEqual("excel.add_sheet", result.Commands[0].ToolId, "tool id");
             AssertEqual("Report", result.Commands[0].Arguments["name"], "sheet name");
             AssertTrue(result.HasRecoveredCommands, "recovery diagnostic");
+        }
+
+        private static void ParsesOfficeTargetJsonDescriptor()
+        {
+            var target = OfficeTargetDescriptor.FromJson("{\"Host\":\"Excel\",\"FullName\":\"C:\\\\Docs\\\\Book.xlsx\",\"Name\":\"Book.xlsx\",\"Selection\":\"Sheet1!A1:B2\"}");
+            AssertEqual("Excel", target.Host, "host");
+            AssertEqual("C:\\Docs\\Book.xlsx", target.FullName, "full name");
+            AssertEqual("Book.xlsx", target.Name, "name");
+            AssertEqual("Sheet1!A1:B2", target.Selection, "selection");
+            AssertTrue(target.HasDocumentIdentity, "has identity");
+        }
+
+        private static void ParsesOfficeTargetBase64Descriptor()
+        {
+            var json = "{\"Host\":\"Outlook\",\"EntryId\":\"abc123\",\"Name\":\"Mail\"}";
+            var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
+            var target = OfficeTargetDescriptor.FromBase64Json(base64);
+            AssertEqual("Outlook", target.Host, "host");
+            AssertEqual("abc123", target.EntryId, "entry id");
+            AssertEqual("Mail", target.Name, "name");
+            AssertTrue(target.HasDocumentIdentity, "has identity");
+        }
+
+        private static void OfficeTargetIgnoresUtf8Bom()
+        {
+            var json = "\uFEFF{\"Host\":\"Word\",\"FullName\":\"C:\\\\Docs\\\\Doc.docx\"}";
+            var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
+            var target = OfficeTargetDescriptor.FromBase64Json(base64);
+            AssertEqual("Word", target.Host, "host");
+            AssertEqual("C:\\Docs\\Doc.docx", target.FullName, "full name");
         }
 
         private static void CreatesAndListsChatsInTempRoot()

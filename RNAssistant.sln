@@ -6,6 +6,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.Core", "src\RNA
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.Office", "src\RNAssistant.Office\RNAssistant.Office.csproj", "{9B67E963-0E92-4D13-980D-6FF798C61A4F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.OfficeHosts", "src\RNAssistant.OfficeHosts\RNAssistant.OfficeHosts.csproj", "{4F22E15B-1EFA-4A21-98EA-BF8BDF40EB7E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.Desktop", "src\RNAssistant.Desktop\RNAssistant.Desktop.csproj", "{AD0F0EE2-91B2-43EA-9237-25C64A5121A1}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.ExcelAddIn", "src\RNAssistant.ExcelAddIn\RNAssistant.ExcelAddIn.csproj", "{95F1441B-40AA-4C1A-AC3F-A422B11CBFCD}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.WordAddIn", "src\RNAssistant.WordAddIn\RNAssistant.WordAddIn.csproj", "{E8F6DB3D-5628-4F03-BFBE-C4D177686091}"
@@ -28,6 +32,14 @@ Global
     {9B67E963-0E92-4D13-980D-6FF798C61A4F}.Debug|x64.Build.0 = Debug|Any CPU
     {9B67E963-0E92-4D13-980D-6FF798C61A4F}.Release|x64.ActiveCfg = Release|Any CPU
     {9B67E963-0E92-4D13-980D-6FF798C61A4F}.Release|x64.Build.0 = Release|Any CPU
+    {4F22E15B-1EFA-4A21-98EA-BF8BDF40EB7E}.Debug|x64.ActiveCfg = Debug|Any CPU
+    {4F22E15B-1EFA-4A21-98EA-BF8BDF40EB7E}.Debug|x64.Build.0 = Debug|Any CPU
+    {4F22E15B-1EFA-4A21-98EA-BF8BDF40EB7E}.Release|x64.ActiveCfg = Release|Any CPU
+    {4F22E15B-1EFA-4A21-98EA-BF8BDF40EB7E}.Release|x64.Build.0 = Release|Any CPU
+    {AD0F0EE2-91B2-43EA-9237-25C64A5121A1}.Debug|x64.ActiveCfg = Debug|x64
+    {AD0F0EE2-91B2-43EA-9237-25C64A5121A1}.Debug|x64.Build.0 = Debug|x64
+    {AD0F0EE2-91B2-43EA-9237-25C64A5121A1}.Release|x64.ActiveCfg = Release|x64
+    {AD0F0EE2-91B2-43EA-9237-25C64A5121A1}.Release|x64.Build.0 = Release|x64
     {95F1441B-40AA-4C1A-AC3F-A422B11CBFCD}.Debug|x64.ActiveCfg = Debug|x64
     {95F1441B-40AA-4C1A-AC3F-A422B11CBFCD}.Debug|x64.Build.0 = Debug|x64
     {95F1441B-40AA-4C1A-AC3F-A422B11CBFCD}.Release|x64.ActiveCfg = Release|x64
@@ -49,4 +61,3 @@ Global
     HideSolutionNode = FALSE
   EndGlobalSection
 EndGlobal
-

@@ -1,11 +1,11 @@
 # RNAssistant
 
-VSTO AI assistant skeleton for Excel, Word, PowerPoint and Outlook.
+Local AI assistant for Excel, Word, PowerPoint and Outlook.
 
 ## Target
 
 - Windows 10
-- Visual Studio Community 2022 with Office/SharePoint development workload
+- Visual Studio Community 2022
 - Office x64
 - .NET Framework 4.8
 - C# 7.3
@@ -15,17 +15,43 @@ VSTO AI assistant skeleton for Excel, Word, PowerPoint and Outlook.
 
 - `src/RNAssistant.Core` - settings, DPAPI secret storage, chat/context stores, OpenAI-compatible chat client, skill parser.
 - `src/RNAssistant.Office` - shared WebView2 task pane, JS bridge, ribbon XML and assistant controller.
-- `src/RNAssistant.ExcelAddIn` - Excel VSTO add-in and built-in Excel skills.
-- `src/RNAssistant.WordAddIn` - Word VSTO add-in and built-in Word skills.
-- `src/RNAssistant.PowerPointAddIn` - PowerPoint VSTO add-in and built-in PowerPoint skills.
-- `src/RNAssistant.OutlookAddIn` - Outlook VSTO add-in and built-in Outlook skills.
+- `src/RNAssistant.OfficeHosts` - shared Excel/Word/PowerPoint/Outlook COM adapters.
+- `src/RNAssistant.Desktop` - standalone WinForms/WebView2 desktop shell.
+- `src/RNAssistant.*AddIn` - VSTO compatibility add-ins and ribbon/task pane wiring.
+- `wrappers/native` - VBA source modules for Office-native launcher wrappers.
 - `web` - static local task pane UI, no npm build.
 - `packages` - vendored NuGet packages for offline restore.
 - `vendor/webview2-runtime` - optional fixed WebView2 x64 runtime folder.
 
 Development rules are in `AGENTS.md`. Architecture boundaries and refactoring targets are in `docs/architecture.md`; review findings and roadmap are in `docs/review-roadmap.md`.
 
-## Windows Quick Start
+## Windows Desktop Quick Start
+
+The preferred local mode is `RNAssistant.Desktop.exe` plus native Office wrapper
+files. This avoids VSTO ClickOnce manifest signing for the main assistant UI.
+
+```cmd
+install-desktop-local.cmd
+```
+
+This builds `RNAssistant.Desktop` and writes `RNASSISTANT_DESKTOP_EXE` to the
+CurrentUser environment. Import the relevant module from `wrappers\native` into
+an Excel `.xlam`, Word `.dotm`, PowerPoint `.ppam`/`.potm`, or Outlook VBA
+project, then wire ribbon buttons to the public `RNAssistant_*` macros.
+
+The desktop shell accepts:
+
+```cmd
+RNAssistant.Desktop.exe --host Excel --target "{...json...}" --action summarize
+RNAssistant.Desktop.exe --host Word --target-base64 eyJIb3N0IjoiV29yZCJ9
+```
+
+It is single-instance: later wrapper clicks send activation to the existing
+window through a named pipe and switch the active Office target.
+
+## VSTO Quick Start
+
+VSTO add-ins remain available for compatibility and debugging.
 
 From a clean checkout on Windows:
 

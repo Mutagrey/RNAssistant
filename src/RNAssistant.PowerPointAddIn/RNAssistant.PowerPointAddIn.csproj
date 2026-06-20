@@ -77,10 +77,13 @@
       <Project>{9B67E963-0E92-4D13-980D-6FF798C61A4F}</Project>
       <Name>RNAssistant.Office</Name>
     </ProjectReference>
+    <ProjectReference Include="..\RNAssistant.OfficeHosts\RNAssistant.OfficeHosts.csproj">
+      <Project>{4F22E15B-1EFA-4A21-98EA-BF8BDF40EB7E}</Project>
+      <Name>RNAssistant.OfficeHosts</Name>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AssistantRibbon.cs" />
-    <Compile Include="PowerPointAdapter.cs" />
     <Compile Include="ThisAddIn.cs">
       <SubType>Code</SubType>
     </Compile>

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.Office.Core;
 using RNAssistant.Office;
+using RNAssistant.OfficeHosts;
 using Excel = Microsoft.Office.Interop.Excel;
 
 namespace RNAssistant.ExcelAddIn
