@@ -1,4 +1,4 @@
-function renderActivityNode(activity, nested, current) {
+function renderActivityNode(activity, nested, current, context) {
   var node = document.createElement("div");
   var status = activityStatus(activity);
   node.className = "agent-activity" + (nested ? " nested" : "") + (current ? " current" : "") + " status-" + status;
@@ -40,6 +40,12 @@ function renderActivityNode(activity, nested, current) {
 
   appendActivityConfirmationPanel(node, activity);
   appendActivityErrorPanel(node, activity);
+  if (typeof tryRenderChartArtifact === "function") {
+    var chart = tryRenderChartArtifact(activity, context || {});
+    if (chart) {
+      node.appendChild(chart);
+    }
+  }
   appendActivityDetails(node, activity);
   return node;
 }
@@ -209,7 +215,10 @@ function renderAgentRunArticle(run) {
   steps.className = "agent-run-steps";
   items.forEach(function (item) {
     var isCurrent = stats.current && item.activity === stats.current;
-    steps.appendChild(renderActivityNode(item.activity, false, isCurrent));
+    steps.appendChild(renderActivityNode(item.activity, false, isCurrent, {
+      messageId: messageId(item.message),
+      index: item.index
+    }));
   });
   body.appendChild(steps);
   node.appendChild(body);

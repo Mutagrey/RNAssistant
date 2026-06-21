@@ -6,6 +6,7 @@ using Excel = Microsoft.Office.Interop.Excel;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Office;
 using RNAssistant.Office.Tools;
 
@@ -124,6 +125,7 @@ namespace RNAssistant.OfficeHosts
                 Skill("excel.list_sheets", "List workbook sheet names.", "{}"),
                 Skill("excel.read_range", "Read a worksheet range.", "{\"sheet\":\"optional\",\"address\":\"A1:D20\"}"),
                 Skill("excel.profile_range", "Profile an Excel range or current selection: dimensions, blanks, formulas, inferred headers, and numeric columns.", "{\"sheet\":\"optional\",\"address\":\"optional A1:D20\"}"),
+                Skill("excel.create_chat_chart", "Create a read-only interactive chart artifact for the RNAssistant chat from the current Excel selection or a worksheet range. Use this for requests like visualize, build a chart in chat, or make a small report without inserting an Excel chart.", "{\"sheet\":\"optional\",\"address\":\"optional A1:D20\",\"chartType\":\"auto|line|column|bar|scatter|pie\",\"title\":\"Chart title\"}"),
                 Skill("excel.list_charts", "List chart objects in the workbook or one sheet, including title, type, position, and size.", "{\"sheet\":\"optional\"}"),
                 Skill("excel.write_range", "Write a scalar value to a worksheet range.", "{\"sheet\":\"optional\",\"address\":\"A1\",\"value\":\"text\"}", true, true),
                 Skill("excel.write_table", "Write a 2D JSON array to a worksheet starting at a cell.", "{\"sheet\":\"optional\",\"startAddress\":\"A1\",\"values\":[[\"Header\", \"Value\"],[\"A\", 1]]}", true, true),
@@ -251,6 +253,8 @@ namespace RNAssistant.OfficeHosts
                         return ReadRange(command);
                     case "excel.profile_range":
                         return ProfileRange(command);
+                    case "excel.create_chat_chart":
+                        return CreateChatChart(command);
                     case "excel.list_charts":
                         return ListCharts(command);
                     case "excel.write_range":
@@ -450,6 +454,51 @@ namespace RNAssistant.OfficeHosts
             }
 
             return ToolResult.Ok("Charts listed: " + charts.Count, JsonConvert.SerializeObject(charts));
+        }
+
+        private ToolResult CreateChatChart(ToolCommand command)
+        {
+            var workbook = RequireWorkbook();
+            var sheetName = ToolArgumentReader.String(command.Arguments, "sheet", null);
+            var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
+            Excel.Worksheet sheet = null;
+            var range = ResolveSelectionRange(workbook);
+            if (!string.IsNullOrWhiteSpace(address))
+            {
+                sheet = ResolveSheet(sheetName);
+                range = sheet.Range[address];
+            }
+            if (range == null)
+            {
+                return ToolResult.Fail("Select an Excel range first or provide sheet/address.");
+            }
+
+            sheet = range.Worksheet as Excel.Worksheet;
+            var rowCount = Convert.ToInt32(range.Rows.Count);
+            var columnCount = Convert.ToInt32(range.Columns.Count);
+            var cellCount = rowCount * columnCount;
+            if (cellCount > 10000)
+            {
+                return ToolResult.Fail("Selected range is too large for a chat chart: " + cellCount + " cells. Limit is 10000 cells.");
+            }
+
+            var rows = RangeToRows(range);
+            var artifact = new ChartArtifactBuilder().Build(
+                rows.Select(r => (IList<object>)r).ToList(),
+                new ChartArtifactSource
+                {
+                    Host = "Excel",
+                    Workbook = workbook.Name,
+                    Sheet = sheet == null ? string.Empty : sheet.Name,
+                    Address = range.Address[false, false],
+                    SourceMode = string.IsNullOrWhiteSpace(address) ? "selection" : "range"
+                },
+                ToolArgumentReader.String(command.Arguments, "title", "Excel chart"),
+                ToolArgumentReader.String(command.Arguments, "chartType", "auto"));
+
+            return ToolResult.Ok(
+                "Chat chart artifact created: " + artifact.Title,
+                JsonConvert.SerializeObject(artifact));
         }
 
         private ToolResult WriteRange(ToolCommand command)

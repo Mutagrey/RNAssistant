@@ -37,6 +37,7 @@
   <ItemGroup>
     <Compile Include="Models\AppSettings.cs" />
     <Compile Include="Models\ChatModels.cs" />
+    <Compile Include="Models\ChartArtifactModels.cs" />
     <Compile Include="Models\ContextModels.cs" />
     <Compile Include="Models\SkillModels.cs" />
     <Compile Include="Models\ToolModels.cs" />
@@ -48,6 +49,7 @@
     <Compile Include="Tools\ToolCommandParser.cs" />
     <Compile Include="Skills\BuiltInSkillProvider.cs" />
     <Compile Include="Services\ContextNormalizer.cs" />
+    <Compile Include="Services\ChartArtifactBuilder.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
     <Compile Include="Storage\ChatStore.cs" />
     <Compile Include="Storage\JsonFileStore.cs" />

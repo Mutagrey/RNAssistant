@@ -112,7 +112,10 @@ function renderMessageArticle(message, index) {
   var body = document.createElement("div");
   if (activity) {
     body.className = "agent-activity-wrap";
-    body.appendChild(renderActivityNode(activity, false));
+    body.appendChild(renderActivityNode(activity, false, false, {
+      messageId: messageId(message),
+      index: index
+    }));
   } else {
     body.className = "markdown";
     body.innerHTML = markdown(messageContent(message));
@@ -151,7 +154,7 @@ function renderLiveActivity() {
   live.className = "message assistant pending agent-live";
   var liveBody = document.createElement("div");
   liveBody.className = "agent-activity-wrap";
-  liveBody.appendChild(renderActivityNode(state.liveActivity, false));
+  liveBody.appendChild(renderActivityNode(state.liveActivity, false, false));
   live.appendChild(liveBody);
   enhanceActivity(liveBody);
   return live;

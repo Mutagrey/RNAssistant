@@ -51,6 +51,7 @@ namespace RNAssistant.Core.Llm
             builder.AppendLine("Never invent tool ids or use API-style aliases such as create_worksheet, addWorksheet, create_sheet, worksheet.create, or action names instead of exact tool ids.");
             builder.AppendLine("After tool results are provided, either answer normally if the task is complete or return the next tool block.");
             builder.AppendLine("If no available tool can satisfy the request, say exactly what is missing.");
+            builder.AppendLine("For Excel requests to visualize selected data inside the chat, prefer excel.create_chat_chart. Use excel.add_chart only when the user wants a chart inserted into the workbook.");
             builder.AppendLine("After any document or VBA mutation, verify the result with read-only tools before the final answer. If verification shows a problem, correct it with another small tool step.");
             builder.AppendLine("For VBA edits, prefer the host vba_apply_patch tool for structured small patches; use vba_replace_module only when replacing the whole module is necessary.");
             builder.AppendLine("Use VBA only when built-in tools cannot solve the task cleanly, or when the user specifically asks for macros/VBA. For agent-created executable code, write VBA code for the current Office host.");

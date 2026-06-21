@@ -96,6 +96,13 @@ namespace RNAssistant.Office.WebView
                         var forkChat = Payload<MessageActionPayload>(payload);
                         responsePayload = _controller.ForkChat(forkChat.Id, forkChat.Index ?? -1, forkChat.ChatId);
                         break;
+                    case "updateMessageActivityData":
+                        var updateActivityData = Payload<UpdateMessageActivityDataPayload>(payload);
+                        responsePayload = _controller.UpdateMessageActivityData(
+                            updateActivityData.MessageId,
+                            updateActivityData.DataJson,
+                            updateActivityData.ChatId);
+                        break;
                     case "getSettings":
                         responsePayload = _controller.GetSettings();
                         break;

@@ -37,6 +37,7 @@ namespace RNAssistant.Office
         public ChatStateResponse DeleteChat(string chatId) { return ChatState(null, chatId); }
         public ChatStateResponse DeleteMessage(string id, int index, string chatId = null) { return ChatState(id, chatId); }
         public ChatStateResponse ForkChat(string id, int index, string chatId = null) { return ChatState(id, chatId); }
+        public ChatStateResponse UpdateMessageActivityData(string messageId, string dataJson, string chatId = null) { return ChatState(messageId, chatId); }
         public SettingsResponse GetSettings() { return new SettingsResponse { Settings = new AppSettings(), HasApiKey = false }; }
         public Task<ModelCatalogResponse> GetModelCatalogAsync(AppSettings settings, string apiKey) { return Task.FromResult(new ModelCatalogResponse { Catalog = new JObject() }); }
 

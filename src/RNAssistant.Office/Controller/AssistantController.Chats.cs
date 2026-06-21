@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
@@ -63,6 +65,38 @@ namespace RNAssistant.Office
             _chatStore.Save(fork);
             _chatSessions.SetActiveSession(fork);
             return ChatState(fork);
+        }
+
+        public ChatStateResponse UpdateMessageActivityData(string messageId, string dataJson, string chatId = null)
+        {
+            if (string.IsNullOrWhiteSpace(messageId))
+            {
+                throw new InvalidOperationException("messageId is required.");
+            }
+
+            if ((dataJson ?? string.Empty).Length > 2000000)
+            {
+                throw new InvalidOperationException("Chart artifact is too large.");
+            }
+
+            var parsed = JObject.Parse(dataJson ?? string.Empty);
+            var type = (string)parsed["Type"] ?? (string)parsed["type"];
+            if (!string.Equals(type, "rnassistant.chart", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Only rnassistant.chart activity data can be updated.");
+            }
+
+            var session = LoadSession(chatId);
+            var message = (session.Messages ?? new List<ChatMessage>()).FirstOrDefault(m =>
+                m != null && string.Equals(m.Id, messageId, StringComparison.OrdinalIgnoreCase));
+            if (message == null || message.Activity == null)
+            {
+                throw new InvalidOperationException("Message activity was not found.");
+            }
+
+            message.Activity.DataJson = parsed.ToString(Formatting.None);
+            _chatStore.Save(session);
+            return ChatState(session);
         }
 
         public ChatStateResponse ListChats()

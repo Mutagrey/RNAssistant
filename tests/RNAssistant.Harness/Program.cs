@@ -113,6 +113,8 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "context: core normalizer", Run = ContextNormalizerUsesCoreModelsOnly },
                 new HarnessTest { Name = "context: normalize and upsert", Run = ContextServiceNormalizesAndUpserts },
                 new HarnessTest { Name = "context: trim helper", Run = ContextServiceTrimsText },
+                new HarnessTest { Name = "chart: artifact default config", Run = ChartArtifactBuildsDefaultConfig },
+                new HarnessTest { Name = "chart: artifact requested type truncates", Run = ChartArtifactHonorsRequestedTypeAndTruncates },
                 new HarnessTest { Name = "bridge: typed runTool payload", Run = BridgeUsesTypedRunToolPayload },
                 new HarnessTest { Name = "bridge: typed sendChat progress", Run = BridgeUsesTypedSendChatPayloadAndProgress },
                 new HarnessTest { Name = "bridge: typed settings payload", Run = BridgeUsesTypedSettingsPayload },
