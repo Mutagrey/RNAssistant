@@ -80,7 +80,7 @@ function setActivity(phase, message) {
     return;
   }
 
-  state.activity = { visible: true, phase: phase || "working", message: message || "Working..." };
+  state.activity = { visible: true, phase: phase || "working", message: message || "Выполняю..." };
   status.classList.remove("hidden");
   status.dataset.phase = state.activity.phase;
   text.textContent = state.activity.message;
@@ -183,7 +183,7 @@ if (window.chrome && window.chrome.webview) {
     if (response && response.type === "progress") {
       var progress = response.payload || {};
       var progressPending = state.pending[response.id];
-      setActivity(progress.phase || "working", progress.message || "Working...");
+      setActivity(progress.phase || "working", progress.message || "Выполняю...");
       if (progressPending && progressPending.type === "sendChat") {
         state.liveActivity = normalizeProgressActivity(progress);
         if (typeof recordLiveAgentActivity === "function") {
@@ -191,7 +191,7 @@ if (window.chrome && window.chrome.webview) {
         }
         renderMessages();
       }
-      log("[" + (progress.phase || "working") + "] " + (progress.message || "Working..."));
+      log("[" + (progress.phase || "working") + "] " + (progress.message || "Выполняю..."));
       return;
     }
     if (response && response.type === "chatState") {

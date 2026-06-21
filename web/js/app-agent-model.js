@@ -26,7 +26,7 @@ function normalizeProgressActivity(progress) {
 
   return {
     kind: "notice",
-    title: progress.message || progress.Message || "Working...",
+    title: progress.message || progress.Message || "Выполняю...",
     subtitle: progress.phase || progress.Phase || "working",
     status: activityStatusFromPhase(progress.phase || progress.Phase)
   };

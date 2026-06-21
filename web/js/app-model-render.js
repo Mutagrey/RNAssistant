@@ -72,7 +72,7 @@ function populateModelSelect(select, selectedValue) {
   if (!select.options.length) {
     var empty = document.createElement("option");
     empty.value = "";
-    empty.textContent = state.modelCatalog.loading ? "Loading models..." : "No model list";
+    empty.textContent = state.modelCatalog.loading ? "Загрузка моделей..." : "Список моделей пуст";
     select.appendChild(empty);
   }
 
@@ -92,7 +92,7 @@ function populateChatModelSelect(select) {
 
   var defaultOption = document.createElement("option");
   defaultOption.value = "";
-  defaultOption.textContent = "Default: " + (defaultModel || "not set");
+  defaultOption.textContent = "По умолчанию: " + (defaultModel || "не задана");
   select.appendChild(defaultOption);
 
   if (selected && !findModel(selected)) {
@@ -111,7 +111,7 @@ function populateChatModelSelect(select) {
   });
 
   select.value = selected;
-  select.title = selected ? ("Chat model: " + selected) : ("Using default model: " + (defaultModel || ""));
+  select.title = selected ? ("Модель чата: " + selected) : ("Используется модель по умолчанию: " + (defaultModel || ""));
   select.disabled = state.modelCatalog.loading || state.modelSaving || !!state.activeSend || !state.activeChatId;
 }
 
@@ -137,28 +137,28 @@ function renderModelInfo(selectedValue) {
   var title = document.createElement("div");
   title.className = "model-info-title";
   var titleText = document.createElement("span");
-  titleText.textContent = model ? model.title : "Default model fallback";
+  titleText.textContent = model ? model.title : "Fallback модели по умолчанию";
   title.appendChild(titleText);
 
   if (model && state.modelCatalog.defaultModel &&
       String(model.value).toLowerCase() === String(state.modelCatalog.defaultModel).toLowerCase()) {
     var badge = document.createElement("span");
     badge.className = "model-default-badge";
-    badge.textContent = "Default";
+    badge.textContent = "По умолчанию";
     title.appendChild(badge);
   }
   box.appendChild(title);
 
   var value = document.createElement("div");
   value.className = "model-info-value";
-  value.textContent = model ? model.value : (selected || "No model selected");
+  value.textContent = model ? model.value : (selected || "Модель не выбрана");
   box.appendChild(value);
 
   var description = document.createElement("div");
   description.className = "model-info-description";
   description.textContent = model
-    ? (model.description || "No description.")
-    : "Typed default model will be used for new chats and chats without their own model.";
+    ? (model.description || "Описание отсутствует.")
+    : "Введенная модель по умолчанию будет использоваться для новых чатов и чатов без собственной модели.";
   box.appendChild(description);
 
   if (!model) {
@@ -167,8 +167,8 @@ function renderModelInfo(selectedValue) {
 
   var metrics = document.createElement("div");
   metrics.className = "model-info-metrics";
-  appendModelMetric(metrics, "Context", model.maxContextTokens);
-  appendModelMetric(metrics, "Output", model.maxTokens);
+  appendModelMetric(metrics, "Контекст", model.maxContextTokens);
+  appendModelMetric(metrics, "Ответ", model.maxTokens);
   appendModelMetric(metrics, "Temp", model.temperature);
   appendModelMetric(metrics, "Top P", model.topP);
   box.appendChild(metrics);
@@ -188,20 +188,20 @@ function renderModelStatus() {
   }
 
   if (state.modelCatalog.loading) {
-    status.textContent = "Loading models...";
+    status.textContent = "Загрузка моделей...";
     return;
   }
   if (state.modelCatalog.error) {
-    status.textContent = "Model list error: " + state.modelCatalog.error;
+    status.textContent = "Ошибка списка моделей: " + state.modelCatalog.error;
     return;
   }
   if (state.modelCatalog.loaded) {
-    status.textContent = "Models loaded: " + (state.modelCatalog.models || []).length +
-      (state.modelCatalog.defaultModel ? ". Default: " + state.modelCatalog.defaultModel : "") +
-      (state.modelCatalog.configUrl ? ". Source: " + state.modelCatalog.configUrl : "");
+    status.textContent = "Моделей загружено: " + (state.modelCatalog.models || []).length +
+      (state.modelCatalog.defaultModel ? ". По умолчанию: " + state.modelCatalog.defaultModel : "") +
+      (state.modelCatalog.configUrl ? ". Источник: " + state.modelCatalog.configUrl : "");
     return;
   }
-  status.textContent = "Model list is not loaded.";
+  status.textContent = "Список моделей не загружен.";
 }
 
 function renderModelControls() {

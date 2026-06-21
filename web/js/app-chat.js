@@ -1,9 +1,9 @@
 async function createChat() {
   setActivity("loading", "Создаю чат...");
   try {
-    applyChatState(await send("createChat", { title: "New chat" }));
+    applyChatState(await send("createChat", { title: "Новый чат" }));
     clearSendError();
-    log("Chat created.");
+    log("Чат создан.");
   } catch (error) {
     log(error.detail || error.message);
   } finally {
@@ -20,7 +20,7 @@ async function selectChat(id) {
   try {
     applyChatState(await send("selectChat", { chatId: id }));
     clearSendError();
-    log("Chat selected.");
+    log("Чат открыт.");
   } catch (error) {
     log(error.detail || error.message);
     renderChatSessions();
@@ -41,21 +41,21 @@ async function renameChat() {
     }
   });
 
-  var title = window.prompt("Chat name", current || "New chat");
+  var title = window.prompt("Название чата", current || "Новый чат");
   if (title === null || !title.trim()) {
     return;
   }
 
   try {
     applyChatState(await send("renameChat", { chatId: state.activeChatId, title: title.trim() }));
-    log("Chat renamed.");
+    log("Чат переименован.");
   } catch (error) {
     log(error.detail || error.message);
   }
 }
 
 async function clearChat() {
-  if (!state.activeChatId || !window.confirm("Clear this chat?")) {
+  if (!state.activeChatId || !window.confirm("Очистить этот чат?")) {
     return;
   }
 
@@ -63,7 +63,7 @@ async function clearChat() {
   try {
     applyChatState(await send("clearChat", { chatId: state.activeChatId }));
     clearSendError();
-    log("Chat cleared.");
+    log("Чат очищен.");
   } catch (error) {
     log(error.detail || error.message);
   } finally {
@@ -72,7 +72,7 @@ async function clearChat() {
 }
 
 async function deleteChat() {
-  if (!state.activeChatId || !window.confirm("Delete this chat?")) {
+  if (!state.activeChatId || !window.confirm("Удалить этот чат?")) {
     return;
   }
 
@@ -80,7 +80,7 @@ async function deleteChat() {
   try {
     applyChatState(await send("deleteChat", { chatId: state.activeChatId }));
     clearSendError();
-    log("Chat deleted.");
+    log("Чат удален.");
   } catch (error) {
     log(error.detail || error.message);
   } finally {
@@ -104,7 +104,7 @@ async function deleteMessage(message, index) {
   try {
     var response = await send("deleteMessage", { chatId: state.activeChatId, id: messageId(message), index: index });
     applyChatState(response);
-    log("Message deleted.");
+    log("Сообщение удалено.");
   } catch (error) {
     showSendError(error.detail || error.message, state.failedSend ? state.failedSend.text : "");
     log(error.detail || error.message);
@@ -119,7 +119,7 @@ async function forkChatAtMessage(message, index) {
   try {
     applyChatState(await send("forkChat", { chatId: state.activeChatId, id: messageId(message), index: index }));
     clearSendError();
-    log("Chat branch created.");
+    log("Ветка чата создана.");
   } catch (error) {
     log(error.detail || error.message);
   }
@@ -141,8 +141,8 @@ function applyInitState(init) {
   state.chats = init.chats || [];
   state.messages = init.messages || [];
   $("docLine").textContent = formatOfficeContextLine(init.officeContext, init.host, init.title);
-  $("toolsPath").textContent = state.toolsPath ? "Storage: " + state.toolsPath : "";
-  $("skillsPath").textContent = state.skillsPath ? "Storage: " + state.skillsPath : "";
+    $("toolsPath").textContent = state.toolsPath ? "Хранилище: " + state.toolsPath : "";
+    $("skillsPath").textContent = state.skillsPath ? "Хранилище: " + state.skillsPath : "";
   renderSettings();
   renderTools();
   renderSkills();
@@ -197,7 +197,7 @@ async function initialize() {
 }
 
 async function clearRuntimeData() {
-  if (!window.confirm("Delete all local chats, chat context, VBA backups, and WebView cache for RNAssistant? Settings, API key, and custom tools and skills will stay.")) {
+  if (!window.confirm("Удалить локальные чаты, контекст чатов, VBA backups и WebView cache RNAssistant? Настройки, API key, custom tools и skills останутся.")) {
     return;
   }
 
@@ -205,7 +205,7 @@ async function clearRuntimeData() {
   try {
     var init = await send("clearRuntimeData", {});
     applyInitState(init);
-    log("Runtime data cleared.");
+    log("Локальные данные очищены.");
   } catch (error) {
     log(error.detail || error.message);
   } finally {

@@ -1,5 +1,6 @@
 function renderSkills() {
   var list = $("skillsList");
+  var query = (($("skillSearchInput") && $("skillSearchInput").value) || "").trim().toLowerCase();
   if (!list) {
     return;
   }
@@ -7,6 +8,7 @@ function renderSkills() {
   list.innerHTML = "";
   if (!state.skills.length) {
     state.selectedSkillIndex = -1;
+    list.appendChild(createSkillEmptyState("Skills пока не загружены."));
     renderSkillEditor();
     return;
   }
@@ -15,7 +17,12 @@ function renderSkills() {
     state.selectedSkillIndex = 0;
   }
 
+  var rendered = 0;
   state.skills.forEach(function (skill, index) {
+    if (query && !skillMatchesSearch(skill, query)) {
+      return;
+    }
+
     var item = document.createElement("button");
     item.type = "button";
     item.className = "tool-list-item" + (index === state.selectedSkillIndex ? " active" : "");
@@ -28,17 +35,40 @@ function renderSkills() {
       renderSkills();
     });
     list.appendChild(item);
+    rendered += 1;
   });
 
+  if (!rendered) {
+    list.appendChild(createSkillEmptyState("Ничего не найдено."));
+  }
+
   renderSkillEditor();
+}
+
+function skillMatchesSearch(skill, query) {
+  var text = [
+    skill.Id || "",
+    skill.Name || "",
+    skill.Host || "",
+    skill.Description || "",
+    (skill.Tags || []).join(" ")
+  ].join(" ").toLowerCase();
+  return text.indexOf(query) >= 0;
+}
+
+function createSkillEmptyState(text) {
+  var node = document.createElement("div");
+  node.className = "tool-list-empty";
+  node.textContent = text;
+  return node;
 }
 
 function renderSkillEditor() {
   var skill = state.skills[state.selectedSkillIndex] || null;
   var disabled = !skill;
   var builtIn = !!(skill && skill.BuiltIn);
-  $("skillEditorTitle").textContent = skill ? (skill.Id || "skill") : "No skill selected";
-  $("skillEditorMeta").textContent = skill ? (builtIn ? "Built-in skill" : (skill.StoragePath || "Custom skill")) : "";
+  $("skillEditorTitle").textContent = skill ? (skill.Id || "skill") : "Skill не выбран";
+  $("skillEditorMeta").textContent = skill ? (builtIn ? "Встроенный skill" : (skill.StoragePath || "Custom skill")) : "Выберите skill из списка или создайте новый.";
   $("skillEnabledInput").checked = skill ? skill.Enabled !== false : false;
   $("skillIdInput").value = skill ? (skill.Id || "") : "";
   $("skillHostInput").value = skill ? (skill.Host || "Common") : "Common";
@@ -157,6 +187,8 @@ async function addSelectedSkillContextToContext() {
 }
 
 function bindSkillActions() {
+  $("skillSearchInput").addEventListener("input", renderSkills);
+
   $("addSkillButton").addEventListener("click", function () {
     syncSelectedSkillFromEditor();
     state.skills.push({

@@ -228,20 +228,20 @@ function appendAgentRunFooter(node, items) {
   footerMeta.className = "message-footer-meta";
   var count = document.createElement("span");
   count.className = "message-usage";
-  count.textContent = items.length + " messages";
+  count.textContent = items.length + " сообщений";
   footerMeta.appendChild(count);
 
   var actions = document.createElement("div");
   actions.className = "message-actions";
   var last = items[items.length - 1];
-  actions.appendChild(smallIconButton("Fork from this run", "branch", function () {
+  actions.appendChild(smallIconButton("Ответвить чат отсюда", "branch", function () {
     forkChatAtMessage(last.message, last.index);
   }));
-  actions.appendChild(smallIconButton("Copy run", "copy", function () {
+  actions.appendChild(smallIconButton("Копировать run", "copy", function () {
     copyText(agentRunText(items));
-    log("Agent run copied.");
+    log("Agent run скопирован.");
   }));
-  actions.appendChild(smallIconButton("Delete run", "trash", function () {
+  actions.appendChild(smallIconButton("Удалить run", "trash", function () {
     deleteAgentRun(items);
   }));
 

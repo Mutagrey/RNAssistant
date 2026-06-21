@@ -1,10 +1,15 @@
 function renderVbaProject() {
   var moduleSelect = $("vbaModuleSelect");
   var backupSelect = $("vbaBackupSelect");
+  var query = (($("vbaModuleSearchInput") && $("vbaModuleSearchInput").value) || "").trim().toLowerCase();
   moduleSelect.innerHTML = "";
   backupSelect.innerHTML = "";
 
   state.vba.modules.forEach(function (module) {
+    if (query && !vbaModuleMatchesSearch(module, query)) {
+      return;
+    }
+
     var option = document.createElement("option");
     option.value = module.name || module.Name || "";
     option.textContent = option.value + " (" + (module.type || module.Type || "module") + ")";
@@ -18,10 +23,28 @@ function renderVbaProject() {
     backupSelect.appendChild(option);
   });
 
-  if (state.vba.selectedModule) {
+  if (state.vba.selectedModule && selectHasOption(moduleSelect, state.vba.selectedModule)) {
     moduleSelect.value = state.vba.selectedModule;
   }
   renderSelectedVbaModule();
+}
+
+function selectHasOption(select, value) {
+  for (var i = 0; i < select.options.length; i += 1) {
+    if (select.options[i].value === value) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function vbaModuleMatchesSearch(module, query) {
+  var text = [
+    module.name || module.Name || "",
+    module.type || module.Type || "",
+    module.code || module.Code || ""
+  ].join(" ").toLowerCase();
+  return text.indexOf(query) >= 0;
 }
 
 function renderSelectedVbaModule() {
@@ -33,7 +56,7 @@ function renderSelectedVbaModule() {
     type: module.type || module.Type,
     lineCount: module.lineCount || module.LineCount
   }, null, 2) : "";
-  renderVbaDiff({ summary: "Preview diff to inspect module changes.", lines: [] });
+  renderVbaDiff({ summary: module ? "Нажмите Diff, чтобы посмотреть изменения." : "Модуль не выбран.", lines: [] });
   updateVbaMacroSuggestion();
 }
 
@@ -73,7 +96,7 @@ function setVbaEditorCode(code) {
 
 function formatVbaDiff(before, after) {
   if (before === after) {
-    return { summary: "No changes.", lines: [] };
+    return { summary: "Изменений нет.", lines: [] };
   }
 
   var oldLines = String(before || "").replace(/\r\n/g, "\n").split("\n");
@@ -110,7 +133,7 @@ function formatVbaDiff(before, after) {
     output.push({ type: "context", text: oldLines[i] });
   }
   return {
-    summary: "Changed lines: -" + oldCount + " +" + newCount,
+    summary: "Измененные строки: -" + oldCount + " +" + newCount,
     lines: output
   };
 }
@@ -130,7 +153,7 @@ function renderVbaDiff(diff) {
   if (!diff.lines || !diff.lines.length) {
     var empty = document.createElement("div");
     empty.className = "vba-diff-empty";
-    empty.textContent = diff.summary === "No changes." ? "Current editor content matches the loaded module." : "No diff rendered yet.";
+    empty.textContent = diff.summary === "Изменений нет." ? "Текст редактора совпадает с загруженным модулем." : "Diff пока не построен.";
     box.appendChild(empty);
     return;
   }
@@ -155,12 +178,12 @@ function renderVbaDiff(diff) {
 function previewVbaDiff() {
   var module = selectedVbaModule();
   if (!module) {
-    renderVbaDiff({ summary: "No module selected.", lines: [] });
+    renderVbaDiff({ summary: "Модуль не выбран.", lines: [] });
     return;
   }
 
   renderVbaDiff(formatVbaDiff(vbaModuleCode(module), vbaEditorCode()));
-  $("vbaStatus").textContent = "Diff preview ready.";
+  $("vbaStatus").textContent = "Diff готов.";
 }
 
 async function withVbaActivity(message, work) {
@@ -270,7 +293,7 @@ function updateVbaMacroRunState() {
   var macroName = input.value.trim() || input.getAttribute("data-suggested") || "";
   button.disabled = !supported || !macroName;
   if (!supported) {
-    setVbaMacroStatus("Macro runner is available for Excel, Word and PowerPoint.", "muted");
+    setVbaMacroStatus("Запуск macro доступен для Excel, Word и PowerPoint.", "muted");
   }
 }
 
@@ -287,7 +310,7 @@ function updateVbaMacroSuggestion() {
 
 function markVbaEditorDirty() {
   updateVbaMacroSuggestion();
-  $("vbaStatus").textContent = "Unsaved VBA edits.";
+  $("vbaStatus").textContent = "Есть несохраненные изменения VBA.";
 }
 
 async function runVbaMacro() {
@@ -295,11 +318,11 @@ async function runVbaMacro() {
   var input = $("vbaMacroInput");
   var macroName = (input.value || "").trim() || input.getAttribute("data-suggested") || "";
   if (!toolId) {
-    setVbaMacroStatus("Current host does not expose run_macro.", "error");
+    setVbaMacroStatus("Текущий host не поддерживает run_macro.", "error");
     return;
   }
   if (!macroName) {
-    setVbaMacroStatus("Enter a macro name.", "error");
+    setVbaMacroStatus("Введите имя macro.", "error");
     return;
   }
 
@@ -311,7 +334,7 @@ async function runVbaMacro() {
       arguments: { macroName: macroName },
       dryRun: false
     });
-    setVbaMacroStatus(response.Message || response.message || "Macro ran: " + macroName, "ok");
+    setVbaMacroStatus(response.Message || response.message || "Macro выполнен: " + macroName, "ok");
     logToolResult("Macro run", toolId, response);
   } catch (error) {
     setVbaMacroStatus(error.detail || error.message, "error");
@@ -324,6 +347,7 @@ async function runVbaMacro() {
 
 function bindVbaActions() {
   $("refreshVbaButton").addEventListener("click", refreshVbaProject);
+  $("vbaModuleSearchInput").addEventListener("input", renderVbaProject);
   $("vbaModuleSelect").addEventListener("change", renderSelectedVbaModule);
   $("vbaCodeInput").addEventListener("input", markVbaEditorDirty);
   $("vbaMacroInput").addEventListener("input", updateVbaMacroRunState);
@@ -332,6 +356,13 @@ function bindVbaActions() {
   $("restoreVbaButton").addEventListener("click", restoreVbaBackup);
   $("reviewVbaButton").addEventListener("click", reviewVbaInChat);
   $("runVbaMacroButton").addEventListener("click", runVbaMacro);
-  renderVbaDiff({ summary: "Refresh VBA to load modules.", lines: [] });
+  Array.prototype.slice.call(document.querySelectorAll("#tab-vba details")).forEach(function (details) {
+    details.addEventListener("toggle", function () {
+      if (typeof refreshCodeEditors === "function") {
+        refreshCodeEditors(["vbaCodeInput"]);
+      }
+    });
+  });
+  renderVbaDiff({ summary: "Обновите VBA, чтобы загрузить модули.", lines: [] });
   updateVbaMacroRunState();
 }

@@ -1,7 +1,9 @@
 .composer {
+  display: flex;
+  flex-direction: column;
   border: 1px solid #d8dee8;
   border-radius: 10px;
-  padding: 8px;
+  padding: 8px 8px 7px;
   background: #fff;
   box-shadow: 0 8px 22px rgba(16, 24, 39, 0.08);
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
@@ -19,7 +21,7 @@
   justify-content: space-between;
   min-width: 0;
   order: 2;
-  margin-top: 7px;
+  margin-top: 6px;
   padding-top: 7px;
   border-top: 1px solid #edf1f6;
 }
@@ -136,12 +138,17 @@
 
 .composer textarea {
   order: 1;
-  min-height: 72px;
+  min-height: 66px;
   max-height: 210px;
   border-color: transparent;
-  padding: 6px 4px;
+  padding: 7px 5px;
   box-shadow: none;
+  line-height: 1.45;
   resize: none;
+}
+
+.composer textarea::placeholder {
+  color: #8a95a6;
 }
 
 .composer textarea:focus,
@@ -172,7 +179,7 @@
 .composer-actions {
   order: 3;
   justify-content: flex-end;
-  margin-top: 7px;
+  margin-top: 6px;
 }
 
 .composer-actions .hidden {

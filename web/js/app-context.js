@@ -248,7 +248,7 @@ async function removeContextItem(id) {
   try {
     await send("removeContextItem", { chatId: state.activeChatId, id: id });
     await syncActiveChatState();
-    log("Context item removed.");
+    log("Элемент контекста удален.");
   } catch (error) {
     log(error.detail || error.message);
   }
@@ -263,7 +263,7 @@ function bindContextActions() {
     try {
       await send("clearContext", { chatId: state.activeChatId });
       await syncActiveChatState();
-      log("Context cleared.");
+      log("Контекст очищен.");
     } catch (error) {
       log(error.message);
     } finally {

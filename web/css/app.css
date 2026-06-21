@@ -248,6 +248,55 @@ button.danger {
   flex: 1 1 auto;
 }
 
+.toolbar-menu {
+  position: relative;
+}
+
+.toolbar-menu summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid #d9e0ea;
+  border-radius: 6px;
+  background: #f7f9fc;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  list-style: none;
+}
+
+.toolbar-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.toolbar-menu[open] summary {
+  border-color: #cbd5e1;
+  background: #eef2f7;
+}
+
+.toolbar-menu-body {
+  position: absolute;
+  right: 0;
+  z-index: 20;
+  display: grid;
+  gap: 6px;
+  min-width: 210px;
+  max-width: min(280px, calc(100vw - 24px));
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.toolbar-menu-body button {
+  width: 100%;
+  justify-content: flex-start;
+}
+
 .inline-field {
   display: inline-flex;
   gap: 6px;

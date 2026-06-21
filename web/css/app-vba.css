@@ -25,7 +25,7 @@
 
 .vba-editor {
   display: grid;
-  grid-template-rows: minmax(360px, 1fr) minmax(110px, 28%);
+  grid-template-rows: minmax(300px, 1fr) auto;
   gap: 12px;
 }
 
@@ -56,11 +56,11 @@
 
 .rn-code-editor-vbaCodeInput {
   height: 100% !important;
-  min-height: 440px !important;
+  min-height: clamp(260px, 48vh, 520px) !important;
 }
 
 .vba-code-pane .CodeMirror-scroll {
-  min-height: 440px;
+  min-height: clamp(260px, 48vh, 520px);
 }
 
 .vba-code-empty {
@@ -72,7 +72,7 @@
 .vba-meta {
   min-height: 120px;
   flex: none;
-  margin-top: 0;
+  margin-top: 8px;
   background: #fbfcfe;
 }
 
@@ -151,6 +151,38 @@
 
 .vba-commandbar {
   align-items: center;
+}
+
+.vba-side-section,
+.vba-diff-panel {
+  min-width: 0;
+}
+
+.vba-side-section summary,
+.vba-diff-panel summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.vba-side-section[open] summary,
+.vba-diff-panel[open] summary {
+  color: var(--text);
+}
+
+.vba-side-section label {
+  margin-top: 8px;
+}
+
+.vba-diff-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.vba-diff-panel:not([open]) {
+  display: block;
 }
 
 .vba-macro-status {

@@ -1,8 +1,10 @@
 function renderTools() {
   var list = $("toolsList");
+  var query = (($("toolSearchInput") && $("toolSearchInput").value) || "").trim().toLowerCase();
   list.innerHTML = "";
   if (!state.tools.length) {
     state.selectedToolIndex = -1;
+    list.appendChild(createToolEmptyState("Tools пока не загружены."));
     renderToolEditor();
     return;
   }
@@ -11,7 +13,12 @@ function renderTools() {
     state.selectedToolIndex = 0;
   }
 
+  var rendered = 0;
   state.tools.forEach(function (skill, index) {
+    if (query && !toolMatchesSearch(skill, query)) {
+      return;
+    }
+
     var item = document.createElement("button");
     item.type = "button";
     item.className = "tool-list-item" + (index === state.selectedToolIndex ? " active" : "");
@@ -24,17 +31,40 @@ function renderTools() {
       renderTools();
     });
     list.appendChild(item);
+    rendered += 1;
   });
 
+  if (!rendered) {
+    list.appendChild(createToolEmptyState("Ничего не найдено."));
+  }
+
   renderToolEditor();
+}
+
+function toolMatchesSearch(skill, query) {
+  var text = [
+    skill.Id || "",
+    skill.Name || "",
+    skill.Host || "",
+    skill.Executor || "",
+    skill.Description || ""
+  ].join(" ").toLowerCase();
+  return text.indexOf(query) >= 0;
+}
+
+function createToolEmptyState(text) {
+  var node = document.createElement("div");
+  node.className = "tool-list-empty";
+  node.textContent = text;
+  return node;
 }
 
 function renderToolEditor() {
   var skill = state.tools[state.selectedToolIndex] || null;
   var disabled = !skill;
   var builtIn = !!(skill && skill.BuiltIn);
-  $("toolEditorTitle").textContent = skill ? (skill.Id || "tool") : "No tool selected";
-  $("toolEditorMeta").textContent = skill ? (builtIn ? "Built-in tool" : (skill.StoragePath || "Custom tool")) : "";
+  $("toolEditorTitle").textContent = skill ? (skill.Id || "tool") : "Tool не выбран";
+  $("toolEditorMeta").textContent = skill ? (builtIn ? "Встроенный tool" : (skill.StoragePath || "Custom tool")) : "Выберите tool из списка или создайте новый.";
   $("toolEnabledInput").checked = skill ? skill.Enabled !== false : false;
   $("toolIdInput").value = skill ? (skill.Id || "") : "";
   $("toolHostInput").value = skill ? (skill.Host || "Common") : "Common";
@@ -187,7 +217,7 @@ async function runSelectedTool(dryRun) {
   }
 
   setActivity(dryRun ? "checking" : "executing", dryRun ? "Проверяю tool..." : "Исполняю tool...");
-  $("toolRunOutput").textContent = dryRun ? "Dry run..." : "Running...";
+  $("toolRunOutput").textContent = dryRun ? "Dry run..." : "Выполняю...";
   try {
     var response = await send("runTool", {
       toolId: skill.Id,
@@ -205,6 +235,8 @@ async function runSelectedTool(dryRun) {
 }
 
 function bindToolActions() {
+  $("toolSearchInput").addEventListener("input", renderTools);
+
   $("addToolButton").addEventListener("click", function () {
     syncSelectedToolFromEditor();
     state.tools.push({

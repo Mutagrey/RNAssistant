@@ -41,7 +41,7 @@
   };
 
   window.chatTitle = function (chat) {
-    return objectValue(chat, "Title", "title", "New chat") || "New chat";
+    return objectValue(chat, "Title", "title", "Новый чат") || "Новый чат";
   };
 
   window.chatMessageCount = function (chat) {

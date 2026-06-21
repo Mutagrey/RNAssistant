@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';">
@@ -8,19 +8,19 @@
   <link rel="stylesheet" href="css/vendor/katex.min.css">
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
-  <link rel="stylesheet" href="css/app.css?v=chatui-20260619-4">
-  <link rel="stylesheet" href="css/app-chat.css?v=chatui-20260619-4">
+  <link rel="stylesheet" href="css/app.css?v=chatui-20260620-1">
+  <link rel="stylesheet" href="css/app-chat.css?v=chatui-20260620-2">
   <link rel="stylesheet" href="css/app-markdown.css">
-  <link rel="stylesheet" href="css/app-composer.css?v=chatui-20260619-4">
+  <link rel="stylesheet" href="css/app-composer.css?v=chatui-20260620-2">
   <link rel="stylesheet" href="css/app-context-chips.css">
   <link rel="stylesheet" href="css/app-models.css">
   <link rel="stylesheet" href="css/app-workspace.css?v=chatui-20260619-5">
-  <link rel="stylesheet" href="css/app-tools.css">
-  <link rel="stylesheet" href="css/app-vba.css">
+  <link rel="stylesheet" href="css/app-tools.css?v=chatui-20260620-1">
+  <link rel="stylesheet" href="css/app-vba.css?v=chatui-20260620-1">
   <link rel="stylesheet" href="css/app-context-panel.css">
   <link rel="stylesheet" href="css/app-dialogs.css">
-  <link rel="stylesheet" href="css/app-responsive.css?v=chatui-20260619-4">
-  <link rel="stylesheet" href="css/app-agent.css?v=chatui-20260619-5">
+  <link rel="stylesheet" href="css/app-responsive.css?v=chatui-20260620-2">
+  <link rel="stylesheet" href="css/app-agent.css?v=chatui-20260620-2">
   <link rel="stylesheet" href="css/app-agent-data.css">
 </head>
 <body>
@@ -28,47 +28,47 @@
     <header class="topbar">
       <div>
         <div class="brand">RN Assistant</div>
-        <div class="docline" id="docLine">Loading...</div>
+        <div class="docline" id="docLine">Загрузка...</div>
       </div>
       <div class="top-actions">
-        <button class="icon-button secondary" id="helpButton" title="How it works" aria-label="How it works">
+        <button class="icon-button secondary" id="helpButton" title="Как это работает" aria-label="Как это работает">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.6 9.1a2.7 2.7 0 1 1 4.7 1.8c-.9.8-1.8 1.4-1.8 2.9"/><path d="M12 17.5h.01"/><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
         </button>
-        <button class="icon-button" id="refreshButton" title="Refresh" aria-label="Refresh">
+        <button class="icon-button" id="refreshButton" title="Обновить" aria-label="Обновить">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M6.1 9A7 7 0 0 1 18.2 6.8L20 11"/><path d="M17.9 15A7 7 0 0 1 5.8 17.2L4 13"/></svg>
         </button>
       </div>
     </header>
 
-    <nav class="tabs" aria-label="Assistant tabs">
-      <button class="tab active" data-tab="chat">Chat</button>
+    <nav class="tabs" aria-label="Разделы ассистента">
+      <button class="tab active" data-tab="chat">Чат</button>
       <button class="tab" data-tab="tools">Tools</button>
       <button class="tab" data-tab="skills">Skills</button>
       <button class="tab" data-tab="vba">VBA</button>
-      <button class="tab" data-tab="context">Context</button>
-      <button class="tab" data-tab="settings">Settings</button>
-      <button class="tab" data-tab="logs">Logs</button>
+      <button class="tab" data-tab="context">Контекст</button>
+      <button class="tab" data-tab="settings">Настройки</button>
+      <button class="tab" data-tab="logs">Логи</button>
     </nav>
 
     <div class="activity hidden" id="activityStatus" role="status" aria-live="polite">
       <span class="activity-dot"></span>
-      <span id="activityText">Working...</span>
+      <span id="activityText">Выполняю...</span>
     </div>
 
     <main class="content">
       <section class="panel active" id="tab-chat">
         <div class="chatbar">
-          <select id="chatSessionSelect" aria-label="Chat session"></select>
-          <button type="button" class="icon-button secondary" id="newChatButton" title="New chat" aria-label="New chat">
+          <select id="chatSessionSelect" aria-label="Сессия чата"></select>
+          <button type="button" class="icon-button secondary" id="newChatButton" title="Новый чат" aria-label="Новый чат">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
           </button>
-          <button type="button" class="icon-button secondary" id="renameChatButton" title="Rename chat" aria-label="Rename chat">
+          <button type="button" class="icon-button secondary" id="renameChatButton" title="Переименовать чат" aria-label="Переименовать чат">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
           </button>
-          <button type="button" class="icon-button secondary" id="clearChatButton" title="Clear chat" aria-label="Clear chat">
+          <button type="button" class="icon-button secondary" id="clearChatButton" title="Очистить чат" aria-label="Очистить чат">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>
           </button>
-          <button type="button" class="icon-button danger" id="deleteChatButton" title="Delete chat" aria-label="Delete chat">
+          <button type="button" class="icon-button danger" id="deleteChatButton" title="Удалить чат" aria-label="Удалить чат">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
         </div>
@@ -76,52 +76,52 @@
         <form class="composer" id="chatForm">
           <div class="context-strip hidden" id="contextStrip">
             <div class="context-strip-head">
-              <span>Context</span>
-              <button type="button" class="link-button" id="openContextTabButton">Manage</button>
+              <span>Контекст</span>
+              <button type="button" class="link-button" id="openContextTabButton">Управлять</button>
             </div>
             <div class="context-chips" id="contextChips"></div>
           </div>
           <div class="send-error hidden" id="sendError" role="alert">
             <div>
-              <div class="send-error-title">Message was not sent</div>
+              <div class="send-error-title">Сообщение не отправлено</div>
               <div class="send-error-text" id="sendErrorText"></div>
             </div>
             <button type="button" class="secondary icon-text-button" id="retrySendButton">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M6.1 9A7 7 0 0 1 18.2 6.8L20 11"/><path d="M17.9 15A7 7 0 0 1 5.8 17.2L4 13"/></svg>
-              <span>Retry</span>
+              <span>Повторить</span>
             </button>
           </div>
           <div class="composer-toolbar">
             <div class="composer-left">
               <div class="context-meter" id="contextMeter">
-                <span>Context</span>
+                <span>Контекст</span>
                 <strong id="contextMeterValue">0%</strong>
                 <div class="context-meter-track"><div id="contextMeterFill"></div></div>
-                <em id="contextMeterDetail">0 / 0 chars</em>
+                <em id="contextMeterDetail">0 / 0 символов</em>
               </div>
-              <label class="composer-model">Model<select id="chatModelSelect" aria-label="Chat model"></select></label>
+              <label class="composer-model">Модель<select id="chatModelSelect" aria-label="Модель чата"></select></label>
             </div>
-            <button type="button" class="secondary icon-text-button" id="addSelectionContextButton" title="Add current Office selection to context">
+            <button type="button" class="secondary icon-text-button" id="addSelectionContextButton" title="Добавить текущее выделение Office в контекст">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-              <span>Add selection</span>
+              <span>Выделение</span>
             </button>
-            <button type="button" class="secondary icon-text-button context-toggle-button" id="toggleVbaContextButton" title="Attach or detach VBA project context">
+            <button type="button" class="secondary icon-text-button context-toggle-button" id="toggleVbaContextButton" title="Добавить или убрать VBA-проект из контекста">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4 4 12l4 8"/><path d="m16 4 4 8-4 8"/><path d="m14 4-4 16"/></svg>
               <span>VBA</span>
             </button>
           </div>
-          <textarea id="chatInput" rows="3" placeholder="Ask about the current document..."></textarea>
+          <textarea id="chatInput" rows="3" placeholder="Спросите про текущий документ..."></textarea>
           <div class="composer-actions">
-            <button type="button" class="icon-button secondary" id="clearInputButton" title="Clear input" aria-label="Clear input">
+            <button type="button" class="icon-button secondary" id="clearInputButton" title="Очистить ввод" aria-label="Очистить ввод">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
             </button>
             <button type="submit" class="icon-text-button primary" id="sendButton">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4 20-7Z"/><path d="M22 2 11 13"/></svg>
-              <span>Send</span>
+              <span>Отправить</span>
             </button>
             <button type="button" class="icon-text-button danger hidden" id="stopButton">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
-              <span id="stopButtonText">Stop</span>
+              <span id="stopButtonText">Стоп</span>
             </button>
           </div>
         </form>
@@ -129,40 +129,43 @@
 
       <section class="panel" id="tab-tools">
         <div class="toolbar">
-          <button id="addToolButton">New Tool</button>
-          <button class="secondary" id="cloneToolButton">Clone</button>
-          <button class="secondary" id="saveToolsButton">Save Tools</button>
+          <button id="addToolButton">Новый tool</button>
+          <button class="secondary" id="cloneToolButton">Клон</button>
+          <button class="secondary" id="saveToolsButton">Сохранить tools</button>
         </div>
         <div class="status" id="toolsPath"></div>
         <div class="tool-layout split-layout" id="toolsLayout" data-split-key="tools" data-default-ratio="0.25" data-min-left="210" data-min-ratio="0.16" data-max-ratio="0.42">
-          <aside class="tool-list" id="toolsList"></aside>
-          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Resize tools list"></div>
+          <div class="tool-list-panel">
+            <input class="tool-search" id="toolSearchInput" placeholder="Поиск tools..." autocomplete="off">
+            <aside class="tool-list" id="toolsList"></aside>
+          </div>
+          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка tools"></div>
           <section class="tool-editor">
             <div class="skill-head">
               <div>
-                <div class="skill-title" id="toolEditorTitle">No tool selected</div>
+                <div class="skill-title" id="toolEditorTitle">Tool не выбран</div>
                 <div class="skill-meta" id="toolEditorMeta"></div>
               </div>
-              <label class="checkline"><input type="checkbox" id="toolEnabledInput"> Enabled</label>
+              <label class="checkline"><input type="checkbox" id="toolEnabledInput"> Включен</label>
             </div>
             <div class="form-grid tool-form">
               <label>Tool ID<input id="toolIdInput" placeholder="excel.normalize_table"></label>
               <label>Host<select id="toolHostInput"><option>Common</option><option>Excel</option><option>Word</option><option>PowerPoint</option><option>Outlook</option></select></label>
               <label>Executor<select id="toolExecutorInput"><option>pipeline</option><option>vba</option><option>builtin</option></select></label>
-              <label class="checkline"><input type="checkbox" id="toolConfirmInput"> Requires confirmation</label>
-              <label>Description<textarea id="toolDescriptionInput" rows="3" placeholder="Description for LLM"></textarea></label>
-              <label>Argument schema JSON<textarea id="toolSchemaInput" rows="4" placeholder="{&quot;address&quot;:&quot;A1:D20&quot;}"></textarea></label>
-              <label>Run arguments JSON<textarea id="toolRunArgsInput" rows="4" spellcheck="false" placeholder="{&quot;address&quot;:&quot;A1:D20&quot;}"></textarea></label>
+              <label class="checkline"><input type="checkbox" id="toolConfirmInput"> Требует подтверждения</label>
+              <label>Описание<textarea id="toolDescriptionInput" rows="3" placeholder="Описание для модели"></textarea></label>
+              <label>Schema аргументов JSON<textarea id="toolSchemaInput" rows="4" placeholder="{&quot;address&quot;:&quot;A1:D20&quot;}"></textarea></label>
+              <label>Аргументы запуска JSON<textarea id="toolRunArgsInput" rows="4" spellcheck="false" placeholder="{&quot;address&quot;:&quot;A1:D20&quot;}"></textarea></label>
               <label>Pipeline JSON<textarea id="toolPipelineInput" rows="10" spellcheck="false" placeholder="{&quot;version&quot;:1,&quot;steps&quot;:[{&quot;id&quot;:&quot;read&quot;,&quot;toolId&quot;:&quot;excel.read_range&quot;,&quot;arguments&quot;:{&quot;address&quot;:&quot;{{args.address}}&quot;}}]}"></textarea></label>
-              <label>VBA / executor code<textarea id="toolCodeInput" rows="10" spellcheck="false" placeholder="Optional VBA module code"></textarea></label>
-              <label>README / notes<textarea id="toolReadmeInput" rows="5" spellcheck="false" placeholder="Usage notes and implementation details"></textarea></label>
+              <label>VBA / executor code<textarea id="toolCodeInput" rows="10" spellcheck="false" placeholder="Опциональный код VBA-модуля"></textarea></label>
+              <label>README / notes<textarea id="toolReadmeInput" rows="5" spellcheck="false" placeholder="Заметки по использованию и реализации"></textarea></label>
             </div>
             <div class="toolbar">
-              <button class="secondary" id="dryRunToolButton" type="button">Dry Run</button>
-              <button id="runToolButton" type="button">Run</button>
-              <button class="secondary" id="copyToolContextButton" type="button">Copy Context</button>
-              <button class="secondary" id="askToolBuilderButton" type="button">Edit in Chat</button>
-              <button class="danger" id="deleteToolButton" type="button">Delete</button>
+              <button class="secondary" id="dryRunToolButton" type="button">Проверка</button>
+              <button id="runToolButton" type="button">Запустить</button>
+              <button class="secondary" id="copyToolContextButton" type="button">Копировать контекст</button>
+              <button class="secondary" id="askToolBuilderButton" type="button">Редактировать в чате</button>
+              <button class="danger" id="deleteToolButton" type="button">Удалить</button>
             </div>
             <pre class="json-box tool-run-output" id="toolRunOutput"></pre>
           </section>
@@ -171,33 +174,36 @@
 
       <section class="panel" id="tab-skills">
         <div class="toolbar">
-          <button id="addSkillButton">New Skill</button>
-          <button class="secondary" id="cloneSkillButton">Clone</button>
-          <button class="secondary" id="saveSkillsButton">Save Skills</button>
+          <button id="addSkillButton">Новый skill</button>
+          <button class="secondary" id="cloneSkillButton">Клон</button>
+          <button class="secondary" id="saveSkillsButton">Сохранить skills</button>
         </div>
         <div class="status" id="skillsPath"></div>
         <div class="tool-layout split-layout" id="skillsLayout" data-split-key="skills" data-default-ratio="0.25" data-min-left="210" data-min-ratio="0.16" data-max-ratio="0.42">
-          <aside class="tool-list" id="skillsList"></aside>
-          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Resize skills list"></div>
+          <div class="tool-list-panel">
+            <input class="tool-search" id="skillSearchInput" placeholder="Поиск skills..." autocomplete="off">
+            <aside class="tool-list" id="skillsList"></aside>
+          </div>
+          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка skills"></div>
           <section class="tool-editor">
             <div class="skill-head">
               <div>
-                <div class="skill-title" id="skillEditorTitle">No skill selected</div>
+                <div class="skill-title" id="skillEditorTitle">Skill не выбран</div>
                 <div class="skill-meta" id="skillEditorMeta"></div>
               </div>
-              <label class="checkline"><input type="checkbox" id="skillEnabledInput"> Enabled</label>
+              <label class="checkline"><input type="checkbox" id="skillEnabledInput"> Включен</label>
             </div>
             <div class="form-grid tool-form">
               <label>Skill ID<input id="skillIdInput" placeholder="common.review_contract"></label>
               <label>Host<select id="skillHostInput"><option>Common</option><option>Excel</option><option>Word</option><option>PowerPoint</option><option>Outlook</option></select></label>
-              <label>Description<textarea id="skillDescriptionInput" rows="3" placeholder="When this skill should be used"></textarea></label>
-              <label>Tags<input id="skillTagsInput" placeholder="review, writing, word"></label>
-              <label>SKILL.md<textarea id="skillBodyInput" rows="18" spellcheck="false" placeholder="# Skill name&#10;&#10;Use this skill when..."></textarea></label>
+              <label>Описание<textarea id="skillDescriptionInput" rows="3" placeholder="Когда агенту использовать этот skill"></textarea></label>
+              <label>Теги<input id="skillTagsInput" placeholder="review, writing, word"></label>
+              <label>SKILL.md<textarea id="skillBodyInput" rows="18" spellcheck="false" placeholder="# Название skill&#10;&#10;Используйте этот skill, когда..."></textarea></label>
             </div>
             <div class="toolbar">
-              <button class="secondary" id="copySkillContextButton" type="button">Copy Context</button>
-              <button class="secondary" id="askSkillBuilderButton" type="button">Edit in Chat</button>
-              <button class="danger" id="deleteSkillButton" type="button">Delete</button>
+              <button class="secondary" id="copySkillContextButton" type="button">Копировать контекст</button>
+              <button class="secondary" id="askSkillBuilderButton" type="button">Редактировать в чате</button>
+              <button class="danger" id="deleteSkillButton" type="button">Удалить</button>
             </div>
           </section>
         </div>
@@ -205,36 +211,51 @@
 
       <section class="panel" id="tab-vba">
         <div class="toolbar vba-commandbar">
-          <button id="refreshVbaButton" type="button">Refresh VBA</button>
-          <button class="secondary" id="reviewVbaButton" type="button">Review in Chat</button>
-          <button class="secondary" id="previewVbaDiffButton" type="button">Preview Diff</button>
-          <button id="saveVbaButton" type="button">Save Module</button>
-          <button class="secondary" id="restoreVbaButton" type="button">Restore Backup</button>
+          <button id="refreshVbaButton" type="button">Обновить VBA</button>
+          <button id="saveVbaButton" type="button">Сохранить модуль</button>
+          <button class="secondary" id="previewVbaDiffButton" type="button">Diff</button>
+          <details class="toolbar-menu">
+            <summary>Еще</summary>
+            <div class="toolbar-menu-body">
+              <button class="secondary" id="reviewVbaButton" type="button">Проверить в чате</button>
+              <button class="secondary" id="restoreVbaButton" type="button">Восстановить backup</button>
+            </div>
+          </details>
           <span class="toolbar-spacer"></span>
           <label class="inline-field">Macro<input id="vbaMacroInput" autocomplete="off" placeholder="Module1.Main"></label>
-          <button class="secondary" id="runVbaMacroButton" type="button">Run Macro</button>
+          <button class="secondary" id="runVbaMacroButton" type="button">Запустить</button>
         </div>
-        <div class="status" id="vbaStatus">VBA context is optional. Use the VBA toggle next to Add selection to attach it to the active chat.</div>
+        <div class="status" id="vbaStatus">VBA-контекст опционален. Переключатель VBA в чате добавляет проект в контекст активной сессии.</div>
         <div class="vba-layout split-layout" id="vbaLayout" data-split-key="vba" data-default-ratio="0.22" data-min-left="210" data-min-ratio="0.16" data-max-ratio="0.38">
           <aside class="vba-sidebar">
-            <label>Module<select id="vbaModuleSelect"></select></label>
-            <label>Backup<select id="vbaBackupSelect"></select></label>
+            <input class="tool-search" id="vbaModuleSearchInput" placeholder="Поиск модулей..." autocomplete="off">
+            <label>Модуль<select id="vbaModuleSelect"></select></label>
+            <details class="vba-side-section">
+              <summary>Backups</summary>
+              <label>Backup<select id="vbaBackupSelect"></select></label>
+            </details>
             <div class="vba-macro-status" id="vbaMacroStatus"></div>
-            <pre class="json-box vba-meta" id="vbaMetaBox"></pre>
+            <details class="vba-side-section">
+              <summary>Metadata</summary>
+              <pre class="json-box vba-meta" id="vbaMetaBox"></pre>
+            </details>
           </aside>
-          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Resize VBA sidebar"></div>
+          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину VBA sidebar"></div>
           <section class="vba-editor">
             <div class="vba-code-pane">
-              <textarea id="vbaCodeInput" spellcheck="false" placeholder="Refresh VBA to load modules."></textarea>
+              <textarea id="vbaCodeInput" spellcheck="false" placeholder="Обновите VBA, чтобы загрузить модули."></textarea>
             </div>
-            <div class="vba-diff" id="vbaDiffOutput" aria-live="polite"></div>
+            <details class="vba-diff-panel" open>
+              <summary>Diff</summary>
+              <div class="vba-diff" id="vbaDiffOutput" aria-live="polite"></div>
+            </details>
           </section>
         </div>
       </section>
 
       <section class="panel" id="tab-context">
         <div class="toolbar">
-          <button class="danger" id="clearContextButton">Clear Context</button>
+          <button class="danger" id="clearContextButton">Очистить контекст</button>
         </div>
         <div class="context-summary" id="contextSummary"></div>
         <div class="context-list" id="contextList"></div>
@@ -246,7 +267,7 @@
 
       <section class="panel" id="tab-settings">
         <div class="settings-shell">
-          <nav class="settings-nav" aria-label="Settings sections">
+          <nav class="settings-nav" aria-label="Разделы настроек">
             <button class="settings-nav-button active" type="button" data-settings-page="connection">Подключение</button>
             <button class="settings-nav-button" type="button" data-settings-page="model">Модель</button>
             <button class="settings-nav-button" type="button" data-settings-page="agent">Агент</button>
@@ -340,10 +361,10 @@
               </div>
               <div class="danger-zone">
                 <div>
-                  <div class="danger-zone-title">Development reset</div>
-                  <div class="danger-zone-text">Удаляет chats, context, VBA backups и WebView cache.</div>
+                  <div class="danger-zone-title">Сброс runtime</div>
+                  <div class="danger-zone-text">Удаляет чаты, контекст, VBA backups и WebView cache.</div>
                 </div>
-                <button class="danger" id="clearRuntimeDataButton" type="button">Clear Chats/Data</button>
+                <button class="danger" id="clearRuntimeDataButton" type="button">Очистить данные</button>
               </div>
             </section>
           </div>
@@ -362,47 +383,47 @@
   <div class="modal hidden" id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
     <div class="modal-panel">
       <div class="modal-head">
-        <h2 id="helpTitle">How RNAssistant tools work</h2>
-        <button class="icon-button secondary" id="closeHelpButton" title="Close" aria-label="Close">
+        <h2 id="helpTitle">Как работают инструменты RNAssistant</h2>
+        <button class="icon-button secondary" id="closeHelpButton" title="Закрыть" aria-label="Закрыть">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
         </button>
       </div>
       <div class="help-content">
         <section>
-          <h3>Chat workflow</h3>
-          <p>With Agent mode enabled, ask for the Office result in normal language. The model must return RNAssistant JSON tool blocks for document actions, and RNAssistant executes them when auto-run is enabled.</p>
+          <h3>Работа с чатом</h3>
+          <p>В Agent mode можно описывать нужный результат обычным языком. Модель возвращает JSON-блоки RNAssistant для действий с документом, а RNAssistant выполняет их, если включен автозапуск.</p>
           <pre><code>Создай новый лист Sales Demo, сгенерируй данные продаж по месяцам и построй линейный график.</code></pre>
         </section>
         <section>
-          <h3>Agent format</h3>
-          <p>Models should return one fenced rnassistant-agent block. RNAssistant parses toolId/tool/action/name plus arguments/args/parameters.</p>
+          <h3>Формат агента</h3>
+          <p>Модель должна вернуть один fenced-блок rnassistant-agent. RNAssistant читает toolId/tool/action/name и параметры arguments/args/parameters.</p>
           <pre><code>```rnassistant-agent
-{"description":"Create sales demo","steps":[
-  {"description":"Add sheet","toolId":"excel.add_sheet","arguments":{"name":"Sales Demo"}},
-  {"description":"Write data","toolId":"excel.write_table","arguments":{"sheet":"Sales Demo","startAddress":"A1","values":[["Month","Sales"],["Jan",120]]}},
-  {"description":"Create chart","toolId":"excel.add_chart","arguments":{"sheet":"Sales Demo","sourceRange":"A1:B2","chartType":"line","title":"Sales"}}
+{"description":"Создать демо продаж","steps":[
+  {"description":"Добавить лист","toolId":"excel.add_sheet","arguments":{"name":"Sales Demo"}},
+  {"description":"Записать данные","toolId":"excel.write_table","arguments":{"sheet":"Sales Demo","startAddress":"A1","values":[["Month","Sales"],["Jan",120]]}},
+  {"description":"Построить график","toolId":"excel.add_chart","arguments":{"sheet":"Sales Demo","sourceRange":"A1:B2","chartType":"line","title":"Sales"}}
 ]}
 ```</code></pre>
         </section>
         <section>
-          <h3>Tools workflow</h3>
-          <p>Open Tools, select a tool, inspect its schema, pipeline, VBA code, and notes. Use Dry Run before Run for custom tools and skills. Agent VBA code should be written as VBA for the current Office host.</p>
+          <h3>Работа с tools</h3>
+          <p>Откройте Tools, выберите tool и проверьте его schema, pipeline, VBA-код и заметки. Для custom tools и skills сначала используйте Dry Run, затем Run. VBA-код агента должен соответствовать текущему Office host.</p>
         </section>
         <section>
-          <h3>Reusable tools</h3>
-          <p>Custom tools are stored in %AppData%\RNAssistant\tools. Pipeline tools call existing tools in order. VBA tools store editable code in code.vba.</p>
+          <h3>Переиспользуемые tools</h3>
+          <p>Custom tools хранятся в %AppData%\RNAssistant\tools. Pipeline tools последовательно вызывают существующие tools. VBA tools хранят редактируемый код в code.vba.</p>
         </section>
         <section>
           <h3>Markdown skills</h3>
-          <p>Skills are guidance files stored in %AppData%\RNAssistant\skills. They help the agent choose an approach, but executable actions still use tools.</p>
+          <p>Skills - это файлы-инструкции из %AppData%\RNAssistant\skills. Они помогают агенту выбрать подход, но исполняемые действия все равно выполняются через tools.</p>
         </section>
         <section>
-          <h3>VBA workflow</h3>
-          <p>Use the VBA tab to load Office VBA modules, preview highlighted code, save module changes with automatic backup, and restore backups. Use the VBA toggle in Chat to attach the project as active chat context.</p>
+          <h3>Работа с VBA</h3>
+          <p>На вкладке VBA можно загрузить модули Office VBA, редактировать код, смотреть diff, сохранять изменения с автоматическим backup и восстанавливать backup. Переключатель VBA в Chat добавляет проект в контекст активного чата.</p>
         </section>
         <section>
-          <h3>Safety switches</h3>
-          <p>Settings controls request timeout, whether read-only LLM tool calls auto-run, retry after errors, and whether document/VBA mutations can run without manual confirmation.</p>
+          <h3>Настройки безопасности</h3>
+          <p>Настройки управляют таймаутом запросов, автозапуском read-only tool calls, повтором после ошибок и тем, могут ли изменения документа/VBA выполняться без ручного подтверждения.</p>
         </section>
       </div>
     </div>
@@ -420,26 +441,26 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=chatui-20260619-6"></script>
-  <script src="js/app-utils.js"></script>
+  <script src="js/app-core.js?v=chatui-20260620-1"></script>
+  <script src="js/app-utils.js?v=chatui-20260620-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
   <script src="js/app-markdown.js"></script>
   <script src="js/app-settings.js?v=chatui-20260619-5"></script>
   <script src="js/app-model-data.js"></script>
-  <script src="js/app-model-render.js?v=chatui-20260619-4"></script>
+  <script src="js/app-model-render.js?v=chatui-20260620-1"></script>
   <script src="js/app-models.js"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=chatui-20260619-6"></script>
-  <script src="js/app-tools.js"></script>
-  <script src="js/app-skills.js"></script>
-  <script src="js/app-vba.js"></script>
-  <script src="js/app-context.js"></script>
+  <script src="js/app-chat-state.js?v=chatui-20260620-2"></script>
+  <script src="js/app-tools.js?v=chatui-20260620-1"></script>
+  <script src="js/app-skills.js?v=chatui-20260620-1"></script>
+  <script src="js/app-vba.js?v=chatui-20260620-1"></script>
+  <script src="js/app-context.js?v=chatui-20260620-1"></script>
   <script src="js/app-agent-data.js"></script>
-  <script src="js/app-agent-model.js?v=chatui-20260619-5"></script>
-  <script src="js/app-agent.js?v=chatui-20260619-5"></script>
-  <script src="js/app-messages.js?v=chatui-20260619-5"></script>
-  <script src="js/app-chat.js?v=chatui-20260619-5"></script>
+  <script src="js/app-agent-model.js?v=chatui-20260620-1"></script>
+  <script src="js/app-agent.js?v=chatui-20260620-2"></script>
+  <script src="js/app-messages.js?v=chatui-20260620-2"></script>
+  <script src="js/app-chat.js?v=chatui-20260620-1"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

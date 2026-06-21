@@ -62,7 +62,7 @@ function lastTokenUsageText() {
   for (var i = state.messages.length - 1; i >= 0; i -= 1) {
     var total = messageTotalTokens(state.messages[i]);
     if (total !== null && total !== undefined) {
-      return " · last " + total + " tokens";
+      return " · последнее " + total + " токенов";
     }
   }
   return "";
@@ -84,7 +84,7 @@ function renderContextMeter() {
   fill.style.width = percent + "%";
   fill.dataset.level = percent >= 90 ? "danger" : (percent >= 70 ? "warn" : "ok");
   value.textContent = percent + "%";
-  detail.textContent = formatNumber(used) + " / " + formatNumber(limit) + " chars" + (usage.actual || usage.Actual ? "" : " est.") + lastTokenUsageText();
+  detail.textContent = formatNumber(used) + " / " + formatNumber(limit) + " символов" + (usage.actual || usage.Actual ? "" : " · оценка") + lastTokenUsageText();
 }
 
 function updateEstimatedContextUsage() {

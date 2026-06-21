@@ -8,15 +8,66 @@ function messageUsageText(message) {
 
   var parts = [];
   if (total !== null && total !== undefined) {
-    parts.push(total + " tokens");
+    parts.push(total + " токенов");
   }
   if (prompt !== null && prompt !== undefined) {
-    parts.push("in " + prompt);
+    parts.push("вход " + prompt);
   }
   if (completion !== null && completion !== undefined) {
-    parts.push("out " + completion);
+    parts.push("ответ " + completion);
   }
   return parts.join(" · ");
+}
+
+function applyPromptSuggestion(text) {
+  var input = $("chatInput");
+  if (!input) {
+    return;
+  }
+
+  input.value = text;
+  input.focus();
+  renderSendControls();
+}
+
+function promptSuggestionButton(text) {
+  var button = document.createElement("button");
+  button.type = "button";
+  button.className = "chat-empty-suggestion";
+  button.textContent = text;
+  button.addEventListener("click", function () {
+    applyPromptSuggestion(text);
+  });
+  return button;
+}
+
+function renderChatEmptyState() {
+  var empty = document.createElement("div");
+  empty.className = "chat-empty";
+
+  var mark = document.createElement("div");
+  mark.className = "chat-empty-mark";
+  mark.innerHTML = "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z\"/><path d=\"M8 9h8\"/><path d=\"M8 13h5\"/></svg>";
+  empty.appendChild(mark);
+
+  var title = document.createElement("div");
+  title.className = "chat-empty-title";
+  title.textContent = "Готов к работе с документом";
+  empty.appendChild(title);
+
+  var text = document.createElement("div");
+  text.className = "chat-empty-text";
+  text.textContent = "Выберите контекст или задайте вопрос по текущему Office-файлу.";
+  empty.appendChild(text);
+
+  var suggestions = document.createElement("div");
+  suggestions.className = "chat-empty-suggestions";
+  suggestions.appendChild(promptSuggestionButton("Суммируй текущий документ"));
+  suggestions.appendChild(promptSuggestionButton("Найди риски и слабые места"));
+  suggestions.appendChild(promptSuggestionButton("Подготовь план правок"));
+  empty.appendChild(suggestions);
+
+  return empty;
 }
 
 function appendMessageFooter(node, message, index, activity) {
@@ -30,20 +81,20 @@ function appendMessageFooter(node, message, index, activity) {
   if (usage || message.Pending || message.Failed) {
     var usageNode = document.createElement("span");
     usageNode.className = "message-usage";
-    usageNode.textContent = message.Failed ? "Not sent" : (message.Pending ? "Sending..." : usage);
+    usageNode.textContent = message.Failed ? "Не отправлено" : (message.Pending ? "Отправляю..." : usage);
     meta.appendChild(usageNode);
   }
 
   var actions = document.createElement("div");
   actions.className = "message-actions";
-  actions.appendChild(smallIconButton("Fork from this message", "branch", function () {
+  actions.appendChild(smallIconButton("Ответвить чат отсюда", "branch", function () {
     forkChatAtMessage(message, index);
   }));
-  actions.appendChild(smallIconButton("Copy message", "copy", function () {
+  actions.appendChild(smallIconButton("Копировать сообщение", "copy", function () {
     copyText(activity ? activityText(activity) : messageContent(message));
-    log("Message copied.");
+    log("Сообщение скопировано.");
   }));
-  actions.appendChild(smallIconButton("Delete message", "trash", function () {
+  actions.appendChild(smallIconButton("Удалить сообщение", "trash", function () {
     deleteMessage(message, index);
   }));
 
@@ -110,6 +161,11 @@ function renderLiveActivity() {
 function renderMessages() {
   var box = $("messages");
   box.innerHTML = "";
+  if (!state.messages.length && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
+    box.appendChild(renderChatEmptyState());
+    return;
+  }
+
   var index = 0;
   while (index < state.messages.length) {
     if (isAgentRunStart(state.messages[index])) {
