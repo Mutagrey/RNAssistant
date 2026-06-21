@@ -52,7 +52,7 @@ namespace RNAssistant.Harness
                 AssertEqual("[[\"Month\",\"Sales\"]]", adapter.Executed[1].Arguments["values"], "retry values");
                 var resultJson = JsonConvert.SerializeObject(result.ToolResults);
                 AssertContains(resultJson, "No table values provided", "failed result logged");
-                AssertContains(resultJson, "executed excel.write_table", "retry result logged");
+                AssertContains(resultJson, "wrote 1 row", "retry result logged");
                 AssertTrue(ContainsMessage(session.Messages, "Local skill retry result") || ContainsMessage(session.Messages, "Agent step"), "retry transcript recorded");
             });
         }

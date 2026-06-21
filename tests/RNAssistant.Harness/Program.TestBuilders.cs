@@ -207,6 +207,77 @@ namespace RNAssistant.Harness
                 });
         }
 
+        private sealed class ScenarioLlm
+        {
+            private readonly List<ScenarioTurn> _turns = new List<ScenarioTurn>();
+            private int _index;
+
+            public readonly List<IReadOnlyList<ChatMessage>> Calls = new List<IReadOnlyList<ChatMessage>>();
+
+            public ScenarioLlm Add(string response, string[] mustContain, string[] mustNotContain)
+            {
+                _turns.Add(new ScenarioTurn
+                {
+                    Response = response ?? string.Empty,
+                    MustContain = mustContain ?? new string[0],
+                    MustNotContain = mustNotContain ?? new string[0]
+                });
+                return this;
+            }
+
+            public ScenarioLlm Add(string response, params string[] mustContain)
+            {
+                return Add(response, mustContain, null);
+            }
+
+            public Task<LlmCompletionResult> CompleteAsync(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var captured = new List<ChatMessage>(messages ?? new ChatMessage[0]);
+                Calls.Add(captured);
+                if (_index >= _turns.Count)
+                {
+                    throw new InvalidOperationException("Scenario LLM has no response for turn " + (_index + 1) + ".");
+                }
+
+                var turn = _turns[_index];
+                var prompt = FlattenMessages(captured);
+                for (var i = 0; i < turn.MustContain.Length; i++)
+                {
+                    AssertContains(prompt, turn.MustContain[i], "scenario turn " + (_index + 1) + " prompt");
+                }
+
+                for (var i = 0; i < turn.MustNotContain.Length; i++)
+                {
+                    if (prompt.IndexOf(turn.MustNotContain[i], StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        throw new InvalidOperationException("scenario turn " + (_index + 1) + " prompt unexpectedly contained '" + turn.MustNotContain[i] + "'");
+                    }
+                }
+
+                _index += 1;
+                return Task.FromResult(new LlmCompletionResult
+                {
+                    Content = turn.Response,
+                    PromptTokens = 10,
+                    CompletionTokens = 2,
+                    TotalTokens = 12
+                });
+            }
+
+            public ChatCompletionService CreateService(FakeOfficeAdapter adapter, OfficeToolExecutor executor)
+            {
+                return new ChatCompletionService(adapter, executor, CompleteAsync);
+            }
+
+            private sealed class ScenarioTurn
+            {
+                public string Response { get; set; }
+                public string[] MustContain { get; set; }
+                public string[] MustNotContain { get; set; }
+            }
+        }
+
         private static ChatSession NewSession(FakeOfficeAdapter adapter)
         {
             return new ChatSession

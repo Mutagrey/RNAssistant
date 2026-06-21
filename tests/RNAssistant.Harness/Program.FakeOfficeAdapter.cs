@@ -37,6 +37,12 @@ namespace RNAssistant.Harness
             private readonly List<ToolDefinition> _builtInTools;
             private readonly Dictionary<string, Queue<ToolResult>> _scriptedResults;
             private readonly Dictionary<string, FakeVbaModule> _vbaModules;
+            private readonly Dictionary<string, FakeSheet> _sheets;
+            private readonly List<FakeSlide> _slides;
+            private readonly List<string> _wordComments;
+            private string _wordText;
+            private string _outlookSelection;
+            private string _outlookDraft;
 
             public string VbaModuleCode
             {
@@ -57,6 +63,12 @@ namespace RNAssistant.Harness
                 _builtInTools = new List<ToolDefinition>((builtInSkills ?? new ToolDefinition[0]).Select(CloneTool));
                 _scriptedResults = new Dictionary<string, Queue<ToolResult>>(StringComparer.OrdinalIgnoreCase);
                 _vbaModules = new Dictionary<string, FakeVbaModule>(StringComparer.OrdinalIgnoreCase);
+                _sheets = new Dictionary<string, FakeSheet>(StringComparer.OrdinalIgnoreCase);
+                _slides = new List<FakeSlide>();
+                _wordComments = new List<string>();
+                _wordText = documentSnapshot ?? string.Empty;
+                _outlookSelection = documentSnapshot ?? string.Empty;
+                _outlookDraft = string.Empty;
                 DocumentKeyValue = "doc";
                 RuntimeDocumentKeyValue = "runtime-doc";
             }
@@ -86,10 +98,29 @@ namespace RNAssistant.Harness
             public string LegacyDocumentKey { get { return "legacy-doc"; } }
             public string RuntimeDocumentKey { get { return RuntimeDocumentKeyValue; } }
             public string DocumentTitle { get { return _documentTitle; } }
+            public string WordText { get { return _wordText; } }
+            public string OutlookDraft { get { return _outlookDraft; } }
+            public int WordCommentCount { get { return _wordComments.Count; } }
+            public int SlideCount { get { return _slides.Count; } }
 
             public string GetDocumentSnapshot(int maxChars)
             {
-                return _documentSnapshot;
+                if (string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase))
+                {
+                    return BuildWorkbookSummary();
+                }
+
+                if (string.Equals(_hostName, "Word", StringComparison.OrdinalIgnoreCase))
+                {
+                    return _wordText;
+                }
+
+                if (string.Equals(_hostName, "PowerPoint", StringComparison.OrdinalIgnoreCase))
+                {
+                    return JsonConvert.SerializeObject(_slides.Select(s => new { title = s.Title, body = s.Body }).ToArray());
+                }
+
+                return _outlookSelection;
             }
 
             public string GetVbaSnapshot(int maxChars)
@@ -142,6 +173,32 @@ namespace RNAssistant.Harness
                     : string.Empty;
             }
 
+            public bool HasSheet(string sheetName)
+            {
+                return _sheets.ContainsKey(string.IsNullOrWhiteSpace(sheetName) ? "Sheet1" : sheetName);
+            }
+
+            public string CellValue(string sheetName, string address)
+            {
+                FakeSheet sheet;
+                if (!_sheets.TryGetValue(string.IsNullOrWhiteSpace(sheetName) ? "Sheet1" : sheetName, out sheet))
+                {
+                    return string.Empty;
+                }
+
+                var cell = ParseAddress(address);
+                string value;
+                return sheet.Cells.TryGetValue(CellKey(cell.Row, cell.Column), out value) ? value : string.Empty;
+            }
+
+            public int ChartCount(string sheetName)
+            {
+                FakeSheet sheet;
+                return _sheets.TryGetValue(string.IsNullOrWhiteSpace(sheetName) ? "Sheet1" : sheetName, out sheet)
+                    ? sheet.Charts.Count
+                    : 0;
+            }
+
             public ToolResult ExecuteTool(ToolCommand command)
             {
                 Executed.Add(Clone(command));
@@ -149,6 +206,12 @@ namespace RNAssistant.Harness
                 if (TryDequeueResult(command.ToolId, out scripted))
                 {
                     return scripted;
+                }
+
+                var fakeResult = ExecuteStatefulTool(command);
+                if (fakeResult != null)
+                {
+                    return fakeResult;
                 }
 
                 if ((command.ToolId ?? string.Empty).EndsWith(".vba_read_module", StringComparison.OrdinalIgnoreCase))
@@ -187,6 +250,331 @@ namespace RNAssistant.Harness
                 }
 
                 return ToolResult.Ok("executed " + command.ToolId, JsonConvert.SerializeObject(new { host = HostName, toolId = command.ToolId }));
+            }
+
+            private ToolResult ExecuteStatefulTool(ToolCommand command)
+            {
+                var toolId = command == null ? string.Empty : command.ToolId ?? string.Empty;
+                if (toolId.StartsWith("excel.", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ExecuteExcelTool(command);
+                }
+
+                if (toolId.StartsWith("word.", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ExecuteWordTool(command);
+                }
+
+                if (toolId.StartsWith("powerpoint.", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ExecutePowerPointTool(command);
+                }
+
+                if (toolId.StartsWith("outlook.", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ExecuteOutlookTool(command);
+                }
+
+                return null;
+            }
+
+            private ToolResult ExecuteExcelTool(ToolCommand command)
+            {
+                if (string.Equals(command.ToolId, "excel.add_sheet", StringComparison.OrdinalIgnoreCase))
+                {
+                    var name = Argument(command, "name", "Sheet" + (_sheets.Count + 1));
+                    EnsureSheet(name);
+                    return ToolResult.Ok("added sheet " + name, JsonConvert.SerializeObject(new { sheet = name }));
+                }
+
+                if (string.Equals(command.ToolId, "excel.write_table", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(command.ToolId, "excel.write_range", StringComparison.OrdinalIgnoreCase))
+                {
+                    var sheetName = Argument(command, "sheet", "Sheet1");
+                    var startAddress = Argument(command, "startAddress", Argument(command, "address", "A1"));
+                    var values = ReadMatrix(command.Arguments.ContainsKey("values") ? command.Arguments["values"] : null);
+                    WriteMatrix(sheetName, startAddress, values);
+                    return ToolResult.Ok("wrote " + values.Count + " row(s) to " + sheetName, JsonConvert.SerializeObject(new { sheet = sheetName, startAddress = startAddress, values = values }));
+                }
+
+                if (string.Equals(command.ToolId, "excel.read_range", StringComparison.OrdinalIgnoreCase))
+                {
+                    var sheetName = Argument(command, "sheet", "Sheet1");
+                    var range = Argument(command, "range", Argument(command, "address", "A1:B10"));
+                    var values = ReadRange(sheetName, range);
+                    return ToolResult.Ok("read range " + sheetName + "!" + range, JsonConvert.SerializeObject(new { sheet = sheetName, range = range, values = values }));
+                }
+
+                if (string.Equals(command.ToolId, "excel.add_chart", StringComparison.OrdinalIgnoreCase))
+                {
+                    var sheetName = Argument(command, "sheet", "Sheet1");
+                    var sheet = EnsureSheet(sheetName);
+                    var chart = new FakeChart
+                    {
+                        SourceRange = Argument(command, "sourceRange", string.Empty),
+                        ChartType = Argument(command, "chartType", string.Empty),
+                        Title = Argument(command, "title", string.Empty)
+                    };
+                    sheet.Charts.Add(chart);
+                    return ToolResult.Ok("added chart " + chart.Title, JsonConvert.SerializeObject(chart));
+                }
+
+                if (string.Equals(command.ToolId, "excel.list_charts", StringComparison.OrdinalIgnoreCase))
+                {
+                    var charts = _sheets.SelectMany(pair => pair.Value.Charts.Select(c => new { sheet = pair.Key, title = c.Title, sourceRange = c.SourceRange, chartType = c.ChartType })).ToArray();
+                    return ToolResult.Ok("listed " + charts.Length + " chart(s)", JsonConvert.SerializeObject(charts));
+                }
+
+                if (string.Equals(command.ToolId, "excel.list_sheets", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ToolResult.Ok("listed " + _sheets.Count + " sheet(s)", JsonConvert.SerializeObject(_sheets.Keys.ToArray()));
+                }
+
+                if (string.Equals(command.ToolId, "excel.workbook_summary", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(command.ToolId, "excel.profile_range", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ToolResult.Ok("workbook summary", BuildWorkbookSummary());
+                }
+
+                if (string.Equals(command.ToolId, "excel.autofit", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ToolResult.Ok("autofit " + Argument(command, "sheet", "Sheet1"));
+                }
+
+                return null;
+            }
+
+            private ToolResult ExecuteWordTool(ToolCommand command)
+            {
+                if (string.Equals(command.ToolId, "word.read_document", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(command.ToolId, "word.read_selection", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ToolResult.Ok("read Word text", JsonConvert.SerializeObject(new { text = _wordText, comments = _wordComments.ToArray() }));
+                }
+
+                if (string.Equals(command.ToolId, "word.insert_text", StringComparison.OrdinalIgnoreCase))
+                {
+                    var text = Argument(command, "text", string.Empty);
+                    _wordText += text;
+                    return ToolResult.Ok("inserted Word text", JsonConvert.SerializeObject(new { text = _wordText }));
+                }
+
+                if (string.Equals(command.ToolId, "word.replace_selection", StringComparison.OrdinalIgnoreCase))
+                {
+                    _wordText = Argument(command, "text", string.Empty);
+                    return ToolResult.Ok("replaced Word selection", JsonConvert.SerializeObject(new { text = _wordText }));
+                }
+
+                if (string.Equals(command.ToolId, "word.add_comment", StringComparison.OrdinalIgnoreCase))
+                {
+                    var text = Argument(command, "text", string.Empty);
+                    _wordComments.Add(text);
+                    return ToolResult.Ok("added Word comment", JsonConvert.SerializeObject(new { comments = _wordComments.ToArray() }));
+                }
+
+                return null;
+            }
+
+            private ToolResult ExecutePowerPointTool(ToolCommand command)
+            {
+                if (string.Equals(command.ToolId, "powerpoint.read_slides", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ToolResult.Ok("read slides", JsonConvert.SerializeObject(_slides.Select(s => new { title = s.Title, body = s.Body }).ToArray()));
+                }
+
+                if (string.Equals(command.ToolId, "powerpoint.add_slide", StringComparison.OrdinalIgnoreCase))
+                {
+                    var slide = new FakeSlide
+                    {
+                        Title = Argument(command, "title", string.Empty),
+                        Body = Argument(command, "body", string.Empty)
+                    };
+                    _slides.Add(slide);
+                    return ToolResult.Ok("added slide " + slide.Title, JsonConvert.SerializeObject(slide));
+                }
+
+                if (string.Equals(command.ToolId, "powerpoint.replace_selection_text", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (_slides.Count == 0)
+                    {
+                        _slides.Add(new FakeSlide());
+                    }
+
+                    _slides[_slides.Count - 1].Body = Argument(command, "text", string.Empty);
+                    return ToolResult.Ok("replaced slide selection", JsonConvert.SerializeObject(_slides[_slides.Count - 1]));
+                }
+
+                return null;
+            }
+
+            private ToolResult ExecuteOutlookTool(ToolCommand command)
+            {
+                if (string.Equals(command.ToolId, "outlook.read_selection", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ToolResult.Ok("read selected mail", JsonConvert.SerializeObject(new { text = _outlookSelection }));
+                }
+
+                if (string.Equals(command.ToolId, "outlook.draft_reply", StringComparison.OrdinalIgnoreCase))
+                {
+                    _outlookDraft = Argument(command, "body", string.Empty);
+                    return ToolResult.Ok("drafted reply", JsonConvert.SerializeObject(new { body = _outlookDraft }));
+                }
+
+                if (string.Equals(command.ToolId, "outlook.collect_folder_mail", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(command.ToolId, "outlook.collect_monthly_summary_data", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ToolResult.Ok("collected Outlook data", JsonConvert.SerializeObject(new { selection = _outlookSelection }));
+                }
+
+                return null;
+            }
+
+            private FakeSheet EnsureSheet(string name)
+            {
+                var sheetName = string.IsNullOrWhiteSpace(name) ? "Sheet1" : name;
+                FakeSheet sheet;
+                if (!_sheets.TryGetValue(sheetName, out sheet))
+                {
+                    sheet = new FakeSheet { Name = sheetName };
+                    _sheets[sheetName] = sheet;
+                }
+
+                return sheet;
+            }
+
+            private void WriteMatrix(string sheetName, string startAddress, List<List<string>> values)
+            {
+                var sheet = EnsureSheet(sheetName);
+                var start = ParseAddress(startAddress);
+                for (var r = 0; r < values.Count; r++)
+                {
+                    for (var c = 0; c < values[r].Count; c++)
+                    {
+                        sheet.Cells[CellKey(start.Row + r, start.Column + c)] = values[r][c] ?? string.Empty;
+                    }
+                }
+            }
+
+            private List<List<string>> ReadRange(string sheetName, string range)
+            {
+                var sheet = EnsureSheet(sheetName);
+                var bounds = ParseRange(range);
+                var values = new List<List<string>>();
+                for (var row = bounds.Start.Row; row <= bounds.End.Row; row++)
+                {
+                    var line = new List<string>();
+                    for (var column = bounds.Start.Column; column <= bounds.End.Column; column++)
+                    {
+                        string value;
+                        line.Add(sheet.Cells.TryGetValue(CellKey(row, column), out value) ? value : string.Empty);
+                    }
+
+                    values.Add(line);
+                }
+
+                return values;
+            }
+
+            private static List<List<string>> ReadMatrix(object raw)
+            {
+                var values = new List<List<string>>();
+                if (raw == null)
+                {
+                    return values;
+                }
+
+                JToken token;
+                if (raw is JToken)
+                {
+                    token = (JToken)raw;
+                }
+                else
+                {
+                    var text = Convert.ToString(raw);
+                    token = string.IsNullOrWhiteSpace(text) ? new JArray() : JToken.Parse(text);
+                }
+
+                var rows = token as JArray;
+                if (rows == null)
+                {
+                    values.Add(new List<string> { Convert.ToString(token) });
+                    return values;
+                }
+
+                foreach (var rowToken in rows)
+                {
+                    var rowArray = rowToken as JArray;
+                    if (rowArray == null)
+                    {
+                        values.Add(new List<string> { Convert.ToString(rowToken) });
+                        continue;
+                    }
+
+                    values.Add(rowArray.Select(cell => Convert.ToString(cell)).ToList());
+                }
+
+                return values;
+            }
+
+            private string BuildWorkbookSummary()
+            {
+                return JsonConvert.SerializeObject(_sheets.Values.Select(s => new
+                {
+                    name = s.Name,
+                    cellCount = s.Cells.Count,
+                    chartCount = s.Charts.Count,
+                    charts = s.Charts.Select(c => new { title = c.Title, sourceRange = c.SourceRange, chartType = c.ChartType }).ToArray()
+                }).ToArray());
+            }
+
+            private static FakeRange ParseRange(string value)
+            {
+                var range = string.IsNullOrWhiteSpace(value) ? "A1:A1" : value;
+                var bang = range.IndexOf('!');
+                if (bang >= 0)
+                {
+                    range = range.Substring(bang + 1);
+                }
+
+                var parts = range.Split(':');
+                var start = ParseAddress(parts.Length > 0 ? parts[0] : "A1");
+                var end = ParseAddress(parts.Length > 1 ? parts[1] : parts[0]);
+                return new FakeRange { Start = start, End = end };
+            }
+
+            private static FakeCellAddress ParseAddress(string value)
+            {
+                var address = string.IsNullOrWhiteSpace(value) ? "A1" : value.Trim();
+                var letters = new string(address.TakeWhile(char.IsLetter).ToArray());
+                var digits = new string(address.SkipWhile(char.IsLetter).TakeWhile(char.IsDigit).ToArray());
+                int row;
+                if (!int.TryParse(digits, out row) || row <= 0)
+                {
+                    row = 1;
+                }
+
+                return new FakeCellAddress { Row = row, Column = ColumnNumber(letters) };
+            }
+
+            private static int ColumnNumber(string letters)
+            {
+                var result = 0;
+                foreach (var ch in (letters ?? "A").ToUpperInvariant())
+                {
+                    if (ch < 'A' || ch > 'Z')
+                    {
+                        continue;
+                    }
+
+                    result = result * 26 + (ch - 'A' + 1);
+                }
+
+                return result <= 0 ? 1 : result;
+            }
+
+            private static string CellKey(int row, int column)
+            {
+                return row + ":" + column;
             }
 
             private static string Argument(ToolCommand command, string name, string fallback)
@@ -332,6 +720,44 @@ namespace RNAssistant.Harness
                 public string Name { get; set; }
                 public string Code { get; set; }
                 public string Type { get; set; }
+            }
+
+            private sealed class FakeSheet
+            {
+                public string Name { get; set; }
+                public Dictionary<string, string> Cells { get; private set; }
+                public List<FakeChart> Charts { get; private set; }
+
+                public FakeSheet()
+                {
+                    Cells = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    Charts = new List<FakeChart>();
+                }
+            }
+
+            private sealed class FakeChart
+            {
+                public string SourceRange { get; set; }
+                public string ChartType { get; set; }
+                public string Title { get; set; }
+            }
+
+            private sealed class FakeSlide
+            {
+                public string Title { get; set; }
+                public string Body { get; set; }
+            }
+
+            private sealed class FakeCellAddress
+            {
+                public int Row { get; set; }
+                public int Column { get; set; }
+            }
+
+            private sealed class FakeRange
+            {
+                public FakeCellAddress Start { get; set; }
+                public FakeCellAddress End { get; set; }
             }
         }
     }

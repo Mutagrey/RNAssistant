@@ -70,7 +70,7 @@ namespace RNAssistant.Office.Services
 
             var tool = (tools ?? new ToolDefinition[0]).FirstOrDefault(t =>
                 t != null && string.Equals(t.Id, command.ToolId, StringComparison.OrdinalIgnoreCase));
-            return tool != null && tool.MutatesDocument;
+            return ToolSafetyPolicy.EffectiveMutatesDocument(tool, tools);
         }
 
         private async Task<ChatCompletionResult> RunLoopAsync(

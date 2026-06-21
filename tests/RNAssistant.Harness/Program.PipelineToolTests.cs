@@ -69,7 +69,7 @@ namespace RNAssistant.Harness
 
                 AssertTrue(result.Success, "pipeline result");
                 AssertEqual(2, adapter.Executed.Count, "adapter execution count");
-                AssertEqual("executed excel.add_sheet", adapter.Executed[1].Arguments["sourceMessage"], "step message placeholder");
+                AssertEqual("added sheet Report", adapter.Executed[1].Arguments["sourceMessage"], "step message placeholder");
                 AssertEqual("true", adapter.Executed[1].Arguments["sourceSuccess"], "step success placeholder");
             });
         }

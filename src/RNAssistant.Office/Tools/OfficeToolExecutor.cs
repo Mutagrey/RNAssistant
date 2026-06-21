@@ -68,8 +68,9 @@ namespace RNAssistant.Office.Tools
             }
 
             var customTool = tool != null && !tool.BuiltIn ? tool : null;
+            var effectiveTool = EffectiveTool(tool, knownTools);
 
-            if (ToolSafetyPolicy.RequiresConfirmation(tool, settings, dryRun, manualRun))
+            if (ToolSafetyPolicy.RequiresConfirmation(effectiveTool, settings, dryRun, manualRun))
             {
                 return ToolResult.WaitingConfirmation("Tool requires confirmation before execution: " + command.ToolId);
             }
@@ -119,6 +120,33 @@ namespace RNAssistant.Office.Tools
 
             cancellationToken.ThrowIfCancellationRequested();
             return _adapter.ExecuteTool(command);
+        }
+
+        private static ToolDefinition EffectiveTool(ToolDefinition tool, IReadOnlyList<ToolDefinition> knownTools)
+        {
+            if (tool == null || tool.MutatesDocument || !ToolSafetyPolicy.EffectiveMutatesDocument(tool, knownTools))
+            {
+                return tool;
+            }
+
+            return new ToolDefinition
+            {
+                Id = tool.Id,
+                Host = tool.Host,
+                Name = tool.Name,
+                Description = tool.Description,
+                ArgumentSchemaJson = tool.ArgumentSchemaJson,
+                Executor = tool.Executor,
+                RequiresConfirmation = tool.RequiresConfirmation,
+                MutatesDocument = true,
+                AgentCanRun = tool.AgentCanRun,
+                PipelineJson = tool.PipelineJson,
+                Code = tool.Code,
+                Readme = tool.Readme,
+                StoragePath = tool.StoragePath,
+                Enabled = tool.Enabled,
+                BuiltIn = tool.BuiltIn
+            };
         }
 
         private IEnumerable<ToolDefinition> KnownTools(IEnumerable<ToolDefinition> providedTools)

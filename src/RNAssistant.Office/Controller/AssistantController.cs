@@ -34,9 +34,17 @@ namespace RNAssistant.Office
         private string _queuedQuickAction;
 
         public AssistantController(IOfficeApplicationAdapter adapter)
+            : this(adapter, null, null)
+        {
+        }
+
+        internal AssistantController(
+            IOfficeApplicationAdapter adapter,
+            AppDataPaths paths,
+            Func<AppSettings, IEnumerable<ChatMessage>, CancellationToken, Task<LlmCompletionResult>> completeAsync)
         {
             _adapter = adapter;
-            _paths = AppDataPaths.CreateDefault();
+            _paths = paths ?? AppDataPaths.CreateDefault();
             _settingsService = new SettingsService(_paths);
             _chatStore = new ChatStore(_paths);
             _toolStore = new ToolStore(_paths);
@@ -47,7 +55,7 @@ namespace RNAssistant.Office
             _skillCatalog = new SkillCatalogService(_adapter, _skillStore);
             _chatSessions = new ChatSessionService(_adapter, _chatStore);
             _llmClient = new LlmClient(() => _settingsService.LoadApiKey());
-            _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, _llmClient.CompleteAsync);
+            _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, completeAsync ?? _llmClient.CompleteAsync);
             _contextService = new ContextService(_adapter);
             _syncRoot = new object();
             _pendingAgentTools = new Dictionary<string, PendingAgentTool>(StringComparer.OrdinalIgnoreCase);
