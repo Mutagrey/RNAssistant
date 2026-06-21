@@ -15,8 +15,10 @@ function renderChatSessions() {
   select.value = state.activeChatId || "";
 
   var hasActive = !!state.activeChatId;
+  var hasMessages = !!(state.messages && state.messages.length);
   $("renameChatButton").disabled = !hasActive;
-  $("clearChatButton").disabled = !hasActive || !state.messages.length;
+  $("clearChatButton").disabled = !hasActive || !hasMessages;
+  $("clearChatButton").hidden = !hasActive || !hasMessages;
   $("deleteChatButton").disabled = !hasActive;
 }
 

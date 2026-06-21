@@ -1,48 +1,20 @@
 function renderSkills() {
-  var list = $("skillsList");
-  var query = (($("skillSearchInput") && $("skillSearchInput").value) || "").trim().toLowerCase();
-  if (!list) {
-    return;
-  }
-
-  list.innerHTML = "";
-  if (!state.skills.length) {
-    state.selectedSkillIndex = -1;
-    list.appendChild(createSkillEmptyState("Skills пока не загружены."));
-    renderSkillEditor();
-    return;
-  }
-
-  if (state.selectedSkillIndex < 0 || state.selectedSkillIndex >= state.skills.length) {
-    state.selectedSkillIndex = 0;
-  }
-
-  var rendered = 0;
-  state.skills.forEach(function (skill, index) {
-    if (query && !skillMatchesSearch(skill, query)) {
-      return;
-    }
-
-    var item = document.createElement("button");
-    item.type = "button";
-    item.className = "tool-list-item" + (index === state.selectedSkillIndex ? " active" : "");
-    item.innerHTML = "<div class=\"tool-list-title\"></div><div class=\"tool-list-meta\"></div>";
-    item.querySelector(".tool-list-title").textContent = skill.Id || skill.Name || "skill";
-    item.querySelector(".tool-list-meta").textContent = (skill.Host || "Common") + " - " + (skill.BuiltIn ? "built-in" : "custom");
-    item.addEventListener("click", function () {
-      syncSelectedSkillFromEditor();
-      state.selectedSkillIndex = index;
-      renderSkills();
-    });
-    list.appendChild(item);
-    rendered += 1;
+  renderResourceList({
+    listId: "skillsList",
+    searchInputId: "skillSearchInput",
+    items: state.skills,
+    emptyText: "Навыки пока не загружены.",
+    getSelectedIndex: function () { return state.selectedSkillIndex; },
+    setSelectedIndex: function (index) { state.selectedSkillIndex = index; },
+    matches: skillMatchesSearch,
+    title: function (skill) { return skill.Id || skill.Name || "навык"; },
+    enabled: function (skill) { return skill.Enabled !== false; },
+    meta: function (skill) { return (skill.Host || "Common") + " - " + (skill.BuiltIn ? "built-in" : "custom"); },
+    description: function (skill) { return skill.Description || ((skill.Tags || []).join(", ") || "Инструкция навыка"); },
+    syncEditor: syncSelectedSkillFromEditor,
+    renderEditor: renderSkillEditor,
+    renderList: renderSkills
   });
-
-  if (!rendered) {
-    list.appendChild(createSkillEmptyState("Ничего не найдено."));
-  }
-
-  renderSkillEditor();
 }
 
 function skillMatchesSearch(skill, query) {
@@ -56,19 +28,10 @@ function skillMatchesSearch(skill, query) {
   return text.indexOf(query) >= 0;
 }
 
-function createSkillEmptyState(text) {
-  var node = document.createElement("div");
-  node.className = "tool-list-empty";
-  node.textContent = text;
-  return node;
-}
-
 function renderSkillEditor() {
   var skill = state.skills[state.selectedSkillIndex] || null;
   var disabled = !skill;
   var builtIn = !!(skill && skill.BuiltIn);
-  $("skillEditorTitle").textContent = skill ? (skill.Id || "skill") : "Skill не выбран";
-  $("skillEditorMeta").textContent = skill ? (builtIn ? "Встроенный skill" : (skill.StoragePath || "Custom skill")) : "Выберите skill из списка или создайте новый.";
   $("skillEnabledInput").checked = skill ? skill.Enabled !== false : false;
   $("skillIdInput").value = skill ? (skill.Id || "") : "";
   $("skillHostInput").value = skill ? (skill.Host || "Common") : "Common";
@@ -182,7 +145,7 @@ async function addSelectedSkillContextToContext() {
       type: "skill_definition",
       id: skill.Id || ""
     });
-  log("Skill context added to chat context.");
+  log("Контекст навыка добавлен в чат.");
   return true;
 }
 
@@ -197,7 +160,7 @@ function bindSkillActions() {
       Name: "new_skill",
       Description: "",
       Tags: [],
-      BodyMarkdown: "# New skill\n\nUse this skill when...\n",
+      BodyMarkdown: "# Новый навык\n\nИспользуйте этот навык, когда...\n",
       Enabled: true,
       BuiltIn: false
     });
@@ -232,7 +195,7 @@ function bindSkillActions() {
       var response = await send("saveSkills", { skills: readSkills() });
       state.skills = response || [];
       renderSkills();
-      log("Skills saved.");
+      log("Навыки сохранены.");
     } catch (error) {
       log(error.message);
     }
@@ -253,7 +216,7 @@ function bindSkillActions() {
 
   $("copySkillContextButton").addEventListener("click", function () {
     copyText(selectedSkillContext());
-    log("Skill context copied.");
+    log("Контекст навыка скопирован.");
   });
 
   $("askSkillBuilderButton").addEventListener("click", function () {
@@ -262,9 +225,8 @@ function bindSkillActions() {
         return;
       }
 
-      $("chatInput").value = "Отредактируй RNAssistant skill из добавленного контекста. Верни обновленный SKILL.md и при необходимости вызови common.skills_save после подтверждения.";
       switchTab("chat");
-      $("chatInput").focus();
+      setChatInputText("Отредактируй RNAssistant-навык из добавленного контекста. Верни обновленный SKILL.md и при необходимости вызови common.skills_save после подтверждения.", true);
     }).catch(function (error) {
       log(error.detail || error.message);
     });

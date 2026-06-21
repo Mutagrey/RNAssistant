@@ -2,8 +2,8 @@ function createRemoveContextButton(note) {
   var button = document.createElement("button");
   button.type = "button";
   button.className = "context-chip-remove";
-  button.title = "Remove context";
-  button.setAttribute("aria-label", "Remove context");
+  button.title = "Убрать из контекста";
+  button.setAttribute("aria-label", "Убрать из контекста");
   button.innerHTML = "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/></svg>";
   button.addEventListener("click", function (event) {
     event.preventDefault();
@@ -27,7 +27,7 @@ function appendContextPopover(chip, note) {
 
   var preview = document.createElement("div");
   preview.className = "context-popover-preview";
-  preview.textContent = notePreview(note) || "No preview.";
+  preview.textContent = notePreview(note) || "Нет превью.";
 
   popover.appendChild(title);
   popover.appendChild(meta);
@@ -81,16 +81,19 @@ function renderVbaContextToggle() {
   var active = vbaContextNotes().length > 0;
   button.classList.toggle("active", active);
   button.setAttribute("aria-pressed", active ? "true" : "false");
-  button.title = active ? "Detach VBA project context" : "Attach VBA project context";
+  button.title = active ? "Убрать VBA-проект из контекста" : "Добавить VBA-проект в контекст";
 }
 
 function renderContextList(notes) {
   var list = $("contextList");
   var summary = $("contextSummary");
+  if (!list || !summary) {
+    return;
+  }
   list.innerHTML = "";
   summary.textContent = notes.length
-    ? notes.length + " context attachment(s) belong to the active chat and will be included in its next model request."
-    : "No context in this chat. Add a selection from the Office right-click menu or the composer button.";
+    ? notes.length + " вложений в контексте активного чата"
+    : "Контекст пуст";
 
   notes.forEach(function (note) {
     var card = document.createElement("article");
@@ -118,7 +121,7 @@ function renderContextList(notes) {
 
     var preview = document.createElement("div");
     preview.className = "context-card-preview";
-    preview.textContent = notePreview(note) || "No preview.";
+    preview.textContent = notePreview(note) || "Нет превью.";
 
     card.appendChild(head);
     card.appendChild(preview);
@@ -130,7 +133,9 @@ function renderContext(skipUsageEstimate) {
   var notes = contextNotes();
   renderContextChips(notes);
   renderContextList(notes);
-  $("contextBox").textContent = JSON.stringify(state.context || {}, null, 2);
+  if ($("contextBox")) {
+    $("contextBox").textContent = JSON.stringify(state.context || {}, null, 2);
+  }
   renderVbaContextToggle();
   if (!skipUsageEstimate) {
     updateEstimatedContextUsage();
@@ -159,7 +164,7 @@ async function addSelectionContext(mode) {
     reportFocusState();
     await send("addSelectionContext", { chatId: state.activeChatId, mode: mode || "full" });
     await syncActiveChatState();
-    log("Selection added to context.");
+    log("Выделение добавлено в контекст.");
   } catch (error) {
     log(error.detail || error.message);
   } finally {
@@ -196,7 +201,7 @@ async function addSelectedToolContextToContext() {
       type: "tool_definition",
       id: skill.Id || ""
     });
-  log("Tool context added to chat context.");
+  log("Контекст инструмента добавлен в чат.");
   return true;
 }
 
@@ -216,7 +221,7 @@ async function addVbaContext() {
       maxChars: Number($("vbaContextLimitInput").value || 30000)
     });
     await syncActiveChatState();
-    log("VBA context added.");
+    log("VBA-контекст добавлен.");
   } finally {
     clearActivity();
   }
@@ -230,7 +235,7 @@ async function toggleVbaContext() {
         await send("removeContextItem", { chatId: state.activeChatId, id: noteId(notes[i]) });
       }
       await syncActiveChatState();
-      log("VBA context removed.");
+      log("VBA-контекст удален.");
       return;
     }
 
@@ -254,8 +259,27 @@ async function removeContextItem(id) {
   }
 }
 
+function setContextManagerOpen(open) {
+  var panel = $("contextManager");
+  var button = $("openContextTabButton");
+  if (!panel) {
+    return;
+  }
+
+  panel.classList.toggle("hidden", !open);
+  if (button) {
+    button.classList.toggle("active", !!open);
+    button.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+}
+
+function toggleContextManager() {
+  var panel = $("contextManager");
+  setContextManagerOpen(panel ? panel.classList.contains("hidden") : true);
+}
+
 function bindContextActions() {
-  $("openContextTabButton").addEventListener("click", function () { switchTab("context"); });
+  $("openContextTabButton").addEventListener("click", toggleContextManager);
   $("addSelectionContextButton").addEventListener("click", function () { addSelectionContext("full"); });
   $("toggleVbaContextButton").addEventListener("click", toggleVbaContext);
   $("clearContextButton").addEventListener("click", async function () {

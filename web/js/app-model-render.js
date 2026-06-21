@@ -31,10 +31,10 @@ function modelOptionTitle(model) {
     parts.push(model.description);
   }
   if (model.maxContextTokens) {
-    parts.push("Context: " + model.maxContextTokens);
+    parts.push("Контекст: " + model.maxContextTokens);
   }
   if (model.maxTokens) {
-    parts.push("Output: " + model.maxTokens);
+    parts.push("Ответ: " + model.maxTokens);
   }
   if (model.temperature !== null && model.temperature !== undefined) {
     parts.push("Temperature: " + model.temperature);
@@ -57,7 +57,7 @@ function populateModelSelect(select, selectedValue) {
   if (selected && !findModel(selected)) {
     var fallback = document.createElement("option");
     fallback.value = selected;
-    fallback.textContent = selected + " (fallback)";
+    fallback.textContent = selected + " (резерв)";
     select.appendChild(fallback);
   }
 
@@ -98,7 +98,7 @@ function populateChatModelSelect(select) {
   if (selected && !findModel(selected)) {
     var fallback = document.createElement("option");
     fallback.value = selected;
-    fallback.textContent = selected + " (chat)";
+    fallback.textContent = selected + " (чат)";
     select.appendChild(fallback);
   }
 
@@ -137,7 +137,7 @@ function renderModelInfo(selectedValue) {
   var title = document.createElement("div");
   title.className = "model-info-title";
   var titleText = document.createElement("span");
-  titleText.textContent = model ? model.title : "Fallback модели по умолчанию";
+  titleText.textContent = model ? model.title : "Резервная модель по умолчанию";
   title.appendChild(titleText);
 
   if (model && state.modelCatalog.defaultModel &&
@@ -176,7 +176,7 @@ function renderModelInfo(selectedValue) {
   if (model.systemPrompt) {
     var prompt = document.createElement("div");
     prompt.className = "model-info-prompt";
-    prompt.textContent = "System prompt: " + model.systemPrompt;
+    prompt.textContent = "Системный промпт: " + model.systemPrompt;
     box.appendChild(prompt);
   }
 }

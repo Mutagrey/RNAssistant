@@ -1,22 +1,48 @@
+.context-manager {
+  order: 2;
+  max-height: min(280px, 38vh);
+  margin-top: 5px;
+  padding-top: 6px;
+  overflow: auto;
+  border-top: 1px solid #eef2f7;
+}
+
+.context-manager.hidden {
+  display: none;
+}
+
+.context-manager-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 30px;
+}
+
 .context-summary {
-  margin-top: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-top: 0;
+  overflow: hidden;
   color: var(--muted);
   font-size: 12px;
+  font-weight: var(--meta-font-weight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .context-list {
   display: grid;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 0;
+  margin-top: 4px;
 }
 
 .context-card {
   display: grid;
-  gap: 7px;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: #fff;
+  gap: 6px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(226, 231, 239, 0.82);
+  background: transparent;
 }
 
 .context-card-head {
@@ -27,14 +53,14 @@
 }
 
 .context-card-head .context-chip-remove {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   margin-right: 0;
-  border-radius: 6px;
+  border-radius: 5px;
 }
 
 .context-card-title {
-  font-weight: 800;
+  font-weight: var(--title-font-weight);
 }
 
 .context-card-meta {
@@ -45,8 +71,9 @@
 .context-card-preview {
   max-height: 180px;
   overflow: auto;
-  padding: 8px;
-  border-radius: 6px;
+  padding: 7px 8px;
+  border: 1px solid rgba(226, 231, 239, 0.72);
+  border-radius: 5px;
   background: var(--code);
   color: var(--code-text);
   font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
@@ -56,12 +83,12 @@
 }
 
 .context-json {
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .context-json summary {
   cursor: pointer;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: var(--label-font-weight);
 }

@@ -25,8 +25,7 @@ function applyPromptSuggestion(text) {
     return;
   }
 
-  input.value = text;
-  input.focus();
+  setChatInputText(text, true);
   renderSendControls();
 }
 

@@ -56,7 +56,7 @@ function renderSelectedVbaModule() {
     type: module.type || module.Type,
     lineCount: module.lineCount || module.LineCount
   }, null, 2) : "";
-  renderVbaDiff({ summary: module ? "Нажмите Diff, чтобы посмотреть изменения." : "Модуль не выбран.", lines: [] });
+  renderVbaDiff({ summary: module ? "Нажмите «Сравнить», чтобы посмотреть изменения." : "Модуль не выбран.", lines: [] });
   updateVbaMacroSuggestion();
 }
 
@@ -127,7 +127,7 @@ function formatVbaDiff(before, after) {
     output.push({ type: "add", text: line });
   });
   if (oldCount > 200 || newCount > 200) {
-    output.push({ type: "note", text: "...diff truncated..." });
+    output.push({ type: "note", text: "...сравнение обрезано..." });
   }
   for (i = oldEnd + 1; i < Math.min(oldLines.length, oldEnd + 4); i += 1) {
     output.push({ type: "context", text: oldLines[i] });
@@ -183,7 +183,7 @@ function previewVbaDiff() {
   }
 
   renderVbaDiff(formatVbaDiff(vbaModuleCode(module), vbaEditorCode()));
-  $("vbaStatus").textContent = "Diff готов.";
+  $("vbaStatus").textContent = "Сравнение готово.";
 }
 
 async function withVbaActivity(message, work) {
@@ -206,7 +206,7 @@ function readVbaResult(response) {
   var data = dataJson ? JSON.parse(dataJson) : {};
   state.vba.modules = data.modules || data.Modules || [];
   state.vba.backups = response.backups || response.Backups || [];
-  $("vbaStatus").textContent = result.Message || result.message || "VBA project loaded.";
+  $("vbaStatus").textContent = result.Message || result.message || "VBA-проект загружен.";
   renderVbaProject();
   updateVbaMacroRunState();
 }
@@ -225,9 +225,9 @@ async function saveVbaModule() {
   }
 
   previewVbaDiff();
-  if (await withVbaActivity("Сохраняю VBA module...", async function () {
+  if (await withVbaActivity("Сохраняю VBA-модуль...", async function () {
     var response = await send("saveVbaModule", { moduleName: moduleName, code: vbaEditorCode() });
-    $("vbaStatus").textContent = response.Message || response.message || "VBA module saved.";
+    $("vbaStatus").textContent = response.Message || response.message || "VBA-модуль сохранен.";
   })) {
     await refreshVbaProject();
   }
@@ -236,9 +236,9 @@ async function saveVbaModule() {
 async function restoreVbaBackup() {
   var backupId = $("vbaBackupSelect").value;
   var moduleName = $("vbaModuleSelect").value;
-  if (await withVbaActivity("Восстанавливаю VBA backup...", async function () {
+  if (await withVbaActivity("Восстанавливаю резервную копию VBA...", async function () {
     var response = await send("restoreVbaBackup", { backupId: backupId, moduleName: moduleName });
-    $("vbaStatus").textContent = response.Message || response.message || "VBA backup restored.";
+    $("vbaStatus").textContent = response.Message || response.message || "Резервная копия VBA восстановлена.";
   })) {
     await refreshVbaProject();
   }
@@ -247,9 +247,8 @@ async function restoreVbaBackup() {
 function reviewVbaInChat() {
   var patchTool = (state.host || "excel").toLowerCase() + ".vba_apply_patch";
   ensureVbaContextAttached().then(function () {
-    $("chatInput").value = "Проверь VBA код из добавленного контекста: найди ошибки, риски и места для улучшения. Если нужны небольшие правки, используй " + patchTool + "; полную замену модуля предлагай только когда это реально нужно.";
     switchTab("chat");
-    $("chatInput").focus();
+    setChatInputText("Проверь VBA код из добавленного контекста: найди ошибки, риски и места для улучшения. Если нужны небольшие правки, используй " + patchTool + "; полную замену модуля предлагай только когда это реально нужно.", true);
   }).catch(function (error) {
     log(error.detail || error.message);
   });
@@ -293,7 +292,7 @@ function updateVbaMacroRunState() {
   var macroName = input.value.trim() || input.getAttribute("data-suggested") || "";
   button.disabled = !supported || !macroName;
   if (!supported) {
-    setVbaMacroStatus("Запуск macro доступен для Excel, Word и PowerPoint.", "muted");
+    setVbaMacroStatus("Запуск макросов доступен для Excel, Word и PowerPoint.", "muted");
   }
 }
 
@@ -318,15 +317,15 @@ async function runVbaMacro() {
   var input = $("vbaMacroInput");
   var macroName = (input.value || "").trim() || input.getAttribute("data-suggested") || "";
   if (!toolId) {
-    setVbaMacroStatus("Текущий host не поддерживает run_macro.", "error");
+    setVbaMacroStatus("Текущее приложение не поддерживает запуск макросов.", "error");
     return;
   }
   if (!macroName) {
-    setVbaMacroStatus("Введите имя macro.", "error");
+    setVbaMacroStatus("Введите имя макроса.", "error");
     return;
   }
 
-  setActivity("vba", "Запускаю macro...");
+  setActivity("vba", "Запускаю макрос...");
   $("runVbaMacroButton").disabled = true;
   try {
     var response = await send("runTool", {
@@ -334,8 +333,8 @@ async function runVbaMacro() {
       arguments: { macroName: macroName },
       dryRun: false
     });
-    setVbaMacroStatus(response.Message || response.message || "Macro выполнен: " + macroName, "ok");
-    logToolResult("Macro run", toolId, response);
+    setVbaMacroStatus(response.Message || response.message || "Макрос выполнен: " + macroName, "ok");
+    logToolResult("Запуск макроса", toolId, response);
   } catch (error) {
     setVbaMacroStatus(error.detail || error.message, "error");
     log(error.detail || error.message);

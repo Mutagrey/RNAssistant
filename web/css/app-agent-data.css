@@ -2,7 +2,7 @@
 .agent-data > summary {
   cursor: pointer;
   color: #344054;
-  font-weight: 700;
+  font-weight: var(--label-font-weight);
 }
 
 .agent-json {
@@ -35,18 +35,19 @@
   align-items: center;
   min-height: 22px;
   padding: 3px 7px;
-  border: 1px solid #d8e1ee;
+  border: 1px solid var(--button-border);
   border-radius: 999px;
-  background: #fff;
-  color: #344054;
+  background: var(--button-bg);
+  color: var(--button-text);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: var(--button-font-weight);
 }
 
 .agent-copy-button:hover,
 .agent-table-toggle:hover {
-  background: #eef4ff;
-  color: var(--accent);
+  border-color: var(--button-border-hover);
+  background: var(--button-bg-hover);
+  color: var(--button-text);
 }
 
 .agent-input-chips {
@@ -83,7 +84,7 @@
   overflow: hidden;
   color: #667085;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: var(--label-font-weight);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -152,7 +153,7 @@
   background: #f1f5f9;
   color: #475467;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: var(--label-font-weight);
 }
 
 .agent-data-table tbody tr:nth-child(even) {

@@ -158,10 +158,17 @@
   display: inline-flex;
   gap: 5px;
   align-items: center;
+  border-color: var(--button-border);
   padding: 4px 7px;
-  background: #e8edf5;
-  color: #243044;
+  background: var(--button-bg);
+  color: var(--button-text);
   font-size: 12px;
+}
+
+.block-tool-button:hover {
+  border-color: var(--button-border-hover);
+  background: var(--button-bg-hover);
+  color: var(--button-text);
 }
 
 .block-tool-button svg {

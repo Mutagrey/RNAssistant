@@ -197,7 +197,7 @@ async function initialize() {
 }
 
 async function clearRuntimeData() {
-  if (!window.confirm("Удалить локальные чаты, контекст чатов, VBA backups и WebView cache RNAssistant? Настройки, API key, custom tools и skills останутся.")) {
+  if (!window.confirm("Удалить локальные чаты, контекст чатов, резервные копии VBA и кеш WebView RNAssistant? Настройки, API-ключ, пользовательские инструменты и навыки останутся.")) {
     return;
   }
 
@@ -232,7 +232,7 @@ function renderSendControls() {
     stopButton.disabled = isCanceling;
   }
   if (stopText) {
-    stopText.textContent = isCanceling ? "Canceling" : "Stop";
+    stopText.textContent = isCanceling ? "Отмена" : "Стоп";
   }
   if (input) {
     input.readOnly = isSending;
@@ -242,6 +242,34 @@ function renderSendControls() {
   }
   if (modelSelect) {
     modelSelect.disabled = isSending || state.modelCatalog.loading || state.modelSaving || !state.activeChatId;
+  }
+  updateComposerInputState();
+}
+
+function updateComposerInputState() {
+  var input = $("chatInput");
+  var form = $("chatForm");
+  var clearButton = $("clearInputButton");
+  var hasText = !!(input && input.value.trim());
+
+  if (form) {
+    form.classList.toggle("has-input", hasText);
+  }
+  if (clearButton) {
+    clearButton.hidden = !hasText;
+  }
+}
+
+function setChatInputText(text, shouldFocus) {
+  var input = $("chatInput");
+  if (!input) {
+    return;
+  }
+
+  input.value = text || "";
+  updateComposerInputState();
+  if (shouldFocus) {
+    input.focus();
   }
 }
 
@@ -272,7 +300,7 @@ async function sendChat(text) {
     if (error.cancelled) {
       removeLocalMessage(text);
       if (!$("chatInput").value.trim()) {
-        $("chatInput").value = text;
+        setChatInputText(text, false);
       }
       updateEstimatedContextUsage();
       renderChatSessions();
@@ -310,7 +338,7 @@ function submitChatInput() {
     return;
   }
 
-  $("chatInput").value = "";
+  setChatInputText("", false);
   clearSendError();
   state.messages.push({ Id: "local-" + Date.now(), Role: "user", Content: text, Local: true, Pending: true });
   updateEstimatedContextUsage();
@@ -387,10 +415,13 @@ async function runQuickAction(action) {
     return;
   }
   if (response.prompt === "/open-context") {
-    switchTab("context");
+    switchTab("chat");
+    if (typeof setContextManagerOpen === "function") {
+      setContextManagerOpen(true);
+    }
     return;
   }
-  $("chatInput").value = response.prompt || "";
+  setChatInputText(response.prompt || "", false);
   switchTab("chat");
 }
 
@@ -403,7 +434,8 @@ function bindChatActions() {
   $("deleteChatButton").addEventListener("click", deleteChat);
   $("retrySendButton").addEventListener("click", retryFailedSend);
   $("stopButton").addEventListener("click", stopActiveSend);
-  $("clearInputButton").addEventListener("click", function () { $("chatInput").value = ""; });
+  $("clearInputButton").addEventListener("click", function () { setChatInputText("", true); });
+  $("chatInput").addEventListener("input", updateComposerInputState);
   $("chatInput").addEventListener("keydown", function (event) {
     if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
       event.preventDefault();
@@ -414,4 +446,5 @@ function bindChatActions() {
     event.preventDefault();
     submitChatInput();
   });
+  updateComposerInputState();
 }

@@ -3,6 +3,10 @@
     padding: 10px;
   }
 
+  .panel-head {
+    gap: 6px;
+  }
+
   .composer-toolbar {
     align-items: center;
     flex-direction: row;
@@ -12,27 +16,27 @@
 
   .composer-toolbar #addSelectionContextButton,
   .composer-toolbar #toggleVbaContextButton {
-    flex: 1 1 calc(50% - 3px);
+    flex: 0 0 auto;
     width: auto;
     margin-right: 0;
   }
 
   .composer-left {
-    flex: 1 1 100%;
-    width: 100%;
-    flex-wrap: wrap;
-    gap: 6px;
+    flex: 1 1 150px;
+    width: auto;
+    flex-wrap: nowrap;
+    gap: 4px;
   }
 
   .context-meter {
-    flex: 1 1 100%;
-    grid-template-columns: auto auto 1fr;
+    flex: 0 0 68px;
+    grid-template-columns: auto minmax(24px, 1fr);
   }
 
   .composer-model {
-    flex: 1 1 100%;
-    min-width: 0;
-    max-width: none;
+    flex: 0 1 132px;
+    min-width: 86px;
+    max-width: 150px;
   }
 
   .context-meter em {
@@ -48,33 +52,16 @@
     max-width: 92%;
   }
 
-  .tool-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .splitter {
-    display: none;
-  }
-
-  .vba-layout {
-    grid-template-columns: 1fr;
-  }
-
   .vba-code-pane {
     grid-template-columns: 1fr;
   }
 
-  .vba-commandbar .toolbar-spacer {
-    display: none;
-  }
-
   .vba-commandbar {
-    align-items: stretch;
+    align-items: center;
   }
 
-  .vba-commandbar > button,
-  .vba-commandbar > .toolbar-menu {
-    flex: 1 1 auto;
+  .vba-commandbar > .action-group {
+    flex: 0 1 auto;
   }
 
   .inline-field,
@@ -87,8 +74,28 @@
     flex-direction: column;
   }
 
+}
+
+@media (max-width: 760px) {
+  .tool-layout,
+  .vba-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .splitter {
+    display: none;
+  }
+
+  .tool-form {
+    grid-template-columns: 1fr;
+  }
+
   .tool-list {
     max-height: 180px;
+  }
+
+  .tool-editor-actions {
+    align-items: stretch;
   }
 }
 
@@ -122,26 +129,44 @@
     padding: 8px;
   }
 
+  .panel-actions {
+    justify-content: flex-end;
+    width: auto;
+    margin-left: auto;
+  }
+
   .toolbar {
     gap: 6px;
   }
 
+  .action-group {
+    gap: 5px;
+  }
+
+  .panel-actions > .action-group + .action-group,
+  .toolbar > .action-group + .action-group {
+    padding-left: 0;
+    border-left: 0;
+  }
+
   .toolbar button,
+  .panel-actions button,
   .toolbar-menu summary {
-    min-height: 32px;
-    padding: 6px 9px;
+    min-height: 30px;
+    padding: 0 9px;
     font-size: 12px;
   }
 
-  .toolbar button {
-    flex: 1 1 auto;
+  .toolbar button,
+  .panel-actions button {
+    flex: 0 1 auto;
   }
 
   .toolbar-menu {
     flex: 0 0 auto;
   }
 
-  .vba-commandbar > .toolbar-menu {
+  .vba-commandbar .toolbar-menu {
     flex: 1 1 auto;
   }
 
@@ -167,8 +192,34 @@
     padding-top: 5px;
   }
 
+  .composer-left {
+    flex: 1 1 100%;
+  }
+
+  .composer-actions {
+    margin-left: auto;
+  }
+
+  .composer-toolbar #addSelectionContextButton,
+  .composer-toolbar #toggleVbaContextButton {
+    flex: 0 0 auto;
+  }
+
   .composer textarea {
     min-height: 58px;
+  }
+
+  .context-strip {
+    align-items: center;
+    flex-direction: row;
+  }
+
+  .context-strip-head {
+    justify-content: space-between;
+  }
+
+  .context-chips {
+    width: auto;
   }
 
   .chat-empty {
@@ -211,7 +262,11 @@
   .tool-editor,
   .vba-sidebar,
   .vba-editor {
-    padding: 10px;
+    padding: 0;
+  }
+
+  .tool-editor {
+    padding: 0;
   }
 
   .rn-code-editor-vbaCodeInput,

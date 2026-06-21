@@ -302,12 +302,12 @@ function appendArgumentsData(parent, text) {
   var details = document.createElement("details");
   details.className = "agent-data agent-arguments";
   var summary = document.createElement("summary");
-  summary.textContent = "Arguments";
+  summary.textContent = "Аргументы";
   details.appendChild(summary);
 
   var actions = document.createElement("div");
   actions.className = "agent-detail-actions";
-  actions.appendChild(createAgentCopyButton("Copy args", prettyJsonText(text)));
+  actions.appendChild(createAgentCopyButton("Копировать аргументы", prettyJsonText(text)));
   details.appendChild(actions);
 
   var view = document.createElement("div");
@@ -315,7 +315,7 @@ function appendArgumentsData(parent, text) {
   view.appendChild(renderArgumentChips(parsed.value));
   details.appendChild(view);
 
-  appendRawJson(details, "Raw JSON", text, false);
+  appendRawJson(details, "Исходный JSON", text, false);
   parent.appendChild(details);
 }
 
@@ -338,7 +338,7 @@ function appendActivityData(parent, label, text, copyLabel) {
 
   var actions = document.createElement("div");
   actions.className = "agent-detail-actions";
-  actions.appendChild(createAgentCopyButton(copyLabel || "Copy result", prettyJsonText(text)));
+  actions.appendChild(createAgentCopyButton(copyLabel || "Копировать результат", prettyJsonText(text)));
   details.appendChild(actions);
 
   var view = document.createElement("div");
@@ -346,6 +346,6 @@ function appendActivityData(parent, label, text, copyLabel) {
   view.appendChild(renderJsonValue(parsed.value, 0));
   details.appendChild(view);
 
-  appendRawJson(details, "Raw JSON", text, false);
+  appendRawJson(details, "Исходный JSON", text, false);
   parent.appendChild(details);
 }

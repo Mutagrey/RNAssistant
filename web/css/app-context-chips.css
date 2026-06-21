@@ -1,9 +1,13 @@
 .context-strip {
-  margin-bottom: 8px;
-  padding: 8px;
-  border: 1px solid #d8e1ee;
-  border-radius: var(--radius);
-  background: #fff;
+  display: flex;
+  order: 2;
+  gap: 5px;
+  align-items: center;
+  min-width: 0;
+  margin: 4px 0 0;
+  padding: 4px 0 0;
+  border-top: 1px solid #eef2f7;
+  background: transparent;
 }
 
 .context-strip.hidden {
@@ -12,21 +16,57 @@
 
 .context-strip-head {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 6px;
+  gap: 4px;
+  margin-bottom: 0;
   color: var(--muted);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: var(--label-font-weight);
   letter-spacing: 0;
   text-transform: uppercase;
 }
 
+.context-manage-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #6b7482;
+}
+
+.context-manage-button:hover {
+  border-color: var(--button-border);
+  background: var(--button-bg);
+  color: var(--text);
+}
+
+.context-manage-button.active {
+  border-color: var(--button-accent-border);
+  background: var(--button-accent-bg);
+  color: var(--accent);
+}
+
+.context-manage-button svg {
+  width: 15px;
+  height: 15px;
+}
+
 .context-chips {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 1px;
+  scrollbar-width: thin;
 }
 
 .context-chip {
@@ -35,51 +75,58 @@
   align-items: center;
   min-width: 0;
   max-width: 100%;
-  border: 1px solid #cbd9ee;
+  border: 1px solid #e1e7f0;
   border-radius: 999px;
-  background: #f6f9ff;
-  color: #243044;
+  background: transparent;
+  color: #344054;
 }
 
 .context-chip-main {
   display: inline-flex;
-  gap: 6px;
+  gap: 5px;
   align-items: center;
   min-width: 0;
-  padding: 5px 4px 5px 8px;
+  padding: 3px 2px 3px 7px;
 }
 
 .context-chip-badge {
   flex: none;
-  color: var(--accent);
+  color: #667085;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: var(--label-font-weight);
 }
 
 .context-chip-title {
   overflow: hidden;
-  max-width: 260px;
+  max-width: 150px;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 11.5px;
+  font-weight: var(--label-font-weight);
 }
 
 .context-chip-remove {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  margin-right: 3px;
+  width: 19px;
+  height: 19px;
+  margin-right: 2px;
   padding: 0;
+  border: 0;
   border-radius: 50%;
   background: transparent;
   color: #667085;
 }
 
 .context-chip-remove:hover {
-  background: #e5edf8;
+  border-color: transparent;
+  background: var(--button-bg-hover);
+  color: var(--text);
+}
+
+.context-chip-remove:hover {
+  background: #f1f5f9;
   color: var(--danger);
 }
 
@@ -105,7 +152,7 @@
 
 .context-popover-title {
   margin-bottom: 4px;
-  font-weight: 800;
+  font-weight: var(--title-font-weight);
 }
 
 .context-popover-meta {

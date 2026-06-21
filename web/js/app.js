@@ -27,6 +27,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
   $("helpButton").addEventListener("click", showHelp);
   $("closeHelpButton").addEventListener("click", hideHelp);
+  $("clearLogButton").addEventListener("click", function () {
+    $("logBox").textContent = "";
+  });
   $("helpModal").addEventListener("click", function (event) {
     if (event.target === $("helpModal")) {
       hideHelp();

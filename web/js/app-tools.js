@@ -1,44 +1,20 @@
 function renderTools() {
-  var list = $("toolsList");
-  var query = (($("toolSearchInput") && $("toolSearchInput").value) || "").trim().toLowerCase();
-  list.innerHTML = "";
-  if (!state.tools.length) {
-    state.selectedToolIndex = -1;
-    list.appendChild(createToolEmptyState("Tools пока не загружены."));
-    renderToolEditor();
-    return;
-  }
-
-  if (state.selectedToolIndex < 0 || state.selectedToolIndex >= state.tools.length) {
-    state.selectedToolIndex = 0;
-  }
-
-  var rendered = 0;
-  state.tools.forEach(function (skill, index) {
-    if (query && !toolMatchesSearch(skill, query)) {
-      return;
-    }
-
-    var item = document.createElement("button");
-    item.type = "button";
-    item.className = "tool-list-item" + (index === state.selectedToolIndex ? " active" : "");
-    item.innerHTML = "<div class=\"tool-list-title\"></div><div class=\"tool-list-meta\"></div>";
-    item.querySelector(".tool-list-title").textContent = skill.Id || skill.Name || "tool";
-    item.querySelector(".tool-list-meta").textContent = (skill.Host || "Common") + " - " + (skill.Executor || (skill.BuiltIn ? "builtin" : "pipeline"));
-    item.addEventListener("click", function () {
-      syncSelectedToolFromEditor();
-      state.selectedToolIndex = index;
-      renderTools();
-    });
-    list.appendChild(item);
-    rendered += 1;
+  renderResourceList({
+    listId: "toolsList",
+    searchInputId: "toolSearchInput",
+    items: state.tools,
+    emptyText: "Инструменты пока не загружены.",
+    getSelectedIndex: function () { return state.selectedToolIndex; },
+    setSelectedIndex: function (index) { state.selectedToolIndex = index; },
+    matches: toolMatchesSearch,
+    title: function (tool) { return tool.Id || tool.Name || "инструмент"; },
+    enabled: function (tool) { return tool.Enabled !== false; },
+    meta: function (tool) { return (tool.Host || "Common") + " - " + (tool.Executor || (tool.BuiltIn ? "builtin" : "pipeline")); },
+    description: function (tool) { return tool.Description || (tool.BuiltIn ? "Встроенный Office-инструмент" : "Пользовательский инструмент"); },
+    syncEditor: syncSelectedToolFromEditor,
+    renderEditor: renderToolEditor,
+    renderList: renderTools
   });
-
-  if (!rendered) {
-    list.appendChild(createToolEmptyState("Ничего не найдено."));
-  }
-
-  renderToolEditor();
 }
 
 function toolMatchesSearch(skill, query) {
@@ -52,19 +28,10 @@ function toolMatchesSearch(skill, query) {
   return text.indexOf(query) >= 0;
 }
 
-function createToolEmptyState(text) {
-  var node = document.createElement("div");
-  node.className = "tool-list-empty";
-  node.textContent = text;
-  return node;
-}
-
 function renderToolEditor() {
   var skill = state.tools[state.selectedToolIndex] || null;
   var disabled = !skill;
   var builtIn = !!(skill && skill.BuiltIn);
-  $("toolEditorTitle").textContent = skill ? (skill.Id || "tool") : "Tool не выбран";
-  $("toolEditorMeta").textContent = skill ? (builtIn ? "Встроенный tool" : (skill.StoragePath || "Custom tool")) : "Выберите tool из списка или создайте новый.";
   $("toolEnabledInput").checked = skill ? skill.Enabled !== false : false;
   $("toolIdInput").value = skill ? (skill.Id || "") : "";
   $("toolHostInput").value = skill ? (skill.Host || "Common") : "Common";
@@ -216,8 +183,8 @@ async function runSelectedTool(dryRun) {
     return;
   }
 
-  setActivity(dryRun ? "checking" : "executing", dryRun ? "Проверяю tool..." : "Исполняю tool...");
-  $("toolRunOutput").textContent = dryRun ? "Dry run..." : "Выполняю...";
+  setActivity(dryRun ? "checking" : "executing", dryRun ? "Проверяю инструмент..." : "Запускаю инструмент...");
+  $("toolRunOutput").textContent = dryRun ? "Проверка..." : "Выполняю...";
   try {
     var response = await send("runTool", {
       toolId: skill.Id,
@@ -225,7 +192,7 @@ async function runSelectedTool(dryRun) {
       dryRun: !!dryRun
     });
     $("toolRunOutput").textContent = JSON.stringify(response, null, 2);
-    logToolResult(dryRun ? "Dry run" : "Tool run", skill.Id, response);
+    logToolResult(dryRun ? "Проверка инструмента" : "Запуск инструмента", skill.Id, response);
   } catch (error) {
     $("toolRunOutput").textContent = error.detail || error.message;
     log(error.message);
@@ -288,7 +255,7 @@ function bindToolActions() {
       var response = await send("saveTools", { tools: readTools() });
       state.tools = response || [];
       renderTools();
-      log("Tools saved.");
+      log("Инструменты сохранены.");
     } catch (error) {
       log(error.message);
     }
@@ -317,7 +284,7 @@ function bindToolActions() {
 
   $("copyToolContextButton").addEventListener("click", function () {
     copyText(selectedToolContext());
-    log("Tool context copied.");
+    log("Контекст инструмента скопирован.");
   });
 
   $("askToolBuilderButton").addEventListener("click", function () {
@@ -326,9 +293,8 @@ function bindToolActions() {
         return;
       }
 
-      $("chatInput").value = "Отредактируй RNAssistant tool из добавленного контекста. Верни обновленные tool.json/pipeline/code блоки, не выполняй действия без подтверждения.";
       switchTab("chat");
-      $("chatInput").focus();
+      setChatInputText("Отредактируй RNAssistant-инструмент из добавленного контекста. Верни обновленные tool.json/pipeline/code блоки, не выполняй действия без подтверждения.", true);
     }).catch(function (error) {
       log(error.detail || error.message);
     });

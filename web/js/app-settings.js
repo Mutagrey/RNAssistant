@@ -1,3 +1,5 @@
+var settingsDirty = false;
+
 function clampUiFontScale(value) {
   value = Number(value || 1);
   if (!isFinite(value) || value <= 0) {
@@ -39,6 +41,8 @@ function renderSettings() {
   $("agentPromptInput").value = s.AgentPrompt || s.agentPrompt || "";
   $("headersInput").value = headersToText(s.CustomHeaders || s.customHeaders || {});
   renderModelControls();
+  settingsDirty = false;
+  updateSettingsSaveButton();
 }
 
 function readSettings() {
@@ -79,6 +83,7 @@ function bindSettingsActions() {
       Array.prototype.slice.call(document.querySelectorAll(".settings-page")).forEach(function (item) {
         item.classList.toggle("active", item.getAttribute("data-settings-page") === page);
       });
+      updateSettingsSaveButton();
     });
   });
 
@@ -86,8 +91,17 @@ function bindSettingsActions() {
     applyUiFontScale({ UiFontScale: Number($("uiFontScaleInput").value || 100) / 100 });
   });
 
+  Array.prototype.slice.call(document.querySelectorAll("#tab-settings input, #tab-settings textarea, #tab-settings select")).forEach(function (control) {
+    control.addEventListener(control.type === "checkbox" || control.tagName === "SELECT" ? "change" : "input", function () {
+      settingsDirty = true;
+      updateSettingsSaveButton();
+    });
+  });
+
   $("saveSettingsButton").addEventListener("click", async function () {
+    var button = $("saveSettingsButton");
     try {
+      button.disabled = true;
       var apiKey = $("apiKeyInput").value;
       var response = await send("saveSettings", { settings: readSettings(), apiKey: apiKey || null });
       state.settings = response.settings;
@@ -96,10 +110,30 @@ function bindSettingsActions() {
       updateEstimatedContextUsage();
       renderContextMeter();
       await loadModelCatalog(false);
-      log("Settings saved.");
+      log("Настройки сохранены.");
     } catch (error) {
+      settingsDirty = true;
+      updateSettingsSaveButton();
       log(error.message);
     }
   });
   $("clearRuntimeDataButton").addEventListener("click", clearRuntimeData);
+}
+
+function activeSettingsPage() {
+  var active = document.querySelector(".settings-nav-button.active");
+  return active ? active.getAttribute("data-settings-page") : "connection";
+}
+
+function updateSettingsSaveButton() {
+  var row = document.querySelector(".settings-actions-row");
+  var button = $("saveSettingsButton");
+  var visible = !!settingsDirty && activeSettingsPage() !== "service";
+  if (!row || !button) {
+    return;
+  }
+
+  row.hidden = !visible;
+  button.hidden = !visible;
+  button.disabled = !visible;
 }
