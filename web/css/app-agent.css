@@ -7,11 +7,12 @@
 }
 
 .agent-run-wrap {
-  padding: 7px 8px;
+  max-width: min(94%, 820px);
+  padding: 9px 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #fff;
-  box-shadow: 0 1px 2px rgba(16, 24, 39, 0.04);
+  box-shadow: 0 1px 2px rgba(16, 24, 39, 0.035);
 }
 
 .agent-run.status-running .agent-run-wrap {
@@ -34,15 +35,20 @@
   gap: 8px;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #edf1f7;
+  margin-bottom: 7px;
 }
 
 .agent-run-summary {
   display: grid;
   min-width: 0;
-  gap: 2px;
+  gap: 3px;
+}
+
+.agent-run-title-row {
+  display: flex;
+  min-width: 0;
+  gap: 7px;
+  align-items: center;
 }
 
 .agent-run-title {
@@ -53,6 +59,57 @@
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.agent-run-status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 18px;
+  padding: 1px 7px;
+  border: 1px solid #d8e1ee;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475467;
+  font-size: 10px;
+  font-weight: var(--label-font-weight);
+  line-height: 1.2;
+}
+
+.agent-run-status-completed {
+  border-color: #bfe8d2;
+  background: #effaf4;
+  color: #067647;
+}
+
+.agent-run-status-running {
+  border-color: #b9d8ff;
+  background: #eff7ff;
+  color: #175cd3;
+}
+
+.agent-run-status-waiting {
+  border-color: #fedf89;
+  background: #fffaeb;
+  color: #b54708;
+}
+
+.agent-run-status-planned {
+  border-color: #fedf89;
+  background: #fffaeb;
+  color: #b54708;
+}
+
+.agent-run-status-failed {
+  border-color: #f1b8b1;
+  background: #fff1f0;
+  color: #b42318;
+}
+
+.agent-run-status-cancelled {
+  border-color: #d0d5dd;
+  background: #f9fafb;
+  color: #475467;
 }
 
 .agent-run-current {
@@ -73,21 +130,137 @@
   white-space: nowrap;
 }
 
+.agent-run-preview {
+  position: relative;
+  display: grid;
+  gap: 5px;
+  margin-top: 4px;
+  padding: 2px 0 2px 1px;
+}
+
+.agent-step-summary {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  min-width: 0;
+}
+
+.agent-step-mark {
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: #98a2b3;
+  box-shadow: 0 0 0 3px #eef2f7;
+}
+
+.agent-step-summary.status-running .agent-step-mark {
+  background: #2e90fa;
+  box-shadow: 0 0 0 3px #d7ebff;
+}
+
+.agent-step-summary.status-completed .agent-step-mark {
+  background: #12b76a;
+  box-shadow: 0 0 0 3px #dff8eb;
+}
+
+.agent-step-summary.status-failed .agent-step-mark {
+  background: #d92d20;
+  box-shadow: 0 0 0 3px #fee4e2;
+}
+
+.agent-step-summary.status-waiting .agent-step-mark,
+.agent-step-summary.status-planned .agent-step-mark {
+  background: #f79009;
+  box-shadow: 0 0 0 3px #fef0c7;
+}
+
+.agent-step-summary.current .agent-step-title {
+  color: #175cd3;
+}
+
+.agent-step-text {
+  min-width: 0;
+}
+
+.agent-step-title {
+  overflow: hidden;
+  color: #1f2937;
+  font-size: 12px;
+  font-weight: var(--label-font-weight);
+  line-height: 1.28;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-step-meta {
+  overflow: hidden;
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-run-more {
+  margin-left: 20px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--meta-font-weight);
+}
+
+.agent-run-details {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.agent-run-details > summary {
+  display: inline-flex;
+  cursor: pointer;
+  color: #344054;
+  font-size: 11px;
+  font-weight: var(--button-font-weight);
+}
+
 .agent-run-steps {
   position: relative;
   display: grid;
   gap: 4px;
+  margin-top: 6px;
+  padding-top: 2px;
 }
 
 .agent-run-steps::before {
   position: absolute;
-  top: 9px;
+  top: 11px;
   bottom: 9px;
   left: 4px;
   width: 2px;
   border-radius: 999px;
   background: #e3e9f2;
   content: "";
+}
+
+.agent-run-final {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid #edf1f7;
+}
+
+.message.assistant .agent-run-final.markdown {
+  max-width: none;
+  padding-right: 0;
+  padding-bottom: 0;
+  padding-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .agent-live .agent-activity-wrap {

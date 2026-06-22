@@ -244,6 +244,9 @@ function agentRunStats(items) {
   if (counts.waiting) {
     parts.push(counts.waiting + " waiting");
   }
+  if (counts.planned) {
+    parts.push(counts.planned + " planned");
+  }
   if (elapsed) {
     parts.push("elapsed " + elapsed);
   }
@@ -259,7 +262,7 @@ function agentRunStats(items) {
     current: current,
     counts: counts,
     elapsed: elapsed,
-    status: counts.failed ? "failed" : (counts.running ? "running" : (counts.waiting ? "waiting" : (counts.cancelled ? "cancelled" : "completed")))
+    status: counts.failed ? "failed" : (counts.running ? "running" : (counts.waiting ? "waiting" : (counts.cancelled ? "cancelled" : (counts.planned && counts.planned === counts.total ? "planned" : "completed"))))
   };
 }
 
@@ -272,6 +275,15 @@ function isAgentRunContinuation(message) {
   return messageRole(message) === "assistant" && (kind === "tool" || kind === "retry");
 }
 
+function isAgentRunFinalMessage(message) {
+  return messageRole(message) === "assistant"
+    && !messageActivity(message)
+    && !message.Pending
+    && !message.Failed
+    && !message.Local
+    && !!messageContent(message).trim();
+}
+
 function collectAgentRun(startIndex) {
   var items = [{ message: state.messages[startIndex], index: startIndex, activity: messageActivity(state.messages[startIndex]) }];
   var index = startIndex + 1;
@@ -279,7 +291,14 @@ function collectAgentRun(startIndex) {
     items.push({ message: state.messages[index], index: index, activity: messageActivity(state.messages[index]) });
     index += 1;
   }
-  return { items: items, nextIndex: index };
+
+  var finalMessage = null;
+  if (index < state.messages.length && isAgentRunFinalMessage(state.messages[index])) {
+    finalMessage = { message: state.messages[index], index: index };
+    index += 1;
+  }
+
+  return { items: items, finalMessage: finalMessage, nextIndex: index };
 }
 
 function agentRunText(items) {
