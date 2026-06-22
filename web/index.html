@@ -150,8 +150,14 @@
             <div class="tool-list-status" id="toolsPath"></div>
             <div class="tool-list-controls">
               <div class="tool-list-actions">
-                <button class="secondary" id="addToolButton" type="button">Новый инструмент</button>
-                <button class="secondary" id="cloneToolButton" type="button">Дублировать</button>
+                <button class="secondary icon-text-button" id="addToolButton" type="button" title="Новый инструмент">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                  <span>Новый</span>
+                </button>
+                <button class="secondary icon-text-button" id="cloneToolButton" type="button" title="Создать копию инструмента">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  <span>Копия</span>
+                </button>
               </div>
               <input class="tool-search" id="toolSearchInput" placeholder="Поиск инструментов..." autocomplete="off">
             </div>
@@ -206,8 +212,14 @@
             <div class="tool-list-status" id="skillsPath"></div>
             <div class="tool-list-controls">
               <div class="tool-list-actions">
-                <button class="secondary" id="addSkillButton" type="button">Новый навык</button>
-                <button class="secondary" id="cloneSkillButton" type="button">Дублировать</button>
+                <button class="secondary icon-text-button" id="addSkillButton" type="button" title="Новый навык">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                  <span>Новый</span>
+                </button>
+                <button class="secondary icon-text-button" id="cloneSkillButton" type="button" title="Создать копию навыка">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  <span>Копия</span>
+                </button>
               </div>
               <input class="tool-search" id="skillSearchInput" placeholder="Поиск навыков..." autocomplete="off">
             </div>
