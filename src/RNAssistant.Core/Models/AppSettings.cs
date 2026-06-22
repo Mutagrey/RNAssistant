@@ -26,6 +26,7 @@ namespace RNAssistant.Core.Models
         public int MaxAgentToolSteps { get; set; }
         public bool? RequireVerificationForMutations { get; set; }
         public bool? AutoContinueAfterConfirmation { get; set; }
+        public bool AllowUnsafeHtmlArtifacts { get; set; }
         public double UiFontScale { get; set; }
         public Dictionary<string, string> CustomHeaders { get; set; }
 
@@ -52,6 +53,7 @@ namespace RNAssistant.Core.Models
             MaxAgentToolSteps = 40;
             RequireVerificationForMutations = true;
             AutoContinueAfterConfirmation = true;
+            AllowUnsafeHtmlArtifacts = false;
             UiFontScale = 1.0;
             CustomHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }

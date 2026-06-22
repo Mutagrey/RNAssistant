@@ -1,0 +1,51 @@
+.html-artifact {
+  margin-top: 8px;
+  border: 1px solid #d8e1ee;
+  border-radius: 8px;
+  background: #fbfdff;
+  overflow: hidden;
+}
+
+.html-artifact-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e3e9f2;
+}
+
+.html-artifact-title {
+  min-width: 0;
+  overflow: hidden;
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.html-artifact-badge {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border: 1px solid #f4b4b4;
+  border-radius: 999px;
+  background: #fff7f7;
+  color: #b42318;
+  font-size: 10px;
+  font-weight: var(--label-font-weight);
+}
+
+.html-artifact-blocked {
+  padding: 10px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.html-artifact-frame {
+  display: block;
+  width: 100%;
+  min-height: 180px;
+  border: 0;
+  background: #fff;
+}

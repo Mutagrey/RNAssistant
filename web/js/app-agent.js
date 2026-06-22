@@ -46,6 +46,12 @@ function renderActivityNode(activity, nested, current, context) {
       node.appendChild(chart);
     }
   }
+  if (typeof tryRenderHtmlArtifact === "function") {
+    var html = tryRenderHtmlArtifact(activity, context || {});
+    if (html) {
+      node.appendChild(html);
+    }
+  }
   appendActivityDetails(node, activity);
   return node;
 }

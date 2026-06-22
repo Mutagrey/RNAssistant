@@ -15,6 +15,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("payload")]
         public JToken Payload { get; set; }
+
+        [JsonProperty("bridgeToken")]
+        public string BridgeToken { get; set; }
     }
 
     public sealed class FocusStateMessage
@@ -355,6 +358,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("quickAction")]
         public string QuickAction { get; set; }
+
+        [JsonProperty("bridgeToken")]
+        public string BridgeToken { get; set; }
     }
 
     public sealed class SendChatResponse : ChatStateResponse

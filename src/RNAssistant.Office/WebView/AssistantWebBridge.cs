@@ -16,6 +16,7 @@ namespace RNAssistant.Office.WebView
         private readonly Action<string> _postMessageJson;
         private readonly object _cancellationSync;
         private readonly Dictionary<string, CancellationTokenSource> _requestCancellations;
+        private readonly string _bridgeToken;
 
         public AssistantWebBridge(AssistantController controller, Action<string> postMessageJson)
         {
@@ -23,6 +24,7 @@ namespace RNAssistant.Office.WebView
             _postMessageJson = postMessageJson;
             _cancellationSync = new object();
             _requestCancellations = new Dictionary<string, CancellationTokenSource>(StringComparer.OrdinalIgnoreCase);
+            _bridgeToken = Guid.NewGuid().ToString("N");
         }
 
         public async Task<string> HandleMessageAsync(string requestJson)
@@ -35,6 +37,10 @@ namespace RNAssistant.Office.WebView
                 id = request.Id;
                 var type = (request.Type ?? string.Empty).Trim();
                 var payload = request.Payload ?? JValue.CreateNull();
+                if (RequiresBridgeToken(type) && !string.Equals(request.BridgeToken, _bridgeToken, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("Invalid WebView bridge token.");
+                }
                 object responsePayload;
                 if (string.Equals(type, "cancelRequest", StringComparison.OrdinalIgnoreCase))
                 {
@@ -53,7 +59,7 @@ namespace RNAssistant.Office.WebView
                 switch (type)
                 {
                     case "init":
-                        responsePayload = _controller.Initialize();
+                        responsePayload = WithBridgeToken(_controller.Initialize());
                         break;
                     case "listChats":
                         responsePayload = _controller.ListChats();
@@ -119,7 +125,7 @@ namespace RNAssistant.Office.WebView
                             saveSettings.ApiKey);
                         break;
                     case "clearRuntimeData":
-                        responsePayload = _controller.ClearRuntimeData();
+                        responsePayload = WithBridgeToken(_controller.ClearRuntimeData());
                         break;
                     case "getTools":
                         responsePayload = _controller.GetTools();
@@ -254,6 +260,21 @@ namespace RNAssistant.Office.WebView
             }
 
             return source;
+        }
+
+        private static bool RequiresBridgeToken(string type)
+        {
+            return !string.Equals(type, "init", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private InitResponse WithBridgeToken(InitResponse response)
+        {
+            if (response != null)
+            {
+                response.BridgeToken = _bridgeToken;
+            }
+
+            return response;
         }
 
         private object CancelRequest(string requestId)

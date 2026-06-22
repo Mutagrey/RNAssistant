@@ -97,6 +97,36 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void HtmlArtifactToolRequiresSetting()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var command = new ToolCommand { ToolId = "common.render_html" };
+                command.Arguments["title"] = "Demo";
+                command.Arguments["html"] = "<div><script>window.demo=1</script>Demo</div>";
+                command.Arguments["height"] = 240;
+
+                var blocked = executor.Execute(
+                    command,
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    new AppSettings { AllowUnsafeHtmlArtifacts = false },
+                    false,
+                    false);
+                AssertTrue(!blocked.Success, "html artifact disabled");
+                AssertContains(blocked.Message, "disabled", "disabled message");
+
+                var allowed = executor.Execute(
+                    command,
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    new AppSettings { AllowUnsafeHtmlArtifacts = true },
+                    false,
+                    false);
+                AssertTrue(allowed.Success, "html artifact enabled");
+                AssertContains(allowed.DataJson, "rnassistant.html", "html artifact type");
+                AssertContains(allowed.DataJson, "<script>", "raw script preserved");
+            });
+        }
+
         private static void ChatUnknownToolRetriesExactAvailableId()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

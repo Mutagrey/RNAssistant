@@ -33,6 +33,7 @@ function renderSettings() {
   $("requireVerificationInput").checked = (s.RequireVerificationForMutations !== false && s.requireVerificationForMutations !== false);
   $("autoContinueAfterConfirmationInput").checked = (s.AutoContinueAfterConfirmation !== false && s.autoContinueAfterConfirmation !== false);
   $("smartChatTitlesInput").checked = (s.SmartChatTitles !== false && s.smartChatTitles !== false);
+  $("allowUnsafeHtmlArtifactsInput").checked = !!(s.AllowUnsafeHtmlArtifacts || s.allowUnsafeHtmlArtifacts);
   $("includeVbaContextInput").checked = !!(s.IncludeVbaContext || s.includeVbaContext);
   $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || 8;
   $("maxAgentToolStepsInput").value = s.MaxAgentToolSteps || s.maxAgentToolSteps || 40;
@@ -63,6 +64,7 @@ function readSettings() {
     RequireVerificationForMutations: $("requireVerificationInput").checked,
     AutoContinueAfterConfirmation: $("autoContinueAfterConfirmationInput").checked,
     SmartChatTitles: $("smartChatTitlesInput").checked,
+    AllowUnsafeHtmlArtifacts: $("allowUnsafeHtmlArtifactsInput").checked,
     IncludeVbaContext: $("includeVbaContextInput").checked,
     MaxAgentIterations: Number($("maxAgentIterationsInput").value || 8),
     MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || 40),

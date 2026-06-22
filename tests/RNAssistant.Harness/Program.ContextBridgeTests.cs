@@ -186,8 +186,9 @@ namespace RNAssistant.Harness
             var controller = new AssistantController();
             var progressMessages = new List<string>();
             var bridge = new AssistantWebBridge(controller, progressMessages.Add);
+            var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b1\",\"type\":\"runTool\",\"payload\":{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\",\"count\":2,\"enabled\":true,\"values\":[[\"A\"]]},\"dryRun\":true}}")
+                "{\"id\":\"b1\",\"type\":\"runTool\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\",\"count\":2,\"enabled\":true,\"values\":[[\"A\"]]},\"dryRun\":true}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -205,13 +206,37 @@ namespace RNAssistant.Harness
             AssertEqual("progress", JObject.Parse(progressMessages[0])["type"].Value<string>(), "progress type");
         }
 
+        private static void BridgeRejectsMissingToken()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var responseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"bad\",\"type\":\"runTool\",\"payload\":{\"toolId\":\"excel.add_sheet\",\"arguments\":{},\"dryRun\":true}}")
+                .GetAwaiter()
+                .GetResult();
+
+            var response = JObject.Parse(responseJson);
+            AssertTrue(!response["ok"].Value<bool>(), "bridge rejects missing token");
+            AssertContains(response["error"].Value<string>(), "bridge token", "bridge token error");
+        }
+
+        private static void BridgeInitReturnsToken()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
+
+            AssertTrue(!string.IsNullOrWhiteSpace(token), "bridge token returned");
+        }
+
         private static void BridgeUsesTypedSendChatPayloadAndProgress()
         {
             var controller = new AssistantController();
             var progressMessages = new List<string>();
             var bridge = new AssistantWebBridge(controller, progressMessages.Add);
+            var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b2\",\"type\":\"sendChat\",\"payload\":{\"chatId\":\"chat-1\",\"text\":\"hello\"}}")
+                "{\"id\":\"b2\",\"type\":\"sendChat\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-1\",\"text\":\"hello\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -234,8 +259,9 @@ namespace RNAssistant.Harness
         {
             var controller = new AssistantController();
             var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"payload\":{\"settings\":{\"model\":\"gpt-test\"},\"apiKey\":\"secret\"}}")
+                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\"},\"apiKey\":\"secret\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -249,12 +275,13 @@ namespace RNAssistant.Harness
         {
             var controller = new AssistantController();
             var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
             var toolsResponseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b6\",\"type\":\"saveTools\",\"payload\":{\"tools\":[{\"Id\":\"excel.custom\",\"Host\":\"Excel\",\"Executor\":\"pipeline\",\"Enabled\":true}]}}")
+                "{\"id\":\"b6\",\"type\":\"saveTools\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"tools\":[{\"Id\":\"excel.custom\",\"Host\":\"Excel\",\"Executor\":\"pipeline\",\"Enabled\":true}]}}")
                 .GetAwaiter()
                 .GetResult();
             var skillsResponseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b7\",\"type\":\"saveSkills\",\"payload\":{\"skills\":[{\"Id\":\"common.review\",\"Host\":\"Common\",\"BodyMarkdown\":\"# Review\",\"Enabled\":true}]}}")
+                "{\"id\":\"b7\",\"type\":\"saveSkills\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"skills\":[{\"Id\":\"common.review\",\"Host\":\"Common\",\"BodyMarkdown\":\"# Review\",\"Enabled\":true}]}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -268,8 +295,9 @@ namespace RNAssistant.Harness
         {
             var controller = new AssistantController();
             var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b4\",\"type\":\"addTextContext\",\"payload\":{\"chatId\":\"chat-2\",\"kind\":\"note\",\"title\":\"T\",\"reference\":\"R\",\"text\":\"Body\",\"detailsJson\":\"{}\"}}")
+                "{\"id\":\"b4\",\"type\":\"addTextContext\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-2\",\"kind\":\"note\",\"title\":\"T\",\"reference\":\"R\",\"text\":\"Body\",\"detailsJson\":\"{}\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -286,8 +314,9 @@ namespace RNAssistant.Harness
         {
             var controller = new AssistantController();
             var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b5\",\"type\":\"saveVbaModule\",\"payload\":{\"moduleName\":\"Module1\",\"code\":\"Sub Main()\\nEnd Sub\"}}")
+                "{\"id\":\"b5\",\"type\":\"saveVbaModule\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"moduleName\":\"Module1\",\"code\":\"Sub Main()\\nEnd Sub\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -295,6 +324,14 @@ namespace RNAssistant.Harness
             AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
             AssertEqual("Module1", controller.LastModuleName, "module name");
             AssertContains(controller.LastModuleCode, "Sub Main", "module code");
+        }
+
+        private static string BridgeToken(AssistantWebBridge bridge)
+        {
+            var initJson = bridge.HandleMessageAsync("{\"id\":\"init\",\"type\":\"init\",\"payload\":{}}")
+                .GetAwaiter()
+                .GetResult();
+            return JObject.Parse(initJson)["payload"]["bridgeToken"].Value<string>();
         }
     }
 }
