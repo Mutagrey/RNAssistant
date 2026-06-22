@@ -52,8 +52,19 @@ function setChatModelSelectWidth(select) {
 
   var option = select.options[select.selectedIndex];
   var text = option ? String(option.textContent || "") : "";
-  var width = Math.max(8, Math.min(32, text.length + 3));
-  select.style.setProperty("--chat-model-select-width", width + "ch");
+  var width = Math.max(72, Math.min(240, text.length * 8 + 30));
+
+  if (typeof window !== "undefined" && window.document && window.document.createElement) {
+    var canvas = setChatModelSelectWidth.canvas || (setChatModelSelectWidth.canvas = window.document.createElement("canvas"));
+    var context = canvas.getContext && canvas.getContext("2d");
+    if (context && window.getComputedStyle) {
+      var styles = window.getComputedStyle(select);
+      context.font = styles.font || [styles.fontStyle, styles.fontVariant, styles.fontWeight, styles.fontSize, styles.fontFamily].join(" ");
+      width = Math.max(72, Math.min(240, Math.ceil(context.measureText(text).width) + 32));
+    }
+  }
+
+  select.style.setProperty("--chat-model-select-width", width + "px");
 }
 
 function populateModelSelect(select, selectedValue) {
