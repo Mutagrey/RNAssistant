@@ -14,7 +14,8 @@ namespace RNAssistant.Desktop
 
         public TargetSelectionBar()
         {
-            Height = 76;
+            Height = 82;
+            MinimumSize = new Size(0, 82);
             Dock = DockStyle.Top;
 
             var root = new TableLayoutPanel
@@ -23,20 +24,29 @@ namespace RNAssistant.Desktop
                 ColumnCount = 1,
                 RowCount = 2,
                 BackColor = Color.FromArgb(247, 248, 250),
-                Padding = new Padding(8, 6, 8, 4)
+                Padding = new Padding(8, 6, 8, 6)
             };
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34f));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 24f));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
-            var row = new FlowLayoutPanel
+            var row = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = false,
-                AutoScroll = true
+                ColumnCount = 8,
+                RowCount = 1,
+                Margin = new Padding(0)
             };
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 38f));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112f));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34f));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110f));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 66f));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90f));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 78f));
+            row.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
-            _modeCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 108 };
+            _modeCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill, Margin = new Padding(0, 3, 6, 3) };
             _modeCombo.Items.Add("Manual");
             _modeCombo.Items.Add("Auto follow");
             _modeCombo.SelectedIndex = 0;
@@ -50,7 +60,7 @@ namespace RNAssistant.Desktop
                 }
             };
 
-            _hostCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 110 };
+            _hostCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill, Margin = new Padding(0, 3, 6, 3) };
             _hostCombo.Items.AddRange(new object[] { "All", "Excel", "Word", "PowerPoint", "Outlook" });
             _hostCombo.SelectedIndex = 0;
             _hostCombo.SelectedIndexChanged += delegate
@@ -65,7 +75,7 @@ namespace RNAssistant.Desktop
                 }
             };
 
-            _targetCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 300 };
+            _targetCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill, Margin = new Padding(0, 3, 6, 3) };
             _targetCombo.SelectedIndexChanged += delegate
             {
                 if (_updating) return;
@@ -80,27 +90,28 @@ namespace RNAssistant.Desktop
                 }
             };
 
-            var activeButton = new Button { Text = "Use active", Width = 86, Height = 26 };
+            var activeButton = new Button { Text = "Use active", Dock = DockStyle.Fill, Margin = new Padding(0, 2, 6, 3) };
             activeButton.Click += delegate { UseActiveRequested?.Invoke(); };
 
-            var refreshButton = new Button { Text = "Refresh", Width = 74, Height = 26 };
+            var refreshButton = new Button { Text = "Refresh", Dock = DockStyle.Fill, Margin = new Padding(0, 2, 0, 3) };
             refreshButton.Click += delegate { RefreshRequested?.Invoke(); };
 
-            row.Controls.Add(new Label { Text = "Mode", Width = 38, TextAlign = ContentAlignment.MiddleLeft, Height = 26 });
-            row.Controls.Add(_modeCombo);
-            row.Controls.Add(new Label { Text = "Type", Width = 34, TextAlign = ContentAlignment.MiddleLeft, Height = 26 });
-            row.Controls.Add(_hostCombo);
-            row.Controls.Add(new Label { Text = "Document", Width = 62, TextAlign = ContentAlignment.MiddleLeft, Height = 26 });
-            row.Controls.Add(_targetCombo);
-            row.Controls.Add(activeButton);
-            row.Controls.Add(refreshButton);
+            row.Controls.Add(HeaderLabel("Mode"), 0, 0);
+            row.Controls.Add(_modeCombo, 1, 0);
+            row.Controls.Add(HeaderLabel("Type"), 2, 0);
+            row.Controls.Add(_hostCombo, 3, 0);
+            row.Controls.Add(HeaderLabel("Document"), 4, 0);
+            row.Controls.Add(_targetCombo, 5, 0);
+            row.Controls.Add(activeButton, 6, 0);
+            row.Controls.Add(refreshButton, 7, 0);
 
             _targetStatus = new Label
             {
                 Dock = DockStyle.Fill,
                 Text = "Manual target mode. Choose a document or use the active Office window.",
                 TextAlign = ContentAlignment.MiddleLeft,
-                ForeColor = Color.FromArgb(77, 86, 100)
+                ForeColor = Color.FromArgb(77, 86, 100),
+                AutoEllipsis = true
             };
 
             root.Controls.Add(row, 0, 0);
@@ -174,6 +185,18 @@ namespace RNAssistant.Desktop
             {
                 return Text;
             }
+        }
+
+        private static Label HeaderLabel(string text)
+        {
+            return new Label
+            {
+                Text = text,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                AutoEllipsis = true,
+                Margin = new Padding(0, 0, 4, 0)
+            };
         }
     }
 }

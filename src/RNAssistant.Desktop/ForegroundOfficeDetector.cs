@@ -15,31 +15,53 @@ namespace RNAssistant.Desktop
                 throw new InvalidOperationException("No foreground window detected.");
             }
 
-            int processId;
-            GetWindowThreadProcessId(hwnd, out processId);
-            if (processId == 0)
+            var currentProcessId = Process.GetCurrentProcess().Id;
+            for (var i = 0; hwnd != IntPtr.Zero && i < 64; i++)
             {
-                throw new InvalidOperationException("Could not detect foreground process.");
+                int processId;
+                GetWindowThreadProcessId(hwnd, out processId);
+                if (processId != 0 && processId != currentProcessId && IsWindowVisible(hwnd))
+                {
+                    var activation = TryCreateActivation(hwnd, processId);
+                    if (activation != null)
+                    {
+                        return activation;
+                    }
+                }
+
+                hwnd = GetWindow(hwnd, GW_HWNDNEXT);
             }
 
-            var process = Process.GetProcessById(processId);
-            var host = HostFromProcess(process.ProcessName);
-            if (string.IsNullOrWhiteSpace(host))
-            {
-                throw new InvalidOperationException("Foreground window is not Excel, Word, PowerPoint or Outlook.");
-            }
+            throw new InvalidOperationException("No foreground Office window detected.");
+        }
 
-            return new DesktopActivation
+        private static DesktopActivation TryCreateActivation(IntPtr hwnd, int processId)
+        {
+            try
             {
-                Host = host,
-                Action = "attach",
-                Target = new OfficeTargetDescriptor
+                var process = Process.GetProcessById(processId);
+                var host = HostFromProcess(process.ProcessName);
+                if (string.IsNullOrWhiteSpace(host))
+                {
+                    return null;
+                }
+
+                return new DesktopActivation
                 {
                     Host = host,
-                    Hwnd = hwnd.ToInt64(),
-                    ProcessId = processId
-                }
-            };
+                    Action = "attach",
+                    Target = new OfficeTargetDescriptor
+                    {
+                        Host = host,
+                        Hwnd = hwnd.ToInt64(),
+                        ProcessId = processId
+                    }
+                };
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private static string HostFromProcess(string processName)
@@ -64,8 +86,16 @@ namespace RNAssistant.Desktop
             return null;
         }
 
+        private const uint GW_HWNDNEXT = 2;
+
         [DllImport("user32.dll")]
         private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
 
         [DllImport("user32.dll")]
         private static extern int GetWindowThreadProcessId(IntPtr hWnd, out int lpdwProcessId);

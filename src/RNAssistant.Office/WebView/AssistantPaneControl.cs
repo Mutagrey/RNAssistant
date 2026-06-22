@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -208,8 +209,38 @@ namespace RNAssistant.Office.WebView
 
         private void RenderStartupError(Exception ex)
         {
-            var message = System.Net.WebUtility.HtmlEncode(ex.Message);
-            _webView.NavigateToString("<html><body style='font-family:Segoe UI;padding:20px'><h3>RN Assistant</h3><p>WebView2 startup failed.</p><pre>" + message + "</pre></body></html>");
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => RenderStartupError(ex)));
+                return;
+            }
+
+            Controls.Clear();
+            _webView.Dispose();
+
+            var baseException = ex == null ? null : ex.GetBaseException();
+            var message = baseException == null ? "Unknown WebView2 startup error." : baseException.Message;
+            var panel = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.White,
+                Padding = new Padding(20)
+            };
+            var label = new Label
+            {
+                Dock = DockStyle.Fill,
+                AutoEllipsis = true,
+                Font = new Font("Segoe UI", 9f),
+                TextAlign = ContentAlignment.TopLeft,
+                Text = "RN Assistant\r\n\r\nWebView2 startup failed.\r\n\r\n" + message
+            };
+            panel.Controls.Add(label);
+            Controls.Add(panel);
         }
 
         private void ExecuteScript(string script)
@@ -225,7 +256,7 @@ namespace RNAssistant.Office.WebView
                 return;
             }
 
-            if (_webView.CoreWebView2 != null)
+            if (!_webView.IsDisposed && _webView.CoreWebView2 != null)
             {
                 _webView.CoreWebView2.ExecuteScriptAsync(script);
             }
@@ -244,7 +275,7 @@ namespace RNAssistant.Office.WebView
                 return;
             }
 
-            if (_webView.CoreWebView2 != null)
+            if (!_webView.IsDisposed && _webView.CoreWebView2 != null)
             {
                 _webView.CoreWebView2.PostWebMessageAsJson(json);
             }

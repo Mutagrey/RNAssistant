@@ -149,8 +149,17 @@ namespace RNAssistant.Desktop
             catch (Exception ex)
             {
                 DesktopLog.Error("Foreground attach failed.", ex);
-                ShowPlaceholder(ex.Message, true);
-                MessageBox.Show(this, ex.Message, "RN Assistant", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                if (TryAttachSingleOpenTarget())
+                {
+                    return;
+                }
+
+                var message = "No active Office window detected. Select a document from the list or bring Office to the front and try again.";
+                RefreshTargetUi(message);
+                if (_runtime == null)
+                {
+                    ShowPlaceholder(message, true);
+                }
             }
         }
 
@@ -179,6 +188,33 @@ namespace RNAssistant.Desktop
                 DesktopLog.Error("Could not refresh Office targets.", ex);
                 RefreshTargetUi("Refresh failed: " + ex.Message);
             }
+        }
+
+        private bool TryAttachSingleOpenTarget()
+        {
+            try
+            {
+                var host = _targetBar == null ? "All" : _targetBar.SelectedHost;
+                _targetRegistry.UpsertMany(_adapterProvider.ListOpenTargets(host));
+                var entries = _targetRegistry.ForHost(host);
+                if (entries.Count == 1)
+                {
+                    _targetRegistry.Select(entries[0].Id);
+                    AttachTarget(entries[0], null);
+                    return true;
+                }
+
+                RefreshTargetUi(entries.Count == 0
+                    ? "No open Office documents found."
+                    : "Multiple Office documents found. Choose one from the document list.");
+            }
+            catch (Exception ex)
+            {
+                DesktopLog.Error("Open target fallback failed.", ex);
+                RefreshTargetUi("Could not refresh Office targets: " + ex.Message);
+            }
+
+            return false;
         }
 
         private void RefreshTargetUi(string status)

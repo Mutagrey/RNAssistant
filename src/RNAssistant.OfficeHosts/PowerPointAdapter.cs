@@ -101,20 +101,17 @@ namespace RNAssistant.OfficeHosts
 
             try
             {
-                var window = _application.ActiveWindow;
-                var selection = window == null ? null : window.Selection;
-                if (selection != null && selection.Type == PowerPoint.PpSelectionType.ppSelectionSlides)
+                var selection = TryGetSelection();
+                var slide = TryGetSelectedSlide(selection) ?? TryGetActiveSlide();
+                if (slide != null)
                 {
-                    context.ContainerName = selection.SlideRange.Count > 0 ? "Slide " + selection.SlideRange[1].SlideIndex : null;
-                }
-                if (string.IsNullOrWhiteSpace(context.ContainerName) && window != null && window.View != null && window.View.Slide != null)
-                {
-                    context.ContainerName = "Slide " + window.View.Slide.SlideIndex;
+                    context.ContainerName = "Slide " + slide.SlideIndex;
                 }
 
-                if (selection != null && selection.Type == PowerPoint.PpSelectionType.ppSelectionShapes && selection.ShapeRange.Count > 0)
+                var shapeCount = TryGetSelectedShapeCount(selection);
+                if (shapeCount > 0)
                 {
-                    context.SelectionAddress = selection.ShapeRange.Count + " shape(s)";
+                    context.SelectionAddress = shapeCount + " shape(s)";
                 }
             }
             catch
@@ -195,7 +192,7 @@ namespace RNAssistant.OfficeHosts
         public ContextNote CaptureSelectionContext(string mode, int maxChars)
         {
             var presentation = RequirePresentation();
-            var selection = _application.ActiveWindow == null ? null : _application.ActiveWindow.Selection;
+            var selection = TryGetSelection();
             if (selection == null)
             {
                 throw new InvalidOperationException("Select a PowerPoint slide or shape first.");
@@ -220,9 +217,9 @@ namespace RNAssistant.OfficeHosts
                 slide = selection.SlideRange[1];
                 text = ReadSlideText(slide);
             }
-            else if (_application.ActiveWindow.View != null)
+            else
             {
-                slide = _application.ActiveWindow.View.Slide as PowerPoint.Slide;
+                slide = TryGetActiveSlide();
                 if (slide != null)
                 {
                     text = ReadSlideText(slide);
@@ -335,39 +332,46 @@ namespace RNAssistant.OfficeHosts
 
         private ToolResult GetSelection()
         {
-            var selection = _application.ActiveWindow == null ? null : _application.ActiveWindow.Selection;
-            if (selection == null)
+            try
+            {
+                var selection = TryGetSelection();
+                if (selection == null)
+                {
+                    return ToolResult.Ok("No PowerPoint selection.", "{}");
+                }
+
+                if (selection.Type == PowerPoint.PpSelectionType.ppSelectionShapes && selection.ShapeRange.Count > 0)
+                {
+                    var shape = selection.ShapeRange[1];
+                    return ToolResult.Ok("Shape selection read.", JsonConvert.SerializeObject(new
+                    {
+                        type = "shape",
+                        name = shape.Name,
+                        text = ShapeText(shape),
+                        left = shape.Left,
+                        top = shape.Top,
+                        width = shape.Width,
+                        height = shape.Height
+                    }));
+                }
+
+                if (selection.Type == PowerPoint.PpSelectionType.ppSelectionSlides && selection.SlideRange.Count > 0)
+                {
+                    var slide = selection.SlideRange[1];
+                    return ToolResult.Ok("Slide selection read.", JsonConvert.SerializeObject(new
+                    {
+                        type = "slide",
+                        index = slide.SlideIndex,
+                        text = ReadSlideText(slide)
+                    }));
+                }
+
+                return ToolResult.Ok("Selection read.", JsonConvert.SerializeObject(new { type = selection.Type.ToString() }));
+            }
+            catch
             {
                 return ToolResult.Ok("No PowerPoint selection.", "{}");
             }
-
-            if (selection.Type == PowerPoint.PpSelectionType.ppSelectionShapes && selection.ShapeRange.Count > 0)
-            {
-                var shape = selection.ShapeRange[1];
-                return ToolResult.Ok("Shape selection read.", JsonConvert.SerializeObject(new
-                {
-                    type = "shape",
-                    name = shape.Name,
-                    text = ShapeText(shape),
-                    left = shape.Left,
-                    top = shape.Top,
-                    width = shape.Width,
-                    height = shape.Height
-                }));
-            }
-
-            if (selection.Type == PowerPoint.PpSelectionType.ppSelectionSlides && selection.SlideRange.Count > 0)
-            {
-                var slide = selection.SlideRange[1];
-                return ToolResult.Ok("Slide selection read.", JsonConvert.SerializeObject(new
-                {
-                    type = "slide",
-                    index = slide.SlideIndex,
-                    text = ReadSlideText(slide)
-                }));
-            }
-
-            return ToolResult.Ok("Selection read.", JsonConvert.SerializeObject(new { type = selection.Type.ToString() }));
         }
 
         private ToolResult ReadSlide(ToolCommand command)
@@ -462,7 +466,7 @@ namespace RNAssistant.OfficeHosts
         {
             var presentation = RequirePresentation();
             var text = ToolArgumentReader.String(command.Arguments, "text", string.Empty);
-            var selection = _application.ActiveWindow.Selection;
+            var selection = TryGetSelection();
             if (selection == null || selection.Type != PowerPoint.PpSelectionType.ppSelectionShapes)
             {
                 return ToolResult.Fail("Select a text shape first.");
@@ -675,6 +679,11 @@ namespace RNAssistant.OfficeHosts
         private PowerPoint.Slide ResolveSlide(int slideIndex)
         {
             var presentation = RequirePresentation();
+            if (presentation.Slides.Count <= 0)
+            {
+                throw new InvalidOperationException("Presentation has no slides.");
+            }
+
             var index = Math.Max(1, Math.Min(presentation.Slides.Count, slideIndex));
             return presentation.Slides[index];
         }
@@ -771,7 +780,7 @@ namespace RNAssistant.OfficeHosts
         {
             try
             {
-                var selection = _application.ActiveWindow == null ? null : _application.ActiveWindow.Selection;
+                var selection = TryGetSelection();
                 if (selection != null &&
                     selection.Type == PowerPoint.PpSelectionType.ppSelectionShapes &&
                     selection.ShapeRange.Count > 0)
@@ -785,6 +794,84 @@ namespace RNAssistant.OfficeHosts
             }
 
             return null;
+        }
+
+        private PowerPoint.DocumentWindow TryGetActiveWindow()
+        {
+            try { return _application.ActiveWindow; }
+            catch { return null; }
+        }
+
+        private PowerPoint.Selection TryGetSelection()
+        {
+            try
+            {
+                var window = TryGetActiveWindow();
+                return window == null ? null : window.Selection;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private PowerPoint.Slide TryGetActiveSlide()
+        {
+            try
+            {
+                var window = TryGetActiveWindow();
+                if (window == null || window.View == null)
+                {
+                    return null;
+                }
+
+                return window.View.Slide as PowerPoint.Slide;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private PowerPoint.Slide TryGetSelectedSlide(PowerPoint.Selection selection)
+        {
+            if (selection == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                if (selection.Type == PowerPoint.PpSelectionType.ppSelectionSlides && selection.SlideRange.Count > 0)
+                {
+                    return selection.SlideRange[1];
+                }
+
+                if (selection.Type == PowerPoint.PpSelectionType.ppSelectionShapes && selection.ShapeRange.Count > 0)
+                {
+                    var shape = selection.ShapeRange[1];
+                    return shape == null ? null : shape.Parent as PowerPoint.Slide;
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
+        private static int TryGetSelectedShapeCount(PowerPoint.Selection selection)
+        {
+            try
+            {
+                return selection != null && selection.Type == PowerPoint.PpSelectionType.ppSelectionShapes
+                    ? selection.ShapeRange.Count
+                    : 0;
+            }
+            catch
+            {
+                return 0;
+            }
         }
 
         private static PowerPoint.Shape ResolveShape(PowerPoint.Slide slide, string shapeName)

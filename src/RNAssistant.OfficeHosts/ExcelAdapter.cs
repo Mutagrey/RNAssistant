@@ -895,25 +895,25 @@ namespace RNAssistant.OfficeHosts
 
             var range = sheet.Range[address];
             var keyColumn = Math.Max(1, ToolArgumentReader.Int32(command.Arguments, "keyColumn", 1));
+            var columnCount = Convert.ToInt32(range.Columns.Count);
+            if (keyColumn > columnCount)
+            {
+                return ToolResult.Fail("keyColumn is outside the sort range.");
+            }
+
             var descending = ToolArgumentReader.Boolean(command.Arguments, "descending", false);
             var hasHeaders = ToolArgumentReader.Boolean(command.Arguments, "hasHeaders", true);
-            var key = sheet.Cells[range.Row, range.Column + keyColumn - 1] as Excel.Range;
+            var key = range.Columns[keyColumn] as Excel.Range;
+            if (key == null)
+            {
+                return ToolResult.Fail("Sort key column could not be resolved.");
+            }
+
             range.Sort(
-                key,
-                descending ? Excel.XlSortOrder.xlDescending : Excel.XlSortOrder.xlAscending,
-                Type.Missing,
-                Type.Missing,
-                Type.Missing,
-                Type.Missing,
-                Type.Missing,
-                hasHeaders ? Excel.XlYesNoGuess.xlYes : Excel.XlYesNoGuess.xlNo,
-                Type.Missing,
-                Type.Missing,
-                Excel.XlSortOrientation.xlSortColumns,
-                Excel.XlSortMethod.xlPinYin,
-                Excel.XlSortDataOption.xlSortNormal,
-                Excel.XlSortDataOption.xlSortNormal,
-                Excel.XlSortDataOption.xlSortNormal);
+                Key1: key,
+                Order1: descending ? Excel.XlSortOrder.xlDescending : Excel.XlSortOrder.xlAscending,
+                Header: hasHeaders ? Excel.XlYesNoGuess.xlYes : Excel.XlYesNoGuess.xlNo,
+                Orientation: Excel.XlSortOrientation.xlSortColumns);
             return ToolResult.Ok("Range sorted: " + sheet.Name + "!" + address);
         }
 
