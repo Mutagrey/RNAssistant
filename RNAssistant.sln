@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.OfficeHosts", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.Desktop", "src\RNAssistant.Desktop\RNAssistant.Desktop.csproj", "{AD0F0EE2-91B2-43EA-9237-25C64A5121A1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.MockDemo", "demo\RNAssistant.MockDemo\RNAssistant.MockDemo.csproj", "{26F75018-13AC-4EB2-A5C9-97E06EF5D5A7}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.ExcelAddIn", "src\RNAssistant.ExcelAddIn\RNAssistant.ExcelAddIn.csproj", "{95F1441B-40AA-4C1A-AC3F-A422B11CBFCD}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.WordAddIn", "src\RNAssistant.WordAddIn\RNAssistant.WordAddIn.csproj", "{E8F6DB3D-5628-4F03-BFBE-C4D177686091}"
@@ -40,6 +42,10 @@ Global
     {AD0F0EE2-91B2-43EA-9237-25C64A5121A1}.Debug|x64.Build.0 = Debug|x64
     {AD0F0EE2-91B2-43EA-9237-25C64A5121A1}.Release|x64.ActiveCfg = Release|x64
     {AD0F0EE2-91B2-43EA-9237-25C64A5121A1}.Release|x64.Build.0 = Release|x64
+    {26F75018-13AC-4EB2-A5C9-97E06EF5D5A7}.Debug|x64.ActiveCfg = Debug|Any CPU
+    {26F75018-13AC-4EB2-A5C9-97E06EF5D5A7}.Debug|x64.Build.0 = Debug|Any CPU
+    {26F75018-13AC-4EB2-A5C9-97E06EF5D5A7}.Release|x64.ActiveCfg = Release|Any CPU
+    {26F75018-13AC-4EB2-A5C9-97E06EF5D5A7}.Release|x64.Build.0 = Release|Any CPU
     {95F1441B-40AA-4C1A-AC3F-A422B11CBFCD}.Debug|x64.ActiveCfg = Debug|x64
     {95F1441B-40AA-4C1A-AC3F-A422B11CBFCD}.Debug|x64.Build.0 = Debug|x64
     {95F1441B-40AA-4C1A-AC3F-A422B11CBFCD}.Release|x64.ActiveCfg = Release|x64

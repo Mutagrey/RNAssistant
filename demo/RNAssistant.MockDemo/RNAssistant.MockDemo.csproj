@@ -13,7 +13,6 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.cs" Link="FakeOfficeAdapter.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Models\AppSettings.cs" Link="Core\Models\AppSettings.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Models\ChatModels.cs" Link="Core\Models\ChatModels.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Models\ChartArtifactModels.cs" Link="Core\Models\ChartArtifactModels.cs" />
@@ -29,36 +28,37 @@
     <Compile Include="..\..\src\RNAssistant.Core\Skills\BuiltInSkillProvider.cs" Link="Core\Skills\BuiltInSkillProvider.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Services\ContextNormalizer.cs" Link="Core\Services\ContextNormalizer.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Services\ChartArtifactBuilder.cs" Link="Core\Services\ChartArtifactBuilder.cs" />
-    <Compile Include="..\..\src\RNAssistant.Core\Storage\SkillStore.cs" Link="Core\Storage\SkillStore.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Storage\AppDataPaths.cs" Link="Core\Storage\AppDataPaths.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Storage\ChatStore.cs" Link="Core\Storage\ChatStore.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Storage\JsonFileStore.cs" Link="Core\Storage\JsonFileStore.cs" />
+    <Compile Include="..\..\src\RNAssistant.Core\Storage\SkillStore.cs" Link="Core\Storage\SkillStore.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Storage\ToolStore.cs" Link="Core\Storage\ToolStore.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Storage\VbaBackupStore.cs" Link="Core\Storage\VbaBackupStore.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Contracts\IOfficeApplicationAdapter.cs" Link="Office\Contracts\IOfficeApplicationAdapter.cs" />
-    <Compile Include="..\..\src\RNAssistant.Office\Agent\AgentTranscript.cs" Link="Office\Agent\AgentTranscript.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Contracts\BridgeDtos.cs" Link="Office\Contracts\BridgeDtos.cs" />
-    <Compile Include="..\..\src\RNAssistant.Office\Runtime\DispatchedOfficeApplicationAdapter.cs" Link="Office\Runtime\DispatchedOfficeApplicationAdapter.cs" />
-    <Compile Include="..\..\src\RNAssistant.Office\Runtime\OfficeStaDispatcher.cs" Link="Office\Runtime\OfficeStaDispatcher.cs" />
-    <Compile Include="..\..\src\RNAssistant.Office\Services\ChatCloneService.cs" Link="Office\Services\ChatCloneService.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Agent\AgentTranscript.cs" Link="Office\Agent\AgentTranscript.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Controller\AssistantController.cs" Link="Office\Controller\AssistantController.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Controller\AssistantController.Agent.cs" Link="Office\Controller\AssistantController.Agent.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Controller\AssistantController.Chats.cs" Link="Office\Controller\AssistantController.Chats.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Controller\AssistantController.Context.cs" Link="Office\Controller\AssistantController.Context.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\AgentRunService.cs" Link="Office\Services\AgentRunService.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Services\ChatCloneService.cs" Link="Office\Services\ChatCloneService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatCompletionService.cs" Link="Office\Services\ChatCompletionService.cs" />
-    <Compile Include="..\..\src\RNAssistant.Office\Services\ChatTitleBuilder.cs" Link="Office\Services\ChatTitleBuilder.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatSessionService.cs" Link="Office\Services\ChatSessionService.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Services\ChatTitleBuilder.cs" Link="Office\Services\ChatTitleBuilder.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ContextService.cs" Link="Office\Services\ContextService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\SkillCatalogService.cs" Link="Office\Services\SkillCatalogService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ToolCatalogService.cs" Link="Office\Services\ToolCatalogService.cs" />
-    <Compile Include="..\..\src\RNAssistant.Office\Tools\ToolArgumentReader.cs" Link="Office\Tools\ToolArgumentReader.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Tools\HtmlArtifactToolExecutor.cs" Link="Office\Tools\HtmlArtifactToolExecutor.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\OfficeToolExecutor.cs" Link="Office\Tools\OfficeToolExecutor.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\PipelineToolExecutor.cs" Link="Office\Tools\PipelineToolExecutor.cs" />
-    <Compile Include="..\..\src\RNAssistant.Office\Tools\SkillToolExecutor.cs" Link="Office\Tools\SkillToolExecutor.cs" />
-    <Compile Include="..\..\src\RNAssistant.Office\Tools\ToolAuthoringExecutor.cs" Link="Office\Tools\ToolAuthoringExecutor.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\PromptToolExecutor.cs" Link="Office\Tools\PromptToolExecutor.cs" />
-    <Compile Include="..\..\src\RNAssistant.Office\Tools\HtmlArtifactToolExecutor.cs" Link="Office\Tools\HtmlArtifactToolExecutor.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Tools\SkillToolExecutor.cs" Link="Office\Tools\SkillToolExecutor.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Tools\ToolArgumentReader.cs" Link="Office\Tools\ToolArgumentReader.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Tools\ToolAuthoringExecutor.cs" Link="Office\Tools\ToolAuthoringExecutor.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\ToolSafetyPolicy.cs" Link="Office\Tools\ToolSafetyPolicy.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\VbaToolExecutor.cs" Link="Office\Tools\VbaToolExecutor.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.cs" Link="Office\WebView\AssistantWebBridge.cs" />
-    <Compile Include="..\..\src\RNAssistant.Desktop\OfficeTargetRegistry.cs" Link="Desktop\OfficeTargetRegistry.cs" />
-    <Compile Include="..\..\src\RNAssistant.OfficeHosts\Targets\OfficeTargetDescriptor.cs" Link="OfficeHosts\Targets\OfficeTargetDescriptor.cs" />
+    <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.cs" Link="Testing\FakeOfficeAdapter.cs" />
   </ItemGroup>
 </Project>
