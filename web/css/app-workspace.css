@@ -230,20 +230,25 @@
 
 @media (max-width: 760px) {
   .settings-shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: 142px minmax(0, 1fr);
   }
 
   .settings-nav {
-    grid-auto-flow: column;
-    grid-auto-columns: max-content;
-    overflow-x: auto;
-    padding: 0 0 8px;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
+    overflow: visible;
+    padding: 0 8px 0 0;
+    border-right: 1px solid rgba(226, 231, 239, 0.82);
+    border-bottom: 0;
   }
 
   .form-grid.two-columns {
     grid-template-columns: 1fr;
   }
 
+}
+
+@media (max-width: 480px) {
+  .settings-shell {
+    grid-template-columns: 116px minmax(0, 1fr);
+    gap: 8px;
+  }
 }
