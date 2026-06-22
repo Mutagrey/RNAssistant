@@ -4,10 +4,10 @@
   width: 100%;
   max-width: none;
   padding: 8px 9px;
-  border: 1px solid var(--line);
+  border: 1px solid #e7edf5;
   border-radius: var(--radius);
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(16, 24, 39, 0.035);
+  background: #fbfcfe;
+  box-shadow: none;
 }
 
 .agent-live .agent-activity-wrap,
@@ -27,89 +27,6 @@
   background: #f9fafb;
 }
 
-.agent-run-header {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  justify-content: space-between;
-  min-width: 0;
-  margin-bottom: 6px;
-}
-
-.agent-run-summary {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  gap: 7px;
-}
-
-.agent-run-status {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  min-height: 18px;
-  padding: 1px 7px;
-  border: 1px solid #d8e1ee;
-  border-radius: 999px;
-  background: #f8fafc;
-  color: #475467;
-  font-size: 10px;
-  font-weight: var(--label-font-weight);
-  line-height: 1.2;
-}
-
-.agent-run-status-completed {
-  border-color: #bfe8d2;
-  background: #effaf4;
-  color: #067647;
-}
-
-.agent-run-status-running {
-  border-color: #b9d8ff;
-  background: #eff7ff;
-  color: #175cd3;
-}
-
-.agent-run-status-waiting,
-.agent-run-status-planned {
-  border-color: #fedf89;
-  background: #fffaeb;
-  color: #b54708;
-}
-
-.agent-run-status-failed {
-  border-color: #f1b8b1;
-  background: #fff1f0;
-  color: #b42318;
-}
-
-.agent-run-status-cancelled {
-  border-color: #d0d5dd;
-  background: #f9fafb;
-  color: #475467;
-}
-
-.agent-run-current,
-.agent-run-meta {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-run-current {
-  color: #344054;
-  font-size: 11px;
-  font-weight: var(--label-font-weight);
-}
-
-.agent-run-meta {
-  flex: 0 0 auto;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: var(--meta-font-weight);
-}
-
 .agent-run-final {
   margin: 2px 0 8px;
   padding-top: 0;
@@ -125,10 +42,92 @@
   box-shadow: none;
 }
 
+.agent-run-artifacts {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+
+.agent-run-process {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid #e7edf5;
+  color: #667085;
+}
+
+.agent-run-process:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.agent-run-process > summary {
+  list-style: none;
+}
+
+.agent-run-process > summary::-webkit-details-marker {
+  display: none;
+}
+
+.agent-run-process-summary {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+  min-height: 22px;
+  cursor: pointer;
+  color: #667085;
+  font-size: 11px;
+  font-weight: var(--meta-font-weight);
+}
+
+.agent-run-process-summary::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #98a2b3;
+}
+
+.agent-run-process.status-running .agent-run-process-summary::before {
+  background: #2e90fa;
+}
+
+.agent-run-process.status-completed .agent-run-process-summary::before {
+  background: #12b76a;
+}
+
+.agent-run-process.status-failed .agent-run-process-summary::before {
+  background: #d92d20;
+}
+
+.agent-run-process.status-waiting .agent-run-process-summary::before,
+.agent-run-process.status-planned .agent-run-process-summary::before {
+  background: #f79009;
+}
+
+.agent-run-process-label,
+.agent-run-process-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-run-process-label {
+  flex: 0 1 auto;
+}
+
+.agent-run-process-meta {
+  flex: 1 1 auto;
+  color: #98a2b3;
+}
+
 .agent-run-steps {
   display: grid;
   gap: 2px;
-  margin-top: 2px;
+  margin-top: 5px;
 }
 
 .agent-run-empty {
@@ -353,7 +352,7 @@
 
 .agent-activity .chart-artifact,
 .agent-activity .html-artifact {
-  margin: 5px 0 8px 20px;
+  margin: 5px 0 8px;
 }
 
 @keyframes agent-running-dot {
@@ -364,16 +363,6 @@
 }
 
 @media (max-width: 560px) {
-  .agent-run-header {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 3px;
-  }
-
-  .agent-run-meta {
-    flex: 0 1 auto;
-  }
-
   .agent-activity-row {
     grid-template-columns: 12px minmax(76px, 0.42fr) minmax(0, 1fr) 10px;
   }
@@ -382,9 +371,7 @@
     display: none;
   }
 
-  .agent-activity-detail-body,
-  .agent-activity .chart-artifact,
-  .agent-activity .html-artifact {
+  .agent-activity-detail-body {
     margin-left: 14px;
   }
 }

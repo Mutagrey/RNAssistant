@@ -62,13 +62,7 @@ namespace RNAssistant.Core.Llm
             }
 
             var builder = new StringBuilder();
-            if (!string.IsNullOrWhiteSpace(message.Content))
-            {
-                builder.AppendLine(message.Content);
-                builder.AppendLine();
-            }
-
-            builder.AppendLine("Structured agent activity:");
+            builder.AppendLine("Agent activity summary:");
             AppendActivity(builder, message.Activity, 0);
             return builder.ToString();
         }
@@ -93,25 +87,36 @@ namespace RNAssistant.Core.Llm
             }
             builder.AppendLine();
 
+            var status = activity.Status ?? string.Empty;
             if (!string.IsNullOrWhiteSpace(activity.ResultMessage))
             {
-                builder.Append(indent).Append("  result: ").AppendLine(activity.ResultMessage);
+                builder.Append(indent).Append("  message: ").AppendLine(Truncate(activity.ResultMessage, 800));
             }
-            if (!string.IsNullOrWhiteSpace(activity.ArgumentsJson))
+            if (IsCompleted(status) && !string.IsNullOrWhiteSpace(activity.DataJson))
             {
-                builder.Append(indent).AppendLine("  arguments:");
-                builder.AppendLine(activity.ArgumentsJson);
-            }
-            if (!string.IsNullOrWhiteSpace(activity.DataJson))
-            {
-                builder.Append(indent).AppendLine("  data:");
-                builder.AppendLine(activity.DataJson);
+                builder.Append(indent).AppendLine("  output data:");
+                builder.AppendLine(Truncate(activity.DataJson, 4000));
             }
 
             foreach (var child in activity.Children ?? new List<ChatActivity>())
             {
                 AppendActivity(builder, child, depth + 1);
             }
+        }
+
+        private static bool IsCompleted(string status)
+        {
+            return string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string Truncate(string value, int maxChars)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length <= maxChars)
+            {
+                return value ?? string.Empty;
+            }
+
+            return value.Substring(0, Math.Max(0, maxChars)) + "\n[truncated]";
         }
     }
 

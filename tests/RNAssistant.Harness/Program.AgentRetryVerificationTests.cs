@@ -51,8 +51,9 @@ namespace RNAssistant.Harness
                 AssertTrue(!adapter.Executed[0].Arguments.ContainsKey("values"), "first command missing values");
                 AssertEqual("[[\"Month\",\"Sales\"]]", adapter.Executed[1].Arguments["values"], "retry values");
                 var resultJson = JsonConvert.SerializeObject(result.ToolResults);
-                AssertContains(resultJson, "No table values provided", "failed result logged");
+                AssertTrue(resultJson.IndexOf("No table values provided", StringComparison.OrdinalIgnoreCase) < 0, "recovered failure not logged");
                 AssertContains(resultJson, "wrote 1 row", "retry result logged");
+                AssertTrue(!ContainsMessage(session.Messages, "No table values provided"), "recovered failure not persisted");
                 AssertTrue(ContainsMessage(session.Messages, "Local skill retry result") || ContainsMessage(session.Messages, "Agent step"), "retry transcript recorded");
             });
         }

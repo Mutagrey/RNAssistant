@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
@@ -367,8 +368,9 @@ namespace RNAssistant.Harness
                 AssertEqual(1, adapter.Executed.Count, "adapter execution count");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "retry tool");
                 var resultJson = Newtonsoft.Json.JsonConvert.SerializeObject(result.ToolResults);
-                AssertContains(resultJson, "create_worksheet", "unknown tool logged");
-                AssertContains(resultJson, "Unknown tool id", "unknown failure logged");
+                AssertTrue(resultJson.IndexOf("create_worksheet", StringComparison.OrdinalIgnoreCase) < 0, "recovered unknown tool not logged");
+                AssertTrue(resultJson.IndexOf("Unknown tool id", StringComparison.OrdinalIgnoreCase) < 0, "recovered unknown failure not logged");
+                AssertContains(resultJson, "excel.add_sheet", "retry success logged");
             });
         }
 

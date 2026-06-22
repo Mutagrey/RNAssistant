@@ -206,8 +206,6 @@ namespace RNAssistant.Office.Services
                         ? _toolExecutor.Execute(command, tools, settings, false, false, session, cancellationToken)
                         : ToolResult.SkippedAutoRun("Auto tool execution is disabled: " + command.ToolId);
                     AttachPendingId(session, command, result, pendingToolRegistrar);
-                    resultLog.Add(AgentTranscript.DescribeResult(command, result));
-                    AgentTranscript.AddLocalResultMessage(session, command, result);
                     ReportProgress(progress, result.Success ? "completed" : (AgentTranscript.IsWaitingResult(result) ? "waiting" : "failed"), result.Message, AgentTranscript.CreateToolActivity(command, result, "tool"));
 
                     var mutating = CommandMutates(command, tools);
@@ -223,16 +221,43 @@ namespace RNAssistant.Office.Services
                     }
 
                     var commandCompleted = result.Success;
+                    var retrySucceeded = false;
+                    var retryAttempted = false;
+                    var retryResultIndex = resultLog.Count;
+                    var retrySessionIndex = session.Messages.Count;
                     if (!result.Success && settings.AutoRunToolCalls != false && settings.AutoRetryToolErrors != false && AgentTranscript.CanRetryToolError(result))
                     {
+                        retryAttempted = true;
                         ReportProgress(progress, "repairing", "Tool упал, прошу модель исправить вызов: " + command.ToolId);
                         var retry = await RetryFailedToolAsync(systemPrompt, contextPrompt, session, settings, tools, command, result, resultLog, progress, pendingToolRegistrar, cancellationToken).ConfigureAwait(false);
                         commandCompleted = retry.Success;
+                        retrySucceeded = retry.Success;
                         if (retry.Mutated)
                         {
                             mutationExecutedThisIteration = true;
                             verificationExpected = settings.RequireVerificationForMutations != false;
                             verificationPromptSent = false;
+                        }
+                    }
+                    if (!retrySucceeded)
+                    {
+                        var resultEntry = AgentTranscript.DescribeResult(command, result);
+                        var resultMessage = AgentTranscript.CreateLocalResultMessage(command, result);
+                        if (retryAttempted && retryResultIndex >= 0 && retryResultIndex <= resultLog.Count)
+                        {
+                            resultLog.Insert(retryResultIndex, resultEntry);
+                        }
+                        else
+                        {
+                            resultLog.Add(resultEntry);
+                        }
+                        if (retryAttempted && retrySessionIndex >= 0 && retrySessionIndex <= session.Messages.Count)
+                        {
+                            session.Messages.Insert(retrySessionIndex, resultMessage);
+                        }
+                        else
+                        {
+                            session.Messages.Add(resultMessage);
                         }
                     }
                     if (!commandCompleted)
@@ -302,11 +327,6 @@ namespace RNAssistant.Office.Services
             cancellationToken.ThrowIfCancellationRequested();
             var repairText = repairCompletion.Content ?? string.Empty;
             var retryCommands = _commandParser.Parse(repairText).ToList();
-            session.Messages.Add(AgentTranscript.CreateAssistantMessage(
-                retryCommands.Count == 0
-                    ? "Agent retry did not return an executable tool call."
-                    : "Agent retry returned " + retryCommands.Count + " corrected tool call(s).",
-                repairCompletion));
             var anySuccess = false;
             var allSucceeded = retryCommands.Count > 0;
             var mutated = false;

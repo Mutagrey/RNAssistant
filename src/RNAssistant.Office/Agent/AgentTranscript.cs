@@ -15,13 +15,18 @@ namespace RNAssistant.Office
     {
         public static void AddLocalResultMessage(ChatSession session, ToolCommand command, ToolResult result)
         {
+            session.Messages.Add(CreateLocalResultMessage(command, result));
+        }
+
+        public static ChatMessage CreateLocalResultMessage(ToolCommand command, ToolResult result)
+        {
             var activity = CreateToolActivity(command, result, "tool");
-            session.Messages.Add(new ChatMessage
+            return new ChatMessage
             {
                 Role = "assistant",
                 Content = CreateToolFallbackContent(activity),
                 Activity = activity
-            });
+            };
         }
 
         public static ChatMessage CreateAssistantMessage(string content, LlmCompletionResult completion, ChatActivity activity = null)
@@ -240,10 +245,6 @@ namespace RNAssistant.Office
                 builder.AppendLine("Tool: " + activity.ToolId);
             }
             builder.AppendLine("Status: " + (activity == null ? "completed" : activity.Status));
-            if (!string.IsNullOrWhiteSpace(activity == null ? null : activity.ResultMessage))
-            {
-                builder.AppendLine("Result: " + activity.ResultMessage);
-            }
             return builder.ToString();
         }
 

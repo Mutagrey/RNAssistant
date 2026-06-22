@@ -212,8 +212,9 @@ namespace RNAssistant.Harness
             AssertTrue(session.Messages[0].Activity != null, "transcript activity exists");
             AssertContains(session.Messages[0].Content, "Agent step", "fallback content");
             var promptMessages = PromptMessageBuilder.Build("system", string.Empty, session.Messages, 8000);
-            AssertContains(promptMessages.Last().Content, "Structured agent activity", "prompt activity marker");
-            AssertContains(promptMessages.Last().Content, "Pipeline executed", "prompt activity result");
+            AssertContains(promptMessages.Last().Content, "Agent activity summary", "prompt activity marker");
+            AssertContains(promptMessages.Last().Content, "excel.make_report", "prompt activity data");
+            AssertTrue(promptMessages.Last().Content.IndexOf("arguments:", StringComparison.OrdinalIgnoreCase) < 0, "prompt omits arguments");
         }
     }
 }
