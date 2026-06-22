@@ -94,12 +94,13 @@
 }
 
 .composer-model {
+  --chat-model-max-width: 240px;
   display: flex;
-  flex: 0 1 clamp(120px, 24vw, 240px);
+  flex: 0 1 auto;
   gap: 0;
   align-items: center;
-  min-width: 104px;
-  max-width: 240px;
+  min-width: 0;
+  max-width: var(--chat-model-max-width);
   min-height: 30px;
   border: 0;
   border-radius: 999px;
@@ -112,14 +113,15 @@
 }
 
 .composer-model select {
-  flex: 1 1 auto;
-  width: 100%;
+  flex: 0 1 auto;
+  width: min(var(--chat-model-select-width, 14ch), var(--chat-model-max-width));
   height: 28px;
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   border: 0;
   border-radius: 999px;
-  padding: 0;
+  padding: 0 18px 0 0;
   background: transparent;
   color: var(--text);
   font-size: 12px;

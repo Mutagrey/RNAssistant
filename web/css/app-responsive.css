@@ -33,9 +33,9 @@
   }
 
   .composer-model {
-    flex: 0 1 clamp(116px, 22vw, 220px);
-    min-width: 96px;
-    max-width: 220px;
+    --chat-model-max-width: 220px;
+    flex: 0 1 auto;
+    min-width: 0;
   }
 
   .context-meter em {
@@ -201,9 +201,9 @@
   }
 
   .composer-model {
-    flex: 0 1 132px;
-    min-width: 92px;
-    max-width: 150px;
+    --chat-model-max-width: 150px;
+    flex: 0 1 auto;
+    min-width: 0;
   }
 
   .composer-actions {

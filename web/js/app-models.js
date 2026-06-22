@@ -55,6 +55,7 @@ function bindModelActions() {
   });
   $("modelInput").addEventListener("input", renderModelControls);
   $("chatModelSelect").addEventListener("change", function () {
+    setChatModelSelectWidth($("chatModelSelect"));
     saveChatModelSelection($("chatModelSelect").value);
   });
   $("loadModelsButton").addEventListener("click", function () {

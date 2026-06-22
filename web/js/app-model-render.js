@@ -45,6 +45,17 @@ function modelOptionTitle(model) {
   return parts.join("\n");
 }
 
+function setChatModelSelectWidth(select) {
+  if (!select) {
+    return;
+  }
+
+  var option = select.options[select.selectedIndex];
+  var text = option ? String(option.textContent || "") : "";
+  var width = Math.max(8, Math.min(32, text.length + 3));
+  select.style.setProperty("--chat-model-select-width", width + "ch");
+}
+
 function populateModelSelect(select, selectedValue) {
   if (!select) {
     return;
@@ -113,6 +124,7 @@ function populateChatModelSelect(select) {
   select.value = selected;
   select.title = selected || defaultModel ? ("Модель чата: " + (selected || defaultModel)) : "Модель чата не выбрана";
   select.disabled = state.modelCatalog.loading || state.modelSaving || !!state.activeSend || !state.activeChatId;
+  setChatModelSelectWidth(select);
 }
 
 function appendModelMetric(box, label, value) {
