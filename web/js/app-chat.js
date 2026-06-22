@@ -392,7 +392,7 @@ function submitChatInput() {
   clearSendError();
   state.messages.push({ Id: "local-" + Date.now(), Role: "user", Content: text, Local: true, Pending: true });
   updateEstimatedContextUsage();
-  renderMessages();
+  renderMessages({ forceScroll: true });
   renderChatSessions();
   renderContextMeter();
   sendChat(text);
@@ -405,7 +405,7 @@ function retryFailedSend() {
 
   markLocalMessage(state.failedSend.text, { Pending: true, Failed: false });
   updateEstimatedContextUsage();
-  renderMessages();
+  renderMessages({ forceScroll: true });
   renderChatSessions();
   renderContextMeter();
   var text = state.failedSend.text;
@@ -476,6 +476,7 @@ async function runQuickAction(action) {
 }
 
 function bindChatActions() {
+  bindMessageScrollControls();
   $("refreshButton").addEventListener("click", initialize);
   $("chatSessionSelect").addEventListener("change", function () { selectChat($("chatSessionSelect").value); });
   $("newChatButton").addEventListener("click", createChat);

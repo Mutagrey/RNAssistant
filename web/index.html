@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
   <link rel="stylesheet" href="css/app.css?v=chatui-20260622-1">
-  <link rel="stylesheet" href="css/app-chat.css?v=chatui-20260621-6">
+  <link rel="stylesheet" href="css/app-chat.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=chatui-20260621-1">
   <link rel="stylesheet" href="css/app-composer.css?v=chatui-20260622-10">
   <link rel="stylesheet" href="css/app-context-chips.css?v=chatui-20260621-5">
@@ -76,7 +76,12 @@
             </button>
           </div>
         </div>
-        <div class="messages" id="messages"></div>
+        <div class="chat-scroll-region">
+          <div class="messages" id="messages"></div>
+          <button type="button" class="chat-scroll-button" id="chatScrollBottomButton" title="К последним сообщениям" aria-label="К последним сообщениям" aria-hidden="true" tabindex="-1">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
+          </button>
+        </div>
         <form class="composer" id="chatForm">
           <div class="send-error hidden" id="sendError" role="alert">
             <div>
@@ -561,8 +566,8 @@
   <script src="js/app-chart-artifacts.js?v=chatui-20260622-1"></script>
   <script src="js/app-html-artifacts.js?v=chatui-20260622-3"></script>
   <script src="js/app-agent.js?v=chatui-20260622-1"></script>
-  <script src="js/app-messages.js?v=chatui-20260622-1"></script>
-  <script src="js/app-chat.js?v=chatui-20260622-2"></script>
+  <script src="js/app-messages.js?v=chatui-20260622-2"></script>
+  <script src="js/app-chat.js?v=chatui-20260622-3"></script>
   <script src="js/app.js?v=chatui-20260621-2"></script>
 </body>
 </html>

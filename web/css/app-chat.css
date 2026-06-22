@@ -1,5 +1,5 @@
 #tab-chat > .chatbar,
-#tab-chat > .messages,
+#tab-chat > .chat-scroll-region,
 #tab-chat > .composer {
   width: min(100%, 980px);
   margin-right: auto;
@@ -36,8 +36,16 @@
   align-items: center;
 }
 
+.chat-scroll-region {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .messages {
   flex: 1;
+  width: 100%;
+  height: 100%;
   min-height: 0;
   overflow: auto;
   padding: 0 4px 12px;
@@ -64,9 +72,10 @@
 
 .message.user .markdown {
   max-width: min(86%, 760px);
-  border-color: #dde7f5;
-  background: #f7f8fa;
-  box-shadow: 0 1px 2px rgba(16, 24, 39, 0.03);
+  border-color: #c9d9f6;
+  background: #edf5ff;
+  color: #152235;
+  box-shadow: 0 1px 2px rgba(29, 78, 216, 0.07);
 }
 
 .message.assistant {
@@ -80,17 +89,16 @@
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: #9aa8bc;
-  box-shadow: 0 0 0 3px #edf2f7;
+  background: #7f93ad;
+  box-shadow: 0 0 0 3px #eef3f8;
   content: "";
 }
 
 .message.assistant .markdown {
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-  padding-right: 2px;
-  padding-left: 2px;
+  max-width: min(94%, 820px);
+  border-color: #e3e9f2;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(16, 24, 39, 0.035);
 }
 
 .message.pending {
@@ -192,6 +200,43 @@
 .message.failed .message-action:hover {
   background: #fff0ed;
   color: #8a1f14;
+}
+
+.chat-scroll-button {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  z-index: 6;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  border-color: #cbd7e6;
+  border-radius: 999px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.96);
+  color: #30415a;
+  box-shadow: 0 10px 24px rgba(16, 24, 39, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px);
+  transition: opacity 0.16s ease, transform 0.16s ease, background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.chat-scroll-button.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.chat-scroll-button:hover {
+  border-color: #abc0dd;
+  background: #f8fbff;
+  color: var(--accent-strong);
+}
+
+.chat-scroll-button svg {
+  width: 16px;
+  height: 16px;
 }
 
 .chat-empty {

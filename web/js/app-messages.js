@@ -1,3 +1,77 @@
+var CHAT_BOTTOM_THRESHOLD = 64;
+var renderedMessagesChatId = null;
+
+function chatDistanceFromBottom(box) {
+  if (!box) {
+    return 0;
+  }
+  return Math.max(0, box.scrollHeight - box.scrollTop - box.clientHeight);
+}
+
+function isChatNearBottom(box) {
+  return !box || chatDistanceFromBottom(box) <= CHAT_BOTTOM_THRESHOLD;
+}
+
+function updateChatScrollButton() {
+  var box = $("messages");
+  var button = $("chatScrollBottomButton");
+  if (!box || !button) {
+    return;
+  }
+
+  var canScroll = box.scrollHeight > box.clientHeight + CHAT_BOTTOM_THRESHOLD;
+  var visible = canScroll && !isChatNearBottom(box);
+  button.classList.toggle("is-visible", visible);
+  button.setAttribute("aria-hidden", visible ? "false" : "true");
+  button.tabIndex = visible ? 0 : -1;
+}
+
+function scrollMessagesToBottom(smooth) {
+  var box = $("messages");
+  if (!box) {
+    return;
+  }
+
+  if (smooth && typeof box.scrollTo === "function") {
+    box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
+  } else {
+    box.scrollTop = box.scrollHeight;
+  }
+  updateChatScrollButton();
+}
+
+function syncChatScroll(shouldScroll, smooth) {
+  if (shouldScroll) {
+    scrollMessagesToBottom(smooth);
+  } else {
+    updateChatScrollButton();
+  }
+
+  if (window.requestAnimationFrame) {
+    window.requestAnimationFrame(function () {
+      if (shouldScroll) {
+        scrollMessagesToBottom(false);
+      } else {
+        updateChatScrollButton();
+      }
+    });
+  }
+}
+
+function bindMessageScrollControls() {
+  var box = $("messages");
+  var button = $("chatScrollBottomButton");
+  if (box) {
+    box.addEventListener("scroll", updateChatScrollButton, { passive: true });
+  }
+  if (button) {
+    button.addEventListener("click", function () {
+      scrollMessagesToBottom(true);
+    });
+  }
+  updateChatScrollButton();
+}
+
 function messageUsageText(message) {
   var total = messageTotalTokens(message);
   var prompt = messagePromptTokens(message);
@@ -166,11 +240,17 @@ function renderLiveActivity() {
   return live;
 }
 
-function renderMessages() {
+function renderMessages(options) {
+  options = options || {};
   var box = $("messages");
+  var chatChanged = renderedMessagesChatId !== state.activeChatId;
+  var shouldScroll = !!options.forceScroll || chatChanged || isChatNearBottom(box);
+
+  renderedMessagesChatId = state.activeChatId;
   box.innerHTML = "";
   if (!state.messages.length && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
     box.appendChild(renderChatEmptyState());
+    syncChatScroll(false, false);
     return;
   }
 
@@ -192,5 +272,5 @@ function renderMessages() {
     box.appendChild(live);
   }
 
-  box.scrollTop = box.scrollHeight;
+  syncChatScroll(shouldScroll, false);
 }
