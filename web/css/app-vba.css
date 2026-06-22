@@ -165,7 +165,7 @@
 
 .vba-diff-line.add .vba-diff-marker {
   color: #16835d;
-  font-weight: 700;
+  font-weight: var(--title-font-weight);
 }
 
 .vba-diff-line.add code {
@@ -182,7 +182,7 @@
 
 .vba-diff-line.remove .vba-diff-marker {
   color: var(--danger);
-  font-weight: 700;
+  font-weight: var(--title-font-weight);
 }
 
 .vba-diff-line.remove code {

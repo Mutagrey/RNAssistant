@@ -38,9 +38,9 @@
   --focus-ring-tight: rgba(37, 99, 235, 0.14);
   --section-line: rgba(226, 231, 239, 0.72);
   --actionbar-bg: linear-gradient(180deg, rgba(246, 247, 249, 0.88), var(--bg) 42%);
-  --button-font-weight: 500;
-  --label-font-weight: 500;
-  --title-font-weight: 600;
+  --button-font-weight: 450;
+  --label-font-weight: 450;
+  --title-font-weight: 500;
   --meta-font-weight: 400;
 }
 
@@ -271,7 +271,7 @@ button.danger-soft:hover {
   color: var(--muted);
   overflow: hidden;
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: var(--title-font-weight);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -356,7 +356,7 @@ button.danger-soft:hover {
   overflow: hidden;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: var(--meta-font-weight);
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;

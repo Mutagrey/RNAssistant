@@ -1,17 +1,20 @@
 function createResourceListItem(options) {
   options = options || {};
 
+  var hasMeta = !!options.meta;
   var item = document.createElement("button");
   item.type = "button";
-  item.className = "tool-list-item" + (options.active ? " active" : "") + (options.compact ? " is-compact" : "");
+  item.className = "tool-list-item"
+    + (options.active ? " active" : "")
+    + (options.compact ? " is-compact" : "")
+    + (options.icon ? " has-icon" : "")
+    + (hasMeta ? " has-meta" : "")
+    + (typeof options.enabled === "boolean" ? " has-badge" : "");
+  item.style.setProperty("--tree-depth", String(Math.max(0, Number(options.depth || 0))));
+  item.title = options.tooltip || [options.title, options.meta].filter(function (part) { return !!part; }).join(" - ");
 
   var top = document.createElement("div");
   top.className = "tool-list-top";
-
-  var title = document.createElement("div");
-  title.className = "tool-list-title";
-  title.textContent = options.title || "";
-  top.appendChild(title);
 
   if (options.icon) {
     var icon = document.createElement("span");
@@ -19,6 +22,12 @@ function createResourceListItem(options) {
     icon.textContent = options.icon;
     top.appendChild(icon);
   }
+
+  var title = document.createElement("div");
+  title.className = "tool-list-title";
+  title.textContent = options.title || "";
+  title.title = options.title || "";
+  top.appendChild(title);
 
   if (typeof options.enabled === "boolean") {
     var badge = document.createElement("div");
@@ -32,6 +41,7 @@ function createResourceListItem(options) {
   var meta = document.createElement("div");
   meta.className = "tool-list-meta";
   meta.textContent = options.meta || "";
+  meta.title = options.meta || "";
 
   var description = document.createElement("div");
   description.className = "tool-list-desc";
@@ -62,6 +72,7 @@ function createResourceGroup(options) {
   summary.className = "resource-tree-group-title";
   var title = document.createElement("span");
   title.textContent = options.title || "";
+  title.title = options.title || "";
   summary.appendChild(title);
   if (options.count !== undefined) {
     var count = document.createElement("em");
@@ -69,6 +80,10 @@ function createResourceGroup(options) {
     summary.appendChild(count);
   }
   details.appendChild(summary);
+  var children = document.createElement("div");
+  children.className = "resource-tree-group-children";
+  details.appendChild(children);
+  details.treeChildren = children;
   details.addEventListener("toggle", function () {
     state.collapsedResourceGroups = state.collapsedResourceGroups || {};
     state.collapsedResourceGroups[key] = !details.open;
@@ -152,6 +167,7 @@ function renderResourceList(options) {
         count: group.rows.length
       });
       list.appendChild(parent);
+      parent = parent.treeChildren || parent;
     }
 
     group.rows.forEach(function (row) {
@@ -165,6 +181,7 @@ function renderResourceList(options) {
       meta: options.meta(item),
       description: options.description(item),
       compact: !!options.compact,
+      depth: group.flat ? 0 : 1,
       onClick: function () {
         options.syncEditor();
         options.setSelectedIndex(index);

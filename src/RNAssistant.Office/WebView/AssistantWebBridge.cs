@@ -208,6 +208,12 @@ namespace RNAssistant.Office.WebView
                             htmlRestore.ChatId,
                             htmlRestore.SnapshotId);
                         break;
+                    case "redoHtmlWorkspaceSnapshot":
+                        var htmlRedo = Payload<HtmlWorkspaceRestorePayload>(payload);
+                        responsePayload = _controller.RedoHtmlWorkspaceSnapshot(
+                            htmlRedo.ChatId,
+                            htmlRedo.SnapshotId);
+                        break;
                     case "getContext":
                         responsePayload = _controller.GetContext(Payload<ChatPayload>(payload).ChatId);
                         break;

@@ -77,6 +77,7 @@
       matches: promptMatchesSearch,
       title: function (def) { return def.label; },
       enabled: function () { return null; },
+      icon: function () { return "PRM"; },
       meta: function (def) { return def.group + " - " + def.field; },
       description: function (def) { return def.description; },
       groupKey: function (def) { return def.group; },

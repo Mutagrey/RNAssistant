@@ -106,6 +106,7 @@ namespace RNAssistant.Office.Services
                     "For an existing HTML workspace, call common.html_workspace_read before editing. " +
                     "Create or update files with common.html_workspace_upsert_file using kind html, css, or script. " +
                     "Create or update dynamic JSON data with common.html_workspace_upsert_data; preview exposes it as window.RNAssistantData[name]. " +
+                    "Use full-page preview layouts by default: body margin 0, no narrow centered card wrapper unless requested, and responsive content that uses the available viewport. " +
                     "Do not use inline chat HTML artifact tools in HTML mode.";
             }
             var contextPrompt = _promptComposer.ComposeContextPrompt(documentContext);

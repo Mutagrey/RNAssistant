@@ -98,6 +98,7 @@ function renderVbaModuleList(modules, query) {
     });
     section.className += " vba-module-group";
     section.setAttribute("role", "group");
+    var body = section.treeChildren || section;
 
     group.modules.forEach(function (module) {
       var name = vbaModuleName(module);
@@ -110,6 +111,8 @@ function renderVbaModuleList(modules, query) {
         meta: type + (lineCount ? " - " + lineCount + " строк" : ""),
         description: firstVbaProcedureName(vbaModuleCode(module)) || "VBA module",
         compact: true,
+        icon: vbaModuleIcon(type),
+        depth: 1,
         onClick: function () {
           $("vbaModuleSelect").value = name;
           state.vba.selectedModule = name;
@@ -119,11 +122,25 @@ function renderVbaModuleList(modules, query) {
       });
       item.setAttribute("role", "treeitem");
       item.setAttribute("aria-selected", name === selectedName ? "true" : "false");
-      section.appendChild(item);
+      body.appendChild(item);
     });
 
     list.appendChild(section);
   });
+}
+
+function vbaModuleIcon(type) {
+  var value = String(type || "module").toLowerCase();
+  if (value.indexOf("class") >= 0) {
+    return "CLS";
+  }
+  if (value.indexOf("form") >= 0) {
+    return "FRM";
+  }
+  if (value.indexOf("document") >= 0 || value.indexOf("worksheet") >= 0 || value.indexOf("workbook") >= 0) {
+    return "OBJ";
+  }
+  return "MOD";
 }
 
 function groupVbaModules(modules) {

@@ -9,16 +9,34 @@ function renderSkills() {
     matches: skillMatchesSearch,
     title: function (skill) { return skill.Id || skill.Name || "навык"; },
     enabled: function (skill) { return skill.Enabled !== false; },
-    meta: function (skill) { return (skill.Host || "Common") + " - " + (skill.BuiltIn ? "built-in" : "custom"); },
+    icon: function (skill) { return skill.BuiltIn ? "SKL" : "CUS"; },
+    meta: skillListMeta,
     description: function (skill) { return skill.Description || ((skill.Tags || []).join(", ") || "Инструкция навыка"); },
     groupKey: function (skill) { return (skill.Host || "Common") + ":" + (skill.BuiltIn ? "builtin" : "custom"); },
-    groupLabel: function (skill) { return (skill.Host || "Common") + " · " + (skill.BuiltIn ? "built-in" : "custom"); },
+    groupLabel: skillGroupLabel,
     groupStoragePrefix: "skills",
     compact: true,
     syncEditor: syncSelectedSkillFromEditor,
     renderEditor: renderSkillEditor,
     renderList: renderSkills
   });
+}
+
+function cleanSkillHostLabel(host) {
+  return String(host || "Common").toLowerCase() === "common" ? "" : (host || "Common");
+}
+
+function skillListMeta(skill) {
+  if (!skill) {
+    return "";
+  }
+  return skill.BuiltIn ? cleanSkillHostLabel(skill.Host) : "custom";
+}
+
+function skillGroupLabel(skill) {
+  var host = cleanSkillHostLabel(skill && skill.Host);
+  var type = skill && skill.BuiltIn ? "Built-in" : "Custom";
+  return host ? host + " · " + type : type;
 }
 
 function skillMatchesSearch(skill, query) {

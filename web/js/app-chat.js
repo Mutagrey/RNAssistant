@@ -139,7 +139,7 @@ function applyInitState(init) {
   state.skillsPath = init.skillsPath || "";
   state.context = init.context || {};
   state.contextUsage = init.contextUsage || {};
-  state.htmlWorkspace = init.htmlWorkspace || init.HtmlWorkspace || { activeFileId: "", files: [], dataSources: [] };
+  state.htmlWorkspace = init.htmlWorkspace || init.HtmlWorkspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [] };
   state.htmlWorkspaceDirty = false;
   state.activeChatId = init.activeChatId || "";
   state.activeChatModel = init.activeChatModel || "";
@@ -186,7 +186,7 @@ function applyBridgeUnavailableState(error) {
   state.skillsPath = "";
   state.context = {};
   state.contextUsage = { usedChars: 0, limitChars: 0, percent: 0, actual: false };
-  state.htmlWorkspace = { activeFileId: "", files: [], dataSources: [] };
+  state.htmlWorkspace = { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [] };
   state.htmlWorkspaceDirty = false;
 
   $("docLine").textContent = "Office bridge недоступен";

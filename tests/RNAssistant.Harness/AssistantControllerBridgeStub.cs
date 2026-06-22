@@ -94,6 +94,7 @@ namespace RNAssistant.Office
         public HtmlWorkspaceResponse SaveHtmlWorkspaceData(string chatId, string name, string json) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace() }; }
         public HtmlWorkspaceResponse SetActiveHtmlWorkspaceFile(string chatId, string path) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace { ActiveFileId = path ?? string.Empty } }; }
         public HtmlWorkspaceResponse RestoreHtmlWorkspaceSnapshot(string chatId, string snapshotId) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace() }; }
+        public HtmlWorkspaceResponse RedoHtmlWorkspaceSnapshot(string chatId, string snapshotId) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace() }; }
         public DocumentContext GetContext(string chatId = null) { return new DocumentContext { DocumentKey = chatId ?? string.Empty }; }
         public DocumentContext AddSelectionContextFromBridge(string mode, string chatId = null) { return new DocumentContext { Title = mode ?? string.Empty }; }
 

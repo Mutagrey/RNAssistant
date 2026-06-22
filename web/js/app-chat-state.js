@@ -56,7 +56,7 @@ function applyChatState(response) {
     state.contextUsage = response.contextUsage || response.ContextUsage || {};
   }
   if (response.htmlWorkspace || response.HtmlWorkspace) {
-    state.htmlWorkspace = response.htmlWorkspace || response.HtmlWorkspace || { activeFileId: "", files: [], dataSources: [] };
+    state.htmlWorkspace = response.htmlWorkspace || response.HtmlWorkspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [] };
     state.htmlWorkspaceDirty = false;
   }
   renderChatSessions();

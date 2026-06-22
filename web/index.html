@@ -8,20 +8,20 @@
   <link rel="stylesheet" href="css/vendor/katex.min.css">
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
-  <link rel="stylesheet" href="css/app.css?v=chatui-20260622-2">
-  <link rel="stylesheet" href="css/app-chat.css?v=chatui-20260622-3">
-  <link rel="stylesheet" href="css/app-markdown.css?v=chatui-20260621-1">
+  <link rel="stylesheet" href="css/app.css?v=chatui-20260622-3">
+  <link rel="stylesheet" href="css/app-chat.css?v=chatui-20260622-5">
+  <link rel="stylesheet" href="css/app-markdown.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-composer.css?v=chatui-20260622-10">
   <link rel="stylesheet" href="css/app-context-chips.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-models.css?v=chatui-20260621-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=chatui-20260622-3">
-  <link rel="stylesheet" href="css/app-tools.css?v=chatui-20260622-4">
+  <link rel="stylesheet" href="css/app-tools.css?v=chatui-20260622-5">
   <link rel="stylesheet" href="css/app-prompts.css?v=chatui-20260622-3">
-  <link rel="stylesheet" href="css/app-vba.css?v=chatui-20260622-6">
+  <link rel="stylesheet" href="css/app-vba.css?v=chatui-20260622-7">
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
-  <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-2">
+  <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260622-3">
-  <link rel="stylesheet" href="css/app-html-workspace.css?v=chatui-20260622-4">
+  <link rel="stylesheet" href="css/app-html-workspace.css?v=chatui-20260622-6">
   <link rel="stylesheet" href="css/app-dialogs.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-responsive.css?v=chatui-20260622-12">
   <link rel="stylesheet" href="css/app-agent.css?v=chatui-20260622-2">
@@ -347,6 +347,13 @@
                 <button class="secondary" id="addJsFileButton" type="button">JS</button>
                 <button class="secondary" id="addHtmlDataButton" type="button">JSON</button>
               </div>
+              <div class="html-workspace-create hidden" id="htmlWorkspaceCreateBox">
+                <input class="tool-search" id="htmlWorkspaceCreateNameInput" autocomplete="off">
+                <div class="tool-list-actions">
+                  <button class="accent-soft" id="confirmHtmlCreateButton" type="button">Создать</button>
+                  <button class="secondary" id="cancelHtmlCreateButton" type="button">Отмена</button>
+                </div>
+              </div>
             </div>
             <div class="tool-list html-workspace-tree" id="htmlWorkspaceTree" role="tree" aria-label="HTML workspace"></div>
           </aside>
@@ -366,6 +373,7 @@
               </div>
               <div class="resource-editor-actions">
                 <button class="secondary" id="undoHtmlWorkspaceButton" type="button">Undo</button>
+                <button class="secondary" id="redoHtmlWorkspaceButton" type="button">Redo</button>
                 <button class="accent-soft" id="saveHtmlWorkspaceButton" type="button">Сохранить</button>
               </div>
             </div>
@@ -602,7 +610,7 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=chatui-20260622-3"></script>
+  <script src="js/app-core.js?v=chatui-20260622-5"></script>
   <script src="js/app-utils.js?v=chatui-20260620-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
@@ -613,12 +621,12 @@
   <script src="js/app-model-render.js?v=chatui-20260622-6"></script>
   <script src="js/app-models.js?v=chatui-20260622-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=chatui-20260622-4"></script>
-  <script src="js/app-resource-list.js?v=chatui-20260622-3"></script>
-  <script src="js/app-tools.js?v=chatui-20260622-3"></script>
-  <script src="js/app-skills.js?v=chatui-20260622-3"></script>
-  <script src="js/app-vba.js?v=chatui-20260622-6"></script>
-  <script src="js/app-html-workspace.js?v=chatui-20260622-5"></script>
+  <script src="js/app-chat-state.js?v=chatui-20260622-5"></script>
+  <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
+  <script src="js/app-tools.js?v=chatui-20260622-4"></script>
+  <script src="js/app-skills.js?v=chatui-20260622-4"></script>
+  <script src="js/app-vba.js?v=chatui-20260622-7"></script>
+  <script src="js/app-html-workspace.js?v=chatui-20260622-9"></script>
   <script src="js/app-context.js?v=chatui-20260622-1"></script>
   <script src="js/app-agent-data.js?v=chatui-20260622-1"></script>
   <script src="js/app-agent-model.js?v=chatui-20260622-1"></script>
@@ -626,7 +634,7 @@
   <script src="js/app-html-artifacts.js?v=chatui-20260622-3"></script>
   <script src="js/app-agent.js?v=chatui-20260622-3"></script>
   <script src="js/app-messages.js?v=chatui-20260622-3"></script>
-  <script src="js/app-chat.js?v=chatui-20260622-4"></script>
+  <script src="js/app-chat.js?v=chatui-20260622-5"></script>
   <script src="js/app.js?v=chatui-20260621-2"></script>
 </body>
 </html>

@@ -45,6 +45,14 @@ namespace RNAssistant.Office
             return HtmlWorkspaceState(session);
         }
 
+        public HtmlWorkspaceResponse RedoHtmlWorkspaceSnapshot(string chatId, string snapshotId)
+        {
+            var session = LoadSession(chatId);
+            HtmlArtifactToolExecutor.RedoSnapshot(session, snapshotId);
+            _chatStore.Save(session);
+            return HtmlWorkspaceState(session);
+        }
+
         private static HtmlWorkspaceResponse HtmlWorkspaceState(ChatSession session)
         {
             return new HtmlWorkspaceResponse

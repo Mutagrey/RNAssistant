@@ -191,6 +191,10 @@ namespace RNAssistant.Office.Tools
             {
                 workspace.History = new List<HtmlWorkspaceSnapshot>();
             }
+            if (workspace.RedoHistory == null)
+            {
+                workspace.RedoHistory = new List<HtmlWorkspaceSnapshot>();
+            }
 
             foreach (var file in workspace.Files.Where(f => f != null))
             {
@@ -223,44 +227,8 @@ namespace RNAssistant.Office.Tools
                 }
             }
 
-            foreach (var snapshot in workspace.History.Where(h => h != null))
-            {
-                if (string.IsNullOrWhiteSpace(snapshot.Id))
-                {
-                    snapshot.Id = Guid.NewGuid().ToString("N");
-                }
-                snapshot.Label = string.IsNullOrWhiteSpace(snapshot.Label) ? "HTML workspace snapshot" : snapshot.Label.Trim();
-                if (snapshot.CreatedUtc == default(DateTime))
-                {
-                    snapshot.CreatedUtc = DateTime.UtcNow;
-                }
-                if (snapshot.Files == null)
-                {
-                    snapshot.Files = new List<HtmlWorkspaceFile>();
-                }
-                if (snapshot.DataSources == null)
-                {
-                    snapshot.DataSources = new List<HtmlWorkspaceDataSource>();
-                }
-                foreach (var file in snapshot.Files.Where(f => f != null))
-                {
-                    file.Path = NormalizePath(string.IsNullOrWhiteSpace(file.Path) ? file.Id : file.Path);
-                    file.Id = FileId(file.Path);
-                    file.Kind = NormalizeKind(file.Kind, file.Path);
-                    file.Content = file.Content ?? string.Empty;
-                }
-                foreach (var dataSource in snapshot.DataSources.Where(d => d != null))
-                {
-                    dataSource.Name = NormalizeDataName(string.IsNullOrWhiteSpace(dataSource.Name) ? dataSource.Id : dataSource.Name);
-                    dataSource.Id = DataSourceId(dataSource.Name);
-                    dataSource.Json = dataSource.Json ?? "{}";
-                }
-            }
-            workspace.History = workspace.History
-                .Where(h => h != null)
-                .OrderByDescending(h => h.CreatedUtc)
-                .Take(MaxHistoryItems)
-                .ToList();
+            workspace.History = NormalizeSnapshots(workspace.History);
+            workspace.RedoHistory = NormalizeSnapshots(workspace.RedoHistory);
 
             if (string.IsNullOrWhiteSpace(workspace.ActiveFileId) ||
                 !workspace.Files.Any(f => f != null && string.Equals(f.Id, workspace.ActiveFileId, StringComparison.OrdinalIgnoreCase)))
@@ -288,6 +256,7 @@ namespace RNAssistant.Office.Tools
             ValidateFile(path, kind, content);
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
             PushHistory(session.HtmlWorkspace, "Before saving " + NormalizePath(path));
+            ClearRedoHistory(session.HtmlWorkspace);
             var normalizedPath = NormalizePath(path);
             var id = FileId(normalizedPath);
             var now = DateTime.UtcNow;
@@ -327,6 +296,7 @@ namespace RNAssistant.Office.Tools
             ValidateDataSource(name, json);
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
             PushHistory(session.HtmlWorkspace, "Before saving data " + NormalizeDataName(name));
+            ClearRedoHistory(session.HtmlWorkspace);
             var normalizedName = NormalizeDataName(name);
             var id = DataSourceId(normalizedName);
             var now = DateTime.UtcNow;
@@ -360,6 +330,7 @@ namespace RNAssistant.Office.Tools
             ValidatePath(path);
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
             PushHistory(session.HtmlWorkspace, "Before selecting " + NormalizePath(path));
+            ClearRedoHistory(session.HtmlWorkspace);
             var id = FileId(NormalizePath(path));
             var file = session.HtmlWorkspace.Files.FirstOrDefault(f =>
                 f != null && string.Equals(f.Id, id, StringComparison.OrdinalIgnoreCase));
@@ -389,10 +360,33 @@ namespace RNAssistant.Office.Tools
                 throw new InvalidOperationException("HTML workspace snapshot was not found.");
             }
 
-            session.HtmlWorkspace.Files = snapshot.Files.Where(f => f != null).Select(CloneFile).ToList();
-            session.HtmlWorkspace.DataSources = snapshot.DataSources.Where(d => d != null).Select(CloneDataSource).ToList();
-            session.HtmlWorkspace.ActiveFileId = snapshot.ActiveFileId;
+            InsertSnapshot(session.HtmlWorkspace.RedoHistory, CreateSnapshot(session.HtmlWorkspace, "Before undo"));
+            ApplySnapshot(session.HtmlWorkspace, snapshot);
             session.HtmlWorkspace.History.RemoveAll(h => h != null && string.Equals(h.Id, snapshot.Id, StringComparison.OrdinalIgnoreCase));
+            session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
+            NormalizeWorkspace(session.HtmlWorkspace);
+            return snapshot;
+        }
+
+        public static HtmlWorkspaceSnapshot RedoSnapshot(ChatSession session, string snapshotId)
+        {
+            if (session == null)
+            {
+                throw new InvalidOperationException("Chat session is required.");
+            }
+
+            session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
+            var snapshot = string.IsNullOrWhiteSpace(snapshotId)
+                ? session.HtmlWorkspace.RedoHistory.OrderByDescending(h => h.CreatedUtc).FirstOrDefault()
+                : session.HtmlWorkspace.RedoHistory.FirstOrDefault(h => h != null && string.Equals(h.Id, snapshotId, StringComparison.OrdinalIgnoreCase));
+            if (snapshot == null)
+            {
+                throw new InvalidOperationException("HTML workspace redo snapshot was not found.");
+            }
+
+            InsertSnapshot(session.HtmlWorkspace.History, CreateSnapshot(session.HtmlWorkspace, "Before redo"));
+            ApplySnapshot(session.HtmlWorkspace, snapshot);
+            session.HtmlWorkspace.RedoHistory.RemoveAll(h => h != null && string.Equals(h.Id, snapshot.Id, StringComparison.OrdinalIgnoreCase));
             session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
             NormalizeWorkspace(session.HtmlWorkspace);
             return snapshot;
@@ -438,15 +432,74 @@ namespace RNAssistant.Office.Tools
             });
         }
 
+        private static List<HtmlWorkspaceSnapshot> NormalizeSnapshots(List<HtmlWorkspaceSnapshot> snapshots)
+        {
+            snapshots = snapshots ?? new List<HtmlWorkspaceSnapshot>();
+            foreach (var snapshot in snapshots.Where(h => h != null))
+            {
+                if (string.IsNullOrWhiteSpace(snapshot.Id))
+                {
+                    snapshot.Id = Guid.NewGuid().ToString("N");
+                }
+                snapshot.Label = string.IsNullOrWhiteSpace(snapshot.Label) ? "HTML workspace snapshot" : snapshot.Label.Trim();
+                if (snapshot.CreatedUtc == default(DateTime))
+                {
+                    snapshot.CreatedUtc = DateTime.UtcNow;
+                }
+                if (snapshot.Files == null)
+                {
+                    snapshot.Files = new List<HtmlWorkspaceFile>();
+                }
+                if (snapshot.DataSources == null)
+                {
+                    snapshot.DataSources = new List<HtmlWorkspaceDataSource>();
+                }
+                foreach (var file in snapshot.Files.Where(f => f != null))
+                {
+                    file.Path = NormalizePath(string.IsNullOrWhiteSpace(file.Path) ? file.Id : file.Path);
+                    file.Id = FileId(file.Path);
+                    file.Kind = NormalizeKind(file.Kind, file.Path);
+                    file.Content = file.Content ?? string.Empty;
+                }
+                foreach (var dataSource in snapshot.DataSources.Where(d => d != null))
+                {
+                    dataSource.Name = NormalizeDataName(string.IsNullOrWhiteSpace(dataSource.Name) ? dataSource.Id : dataSource.Name);
+                    dataSource.Id = DataSourceId(dataSource.Name);
+                    dataSource.Json = dataSource.Json ?? "{}";
+                }
+            }
+
+            return snapshots
+                .Where(h => h != null)
+                .OrderByDescending(h => h.CreatedUtc)
+                .Take(MaxHistoryItems)
+                .ToList();
+        }
+
         private static void PushHistory(HtmlWorkspace workspace, string label)
         {
             workspace = NormalizeWorkspace(workspace);
-            if (!HasWorkspaceContent(workspace))
+            InsertSnapshot(workspace.History, CreateSnapshot(workspace, label));
+        }
+
+        private static void ClearRedoHistory(HtmlWorkspace workspace)
+        {
+            if (workspace == null)
             {
                 return;
             }
 
-            var snapshot = new HtmlWorkspaceSnapshot
+            workspace.RedoHistory = new List<HtmlWorkspaceSnapshot>();
+        }
+
+        private static HtmlWorkspaceSnapshot CreateSnapshot(HtmlWorkspace workspace, string label)
+        {
+            if (!HasWorkspaceContent(workspace))
+            {
+                return null;
+            }
+
+            return new HtmlWorkspaceSnapshot
             {
                 Id = Guid.NewGuid().ToString("N"),
                 Label = string.IsNullOrWhiteSpace(label) ? "HTML workspace snapshot" : label,
@@ -455,16 +508,31 @@ namespace RNAssistant.Office.Tools
                 DataSources = workspace.DataSources.Where(d => d != null).Select(CloneDataSource).ToList(),
                 CreatedUtc = DateTime.UtcNow
             };
-            if (workspace.History.Count > 0 && SnapshotEquals(snapshot, workspace.History[0]))
+        }
+
+        private static void InsertSnapshot(List<HtmlWorkspaceSnapshot> snapshots, HtmlWorkspaceSnapshot snapshot)
+        {
+            if (snapshots == null || snapshot == null)
+            {
+                return;
+            }
+            if (snapshots.Count > 0 && SnapshotEquals(snapshot, snapshots[0]))
             {
                 return;
             }
 
-            workspace.History.Insert(0, snapshot);
-            if (workspace.History.Count > MaxHistoryItems)
+            snapshots.Insert(0, snapshot);
+            if (snapshots.Count > MaxHistoryItems)
             {
-                workspace.History.RemoveRange(MaxHistoryItems, workspace.History.Count - MaxHistoryItems);
+                snapshots.RemoveRange(MaxHistoryItems, snapshots.Count - MaxHistoryItems);
             }
+        }
+
+        private static void ApplySnapshot(HtmlWorkspace workspace, HtmlWorkspaceSnapshot snapshot)
+        {
+            workspace.Files = (snapshot.Files ?? new List<HtmlWorkspaceFile>()).Where(f => f != null).Select(CloneFile).ToList();
+            workspace.DataSources = (snapshot.DataSources ?? new List<HtmlWorkspaceDataSource>()).Where(d => d != null).Select(CloneDataSource).ToList();
+            workspace.ActiveFileId = snapshot.ActiveFileId;
         }
 
         private static bool HasWorkspaceContent(HtmlWorkspace workspace)

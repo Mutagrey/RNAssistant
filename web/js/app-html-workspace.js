@@ -1,4 +1,6 @@
 (function () {
+  var htmlPreviewRefreshTimer = 0;
+
   function prop(source, pascal, camel, fallback) {
     source = source || {};
     return source[camel] !== undefined ? source[camel] : (source[pascal] !== undefined ? source[pascal] : fallback);
@@ -9,6 +11,7 @@
     current.files = prop(current, "Files", "files", []) || [];
     current.dataSources = prop(current, "DataSources", "dataSources", []) || [];
     current.history = prop(current, "History", "history", []) || [];
+    current.redoHistory = prop(current, "RedoHistory", "redoHistory", []) || [];
     current.activeFileId = prop(current, "ActiveFileId", "activeFileId", "") || "";
     state.htmlWorkspace = current;
     return current;
@@ -24,6 +27,10 @@
 
   function historyItems() {
     return workspace().history || [];
+  }
+
+  function redoItems() {
+    return workspace().redoHistory || [];
   }
 
   function fileId(file) {
@@ -174,6 +181,17 @@
     syncHtmlEditorToState();
     state.htmlWorkspaceDirty = true;
     updateHtmlWorkspaceStatus();
+    scheduleHtmlWorkspacePreviewRefresh();
+  }
+
+  function scheduleHtmlWorkspacePreviewRefresh() {
+    if (htmlPreviewRefreshTimer) {
+      window.clearTimeout(htmlPreviewRefreshTimer);
+    }
+    htmlPreviewRefreshTimer = window.setTimeout(function () {
+      htmlPreviewRefreshTimer = 0;
+      renderHtmlWorkspacePreview();
+    }, 160);
   }
 
   function updateHtmlWorkspaceStatus() {
@@ -186,7 +204,7 @@
       } else if (!files().length && !dataSources().length) {
         status.textContent = "HTML workspace пуст.";
       } else {
-        status.textContent = (files().length || 0) + " file(s), " + (dataSources().length || 0) + " data source(s), " + historyItems().length + " version(s)" + (state.htmlWorkspaceDirty ? " · не сохранено" : "");
+        status.textContent = (files().length || 0) + " file(s), " + (dataSources().length || 0) + " data source(s), " + historyItems().length + " undo, " + redoItems().length + " redo" + (state.htmlWorkspaceDirty ? " · не сохранено" : "");
       }
     }
     if (save) {
@@ -197,6 +215,12 @@
       $("undoHtmlWorkspaceButton").title = historyItems().length
         ? "Вернуть: " + snapshotLabel(historyItems()[0])
         : "Нет предыдущих версий";
+    }
+    if ($("redoHtmlWorkspaceButton")) {
+      $("redoHtmlWorkspaceButton").disabled = state.bridgeUnavailable || !redoItems().length;
+      $("redoHtmlWorkspaceButton").title = redoItems().length
+        ? "Повторить: " + snapshotLabel(redoItems()[0])
+        : "Нет отмененных версий";
     }
   }
 
@@ -250,18 +274,20 @@
     var count = 0;
     var group = createResourceGroup({ key: key, title: label, count: items.length });
     group.className += " html-workspace-group";
-    items.forEach(function (file) {
+    var body = group.treeChildren || group;
+    renderFileTreeRows(body, key, items.filter(function (file) {
       var text = [filePath(file), fileKind(file), fileContent(file)].join(" ");
-      if (!matchesText(text, query)) {
-        return;
-      }
-      group.appendChild(createResourceListItem({
-        title: filePath(file),
+      return matchesText(text, query);
+    }), function (container, file) {
+      container.appendChild(createResourceListItem({
+        title: fileDisplayName(file),
         active: selectedKey() === selectionKey("file", fileId(file)),
-        meta: fileKind(file) || "file",
+        meta: fileMeta(file),
+        tooltip: filePath(file) + " - " + (fileKind(file) || "file"),
         icon: fileListIcon(file),
         description: firstLine(fileContent(file)) || "HTML workspace file",
         compact: true,
+        depth: 1,
         onClick: function () { selectHtmlWorkspaceItem("file", fileId(file)); }
       }));
       count += 1;
@@ -276,18 +302,20 @@
     var count = 0;
     var group = createResourceGroup({ key: key, title: label, count: items.length });
     group.className += " html-workspace-group";
+    var body = group.treeChildren || group;
     items.forEach(function (data) {
       var text = [dataName(data), dataJson(data)].join(" ");
       if (!matchesText(text, query)) {
         return;
       }
-      group.appendChild(createResourceListItem({
+      body.appendChild(createResourceListItem({
         title: dataName(data),
         active: selectedKey() === selectionKey("data", dataId(data)),
         meta: "data/*.json",
         icon: "JSON",
         description: firstLine(dataJson(data)) || "JSON data source",
         compact: true,
+        depth: 1,
         onClick: function () { selectHtmlWorkspaceItem("data", dataId(data)); }
       }));
       count += 1;
@@ -300,6 +328,69 @@
 
   function firstLine(value) {
     return String(value || "").split(/\r?\n/)[0].trim().slice(0, 140);
+  }
+
+  function renderFileTreeRows(parent, key, items, appendFile) {
+    var tree = buildFileTree(items);
+    renderFileTreeNode(parent, key, tree, appendFile);
+  }
+
+  function buildFileTree(items) {
+    var root = { dirs: {}, files: [] };
+    items.forEach(function (file) {
+      var parts = String(filePath(file) || "").split("/").filter(function (part) { return !!part; });
+      var node = root;
+      while (parts.length > 1) {
+        var dir = parts.shift();
+        if (!node.dirs[dir]) {
+          node.dirs[dir] = { name: dir, dirs: {}, files: [] };
+        }
+        node = node.dirs[dir];
+      }
+      node.files.push(file);
+    });
+    return root;
+  }
+
+  function renderFileTreeNode(parent, key, node, appendFile) {
+    Object.keys(node.dirs).sort().forEach(function (dirName) {
+      var dir = node.dirs[dirName];
+      var group = createResourceGroup({
+        key: key + ":dir:" + dirPathKey(dir, dirName),
+        title: dirName,
+        count: countTreeFiles(dir)
+      });
+      group.className += " resource-tree-subgroup";
+      var body = group.treeChildren || group;
+      parent.appendChild(group);
+      renderFileTreeNode(body, key + "/" + dirName, dir, appendFile);
+    });
+    node.files.sort(function (left, right) {
+      return filePath(left).localeCompare(filePath(right));
+    }).forEach(function (file) {
+      appendFile(parent, file);
+    });
+  }
+
+  function dirPathKey(dir, fallback) {
+    return fallback || (dir && dir.name) || "folder";
+  }
+
+  function countTreeFiles(node) {
+    var count = (node.files || []).length;
+    Object.keys(node.dirs || {}).forEach(function (key) {
+      count += countTreeFiles(node.dirs[key]);
+    });
+    return count;
+  }
+
+  function fileDisplayName(file) {
+    var parts = String(filePath(file) || "").split("/").filter(function (part) { return !!part; });
+    return parts.length ? parts[parts.length - 1] : filePath(file);
+  }
+
+  function fileMeta(file) {
+    return fileKind(file) || "file";
   }
 
   function fileListIcon(file) {
@@ -402,6 +493,10 @@
     }).join("\n");
   }
 
+  function previewViewportReset() {
+    return "<style data-rn-preview-reset>html,body{min-height:100%;margin:0;}*,*::before,*::after{box-sizing:border-box;}</style>";
+  }
+
   function encodeHtml(value) {
     return String(value || "")
       .replace(/&/g, "&amp;")
@@ -413,7 +508,7 @@
   function buildPreviewHtml() {
     var file = activeHtmlFile();
     var html = file ? fileContent(file) : "";
-    var headInject = dataScript() + "\n" + cssBlock();
+    var headInject = previewViewportReset() + "\n" + dataScript() + "\n" + cssBlock();
     var bodyInject = scriptBlock();
     if (!html.trim()) {
       html = "<div style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">HTML workspace пуст.</div>";
@@ -456,7 +551,7 @@
 
   function applyHtmlWorkspaceResponse(response) {
     response = response || {};
-    state.htmlWorkspace = response.workspace || response.Workspace || { activeFileId: "", files: [], dataSources: [] };
+    state.htmlWorkspace = response.workspace || response.Workspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [] };
     state.htmlWorkspaceDirty = false;
     renderHtmlWorkspace();
   }
@@ -516,15 +611,78 @@
     }
   }
 
+  async function redoHtmlWorkspace() {
+    if (state.bridgeUnavailable || !redoItems().length) {
+      return;
+    }
+    if (state.htmlWorkspaceDirty && !window.confirm("Есть несохраненные изменения. Повторить отмененную версию?")) {
+      return;
+    }
+
+    setActivity("restoring", "Повторяю HTML workspace...");
+    try {
+      applyHtmlWorkspaceResponse(await send("redoHtmlWorkspaceSnapshot", {
+        chatId: state.activeChatId,
+        snapshotId: prop(redoItems()[0], "Id", "id", "")
+      }));
+      log("HTML workspace redo выполнен.");
+    } catch (error) {
+      log(error.detail || error.message);
+      window.alert(error.message || "HTML workspace redo не выполнен.");
+    } finally {
+      clearActivity();
+    }
+  }
+
   async function addHtmlWorkspaceFile(kind) {
     if (state.bridgeUnavailable) {
       return;
     }
     var fallback = kind === "css" ? "styles.css" : (kind === "script" ? "app.js" : "index.html");
-    var path = window.prompt("Имя файла", fallback);
+    showHtmlWorkspaceCreate(kind, fallback);
+  }
+
+  function showHtmlWorkspaceCreate(kind, fallback) {
+    state.htmlWorkspaceCreateKind = kind;
+    var box = $("htmlWorkspaceCreateBox");
+    var input = $("htmlWorkspaceCreateNameInput");
+    if (!box || !input) {
+      return;
+    }
+
+    box.classList.remove("hidden");
+    input.value = fallback || "";
+    input.placeholder = kind === "data" ? "Имя data source" : "Путь файла";
+    input.focus();
+    input.select();
+  }
+
+  function hideHtmlWorkspaceCreate() {
+    state.htmlWorkspaceCreateKind = "";
+    if ($("htmlWorkspaceCreateBox")) {
+      $("htmlWorkspaceCreateBox").classList.add("hidden");
+    }
+  }
+
+  async function confirmHtmlWorkspaceCreate() {
+    if (state.bridgeUnavailable) {
+      return;
+    }
+    var kind = state.htmlWorkspaceCreateKind || "html";
+    var input = $("htmlWorkspaceCreateNameInput");
+    var path = input ? input.value : "";
     if (!path || !path.trim()) {
       return;
     }
+    if (kind === "data") {
+      await createHtmlWorkspaceData(path.trim());
+      return;
+    }
+
+    await createHtmlWorkspaceFile(kind, path.trim());
+  }
+
+  async function createHtmlWorkspaceFile(kind, path) {
     var content = kind === "css"
       ? "body {\n  font-family: Segoe UI, Arial, sans-serif;\n}\n"
       : (kind === "script"
@@ -534,12 +692,13 @@
     try {
       applyHtmlWorkspaceResponse(await send("saveHtmlWorkspaceFile", {
         chatId: state.activeChatId,
-        path: path.trim(),
+        path: path,
         kind: kind,
         content: content,
         setActive: kind === "html"
       }));
-      state.htmlWorkspaceSelection = { type: "file", id: path.trim().toLowerCase() };
+      state.htmlWorkspaceSelection = { type: "file", id: path.toLowerCase() };
+      hideHtmlWorkspaceCreate();
       renderHtmlWorkspace();
     } catch (error) {
       log(error.detail || error.message);
@@ -553,18 +712,19 @@
     if (state.bridgeUnavailable) {
       return;
     }
-    var name = window.prompt("Имя data source", "data");
-    if (!name || !name.trim()) {
-      return;
-    }
+    showHtmlWorkspaceCreate("data", "data");
+  }
+
+  async function createHtmlWorkspaceData(name) {
     setActivity("saving", "Создаю JSON data source...");
     try {
       applyHtmlWorkspaceResponse(await send("saveHtmlWorkspaceData", {
         chatId: state.activeChatId,
-        name: name.trim(),
+        name: name,
         json: "{\n  \"items\": []\n}\n"
       }));
-      state.htmlWorkspaceSelection = { type: "data", id: name.trim().toLowerCase() };
+      state.htmlWorkspaceSelection = { type: "data", id: name.toLowerCase() };
+      hideHtmlWorkspaceCreate();
       renderHtmlWorkspace();
     } catch (error) {
       log(error.detail || error.message);
@@ -607,11 +767,23 @@
     $("htmlWorkspaceSearchInput").addEventListener("input", renderHtmlWorkspaceList);
     $("saveHtmlWorkspaceButton").addEventListener("click", saveHtmlWorkspaceSelection);
     $("undoHtmlWorkspaceButton").addEventListener("click", undoHtmlWorkspace);
+    $("redoHtmlWorkspaceButton").addEventListener("click", redoHtmlWorkspace);
     $("toggleHtmlSidebarButton").addEventListener("click", toggleHtmlWorkspaceSidebar);
     $("addHtmlFileButton").addEventListener("click", function () { addHtmlWorkspaceFile("html"); });
     $("addCssFileButton").addEventListener("click", function () { addHtmlWorkspaceFile("css"); });
     $("addJsFileButton").addEventListener("click", function () { addHtmlWorkspaceFile("script"); });
     $("addHtmlDataButton").addEventListener("click", addHtmlWorkspaceData);
+    $("confirmHtmlCreateButton").addEventListener("click", confirmHtmlWorkspaceCreate);
+    $("cancelHtmlCreateButton").addEventListener("click", hideHtmlWorkspaceCreate);
+    $("htmlWorkspaceCreateNameInput").addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        confirmHtmlWorkspaceCreate();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        hideHtmlWorkspaceCreate();
+      }
+    });
     Array.prototype.slice.call(document.querySelectorAll(".html-workspace-mode-button")).forEach(function (button) {
       button.addEventListener("click", function () {
         setHtmlWorkspaceMode(button.getAttribute("data-html-mode"));

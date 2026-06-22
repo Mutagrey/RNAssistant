@@ -219,6 +219,13 @@ namespace RNAssistant.Harness
             AssertEqual("index.html", session.HtmlWorkspace.ActiveFileId, "html undo keeps active file");
             AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "html undo keeps data");
             AssertEqual(historyCount - 1, session.HtmlWorkspace.History.Count, "html undo consumes restored version");
+            AssertEqual(1, session.HtmlWorkspace.RedoHistory.Count, "html undo creates redo version");
+
+            HtmlArtifactToolExecutor.RedoSnapshot(session, session.HtmlWorkspace.RedoHistory[0].Id);
+            AssertContains(session.HtmlWorkspace.Files[0].Content, "Second", "html redo restores undone file content");
+            AssertEqual("index.html", session.HtmlWorkspace.ActiveFileId, "html redo keeps active file");
+            AssertEqual(0, session.HtmlWorkspace.RedoHistory.Count, "html redo consumes redo version");
+            AssertEqual(historyCount, session.HtmlWorkspace.History.Count, "html redo restores undo history");
         }
 
         private static void ChatAgentCreatesHtmlWorkspace()

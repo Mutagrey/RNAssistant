@@ -9,16 +9,37 @@ function renderTools() {
     matches: toolMatchesSearch,
     title: function (tool) { return tool.Id || tool.Name || "инструмент"; },
     enabled: function (tool) { return tool.Enabled !== false; },
-    meta: function (tool) { return (tool.Host || "Common") + " - " + (tool.Executor || (tool.BuiltIn ? "builtin" : "pipeline")); },
+    icon: function (tool) { return tool.BuiltIn ? "BIN" : (String(tool.Executor || "PIPE").slice(0, 4).toUpperCase()); },
+    meta: toolListMeta,
     description: function (tool) { return tool.Description || (tool.BuiltIn ? "Встроенный Office-инструмент" : "Пользовательский инструмент"); },
     groupKey: function (tool) { return (tool.Host || "Common") + ":" + (tool.BuiltIn ? "builtin" : "custom"); },
-    groupLabel: function (tool) { return (tool.Host || "Common") + " · " + (tool.BuiltIn ? "built-in" : "custom"); },
+    groupLabel: toolGroupLabel,
     groupStoragePrefix: "tools",
     compact: true,
     syncEditor: syncSelectedToolFromEditor,
     renderEditor: renderToolEditor,
     renderList: renderTools
   });
+}
+
+function cleanHostLabel(host) {
+  return String(host || "Common").toLowerCase() === "common" ? "" : (host || "Common");
+}
+
+function toolListMeta(tool) {
+  if (!tool) {
+    return "";
+  }
+  if (tool.BuiltIn) {
+    return cleanHostLabel(tool.Host);
+  }
+  return tool.Executor || "pipeline";
+}
+
+function toolGroupLabel(tool) {
+  var host = cleanHostLabel(tool && tool.Host);
+  var type = tool && tool.BuiltIn ? "Built-in" : "Custom";
+  return host ? host + " · " + type : type;
 }
 
 function toolMatchesSearch(skill, query) {

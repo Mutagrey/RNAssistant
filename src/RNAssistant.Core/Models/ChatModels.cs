@@ -93,6 +93,7 @@ namespace RNAssistant.Core.Models
         public List<HtmlWorkspaceFile> Files { get; set; }
         public List<HtmlWorkspaceDataSource> DataSources { get; set; }
         public List<HtmlWorkspaceSnapshot> History { get; set; }
+        public List<HtmlWorkspaceSnapshot> RedoHistory { get; set; }
         public DateTime UpdatedUtc { get; set; }
 
         public HtmlWorkspace()
@@ -100,6 +101,7 @@ namespace RNAssistant.Core.Models
             Files = new List<HtmlWorkspaceFile>();
             DataSources = new List<HtmlWorkspaceDataSource>();
             History = new List<HtmlWorkspaceSnapshot>();
+            RedoHistory = new List<HtmlWorkspaceSnapshot>();
             UpdatedUtc = DateTime.UtcNow;
         }
     }

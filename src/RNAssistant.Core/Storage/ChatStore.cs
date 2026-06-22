@@ -294,6 +294,10 @@ namespace RNAssistant.Core.Storage
             {
                 session.HtmlWorkspace.History = new List<HtmlWorkspaceSnapshot>();
             }
+            if (session.HtmlWorkspace.RedoHistory == null)
+            {
+                session.HtmlWorkspace.RedoHistory = new List<HtmlWorkspaceSnapshot>();
+            }
             if (session.HtmlWorkspace.UpdatedUtc == default(DateTime))
             {
                 session.HtmlWorkspace.UpdatedUtc = session.UpdatedUtc == default(DateTime) ? DateTime.UtcNow : session.UpdatedUtc;
