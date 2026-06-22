@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -48,6 +49,10 @@ namespace RNAssistant.MockDemo
             else if (Contains(lastUser, "If the task is complete, answer the user normally"))
             {
                 content = FinalAnswer(_host);
+            }
+            else if (!LooksLikeOfficeAction(lastUser))
+            {
+                content = ProseAnswer(lastUser);
             }
             else if (string.Equals(model, "mock-glm5", StringComparison.OrdinalIgnoreCase))
             {
@@ -216,6 +221,16 @@ namespace RNAssistant.MockDemo
             return "Готово: создал лист `Demo Report`, записал таблицу продаж, добавил график `Demo Sales` и проверил диапазон/список графиков.";
         }
 
+        private static string ProseAnswer(string userText)
+        {
+            if (Contains(userText, "EBITDA"))
+            {
+                return "EBITDA - это прибыль бизнеса до процентов по кредитам, налогов, амортизации и износа. Простыми словами: показатель помогает понять, сколько компания зарабатывает на основной деятельности до влияния кредитов, налоговой структуры и бухгалтерской амортизации.";
+            }
+
+            return "Это обычный mock-ответ без вызова Office tools. В демо agent tools запускаются только когда запрос похож на действие с документом.";
+        }
+
         private static string AgentBlock(IEnumerable<DemoCommand> commands)
         {
             return "```rnassistant-agent\n" +
@@ -273,6 +288,23 @@ namespace RNAssistant.MockDemo
                 .Where(m => m != null && string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase))
                 .LastOrDefault();
             return last == null ? string.Empty : last.Content ?? string.Empty;
+        }
+
+        private static bool LooksLikeOfficeAction(string text)
+        {
+            var value = (text ?? string.Empty).ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            var action = Regex.IsMatch(value, "(создай|создать|сделай|построй|сгенерируй|заполни|вставь|замени|измени|добавь|нарисуй|create|make|add|insert|replace|update|write|generate|build|chart)");
+            if (!action)
+            {
+                return false;
+            }
+
+            return Regex.IsMatch(value, "(лист|таблиц|диапазон|ячейк|график|диаграмм|sheet|table|range|cell|chart|slide|слайд|document|документ|selection|выдел|mail|email|письм|отчет|report)");
         }
 
         private static bool Contains(string value, string expected)

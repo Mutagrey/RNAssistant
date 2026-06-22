@@ -117,6 +117,25 @@ namespace RNAssistant.MockDemo
             {
                 throw new InvalidOperationException("chat messages were not returned");
             }
+
+            var plain = await SendAsync(
+                bridge,
+                "4",
+                "sendChat",
+                new { chatId = chatId, text = "Что такое EBITDA простыми словами?" },
+                token).ConfigureAwait(false);
+            var plainPayload = Payload(plain);
+            var plainMessage = plainPayload["message"] == null ? string.Empty : plainPayload["message"].ToString();
+            if (plainMessage.IndexOf("EBITDA", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                throw new InvalidOperationException("plain answer did not answer the ordinary question: " + plainMessage);
+            }
+
+            var toolResults = plainPayload["toolResults"] as JArray;
+            if (toolResults != null && toolResults.Count != 0)
+            {
+                throw new InvalidOperationException("plain answer unexpectedly executed tools");
+            }
         }
 
         private static async Task<JObject> SendAsync(MockBridgeHost bridge, string id, string type, object payload, string token)
