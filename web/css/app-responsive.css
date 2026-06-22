@@ -29,8 +29,7 @@
   }
 
   .context-meter {
-    flex: 0 0 68px;
-    grid-template-columns: auto minmax(24px, 1fr);
+    flex: 0 0 96px;
   }
 
   .composer-model {
@@ -198,12 +197,7 @@
   }
 
   .context-meter {
-    flex: 0 0 38px;
-    grid-template-columns: auto;
-  }
-
-  .context-meter-track {
-    display: none;
+    flex: 0 0 84px;
   }
 
   .composer-model {
