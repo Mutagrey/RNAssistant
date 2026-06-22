@@ -61,6 +61,7 @@ namespace RNAssistant.Core.Storage
             {
                 settings.AgentPrompt = defaults.AgentPrompt;
             }
+            NormalizeAgentPrompts(settings);
             if (settings.MaxTokens <= 0)
             {
                 settings.MaxTokens = defaults.MaxTokens;
@@ -138,6 +139,29 @@ namespace RNAssistant.Core.Storage
                 settings.MaxAgentToolSteps = 200;
             }
             return settings;
+        }
+
+        private static void NormalizeAgentPrompts(AppSettings settings)
+        {
+            var defaults = new AgentPromptSettings();
+            if (settings.AgentPrompts == null)
+            {
+                settings.AgentPrompts = new AgentPromptSettings();
+            }
+
+            settings.AgentPrompts.ToolProtocolPrompt = DefaultIfBlank(settings.AgentPrompts.ToolProtocolPrompt, defaults.ToolProtocolPrompt);
+            settings.AgentPrompts.ToolRoutingPrompt = DefaultIfBlank(settings.AgentPrompts.ToolRoutingPrompt, defaults.ToolRoutingPrompt);
+            settings.AgentPrompts.ForceToolUsePrompt = DefaultIfBlank(settings.AgentPrompts.ForceToolUsePrompt, defaults.ForceToolUsePrompt);
+            settings.AgentPrompts.RepairMalformedToolBlockPrompt = DefaultIfBlank(settings.AgentPrompts.RepairMalformedToolBlockPrompt, defaults.RepairMalformedToolBlockPrompt);
+            settings.AgentPrompts.AfterToolResultsPrompt = DefaultIfBlank(settings.AgentPrompts.AfterToolResultsPrompt, defaults.AfterToolResultsPrompt);
+            settings.AgentPrompts.VerifyMutationPrompt = DefaultIfBlank(settings.AgentPrompts.VerifyMutationPrompt, defaults.VerifyMutationPrompt);
+            settings.AgentPrompts.ConfirmedToolContinuationPrompt = DefaultIfBlank(settings.AgentPrompts.ConfirmedToolContinuationPrompt, defaults.ConfirmedToolContinuationPrompt);
+            settings.AgentPrompts.RetryFailedToolPrompt = DefaultIfBlank(settings.AgentPrompts.RetryFailedToolPrompt, defaults.RetryFailedToolPrompt);
+        }
+
+        private static string DefaultIfBlank(string value, string fallback)
+        {
+            return string.IsNullOrWhiteSpace(value) ? fallback : value;
         }
 
         private static string NormalizeBaseUrl(string baseUrl)

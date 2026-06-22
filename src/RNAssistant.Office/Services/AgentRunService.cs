@@ -57,7 +57,7 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<SkillDefinition> skills,
             CancellationToken cancellationToken)
         {
-            var prompt = "The user confirmed and RNAssistant executed the pending local tool. Continue the same Office task from the stored local result. If a document or VBA mutation happened, verify it with read-only tools before the final answer.";
+            var prompt = PromptText(settings, p => p.ConfirmedToolContinuationPrompt);
             return await RunLoopAsync(prompt, prompt, CommandMutates(confirmedCommand, tools), session, documentContext, settings, tools, progress, pendingToolRegistrar, skills, cancellationToken).ConfigureAwait(false);
         }
 
@@ -140,14 +140,14 @@ namespace RNAssistant.Office.Services
                     if (iteration == 0 && settings.AgentModeEnabled != false && AgentTranscript.ShouldForceAgentToolUse(taskText, _adapter.HostName))
                     {
                         followUpPrompt = parseResult.HasProtocolDiagnostics
-                            ? "Your previous response contained an RNAssistant tool block, but the local parser could not recover executable JSON. Return only one corrected ```rnassistant-agent fenced JSON block with executable steps. Copy toolId values exactly from the Available tools list. No prose."
-                            : "You are in RNAssistant Agent mode. The user asked for an Office action, so a prose-only answer is not acceptable. Return only one ```rnassistant-agent fenced JSON block with executable steps. Copy toolId values exactly from the Available tools list. If a tool is missing, say that plainly instead of inventing one.";
+                            ? PromptText(settings, p => p.RepairMalformedToolBlockPrompt)
+                            : PromptText(settings, p => p.ForceToolUsePrompt);
                         continue;
                     }
 
                     if (verificationExpected && settings.RequireVerificationForMutations != false && !verificationPromptSent)
                     {
-                        followUpPrompt = VerificationPrompt();
+                        followUpPrompt = VerificationPrompt(settings);
                         verificationPromptSent = true;
                         continue;
                     }
@@ -248,8 +248,8 @@ namespace RNAssistant.Office.Services
                 }
 
                 followUpPrompt = mutationExecutedThisIteration && settings.RequireVerificationForMutations != false
-                    ? VerificationPrompt()
-                    : "Local tool results above are available. If the task is complete, answer the user normally. If more Office/VBA actions are needed, return one rnassistant-agent block with only the next commands.";
+                    ? VerificationPrompt(settings)
+                    : PromptText(settings, p => p.AfterToolResultsPrompt);
                 if (mutationExecutedThisIteration && settings.RequireVerificationForMutations != false)
                 {
                     verificationPromptSent = true;
@@ -283,12 +283,18 @@ namespace RNAssistant.Office.Services
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var repairPrompt = "A local tool call failed. Return only corrected rnassistant-agent JSON block(s), no prose. " +
-                "Use only these exact available tool ids: " + AvailableToolIdsText(tools) + "\n" +
-                "Original command: `" + failedCommand.ToolId + "` with arguments:\n```json\n" +
-                JsonConvert.SerializeObject(failedCommand.Arguments, Formatting.Indented) +
-                "\n```\nError: " + failedResult.Message +
-                (string.IsNullOrWhiteSpace(failedResult.DataJson) ? string.Empty : "\nData:\n```json\n" + failedResult.DataJson + "\n```");
+            var failedDataJson = failedResult == null ? null : failedResult.DataJson;
+            var dataJsonBlock = string.IsNullOrWhiteSpace(failedDataJson)
+                ? string.Empty
+                : "Data:\n```json\n" + failedDataJson + "\n```";
+            var repairPrompt = RenderPrompt(PromptText(settings, p => p.RetryFailedToolPrompt), new Dictionary<string, string>
+            {
+                ["availableToolIds"] = AvailableToolIdsText(tools),
+                ["toolId"] = failedCommand == null ? string.Empty : failedCommand.ToolId,
+                ["argumentsJson"] = JsonConvert.SerializeObject(failedCommand == null ? null : failedCommand.Arguments, Formatting.Indented),
+                ["error"] = failedResult == null ? string.Empty : failedResult.Message,
+                ["dataJsonBlock"] = dataJsonBlock
+            });
             var repairMessages = PromptMessageBuilder.Build(systemPrompt, contextPrompt, session.Messages, settings.ContextCharLimit);
             repairMessages.Add(new ChatMessage { Role = "user", Content = repairPrompt });
 
@@ -382,9 +388,30 @@ namespace RNAssistant.Office.Services
                 value.IndexOf("visual basic", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        private static string VerificationPrompt()
+        private static string VerificationPrompt(AppSettings settings)
         {
-            return "Local tool results above include a document or VBA mutation. Before the final answer, verify the result with read-only tools such as get_context, workbook_summary, read_range, list_charts, or VBA read tools. If verification shows a problem, return the next corrective rnassistant-agent block; otherwise answer normally with what changed and what you verified.";
+            return PromptText(settings, p => p.VerifyMutationPrompt);
+        }
+
+        private static string PromptText(AppSettings settings, Func<AgentPromptSettings, string> selector)
+        {
+            var defaults = new AgentPromptSettings();
+            var prompts = settings == null || settings.AgentPrompts == null
+                ? defaults
+                : settings.AgentPrompts;
+            var value = selector(prompts);
+            return string.IsNullOrWhiteSpace(value) ? selector(defaults) : value;
+        }
+
+        private static string RenderPrompt(string template, IDictionary<string, string> values)
+        {
+            var result = template ?? string.Empty;
+            foreach (var item in values ?? new Dictionary<string, string>())
+            {
+                result = result.Replace("{{" + item.Key + "}}", item.Value ?? string.Empty);
+            }
+
+            return result;
         }
 
         private static string AvailableToolIdsText(IEnumerable<ToolDefinition> tools)

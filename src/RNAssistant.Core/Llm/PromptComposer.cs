@@ -12,6 +12,7 @@ namespace RNAssistant.Core.Llm
         public string ComposeSystemPrompt(AppSettings settings, string host, string documentSnapshot, string vbaSnapshot, IEnumerable<ToolDefinition> tools, IEnumerable<SkillDefinition> skills, DocumentContext context)
         {
             settings = settings ?? new AppSettings();
+            var agentPrompts = settings.AgentPrompts ?? new AgentPromptSettings();
             var builder = new StringBuilder();
             if (!string.IsNullOrWhiteSpace(settings.SystemPrompt))
             {
@@ -44,20 +45,8 @@ namespace RNAssistant.Core.Llm
             {
                 builder.AppendLine("Normal chat mode is enabled. Answer in prose unless the user explicitly asks you to run an Office action.");
             }
-            builder.AppendLine("Required tool response format:");
-            builder.AppendLine("```rnassistant-agent");
-            builder.AppendLine("{\"description\":\"short plan\",\"steps\":[{\"description\":\"step name\",\"toolId\":\"tool.id\",\"arguments\":{\"name\":\"value\"}}]}");
-            builder.AppendLine("```");
-            builder.AppendLine("A JSON array is also accepted inside the fence. Each command must use a toolId copied exactly from the Available tools list and an arguments/args/parameters object.");
-            builder.AppendLine("Never invent tool ids or use API-style aliases such as create_worksheet, addWorksheet, create_sheet, worksheet.create, or action names instead of exact tool ids.");
-            builder.AppendLine("After tool results are provided, either answer normally if the task is complete or return the next tool block.");
-            builder.AppendLine("If no available tool can satisfy the request, say exactly what is missing.");
-            builder.AppendLine("For Excel requests to visualize selected data inside the chat, prefer excel.create_chat_chart. Use excel.add_chart only when the user wants a chart inserted into the workbook.");
-            builder.AppendLine("Use common.render_html only when the user explicitly asks for an HTML component/report in chat and unsafe HTML artifacts are enabled. Do not use it for normal prose or Office document changes.");
-            builder.AppendLine("After any document or VBA mutation, verify the result with read-only tools before the final answer. If verification shows a problem, correct it with another small tool step.");
-            builder.AppendLine("For VBA edits, prefer the host vba_apply_patch tool for structured small patches; use vba_replace_module only when replacing the whole module is necessary.");
-            builder.AppendLine("Use VBA only when built-in tools cannot solve the task cleanly, or when the user specifically asks for macros/VBA. For agent-created executable code, write VBA code for the current Office host.");
-            builder.AppendLine("When creating reusable automations, use common.tools_save for executable tools and common.skills_save for markdown guidance. Validate generated pipeline/VBA tool definitions before saving.");
+            AppendPromptBlock(builder, PromptOrDefault(agentPrompts.ToolProtocolPrompt, new AgentPromptSettings().ToolProtocolPrompt));
+            AppendPromptBlock(builder, PromptOrDefault(agentPrompts.ToolRoutingPrompt, new AgentPromptSettings().ToolRoutingPrompt));
             builder.AppendLine();
             AppendSkills(builder, skills, SkillBodyLimit(settings));
             builder.AppendLine("Available tools:");
@@ -89,6 +78,21 @@ namespace RNAssistant.Core.Llm
             }
 
             return builder.ToString();
+        }
+
+        private static void AppendPromptBlock(StringBuilder builder, string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            builder.AppendLine(value.Trim());
+        }
+
+        private static string PromptOrDefault(string value, string fallback)
+        {
+            return string.IsNullOrWhiteSpace(value) ? fallback : value;
         }
 
         private static void AppendSkills(StringBuilder builder, IEnumerable<SkillDefinition> skills, int bodyCharLimit)

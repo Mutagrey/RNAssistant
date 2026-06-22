@@ -16,6 +16,7 @@ function applyUiFontScale(settings) {
 
 function renderSettings() {
   var s = state.settings || {};
+  var prompts = s.AgentPrompts || s.agentPrompts || {};
   applyUiFontScale(s);
   $("baseUrlInput").value = s.BaseUrl || s.baseUrl || "";
   $("modelInput").value = s.Model || s.model || "";
@@ -40,6 +41,14 @@ function renderSettings() {
   $("vbaContextLimitInput").value = s.VbaContextCharLimit || s.vbaContextCharLimit || 30000;
   $("systemPromptInput").value = s.SystemPrompt || s.systemPrompt || "";
   $("agentPromptInput").value = s.AgentPrompt || s.agentPrompt || "";
+  $("toolProtocolPromptInput").value = promptValue(prompts, "ToolProtocolPrompt", "toolProtocolPrompt");
+  $("toolRoutingPromptInput").value = promptValue(prompts, "ToolRoutingPrompt", "toolRoutingPrompt");
+  $("forceToolUsePromptInput").value = promptValue(prompts, "ForceToolUsePrompt", "forceToolUsePrompt");
+  $("repairMalformedToolBlockPromptInput").value = promptValue(prompts, "RepairMalformedToolBlockPrompt", "repairMalformedToolBlockPrompt");
+  $("afterToolResultsPromptInput").value = promptValue(prompts, "AfterToolResultsPrompt", "afterToolResultsPrompt");
+  $("verifyMutationPromptInput").value = promptValue(prompts, "VerifyMutationPrompt", "verifyMutationPrompt");
+  $("confirmedToolContinuationPromptInput").value = promptValue(prompts, "ConfirmedToolContinuationPrompt", "confirmedToolContinuationPrompt");
+  $("retryFailedToolPromptInput").value = promptValue(prompts, "RetryFailedToolPrompt", "retryFailedToolPrompt");
   $("headersInput").value = headersToText(s.CustomHeaders || s.customHeaders || {});
   renderModelControls();
   settingsDirty = false;
@@ -71,7 +80,25 @@ function readSettings() {
     VbaContextCharLimit: Number($("vbaContextLimitInput").value || 30000),
     SystemPrompt: $("systemPromptInput").value,
     AgentPrompt: $("agentPromptInput").value,
+    AgentPrompts: readAgentPrompts(),
     CustomHeaders: textToHeaders($("headersInput").value)
+  };
+}
+
+function promptValue(prompts, pascal, camel) {
+  return prompts && prompts[pascal] !== undefined ? prompts[pascal] : ((prompts && prompts[camel] !== undefined) ? prompts[camel] : "");
+}
+
+function readAgentPrompts() {
+  return {
+    ToolProtocolPrompt: $("toolProtocolPromptInput").value,
+    ToolRoutingPrompt: $("toolRoutingPromptInput").value,
+    ForceToolUsePrompt: $("forceToolUsePromptInput").value,
+    RepairMalformedToolBlockPrompt: $("repairMalformedToolBlockPromptInput").value,
+    AfterToolResultsPrompt: $("afterToolResultsPromptInput").value,
+    VerifyMutationPrompt: $("verifyMutationPromptInput").value,
+    ConfirmedToolContinuationPrompt: $("confirmedToolContinuationPromptInput").value,
+    RetryFailedToolPrompt: $("retryFailedToolPromptInput").value
   };
 }
 

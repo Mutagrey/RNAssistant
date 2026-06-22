@@ -172,6 +172,26 @@ namespace RNAssistant.Harness
             AssertTrue(prompt.IndexOf("TAIL_MARKER", StringComparison.OrdinalIgnoreCase) < 0, "skill tail omitted");
         }
 
+        private static void PromptUsesEditableAgentPromptBlocks()
+        {
+            var settings = new AppSettings { AgentModeEnabled = true };
+            settings.AgentPrompts.ToolProtocolPrompt = "CUSTOM_TOOL_PROTOCOL";
+            settings.AgentPrompts.ToolRoutingPrompt = "CUSTOM_TOOL_ROUTING";
+
+            var prompt = new PromptComposer().ComposeSystemPrompt(
+                settings,
+                "Excel",
+                string.Empty,
+                string.Empty,
+                new ToolDefinition[0],
+                new SkillDefinition[0],
+                null);
+
+            AssertContains(prompt, "CUSTOM_TOOL_PROTOCOL", "custom tool protocol prompt");
+            AssertContains(prompt, "CUSTOM_TOOL_ROUTING", "custom tool routing prompt");
+            AssertTrue(prompt.IndexOf("Required tool response format", StringComparison.OrdinalIgnoreCase) < 0, "default protocol replaced");
+        }
+
         private static void AgentCanSaveSkillsWithConfirmation()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

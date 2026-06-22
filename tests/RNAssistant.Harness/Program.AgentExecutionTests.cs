@@ -156,6 +156,35 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ChatUsesEditableAgentFollowUpPrompt()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    "Sure, I can do that.",
+                    AgentBlock(Command("excel.add_sheet", "name", "Report")),
+                    "Done.");
+                var session = NewSession(adapter);
+                var settings = new AppSettings { ContextCharLimit = 8000 };
+                settings.AgentPrompts.ForceToolUsePrompt = "CUSTOM_FORCE_TOOL_PROMPT";
+
+                var result = service.ExecuteAsync(
+                    "Create a new sheet named Report.",
+                    session,
+                    NewContext(adapter),
+                    settings,
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Done.", result.AssistantText, "assistant text");
+                AssertContains(FlattenMessages(calls[1]), "CUSTOM_FORCE_TOOL_PROMPT", "custom force tool prompt");
+            });
+        }
+
         private static void AgentTranscriptCreatesActivityTree()
         {
             var plan = AgentTranscript.CreateAgentPlanActivity(new[] { Command("excel.add_sheet", "name", "Report") });

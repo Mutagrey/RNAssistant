@@ -380,13 +380,21 @@
             <section class="settings-page" data-settings-page="prompts">
               <div class="settings-heading">
                 <h2>Промпты</h2>
-                <p>Системный промпт отвечает за стиль, промпт агента - за планирование и инструменты.</p>
+                <p>Editable prompt blocks for agent planning, tool routing and recovery. Text can use Markdown.</p>
               </div>
               <div class="form-grid">
-                <label><span>Системный промпт</span><textarea id="systemPromptInput" rows="7"></textarea></label>
-                <label><span>Промпт агента</span><textarea id="agentPromptInput" rows="7"></textarea></label>
+                <label class="wide"><span>Системный промпт</span><textarea id="systemPromptInput" rows="5"></textarea></label>
+                <label class="wide"><span>Промпт агента</span><textarea id="agentPromptInput" rows="5"></textarea></label>
+                <label class="wide"><span>Tool protocol</span><textarea id="toolProtocolPromptInput" rows="7" spellcheck="false"></textarea></label>
+                <label class="wide"><span>Tool routing</span><textarea id="toolRoutingPromptInput" rows="9" spellcheck="false"></textarea></label>
+                <label class="wide"><span>Force tool use</span><textarea id="forceToolUsePromptInput" rows="4" spellcheck="false"></textarea></label>
+                <label class="wide"><span>Repair malformed tool block</span><textarea id="repairMalformedToolBlockPromptInput" rows="4" spellcheck="false"></textarea></label>
+                <label class="wide"><span>After tool results</span><textarea id="afterToolResultsPromptInput" rows="4" spellcheck="false"></textarea></label>
+                <label class="wide"><span>Verify mutation</span><textarea id="verifyMutationPromptInput" rows="4" spellcheck="false"></textarea></label>
+                <label class="wide"><span>Continue after confirmation</span><textarea id="confirmedToolContinuationPromptInput" rows="4" spellcheck="false"></textarea></label>
+                <label class="wide"><span>Retry failed tool</span><textarea id="retryFailedToolPromptInput" rows="8" spellcheck="false"></textarea></label>
               </div>
-              <div class="status">RNAssistant всегда добавляет обязательный протокол для parser/runtime.</div>
+              <div class="status">Retry placeholders: {{availableToolIds}}, {{toolId}}, {{argumentsJson}}, {{error}}, {{dataJsonBlock}}. Empty prompt fields fall back to built-in defaults.</div>
             </section>
 
             <section class="settings-page" data-settings-page="service">
@@ -490,7 +498,7 @@
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
   <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js?v=chatui-20260622-1"></script>
+  <script src="js/app-settings.js?v=chatui-20260622-2"></script>
   <script src="js/app-model-data.js"></script>
   <script src="js/app-model-render.js?v=chatui-20260622-1"></script>
   <script src="js/app-models.js"></script>
