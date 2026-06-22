@@ -55,10 +55,10 @@
 
 .composer-left {
   display: flex;
-  flex: 1 1 150px;
+  flex: 1 1 auto;
   gap: 4px;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   min-width: 0;
 }
 
@@ -81,11 +81,11 @@
 
 .composer-model {
   display: flex;
-  flex: 1 1 132px;
+  flex: 0 1 clamp(120px, 24vw, 240px);
   gap: 0;
   align-items: center;
-  min-width: 86px;
-  max-width: min(280px, 100%);
+  min-width: 104px;
+  max-width: 240px;
   min-height: 30px;
   border: 0;
   border-radius: 999px;

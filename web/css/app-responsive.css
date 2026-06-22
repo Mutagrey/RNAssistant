@@ -22,7 +22,7 @@
   }
 
   .composer-left {
-    flex: 1 1 150px;
+    flex: 1 1 auto;
     width: auto;
     flex-wrap: nowrap;
     gap: 4px;
@@ -34,9 +34,9 @@
   }
 
   .composer-model {
-    flex: 1 1 132px;
-    min-width: 86px;
-    max-width: min(240px, 100%);
+    flex: 0 1 clamp(116px, 22vw, 220px);
+    min-width: 96px;
+    max-width: 220px;
   }
 
   .context-meter em {
@@ -192,7 +192,7 @@
   }
 
   .composer-left {
-    flex: 1 1 122px;
+    flex: 1 1 auto;
     width: auto;
     gap: 2px;
   }
@@ -207,9 +207,9 @@
   }
 
   .composer-model {
-    flex: 1 1 96px;
-    min-width: 72px;
-    max-width: min(170px, 100%);
+    flex: 0 1 132px;
+    min-width: 92px;
+    max-width: 150px;
   }
 
   .composer-actions {
