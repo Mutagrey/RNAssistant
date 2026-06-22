@@ -50,7 +50,13 @@ namespace RNAssistant.Office
             _toolStore = new ToolStore(_paths);
             _skillStore = new SkillStore(_paths);
             _vbaBackupStore = new VbaBackupStore(_paths);
-            _toolExecutor = new OfficeToolExecutor(_adapter, _vbaBackupStore, _skillStore, _toolStore);
+            _toolExecutor = new OfficeToolExecutor(
+                _adapter,
+                _vbaBackupStore,
+                _skillStore,
+                _toolStore,
+                () => _settingsService.Load(),
+                settings => _settingsService.Save(settings));
             _toolCatalog = new ToolCatalogService(_adapter, _toolExecutor, _toolStore);
             _skillCatalog = new SkillCatalogService(_adapter, _skillStore);
             _chatSessions = new ChatSessionService(_adapter, _chatStore);

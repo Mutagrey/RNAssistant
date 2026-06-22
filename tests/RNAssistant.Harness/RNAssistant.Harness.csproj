@@ -52,6 +52,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Tools\PipelineToolExecutor.cs" Link="Office\Tools\PipelineToolExecutor.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\SkillToolExecutor.cs" Link="Office\Tools\SkillToolExecutor.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\ToolAuthoringExecutor.cs" Link="Office\Tools\ToolAuthoringExecutor.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Tools\PromptToolExecutor.cs" Link="Office\Tools\PromptToolExecutor.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\HtmlArtifactToolExecutor.cs" Link="Office\Tools\HtmlArtifactToolExecutor.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\ToolSafetyPolicy.cs" Link="Office\Tools\ToolSafetyPolicy.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\VbaToolExecutor.cs" Link="Office\Tools\VbaToolExecutor.cs" />

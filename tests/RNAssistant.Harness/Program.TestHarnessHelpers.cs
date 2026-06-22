@@ -31,7 +31,14 @@ namespace RNAssistant.Harness
         {
             WithTempPaths(delegate(AppDataPaths paths)
             {
-                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths), new ToolStore(paths));
+                var settings = new AppSettings();
+                var executor = new OfficeToolExecutor(
+                    adapter,
+                    new VbaBackupStore(paths),
+                    new SkillStore(paths),
+                    new ToolStore(paths),
+                    () => settings,
+                    value => settings = value);
                 action(executor, adapter);
             });
         }

@@ -73,6 +73,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "tools: store skips broken custom tool files", Run = ToolStoreSkipsBrokenCustomToolFiles },
                 new HarnessTest { Name = "tools: unknown and disabled tools fail", Run = UnknownAndDisabledToolsFail },
                 new HarnessTest { Name = "tools: html artifact setting gate", Run = HtmlArtifactToolRequiresSetting },
+                new HarnessTest { Name = "tools: prompt templates save", Run = PromptToolSavesAgentPromptTemplates },
                 new HarnessTest { Name = "tools: safety metadata gates mutations", Run = ToolSafetyMetadataGatesMutations },
                 new HarnessTest { Name = "tools: pipeline effective mutation gates false metadata", Run = CustomPipelineWithMutatingStepNeedsConfirmationWhenMetadataLies },
                 new HarnessTest { Name = "tools: confirmation matrix covers dry and manual runs", Run = ConfirmationMatrixCoversDryAndManualRuns },

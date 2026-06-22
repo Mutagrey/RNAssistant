@@ -15,15 +15,23 @@ namespace RNAssistant.Office.Tools
         private readonly VbaToolExecutor _vbaExecutor;
         private readonly SkillToolExecutor _skillExecutor;
         private readonly ToolAuthoringExecutor _toolAuthoringExecutor;
+        private readonly PromptToolExecutor _promptToolExecutor;
         private readonly HtmlArtifactToolExecutor _htmlArtifactExecutor;
 
-        public OfficeToolExecutor(IOfficeApplicationAdapter adapter, VbaBackupStore vbaBackupStore, SkillStore skillStore, ToolStore toolStore = null)
+        public OfficeToolExecutor(
+            IOfficeApplicationAdapter adapter,
+            VbaBackupStore vbaBackupStore,
+            SkillStore skillStore,
+            ToolStore toolStore = null,
+            Func<AppSettings> loadSettings = null,
+            Action<AppSettings> saveSettings = null)
         {
             _adapter = adapter;
             _pipelineExecutor = new PipelineToolExecutor();
             _vbaExecutor = new VbaToolExecutor(adapter, vbaBackupStore);
             _skillExecutor = new SkillToolExecutor(adapter, skillStore);
             _toolAuthoringExecutor = new ToolAuthoringExecutor(adapter, toolStore);
+            _promptToolExecutor = new PromptToolExecutor(loadSettings, saveSettings);
             _htmlArtifactExecutor = new HtmlArtifactToolExecutor();
         }
 
@@ -32,6 +40,7 @@ namespace RNAssistant.Office.Tools
             return _vbaExecutor.GetControllerTools()
                 .Concat(_skillExecutor.GetControllerTools())
                 .Concat(_toolAuthoringExecutor.GetControllerTools())
+                .Concat(_promptToolExecutor.GetControllerTools())
                 .Concat(_htmlArtifactExecutor.GetControllerTools());
         }
 
@@ -111,6 +120,12 @@ namespace RNAssistant.Office.Tools
                 return _toolAuthoringExecutor.ExecuteControllerTool(command, settings, dryRun, manualRun);
             }
 
+            if (_promptToolExecutor.IsControllerTool(command.ToolId))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return _promptToolExecutor.ExecuteControllerTool(command, dryRun);
+            }
+
             if (_htmlArtifactExecutor.IsControllerTool(command.ToolId))
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -167,6 +182,7 @@ namespace RNAssistant.Office.Tools
             AddTools(result, seen, _vbaExecutor.GetControllerTools());
             AddTools(result, seen, _skillExecutor.GetControllerTools());
             AddTools(result, seen, _toolAuthoringExecutor.GetControllerTools());
+            AddTools(result, seen, _promptToolExecutor.GetControllerTools());
             AddTools(result, seen, _htmlArtifactExecutor.GetControllerTools());
             return result;
         }

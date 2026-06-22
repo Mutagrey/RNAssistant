@@ -16,7 +16,6 @@ function applyUiFontScale(settings) {
 
 function renderSettings() {
   var s = state.settings || {};
-  var prompts = s.AgentPrompts || s.agentPrompts || {};
   applyUiFontScale(s);
   $("baseUrlInput").value = s.BaseUrl || s.baseUrl || "";
   $("modelInput").value = s.Model || s.model || "";
@@ -39,16 +38,9 @@ function renderSettings() {
   $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || 8;
   $("maxAgentToolStepsInput").value = s.MaxAgentToolSteps || s.maxAgentToolSteps || 40;
   $("vbaContextLimitInput").value = s.VbaContextCharLimit || s.vbaContextCharLimit || 30000;
-  $("systemPromptInput").value = s.SystemPrompt || s.systemPrompt || "";
-  $("agentPromptInput").value = s.AgentPrompt || s.agentPrompt || "";
-  $("toolProtocolPromptInput").value = promptValue(prompts, "ToolProtocolPrompt", "toolProtocolPrompt");
-  $("toolRoutingPromptInput").value = promptValue(prompts, "ToolRoutingPrompt", "toolRoutingPrompt");
-  $("forceToolUsePromptInput").value = promptValue(prompts, "ForceToolUsePrompt", "forceToolUsePrompt");
-  $("repairMalformedToolBlockPromptInput").value = promptValue(prompts, "RepairMalformedToolBlockPrompt", "repairMalformedToolBlockPrompt");
-  $("afterToolResultsPromptInput").value = promptValue(prompts, "AfterToolResultsPrompt", "afterToolResultsPrompt");
-  $("verifyMutationPromptInput").value = promptValue(prompts, "VerifyMutationPrompt", "verifyMutationPrompt");
-  $("confirmedToolContinuationPromptInput").value = promptValue(prompts, "ConfirmedToolContinuationPrompt", "confirmedToolContinuationPrompt");
-  $("retryFailedToolPromptInput").value = promptValue(prompts, "RetryFailedToolPrompt", "retryFailedToolPrompt");
+  if (typeof renderPromptSettings === "function") {
+    renderPromptSettings(s);
+  }
   $("headersInput").value = headersToText(s.CustomHeaders || s.customHeaders || {});
   renderModelControls();
   settingsDirty = false;
@@ -56,6 +48,12 @@ function renderSettings() {
 }
 
 function readSettings() {
+  if (typeof syncSelectedPromptFromEditor === "function") {
+    syncSelectedPromptFromEditor();
+  }
+  var promptSettings = typeof readPromptSettings === "function"
+    ? readPromptSettings()
+    : { SystemPrompt: "", AgentPrompt: "", AgentPrompts: {} };
   return {
     BaseUrl: $("baseUrlInput").value.trim(),
     Model: $("modelInput").value.trim(),
@@ -78,27 +76,10 @@ function readSettings() {
     MaxAgentIterations: Number($("maxAgentIterationsInput").value || 8),
     MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || 40),
     VbaContextCharLimit: Number($("vbaContextLimitInput").value || 30000),
-    SystemPrompt: $("systemPromptInput").value,
-    AgentPrompt: $("agentPromptInput").value,
-    AgentPrompts: readAgentPrompts(),
+    SystemPrompt: promptSettings.SystemPrompt,
+    AgentPrompt: promptSettings.AgentPrompt,
+    AgentPrompts: promptSettings.AgentPrompts,
     CustomHeaders: textToHeaders($("headersInput").value)
-  };
-}
-
-function promptValue(prompts, pascal, camel) {
-  return prompts && prompts[pascal] !== undefined ? prompts[pascal] : ((prompts && prompts[camel] !== undefined) ? prompts[camel] : "");
-}
-
-function readAgentPrompts() {
-  return {
-    ToolProtocolPrompt: $("toolProtocolPromptInput").value,
-    ToolRoutingPrompt: $("toolRoutingPromptInput").value,
-    ForceToolUsePrompt: $("forceToolUsePromptInput").value,
-    RepairMalformedToolBlockPrompt: $("repairMalformedToolBlockPromptInput").value,
-    AfterToolResultsPrompt: $("afterToolResultsPromptInput").value,
-    VerifyMutationPrompt: $("verifyMutationPromptInput").value,
-    ConfirmedToolContinuationPrompt: $("confirmedToolContinuationPromptInput").value,
-    RetryFailedToolPrompt: $("retryFailedToolPromptInput").value
   };
 }
 
@@ -122,6 +103,9 @@ function bindSettingsActions() {
 
   Array.prototype.slice.call(document.querySelectorAll("#tab-settings input, #tab-settings textarea, #tab-settings select")).forEach(function (control) {
     control.addEventListener(control.type === "checkbox" || control.tagName === "SELECT" ? "change" : "input", function () {
+      if (control.id === "promptSearchInput") {
+        return;
+      }
       settingsDirty = true;
       updateSettingsSaveButton();
     });
@@ -147,6 +131,9 @@ function bindSettingsActions() {
     }
   });
   $("clearRuntimeDataButton").addEventListener("click", clearRuntimeData);
+  if (typeof bindPromptSettingsActions === "function") {
+    bindPromptSettingsActions();
+  }
 }
 
 function activeSettingsPage() {

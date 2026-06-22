@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Storage;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
@@ -124,6 +125,53 @@ namespace RNAssistant.Harness
                 AssertTrue(allowed.Success, "html artifact enabled");
                 AssertContains(allowed.DataJson, "rnassistant.html", "html artifact type");
                 AssertContains(allowed.DataJson, "<script>", "raw script preserved");
+            });
+        }
+
+        private static void PromptToolSavesAgentPromptTemplates()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var settingsStore = new AppSettings();
+                var executor = new OfficeToolExecutor(
+                    adapter,
+                    new VbaBackupStore(paths),
+                    new SkillStore(paths),
+                    new ToolStore(paths),
+                    () => settingsStore,
+                    value => settingsStore = value);
+                var command = new ToolCommand { ToolId = "common.prompts_save" };
+                command.Arguments["toolRoutingPrompt"] = "CUSTOM ROUTING";
+                command.Arguments["retryFailedToolPrompt"] = "Retry {{toolId}} with {{availableToolIds}}";
+
+                var blocked = executor.Execute(
+                    command,
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    new AppSettings { AutoConfirmToolActions = false },
+                    false,
+                    false);
+                AssertContains(blocked.Status, "waiting_confirmation", "prompt save waits confirmation");
+
+                var saved = executor.Execute(
+                    command,
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false);
+                AssertTrue(saved.Success, "prompt save succeeds");
+
+                AssertEqual("CUSTOM ROUTING", settingsStore.AgentPrompts.ToolRoutingPrompt, "routing prompt saved");
+                AssertContains(settingsStore.AgentPrompts.RetryFailedToolPrompt, "{{toolId}}", "retry prompt placeholder saved");
+
+                var read = executor.Execute(
+                    new ToolCommand { ToolId = "common.prompts_read" },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    new AppSettings(),
+                    false,
+                    false);
+                AssertTrue(read.Success, "prompt read succeeds");
+                AssertContains(read.DataJson, "CUSTOM ROUTING", "prompt read data");
             });
         }
 

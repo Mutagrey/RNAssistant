@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="css/app-models.css?v=chatui-20260621-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=chatui-20260621-8">
   <link rel="stylesheet" href="css/app-tools.css?v=chatui-20260622-2">
+  <link rel="stylesheet" href="css/app-prompts.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-vba.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-1">
@@ -380,21 +381,45 @@
             <section class="settings-page" data-settings-page="prompts">
               <div class="settings-heading">
                 <h2>Промпты</h2>
-                <p>Editable prompt blocks for agent planning, tool routing and recovery. Text can use Markdown.</p>
+                <p>Редактируемые prompt-блоки агента. Текст можно писать как Markdown.</p>
               </div>
-              <div class="form-grid">
-                <label class="wide"><span>Системный промпт</span><textarea id="systemPromptInput" rows="5"></textarea></label>
-                <label class="wide"><span>Промпт агента</span><textarea id="agentPromptInput" rows="5"></textarea></label>
-                <label class="wide"><span>Tool protocol</span><textarea id="toolProtocolPromptInput" rows="7" spellcheck="false"></textarea></label>
-                <label class="wide"><span>Tool routing</span><textarea id="toolRoutingPromptInput" rows="9" spellcheck="false"></textarea></label>
-                <label class="wide"><span>Force tool use</span><textarea id="forceToolUsePromptInput" rows="4" spellcheck="false"></textarea></label>
-                <label class="wide"><span>Repair malformed tool block</span><textarea id="repairMalformedToolBlockPromptInput" rows="4" spellcheck="false"></textarea></label>
-                <label class="wide"><span>After tool results</span><textarea id="afterToolResultsPromptInput" rows="4" spellcheck="false"></textarea></label>
-                <label class="wide"><span>Verify mutation</span><textarea id="verifyMutationPromptInput" rows="4" spellcheck="false"></textarea></label>
-                <label class="wide"><span>Continue after confirmation</span><textarea id="confirmedToolContinuationPromptInput" rows="4" spellcheck="false"></textarea></label>
-                <label class="wide"><span>Retry failed tool</span><textarea id="retryFailedToolPromptInput" rows="8" spellcheck="false"></textarea></label>
+              <div class="prompt-layout split-layout" id="promptsLayout" data-split-key="prompts" data-default-ratio="0.3" data-min-left="180" data-min-ratio="0.2" data-max-ratio="0.48">
+                <div class="tool-list-panel surface-panel">
+                  <input class="tool-search" id="promptSearchInput" placeholder="Поиск промптов..." autocomplete="off">
+                  <aside class="tool-list" id="promptList"></aside>
+                </div>
+                <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка промптов"></div>
+                <section class="prompt-editor surface-panel" id="promptEditorPanel">
+                  <div class="resource-editor-empty" id="promptEditorEmpty">
+                    <div class="resource-editor-empty-title">Промпт не выбран</div>
+                    <div class="resource-editor-empty-text">Выберите prompt-блок слева.</div>
+                  </div>
+                  <div class="prompt-editor-content" id="promptEditorContent">
+                    <div class="prompt-editor-head">
+                      <div class="prompt-editor-titlebox">
+                        <div class="prompt-editor-title" id="promptTitle"></div>
+                        <div class="prompt-editor-meta" id="promptMeta"></div>
+                      </div>
+                      <div class="prompt-editor-actions">
+                        <button class="icon-button secondary" id="copyPromptButton" type="button" title="Скопировать промпт" aria-label="Скопировать промпт">
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        </button>
+                        <button class="secondary icon-text-button" id="addPromptToChatButton" type="button">
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                          <span>В чат</span>
+                        </button>
+                      </div>
+                    </div>
+                    <div class="prompt-mode-toggle" role="group" aria-label="Режим промпта">
+                      <button class="prompt-mode-button active" type="button" data-prompt-mode="preview">Preview</button>
+                      <button class="prompt-mode-button" type="button" data-prompt-mode="edit">Edit</button>
+                    </div>
+                    <div class="prompt-preview markdown" id="promptPreview"></div>
+                    <textarea class="prompt-edit-input hidden" id="promptEditInput" rows="16" spellcheck="false"></textarea>
+                  </div>
+                </section>
               </div>
-              <div class="status">Retry placeholders: {{availableToolIds}}, {{toolId}}, {{argumentsJson}}, {{error}}, {{dataJsonBlock}}. Empty prompt fields fall back to built-in defaults.</div>
+              <div class="status">Retry placeholders: {{availableToolIds}}, {{toolId}}, {{argumentsJson}}, {{error}}, {{dataJsonBlock}}. Пустые поля используют встроенный дефолт.</div>
             </section>
 
             <section class="settings-page" data-settings-page="service">
@@ -498,7 +523,8 @@
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
   <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js?v=chatui-20260622-2"></script>
+  <script src="js/app-settings.js?v=chatui-20260622-3"></script>
+  <script src="js/app-prompts.js?v=chatui-20260622-1"></script>
   <script src="js/app-model-data.js"></script>
   <script src="js/app-model-render.js?v=chatui-20260622-1"></script>
   <script src="js/app-models.js"></script>
