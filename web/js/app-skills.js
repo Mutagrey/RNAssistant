@@ -3,7 +3,7 @@ function renderSkills() {
     listId: "skillsList",
     searchInputId: "skillSearchInput",
     items: state.skills,
-    emptyText: "Навыки пока не загружены.",
+    emptyText: state.bridgeUnavailable ? "Office bridge недоступен. Навыки загрузятся внутри add-in." : "Навыки пока не загружены.",
     getSelectedIndex: function () { return state.selectedSkillIndex; },
     setSelectedIndex: function (index) { state.selectedSkillIndex = index; },
     matches: skillMatchesSearch,
@@ -32,6 +32,17 @@ function renderSkillEditor() {
   var skill = state.skills[state.selectedSkillIndex] || null;
   var disabled = !skill;
   var builtIn = !!(skill && skill.BuiltIn);
+  var panel = $("skillEditorPanel");
+  var empty = $("skillEditorEmpty");
+  if (panel) {
+    panel.classList.toggle("is-empty", disabled);
+  }
+  if (empty) {
+    empty.querySelector(".resource-editor-empty-title").textContent = state.bridgeUnavailable ? "Навыки недоступны" : "Навык не выбран";
+    empty.querySelector(".resource-editor-empty-text").textContent = state.bridgeUnavailable
+      ? "Откройте RNAssistant внутри Office, чтобы загрузить built-in и пользовательские навыки."
+      : "Выберите навык слева или создайте новый.";
+  }
   $("skillEnabledInput").checked = skill ? skill.Enabled !== false : false;
   $("skillIdInput").value = skill ? (skill.Id || "") : "";
   $("skillHostInput").value = skill ? (skill.Host || "Common") : "Common";
@@ -60,6 +71,8 @@ function renderSkillEditor() {
   $("cloneSkillButton").disabled = disabled;
   $("copySkillContextButton").disabled = disabled;
   $("askSkillBuilderButton").disabled = disabled;
+  $("addSkillButton").disabled = !!state.bridgeUnavailable;
+  $("saveSkillsButton").disabled = !!state.bridgeUnavailable;
 }
 
 function syncSelectedSkillFromEditor() {

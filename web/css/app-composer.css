@@ -214,6 +214,16 @@
   outline: 0;
 }
 
+.bridge-unavailable .composer {
+  border-color: #d8dee8;
+  background: #fbfcfe;
+  box-shadow: none;
+}
+
+.bridge-unavailable .composer textarea {
+  color: var(--muted);
+}
+
 .composer-actions {
   display: flex;
   flex-wrap: wrap;

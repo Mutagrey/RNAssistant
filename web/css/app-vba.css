@@ -26,6 +26,43 @@
   gap: 10px;
 }
 
+.vba-empty-state {
+  display: none;
+  min-height: 220px;
+  place-items: center;
+  align-content: center;
+  gap: 5px;
+  padding: 22px 18px;
+  border: 1px solid #e2e8f2;
+  border-radius: 8px;
+  background: #fbfcfe;
+  color: var(--muted);
+  text-align: center;
+}
+
+.vba-empty-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: var(--title-font-weight);
+}
+
+.vba-empty-text {
+  max-width: 380px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.vba-editor.is-empty .vba-empty-state {
+  display: grid;
+}
+
+.vba-editor.is-empty .vba-runbar,
+.vba-editor.is-empty .vba-code-pane,
+.vba-editor.is-empty .vba-diff-panel,
+.vba-editor.is-empty .vba-editor-actions {
+  display: none;
+}
+
 .vba-editor-head {
   display: flex;
   gap: 10px;
@@ -34,6 +71,10 @@
   min-width: 0;
   padding-bottom: 8px;
   border-bottom: 1px solid rgba(226, 231, 239, 0.72);
+}
+
+.vba-editor-head .panel-status {
+  white-space: normal;
 }
 
 .vba-runbar {
@@ -82,6 +123,7 @@
 }
 
 .vba-code-pane .CodeMirror-scroll {
+  max-width: 100%;
   min-height: clamp(260px, 48vh, 520px);
 }
 

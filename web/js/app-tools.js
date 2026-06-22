@@ -3,7 +3,7 @@ function renderTools() {
     listId: "toolsList",
     searchInputId: "toolSearchInput",
     items: state.tools,
-    emptyText: "Инструменты пока не загружены.",
+    emptyText: state.bridgeUnavailable ? "Office bridge недоступен. Инструменты загрузятся внутри add-in." : "Инструменты пока не загружены.",
     getSelectedIndex: function () { return state.selectedToolIndex; },
     setSelectedIndex: function (index) { state.selectedToolIndex = index; },
     matches: toolMatchesSearch,
@@ -32,6 +32,17 @@ function renderToolEditor() {
   var skill = state.tools[state.selectedToolIndex] || null;
   var disabled = !skill;
   var builtIn = !!(skill && skill.BuiltIn);
+  var panel = $("toolEditorPanel");
+  var empty = $("toolEditorEmpty");
+  if (panel) {
+    panel.classList.toggle("is-empty", disabled);
+  }
+  if (empty) {
+    empty.querySelector(".resource-editor-empty-title").textContent = state.bridgeUnavailable ? "Инструменты недоступны" : "Инструмент не выбран";
+    empty.querySelector(".resource-editor-empty-text").textContent = state.bridgeUnavailable
+      ? "Откройте RNAssistant внутри Office, чтобы загрузить built-in и пользовательские инструменты."
+      : "Выберите инструмент слева или создайте новый.";
+  }
   $("toolEnabledInput").checked = skill ? skill.Enabled !== false : false;
   $("toolIdInput").value = skill ? (skill.Id || "") : "";
   $("toolHostInput").value = skill ? (skill.Host || "Common") : "Common";
@@ -82,6 +93,8 @@ function renderToolEditor() {
   $("cloneToolButton").disabled = disabled;
   $("copyToolContextButton").disabled = disabled;
   $("askToolBuilderButton").disabled = disabled;
+  $("addToolButton").disabled = !!state.bridgeUnavailable;
+  $("saveToolsButton").disabled = !!state.bridgeUnavailable;
 }
 
 function syncSelectedToolFromEditor() {

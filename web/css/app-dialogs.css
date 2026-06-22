@@ -54,6 +54,7 @@
 }
 
 .help-content pre {
+  max-width: 100%;
   margin: 8px 0 0;
   padding: 9px;
   overflow: auto;
@@ -62,5 +63,9 @@
   background: var(--code);
   color: var(--code-text);
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
+.help-content code {
+  overflow-wrap: anywhere;
+}

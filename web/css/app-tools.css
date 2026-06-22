@@ -173,10 +173,15 @@
 }
 
 .tool-list-empty {
+  margin-top: 4px;
   padding: 14px 12px;
+  border: 1px solid #e2e8f2;
+  border-radius: 8px;
+  background: #fbfcfe;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.35;
+  text-align: center;
 }
 
 .tool-editor {
@@ -184,6 +189,42 @@
   min-width: 0;
   overflow: auto;
   padding: 0;
+}
+
+.resource-editor-empty {
+  display: none;
+  min-height: 220px;
+  place-items: center;
+  align-content: center;
+  gap: 5px;
+  padding: 22px 18px;
+  border: 1px solid #e2e8f2;
+  border-radius: 8px;
+  background: #fbfcfe;
+  color: var(--muted);
+  text-align: center;
+}
+
+.resource-editor-empty-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: var(--title-font-weight);
+}
+
+.resource-editor-empty-text {
+  max-width: 360px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.tool-editor.is-empty .resource-editor-empty {
+  display: grid;
+}
+
+.tool-editor.is-empty .tool-form,
+.tool-editor.is-empty .tool-run-output,
+.tool-editor.is-empty .tool-editor-actions {
+  display: none;
 }
 
 .tool-form {
@@ -268,4 +309,9 @@
 
 .rn-code-editor-skillBodyInput {
   min-height: 390px !important;
+}
+
+.tool-editor .CodeMirror,
+.tool-editor .CodeMirror-scroll {
+  max-width: 100%;
 }

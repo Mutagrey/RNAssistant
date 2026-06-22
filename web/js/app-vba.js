@@ -4,6 +4,7 @@ function renderVbaProject() {
   var query = (($("vbaModuleSearchInput") && $("vbaModuleSearchInput").value) || "").trim().toLowerCase();
   moduleSelect.innerHTML = "";
   backupSelect.innerHTML = "";
+  var renderedModules = 0;
 
   state.vba.modules.forEach(function (module) {
     if (query && !vbaModuleMatchesSearch(module, query)) {
@@ -14,7 +15,15 @@ function renderVbaProject() {
     option.value = module.name || module.Name || "";
     option.textContent = option.value + " (" + (module.type || module.Type || "module") + ")";
     moduleSelect.appendChild(option);
+    renderedModules += 1;
   });
+
+  if (!renderedModules) {
+    var emptyModule = document.createElement("option");
+    emptyModule.value = "";
+    emptyModule.textContent = state.bridgeUnavailable ? "Office bridge недоступен" : (query ? "Модули не найдены" : "Модули не загружены");
+    moduleSelect.appendChild(emptyModule);
+  }
 
   state.vba.backups.forEach(function (backup) {
     var option = document.createElement("option");
@@ -22,6 +31,35 @@ function renderVbaProject() {
     option.textContent = (backup.ModuleName || backup.moduleName || "module") + " - " + (backup.CreatedUtc || backup.createdUtc || "");
     backupSelect.appendChild(option);
   });
+
+  if (!state.vba.backups.length) {
+    var emptyBackup = document.createElement("option");
+    emptyBackup.value = "";
+    emptyBackup.textContent = "Резервных копий нет";
+    backupSelect.appendChild(emptyBackup);
+  }
+
+  moduleSelect.disabled = state.bridgeUnavailable || !renderedModules;
+  backupSelect.disabled = state.bridgeUnavailable || !state.vba.backups.length;
+  $("vbaModuleSearchInput").disabled = state.bridgeUnavailable;
+  $("refreshVbaButton").disabled = state.bridgeUnavailable;
+  var editorPanel = document.querySelector(".vba-editor");
+  var emptyState = $("vbaEmptyState");
+  var isEmpty = state.bridgeUnavailable || !renderedModules;
+  if (editorPanel) {
+    editorPanel.classList.toggle("is-empty", isEmpty);
+  }
+  if (emptyState) {
+    emptyState.querySelector(".vba-empty-title").textContent = state.bridgeUnavailable ? "VBA недоступен" : "VBA не загружен";
+    emptyState.querySelector(".vba-empty-text").textContent = state.bridgeUnavailable
+      ? "Откройте RNAssistant внутри Office, чтобы загрузить VBA-проект и работать с модулями."
+      : "Нажмите «Загрузить VBA», чтобы редактировать модули, сравнивать diff и сохранять изменения.";
+  }
+  if (state.bridgeUnavailable) {
+    $("vbaStatus").textContent = "Office bridge недоступен. VBA загрузится внутри add-in.";
+  } else if (!state.vba.modules.length) {
+    $("vbaStatus").textContent = "VBA-контекст не загружен.";
+  }
 
   if (state.vba.selectedModule && selectHasOption(moduleSelect, state.vba.selectedModule)) {
     moduleSelect.value = state.vba.selectedModule;
@@ -56,7 +94,17 @@ function renderSelectedVbaModule() {
     type: module.type || module.Type,
     lineCount: module.lineCount || module.LineCount
   }, null, 2) : "";
-  renderVbaDiff({ summary: module ? "Нажмите «Сравнить», чтобы посмотреть изменения." : "Модуль не выбран.", lines: [] });
+  renderVbaDiff({
+    summary: module ? "Нажмите «Показать diff», чтобы посмотреть изменения." : (state.bridgeUnavailable ? "Office bridge недоступен." : "Модуль не выбран."),
+    lines: []
+  });
+  if (typeof setCodeEditorReadOnly === "function") {
+    setCodeEditorReadOnly("vbaCodeInput", !module || state.bridgeUnavailable);
+  }
+  $("previewVbaDiffButton").disabled = !module || state.bridgeUnavailable;
+  $("saveVbaButton").disabled = !module || state.bridgeUnavailable;
+  $("restoreVbaButton").disabled = state.bridgeUnavailable || !$("vbaBackupSelect").value || !module;
+  $("reviewVbaButton").disabled = !module || state.bridgeUnavailable;
   updateVbaMacroSuggestion();
 }
 
@@ -288,10 +336,13 @@ function updateVbaMacroRunState() {
   if (!button || !input) {
     return;
   }
-  var supported = !!vbaMacroToolId();
+  var supported = !!vbaMacroToolId() && !state.bridgeUnavailable;
   var macroName = input.value.trim() || input.getAttribute("data-suggested") || "";
   button.disabled = !supported || !macroName;
-  if (!supported) {
+  input.disabled = state.bridgeUnavailable;
+  if (state.bridgeUnavailable) {
+    setVbaMacroStatus("Откройте панель внутри Office, чтобы загрузить VBA.", "muted");
+  } else if (!supported) {
     setVbaMacroStatus("Запуск макросов доступен для Excel, Word и PowerPoint.", "muted");
   }
 }

@@ -51,13 +51,19 @@ function renderChatEmptyState() {
 
   var title = document.createElement("div");
   title.className = "chat-empty-title";
-  title.textContent = "Готов к работе с документом";
+  title.textContent = state.bridgeUnavailable ? "Откройте панель из Office" : "Готов к работе с документом";
   empty.appendChild(title);
 
   var text = document.createElement("div");
   text.className = "chat-empty-text";
-  text.textContent = "Выберите контекст или задайте вопрос по текущему Office-файлу.";
+  text.textContent = state.bridgeUnavailable
+    ? "Статический UI загружен, но WebView bridge RNAssistant недоступен. Чаты, контекст и инструменты заработают внутри add-in."
+    : "Выберите контекст или задайте вопрос по текущему Office-файлу.";
   empty.appendChild(text);
+
+  if (state.bridgeUnavailable) {
+    return empty;
+  }
 
   var suggestions = document.createElement("div");
   suggestions.className = "chat-empty-suggestions";

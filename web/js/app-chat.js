@@ -126,9 +126,12 @@ async function forkChatAtMessage(message, index) {
 }
 
 function applyInitState(init) {
+  state.bridgeUnavailable = false;
+  document.body.classList.remove("bridge-unavailable");
   state.host = init.host;
   state.title = init.title;
   state.officeContext = init.officeContext || null;
+  state.bridgeToken = init.bridgeToken || init.BridgeToken || state.bridgeToken || "";
   state.settings = init.settings || {};
   state.tools = init.tools || [];
   state.skills = init.skills || [];
@@ -158,6 +161,44 @@ function applyInitState(init) {
   if (init.quickAction) {
     runQuickAction(init.quickAction);
   }
+}
+
+function applyBridgeUnavailableState(error) {
+  state.bridgeUnavailable = true;
+  document.body.classList.add("bridge-unavailable");
+  state.host = "";
+  state.title = "";
+  state.officeContext = null;
+  state.chats = [];
+  state.activeChatId = "";
+  state.messages = [];
+  state.tools = [];
+  state.skills = [];
+  state.vba = { modules: [], backups: [], selectedModule: "" };
+  state.toolsPath = "";
+  state.skillsPath = "";
+  state.context = {};
+  state.contextUsage = { usedChars: 0, limitChars: 0, percent: 0, actual: false };
+
+  $("docLine").textContent = "Office bridge недоступен";
+  $("toolsPath").textContent = "";
+  $("skillsPath").textContent = "";
+  renderSettings();
+  renderTools();
+  renderSkills();
+  renderContext(true);
+  renderChatSessions();
+  renderMessages();
+  renderContextMeter();
+  renderModelControls();
+  renderSendControls();
+  if (typeof renderVbaProject === "function") {
+    renderVbaProject();
+  }
+  if (typeof updateVbaMacroRunState === "function") {
+    updateVbaMacroRunState();
+  }
+  log((error && (error.detail || error.message)) || "WebView bridge is not available.");
 }
 
 function formatOfficeContextLine(context, host, title) {
@@ -190,7 +231,7 @@ async function initialize() {
     var init = await send("init");
     applyInitState(init);
   } catch (error) {
-    log(error.message);
+    applyBridgeUnavailableState(error);
   } finally {
     clearActivity();
   }
@@ -225,7 +266,7 @@ function renderSendControls() {
 
   if (sendButton) {
     sendButton.classList.toggle("hidden", isSending);
-    sendButton.disabled = isSending || state.modelSaving;
+    sendButton.disabled = isSending || state.modelSaving || state.bridgeUnavailable || !state.activeChatId;
   }
   if (stopButton) {
     stopButton.classList.toggle("hidden", !isSending);
@@ -235,13 +276,22 @@ function renderSendControls() {
     stopText.textContent = isCanceling ? "Отмена" : "Стоп";
   }
   if (input) {
-    input.readOnly = isSending;
+    input.readOnly = isSending || state.bridgeUnavailable;
+    input.placeholder = state.bridgeUnavailable
+      ? "Откройте RNAssistant внутри Office, чтобы начать чат..."
+      : "Спросите про текущий документ...";
   }
   if (clearButton) {
     clearButton.disabled = isSending;
   }
   if (modelSelect) {
-    modelSelect.disabled = isSending || state.modelCatalog.loading || state.modelSaving || !state.activeChatId;
+    modelSelect.disabled = isSending || state.modelCatalog.loading || state.modelSaving || state.bridgeUnavailable || !state.activeChatId;
+  }
+  if ($("addSelectionContextButton")) {
+    $("addSelectionContextButton").disabled = isSending || state.bridgeUnavailable;
+  }
+  if ($("toggleVbaContextButton")) {
+    $("toggleVbaContextButton").disabled = isSending || state.bridgeUnavailable;
   }
   updateComposerInputState();
 }

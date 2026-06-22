@@ -5,7 +5,14 @@ function renderChatSessions() {
   }
 
   select.innerHTML = "";
-  (state.chats || []).forEach(function (chat) {
+  var chats = state.chats || [];
+  if (!chats.length) {
+    var empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = state.bridgeUnavailable ? "Office bridge недоступен" : "Нет чатов";
+    select.appendChild(empty);
+  }
+  chats.forEach(function (chat) {
     var option = document.createElement("option");
     option.value = chatId(chat);
     var model = chatModel(chat);
@@ -13,9 +20,11 @@ function renderChatSessions() {
     select.appendChild(option);
   });
   select.value = state.activeChatId || "";
+  select.disabled = !chats.length || state.bridgeUnavailable;
 
   var hasActive = !!state.activeChatId;
   var hasMessages = !!(state.messages && state.messages.length);
+  $("newChatButton").disabled = !!state.bridgeUnavailable;
   $("renameChatButton").disabled = !hasActive;
   $("clearChatButton").disabled = !hasActive || !hasMessages;
   $("clearChatButton").hidden = !hasActive || !hasMessages;

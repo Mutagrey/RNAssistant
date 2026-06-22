@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; frame-src 'self' blob: data:; child-src 'self' blob: data:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RN Assistant</title>
   <link rel="stylesheet" href="css/vendor/katex.min.css">
@@ -11,16 +11,17 @@
   <link rel="stylesheet" href="css/app.css?v=chatui-20260621-14">
   <link rel="stylesheet" href="css/app-chat.css?v=chatui-20260621-6">
   <link rel="stylesheet" href="css/app-markdown.css?v=chatui-20260621-1">
-  <link rel="stylesheet" href="css/app-composer.css?v=chatui-20260621-9">
+  <link rel="stylesheet" href="css/app-composer.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=chatui-20260621-5">
   <link rel="stylesheet" href="css/app-models.css?v=chatui-20260621-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=chatui-20260621-8">
-  <link rel="stylesheet" href="css/app-tools.css?v=chatui-20260621-11">
-  <link rel="stylesheet" href="css/app-vba.css?v=chatui-20260621-8">
+  <link rel="stylesheet" href="css/app-tools.css?v=chatui-20260622-2">
+  <link rel="stylesheet" href="css/app-vba.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-1">
-  <link rel="stylesheet" href="css/app-dialogs.css">
-  <link rel="stylesheet" href="css/app-responsive.css?v=chatui-20260621-9">
+  <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260622-1">
+  <link rel="stylesheet" href="css/app-dialogs.css?v=chatui-20260622-1">
+  <link rel="stylesheet" href="css/app-responsive.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-agent.css?v=chatui-20260621-3">
   <link rel="stylesheet" href="css/app-agent-data.css?v=chatui-20260621-3">
 </head>
@@ -148,16 +149,20 @@
             <div class="tool-list-status" id="toolsPath"></div>
             <div class="tool-list-controls">
               <div class="tool-list-actions">
-                <button class="secondary" id="addToolButton" type="button">Новый</button>
-                <button class="secondary" id="cloneToolButton" type="button">Клон</button>
+                <button class="secondary" id="addToolButton" type="button">Новый инструмент</button>
+                <button class="secondary" id="cloneToolButton" type="button">Дублировать</button>
               </div>
               <input class="tool-search" id="toolSearchInput" placeholder="Поиск инструментов..." autocomplete="off">
             </div>
             <aside class="tool-list" id="toolsList"></aside>
           </div>
           <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка инструментов"></div>
-          <section class="tool-editor surface-panel">
-            <div class="form-grid tool-form">
+          <section class="tool-editor surface-panel" id="toolEditorPanel">
+            <div class="resource-editor-empty" id="toolEditorEmpty">
+              <div class="resource-editor-empty-title">Инструмент не выбран</div>
+              <div class="resource-editor-empty-text">Выберите инструмент слева или создайте новый.</div>
+            </div>
+            <div class="form-grid tool-form" id="toolForm">
               <div class="tool-form-section">Основное</div>
               <label>ID инструмента<input id="toolIdInput" placeholder="excel.normalize_table"></label>
               <label>Приложение<select id="toolHostInput"><option>Common</option><option>Excel</option><option>Word</option><option>PowerPoint</option><option>Outlook</option></select></label>
@@ -178,12 +183,12 @@
             <pre class="json-box tool-run-output" id="toolRunOutput"></pre>
             <div class="toolbar tool-editor-actions action-bar">
               <div class="action-group">
-                <button class="secondary" id="dryRunToolButton" type="button">Проверка</button>
+                <button class="secondary" id="dryRunToolButton" type="button">Проверить</button>
                 <button class="primary" id="runToolButton" type="button">Запустить</button>
               </div>
               <div class="action-group">
-                <button class="secondary" id="copyToolContextButton" type="button">В контекст</button>
-                <button class="secondary" id="askToolBuilderButton" type="button">В чате</button>
+                <button class="secondary" id="copyToolContextButton" type="button">Добавить в контекст</button>
+                <button class="secondary" id="askToolBuilderButton" type="button">Обсудить</button>
               </div>
               <div class="action-group action-group-end">
                 <button class="accent-soft" id="saveToolsButton" type="button">Сохранить</button>
@@ -200,16 +205,20 @@
             <div class="tool-list-status" id="skillsPath"></div>
             <div class="tool-list-controls">
               <div class="tool-list-actions">
-                <button class="secondary" id="addSkillButton" type="button">Новый</button>
-                <button class="secondary" id="cloneSkillButton" type="button">Клон</button>
+                <button class="secondary" id="addSkillButton" type="button">Новый навык</button>
+                <button class="secondary" id="cloneSkillButton" type="button">Дублировать</button>
               </div>
               <input class="tool-search" id="skillSearchInput" placeholder="Поиск навыков..." autocomplete="off">
             </div>
             <aside class="tool-list" id="skillsList"></aside>
           </div>
           <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка навыков"></div>
-          <section class="tool-editor surface-panel">
-            <div class="form-grid tool-form">
+          <section class="tool-editor surface-panel" id="skillEditorPanel">
+            <div class="resource-editor-empty" id="skillEditorEmpty">
+              <div class="resource-editor-empty-title">Навык не выбран</div>
+              <div class="resource-editor-empty-text">Выберите навык слева или создайте новый.</div>
+            </div>
+            <div class="form-grid tool-form" id="skillForm">
               <div class="tool-form-section">Основное</div>
               <label>ID навыка<input id="skillIdInput" placeholder="common.review_contract"></label>
               <label>Приложение<select id="skillHostInput"><option>Common</option><option>Excel</option><option>Word</option><option>PowerPoint</option><option>Outlook</option></select></label>
@@ -223,8 +232,8 @@
             </div>
             <div class="toolbar tool-editor-actions action-bar">
               <div class="action-group">
-                <button class="secondary" id="copySkillContextButton" type="button">В контекст</button>
-                <button class="secondary" id="askSkillBuilderButton" type="button">В чате</button>
+                <button class="secondary" id="copySkillContextButton" type="button">Добавить в контекст</button>
+                <button class="secondary" id="askSkillBuilderButton" type="button">Обсудить</button>
               </div>
               <div class="action-group action-group-end">
                 <button class="accent-soft" id="saveSkillsButton" type="button">Сохранить</button>
@@ -255,9 +264,13 @@
               <div class="panel-status" id="vbaStatus">VBA-контекст не загружен.</div>
               <div class="panel-actions vba-commandbar">
                 <div class="action-group">
-                  <button class="secondary" id="refreshVbaButton" type="button">Обновить</button>
+                  <button class="secondary" id="refreshVbaButton" type="button">Загрузить VBA</button>
                 </div>
               </div>
+            </div>
+            <div class="vba-empty-state" id="vbaEmptyState">
+              <div class="vba-empty-title">VBA не загружен</div>
+              <div class="vba-empty-text">Загрузите VBA-проект, чтобы редактировать модули, сравнивать diff и сохранять изменения.</div>
             </div>
             <div class="vba-runbar">
               <label class="inline-field">Макрос<input id="vbaMacroInput" autocomplete="off" placeholder="Module1.Main"></label>
@@ -273,13 +286,13 @@
             </details>
             <div class="toolbar vba-editor-actions action-bar">
               <div class="action-group">
-                <button class="secondary" id="previewVbaDiffButton" type="button">Сравнить</button>
-                <button class="secondary" id="reviewVbaButton" type="button">В чате</button>
+                <button class="secondary" id="previewVbaDiffButton" type="button">Показать diff</button>
+                <button class="secondary" id="reviewVbaButton" type="button">Обсудить код</button>
               </div>
               <div class="action-group action-group-end">
                 <button class="accent-soft" id="saveVbaButton" type="button">Сохранить</button>
                 <details class="toolbar-menu">
-                  <summary>Еще</summary>
+                  <summary>Действия</summary>
                   <div class="toolbar-menu-body">
                     <button class="secondary" id="restoreVbaButton" type="button">Восстановить копию</button>
                   </div>
@@ -363,8 +376,9 @@
               <div class="form-grid two-columns">
                 <label><span>Размер шрифта, %</span><input id="uiFontScaleInput" type="number" min="85" max="130" step="5"></label>
                 <label class="checkline"><input id="smartChatTitlesInput" type="checkbox"><span>Умные названия чатов</span></label>
+                <label class="checkline"><input id="allowUnsafeHtmlArtifactsInput" type="checkbox"><span>Экспериментальный HTML в чате</span></label>
               </div>
-              <div class="setting-note">Если выключить, новый чат получает название из первых символов ответа модели.</div>
+              <div class="setting-note">HTML-компоненты выполняются в sandboxed iframe. Включайте только для тестов с доверенным содержимым.</div>
             </section>
 
             <section class="settings-page" data-settings-page="prompts">
@@ -475,28 +489,29 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=chatui-20260621-1"></script>
+  <script src="js/app-core.js?v=chatui-20260622-1"></script>
   <script src="js/app-utils.js?v=chatui-20260620-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
   <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js?v=chatui-20260621-2"></script>
+  <script src="js/app-settings.js?v=chatui-20260622-1"></script>
   <script src="js/app-model-data.js"></script>
-  <script src="js/app-model-render.js?v=chatui-20260621-1"></script>
+  <script src="js/app-model-render.js?v=chatui-20260622-1"></script>
   <script src="js/app-models.js"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=chatui-20260621-2"></script>
-  <script src="js/app-resource-list.js?v=chatui-20260621-3"></script>
-  <script src="js/app-tools.js?v=chatui-20260621-6"></script>
-  <script src="js/app-skills.js?v=chatui-20260621-6"></script>
-  <script src="js/app-vba.js?v=chatui-20260621-2"></script>
+  <script src="js/app-chat-state.js?v=chatui-20260622-1"></script>
+  <script src="js/app-resource-list.js?v=chatui-20260622-1"></script>
+  <script src="js/app-tools.js?v=chatui-20260622-2"></script>
+  <script src="js/app-skills.js?v=chatui-20260622-2"></script>
+  <script src="js/app-vba.js?v=chatui-20260622-2"></script>
   <script src="js/app-context.js?v=chatui-20260621-5"></script>
   <script src="js/app-agent-data.js?v=chatui-20260621-1"></script>
   <script src="js/app-agent-model.js?v=chatui-20260620-1"></script>
   <script src="js/app-chart-artifacts.js?v=chatui-20260622-1"></script>
-  <script src="js/app-agent.js?v=chatui-20260621-1"></script>
-  <script src="js/app-messages.js?v=chatui-20260621-2"></script>
-  <script src="js/app-chat.js?v=chatui-20260621-4"></script>
+  <script src="js/app-html-artifacts.js?v=chatui-20260622-1"></script>
+  <script src="js/app-agent.js?v=chatui-20260622-1"></script>
+  <script src="js/app-messages.js?v=chatui-20260622-1"></script>
+  <script src="js/app-chat.js?v=chatui-20260622-2"></script>
   <script src="js/app.js?v=chatui-20260621-2"></script>
 </body>
 </html>

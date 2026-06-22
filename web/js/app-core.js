@@ -10,6 +10,7 @@ var state = {
   chats: [],
   activeChatId: "",
   activeChatModel: "",
+  bridgeToken: "",
   messages: [],
   failedSend: null,
   activeSend: null,
@@ -17,6 +18,7 @@ var state = {
   liveAgentRun: null,
   modelCatalog: { configUrl: "", defaultModel: "", models: [], loaded: false, loading: false, error: "" },
   modelSaving: false,
+  bridgeUnavailable: false,
   selectedToolIndex: -1,
   selectedSkillIndex: -1,
   toolsPath: "",
@@ -120,7 +122,7 @@ function send(type, payload) {
     }
 
     state.pending[id] = { resolve: resolve, reject: reject, type: type };
-    window.chrome.webview.postMessage({ id: id, type: type, payload: payload || {} });
+    window.chrome.webview.postMessage({ id: id, type: type, bridgeToken: state.bridgeToken || null, payload: payload || {} });
   });
   promise.requestId = id;
   return promise;
