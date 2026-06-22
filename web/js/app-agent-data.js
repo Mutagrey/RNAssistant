@@ -39,56 +39,6 @@ function isScalarJson(value) {
   return value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean";
 }
 
-function appendUnique(items, value) {
-  if (value && items.indexOf(value) < 0) {
-    items.push(value);
-  }
-}
-
-function activityDataBadges(activity) {
-  var badges = [];
-  var toolId = activityToolId(activity).toLowerCase();
-  var args = tryParseJson(activityArgumentsJson(activity));
-  var data = tryParseJson(activityDataJson(activity));
-  var combined = toolId + " " + (activityArgumentsJson(activity) || "").toLowerCase() + " " + (activityDataJson(activity) || "").toLowerCase();
-
-  if (combined.indexOf("vba") >= 0 || combined.indexOf("module") >= 0 || combined.indexOf("macro") >= 0) {
-    appendUnique(badges, "vba");
-  }
-  if (combined.indexOf("slide") >= 0 || combined.indexOf("powerpoint") >= 0) {
-    appendUnique(badges, "slide");
-  }
-  if (combined.indexOf("mail") >= 0 || combined.indexOf("email") >= 0 || combined.indexOf("outlook") >= 0) {
-    appendUnique(badges, "mail");
-  }
-  if (combined.indexOf("range") >= 0 || combined.indexOf("address") >= 0 || combined.indexOf("sheet") >= 0 || combined.indexOf("cell") >= 0) {
-    appendUnique(badges, "range");
-  }
-  if (combined.indexOf("table") >= 0 || combined.indexOf("rows") >= 0 || combined.indexOf("values") >= 0) {
-    appendUnique(badges, "table");
-  }
-
-  [args.value, data.value].forEach(function (value) {
-    if (Array.isArray(value)) {
-      appendUnique(badges, "table");
-    }
-    if (value && typeof value === "object") {
-      var keys = objectKeys(value).map(function (key) { return key.toLowerCase(); }).join(" ");
-      if (/(rows|values|cells|table)/.test(keys)) {
-        appendUnique(badges, "table");
-      }
-      if (/(range|address|sheet|cell)/.test(keys)) {
-        appendUnique(badges, "range");
-      }
-    }
-  });
-
-  if (activityDataJson(activity)) {
-    appendUnique(badges, "json");
-  }
-  return badges;
-}
-
 function scalarJsonText(value) {
   if (value === null) {
     return "null";
@@ -134,7 +84,7 @@ function renderJsonArray(value, depth) {
   if (!value.length) {
     var emptyArray = document.createElement("span");
     emptyArray.className = "agent-data-empty";
-    emptyArray.textContent = "Empty array";
+    emptyArray.textContent = "Пустой массив";
     return emptyArray;
   }
 
@@ -156,7 +106,7 @@ function renderJsonArray(value, depth) {
   if (value.length > 20) {
     var more = document.createElement("li");
     more.className = "agent-data-note";
-    more.textContent = "..." + (value.length - 20) + " more";
+    more.textContent = "Еще " + (value.length - 20);
     list.appendChild(more);
   }
   return list;
@@ -196,10 +146,10 @@ function renderJsonTable(value, tableKeys) {
     var toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "agent-table-toggle";
-    toggle.textContent = "Show all " + value.length + " rows";
+    toggle.textContent = "Показать все " + value.length + " строк";
     toggle.addEventListener("click", function () {
       var collapsed = wrap.classList.toggle("collapsed");
-      toggle.textContent = collapsed ? "Show all " + value.length + " rows" : "Collapse";
+      toggle.textContent = collapsed ? "Показать все " + value.length + " строк" : "Свернуть";
     });
     wrap.appendChild(toggle);
   }
@@ -211,7 +161,7 @@ function renderJsonObject(value, depth) {
   if (!keys.length) {
     var emptyObject = document.createElement("span");
     emptyObject.className = "agent-data-empty";
-    emptyObject.textContent = "Empty object";
+    emptyObject.textContent = "Пустой объект";
     return emptyObject;
   }
 
@@ -249,7 +199,7 @@ function appendRawJson(parent, label, text, open) {
 
   var actions = document.createElement("div");
   actions.className = "agent-detail-actions";
-  actions.appendChild(createAgentCopyButton("Copy raw JSON", prettyJsonText(text)));
+  actions.appendChild(createAgentCopyButton("Копировать JSON", prettyJsonText(text)));
   details.appendChild(actions);
 
   var pre = document.createElement("pre");
@@ -261,33 +211,6 @@ function appendRawJson(parent, label, text, open) {
   parent.appendChild(details);
 }
 
-function renderArgumentChips(value) {
-  var chips = document.createElement("div");
-  chips.className = "agent-input-chips";
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    var fallback = document.createElement("span");
-    fallback.className = "agent-input-chip";
-    fallback.textContent = scalarJsonText(value);
-    chips.appendChild(fallback);
-    return chips;
-  }
-
-  objectKeys(value).forEach(function (key) {
-    var chip = document.createElement("span");
-    chip.className = "agent-input-chip";
-    var label = document.createElement("strong");
-    label.textContent = key + ":";
-    chip.appendChild(label);
-    var chipValue = isScalarJson(value[key]) ? scalarJsonText(value[key]) : JSON.stringify(value[key]);
-    if (chipValue.length > 80) {
-      chipValue = chipValue.substring(0, 77) + "...";
-    }
-    chip.appendChild(document.createTextNode(" " + chipValue));
-    chips.appendChild(chip);
-  });
-  return chips;
-}
-
 function appendArgumentsData(parent, text) {
   if (!text) {
     return;
@@ -295,7 +218,7 @@ function appendArgumentsData(parent, text) {
 
   var parsed = tryParseJson(text);
   if (!parsed.ok) {
-    appendRawJson(parent, "Arguments", text, true);
+    appendRawJson(parent, "Аргументы", text, true);
     return;
   }
 
@@ -312,7 +235,7 @@ function appendArgumentsData(parent, text) {
 
   var view = document.createElement("div");
   view.className = "agent-data-view";
-  view.appendChild(renderArgumentChips(parsed.value));
+  view.appendChild(renderJsonValue(parsed.value, 0));
   details.appendChild(view);
 
   appendRawJson(details, "Исходный JSON", text, false);

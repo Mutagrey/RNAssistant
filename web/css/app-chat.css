@@ -1,9 +1,10 @@
 #tab-chat > .chatbar,
 #tab-chat > .chat-scroll-region,
 #tab-chat > .composer {
-  width: min(100%, 980px);
-  margin-right: auto;
-  margin-left: auto;
+  width: 100%;
+  max-width: none;
+  margin-right: 0;
+  margin-left: 0;
 }
 
 .chatbar {
@@ -71,7 +72,7 @@
 }
 
 .message.user .markdown {
-  max-width: min(86%, 760px);
+  max-width: 92%;
   border-color: #c9d9f6;
   background: #edf5ff;
   color: #152235;
@@ -95,7 +96,9 @@
 }
 
 .message.assistant .markdown {
-  max-width: min(94%, 820px);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
   border-color: #e3e9f2;
   background: #ffffff;
   box-shadow: 0 1px 2px rgba(16, 24, 39, 0.035);
@@ -132,7 +135,7 @@
 }
 
 .message.user .message-footer {
-  max-width: 86%;
+  max-width: 92%;
 }
 
 .message:hover .message-footer,

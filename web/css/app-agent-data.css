@@ -50,29 +50,6 @@
   color: var(--button-text);
 }
 
-.agent-input-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.agent-input-chip {
-  max-width: 100%;
-  overflow: hidden;
-  padding: 3px 7px;
-  border: 1px solid #d8e1ee;
-  border-radius: 999px;
-  background: #fff;
-  color: #344054;
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-input-chip strong {
-  color: #667085;
-}
-
 .agent-data-grid {
   display: grid;
   grid-template-columns: minmax(82px, max-content) minmax(0, 1fr);

@@ -194,7 +194,8 @@ function renderMessageArticle(message, index) {
     body.className = "agent-activity-wrap";
     body.appendChild(renderActivityNode(activity, false, false, {
       messageId: messageId(message),
-      index: index
+      index: index,
+      message: message
     }));
   } else {
     body.className = "markdown";

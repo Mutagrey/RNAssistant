@@ -3,74 +3,101 @@ function renderActivityNode(activity, nested, current, context) {
   var status = activityStatus(activity);
   node.className = "agent-activity" + (nested ? " nested" : "") + (current ? " current" : "") + " status-" + status;
 
-  var row = document.createElement("div");
+  var expandable = activityHasDetails(activity);
+  if (expandable) {
+    var details = document.createElement("details");
+    details.className = "agent-activity-toggle";
+    details.open = current || status === "failed" || status === "waiting";
+    details.appendChild(renderActivityRow(activity, current, true, context));
+    appendActivityDetailsContent(details, activity, context);
+    node.appendChild(details);
+  } else {
+    node.appendChild(renderActivityRow(activity, current, false, context));
+  }
+
+  appendActivityArtifacts(node, activity, context);
+  return node;
+}
+
+function renderActivityRow(activity, current, expandable, context) {
+  var row = document.createElement(expandable ? "summary" : "div");
+  var status = activityStatus(activity);
+  var title = activityPrimaryText(activity);
+  var comment = activityCommentText(activity);
   row.className = "agent-activity-row";
+  row.title = [title, comment, agentStatusLabel(status)].filter(Boolean).join(" · ");
 
   var mark = document.createElement("span");
   mark.className = "agent-activity-mark";
   mark.setAttribute("aria-hidden", "true");
   row.appendChild(mark);
 
-  var text = document.createElement("div");
-  text.className = "agent-activity-text";
+  var name = document.createElement("span");
+  name.className = "agent-activity-name";
+  name.textContent = title;
+  row.appendChild(name);
 
-  var title = document.createElement("div");
-  title.className = "agent-activity-title";
-  title.textContent = activityTitle(activity);
-  text.appendChild(title);
+  var commentNode = document.createElement("span");
+  commentNode.className = "agent-activity-comment";
+  commentNode.textContent = comment;
+  row.appendChild(commentNode);
 
-  var metaParts = [];
-  var subtitle = activityValue(activity, "Subtitle", "subtitle", "");
-  var toolId = activityToolId(activity);
-  var result = activityResultMessage(activity);
-  metaParts.push(status);
-  if (!result && subtitle && !toolId) {
-    metaParts.push(subtitle);
-  }
-  if (result) {
-    metaParts.push(result);
+  var metaParts = [agentStatusLabel(status)];
+  var time = activityTimeText(context);
+  if (time) {
+    metaParts.unshift(time);
   }
   var meta = document.createElement("div");
   meta.className = "agent-activity-meta";
   meta.textContent = metaParts.join(" · ");
-  text.appendChild(meta);
-  appendActivityBadges(text, activity);
-  row.appendChild(text);
-  node.appendChild(row);
+  row.appendChild(meta);
 
-  appendActivityConfirmationPanel(node, activity);
-  appendActivityErrorPanel(node, activity);
-  if (typeof tryRenderChartArtifact === "function") {
-    var chart = tryRenderChartArtifact(activity, context || {});
-    if (chart) {
-      node.appendChild(chart);
-    }
-  }
-  if (typeof tryRenderHtmlArtifact === "function") {
-    var html = tryRenderHtmlArtifact(activity, context || {});
-    if (html) {
-      node.appendChild(html);
-    }
-  }
-  appendActivityDetails(node, activity);
-  return node;
+  var caret = document.createElement("span");
+  caret.className = "agent-activity-caret" + (expandable ? "" : " is-hidden");
+  caret.setAttribute("aria-hidden", "true");
+  caret.textContent = "›";
+  row.appendChild(caret);
+  return row;
 }
 
-function appendActivityBadges(parent, activity) {
-  var badges = activityDataBadges(activity);
-  if (!badges.length) {
-    return;
-  }
+function activityPrimaryText(activity) {
+  return activityToolId(activity) || activityTitle(activity);
+}
 
-  var row = document.createElement("div");
-  row.className = "agent-activity-badges";
-  badges.forEach(function (badge) {
-    var item = document.createElement("span");
-    item.className = "agent-data-badge";
-    item.textContent = badge;
-    row.appendChild(item);
-  });
-  parent.appendChild(row);
+function activityCommentText(activity) {
+  var toolId = activityToolId(activity);
+  var title = activityTitle(activity);
+  var result = activityResultMessage(activity);
+  var subtitle = activityValue(activity, "Subtitle", "subtitle", "");
+  if (result) {
+    return result;
+  }
+  if (toolId && title && title !== toolId) {
+    return title;
+  }
+  return subtitle || "";
+}
+
+function activityTimeText(context) {
+  var value = context && context.message ? messageCreatedUtc(context.message) : "";
+  if (!value) {
+    return "";
+  }
+  var date = new Date(value);
+  if (isNaN(date.getTime())) {
+    return "";
+  }
+  var hours = date.getHours();
+  var minutes = date.getMinutes();
+  return (hours < 10 ? "0" : "") + hours + ":" + (minutes < 10 ? "0" : "") + minutes;
+}
+
+function activityHasDetails(activity) {
+  return !!(activityChildren(activity).length ||
+    activityArgumentsJson(activity) ||
+    activityDataJson(activity) ||
+    activityStatus(activity) === "failed" ||
+    (activityPendingId(activity) && activityStatus(activity) === "waiting"));
 }
 
 function createAgentTextButton(label, className, onClick) {
@@ -93,15 +120,15 @@ function appendActivityConfirmationPanel(node, activity) {
 
   var reason = document.createElement("div");
   reason.className = "agent-confirm-reason";
-  reason.textContent = activityResultMessage(activity) || "Tool waits for confirmation.";
+  reason.textContent = activityResultMessage(activity) || "Инструмент ждет подтверждения.";
   panel.appendChild(reason);
 
   var actions = document.createElement("div");
   actions.className = "agent-inline-actions";
-  actions.appendChild(createAgentTextButton("Confirm", "primary", function () {
+  actions.appendChild(createAgentTextButton("Подтвердить", "primary", function () {
     confirmAgentTool(pendingId);
   }));
-  actions.appendChild(createAgentTextButton("Cancel", "secondary", function () {
+  actions.appendChild(createAgentTextButton("Отменить", "secondary", function () {
     cancelAgentTool(pendingId);
   }));
   panel.appendChild(actions);
@@ -121,17 +148,17 @@ function appendActivityErrorPanel(node, activity) {
 
   var reason = document.createElement("div");
   reason.className = "agent-error-reason";
-  reason.textContent = result || "Step failed.";
+  reason.textContent = result || "Шаг завершился ошибкой.";
   panel.appendChild(reason);
 
   var meta = document.createElement("div");
   meta.className = "agent-error-meta";
-  meta.textContent = toolId ? ("Tool: " + toolId) : "Tool step";
+  meta.textContent = toolId ? ("Инструмент: " + toolId) : "Шаг инструмента";
   panel.appendChild(meta);
 
   var actions = document.createElement("div");
   actions.className = "agent-inline-actions";
-  actions.appendChild(createAgentCopyButton("Copy diagnostics", [
+  actions.appendChild(createAgentCopyButton("Копировать диагностику", [
     "Title: " + activityTitle(activity),
     "Tool: " + toolId,
     "Status: " + activityStatus(activity),
@@ -143,32 +170,44 @@ function appendActivityErrorPanel(node, activity) {
   node.appendChild(panel);
 }
 
-function appendActivityDetails(node, activity) {
+function appendActivityDetailsContent(node, activity, context) {
   var children = activityChildren(activity);
   var argumentsJson = activityArgumentsJson(activity);
   var dataJson = activityDataJson(activity);
-  if (!children.length && !argumentsJson && !dataJson) {
-    return;
-  }
 
-  var details = document.createElement("details");
-  details.className = "agent-activity-details";
-  var summary = document.createElement("summary");
-  summary.textContent = children.length ? "Nested steps and details" : "Details";
-  details.appendChild(summary);
+  var body = document.createElement("div");
+  body.className = "agent-activity-detail-body";
+
+  appendActivityConfirmationPanel(body, activity);
+  appendActivityErrorPanel(body, activity);
 
   if (children.length) {
     var childList = document.createElement("div");
     childList.className = "agent-activity-children";
     children.forEach(function (child) {
-      childList.appendChild(renderActivityNode(child, true, false));
+      childList.appendChild(renderActivityNode(child, true, context && activityContains(child, context.currentActivity), context));
     });
-    details.appendChild(childList);
+    body.appendChild(childList);
   }
 
-  appendArgumentsData(details, argumentsJson);
-  appendActivityData(details, "Result data", dataJson, "Copy result");
-  node.appendChild(details);
+  appendArgumentsData(body, argumentsJson);
+  appendActivityData(body, "Результат", dataJson, "Копировать результат");
+  node.appendChild(body);
+}
+
+function appendActivityArtifacts(node, activity, context) {
+  if (typeof tryRenderChartArtifact === "function") {
+    var chart = tryRenderChartArtifact(activity, context || {});
+    if (chart) {
+      node.appendChild(chart);
+    }
+  }
+  if (typeof tryRenderHtmlArtifact === "function") {
+    var html = tryRenderHtmlArtifact(activity, context || {});
+    if (html) {
+      node.appendChild(html);
+    }
+  }
 }
 
 function agentStatusLabel(status) {
@@ -190,89 +229,63 @@ function renderAgentRunStatus(stats) {
   return status;
 }
 
-function renderAgentStepSummary(activity, current) {
-  var row = document.createElement("div");
-  var status = activityStatus(activity);
-  row.className = "agent-step-summary status-" + status + (current ? " current" : "");
-
-  var mark = document.createElement("span");
-  mark.className = "agent-step-mark";
-  mark.setAttribute("aria-hidden", "true");
-  row.appendChild(mark);
-
-  var text = document.createElement("div");
-  text.className = "agent-step-text";
-
-  var title = document.createElement("div");
-  title.className = "agent-step-title";
-  title.textContent = activityTitle(activity);
-  text.appendChild(title);
-
-  var metaParts = [agentStatusLabel(status)];
-  var toolId = activityToolId(activity);
-  var result = activityResultMessage(activity);
-  if (toolId) {
-    metaParts.push(toolId);
-  }
-  if (result) {
-    metaParts.push(result);
-  }
-
-  var meta = document.createElement("div");
-  meta.className = "agent-step-meta";
-  meta.textContent = metaParts.join(" · ");
-  text.appendChild(meta);
-
-  row.appendChild(text);
-  return row;
-}
-
-function appendAgentStepPreview(parent, items, stats) {
-  var activities = collectRunActivities(items);
-  var preview = document.createElement("div");
-  preview.className = "agent-run-preview";
-
-  activities.slice(0, 5).forEach(function (activity) {
-    preview.appendChild(renderAgentStepSummary(activity, stats.current && activity === stats.current));
-  });
-
-  if (activities.length > 5) {
-    var more = document.createElement("div");
-    more.className = "agent-run-more";
-    more.textContent = "Еще " + (activities.length - 5) + " шаг(ов) в деталях";
-    preview.appendChild(more);
-  }
-
-  if (!activities.length) {
-    var empty = document.createElement("div");
-    empty.className = "agent-run-more";
-    empty.textContent = "Шаги пока не получены";
-    preview.appendChild(empty);
-  }
-
-  parent.appendChild(preview);
-}
-
 function appendAgentRunDetails(parent, items, stats) {
-  var details = document.createElement("details");
-  details.className = "agent-run-details";
-  details.open = stats.status === "failed" || stats.status === "waiting";
-
-  var summary = document.createElement("summary");
-  summary.textContent = "Процесс и данные";
-  details.appendChild(summary);
-
   var steps = document.createElement("div");
   steps.className = "agent-run-steps";
-  items.forEach(function (item) {
-    var isCurrent = stats.current && item.activity === stats.current;
+  var timeline = collectAgentRunTimelineItems(items);
+  timeline.forEach(function (item) {
+    var isCurrent = stats.current && activityContains(item.activity, stats.current);
     steps.appendChild(renderActivityNode(item.activity, false, isCurrent, {
       messageId: messageId(item.message),
-      index: item.index
+      index: item.index,
+      message: item.message,
+      currentActivity: stats.current
     }));
   });
-  details.appendChild(steps);
-  parent.appendChild(details);
+  if (!timeline.length) {
+    var empty = document.createElement("div");
+    empty.className = "agent-run-empty";
+    empty.textContent = "Шаги пока не получены.";
+    steps.appendChild(empty);
+  }
+  parent.appendChild(steps);
+}
+
+function collectAgentRunTimelineItems(items) {
+  items = items || [];
+  if (!items.length) {
+    return [];
+  }
+  var first = items[0].activity;
+  if (items.length > 1 && activityKind(first) === "plan") {
+    return items.slice(1);
+  }
+  if (activityKind(first) === "plan") {
+    return activityChildren(first).map(function (activity) {
+      return {
+        message: items[0].message,
+        index: items[0].index,
+        activity: activity
+      };
+    });
+  }
+  return items.slice();
+}
+
+function activityContains(activity, target) {
+  if (!activity || !target) {
+    return false;
+  }
+  if (activity === target) {
+    return true;
+  }
+  var children = activityChildren(activity);
+  for (var i = 0; i < children.length; i += 1) {
+    if (activityContains(children[i], target)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function appendAgentFinalAnswer(parent, finalMessage) {
@@ -319,20 +332,13 @@ function renderAgentRunArticle(run) {
 
   var header = document.createElement("div");
   header.className = "agent-run-header";
-  var title = document.createElement("div");
-  title.className = "agent-run-title";
-  title.textContent = "Работа агента";
   var summary = document.createElement("div");
   summary.className = "agent-run-summary";
-  var titleRow = document.createElement("div");
-  titleRow.className = "agent-run-title-row";
-  titleRow.appendChild(renderAgentRunStatus(stats));
-  titleRow.appendChild(title);
-  summary.appendChild(titleRow);
-  if (stats.current) {
+  summary.appendChild(renderAgentRunStatus(stats));
+  if (stats.current && stats.status !== "completed") {
     var current = document.createElement("div");
     current.className = "agent-run-current";
-    current.textContent = activityTitle(stats.current);
+    current.textContent = activityPrimaryText(stats.current);
     summary.appendChild(current);
   }
   var meta = document.createElement("div");
@@ -342,9 +348,8 @@ function renderAgentRunArticle(run) {
   header.appendChild(meta);
   body.appendChild(header);
 
-  appendAgentStepPreview(body, items, stats);
-  appendAgentRunDetails(body, items, stats);
   appendAgentFinalAnswer(body, finalMessage);
+  appendAgentRunDetails(body, items, stats);
   node.appendChild(body);
 
   if (!run.live) {
