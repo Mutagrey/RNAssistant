@@ -929,6 +929,12 @@ namespace RNAssistant.OfficeHosts
             var field = Math.Max(1, ToolArgumentReader.Int32(command.Arguments, "field", 1));
             var criteria = ToolArgumentReader.String(command.Arguments, "criteria", string.Empty);
             var range = sheet.Range[address];
+            var columnCount = Convert.ToInt32(range.Columns.Count);
+            if (field > columnCount)
+            {
+                return ToolResult.Fail("field is outside the filter range.");
+            }
+
             range.AutoFilter(field, string.IsNullOrWhiteSpace(criteria) ? Type.Missing : criteria, Excel.XlAutoFilterOperator.xlAnd, Type.Missing, true);
             return ToolResult.Ok("Range filtered: " + sheet.Name + "!" + address);
         }
@@ -1079,10 +1085,28 @@ namespace RNAssistant.OfficeHosts
                 }
 
                 workbook.Activate();
-                return (Excel.Worksheet)_application.ActiveSheet;
+                var activatedSheet = _application.ActiveSheet as Excel.Worksheet;
+                if (activatedSheet != null && SameWorkbook(activatedSheet.Parent as Excel.Workbook, workbook))
+                {
+                    return activatedSheet;
+                }
+
+                var firstSheet = FirstWorksheet(workbook);
+                if (firstSheet != null)
+                {
+                    return firstSheet;
+                }
+
+                throw new InvalidOperationException("Workbook has no worksheets.");
             }
 
-            return (Excel.Worksheet)workbook.Worksheets[name];
+            var sheet = FindWorksheet(workbook, name);
+            if (sheet == null)
+            {
+                throw new InvalidOperationException("Worksheet not found: " + name);
+            }
+
+            return sheet;
         }
 
         private Excel.Range ResolveSelectionRange(Excel.Workbook workbook)
@@ -1134,12 +1158,58 @@ namespace RNAssistant.OfficeHosts
             var address = reference.Substring(separator + 1);
             try
             {
-                return ((Excel.Worksheet)workbook.Worksheets[sheetName]).Range[address];
+                var sheet = FindWorksheet(workbook, sheetName);
+                return sheet == null ? null : sheet.Range[address];
             }
             catch
             {
                 return null;
             }
+        }
+
+        private static Excel.Worksheet FirstWorksheet(Excel.Workbook workbook)
+        {
+            if (workbook == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                foreach (Excel.Worksheet sheet in workbook.Worksheets)
+                {
+                    return sheet;
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
+        private static Excel.Worksheet FindWorksheet(Excel.Workbook workbook, string name)
+        {
+            if (workbook == null || string.IsNullOrWhiteSpace(name))
+            {
+                return null;
+            }
+
+            try
+            {
+                foreach (Excel.Worksheet sheet in workbook.Worksheets)
+                {
+                    if (string.Equals(SafeString(delegate { return sheet.Name; }), name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return sheet;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
         }
 
         private static bool RangeBelongsToWorkbook(Excel.Range range, Excel.Workbook workbook)

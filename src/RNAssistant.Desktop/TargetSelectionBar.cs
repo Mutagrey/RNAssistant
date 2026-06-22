@@ -38,7 +38,7 @@ namespace RNAssistant.Desktop
             };
             row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 38f));
             row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112f));
-            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34f));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 48f));
             row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110f));
             row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 66f));
             row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
@@ -195,7 +195,8 @@ namespace RNAssistant.Desktop
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
                 AutoEllipsis = true,
-                Margin = new Padding(0, 0, 4, 0)
+                MinimumSize = new Size(0, 26),
+                Margin = new Padding(0, 0, 2, 0)
             };
         }
     }

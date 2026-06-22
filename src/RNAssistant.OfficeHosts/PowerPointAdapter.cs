@@ -467,7 +467,9 @@ namespace RNAssistant.OfficeHosts
             var presentation = RequirePresentation();
             var text = ToolArgumentReader.String(command.Arguments, "text", string.Empty);
             var selection = TryGetSelection();
-            if (selection == null || selection.Type != PowerPoint.PpSelectionType.ppSelectionShapes)
+            if (selection == null ||
+                selection.Type != PowerPoint.PpSelectionType.ppSelectionShapes ||
+                TryGetSelectedShapeCount(selection) <= 0)
             {
                 return ToolResult.Fail("Select a text shape first.");
             }

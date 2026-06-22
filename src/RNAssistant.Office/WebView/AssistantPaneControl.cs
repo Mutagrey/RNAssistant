@@ -156,10 +156,14 @@ namespace RNAssistant.Office.WebView
             var processFolder = Path.Combine(root, SafeFolderName(Process.GetCurrentProcess().ProcessName));
             var recoveryFolder = Path.Combine(root, "recovery-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss"));
 
-            candidates.Add(new WebViewEnvironmentCandidate("fixed runtime + shared profile", browserFolder, root));
-            candidates.Add(new WebViewEnvironmentCandidate("fixed runtime + process profile", browserFolder, processFolder));
-            candidates.Add(new WebViewEnvironmentCandidate("installed runtime + process profile", null, processFolder));
-            candidates.Add(new WebViewEnvironmentCandidate("installed runtime + recovery profile", null, recoveryFolder));
+            if (!string.IsNullOrWhiteSpace(browserFolder))
+            {
+                candidates.Add(new WebViewEnvironmentCandidate("fixed runtime + shared profile", browserFolder, root));
+                candidates.Add(new WebViewEnvironmentCandidate("fixed runtime + process profile", browserFolder, processFolder));
+            }
+
+            candidates.Add(new WebViewEnvironmentCandidate("installed WebView2 Runtime + process profile", null, processFolder));
+            candidates.Add(new WebViewEnvironmentCandidate("installed WebView2 Runtime + recovery profile", null, recoveryFolder));
             return candidates;
         }
 
@@ -320,6 +324,11 @@ namespace RNAssistant.Office.WebView
 
             var baseException = ex == null ? null : ex.GetBaseException();
             var message = baseException == null ? "Unknown WebView2 startup error." : baseException.Message;
+            if (!message.Contains("WebView2 Runtime"))
+            {
+                message += "\r\n\r\nInstall Microsoft Edge WebView2 Runtime or copy a fixed runtime to vendor\\webview2-runtime. The NuGet package only provides the .NET control/API, not the browser runtime.";
+            }
+
             var panel = new Panel
             {
                 Dock = DockStyle.Fill,
