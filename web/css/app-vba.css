@@ -177,15 +177,16 @@
 
 .vba-diff-line {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 24px 42px 42px minmax(max-content, 1fr);
+  width: max-content;
+  min-width: 100%;
   min-height: 22px;
   border-bottom: 1px solid rgba(226, 231, 239, 0.68);
 }
 
 .vba-diff-line code {
-  overflow: hidden;
-  padding: 3px 8px 3px 0;
-  text-overflow: ellipsis;
+  overflow: visible;
+  padding: 3px 12px 3px 8px;
   white-space: pre;
 }
 
@@ -196,19 +197,46 @@
   user-select: none;
 }
 
+.vba-diff-line-number {
+  padding: 3px 6px;
+  border-right: 1px solid rgba(226, 231, 239, 0.72);
+  color: #98a2b3;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  user-select: none;
+}
+
 .vba-diff-line.add {
-  background: #eefbf4;
+  background: #eaf8f0;
 }
 
 .vba-diff-line.add .vba-diff-marker {
   color: #16835d;
+  font-weight: 700;
+}
+
+.vba-diff-line.add code {
+  color: #0f5132;
+}
+
+.vba-diff-line.add .vba-diff-new-line {
+  color: #16835d;
 }
 
 .vba-diff-line.remove {
-  background: #fff1f0;
+  background: #fff0ef;
 }
 
 .vba-diff-line.remove .vba-diff-marker {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.vba-diff-line.remove code {
+  color: #842029;
+}
+
+.vba-diff-line.remove .vba-diff-old-line {
   color: var(--danger);
 }
 

@@ -167,19 +167,19 @@ function formatVbaDiff(before, after) {
   var output = [];
   var i;
   for (i = Math.max(0, start - 3); i < start; i += 1) {
-    output.push({ type: "context", text: oldLines[i] });
+    output.push({ type: "context", oldLine: i + 1, newLine: i + 1, text: oldLines[i] });
   }
-  oldLines.slice(start, oldEnd + 1).slice(0, 200).forEach(function (line) {
-    output.push({ type: "remove", text: line });
-  });
-  newLines.slice(start, newEnd + 1).slice(0, 200).forEach(function (line) {
-    output.push({ type: "add", text: line });
-  });
+  for (i = start; i <= oldEnd && i < start + 200; i += 1) {
+    output.push({ type: "remove", oldLine: i + 1, newLine: "", text: oldLines[i] });
+  }
+  for (i = start; i <= newEnd && i < start + 200; i += 1) {
+    output.push({ type: "add", oldLine: "", newLine: i + 1, text: newLines[i] });
+  }
   if (oldCount > 200 || newCount > 200) {
-    output.push({ type: "note", text: "...сравнение обрезано..." });
+    output.push({ type: "note", oldLine: "", newLine: "", text: "...сравнение обрезано..." });
   }
   for (i = oldEnd + 1; i < Math.min(oldLines.length, oldEnd + 4); i += 1) {
-    output.push({ type: "context", text: oldLines[i] });
+    output.push({ type: "context", oldLine: i + 1, newLine: newEnd + i - oldEnd + 1, text: oldLines[i] });
   }
   return {
     summary: "Измененные строки: -" + oldCount + " +" + newCount,
@@ -215,10 +215,20 @@ function renderVbaDiff(diff) {
     marker.className = "vba-diff-marker";
     marker.textContent = line.type === "add" ? "+" : (line.type === "remove" ? "-" : " ");
 
+    var oldLine = document.createElement("span");
+    oldLine.className = "vba-diff-line-number vba-diff-old-line";
+    oldLine.textContent = line.oldLine || "";
+
+    var newLine = document.createElement("span");
+    newLine.className = "vba-diff-line-number vba-diff-new-line";
+    newLine.textContent = line.newLine || "";
+
     var text = document.createElement("code");
     text.textContent = line.text || "";
 
     row.appendChild(marker);
+    row.appendChild(oldLine);
+    row.appendChild(newLine);
     row.appendChild(text);
     box.appendChild(row);
   });
