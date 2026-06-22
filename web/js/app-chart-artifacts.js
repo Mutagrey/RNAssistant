@@ -70,6 +70,134 @@
     return configValue(config, "Colors", "colors", []) || [];
   }
 
+  function isTransposed(config) {
+    var value = configValue(config, "Transposed", "transposed", false);
+    return value === true || value === "true";
+  }
+
+  function uniqueName(base, used) {
+    base = String(base || "Series").trim() || "Series";
+    var name = base;
+    var index = 2;
+    while (used[name.toLowerCase()]) {
+      name = base + " " + index;
+      index += 1;
+    }
+    used[name.toLowerCase()] = true;
+    return name;
+  }
+
+  function inferColumnKind(rows, name) {
+    var nonBlank = 0;
+    var numeric = 0;
+    rows.forEach(function (row) {
+      var value = row ? row[name] : null;
+      if (value === null || value === undefined || value === "") {
+        return;
+      }
+      nonBlank += 1;
+      if (numberValue(value) !== null) {
+        numeric += 1;
+      }
+    });
+    return nonBlank > 0 && numeric / nonBlank >= 0.8 ? "number" : "category";
+  }
+
+  function makeColumn(name, index, kind) {
+    return {
+      Name: name,
+      name: name,
+      Index: index,
+      index: index,
+      Kind: kind,
+      kind: kind
+    };
+  }
+
+  function transposeData(artifact) {
+    var sourceColumns = artifactColumns(artifact);
+    var sourceRows = artifactRows(artifact);
+    if (sourceColumns.length < 2 || sourceRows.length === 0) {
+      return { columns: sourceColumns, rows: sourceRows };
+    }
+
+    var labelColumn = columnName(sourceColumns[0]);
+    var valueColumns = sourceColumns.slice(1);
+    var used = {};
+    var xName = uniqueName("Category", used);
+    var seriesNames = sourceRows.map(function (row, index) {
+      return uniqueName(row && labelColumn ? row[labelColumn] : "", used) || ("Series " + (index + 1));
+    });
+    var rows = valueColumns.map(function (column) {
+      var category = columnName(column);
+      var item = {};
+      item[xName] = category;
+      sourceRows.forEach(function (row, rowIndex) {
+        item[seriesNames[rowIndex]] = row ? row[category] : null;
+      });
+      return item;
+    });
+    var columns = [makeColumn(xName, 0, "category")];
+    seriesNames.forEach(function (name, index) {
+      columns.push(makeColumn(name, index + 1, inferColumnKind(rows, name)));
+    });
+    return { columns: columns, rows: rows };
+  }
+
+  function chartData(artifact) {
+    return isTransposed(artifactConfig(artifact))
+      ? transposeData(artifact)
+      : { columns: artifactColumns(artifact), rows: artifactRows(artifact) };
+  }
+
+  function defaultX(columns) {
+    return (columns.filter(function (column) { return columnKind(column) === "date"; })[0] ||
+      columns.filter(function (column) { return columnKind(column) === "category"; })[0] ||
+      columns[0] || {});
+  }
+
+  function defaultSeries(columns, x) {
+    var series = columns.filter(function (column) {
+      return columnName(column) !== x && columnKind(column) === "number";
+    }).map(columnName);
+    if (!series.length) {
+      series = columns.filter(function (column) {
+        return columnName(column) !== x;
+      }).slice(0, 1).map(columnName);
+    }
+    return series;
+  }
+
+  function normalizeConfigForData(config, data) {
+    var columns = data.columns || [];
+    var names = columns.map(columnName);
+    var x = configValue(config, "X", "x", "");
+    if (names.indexOf(x) < 0) {
+      x = columnName(defaultX(columns));
+      setConfigValue(config, "X", "x", x);
+    }
+
+    var rawSeries = selectedSeries(config);
+    var series = rawSeries.filter(function (name) {
+      return name !== x && names.indexOf(name) >= 0;
+    });
+    if (!series.length) {
+      series = defaultSeries(columns, x);
+      setConfigValue(config, "Series", "series", series);
+    } else if (series.length !== rawSeries.length) {
+      setConfigValue(config, "Series", "series", series);
+    }
+    return { x: x, series: series };
+  }
+
+  function resetConfigForCurrentOrientation(artifact, config) {
+    var data = chartData(artifact);
+    var x = columnName(defaultX(data.columns || []));
+    setConfigValue(config, "X", "x", x);
+    setConfigValue(config, "Series", "series", defaultSeries(data.columns || [], x));
+    setConfigValue(config, "Colors", "colors", []);
+  }
+
   function sourceText(artifact) {
     var source = artifactValue(artifact, "Source", "source", {}) || {};
     var sheet = artifactValue(source, "Sheet", "sheet", "");
@@ -139,9 +267,25 @@
   }
 
   function appendChartControls(toolbar, artifact, config, context, changed) {
-    var columns = artifactColumns(artifact);
-    var x = configValue(config, "X", "x", "");
+    var data = chartData(artifact);
+    var normalized = normalizeConfigForData(config, data);
+    var columns = data.columns;
+    var x = normalized.x;
     var chartType = configValue(config, "ChartType", "chartType", "column");
+    var transpose = document.createElement("button");
+    transpose.type = "button";
+    transpose.className = "chart-refresh-button chart-transpose-button";
+    if (isTransposed(config)) {
+      transpose.classList.add("is-active");
+    }
+    transpose.textContent = isTransposed(config) ? "По строкам" : "По колонкам";
+    transpose.title = "Переключить строки и колонки";
+    transpose.addEventListener("click", function () {
+      setConfigValue(config, "Transposed", "transposed", !isTransposed(config));
+      resetConfigForCurrentOrientation(artifact, config);
+      changed();
+    });
+    toolbar.appendChild(labeledControl("Ориентация", transpose));
 
     toolbar.appendChild(labeledControl("Тип", createSelect([
       { value: "column", label: "Column" },
@@ -227,11 +371,13 @@
   }
 
   function buildOption(artifact) {
-    var rows = artifactRows(artifact);
-    var columns = artifactColumns(artifact);
     var config = artifactConfig(artifact);
-    var x = configValue(config, "X", "x", "");
-    var series = selectedSeries(config);
+    var data = chartData(artifact);
+    var normalized = normalizeConfigForData(config, data);
+    var rows = data.rows || [];
+    var columns = data.columns || [];
+    var x = normalized.x;
+    var series = normalized.series;
     var colors = selectedColors(config);
     var chartType = configValue(config, "ChartType", "chartType", "column");
     var xColumn = columns.filter(function (column) { return columnName(column) === x; })[0] || {};
@@ -300,7 +446,7 @@
     chart.setOption(buildOption(artifact), true);
     chart.off("click");
     chart.on("click", function (params) {
-      var rows = artifactRows(artifact);
+      var rows = chartData(artifact).rows || [];
       var row = rows[params.dataIndex] || {};
       point.textContent = Object.keys(row).map(function (key) {
         return key + ": " + row[key];
@@ -366,6 +512,11 @@
       if (!parsed.ok) {
         throw new Error("Tool returned no chart artifact.");
       }
+      var nextArtifact = parsed.value;
+      var nextConfig = artifactConfig(nextArtifact);
+      setConfigValue(nextConfig, "Transposed", "transposed", isTransposed(artifactConfig(artifact)));
+      resetConfigForCurrentOrientation(nextArtifact, nextConfig);
+      dataJson = JSON.stringify(nextArtifact);
       updateLocalMessageArtifact(context.messageId, dataJson);
       await send("updateMessageActivityData", { chatId: state.activeChatId, messageId: context.messageId, dataJson: dataJson });
       renderMessages();
