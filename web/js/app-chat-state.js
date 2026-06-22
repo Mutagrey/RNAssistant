@@ -87,15 +87,19 @@ function renderContextMeter() {
   var fill = $("contextMeterFill");
   var value = $("contextMeterValue");
   var detail = $("contextMeterDetail");
-  if (!fill || !value || !detail) {
+  var meter = $("contextMeter");
+  if (!fill || !value || !detail || !meter) {
     return;
   }
 
   percent = Math.max(0, Math.min(100, percent));
+  var detailText = formatNumber(used) + " / " + formatNumber(limit) + " символов" + (usage.actual || usage.Actual ? "" : " · оценка") + lastTokenUsageText();
   fill.style.width = percent + "%";
   fill.dataset.level = percent >= 90 ? "danger" : (percent >= 70 ? "warn" : "ok");
   value.textContent = percent + "%";
-  detail.textContent = formatNumber(used) + " / " + formatNumber(limit) + " символов" + (usage.actual || usage.Actual ? "" : " · оценка") + lastTokenUsageText();
+  detail.textContent = detailText;
+  meter.title = "Контекст: " + percent + "%\n" + detailText;
+  meter.setAttribute("aria-label", meter.title);
 }
 
 function updateEstimatedContextUsage() {
