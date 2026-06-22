@@ -13,10 +13,14 @@ function createResourceListItem(options) {
   title.textContent = options.title || "";
   top.appendChild(title);
 
-  var badge = document.createElement("div");
-  badge.className = "tool-list-badge " + (options.enabled === false ? "is-disabled" : "is-enabled");
-  badge.textContent = options.enabled === false ? "выкл" : "вкл";
-  top.appendChild(badge);
+  if (typeof options.enabled === "boolean") {
+    var badge = document.createElement("div");
+    var enabledText = options.enabled ? "Включено" : "Отключено";
+    badge.className = "tool-list-badge " + (options.enabled ? "is-enabled" : "is-disabled");
+    badge.title = enabledText;
+    badge.setAttribute("aria-label", enabledText);
+    top.appendChild(badge);
+  }
 
   var meta = document.createElement("div");
   meta.className = "tool-list-meta";

@@ -8,21 +8,21 @@
   <link rel="stylesheet" href="css/vendor/katex.min.css">
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
-  <link rel="stylesheet" href="css/app.css?v=chatui-20260621-14">
+  <link rel="stylesheet" href="css/app.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-chat.css?v=chatui-20260621-6">
   <link rel="stylesheet" href="css/app-markdown.css?v=chatui-20260621-1">
   <link rel="stylesheet" href="css/app-composer.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=chatui-20260621-5">
   <link rel="stylesheet" href="css/app-models.css?v=chatui-20260621-1">
-  <link rel="stylesheet" href="css/app-workspace.css?v=chatui-20260621-8">
-  <link rel="stylesheet" href="css/app-tools.css?v=chatui-20260622-2">
-  <link rel="stylesheet" href="css/app-prompts.css?v=chatui-20260622-1">
-  <link rel="stylesheet" href="css/app-vba.css?v=chatui-20260622-3">
+  <link rel="stylesheet" href="css/app-workspace.css?v=chatui-20260622-1">
+  <link rel="stylesheet" href="css/app-tools.css?v=chatui-20260622-3">
+  <link rel="stylesheet" href="css/app-prompts.css?v=chatui-20260622-2">
+  <link rel="stylesheet" href="css/app-vba.css?v=chatui-20260622-4">
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-1">
-  <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260622-2">
+  <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-dialogs.css?v=chatui-20260622-1">
-  <link rel="stylesheet" href="css/app-responsive.css?v=chatui-20260622-1">
+  <link rel="stylesheet" href="css/app-responsive.css?v=chatui-20260622-2">
   <link rel="stylesheet" href="css/app-agent.css?v=chatui-20260621-3">
   <link rel="stylesheet" href="css/app-agent-data.css?v=chatui-20260621-3">
 </head>
@@ -246,27 +246,28 @@
       </section>
 
       <section class="panel" id="tab-vba">
-        <div class="vba-layout split-layout" id="vbaLayout" data-split-key="vba" data-default-ratio="0.22" data-min-left="210" data-min-ratio="0.16" data-max-ratio="0.38">
-          <aside class="vba-sidebar surface-panel padded">
-            <input class="tool-search" id="vbaModuleSearchInput" placeholder="Поиск модулей..." autocomplete="off">
-            <label>Модуль<select id="vbaModuleSelect"></select></label>
-            <details class="vba-side-section">
-              <summary>Резервные копии</summary>
-              <label>Копия<select id="vbaBackupSelect"></select></label>
-            </details>
-            <details class="vba-side-section">
-              <summary>Метаданные</summary>
-              <pre class="json-box vba-meta" id="vbaMetaBox"></pre>
-            </details>
-          </aside>
-          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка VBA"></div>
-          <section class="vba-editor surface-panel padded">
-            <div class="vba-editor-head">
+        <div class="vba-layout" id="vbaLayout">
+          <section class="vba-topbar surface-panel padded">
+            <div class="vba-topbar-head">
               <div class="panel-status" id="vbaStatus">VBA-контекст не загружен.</div>
               <div class="panel-actions vba-commandbar">
-                <div class="action-group">
-                  <button class="secondary" id="refreshVbaButton" type="button">Загрузить VBA</button>
-                </div>
+                <button class="secondary" id="refreshVbaButton" type="button">Загрузить VBA</button>
+                <label class="inline-field vba-backup-field">Копия<select id="vbaBackupSelect"></select></label>
+              </div>
+            </div>
+            <input class="tool-search" id="vbaModuleSearchInput" placeholder="Поиск модулей..." autocomplete="off">
+            <select class="hidden" id="vbaModuleSelect" aria-hidden="true" tabindex="-1"></select>
+            <div class="tool-list is-horizontal vba-module-list" id="vbaModuleList" role="listbox" aria-label="VBA модули"></div>
+          </section>
+          <section class="vba-editor surface-panel padded">
+            <div class="vba-editor-head">
+              <div class="vba-editor-titlebox">
+                <div class="vba-editor-title" id="vbaModuleTitle">Модуль не выбран</div>
+                <div class="vba-editor-meta" id="vbaModuleMeta"></div>
+              </div>
+              <div class="mode-toggle vba-mode-toggle" role="group" aria-label="Режим VBA">
+                <button class="mode-button vba-mode-button active" type="button" data-vba-mode="preview">Preview</button>
+                <button class="mode-button vba-mode-button" type="button" data-vba-mode="edit">Edit</button>
               </div>
             </div>
             <div class="vba-empty-state" id="vbaEmptyState">
@@ -279,9 +280,14 @@
               <button class="primary" id="runVbaMacroButton" type="button">Запустить</button>
               <div class="vba-macro-status" id="vbaMacroStatus"></div>
             </div>
-            <div class="vba-code-pane">
+            <div class="editor-preview vba-code-preview markdown" id="vbaCodePreview"></div>
+            <div class="vba-code-pane hidden" id="vbaCodePane">
               <textarea id="vbaCodeInput" spellcheck="false" placeholder="Обновите VBA, чтобы загрузить модули."></textarea>
             </div>
+            <details class="vba-meta-panel">
+              <summary>Метаданные</summary>
+              <pre class="json-box vba-meta" id="vbaMetaBox"></pre>
+            </details>
             <details class="vba-diff-panel" open>
               <summary>Сравнение</summary>
               <div class="vba-diff" id="vbaDiffOutput" aria-live="polite"></div>
@@ -410,12 +416,12 @@
                         </button>
                       </div>
                     </div>
-                    <div class="prompt-mode-toggle" role="group" aria-label="Режим промпта">
-                      <button class="prompt-mode-button active" type="button" data-prompt-mode="preview">Preview</button>
-                      <button class="prompt-mode-button" type="button" data-prompt-mode="edit">Edit</button>
+                    <div class="mode-toggle prompt-mode-toggle" role="group" aria-label="Режим промпта">
+                      <button class="mode-button prompt-mode-button active" type="button" data-prompt-mode="preview">Preview</button>
+                      <button class="mode-button prompt-mode-button" type="button" data-prompt-mode="edit">Edit</button>
                     </div>
-                    <div class="prompt-preview markdown" id="promptPreview"></div>
-                    <textarea class="prompt-edit-input hidden" id="promptEditInput" rows="16" spellcheck="false"></textarea>
+                    <div class="editor-preview prompt-preview markdown" id="promptPreview"></div>
+                    <textarea class="editor-edit-input prompt-edit-input hidden" id="promptEditInput" rows="16" spellcheck="false"></textarea>
                   </div>
                 </section>
               </div>
@@ -518,27 +524,27 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=chatui-20260622-1"></script>
+  <script src="js/app-core.js?v=chatui-20260622-2"></script>
   <script src="js/app-utils.js?v=chatui-20260620-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
   <script src="js/app-markdown.js"></script>
   <script src="js/app-settings.js?v=chatui-20260622-3"></script>
-  <script src="js/app-prompts.js?v=chatui-20260622-1"></script>
+  <script src="js/app-prompts.js?v=chatui-20260622-2"></script>
   <script src="js/app-model-data.js"></script>
   <script src="js/app-model-render.js?v=chatui-20260622-1"></script>
   <script src="js/app-models.js"></script>
   <script src="js/app-context-data.js"></script>
   <script src="js/app-chat-state.js?v=chatui-20260622-1"></script>
-  <script src="js/app-resource-list.js?v=chatui-20260622-1"></script>
+  <script src="js/app-resource-list.js?v=chatui-20260622-2"></script>
   <script src="js/app-tools.js?v=chatui-20260622-2"></script>
   <script src="js/app-skills.js?v=chatui-20260622-2"></script>
-  <script src="js/app-vba.js?v=chatui-20260622-2"></script>
+  <script src="js/app-vba.js?v=chatui-20260622-3"></script>
   <script src="js/app-context.js?v=chatui-20260621-5"></script>
   <script src="js/app-agent-data.js?v=chatui-20260621-1"></script>
   <script src="js/app-agent-model.js?v=chatui-20260620-1"></script>
   <script src="js/app-chart-artifacts.js?v=chatui-20260622-1"></script>
-  <script src="js/app-html-artifacts.js?v=chatui-20260622-2"></script>
+  <script src="js/app-html-artifacts.js?v=chatui-20260622-3"></script>
   <script src="js/app-agent.js?v=chatui-20260622-1"></script>
   <script src="js/app-messages.js?v=chatui-20260622-1"></script>
   <script src="js/app-chat.js?v=chatui-20260622-2"></script>

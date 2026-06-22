@@ -1,16 +1,22 @@
 function renderVbaProject() {
   var moduleSelect = $("vbaModuleSelect");
   var backupSelect = $("vbaBackupSelect");
+  var moduleList = $("vbaModuleList");
   var query = (($("vbaModuleSearchInput") && $("vbaModuleSearchInput").value) || "").trim().toLowerCase();
   moduleSelect.innerHTML = "";
   backupSelect.innerHTML = "";
+  if (moduleList) {
+    moduleList.innerHTML = "";
+  }
   var renderedModules = 0;
+  var filteredModules = [];
 
   state.vba.modules.forEach(function (module) {
     if (query && !vbaModuleMatchesSearch(module, query)) {
       return;
     }
 
+    filteredModules.push(module);
     var option = document.createElement("option");
     option.value = module.name || module.Name || "";
     option.textContent = option.value + " (" + (module.type || module.Type || "module") + ")";
@@ -64,8 +70,47 @@ function renderVbaProject() {
 
   if (state.vba.selectedModule && selectHasOption(moduleSelect, state.vba.selectedModule)) {
     moduleSelect.value = state.vba.selectedModule;
+  } else if (renderedModules) {
+    moduleSelect.value = moduleSelect.options[0].value;
   }
+  renderVbaModuleList(filteredModules, query);
   renderSelectedVbaModule();
+}
+
+function renderVbaModuleList(modules, query) {
+  var list = $("vbaModuleList");
+  if (!list) {
+    return;
+  }
+
+  list.innerHTML = "";
+  if (!modules.length) {
+    list.appendChild(createResourceEmptyState(state.bridgeUnavailable ? "Office bridge недоступен." : (query ? "Модули не найдены." : "Модули не загружены.")));
+    return;
+  }
+
+  var selectedName = $("vbaModuleSelect").value;
+  modules.forEach(function (module) {
+    var name = vbaModuleName(module);
+    var type = module.type || module.Type || "module";
+    var lineCount = module.lineCount || module.LineCount || 0;
+    var item = createResourceListItem({
+      title: name,
+      enabled: null,
+      active: name === selectedName,
+      meta: type + (lineCount ? " - " + lineCount + " строк" : ""),
+      description: firstVbaProcedureName(vbaModuleCode(module)) || "VBA module",
+      onClick: function () {
+        $("vbaModuleSelect").value = name;
+        state.vba.selectedModule = name;
+        renderVbaModuleList(modules, query);
+        renderSelectedVbaModule();
+      }
+    });
+    item.setAttribute("role", "option");
+    item.setAttribute("aria-selected", name === selectedName ? "true" : "false");
+    list.appendChild(item);
+  });
 }
 
 function selectHasOption(select, value) {
@@ -90,6 +135,8 @@ function renderSelectedVbaModule() {
   var module = selectedVbaModule();
   state.vba.selectedModule = vbaModuleName(module);
   setVbaEditorCode(module ? vbaModuleCode(module) : "");
+  $("vbaModuleTitle").textContent = module ? vbaModuleName(module) : "Модуль не выбран";
+  $("vbaModuleMeta").textContent = module ? vbaModuleMetaText(module) : "";
   $("vbaMetaBox").textContent = module ? JSON.stringify({
     name: vbaModuleName(module),
     type: module.type || module.Type,
@@ -106,6 +153,8 @@ function renderSelectedVbaModule() {
   $("saveVbaButton").disabled = !module || state.bridgeUnavailable;
   $("restoreVbaButton").disabled = state.bridgeUnavailable || !$("vbaBackupSelect").value || !module;
   $("reviewVbaButton").disabled = !module || state.bridgeUnavailable;
+  renderVbaCodePreview();
+  applyVbaMode();
   updateVbaMacroSuggestion();
 }
 
@@ -128,6 +177,22 @@ function vbaModuleCode(module) {
   return module ? (module.code || module.Code || "") : "";
 }
 
+function vbaModuleMetaText(module) {
+  if (!module) {
+    return "";
+  }
+  var parts = [module.type || module.Type || "module"];
+  var lineCount = module.lineCount || module.LineCount;
+  if (lineCount) {
+    parts.push(lineCount + " строк");
+  }
+  var procedure = firstVbaProcedureName(vbaModuleCode(module));
+  if (procedure) {
+    parts.push("entry: " + procedure);
+  }
+  return parts.join(" - ");
+}
+
 function vbaEditorCode() {
   if (typeof getCodeEditorValue === "function") {
     return getCodeEditorValue("vbaCodeInput");
@@ -141,6 +206,54 @@ function setVbaEditorCode(code) {
     return;
   }
   $("vbaCodeInput").value = code || "";
+}
+
+function renderVbaCodePreview() {
+  var preview = $("vbaCodePreview");
+  var module = selectedVbaModule();
+  if (!preview) {
+    return;
+  }
+
+  preview.innerHTML = "";
+  if (!module) {
+    preview.textContent = state.bridgeUnavailable ? "Office bridge недоступен." : "Модуль не выбран.";
+    return;
+  }
+
+  var pre = document.createElement("pre");
+  var code = document.createElement("code");
+  code.className = "language-vbnet";
+  code.dataset.language = "vba";
+  code.textContent = vbaEditorCode() || "' Пустой модуль";
+  pre.appendChild(code);
+  preview.appendChild(pre);
+  if (typeof highlightCode === "function") {
+    highlightCode(code);
+  }
+}
+
+function setVbaMode(mode) {
+  if (typeof syncCodeEditors === "function") {
+    syncCodeEditors(["vbaCodeInput"]);
+  }
+  state.vbaEditorMode = mode === "edit" ? "edit" : "preview";
+  if (state.vbaEditorMode === "preview") {
+    renderVbaCodePreview();
+  }
+  applyVbaMode();
+}
+
+function applyVbaMode() {
+  var mode = state.vbaEditorMode === "edit" ? "edit" : "preview";
+  Array.prototype.slice.call(document.querySelectorAll(".vba-mode-button")).forEach(function (button) {
+    button.classList.toggle("active", button.getAttribute("data-vba-mode") === mode);
+  });
+  $("vbaCodePreview").classList.toggle("hidden", mode !== "preview");
+  $("vbaCodePane").classList.toggle("hidden", mode !== "edit");
+  if (mode === "edit" && typeof refreshCodeEditors === "function") {
+    refreshCodeEditors(["vbaCodeInput"]);
+  }
 }
 
 function formatVbaDiff(before, after) {
@@ -371,6 +484,9 @@ function updateVbaMacroSuggestion() {
 
 function markVbaEditorDirty() {
   updateVbaMacroSuggestion();
+  if (state.vbaEditorMode === "preview") {
+    renderVbaCodePreview();
+  }
   $("vbaStatus").textContent = "Есть несохраненные изменения VBA.";
 }
 
@@ -413,6 +529,11 @@ function bindVbaActions() {
   $("vbaModuleSelect").addEventListener("change", renderSelectedVbaModule);
   $("vbaCodeInput").addEventListener("input", markVbaEditorDirty);
   $("vbaMacroInput").addEventListener("input", updateVbaMacroRunState);
+  Array.prototype.slice.call(document.querySelectorAll(".vba-mode-button")).forEach(function (button) {
+    button.addEventListener("click", function () {
+      setVbaMode(button.getAttribute("data-vba-mode"));
+    });
+  });
   $("previewVbaDiffButton").addEventListener("click", previewVbaDiff);
   $("saveVbaButton").addEventListener("click", saveVbaModule);
   $("restoreVbaButton").addEventListener("click", restoreVbaBackup);
@@ -425,6 +546,7 @@ function bindVbaActions() {
       }
     });
   });
-  renderVbaDiff({ summary: "Обновите VBA, чтобы загрузить модули.", lines: [] });
+  renderVbaProject();
+  applyVbaMode();
   updateVbaMacroRunState();
 }

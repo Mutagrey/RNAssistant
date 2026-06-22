@@ -27,19 +27,18 @@
 
 .html-artifact-badge {
   flex: 0 0 auto;
-  padding: 2px 7px;
-  border: 1px solid #f4b4b4;
+  width: 9px;
+  height: 9px;
+  overflow: hidden;
+  border: 0;
   border-radius: 999px;
-  background: #fff7f7;
-  color: #b42318;
-  font-size: 10px;
-  font-weight: var(--label-font-weight);
+  background: #c24135;
+  box-shadow: 0 0 0 3px rgba(180, 35, 24, 0.12);
 }
 
 .html-artifact.is-enabled .html-artifact-badge {
-  border-color: #b7dfc9;
-  background: #f0fbf5;
-  color: #176f4a;
+  background: #16a36d;
+  box-shadow: 0 0 0 3px rgba(22, 131, 93, 0.13);
 }
 
 .html-artifact-blocked {

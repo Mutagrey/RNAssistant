@@ -35,7 +35,8 @@
     title.textContent = artifactValue(artifact, "Title", "title", "HTML-компонент");
     var badge = document.createElement("span");
     badge.className = "html-artifact-badge";
-    badge.textContent = enabled ? "sandbox iframe" : "выключено";
+    badge.title = enabled ? "HTML sandbox iframe включен" : "HTML отключен";
+    badge.setAttribute("aria-label", badge.title);
     header.appendChild(title);
     header.appendChild(badge);
     node.appendChild(header);

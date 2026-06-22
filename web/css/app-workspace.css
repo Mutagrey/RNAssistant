@@ -44,6 +44,66 @@
   min-width: 0;
 }
 
+.mode-toggle {
+  display: inline-flex;
+  width: max-content;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  background: #fff;
+}
+
+.mode-button {
+  height: 30px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: var(--label-font-weight);
+}
+
+.mode-button:last-child {
+  border-right: 0;
+}
+
+.mode-button.active {
+  background: var(--secondary-bg);
+  color: var(--text);
+}
+
+.editor-preview,
+.editor-edit-input {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  background: #fff;
+}
+
+.editor-preview {
+  padding: 10px;
+}
+
+.editor-edit-input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  resize: none;
+}
+
+.editor-edit-input:focus {
+  border-color: var(--accent);
+  outline: 2px solid var(--focus-ring-tight);
+  outline-offset: 0;
+}
+
 .settings-actions-row {
   display: flex;
   justify-content: flex-end;

@@ -76,7 +76,7 @@
       setSelectedIndex: function (index) { state.selectedPromptIndex = index; },
       matches: promptMatchesSearch,
       title: function (def) { return def.label; },
-      enabled: function () { return true; },
+      enabled: function () { return null; },
       meta: function (def) { return def.group + " - " + def.field; },
       description: function (def) { return def.description; },
       syncEditor: syncSelectedPromptFromEditor,

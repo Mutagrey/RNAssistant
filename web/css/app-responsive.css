@@ -95,7 +95,7 @@
   }
 
   .tool-list-panel,
-  .vba-sidebar {
+  .vba-topbar {
     padding-right: 0;
   }
 
@@ -298,7 +298,7 @@
   }
 
   .tool-editor,
-  .vba-sidebar,
+  .vba-topbar,
   .vba-editor {
     padding: 0;
   }

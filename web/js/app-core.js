@@ -23,6 +23,7 @@ var state = {
   selectedSkillIndex: -1,
   selectedPromptIndex: -1,
   promptEditorMode: "preview",
+  vbaEditorMode: "preview",
   promptDrafts: {},
   toolsPath: "",
   skillsPath: "",
