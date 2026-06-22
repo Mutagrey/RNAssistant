@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Reflection;
+using System.Text;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -16,8 +19,8 @@ namespace RNAssistant.Office.WebView
     {
         private readonly AssistantController _controller;
         private readonly string _webRoot;
-        private readonly WebView2 _webView;
         private readonly AssistantWebBridge _bridge;
+        private WebView2 _webView;
         private bool _webContentWantsKeyboard;
         private IntPtr _lastExternalFocusWindow;
 
@@ -25,9 +28,8 @@ namespace RNAssistant.Office.WebView
         {
             _controller = controller;
             _webRoot = webRoot;
-            _webView = new WebView2 { Dock = DockStyle.Fill, TabStop = false };
             _bridge = new AssistantWebBridge(controller, PostBridgeMessage);
-            Controls.Add(_webView);
+            CreateWebViewControl();
             Load += OnLoad;
         }
 
@@ -83,10 +85,37 @@ namespace RNAssistant.Office.WebView
 
         private async Task InitializeAsync()
         {
-            var userDataFolder = RNAssistant.Core.Storage.AppDataPaths.CreateDefault().WebViewUserDataDirectory;
-            var browserFolder = ResolveFixedRuntimeFolder();
-            var environment = await CoreWebView2Environment.CreateAsync(browserFolder, userDataFolder).ConfigureAwait(true);
-            await _webView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
+            var errors = new StringBuilder();
+            var candidates = BuildEnvironmentCandidates();
+            for (var i = 0; i < candidates.Count; i++)
+            {
+                var candidate = candidates[i];
+                try
+                {
+                    if (i > 0)
+                    {
+                        ResetWebViewControl();
+                    }
+
+                    Directory.CreateDirectory(candidate.UserDataFolder);
+                    var environment = await CoreWebView2Environment.CreateAsync(candidate.BrowserFolder, candidate.UserDataFolder).ConfigureAwait(true);
+                    await _webView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
+                    ConfigureInitializedWebView();
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    var baseException = ex.GetBaseException();
+                    errors.AppendLine(candidate.Name + ": " + baseException.Message);
+                    Debug.WriteLine("RNAssistant WebView2 startup failed for " + candidate.Name + ": " + baseException);
+                }
+            }
+
+            throw new InvalidOperationException("WebView2 startup failed after fallback attempts.\r\n" + errors.ToString());
+        }
+
+        private void ConfigureInitializedWebView()
+        {
             _webView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
             _webView.CoreWebView2.Settings.AreDevToolsEnabled = true;
             _webView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = false;
@@ -100,6 +129,38 @@ namespace RNAssistant.Office.WebView
             }
 
             _webView.Source = new Uri(indexPath);
+        }
+
+        private void CreateWebViewControl()
+        {
+            _webView = new WebView2 { Dock = DockStyle.Fill, TabStop = false };
+            Controls.Add(_webView);
+        }
+
+        private void ResetWebViewControl()
+        {
+            if (_webView != null)
+            {
+                Controls.Remove(_webView);
+                _webView.Dispose();
+            }
+
+            CreateWebViewControl();
+        }
+
+        private static IReadOnlyList<WebViewEnvironmentCandidate> BuildEnvironmentCandidates()
+        {
+            var candidates = new List<WebViewEnvironmentCandidate>();
+            var root = RNAssistant.Core.Storage.AppDataPaths.CreateDefault().WebViewUserDataDirectory;
+            var browserFolder = ResolveFixedRuntimeFolder();
+            var processFolder = Path.Combine(root, SafeFolderName(Process.GetCurrentProcess().ProcessName));
+            var recoveryFolder = Path.Combine(root, "recovery-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss"));
+
+            candidates.Add(new WebViewEnvironmentCandidate("fixed runtime + shared profile", browserFolder, root));
+            candidates.Add(new WebViewEnvironmentCandidate("fixed runtime + process profile", browserFolder, processFolder));
+            candidates.Add(new WebViewEnvironmentCandidate("installed runtime + process profile", null, processFolder));
+            candidates.Add(new WebViewEnvironmentCandidate("installed runtime + recovery profile", null, recoveryFolder));
+            return candidates;
         }
 
         private void TryAttachAcceleratorFilter()
@@ -207,6 +268,37 @@ namespace RNAssistant.Office.WebView
             return null;
         }
 
+        private static string SafeFolderName(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "process";
+            }
+
+            var invalid = Path.GetInvalidFileNameChars();
+            var builder = new StringBuilder(value.Length);
+            foreach (var ch in value)
+            {
+                builder.Append(Array.IndexOf(invalid, ch) >= 0 ? '_' : ch);
+            }
+
+            return builder.ToString();
+        }
+
+        private sealed class WebViewEnvironmentCandidate
+        {
+            public WebViewEnvironmentCandidate(string name, string browserFolder, string userDataFolder)
+            {
+                Name = name;
+                BrowserFolder = browserFolder;
+                UserDataFolder = userDataFolder;
+            }
+
+            public string Name { get; private set; }
+            public string BrowserFolder { get; private set; }
+            public string UserDataFolder { get; private set; }
+        }
+
         private void RenderStartupError(Exception ex)
         {
             if (IsDisposed)
@@ -221,7 +313,10 @@ namespace RNAssistant.Office.WebView
             }
 
             Controls.Clear();
-            _webView.Dispose();
+            if (_webView != null)
+            {
+                _webView.Dispose();
+            }
 
             var baseException = ex == null ? null : ex.GetBaseException();
             var message = baseException == null ? "Unknown WebView2 startup error." : baseException.Message;
