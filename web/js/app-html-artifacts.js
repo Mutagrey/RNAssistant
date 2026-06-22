@@ -24,31 +24,40 @@
       return null;
     }
 
+    var enabled = htmlArtifactsEnabled();
     var node = document.createElement("section");
-    node.className = "html-artifact";
+    node.className = "html-artifact " + (enabled ? "is-enabled" : "is-blocked");
 
     var header = document.createElement("div");
     header.className = "html-artifact-header";
     var title = document.createElement("div");
     title.className = "html-artifact-title";
-    title.textContent = artifactValue(artifact, "Title", "title", "HTML component");
+    title.textContent = artifactValue(artifact, "Title", "title", "HTML-компонент");
     var badge = document.createElement("span");
     badge.className = "html-artifact-badge";
-    badge.textContent = htmlArtifactsEnabled() ? "sandboxed scripts" : "blocked";
+    badge.textContent = enabled ? "sandbox iframe" : "выключено";
     header.appendChild(title);
     header.appendChild(badge);
     node.appendChild(header);
 
-    if (!htmlArtifactsEnabled()) {
+    if (!enabled) {
       var blocked = document.createElement("div");
       blocked.className = "html-artifact-blocked";
-      blocked.textContent = "HTML artifacts are disabled in Settings > Interface.";
+      var blockedTitle = document.createElement("div");
+      blockedTitle.className = "html-artifact-blocked-title";
+      blockedTitle.textContent = "HTML не отображается";
+      var blockedText = document.createElement("div");
+      blockedText.className = "html-artifact-blocked-text";
+      blockedText.textContent = "Включите экспериментальный HTML в разделе «Настройки» > «Интерфейс» только для доверенного содержимого.";
+      blocked.appendChild(blockedTitle);
+      blocked.appendChild(blockedText);
       node.appendChild(blocked);
       return node;
     }
 
     var iframe = document.createElement("iframe");
     iframe.className = "html-artifact-frame";
+    iframe.title = title.textContent;
     iframe.setAttribute("sandbox", "allow-scripts allow-forms allow-modals allow-popups");
     iframe.referrerPolicy = "no-referrer";
     iframe.style.height = Math.max(180, Math.min(900, Number(artifactValue(artifact, "Height", "height", 360) || 360))) + "px";
