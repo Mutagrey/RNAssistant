@@ -52,18 +52,6 @@
     max-width: 92%;
   }
 
-  .vba-code-pane {
-    grid-template-columns: 1fr;
-  }
-
-  .vba-commandbar {
-    align-items: center;
-  }
-
-  .vba-commandbar > .action-group {
-    flex: 0 1 auto;
-  }
-
   .inline-field,
   .inline-field input {
     width: 100%;
@@ -77,26 +65,8 @@
 }
 
 @media (max-width: 760px) {
-  .tool-layout,
-  .vba-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .splitter {
-    display: none;
-  }
-
   .tool-form {
     grid-template-columns: 1fr;
-  }
-
-  .tool-list {
-    max-height: 180px;
-  }
-
-  .tool-list-panel,
-  .vba-topbar {
-    padding-right: 0;
   }
 
   .tool-editor,
@@ -106,6 +76,27 @@
 
   .tool-editor-actions {
     align-items: stretch;
+  }
+}
+
+@media (max-width: 560px) {
+  .tool-layout,
+  .prompt-layout,
+  .vba-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .splitter {
+    display: none;
+  }
+
+  .tool-list {
+    max-height: 180px;
+  }
+
+  .tool-list-panel,
+  .vba-list-panel {
+    padding-right: 0;
   }
 }
 
@@ -174,10 +165,6 @@
 
   .toolbar-menu {
     flex: 0 0 auto;
-  }
-
-  .vba-commandbar .toolbar-menu {
-    flex: 1 1 auto;
   }
 
   .toolbar-menu summary {
@@ -298,7 +285,7 @@
   }
 
   .tool-editor,
-  .vba-topbar,
+  .vba-list-panel,
   .vba-editor {
     padding: 0;
   }
@@ -308,13 +295,12 @@
   }
 
   .tool-editor-actions,
-  .vba-editor-actions {
+  .resource-editor-actions {
     align-items: stretch;
     justify-content: flex-start;
   }
 
-  .tool-editor-actions .action-group,
-  .vba-editor-actions .action-group {
+  .tool-editor-actions .action-group {
     flex: 1 1 auto;
   }
 

@@ -44,6 +44,44 @@
   min-width: 0;
 }
 
+.resource-editor-head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.resource-editor-titlebox {
+  min-width: 0;
+}
+
+.resource-editor-title {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: var(--title-font-weight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-editor-meta {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--meta-font-weight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-editor-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: center;
+}
+
 .mode-toggle {
   display: inline-flex;
   width: max-content;

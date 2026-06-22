@@ -1,168 +1,56 @@
-.vba-layout {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 8px;
-  flex: 1;
+.vba-module-list {
   min-height: 0;
-  margin-top: 0;
-}
-
-.vba-topbar,
-.vba-editor {
-  min-height: 0;
-  min-width: 0;
-}
-
-.vba-topbar {
-  display: grid;
-  gap: 8px;
-  overflow: hidden;
-}
-
-.vba-topbar-head {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  justify-content: space-between;
-  min-width: 0;
-}
-
-.vba-topbar-head .panel-status {
-  min-width: 0;
-  white-space: normal;
-}
-
-.vba-editor {
-  display: grid;
-  grid-template-rows: auto auto auto minmax(260px, 1fr) auto auto auto;
-  gap: 10px;
   overflow: auto;
 }
 
-.vba-empty-state {
-  display: none;
-  min-height: 220px;
-  place-items: center;
-  align-content: center;
-  gap: 5px;
-  padding: 22px 18px;
-  border: 1px solid #e2e8f2;
-  border-radius: 8px;
-  background: #fbfcfe;
+.vba-module-group {
+  margin-bottom: 8px;
+}
+
+.vba-module-group-title {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 7px 4px;
+  background: var(--bg);
   color: var(--muted);
-  text-align: center;
+  font-size: 10.5px;
+  font-weight: var(--label-font-weight);
+  letter-spacing: 0;
 }
 
-.vba-empty-title {
-  color: var(--text);
-  font-size: 14px;
-  font-weight: var(--title-font-weight);
-}
-
-.vba-empty-text {
-  max-width: 380px;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.vba-empty-state button {
-  margin-top: 8px;
-}
-
-.vba-editor.is-empty .vba-empty-state {
+.vba-editor {
   display: grid;
-}
-
-.vba-editor.is-empty .vba-mode-toggle,
-.vba-editor.is-empty .vba-runbar,
-.vba-editor.is-empty .vba-code-preview,
-.vba-editor.is-empty .vba-code-pane,
-.vba-editor.is-empty .vba-meta-panel,
-.vba-editor.is-empty .vba-diff-panel,
-.vba-editor.is-empty .vba-editor-actions {
-  display: none;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .vba-editor-head {
-  display: flex;
-  gap: 10px;
   align-items: center;
-  justify-content: space-between;
-  min-width: 0;
   padding-bottom: 8px;
   border-bottom: 1px solid rgba(226, 231, 239, 0.72);
 }
 
-.vba-editor-titlebox {
-  min-width: 0;
+.vba-mode-toggle {
+  max-width: 100%;
+  overflow-x: auto;
 }
 
-.vba-editor-title {
-  overflow: hidden;
-  color: var(--text);
-  font-size: 14px;
-  font-weight: var(--title-font-weight);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.vba-editor.is-empty .resource-editor-actions,
+.vba-editor.is-empty .vba-view {
+  display: none;
 }
 
-.vba-editor-meta {
-  margin-top: 2px;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: var(--meta-font-weight);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.vba-runbar {
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-  margin-bottom: 6px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid rgba(226, 231, 239, 0.72);
-}
-
-.vba-runbar .inline-field {
-  min-width: min(260px, 100%);
-}
-
-.vba-commandbar {
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-  min-width: min(420px, 100%);
-}
-
-.vba-commandbar .action-group {
-  flex-wrap: nowrap;
-}
-
-.vba-backup-field {
-  min-width: min(230px, 42vw);
-  margin: 0;
-}
-
-.vba-backup-field select {
-  width: 150px;
-  min-width: 0;
-}
-
-.vba-module-list {
-  min-height: 76px;
-}
-
-.vba-code-pane {
+.vba-view {
   min-height: 0;
+  overflow: hidden;
 }
 
 .vba-code-preview {
-  min-height: 260px;
+  min-height: 0;
   background: #fbfcfe;
 }
 
@@ -178,6 +66,10 @@
   white-space: pre;
 }
 
+.vba-code-pane {
+  min-height: 0;
+}
+
 .vba-editor textarea {
   width: 100%;
   height: 100%;
@@ -185,29 +77,28 @@
 
 .rn-code-editor-vbaCodeInput {
   height: 100% !important;
-  min-height: clamp(260px, 48vh, 520px) !important;
+  min-height: clamp(280px, 52vh, 560px) !important;
 }
 
 .vba-code-pane .CodeMirror-scroll {
   max-width: 100%;
-  min-height: clamp(260px, 48vh, 520px);
+  min-height: clamp(280px, 52vh, 560px);
 }
 
-.vba-code-empty {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: var(--label-font-weight);
+.vba-diff-view {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
 }
 
-.vba-meta {
-  min-height: 120px;
-  flex: none;
-  margin-top: 8px;
-  background: #fbfcfe;
+.vba-tab-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-start;
 }
 
 .vba-diff {
-  min-height: 110px;
+  min-height: 0;
   margin: 0;
   overflow: auto;
   border: 1px solid rgba(226, 231, 239, 0.86);
@@ -307,38 +198,40 @@
   color: var(--muted);
 }
 
-.vba-editor-actions {
-  margin-top: 0;
+.vba-run-view,
+.vba-info-view {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  overflow: auto;
 }
 
-.vba-meta-panel,
-.vba-diff-panel {
+.vba-runbar,
+.vba-backup-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.vba-runbar .inline-field {
+  min-width: min(260px, 100%);
+}
+
+.vba-backup-field {
+  min-width: min(260px, 100%);
+  margin: 0;
+}
+
+.vba-backup-field select {
+  width: 170px;
   min-width: 0;
 }
 
-.vba-meta-panel summary,
-.vba-diff-panel summary {
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: var(--label-font-weight);
-  line-height: 1.35;
-}
-
-.vba-meta-panel[open] summary,
-.vba-diff-panel[open] summary {
-  color: var(--text);
-}
-
-.vba-meta-panel,
-.vba-diff-panel {
-  display: grid;
-  gap: 8px;
-}
-
-.vba-meta-panel:not([open]),
-.vba-diff-panel:not([open]) {
-  display: block;
+.vba-meta {
+  min-height: 180px;
+  flex: none;
+  background: #fbfcfe;
 }
 
 .vba-macro-status {

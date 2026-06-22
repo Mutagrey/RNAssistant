@@ -14,15 +14,15 @@
   <link rel="stylesheet" href="css/app-composer.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=chatui-20260621-5">
   <link rel="stylesheet" href="css/app-models.css?v=chatui-20260621-1">
-  <link rel="stylesheet" href="css/app-workspace.css?v=chatui-20260622-1">
+  <link rel="stylesheet" href="css/app-workspace.css?v=chatui-20260622-2">
   <link rel="stylesheet" href="css/app-tools.css?v=chatui-20260622-3">
-  <link rel="stylesheet" href="css/app-prompts.css?v=chatui-20260622-2">
-  <link rel="stylesheet" href="css/app-vba.css?v=chatui-20260622-4">
+  <link rel="stylesheet" href="css/app-prompts.css?v=chatui-20260622-3">
+  <link rel="stylesheet" href="css/app-vba.css?v=chatui-20260622-6">
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-dialogs.css?v=chatui-20260622-1">
-  <link rel="stylesheet" href="css/app-responsive.css?v=chatui-20260622-2">
+  <link rel="stylesheet" href="css/app-responsive.css?v=chatui-20260622-4">
   <link rel="stylesheet" href="css/app-agent.css?v=chatui-20260621-3">
   <link rel="stylesheet" href="css/app-agent-data.css?v=chatui-20260621-3">
 </head>
@@ -246,61 +246,65 @@
       </section>
 
       <section class="panel" id="tab-vba">
-        <div class="vba-layout" id="vbaLayout">
-          <section class="vba-topbar surface-panel padded">
-            <div class="vba-topbar-head">
-              <div class="panel-status" id="vbaStatus">VBA-контекст не загружен.</div>
-              <div class="panel-actions vba-commandbar">
+        <div class="tool-layout vba-layout split-layout" id="vbaLayout" data-split-key="vba" data-default-ratio="0.28" data-min-left="180" data-min-ratio="0.18" data-max-ratio="0.46">
+          <aside class="tool-list-panel vba-list-panel">
+            <div class="tool-list-status" id="vbaStatus">VBA-контекст не загружен.</div>
+            <div class="tool-list-controls">
+              <input class="tool-search" id="vbaModuleSearchInput" placeholder="Поиск модулей..." autocomplete="off">
+              <div class="tool-list-actions">
                 <button class="secondary" id="refreshVbaButton" type="button">Загрузить VBA</button>
-                <label class="inline-field vba-backup-field">Копия<select id="vbaBackupSelect"></select></label>
               </div>
             </div>
-            <input class="tool-search" id="vbaModuleSearchInput" placeholder="Поиск модулей..." autocomplete="off">
             <select class="hidden" id="vbaModuleSelect" aria-hidden="true" tabindex="-1"></select>
-            <div class="tool-list is-horizontal vba-module-list" id="vbaModuleList" role="listbox" aria-label="VBA модули"></div>
-          </section>
-          <section class="vba-editor surface-panel padded">
-            <div class="vba-editor-head">
-              <div class="vba-editor-titlebox">
-                <div class="vba-editor-title" id="vbaModuleTitle">Модуль не выбран</div>
-                <div class="vba-editor-meta" id="vbaModuleMeta"></div>
+            <div class="tool-list vba-module-list" id="vbaModuleList" role="tree" aria-label="VBA модули"></div>
+          </aside>
+          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка VBA"></div>
+          <section class="vba-editor surface-panel padded tool-editor">
+            <div class="resource-editor-head vba-editor-head">
+              <div class="resource-editor-titlebox">
+                <div class="resource-editor-title" id="vbaModuleTitle">Модуль не выбран</div>
+                <div class="resource-editor-meta" id="vbaModuleMeta"></div>
               </div>
-              <div class="mode-toggle vba-mode-toggle" role="group" aria-label="Режим VBA">
-                <button class="mode-button vba-mode-button active" type="button" data-vba-mode="preview">Preview</button>
-                <button class="mode-button vba-mode-button" type="button" data-vba-mode="edit">Edit</button>
-              </div>
-            </div>
-            <div class="vba-empty-state" id="vbaEmptyState">
-              <div class="vba-empty-title">VBA не загружен</div>
-              <div class="vba-empty-text">Загрузите VBA-проект, чтобы редактировать модули, сравнивать diff и сохранять изменения.</div>
-              <button class="primary" id="refreshVbaEmptyButton" type="button">Загрузить VBA</button>
-            </div>
-            <div class="vba-runbar">
-              <label class="inline-field">Макрос<input id="vbaMacroInput" autocomplete="off" placeholder="Module1.Main"></label>
-              <button class="primary" id="runVbaMacroButton" type="button">Запустить</button>
-              <div class="vba-macro-status" id="vbaMacroStatus"></div>
-            </div>
-            <div class="editor-preview vba-code-preview markdown" id="vbaCodePreview"></div>
-            <div class="vba-code-pane hidden" id="vbaCodePane">
-              <textarea id="vbaCodeInput" spellcheck="false" placeholder="Обновите VBA, чтобы загрузить модули."></textarea>
-            </div>
-            <details class="vba-meta-panel">
-              <summary>Метаданные</summary>
-              <pre class="json-box vba-meta" id="vbaMetaBox"></pre>
-            </details>
-            <details class="vba-diff-panel" open>
-              <summary>Сравнение</summary>
-              <div class="vba-diff" id="vbaDiffOutput" aria-live="polite"></div>
-            </details>
-            <div class="toolbar vba-editor-actions action-bar">
-              <div class="action-group">
-                <button class="secondary" id="previewVbaDiffButton" type="button">Показать diff</button>
-                <button class="secondary" id="reviewVbaButton" type="button">Обсудить код</button>
-              </div>
-              <div class="action-group action-group-end">
-                <button class="secondary" id="restoreVbaButton" type="button">Восстановить из копии</button>
+              <div class="resource-editor-actions">
+                <button class="secondary" id="reviewVbaButton" type="button">Обсудить</button>
                 <button class="accent-soft" id="saveVbaButton" type="button">Сохранить</button>
               </div>
+            </div>
+            <div class="mode-toggle vba-mode-toggle" role="group" aria-label="Раздел VBA">
+              <button class="mode-button vba-mode-button active" type="button" data-vba-mode="preview">Preview</button>
+              <button class="mode-button vba-mode-button" type="button" data-vba-mode="edit">Edit</button>
+              <button class="mode-button vba-mode-button" type="button" data-vba-mode="diff">Diff</button>
+              <button class="mode-button vba-mode-button" type="button" data-vba-mode="run">Run</button>
+              <button class="mode-button vba-mode-button" type="button" data-vba-mode="info">Info</button>
+            </div>
+            <div class="resource-editor-empty" id="vbaEmptyState">
+              <div class="resource-editor-empty-title">VBA не загружен</div>
+              <div class="resource-editor-empty-text">Загрузите VBA-проект, чтобы редактировать модули, сравнивать diff и сохранять изменения.</div>
+              <button class="primary" id="refreshVbaEmptyButton" type="button">Загрузить VBA</button>
+            </div>
+            <div class="editor-preview vba-code-preview markdown vba-view" id="vbaCodePreview" data-vba-view="preview"></div>
+            <div class="vba-code-pane vba-view hidden" id="vbaCodePane" data-vba-view="edit">
+              <textarea id="vbaCodeInput" spellcheck="false" placeholder="Обновите VBA, чтобы загрузить модули."></textarea>
+            </div>
+            <div class="vba-diff-view vba-view hidden" data-vba-view="diff">
+              <div class="vba-tab-actions">
+                <button class="secondary" id="previewVbaDiffButton" type="button">Обновить diff</button>
+              </div>
+              <div class="vba-diff" id="vbaDiffOutput" aria-live="polite"></div>
+            </div>
+            <div class="vba-run-view vba-view hidden" data-vba-view="run">
+              <div class="vba-runbar">
+                <label class="inline-field">Макрос<input id="vbaMacroInput" autocomplete="off" placeholder="Module1.Main"></label>
+                <button class="primary" id="runVbaMacroButton" type="button">Запустить</button>
+              </div>
+              <div class="vba-macro-status" id="vbaMacroStatus"></div>
+            </div>
+            <div class="vba-info-view vba-view hidden" data-vba-view="info">
+              <div class="vba-backup-row">
+                <label class="inline-field vba-backup-field">Копия<select id="vbaBackupSelect"></select></label>
+                <button class="secondary" id="restoreVbaButton" type="button">Восстановить</button>
+              </div>
+              <pre class="json-box vba-meta" id="vbaMetaBox"></pre>
             </div>
           </section>
         </div>
@@ -401,12 +405,12 @@
                     <div class="resource-editor-empty-text">Выберите prompt-блок слева.</div>
                   </div>
                   <div class="prompt-editor-content" id="promptEditorContent">
-                    <div class="prompt-editor-head">
-                      <div class="prompt-editor-titlebox">
-                        <div class="prompt-editor-title" id="promptTitle"></div>
-                        <div class="prompt-editor-meta" id="promptMeta"></div>
+                    <div class="resource-editor-head">
+                      <div class="resource-editor-titlebox">
+                        <div class="resource-editor-title" id="promptTitle"></div>
+                        <div class="resource-editor-meta" id="promptMeta"></div>
                       </div>
-                      <div class="prompt-editor-actions">
+                      <div class="resource-editor-actions">
                         <button class="icon-button secondary" id="copyPromptButton" type="button" title="Скопировать промпт" aria-label="Скопировать промпт">
                           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                         </button>
@@ -539,7 +543,7 @@
   <script src="js/app-resource-list.js?v=chatui-20260622-2"></script>
   <script src="js/app-tools.js?v=chatui-20260622-2"></script>
   <script src="js/app-skills.js?v=chatui-20260622-2"></script>
-  <script src="js/app-vba.js?v=chatui-20260622-3"></script>
+  <script src="js/app-vba.js?v=chatui-20260622-5"></script>
   <script src="js/app-context.js?v=chatui-20260621-5"></script>
   <script src="js/app-agent-data.js?v=chatui-20260621-1"></script>
   <script src="js/app-agent-model.js?v=chatui-20260620-1"></script>

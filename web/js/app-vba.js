@@ -57,8 +57,8 @@ function renderVbaProject() {
     editorPanel.classList.toggle("is-empty", isEmpty);
   }
   if (emptyState) {
-    emptyState.querySelector(".vba-empty-title").textContent = state.bridgeUnavailable ? "VBA недоступен" : "VBA не загружен";
-    emptyState.querySelector(".vba-empty-text").textContent = state.bridgeUnavailable
+    emptyState.querySelector(".resource-editor-empty-title").textContent = state.bridgeUnavailable ? "VBA недоступен" : "VBA не загружен";
+    emptyState.querySelector(".resource-editor-empty-text").textContent = state.bridgeUnavailable
       ? "Откройте RNAssistant внутри Office, чтобы загрузить VBA-проект и работать с модулями."
       : "Нажмите «Загрузить VBA», чтобы редактировать модули, сравнивать diff и сохранять изменения.";
   }
@@ -90,27 +90,100 @@ function renderVbaModuleList(modules, query) {
   }
 
   var selectedName = $("vbaModuleSelect").value;
-  modules.forEach(function (module) {
-    var name = vbaModuleName(module);
-    var type = module.type || module.Type || "module";
-    var lineCount = module.lineCount || module.LineCount || 0;
-    var item = createResourceListItem({
-      title: name,
-      enabled: null,
-      active: name === selectedName,
-      meta: type + (lineCount ? " - " + lineCount + " строк" : ""),
-      description: firstVbaProcedureName(vbaModuleCode(module)) || "VBA module",
-      onClick: function () {
-        $("vbaModuleSelect").value = name;
-        state.vba.selectedModule = name;
-        renderVbaModuleList(modules, query);
-        renderSelectedVbaModule();
-      }
+  groupVbaModules(modules).forEach(function (group) {
+    var section = document.createElement("div");
+    section.className = "vba-module-group";
+    section.setAttribute("role", "group");
+
+    var title = document.createElement("div");
+    title.className = "vba-module-group-title";
+    title.textContent = group.label;
+    section.appendChild(title);
+
+    group.modules.forEach(function (module) {
+      var name = vbaModuleName(module);
+      var type = vbaModuleType(module);
+      var lineCount = module.lineCount || module.LineCount || 0;
+      var item = createResourceListItem({
+        title: name,
+        enabled: null,
+        active: name === selectedName,
+        meta: type + (lineCount ? " - " + lineCount + " строк" : ""),
+        description: firstVbaProcedureName(vbaModuleCode(module)) || "VBA module",
+        onClick: function () {
+          $("vbaModuleSelect").value = name;
+          state.vba.selectedModule = name;
+          renderVbaModuleList(modules, query);
+          renderSelectedVbaModule();
+        }
+      });
+      item.setAttribute("role", "treeitem");
+      item.setAttribute("aria-selected", name === selectedName ? "true" : "false");
+      section.appendChild(item);
     });
-    item.setAttribute("role", "option");
-    item.setAttribute("aria-selected", name === selectedName ? "true" : "false");
-    list.appendChild(item);
+
+    list.appendChild(section);
   });
+}
+
+function groupVbaModules(modules) {
+  var byLabel = {};
+  var groups = [];
+  modules.forEach(function (module) {
+    var type = vbaModuleType(module);
+    var label = vbaModuleGroupLabel(type);
+    if (!byLabel[label]) {
+      byLabel[label] = { label: label, order: vbaModuleGroupOrder(type), modules: [] };
+      groups.push(byLabel[label]);
+    }
+    byLabel[label].modules.push(module);
+  });
+
+  groups.sort(function (left, right) {
+    if (left.order !== right.order) {
+      return left.order - right.order;
+    }
+    return left.label.localeCompare(right.label);
+  });
+  return groups;
+}
+
+function vbaModuleType(module) {
+  return module ? (module.type || module.Type || "module") : "module";
+}
+
+function vbaModuleGroupLabel(type) {
+  var value = String(type || "module").toLowerCase();
+  if (value.indexOf("document") >= 0 || value.indexOf("worksheet") >= 0 || value.indexOf("workbook") >= 0) {
+    return "Объекты документа";
+  }
+  if (value.indexOf("class") >= 0) {
+    return "Классы";
+  }
+  if (value.indexOf("form") >= 0) {
+    return "Формы";
+  }
+  if (value.indexOf("module") >= 0 || value === "standard") {
+    return "Модули";
+  }
+  return type || "Other";
+}
+
+function vbaModuleGroupOrder(type) {
+  var label = vbaModuleGroupLabel(type);
+  if (label === "Модули") {
+    return 1;
+  }
+  if (label === "Объекты документа") {
+    return 2;
+  }
+  if (label === "Классы") {
+    return 3;
+  }
+  if (label === "Формы") {
+    return 4;
+  }
+  return 9;
 }
 
 function selectHasOption(select, value) {
@@ -188,7 +261,7 @@ function vbaModuleMetaText(module) {
   }
   var procedure = firstVbaProcedureName(vbaModuleCode(module));
   if (procedure) {
-    parts.push("entry: " + procedure);
+    parts.push("процедура: " + procedure);
   }
   return parts.join(" - ");
 }
@@ -237,20 +310,29 @@ function setVbaMode(mode) {
   if (typeof syncCodeEditors === "function") {
     syncCodeEditors(["vbaCodeInput"]);
   }
-  state.vbaEditorMode = mode === "edit" ? "edit" : "preview";
+  state.vbaEditorMode = normalizeVbaMode(mode);
   if (state.vbaEditorMode === "preview") {
     renderVbaCodePreview();
+  } else if (state.vbaEditorMode === "diff") {
+    previewVbaDiff();
   }
   applyVbaMode();
 }
 
+function normalizeVbaMode(mode) {
+  var value = mode || "preview";
+  return value === "edit" || value === "diff" || value === "run" || value === "info" ? value : "preview";
+}
+
 function applyVbaMode() {
-  var mode = state.vbaEditorMode === "edit" ? "edit" : "preview";
+  var mode = normalizeVbaMode(state.vbaEditorMode);
+  state.vbaEditorMode = mode;
   Array.prototype.slice.call(document.querySelectorAll(".vba-mode-button")).forEach(function (button) {
     button.classList.toggle("active", button.getAttribute("data-vba-mode") === mode);
   });
-  $("vbaCodePreview").classList.toggle("hidden", mode !== "preview");
-  $("vbaCodePane").classList.toggle("hidden", mode !== "edit");
+  Array.prototype.slice.call(document.querySelectorAll(".vba-view")).forEach(function (view) {
+    view.classList.toggle("hidden", view.getAttribute("data-vba-view") !== mode);
+  });
   if (mode === "edit" && typeof refreshCodeEditors === "function") {
     refreshCodeEditors(["vbaCodeInput"]);
   }
