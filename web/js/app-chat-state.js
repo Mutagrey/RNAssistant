@@ -50,11 +50,18 @@ function applyChatState(response) {
   if (response.contextUsage || response.ContextUsage) {
     state.contextUsage = response.contextUsage || response.ContextUsage || {};
   }
+  if (response.htmlWorkspace || response.HtmlWorkspace) {
+    state.htmlWorkspace = response.htmlWorkspace || response.HtmlWorkspace || { activeFileId: "", files: [], dataSources: [] };
+    state.htmlWorkspaceDirty = false;
+  }
   renderChatSessions();
   renderMessages();
   renderContext(true);
   renderContextMeter();
   renderModelControls();
+  if (typeof renderHtmlWorkspace === "function") {
+    renderHtmlWorkspace();
+  }
 }
 
 function logToolResult(prefix, toolId, result) {

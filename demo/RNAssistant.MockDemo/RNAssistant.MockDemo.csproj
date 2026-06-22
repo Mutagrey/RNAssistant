@@ -41,6 +41,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Controller\AssistantController.Agent.cs" Link="Office\Controller\AssistantController.Agent.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Controller\AssistantController.Chats.cs" Link="Office\Controller\AssistantController.Chats.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Controller\AssistantController.Context.cs" Link="Office\Controller\AssistantController.Context.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Controller\AssistantController.HtmlWorkspace.cs" Link="Office\Controller\AssistantController.HtmlWorkspace.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\AgentRunService.cs" Link="Office\Services\AgentRunService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatCloneService.cs" Link="Office\Services\ChatCloneService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatCompletionService.cs" Link="Office\Services\ChatCompletionService.cs" />

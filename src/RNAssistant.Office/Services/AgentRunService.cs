@@ -203,7 +203,7 @@ namespace RNAssistant.Office.Services
                         CreateRunningActivity(command, settings.AutoRunToolCalls != false ? "running" : "waiting", "tool"));
                     cancellationToken.ThrowIfCancellationRequested();
                     var result = settings.AutoRunToolCalls != false
-                        ? _toolExecutor.Execute(command, tools, settings, false, false, cancellationToken)
+                        ? _toolExecutor.Execute(command, tools, settings, false, false, session, cancellationToken)
                         : ToolResult.SkippedAutoRun("Auto tool execution is disabled: " + command.ToolId);
                     AttachPendingId(session, command, result, pendingToolRegistrar);
                     resultLog.Add(AgentTranscript.DescribeResult(command, result));
@@ -315,7 +315,7 @@ namespace RNAssistant.Office.Services
                 cancellationToken.ThrowIfCancellationRequested();
                 var retry = retryCommands[i];
                 ReportProgress(progress, "retrying", "Повтор tool " + (i + 1) + "/" + retryCommands.Count + ": " + retry.ToolId, CreateRunningActivity(retry, "running", "retry"));
-                var retryResult = _toolExecutor.Execute(retry, tools, settings, false, false, cancellationToken);
+                var retryResult = _toolExecutor.Execute(retry, tools, settings, false, false, session, cancellationToken);
                 AttachPendingId(session, retry, retryResult, pendingToolRegistrar);
                 if (resultLog != null)
                 {

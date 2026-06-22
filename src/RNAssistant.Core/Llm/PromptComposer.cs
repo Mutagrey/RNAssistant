@@ -28,7 +28,7 @@ namespace RNAssistant.Core.Llm
             builder.AppendLine("Auto-run local tool blocks: " + (settings.AutoRunToolCalls != false ? "enabled" : "disabled"));
             builder.AppendLine("Auto-confirm tool actions: " + (settings.AutoConfirmToolActions ? "enabled" : "disabled"));
             builder.AppendLine("Mutation verification: " + (settings.RequireVerificationForMutations != false ? "required" : "not required"));
-            builder.AppendLine("Unsafe HTML chat artifacts: " + (settings.AllowUnsafeHtmlArtifacts ? "enabled" : "disabled"));
+            builder.AppendLine("Unsafe HTML preview and legacy chat artifacts: " + (settings.AllowUnsafeHtmlArtifacts ? "enabled" : "disabled"));
             builder.AppendLine("Do not rely on native API tool_calls. Local Office actions are executed through parseable RNAssistant JSON in text; compatibility conversion exists only for endpoints that return tool_calls anyway.");
             if (settings.AgentModeEnabled != false)
             {

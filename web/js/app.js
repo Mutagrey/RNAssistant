@@ -44,6 +44,7 @@ document.addEventListener("DOMContentLoaded", function () {
   bindChatActions();
   bindContextActions();
   bindVbaActions();
+  bindHtmlWorkspaceActions();
   bindModelActions();
   bindSettingsActions();
   bindToolActions();

@@ -316,7 +316,7 @@ namespace RNAssistant.Office
                 return false;
             }
 
-            return Regex.IsMatch(value, "(лист|таблиц|диапазон|ячейк|график|диаграмм|sheet|table|range|cell|chart|slide|слайд|document|документ|selection|выдел|mail|email|письм)");
+            return Regex.IsMatch(value, "(лист|таблиц|диапазон|ячейк|график|диаграмм|html|page|страниц|report|отчет|component|компонент|ui|sheet|table|range|cell|chart|slide|слайд|document|документ|selection|выдел|mail|email|письм)");
         }
 
         public static bool CanRetryToolError(ToolResult result)

@@ -240,6 +240,36 @@ namespace RNAssistant.Office.Contracts
         public int? MaxChars { get; set; }
     }
 
+    public sealed class HtmlWorkspaceFilePayload : ChatPayload
+    {
+        [JsonProperty("path")]
+        public string Path { get; set; }
+
+        [JsonProperty("kind")]
+        public string Kind { get; set; }
+
+        [JsonProperty("content")]
+        public string Content { get; set; }
+
+        [JsonProperty("setActive")]
+        public bool? SetActive { get; set; }
+    }
+
+    public sealed class HtmlWorkspaceDataPayload : ChatPayload
+    {
+        [JsonProperty("name")]
+        public string Name { get; set; }
+
+        [JsonProperty("json")]
+        public string Json { get; set; }
+    }
+
+    public sealed class HtmlWorkspaceActiveFilePayload : ChatPayload
+    {
+        [JsonProperty("path")]
+        public string Path { get; set; }
+    }
+
     public sealed class RemoveContextItemPayload : ChatPayload
     {
         [JsonProperty("id")]
@@ -279,6 +309,15 @@ namespace RNAssistant.Office.Contracts
         public IReadOnlyList<VbaModuleBackup> Backups { get; set; }
     }
 
+    public sealed class HtmlWorkspaceResponse
+    {
+        [JsonProperty("activeChatId")]
+        public string ActiveChatId { get; set; }
+
+        [JsonProperty("workspace")]
+        public HtmlWorkspace Workspace { get; set; }
+    }
+
     public sealed class QuickActionResponse
     {
         [JsonProperty("prompt")]
@@ -304,6 +343,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("contextUsage")]
         public object ContextUsage { get; set; }
+
+        [JsonProperty("htmlWorkspace")]
+        public HtmlWorkspace HtmlWorkspace { get; set; }
     }
 
     public sealed class InitResponse
@@ -355,6 +397,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("contextUsage")]
         public object ContextUsage { get; set; }
+
+        [JsonProperty("htmlWorkspace")]
+        public HtmlWorkspace HtmlWorkspace { get; set; }
 
         [JsonProperty("quickAction")]
         public string QuickAction { get; set; }

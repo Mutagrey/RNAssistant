@@ -139,6 +139,8 @@ function applyInitState(init) {
   state.skillsPath = init.skillsPath || "";
   state.context = init.context || {};
   state.contextUsage = init.contextUsage || {};
+  state.htmlWorkspace = init.htmlWorkspace || init.HtmlWorkspace || { activeFileId: "", files: [], dataSources: [] };
+  state.htmlWorkspaceDirty = false;
   state.activeChatId = init.activeChatId || "";
   state.activeChatModel = init.activeChatModel || "";
   state.chats = init.chats || [];
@@ -153,6 +155,9 @@ function applyInitState(init) {
   renderChatSessions();
   renderMessages();
   renderContextMeter();
+  if (typeof renderHtmlWorkspace === "function") {
+    renderHtmlWorkspace();
+  }
   if (typeof updateVbaMacroRunState === "function") {
     updateVbaMacroRunState();
   }
@@ -179,6 +184,8 @@ function applyBridgeUnavailableState(error) {
   state.skillsPath = "";
   state.context = {};
   state.contextUsage = { usedChars: 0, limitChars: 0, percent: 0, actual: false };
+  state.htmlWorkspace = { activeFileId: "", files: [], dataSources: [] };
+  state.htmlWorkspaceDirty = false;
 
   $("docLine").textContent = "Office bridge недоступен";
   $("toolsPath").textContent = "";
@@ -190,6 +197,9 @@ function applyBridgeUnavailableState(error) {
   renderChatSessions();
   renderMessages();
   renderContextMeter();
+  if (typeof renderHtmlWorkspace === "function") {
+    renderHtmlWorkspace();
+  }
   renderModelControls();
   renderSendControls();
   if (typeof renderVbaProject === "function") {

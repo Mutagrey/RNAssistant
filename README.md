@@ -186,6 +186,17 @@ Pure JSON arrays/objects with `toolId`, `tool`, `action`, or `name` are accepted
 
 When `Agent mode for Office actions` is enabled, ordinary Office requests such as creating sheets, writing data, adding charts, editing documents, or creating slides should return a `rnassistant-agent` block. If the first model answer is prose-only for an obvious Office action, RNAssistant asks the model once more to return an executable agent block.
 
+## HTML Workspace
+
+The HTML tab is tied to the active chat session. Agent-created HTML pages are stored with the chat, not inside the Office document.
+
+- Use `common.html_workspace_upsert_file` for `index.html`, CSS, and script files (`kind`: `html`, `css`, or `script`).
+- Use `common.html_workspace_upsert_data` for JSON data sources. Preview exposes them as `window.RNAssistantData`.
+- Use `common.html_workspace_read` to inspect the current workspace and `common.html_workspace_set_active` to choose the displayed HTML file.
+- `common.render_html` remains available only for legacy one-off chat artifacts.
+
+HTML preview runs in a sandboxed iframe and is controlled by the Interface setting for HTML preview/artifacts.
+
 ## Tool Library
 
 Custom tools are stored under:

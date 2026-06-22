@@ -31,7 +31,7 @@ namespace RNAssistant.Office
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
             cancellationToken.ThrowIfCancellationRequested();
-            var result = _toolExecutor.Execute(CloneCommand(pending.Command), tools, settings, false, true, cancellationToken);
+            var result = _toolExecutor.Execute(CloneCommand(pending.Command), tools, settings, false, true, session, cancellationToken);
             UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
             if (result.Success && settings.AutoContinueAfterConfirmation != false)
             {

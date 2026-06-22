@@ -278,6 +278,22 @@ namespace RNAssistant.Core.Storage
             {
                 session.Context = new DocumentContext();
             }
+            if (session.HtmlWorkspace == null)
+            {
+                session.HtmlWorkspace = new HtmlWorkspace();
+            }
+            if (session.HtmlWorkspace.Files == null)
+            {
+                session.HtmlWorkspace.Files = new List<HtmlWorkspaceFile>();
+            }
+            if (session.HtmlWorkspace.DataSources == null)
+            {
+                session.HtmlWorkspace.DataSources = new List<HtmlWorkspaceDataSource>();
+            }
+            if (session.HtmlWorkspace.UpdatedUtc == default(DateTime))
+            {
+                session.HtmlWorkspace.UpdatedUtc = session.UpdatedUtc == default(DateTime) ? DateTime.UtcNow : session.UpdatedUtc;
+            }
             if (string.IsNullOrWhiteSpace(session.Context.Host))
             {
                 session.Context.Host = session.Host;

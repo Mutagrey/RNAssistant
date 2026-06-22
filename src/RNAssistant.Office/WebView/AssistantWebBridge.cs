@@ -173,6 +173,31 @@ namespace RNAssistant.Office.WebView
                         var restoreVba = Payload<RestoreVbaBackupPayload>(payload);
                         responsePayload = _controller.RestoreVbaBackup(restoreVba.BackupId, restoreVba.ModuleName);
                         break;
+                    case "getHtmlWorkspace":
+                        responsePayload = _controller.GetHtmlWorkspace(Payload<ChatPayload>(payload).ChatId);
+                        break;
+                    case "saveHtmlWorkspaceFile":
+                        var htmlFile = Payload<HtmlWorkspaceFilePayload>(payload);
+                        responsePayload = _controller.SaveHtmlWorkspaceFile(
+                            htmlFile.ChatId,
+                            htmlFile.Path,
+                            htmlFile.Kind,
+                            htmlFile.Content,
+                            htmlFile.SetActive != false);
+                        break;
+                    case "saveHtmlWorkspaceData":
+                        var htmlData = Payload<HtmlWorkspaceDataPayload>(payload);
+                        responsePayload = _controller.SaveHtmlWorkspaceData(
+                            htmlData.ChatId,
+                            htmlData.Name,
+                            htmlData.Json);
+                        break;
+                    case "setActiveHtmlWorkspaceFile":
+                        var htmlActive = Payload<HtmlWorkspaceActiveFilePayload>(payload);
+                        responsePayload = _controller.SetActiveHtmlWorkspaceFile(
+                            htmlActive.ChatId,
+                            htmlActive.Path);
+                        break;
                     case "getContext":
                         responsePayload = _controller.GetContext(Payload<ChatPayload>(payload).ChatId);
                         break;

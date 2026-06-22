@@ -128,6 +128,117 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void HtmlWorkspaceToolsUpdateChatSession()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var session = new ChatSession
+                {
+                    Host = adapter.HostName,
+                    DocumentKey = adapter.DocumentKey,
+                    DocumentTitle = adapter.DocumentTitle,
+                    Title = "HTML"
+                };
+                var tools = new List<ToolDefinition>(adapter.GetBuiltInTools());
+
+                var fileCommand = new ToolCommand { ToolId = "common.html_workspace_upsert_file" };
+                fileCommand.Arguments["path"] = "index.html";
+                fileCommand.Arguments["kind"] = "html";
+                fileCommand.Arguments["content"] = "<h1>Report</h1>";
+                fileCommand.Arguments["setActive"] = true;
+
+                var fileResult = executor.Execute(fileCommand, tools, new AppSettings(), false, false, session);
+                AssertTrue(fileResult.Success, "html workspace file save succeeds");
+                AssertEqual(1, session.HtmlWorkspace.Files.Count, "html file count");
+                AssertEqual("index.html", session.HtmlWorkspace.ActiveFileId, "active html file");
+
+                var scriptCommand = new ToolCommand { ToolId = "common.html_workspace_upsert_file" };
+                scriptCommand.Arguments["path"] = "app.js";
+                scriptCommand.Arguments["kind"] = "js";
+                scriptCommand.Arguments["content"] = "window.reportReady = true;";
+                scriptCommand.Arguments["setActive"] = false;
+                var scriptResult = executor.Execute(scriptCommand, tools, new AppSettings(), false, false, session);
+                AssertTrue(scriptResult.Success, "html workspace script save succeeds");
+                AssertEqual(2, session.HtmlWorkspace.Files.Count, "html file and script count");
+                AssertEqual("script", session.HtmlWorkspace.Files[1].Kind, "script kind normalized");
+
+                var dataCommand = new ToolCommand { ToolId = "common.html_workspace_upsert_data" };
+                dataCommand.Arguments["name"] = "rows";
+                dataCommand.Arguments["json"] = "{\"items\":[1,2]}";
+                var dataResult = executor.Execute(dataCommand, tools, new AppSettings(), false, false, session);
+                AssertTrue(dataResult.Success, "html workspace data save succeeds");
+                AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "html data count");
+
+                var readResult = executor.Execute(new ToolCommand { ToolId = "common.html_workspace_read" }, tools, new AppSettings(), false, false, session);
+                AssertTrue(readResult.Success, "html workspace read succeeds");
+                AssertContains(readResult.DataJson, "rnassistant.htmlWorkspace", "workspace result type");
+                AssertContains(readResult.DataJson, "items", "workspace data included");
+
+                var invalidData = new ToolCommand { ToolId = "common.html_workspace_upsert_data" };
+                invalidData.Arguments["name"] = "bad";
+                invalidData.Arguments["json"] = "{ bad";
+                var invalidResult = executor.Execute(invalidData, tools, new AppSettings(), false, false, session);
+                AssertTrue(!invalidResult.Success, "invalid html data fails");
+                AssertContains(invalidResult.Message, "Invalid HTML workspace JSON", "invalid html data message");
+            });
+        }
+
+        private static void HtmlWorkspacePersistsWithChatSession()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Excel", "book", "Book.xlsx", "HTML chat");
+                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "<h1>Saved</h1>", true);
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "hello" });
+                store.Save(session);
+
+                store.ClearMessages(session.Host, session.DocumentKey, session.SessionId);
+                var loaded = store.Load(session.Host, session.DocumentKey, session.SessionId);
+                AssertEqual(0, loaded.Messages.Count, "messages cleared");
+                AssertEqual(1, loaded.HtmlWorkspace.Files.Count, "html workspace preserved");
+                AssertEqual("index.html", loaded.HtmlWorkspace.ActiveFileId, "active html preserved");
+
+                AssertTrue(store.Delete(session.Host, session.DocumentKey, session.SessionId), "chat deleted");
+                AssertTrue(store.Load(session.Host, session.DocumentKey, session.SessionId) == null, "deleted chat not loaded");
+            });
+        }
+
+        private static void ChatAgentCreatesHtmlWorkspace()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    AgentBlock(
+                        Command("common.html_workspace_upsert_data", "name", "sales", "json", "{\"rows\":[{\"month\":\"Jan\",\"sales\":120}]}"),
+                        Command("common.html_workspace_upsert_file", "path", "app.js", "kind", "script", "content", "window.rows=window.RNAssistantData.sales.rows;", "setActive", false),
+                        Command("common.html_workspace_upsert_file", "path", "index.html", "kind", "html", "content", "<!doctype html><html><head><script>window.rows=window.RNAssistantData.sales.rows;</script></head><body><h1>Sales</h1></body></html>", "setActive", true)),
+                    "Готово.");
+                var session = NewSession(adapter);
+
+                var result = service.ExecuteAsync(
+                    "Сделай HTML страницу отчета по продажам.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000 },
+                    new List<ToolDefinition>(executor.GetControllerTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Готово.", result.AssistantText, "html agent final answer");
+                AssertEqual(2, session.HtmlWorkspace.Files.Count, "agent html file count");
+                AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "agent html data count");
+                AssertEqual("index.html", session.HtmlWorkspace.ActiveFileId, "agent html active file");
+                AssertContains(session.HtmlWorkspace.Files[0].Content, "RNAssistantData.sales.rows", "agent html uses data");
+                AssertContains(FlattenMessages(calls[0]), "common.html_workspace_upsert_file", "prompt exposes html file tool");
+                AssertContains(FlattenMessages(calls[0]), "html|css|script", "prompt exposes script file kind");
+                AssertContains(FlattenMessages(calls[0]), "window.RNAssistantData", "prompt explains data injection");
+            });
+        }
+
         private static void PromptToolSavesAgentPromptTemplates()
         {
             WithTempPaths(delegate(AppDataPaths paths)

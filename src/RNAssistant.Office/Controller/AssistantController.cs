@@ -93,6 +93,7 @@ namespace RNAssistant.Office
                 Context = context,
                 Messages = session.Messages,
                 ContextUsage = ContextUsageEstimator.FromSession(session, settings),
+                HtmlWorkspace = session == null ? new HtmlWorkspace() : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace),
                 QuickAction = DequeueQuickAction()
             };
         }
@@ -126,7 +127,7 @@ namespace RNAssistant.Office
             {
                 var emptySession = LoadSession(chatId, true);
                 var emptyId = ChatStore.GetSessionId(emptySession);
-                return new SendChatResponse { Message = string.Empty, ToolResults = new object[0], ActiveChatId = emptyId, ActiveChatModel = emptySession.Model, Chats = _chatSessions.GetChatSummaries(emptyId), Context = LoadContext(emptySession), Messages = emptySession.Messages, ContextUsage = ContextUsageEstimator.FromSession(emptySession, _settingsService.Load()) };
+                return new SendChatResponse { Message = string.Empty, ToolResults = new object[0], ActiveChatId = emptyId, ActiveChatModel = emptySession.Model, Chats = _chatSessions.GetChatSummaries(emptyId), Context = LoadContext(emptySession), Messages = emptySession.Messages, ContextUsage = ContextUsageEstimator.FromSession(emptySession, _settingsService.Load()), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(emptySession.HtmlWorkspace) };
             }
 
             var settings = _settingsService.Load();
@@ -150,7 +151,7 @@ namespace RNAssistant.Office
                 StartChatTitleGeneration(session, text, completion.AssistantText, settings, chatStateChanged);
             }
 
-            return new SendChatResponse { Message = completion.AssistantText, ToolResults = completion.ToolResults, ActiveChatId = activeId, ActiveChatModel = session.Model, Chats = _chatSessions.GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings) };
+            return new SendChatResponse { Message = completion.AssistantText, ToolResults = completion.ToolResults, ActiveChatId = activeId, ActiveChatModel = session.Model, Chats = _chatSessions.GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace) };
         }
 
         private void StartChatTitleGeneration(ChatSession session, string userText, string assistantText, AppSettings settings, Action<ChatStateResponse> chatStateChanged)
@@ -299,6 +300,7 @@ namespace RNAssistant.Office
         public ToolResult RunTool(string toolId, IDictionary<string, object> arguments, bool dryRun, Action<string, string> progress = null, CancellationToken cancellationToken = default(CancellationToken))
         {
             var settings = _settingsService.Load();
+            var session = LoadSession(null);
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
             var command = new ToolCommand { ToolId = toolId };
             foreach (var pair in arguments ?? new Dictionary<string, object>())
@@ -307,7 +309,13 @@ namespace RNAssistant.Office
             }
 
             ReportProgress(progress, dryRun ? "checking" : "executing", (dryRun ? "Проверяю tool: " : "Исполняю tool: ") + toolId);
-            return _toolExecutor.Execute(command, tools, settings, dryRun, true, cancellationToken);
+            var result = _toolExecutor.Execute(command, tools, settings, dryRun, true, session, cancellationToken);
+            if (!dryRun && IsHtmlWorkspaceTool(toolId))
+            {
+                _chatStore.Save(session);
+            }
+
+            return result;
         }
 
         public VbaProjectResponse GetVbaProject(int maxChars)
@@ -416,6 +424,13 @@ namespace RNAssistant.Office
             {
                 progress(phase, message, null);
             }
+        }
+
+        private static bool IsHtmlWorkspaceTool(string toolId)
+        {
+            return string.Equals(toolId, HtmlArtifactToolExecutor.UpsertFileToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, HtmlArtifactToolExecutor.UpsertDataToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, HtmlArtifactToolExecutor.SetActiveToolId, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

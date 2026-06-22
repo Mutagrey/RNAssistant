@@ -28,7 +28,7 @@ namespace RNAssistant.Core.Models
                 "After tool results, answer normally if complete; otherwise return the next single tool block.\n" +
                 "If no available tool can satisfy the request, say exactly what is missing.\n" +
                 "For Excel chart-in-chat requests, prefer excel.create_chat_chart. Use excel.add_chart only to insert a chart into the workbook.\n" +
-                "Use common.render_html only when the user explicitly asks to render an HTML component/report inside chat and unsafe HTML artifacts are enabled.\n" +
+                "For HTML UI/report/page requests, use common.html_workspace_upsert_file with kind html, css, or script, and common.html_workspace_upsert_data so the HTML tab can edit and preview the result. For changes to an existing HTML page, read common.html_workspace_read first, then update only the needed file or data source. Use common.render_html only for legacy one-off chat artifacts when explicitly requested.\n" +
                 "After any document or VBA mutation, verify with read-only tools before the final answer. If verification shows a problem, correct it with another small tool step.\n" +
                 "For VBA edits, prefer the host vba_apply_patch tool for small patches; use vba_replace_module only for whole-module replacement.\n" +
                 "Use VBA only when built-in tools cannot solve the task cleanly or when the user specifically asks for macros/VBA.\n" +

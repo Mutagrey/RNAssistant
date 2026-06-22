@@ -31,6 +31,22 @@ namespace RNAssistant.Office.Services
                 : messages.Select(CloneMessage).ToList();
         }
 
+        public static HtmlWorkspace CloneHtmlWorkspace(HtmlWorkspace workspace)
+        {
+            if (workspace == null)
+            {
+                return new HtmlWorkspace();
+            }
+
+            return new HtmlWorkspace
+            {
+                ActiveFileId = workspace.ActiveFileId,
+                UpdatedUtc = workspace.UpdatedUtc,
+                Files = workspace.Files == null ? new List<HtmlWorkspaceFile>() : workspace.Files.Select(CloneHtmlFile).ToList(),
+                DataSources = workspace.DataSources == null ? new List<HtmlWorkspaceDataSource>() : workspace.DataSources.Select(CloneHtmlDataSource).ToList()
+            };
+        }
+
         public static ChatMessage CloneMessage(ChatMessage message)
         {
             if (message == null)
@@ -72,6 +88,41 @@ namespace RNAssistant.Office.Services
                 ResultMessage = activity.ResultMessage,
                 DataJson = activity.DataJson,
                 Children = activity.Children == null ? null : activity.Children.Select(CloneActivity).ToList()
+            };
+        }
+
+        public static HtmlWorkspaceFile CloneHtmlFile(HtmlWorkspaceFile file)
+        {
+            if (file == null)
+            {
+                return null;
+            }
+
+            return new HtmlWorkspaceFile
+            {
+                Id = file.Id,
+                Path = file.Path,
+                Kind = file.Kind,
+                Content = file.Content,
+                CreatedUtc = file.CreatedUtc,
+                UpdatedUtc = file.UpdatedUtc
+            };
+        }
+
+        public static HtmlWorkspaceDataSource CloneHtmlDataSource(HtmlWorkspaceDataSource dataSource)
+        {
+            if (dataSource == null)
+            {
+                return null;
+            }
+
+            return new HtmlWorkspaceDataSource
+            {
+                Id = dataSource.Id,
+                Name = dataSource.Name,
+                Json = dataSource.Json,
+                CreatedUtc = dataSource.CreatedUtc,
+                UpdatedUtc = dataSource.UpdatedUtc
             };
         }
 

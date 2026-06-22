@@ -8,6 +8,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office
 {
@@ -34,7 +35,7 @@ namespace RNAssistant.Office
             }
 
             var activeId = ChatStore.GetSessionId(session);
-            return new ChatStateResponse { ActiveChatId = activeId, ActiveChatModel = session.Model, Chats = _chatSessions.GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load()) };
+            return new ChatStateResponse { ActiveChatId = activeId, ActiveChatModel = session.Model, Chats = _chatSessions.GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load()), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace) };
         }
 
         public ChatStateResponse ForkChat(string id, int index, string chatId = null)
@@ -58,6 +59,7 @@ namespace RNAssistant.Office
             var fork = _chatStore.Create(source.Host, source.DocumentKey, source.DocumentTitle, ChatSessionService.BuildForkTitle(source));
             fork.Model = source.Model;
             fork.Context = ChatCloneService.CloneContext(LoadContext(source)) ?? CreateEmptyContext();
+            fork.HtmlWorkspace = ChatCloneService.CloneHtmlWorkspace(source.HtmlWorkspace);
             fork.Messages = targetIndex < 0
                 ? new List<ChatMessage>()
                 : ChatCloneService.CloneMessages(sourceMessages.Take(targetIndex + 1));
@@ -172,7 +174,8 @@ namespace RNAssistant.Office
                 Chats = _chatSessions.GetChatSummaries(activeId),
                 Context = session == null ? CreateEmptyContext() : LoadContext(session),
                 Messages = session == null ? new List<ChatMessage>() : session.Messages,
-                ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load())
+                ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load()),
+                HtmlWorkspace = session == null ? new HtmlWorkspace() : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace)
             };
         }
 

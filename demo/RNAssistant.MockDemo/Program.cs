@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -135,6 +136,86 @@ namespace RNAssistant.MockDemo
             if (toolResults != null && toolResults.Count != 0)
             {
                 throw new InvalidOperationException("plain answer unexpectedly executed tools");
+            }
+
+            var htmlCreate = await SendAsync(
+                bridge,
+                "5",
+                "sendChat",
+                new { chatId = chatId, text = "Сделай HTML страницу Sales HTML Dashboard с данными продаж, CSS и отдельным JS скриптом." },
+                token).ConfigureAwait(false);
+            var htmlCreatePayload = Payload(htmlCreate);
+            AssertHtmlWorkspace(htmlCreatePayload, false);
+
+            var htmlEdit = await SendAsync(
+                bridge,
+                "6",
+                "sendChat",
+                new { chatId = chatId, text = "Обнови HTML страницу: добавь март в данные и измени JS так, чтобы total стал обновленным." },
+                token).ConfigureAwait(false);
+            var htmlEditPayload = Payload(htmlEdit);
+            AssertHtmlWorkspace(htmlEditPayload, true);
+        }
+
+        private static void AssertHtmlWorkspace(JObject payload, bool expectEdit)
+        {
+            var workspace = payload["htmlWorkspace"] as JObject;
+            if (workspace == null)
+            {
+                throw new InvalidOperationException("htmlWorkspace was not returned");
+            }
+
+            var files = (workspace["files"] ?? workspace["Files"]) as JArray;
+            var dataSources = (workspace["dataSources"] ?? workspace["DataSources"]) as JArray;
+            if (files == null || files.Count < 3)
+            {
+                throw new InvalidOperationException("HTML workspace files were not created");
+            }
+            if (dataSources == null || dataSources.Count != 1)
+            {
+                throw new InvalidOperationException("HTML workspace data source was not created");
+            }
+
+            var hasHtml = false;
+            var hasCss = false;
+            var hasScript = false;
+            var scriptContent = string.Empty;
+            foreach (var token in files.OfType<JObject>())
+            {
+                var kind = ((string)(token["kind"] ?? token["Kind"]) ?? string.Empty).ToLowerInvariant();
+                var path = ((string)(token["path"] ?? token["Path"]) ?? string.Empty).ToLowerInvariant();
+                var content = (string)(token["content"] ?? token["Content"]) ?? string.Empty;
+                hasHtml = hasHtml || kind == "html" || path.EndsWith(".html", StringComparison.OrdinalIgnoreCase);
+                hasCss = hasCss || kind == "css" || path.EndsWith(".css", StringComparison.OrdinalIgnoreCase);
+                if (kind == "script" || path.EndsWith(".js", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasScript = true;
+                    scriptContent = content;
+                }
+            }
+
+            if (!hasHtml || !hasCss || !hasScript)
+            {
+                throw new InvalidOperationException("HTML workspace must contain html, css, and script files");
+            }
+
+            var dataJson = (string)(dataSources[0]["json"] ?? dataSources[0]["Json"]) ?? string.Empty;
+            if (dataJson.IndexOf("\"sales\"", StringComparison.OrdinalIgnoreCase) < 0 &&
+                dataJson.IndexOf("\"rows\"", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                throw new InvalidOperationException("HTML workspace data source does not contain rows");
+            }
+
+            if (expectEdit)
+            {
+                if (dataJson.IndexOf("Mar", StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    throw new InvalidOperationException("HTML edit did not add March data");
+                }
+                if (scriptContent.IndexOf("updated", StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    throw new InvalidOperationException("HTML edit did not update app.js");
+                }
             }
         }
 

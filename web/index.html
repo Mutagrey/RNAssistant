@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; frame-src 'self' blob: data:; child-src 'self' blob: data:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; frame-src 'self' blob: data:; child-src 'self' blob: data:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' blob: data:;">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RN Assistant</title>
   <link rel="stylesheet" href="css/vendor/katex.min.css">
@@ -21,6 +21,7 @@
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-2">
   <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260622-3">
+  <link rel="stylesheet" href="css/app-html-workspace.css?v=chatui-20260622-4">
   <link rel="stylesheet" href="css/app-dialogs.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-responsive.css?v=chatui-20260622-11">
   <link rel="stylesheet" href="css/app-agent.css?v=chatui-20260622-1">
@@ -48,6 +49,7 @@
       <button class="tab" data-tab="tools">Инструменты</button>
       <button class="tab" data-tab="skills">Навыки</button>
       <button class="tab" data-tab="vba">VBA</button>
+      <button class="tab" data-tab="html">HTML</button>
       <button class="tab" data-tab="settings">Настройки</button>
       <button class="tab" data-tab="logs">Журнал</button>
     </nav>
@@ -326,6 +328,54 @@
         </div>
       </section>
 
+      <section class="panel" id="tab-html">
+        <div class="tool-layout html-workspace-layout split-layout" id="htmlWorkspaceLayout" data-split-key="html-workspace" data-default-ratio="0.3" data-min-left="180" data-min-ratio="0.18" data-max-ratio="0.5">
+          <aside class="tool-list-panel html-workspace-sidebar" id="htmlWorkspaceSidebar">
+            <div class="tool-list-status" id="htmlWorkspaceStatus">HTML workspace пуст.</div>
+            <div class="tool-list-controls">
+              <input class="tool-search" id="htmlWorkspaceSearchInput" placeholder="Поиск HTML..." autocomplete="off">
+              <div class="tool-list-actions html-workspace-add-actions">
+                <button class="secondary" id="addHtmlFileButton" type="button">HTML</button>
+                <button class="secondary" id="addCssFileButton" type="button">CSS</button>
+                <button class="secondary" id="addJsFileButton" type="button">JS</button>
+                <button class="secondary" id="addHtmlDataButton" type="button">JSON</button>
+              </div>
+            </div>
+            <div class="tool-list html-workspace-tree" id="htmlWorkspaceTree" role="tree" aria-label="HTML workspace"></div>
+          </aside>
+          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка HTML"></div>
+          <section class="html-workspace-editor surface-panel padded tool-editor" id="htmlWorkspaceEditor">
+            <div class="resource-editor-head html-workspace-head">
+              <button class="icon-button secondary html-sidebar-toggle-button" id="toggleHtmlSidebarButton" type="button" title="Скрыть список" aria-label="Скрыть список">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></svg>
+              </button>
+              <div class="resource-editor-titlebox">
+                <div class="resource-editor-title" id="htmlWorkspaceTitle">HTML не выбран</div>
+                <div class="resource-editor-meta" id="htmlWorkspaceMeta"></div>
+              </div>
+              <div class="mode-toggle html-workspace-mode-toggle" role="group" aria-label="Режим HTML">
+                <button class="mode-button html-workspace-mode-button active" type="button" data-html-mode="preview">Preview</button>
+                <button class="mode-button html-workspace-mode-button" type="button" data-html-mode="edit">Edit</button>
+              </div>
+              <div class="resource-editor-actions">
+                <button class="accent-soft" id="saveHtmlWorkspaceButton" type="button">Сохранить</button>
+              </div>
+            </div>
+            <div class="resource-editor-empty" id="htmlWorkspaceEmptyState">
+              <div class="resource-editor-empty-title">HTML workspace пуст</div>
+              <div class="resource-editor-empty-text">Создайте HTML через чат или добавьте файл слева.</div>
+            </div>
+            <div class="html-workspace-preview html-workspace-view" id="htmlWorkspacePreview" data-html-view="preview">
+              <div class="html-workspace-blocked hidden" id="htmlWorkspacePreviewBlocked">HTML preview отключен в настройках интерфейса.</div>
+              <iframe class="html-workspace-frame" id="htmlWorkspacePreviewFrame" title="HTML preview" sandbox="allow-scripts allow-forms allow-modals allow-popups" referrerpolicy="no-referrer"></iframe>
+            </div>
+            <div class="html-workspace-edit html-workspace-view hidden" id="htmlWorkspaceEdit" data-html-view="edit">
+              <textarea id="htmlWorkspaceEditorInput" spellcheck="false" placeholder="Выберите HTML файл или JSON источник."></textarea>
+            </div>
+          </section>
+        </div>
+      </section>
+
       <section class="panel" id="tab-settings">
         <div class="settings-shell">
           <nav class="settings-nav" aria-label="Разделы настроек">
@@ -399,9 +449,9 @@
               <div class="form-grid two-columns">
                 <label><span>Размер шрифта, %</span><input id="uiFontScaleInput" type="number" min="85" max="130" step="5"></label>
                 <label class="checkline"><input id="smartChatTitlesInput" type="checkbox"><span>Умные названия чатов</span></label>
-                <label class="checkline"><input id="allowUnsafeHtmlArtifactsInput" type="checkbox"><span>HTML-артефакты в чате</span></label>
+                <label class="checkline"><input id="allowUnsafeHtmlArtifactsInput" type="checkbox"><span>HTML preview и артефакты</span></label>
               </div>
-              <div class="setting-note">HTML-артефакты выполняются в sandboxed iframe. Включайте только для тестов с доверенным содержимым.</div>
+              <div class="setting-note">HTML preview выполняется в sandboxed iframe. Включайте только для тестов с доверенным содержимым.</div>
             </section>
 
             <section class="settings-page" data-settings-page="prompts">
@@ -560,6 +610,7 @@
   <script src="js/app-tools.js?v=chatui-20260622-2"></script>
   <script src="js/app-skills.js?v=chatui-20260622-2"></script>
   <script src="js/app-vba.js?v=chatui-20260622-5"></script>
+  <script src="js/app-html-workspace.js?v=chatui-20260622-4"></script>
   <script src="js/app-context.js?v=chatui-20260621-5"></script>
   <script src="js/app-agent-data.js?v=chatui-20260621-1"></script>
   <script src="js/app-agent-model.js?v=chatui-20260622-1"></script>

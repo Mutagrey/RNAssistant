@@ -46,7 +46,12 @@ namespace RNAssistant.Office.Tools
 
         public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, bool dryRun, bool manualRun, CancellationToken cancellationToken = default(CancellationToken))
         {
-            return ExecuteCommand(command, skills, settings, 0, dryRun, manualRun, cancellationToken);
+            return Execute(command, skills, settings, dryRun, manualRun, null, cancellationToken);
+        }
+
+        public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, bool dryRun, bool manualRun, ChatSession session, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            return ExecuteCommand(command, skills, settings, 0, dryRun, manualRun, session, cancellationToken);
         }
 
         public string VbaToolId(string suffix)
@@ -54,7 +59,7 @@ namespace RNAssistant.Office.Tools
             return _vbaExecutor.ToolId(suffix);
         }
 
-        private ToolResult ExecuteCommand(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun, CancellationToken cancellationToken)
+        private ToolResult ExecuteCommand(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun, ChatSession session, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             settings = settings ?? new AppSettings();
@@ -89,7 +94,17 @@ namespace RNAssistant.Office.Tools
 
             if (customTool != null && string.Equals(customTool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
             {
-                return _pipelineExecutor.Execute(customTool, command, skills, settings, depth + 1, dryRun, manualRun, ExecuteCommand, cancellationToken);
+                return _pipelineExecutor.Execute(
+                    customTool,
+                    command,
+                    skills,
+                    settings,
+                    depth + 1,
+                    dryRun,
+                    manualRun,
+                    (nested, nestedSkills, nestedSettings, nestedDepth, nestedDryRun, nestedManualRun, nestedCancellationToken) =>
+                        ExecuteCommand(nested, nestedSkills, nestedSettings, nestedDepth, nestedDryRun, nestedManualRun, session, nestedCancellationToken),
+                    cancellationToken);
             }
 
             if (customTool != null && string.Equals(customTool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
@@ -105,7 +120,15 @@ namespace RNAssistant.Office.Tools
 
             if (_vbaExecutor.IsControllerTool(command.ToolId))
             {
-                return _vbaExecutor.ExecuteControllerTool(command, skills, settings, dryRun, manualRun, ExecuteCommand, cancellationToken);
+                return _vbaExecutor.ExecuteControllerTool(
+                    command,
+                    skills,
+                    settings,
+                    dryRun,
+                    manualRun,
+                    (nested, nestedSkills, nestedSettings, nestedDepth, nestedDryRun, nestedManualRun, nestedCancellationToken) =>
+                        ExecuteCommand(nested, nestedSkills, nestedSettings, nestedDepth, nestedDryRun, nestedManualRun, session, nestedCancellationToken),
+                    cancellationToken);
             }
 
             if (_skillExecutor.IsControllerTool(command.ToolId))
@@ -129,7 +152,7 @@ namespace RNAssistant.Office.Tools
             if (_htmlArtifactExecutor.IsControllerTool(command.ToolId))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                return _htmlArtifactExecutor.ExecuteControllerTool(command, settings);
+                return _htmlArtifactExecutor.ExecuteControllerTool(command, settings, session, dryRun);
             }
 
             if (dryRun)

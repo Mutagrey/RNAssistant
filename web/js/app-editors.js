@@ -7,7 +7,8 @@
     toolCodeInput: { mode: "vb", minHeight: 210 },
     toolReadmeInput: { mode: "markdown", minHeight: 150, lineWrapping: true },
     skillBodyInput: { mode: "markdown", minHeight: 360, lineWrapping: true },
-    vbaCodeInput: { mode: "vb", minHeight: 440 }
+    vbaCodeInput: { mode: "vb", minHeight: 440 },
+    htmlWorkspaceEditorInput: { mode: "javascript", minHeight: 440, lineWrapping: true }
   };
 
   function textarea(id) {
@@ -42,11 +43,17 @@
           if (id === "vbaCodeInput" && typeof saveVbaModule === "function") {
             saveVbaModule();
           }
+          if (id === "htmlWorkspaceEditorInput" && typeof saveHtmlWorkspaceSelection === "function") {
+            saveHtmlWorkspaceSelection();
+          }
         },
         "Cmd-S": function (editor) {
           editor.save();
           if (id === "vbaCodeInput" && typeof saveVbaModule === "function") {
             saveVbaModule();
+          }
+          if (id === "htmlWorkspaceEditorInput" && typeof saveHtmlWorkspaceSelection === "function") {
+            saveHtmlWorkspaceSelection();
           }
         }
       }
@@ -60,6 +67,9 @@
       }
       if (id === "vbaCodeInput" && typeof markVbaEditorDirty === "function") {
         markVbaEditorDirty();
+      }
+      if (id === "htmlWorkspaceEditorInput" && typeof markHtmlWorkspaceDirty === "function") {
+        markHtmlWorkspaceDirty();
       }
     });
 
