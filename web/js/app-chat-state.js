@@ -84,18 +84,19 @@ function renderContextMeter() {
   var used = Number(usage.usedChars || usage.UsedChars || 0);
   var limit = Number(usage.limitChars || usage.LimitChars || 0);
   var percent = Number(usage.percent || usage.Percent || (limit ? Math.round(used * 100 / limit) : 0));
-  var fill = $("contextMeterFill");
   var value = $("contextMeterValue");
   var detail = $("contextMeterDetail");
   var meter = $("contextMeter");
-  if (!fill || !value || !detail || !meter) {
+  if (!value || !detail || !meter) {
     return;
   }
 
   percent = Math.max(0, Math.min(100, percent));
   var detailText = formatNumber(used) + " / " + formatNumber(limit) + " символов" + (usage.actual || usage.Actual ? "" : " · оценка") + lastTokenUsageText();
-  fill.style.width = percent + "%";
-  fill.dataset.level = percent >= 90 ? "danger" : (percent >= 70 ? "warn" : "ok");
+  var level = percent >= 90 ? "danger" : (percent >= 70 ? "warn" : "ok");
+  meter.dataset.level = level;
+  meter.style.setProperty("--context-meter-percent", percent + "%");
+  meter.style.setProperty("--context-meter-color", level === "danger" ? "var(--danger)" : (level === "warn" ? "#b7791f" : "var(--success)"));
   value.textContent = percent + "%";
   detail.textContent = detailText;
   meter.title = "Контекст: " + percent + "%\n" + detailText;

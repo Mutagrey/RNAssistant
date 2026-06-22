@@ -63,20 +63,30 @@
 }
 
 .context-meter {
-  display: flex;
-  flex: 0 0 96px;
-  gap: 4px;
-  align-items: center;
+  position: relative;
+  display: grid;
+  flex: 0 0 30px;
+  place-items: center;
+  width: 30px;
+  height: 30px;
   min-width: 0;
   min-height: 30px;
   border: 0;
   border-radius: 999px;
-  padding: 0 2px;
-  background: transparent;
-  color: var(--muted);
+  padding: 0;
+  background: conic-gradient(var(--context-meter-color, var(--success)) var(--context-meter-percent, 0%), #e5edf6 0);
+  color: var(--text);
   font-size: 11px;
   font-weight: var(--label-font-weight);
   cursor: help;
+}
+
+.context-meter::before {
+  position: absolute;
+  inset: 4px;
+  border-radius: inherit;
+  background: #fff;
+  content: "";
 }
 
 .context-meter > * {
@@ -118,16 +128,13 @@
 }
 
 .context-meter strong {
+  position: relative;
+  z-index: 1;
   display: grid;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
   place-items: center;
-  border: 1px solid #dbe4ef;
-  border-radius: 999px;
-  background: #f8fafc;
   color: var(--text);
-  font-size: 10px;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 
@@ -138,31 +145,6 @@
   font-style: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.context-meter-track {
-  flex: 1 1 auto;
-  height: 5px;
-  min-width: 34px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #dde6f2;
-}
-
-.context-meter-track > div {
-  width: 0;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--success);
-  transition: width 0.18s ease;
-}
-
-.context-meter-track > div[data-level="warn"] {
-  background: #b7791f;
-}
-
-.context-meter-track > div[data-level="danger"] {
-  background: var(--danger);
 }
 
 .composer-input-wrap {
