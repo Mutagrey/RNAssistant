@@ -95,9 +95,9 @@
 
 .composer-model {
   --chat-model-max-width: 240px;
-  display: flex;
+  display: inline-flex;
   flex: 0 1 auto;
-  gap: 0;
+  gap: 3px;
   align-items: center;
   min-width: 0;
   max-width: var(--chat-model-max-width);
@@ -112,16 +112,30 @@
   white-space: nowrap;
 }
 
+.composer-model::after {
+  width: 0;
+  height: 0;
+  flex: 0 0 auto;
+  border-top: 4px solid var(--muted);
+  border-right: 4px solid transparent;
+  border-left: 4px solid transparent;
+  content: "";
+  opacity: 0.82;
+  pointer-events: none;
+}
+
 .composer-model select {
+  appearance: none;
+  -webkit-appearance: none;
   flex: 0 1 auto;
-  width: min(var(--chat-model-select-width, 14ch), var(--chat-model-max-width));
+  width: min(var(--chat-model-select-width, 14ch), calc(var(--chat-model-max-width) - 12px));
   height: 28px;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
   border: 0;
   border-radius: 999px;
-  padding: 0 24px 0 0;
+  padding: 0;
   background: transparent;
   color: var(--text);
   font-size: 12px;
