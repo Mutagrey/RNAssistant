@@ -175,6 +175,58 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void PromptToolReadsDefaults()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var settingsStore = new AppSettings();
+                settingsStore.AgentPrompts.ToolRoutingPrompt = "CUSTOM ROUTING";
+                var executor = new OfficeToolExecutor(
+                    adapter,
+                    new VbaBackupStore(paths),
+                    new SkillStore(paths),
+                    new ToolStore(paths),
+                    () => settingsStore,
+                    value => settingsStore = value);
+
+                var read = executor.Execute(
+                    new ToolCommand { ToolId = "common.prompts_read_defaults" },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    new AppSettings(),
+                    false,
+                    false);
+
+                AssertTrue(read.Success, "prompt defaults read succeeds");
+                AssertContains(read.DataJson, "CUSTOM ROUTING", "current prompt returned");
+                AssertContains(read.DataJson, "built-in tools cannot solve", "default prompt returned");
+            });
+        }
+
+        private static void ToolValidateChecksPayloadWithoutSaving()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var toolStore = new ToolStore(paths);
+                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths), toolStore);
+                var command = new ToolCommand { ToolId = "common.tools_validate" };
+                command.Arguments["id"] = "excel.validated";
+                command.Arguments["host"] = "Excel";
+                command.Arguments["name"] = "Validated";
+                command.Arguments["description"] = "Validated pipeline.";
+                command.Arguments["argumentSchemaJson"] = "{}";
+                command.Arguments["executor"] = "pipeline";
+                command.Arguments["pipelineJson"] = "{\"steps\":[{\"toolId\":\"excel.list_sheets\",\"arguments\":{}}]}";
+
+                var result = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings(), false, false);
+
+                AssertTrue(result.Success, "tool validate succeeds");
+                AssertContains(result.Message, "valid", "tool validate message");
+                AssertTrue(!HasTool(toolStore.Load(), "excel.validated"), "tool validate does not save");
+            });
+        }
+
         private static void ChatUnknownToolRetriesExactAvailableId()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

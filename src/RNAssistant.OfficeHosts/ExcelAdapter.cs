@@ -119,24 +119,36 @@ namespace RNAssistant.OfficeHosts
         {
             return new[]
             {
-                Skill("excel.get_context", "Return active Excel workbook, sheet and selection context.", "{}"),
-                Skill("excel.get_selection", "Read the current or launcher-captured Excel selection.", "{}"),
-                Skill("excel.workbook_summary", "Return workbook metadata, sheets and used ranges.", "{}"),
-                Skill("excel.list_sheets", "List workbook sheet names.", "{}"),
-                Skill("excel.read_range", "Read a worksheet range.", "{\"sheet\":\"optional\",\"address\":\"A1:D20\"}"),
-                Skill("excel.profile_range", "Profile an Excel range or current selection: dimensions, blanks, formulas, inferred headers, and numeric columns.", "{\"sheet\":\"optional\",\"address\":\"optional A1:D20\"}"),
-                Skill("excel.create_chat_chart", "Create a read-only interactive chart artifact for the RNAssistant chat from the current Excel selection or a worksheet range. Use this for requests like visualize, build a chart in chat, or make a small report without inserting an Excel chart.", "{\"sheet\":\"optional\",\"address\":\"optional A1:D20\",\"chartType\":\"auto|line|column|bar|scatter|pie\",\"title\":\"Chart title\"}"),
-                Skill("excel.list_charts", "List chart objects in the workbook or one sheet, including title, type, position, and size.", "{\"sheet\":\"optional\"}"),
-                Skill("excel.write_range", "Write a scalar value to a worksheet range.", "{\"sheet\":\"optional\",\"address\":\"A1\",\"value\":\"text\"}", true, true),
-                Skill("excel.write_table", "Write a 2D JSON array to a worksheet starting at a cell.", "{\"sheet\":\"optional\",\"startAddress\":\"A1\",\"values\":[[\"Header\", \"Value\"],[\"A\", 1]]}", true, true),
-                Skill("excel.add_chart", "Create a chart from a worksheet source range.", "{\"sheet\":\"optional\",\"sourceRange\":\"A1:B6\",\"chartType\":\"line|column|bar|pie\",\"title\":\"Chart title\",\"left\":300,\"top\":20,\"width\":480,\"height\":300}", true, true),
-                Skill("excel.autofit", "Autofit rows and columns for a worksheet range or used range.", "{\"sheet\":\"optional\",\"address\":\"optional A1:D20\"}", true, true),
-                Skill("excel.add_sheet", "Add a new worksheet.", "{\"name\":\"Sheet name\"}", true, true),
-                Skill("excel.vba_read_project", "Read VBA project modules and source code when Trust Access to VBA project is enabled.", "{\"maxChars\":30000}"),
-                Skill("excel.vba_read_module", "Read one VBA module by name.", "{\"moduleName\":\"Module1\",\"maxChars\":30000}"),
-                Skill("excel.vba_replace_module", "Replace a VBA module source code; RNAssistant stores rollback backups before replacement.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}", true, false),
-                Skill("excel.insert_vba_module", "Insert VBA module when Trust Access to VBA project is enabled; otherwise returns copyable code.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}", true, false),
-                Skill("excel.run_macro", "Run an Excel VBA macro by name.", "{\"macroName\":\"Module1.Test\"}", true, false)
+                Skill("excel.get_context", "Read-only: Return active workbook, sheet, and selection context.", "{}"),
+                Skill("excel.get_selection", "Read-only: Read the current or launcher-captured selection values.", "{}"),
+                Skill("excel.workbook_summary", "Read-only: Return workbook metadata, sheets, and used ranges.", "{}"),
+                Skill("excel.list_sheets", "Read-only: List workbook sheet names.", "{}"),
+                Skill("excel.read_range", "Read-only: Read worksheet values from an A1 range.", "{\"sheet\":\"\",\"address\":\"A1:D20\"}"),
+                Skill("excel.read_formula_range", "Read-only: Read formulas from an A1 range.", "{\"sheet\":\"\",\"address\":\"A1:D20\"}"),
+                Skill("excel.profile_range", "Read-only: Profile a range or selection for dimensions, blanks, formulas, headers, and numeric columns.", "{\"sheet\":\"\",\"address\":\"\"}"),
+                Skill("excel.find_cells", "Read-only: Find cells whose value or formula contains query text.", "{\"sheet\":\"\",\"query\":\"text\",\"lookIn\":\"values\",\"maxResults\":50}"),
+                Skill("excel.create_chat_chart", "Read-only: Create an interactive chart artifact in chat from a selection or range.", "{\"sheet\":\"\",\"address\":\"\",\"chartType\":\"auto\",\"title\":\"Chart title\"}"),
+                Skill("excel.list_charts", "Read-only: List chart objects in the workbook or one sheet.", "{\"sheet\":\"\"}"),
+                Skill("excel.list_tables", "Read-only: List Excel tables in the workbook or one sheet.", "{\"sheet\":\"\"}"),
+                Skill("excel.list_names", "Read-only: List workbook defined names.", "{}"),
+                Skill("excel.list_shapes", "Read-only: List shapes in the workbook or one sheet.", "{\"sheet\":\"\"}"),
+                Skill("excel.write_range", "Mutates document: Write one scalar value to a worksheet range.", "{\"sheet\":\"\",\"address\":\"A1\",\"value\":\"text\"}", true, true),
+                Skill("excel.write_table", "Mutates document: Write a 2D JSON array to a worksheet starting at a cell.", "{\"sheet\":\"\",\"startAddress\":\"A1\",\"values\":[[\"Header\",\"Value\"],[\"A\",1]]}", true, true),
+                Skill("excel.set_formula", "Mutates document: Write one formula to a worksheet range.", "{\"sheet\":\"\",\"address\":\"B2\",\"formula\":\"=SUM(A1:A10)\"}", true, true),
+                Skill("excel.add_table", "Mutates document: Convert a source range into an Excel table.", "{\"sheet\":\"\",\"sourceRange\":\"A1:B6\",\"name\":\"Table1\",\"hasHeaders\":true,\"style\":\"TableStyleMedium2\"}", true, true),
+                Skill("excel.add_chart", "Mutates document: Create a chart from a worksheet source range.", "{\"sheet\":\"\",\"sourceRange\":\"A1:B6\",\"chartType\":\"line\",\"title\":\"Chart title\",\"left\":300,\"top\":20,\"width\":480,\"height\":300}", true, true),
+                Skill("excel.format_range", "Mutates document: Apply basic number, font, fill, and alignment formatting to a range.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"numberFormat\":\"\",\"bold\":true,\"italic\":false,\"fillColor\":\"#FFFF00\",\"fontColor\":\"#000000\",\"horizontalAlignment\":\"center\"}", true, true),
+                Skill("excel.autofit", "Mutates document: Autofit rows and columns for a range or used range.", "{\"sheet\":\"\",\"address\":\"\"}", true, true),
+                Skill("excel.add_sheet", "Mutates document: Add a new worksheet.", "{\"name\":\"Sheet name\"}", true, true),
+                Skill("excel.rename_sheet", "Mutates document: Rename a worksheet.", "{\"sheet\":\"Old name\",\"newName\":\"New name\"}", true, false),
+                Skill("excel.clear_range", "Mutates document: Clear cell values, formats, or both in a range.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"clearWhat\":\"values\"}", true, false),
+                Skill("excel.sort_range", "Mutates document: Sort rows in a range by one key column.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"keyColumn\":1,\"descending\":false,\"hasHeaders\":true}", true, false),
+                Skill("excel.filter_range", "Mutates document: Apply AutoFilter criteria to a range.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"field\":1,\"criteria\":\"North\"}", true, false),
+                Skill("excel.vba_read_project", "Read-only: Read VBA project modules and source code when Trust Access to VBA project is enabled.", "{\"maxChars\":30000}"),
+                Skill("excel.vba_read_module", "Read-only: Read one VBA module by name.", "{\"moduleName\":\"Module1\",\"maxChars\":30000}"),
+                Skill("excel.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}", true, false),
+                Skill("excel.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}", true, false),
+                Skill("excel.run_macro", "Mutates document: Run an Excel VBA macro by name.", "{\"macroName\":\"Module1.Test\"}", true, false)
             };
         }
 
@@ -251,22 +263,46 @@ namespace RNAssistant.OfficeHosts
                         return ListSheets();
                     case "excel.read_range":
                         return ReadRange(command);
+                    case "excel.read_formula_range":
+                        return ReadFormulaRange(command);
                     case "excel.profile_range":
                         return ProfileRange(command);
+                    case "excel.find_cells":
+                        return FindCells(command);
                     case "excel.create_chat_chart":
                         return CreateChatChart(command);
                     case "excel.list_charts":
                         return ListCharts(command);
+                    case "excel.list_tables":
+                        return ListTables(command);
+                    case "excel.list_names":
+                        return ListNames();
+                    case "excel.list_shapes":
+                        return ListShapes(command);
                     case "excel.write_range":
                         return WriteRange(command);
                     case "excel.write_table":
                         return WriteTable(command);
+                    case "excel.set_formula":
+                        return SetFormula(command);
+                    case "excel.add_table":
+                        return AddTable(command);
                     case "excel.add_chart":
                         return AddChart(command);
+                    case "excel.format_range":
+                        return FormatRange(command);
                     case "excel.autofit":
                         return Autofit(command);
                     case "excel.add_sheet":
                         return AddSheet(command);
+                    case "excel.rename_sheet":
+                        return RenameSheet(command);
+                    case "excel.clear_range":
+                        return ClearRange(command);
+                    case "excel.sort_range":
+                        return SortRange(command);
+                    case "excel.filter_range":
+                        return FilterRange(command);
                     case "excel.vba_read_project":
                         return ReadVbaProject(command);
                     case "excel.vba_read_module":
@@ -349,6 +385,15 @@ namespace RNAssistant.OfficeHosts
             return ToolResult.Ok("Range read: " + sheet.Name + "!" + address, JsonConvert.SerializeObject(rows));
         }
 
+        private ToolResult ReadFormulaRange(ToolCommand command)
+        {
+            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
+            var address = ToolArgumentReader.String(command.Arguments, "address", "A1");
+            var range = sheet.Range[address];
+            var rows = RangeToFormulaRows(range);
+            return ToolResult.Ok("Formula range read: " + sheet.Name + "!" + address, JsonConvert.SerializeObject(rows));
+        }
+
         private ToolResult ProfileRange(ToolCommand command)
         {
             var sheetName = ToolArgumentReader.String(command.Arguments, "sheet", null);
@@ -421,6 +466,52 @@ namespace RNAssistant.OfficeHosts
             }));
         }
 
+        private ToolResult FindCells(ToolCommand command)
+        {
+            var sheetFilter = ToolArgumentReader.String(command.Arguments, "sheet", string.Empty);
+            var query = ToolArgumentReader.String(command.Arguments, "query", string.Empty);
+            var lookIn = ToolArgumentReader.String(command.Arguments, "lookIn", "values");
+            var maxResults = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxResults", 50)));
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                return ToolResult.Fail("query is required.");
+            }
+
+            var workbook = RequireWorkbook();
+            var matches = new List<object>();
+            foreach (Excel.Worksheet sheet in workbook.Worksheets)
+            {
+                if (!string.IsNullOrWhiteSpace(sheetFilter) &&
+                    !string.Equals(sheet.Name, sheetFilter, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                foreach (Excel.Range cell in sheet.UsedRange.Cells)
+                {
+                    var value = string.Equals(lookIn, "formulas", StringComparison.OrdinalIgnoreCase)
+                        ? Convert.ToString(cell.Formula)
+                        : Convert.ToString(cell.Value2);
+                    if (value != null && value.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        matches.Add(new
+                        {
+                            sheet = sheet.Name,
+                            address = cell.Address[false, false],
+                            value = Convert.ToString(cell.Value2),
+                            formula = Convert.ToString(cell.Formula)
+                        });
+                        if (matches.Count >= maxResults)
+                        {
+                            return ToolResult.Ok("Cells found: " + matches.Count, JsonConvert.SerializeObject(matches));
+                        }
+                    }
+                }
+            }
+
+            return ToolResult.Ok("Cells found: " + matches.Count, JsonConvert.SerializeObject(matches));
+        }
+
         private ToolResult ListCharts(ToolCommand command)
         {
             var workbook = RequireWorkbook();
@@ -454,6 +545,85 @@ namespace RNAssistant.OfficeHosts
             }
 
             return ToolResult.Ok("Charts listed: " + charts.Count, JsonConvert.SerializeObject(charts));
+        }
+
+        private ToolResult ListTables(ToolCommand command)
+        {
+            var workbook = RequireWorkbook();
+            var sheetFilter = ToolArgumentReader.String(command.Arguments, "sheet", string.Empty);
+            var tables = new List<object>();
+            foreach (Excel.Worksheet sheet in workbook.Worksheets)
+            {
+                if (!string.IsNullOrWhiteSpace(sheetFilter) &&
+                    !string.Equals(sheet.Name, sheetFilter, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                foreach (Excel.ListObject table in sheet.ListObjects)
+                {
+                    tables.Add(new
+                    {
+                        sheet = sheet.Name,
+                        name = table.Name,
+                        displayName = table.DisplayName,
+                        range = table.Range == null ? string.Empty : table.Range.Address[false, false],
+                        rows = table.ListRows.Count,
+                        columns = table.ListColumns.Count
+                    });
+                }
+            }
+
+            return ToolResult.Ok("Tables listed: " + tables.Count, JsonConvert.SerializeObject(tables));
+        }
+
+        private ToolResult ListNames()
+        {
+            var workbook = RequireWorkbook();
+            var names = new List<object>();
+            foreach (Excel.Name name in workbook.Names)
+            {
+                names.Add(new
+                {
+                    name = name.Name,
+                    refersTo = name.RefersTo,
+                    value = SafeString(delegate { return Convert.ToString(name.RefersToRange == null ? string.Empty : name.RefersToRange.Value2); })
+                });
+            }
+
+            return ToolResult.Ok("Defined names listed: " + names.Count, JsonConvert.SerializeObject(names));
+        }
+
+        private ToolResult ListShapes(ToolCommand command)
+        {
+            var workbook = RequireWorkbook();
+            var sheetFilter = ToolArgumentReader.String(command.Arguments, "sheet", string.Empty);
+            var shapes = new List<object>();
+            foreach (Excel.Worksheet sheet in workbook.Worksheets)
+            {
+                if (!string.IsNullOrWhiteSpace(sheetFilter) &&
+                    !string.Equals(sheet.Name, sheetFilter, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                foreach (Excel.Shape shape in sheet.Shapes)
+                {
+                    shapes.Add(new
+                    {
+                        sheet = sheet.Name,
+                        name = shape.Name,
+                        type = shape.Type.ToString(),
+                        left = shape.Left,
+                        top = shape.Top,
+                        width = shape.Width,
+                        height = shape.Height,
+                        alternativeText = SafeString(delegate { return shape.AlternativeText; })
+                    });
+                }
+            }
+
+            return ToolResult.Ok("Shapes listed: " + shapes.Count, JsonConvert.SerializeObject(shapes));
         }
 
         private ToolResult CreateChatChart(ToolCommand command)
@@ -553,6 +723,46 @@ namespace RNAssistant.OfficeHosts
             return ToolResult.Ok("Wrote table to " + sheet.Name + "!" + target.Address[false, false], JsonConvert.SerializeObject(new { sheet = sheet.Name, range = target.Address[false, false], rows = rows, columns = columns }));
         }
 
+        private ToolResult SetFormula(ToolCommand command)
+        {
+            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
+            var address = ToolArgumentReader.String(command.Arguments, "address", "A1");
+            var formula = ToolArgumentReader.String(command.Arguments, "formula", string.Empty);
+            if (string.IsNullOrWhiteSpace(formula))
+            {
+                return ToolResult.Fail("formula is required.");
+            }
+
+            sheet.Range[address].Formula = formula;
+            return ToolResult.Ok("Formula set in " + sheet.Name + "!" + address);
+        }
+
+        private ToolResult AddTable(ToolCommand command)
+        {
+            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
+            var sourceRange = ToolArgumentReader.String(command.Arguments, "sourceRange", "A1:B2");
+            var name = ToolArgumentReader.String(command.Arguments, "name", string.Empty);
+            var hasHeaders = ToolArgumentReader.Boolean(command.Arguments, "hasHeaders", true);
+            var style = ToolArgumentReader.String(command.Arguments, "style", string.Empty);
+            var range = sheet.Range[sourceRange];
+            var table = sheet.ListObjects.Add(
+                Excel.XlListObjectSourceType.xlSrcRange,
+                range,
+                Type.Missing,
+                hasHeaders ? Excel.XlYesNoGuess.xlYes : Excel.XlYesNoGuess.xlNo,
+                Type.Missing);
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                table.Name = name;
+            }
+            if (!string.IsNullOrWhiteSpace(style))
+            {
+                table.TableStyle = style;
+            }
+
+            return ToolResult.Ok("Table added: " + table.Name, JsonConvert.SerializeObject(new { sheet = sheet.Name, name = table.Name, range = table.Range.Address[false, false] }));
+        }
+
         private ToolResult AddChart(ToolCommand command)
         {
             var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
@@ -575,6 +785,45 @@ namespace RNAssistant.OfficeHosts
             return ToolResult.Ok("Chart added: " + title, JsonConvert.SerializeObject(new { sheet = sheet.Name, sourceRange = sourceRange, chartType = chartType, title = title }));
         }
 
+        private ToolResult FormatRange(ToolCommand command)
+        {
+            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
+            var address = ToolArgumentReader.String(command.Arguments, "address", "A1");
+            var range = sheet.Range[address];
+            var numberFormat = ToolArgumentReader.String(command.Arguments, "numberFormat", string.Empty);
+            if (!string.IsNullOrWhiteSpace(numberFormat))
+            {
+                range.NumberFormat = numberFormat;
+            }
+            if (command.Arguments.ContainsKey("bold"))
+            {
+                range.Font.Bold = ToolArgumentReader.Boolean(command.Arguments, "bold", false);
+            }
+            if (command.Arguments.ContainsKey("italic"))
+            {
+                range.Font.Italic = ToolArgumentReader.Boolean(command.Arguments, "italic", false);
+            }
+
+            var fillColor = ToolArgumentReader.String(command.Arguments, "fillColor", string.Empty);
+            if (!string.IsNullOrWhiteSpace(fillColor))
+            {
+                range.Interior.Color = OleColor(fillColor);
+            }
+            var fontColor = ToolArgumentReader.String(command.Arguments, "fontColor", string.Empty);
+            if (!string.IsNullOrWhiteSpace(fontColor))
+            {
+                range.Font.Color = OleColor(fontColor);
+            }
+
+            var horizontal = ToolArgumentReader.String(command.Arguments, "horizontalAlignment", string.Empty);
+            if (!string.IsNullOrWhiteSpace(horizontal))
+            {
+                range.HorizontalAlignment = ResolveHorizontalAlignment(horizontal);
+            }
+
+            return ToolResult.Ok("Range formatted: " + sheet.Name + "!" + address);
+        }
+
         private ToolResult Autofit(ToolCommand command)
         {
             var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
@@ -592,6 +841,96 @@ namespace RNAssistant.OfficeHosts
             var sheet = (Excel.Worksheet)workbook.Worksheets.Add();
             sheet.Name = name;
             return ToolResult.Ok("Added sheet: " + name);
+        }
+
+        private ToolResult RenameSheet(ToolCommand command)
+        {
+            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
+            var newName = ToolArgumentReader.String(command.Arguments, "newName", string.Empty);
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                return ToolResult.Fail("newName is required.");
+            }
+
+            var oldName = sheet.Name;
+            sheet.Name = newName;
+            return ToolResult.Ok("Renamed sheet " + oldName + " to " + newName);
+        }
+
+        private ToolResult ClearRange(ToolCommand command)
+        {
+            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
+            var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
+            if (string.IsNullOrWhiteSpace(address))
+            {
+                return ToolResult.Fail("address is required.");
+            }
+
+            var clearWhat = ToolArgumentReader.String(command.Arguments, "clearWhat", "values");
+            var range = sheet.Range[address];
+            if (string.Equals(clearWhat, "formats", StringComparison.OrdinalIgnoreCase))
+            {
+                range.ClearFormats();
+            }
+            else if (string.Equals(clearWhat, "all", StringComparison.OrdinalIgnoreCase))
+            {
+                range.Clear();
+            }
+            else
+            {
+                range.ClearContents();
+            }
+
+            return ToolResult.Ok("Range cleared: " + sheet.Name + "!" + address + " (" + clearWhat + ")");
+        }
+
+        private ToolResult SortRange(ToolCommand command)
+        {
+            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
+            var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
+            if (string.IsNullOrWhiteSpace(address))
+            {
+                return ToolResult.Fail("address is required.");
+            }
+
+            var range = sheet.Range[address];
+            var keyColumn = Math.Max(1, ToolArgumentReader.Int32(command.Arguments, "keyColumn", 1));
+            var descending = ToolArgumentReader.Boolean(command.Arguments, "descending", false);
+            var hasHeaders = ToolArgumentReader.Boolean(command.Arguments, "hasHeaders", true);
+            var key = sheet.Cells[range.Row, range.Column + keyColumn - 1] as Excel.Range;
+            range.Sort(
+                key,
+                descending ? Excel.XlSortOrder.xlDescending : Excel.XlSortOrder.xlAscending,
+                Type.Missing,
+                Type.Missing,
+                Type.Missing,
+                Type.Missing,
+                Type.Missing,
+                hasHeaders ? Excel.XlYesNoGuess.xlYes : Excel.XlYesNoGuess.xlNo,
+                Type.Missing,
+                Type.Missing,
+                Excel.XlSortOrientation.xlSortColumns,
+                Excel.XlSortMethod.xlPinYin,
+                Excel.XlSortDataOption.xlSortNormal,
+                Excel.XlSortDataOption.xlSortNormal,
+                Excel.XlSortDataOption.xlSortNormal);
+            return ToolResult.Ok("Range sorted: " + sheet.Name + "!" + address);
+        }
+
+        private ToolResult FilterRange(ToolCommand command)
+        {
+            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
+            var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
+            if (string.IsNullOrWhiteSpace(address))
+            {
+                return ToolResult.Fail("address is required.");
+            }
+
+            var field = Math.Max(1, ToolArgumentReader.Int32(command.Arguments, "field", 1));
+            var criteria = ToolArgumentReader.String(command.Arguments, "criteria", string.Empty);
+            var range = sheet.Range[address];
+            range.AutoFilter(field, string.IsNullOrWhiteSpace(criteria) ? Type.Missing : criteria, Excel.XlAutoFilterOperator.xlAnd, Type.Missing, true);
+            return ToolResult.Ok("Range filtered: " + sheet.Name + "!" + address);
         }
 
         private ToolResult ReadVbaProject(ToolCommand command)
@@ -965,6 +1304,37 @@ namespace RNAssistant.OfficeHosts
                 default:
                     return Excel.XlChartType.xlLineMarkers;
             }
+        }
+
+        private static Excel.XlHAlign ResolveHorizontalAlignment(string value)
+        {
+            switch ((value ?? string.Empty).ToLowerInvariant())
+            {
+                case "left":
+                    return Excel.XlHAlign.xlHAlignLeft;
+                case "right":
+                    return Excel.XlHAlign.xlHAlignRight;
+                case "center":
+                case "centre":
+                    return Excel.XlHAlign.xlHAlignCenter;
+                default:
+                    return Excel.XlHAlign.xlHAlignGeneral;
+            }
+        }
+
+        private static int OleColor(string value)
+        {
+            var text = (value ?? string.Empty).Trim().TrimStart('#');
+            int rgb;
+            if (text.Length != 6 || !int.TryParse(text, System.Globalization.NumberStyles.HexNumber, null, out rgb))
+            {
+                return 0;
+            }
+
+            var r = (rgb >> 16) & 0xFF;
+            var g = (rgb >> 8) & 0xFF;
+            var b = rgb & 0xFF;
+            return r + (g << 8) + (b << 16);
         }
 
         private static void AppendRangeValues(StringBuilder builder, Excel.Range range, int maxChars)

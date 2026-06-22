@@ -318,6 +318,16 @@ namespace RNAssistant.Harness
 
         private ToolResult ExecuteExcelTool(ToolCommand command)
         {
+            if (string.Equals(command.ToolId, "excel.get_context", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Ok("context", JsonConvert.SerializeObject(GetOfficeContext()));
+            }
+
+            if (string.Equals(command.ToolId, "excel.get_selection", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Ok("selection", JsonConvert.SerializeObject(new { sheet = "Data", address = "A1:B4", values = ReadRange("Data", "A1:B4") }));
+            }
+
             if (string.Equals(command.ToolId, "excel.add_sheet", StringComparison.OrdinalIgnoreCase))
             {
                 var name = Argument(command, "name", "Sheet" + (_sheets.Count + 1));
@@ -343,6 +353,30 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("read range " + sheetName + "!" + range, JsonConvert.SerializeObject(new { sheet = sheetName, range = range, values = values }));
             }
 
+            if (string.Equals(command.ToolId, "excel.read_formula_range", StringComparison.OrdinalIgnoreCase))
+            {
+                var sheetName = Argument(command, "sheet", "Sheet1");
+                var range = Argument(command, "address", "A1:B10");
+                return ToolResult.Ok("read formulas " + sheetName + "!" + range, JsonConvert.SerializeObject(new { sheet = sheetName, range = range, formulas = ReadRange(sheetName, range) }));
+            }
+
+            if (string.Equals(command.ToolId, "excel.find_cells", StringComparison.OrdinalIgnoreCase))
+            {
+                var query = Argument(command, "query", string.Empty);
+                var matches = new List<object>();
+                foreach (var sheet in _sheets)
+                {
+                    foreach (var cell in sheet.Value.Cells)
+                    {
+                        if (cell.Value.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            matches.Add(new { sheet = sheet.Key, address = cell.Key, value = cell.Value });
+                        }
+                    }
+                }
+                return ToolResult.Ok("found " + matches.Count + " cell(s)", JsonConvert.SerializeObject(matches));
+            }
+
             if (string.Equals(command.ToolId, "excel.add_chart", StringComparison.OrdinalIgnoreCase))
             {
                 var sheetName = Argument(command, "sheet", "Sheet1");
@@ -363,6 +397,28 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("listed " + charts.Length + " chart(s)", JsonConvert.SerializeObject(charts));
             }
 
+            if (string.Equals(command.ToolId, "excel.add_table", StringComparison.OrdinalIgnoreCase))
+            {
+                var sheetName = Argument(command, "sheet", "Sheet1");
+                var sheet = EnsureSheet(sheetName);
+                var name = Argument(command, "name", "Table" + (sheet.Tables.Count + 1));
+                sheet.Tables.Add(name);
+                return ToolResult.Ok("added table " + name, JsonConvert.SerializeObject(new { sheet = sheetName, name = name, range = Argument(command, "sourceRange", "A1:B2") }));
+            }
+
+            if (string.Equals(command.ToolId, "excel.list_tables", StringComparison.OrdinalIgnoreCase))
+            {
+                var tables = _sheets.SelectMany(pair => pair.Value.Tables.Select(t => new { sheet = pair.Key, name = t })).ToArray();
+                return ToolResult.Ok("listed " + tables.Length + " table(s)", JsonConvert.SerializeObject(tables));
+            }
+
+            if (string.Equals(command.ToolId, "excel.list_names", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "excel.list_shapes", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "excel.create_chat_chart", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Ok("listed " + command.ToolId, "[]");
+            }
+
             if (string.Equals(command.ToolId, "excel.list_sheets", StringComparison.OrdinalIgnoreCase))
             {
                 return ToolResult.Ok("listed " + _sheets.Count + " sheet(s)", JsonConvert.SerializeObject(_sheets.Keys.ToArray()));
@@ -372,6 +428,42 @@ namespace RNAssistant.Harness
                 string.Equals(command.ToolId, "excel.profile_range", StringComparison.OrdinalIgnoreCase))
             {
                 return ToolResult.Ok("workbook summary", BuildWorkbookSummary());
+            }
+
+            if (string.Equals(command.ToolId, "excel.set_formula", StringComparison.OrdinalIgnoreCase))
+            {
+                var sheetName = Argument(command, "sheet", "Sheet1");
+                var address = Argument(command, "address", "A1");
+                WriteMatrix(sheetName, address, new List<List<string>> { new List<string> { Argument(command, "formula", string.Empty) } });
+                return ToolResult.Ok("set formula " + sheetName + "!" + address);
+            }
+
+            if (string.Equals(command.ToolId, "excel.rename_sheet", StringComparison.OrdinalIgnoreCase))
+            {
+                var oldName = Argument(command, "sheet", "Sheet1");
+                var newName = Argument(command, "newName", string.Empty);
+                if (string.IsNullOrWhiteSpace(newName))
+                {
+                    return ToolResult.Fail("newName is required.");
+                }
+                var sheet = EnsureSheet(oldName);
+                _sheets.Remove(oldName);
+                sheet.Name = newName;
+                _sheets[newName] = sheet;
+                return ToolResult.Ok("renamed sheet " + oldName + " to " + newName);
+            }
+
+            if (string.Equals(command.ToolId, "excel.clear_range", StringComparison.OrdinalIgnoreCase))
+            {
+                ClearRange(Argument(command, "sheet", "Sheet1"), Argument(command, "address", "A1:A1"));
+                return ToolResult.Ok("cleared range");
+            }
+
+            if (string.Equals(command.ToolId, "excel.sort_range", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "excel.filter_range", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "excel.format_range", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Ok("applied " + command.ToolId);
             }
 
             if (string.Equals(command.ToolId, "excel.autofit", StringComparison.OrdinalIgnoreCase))
@@ -385,9 +477,26 @@ namespace RNAssistant.Harness
         private ToolResult ExecuteWordTool(ToolCommand command)
         {
             if (string.Equals(command.ToolId, "word.read_document", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "word.read_selection", StringComparison.OrdinalIgnoreCase))
+                string.Equals(command.ToolId, "word.read_selection", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "word.get_selection_text", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "word.read_range", StringComparison.OrdinalIgnoreCase))
             {
                 return ToolResult.Ok("read Word text", JsonConvert.SerializeObject(new { text = _wordText, comments = _wordComments.ToArray() }));
+            }
+
+            if (string.Equals(command.ToolId, "word.find_text", StringComparison.OrdinalIgnoreCase))
+            {
+                var query = Argument(command, "query", string.Empty);
+                var index = _wordText.IndexOf(query, StringComparison.OrdinalIgnoreCase);
+                return ToolResult.Ok("found Word text", JsonConvert.SerializeObject(index < 0 ? new object[0] : new[] { new { start = index, end = index + query.Length } }));
+            }
+
+            if (string.Equals(command.ToolId, "word.read_headings", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "word.read_tables", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "word.list_comments", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "word.document_stats", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Ok("read Word metadata", JsonConvert.SerializeObject(new { text = _wordText, comments = _wordComments.ToArray() }));
             }
 
             if (string.Equals(command.ToolId, "word.insert_text", StringComparison.OrdinalIgnoreCase))
@@ -397,10 +506,30 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("inserted Word text", JsonConvert.SerializeObject(new { text = _wordText }));
             }
 
+            if (string.Equals(command.ToolId, "word.insert_paragraph", StringComparison.OrdinalIgnoreCase))
+            {
+                _wordText += Environment.NewLine + Argument(command, "text", string.Empty);
+                return ToolResult.Ok("inserted Word paragraph", JsonConvert.SerializeObject(new { text = _wordText }));
+            }
+
             if (string.Equals(command.ToolId, "word.replace_selection", StringComparison.OrdinalIgnoreCase))
             {
                 _wordText = Argument(command, "text", string.Empty);
                 return ToolResult.Ok("replaced Word selection", JsonConvert.SerializeObject(new { text = _wordText }));
+            }
+
+            if (string.Equals(command.ToolId, "word.replace_text", StringComparison.OrdinalIgnoreCase))
+            {
+                _wordText = _wordText.Replace(Argument(command, "find", string.Empty), Argument(command, "replace", string.Empty));
+                return ToolResult.Ok("replaced Word text", JsonConvert.SerializeObject(new { text = _wordText }));
+            }
+
+            if (string.Equals(command.ToolId, "word.apply_style", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "word.format_selection", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "word.add_table", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "word.insert_page_break", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Ok("applied " + command.ToolId);
             }
 
             if (string.Equals(command.ToolId, "word.add_comment", StringComparison.OrdinalIgnoreCase))
@@ -415,9 +544,14 @@ namespace RNAssistant.Harness
 
         private ToolResult ExecutePowerPointTool(ToolCommand command)
         {
-            if (string.Equals(command.ToolId, "powerpoint.read_slides", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, "powerpoint.get_selection", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "powerpoint.read_slides", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "powerpoint.read_slide", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "powerpoint.list_slides", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "powerpoint.list_shapes", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "powerpoint.read_speaker_notes", StringComparison.OrdinalIgnoreCase))
             {
-                return ToolResult.Ok("read slides", JsonConvert.SerializeObject(_slides.Select(s => new { title = s.Title, body = s.Body }).ToArray()));
+                return ToolResult.Ok("read slides", JsonConvert.SerializeObject(_slides.Select(s => new { title = s.Title, body = s.Body, notes = s.Notes }).ToArray()));
             }
 
             if (string.Equals(command.ToolId, "powerpoint.add_slide", StringComparison.OrdinalIgnoreCase))
@@ -442,20 +576,71 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("replaced slide selection", JsonConvert.SerializeObject(_slides[_slides.Count - 1]));
             }
 
+            if (string.Equals(command.ToolId, "powerpoint.set_speaker_notes", StringComparison.OrdinalIgnoreCase))
+            {
+                var slide = LastOrNewSlide();
+                slide.Notes = Argument(command, "notes", string.Empty);
+                return ToolResult.Ok("set notes", JsonConvert.SerializeObject(slide));
+            }
+
+            if (string.Equals(command.ToolId, "powerpoint.add_text_box", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "powerpoint.set_shape_text", StringComparison.OrdinalIgnoreCase))
+            {
+                var slide = LastOrNewSlide();
+                slide.Body = Argument(command, "text", slide.Body ?? string.Empty);
+                return ToolResult.Ok("set slide shape text", JsonConvert.SerializeObject(slide));
+            }
+
+            if (string.Equals(command.ToolId, "powerpoint.add_picture", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "powerpoint.add_table", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Ok("added slide object", JsonConvert.SerializeObject(new { slideCount = _slides.Count }));
+            }
+
+            if (string.Equals(command.ToolId, "powerpoint.duplicate_slide", StringComparison.OrdinalIgnoreCase))
+            {
+                var slide = LastOrNewSlide();
+                _slides.Add(new FakeSlide { Title = slide.Title, Body = slide.Body, Notes = slide.Notes });
+                return ToolResult.Ok("duplicated slide", JsonConvert.SerializeObject(new { slideCount = _slides.Count }));
+            }
+
+            if (string.Equals(command.ToolId, "powerpoint.move_slide", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Ok("moved slide");
+            }
+
             return null;
         }
 
         private ToolResult ExecuteOutlookTool(ToolCommand command)
         {
-            if (string.Equals(command.ToolId, "outlook.read_selection", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, "outlook.read_selection", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "outlook.read_current_mail", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "outlook.read_mail_by_entry_id", StringComparison.OrdinalIgnoreCase))
             {
                 return ToolResult.Ok("read selected mail", JsonConvert.SerializeObject(new { text = _outlookSelection }));
             }
 
-            if (string.Equals(command.ToolId, "outlook.draft_reply", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, "outlook.search_mail", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "outlook.list_attachments", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Ok("read Outlook metadata", JsonConvert.SerializeObject(new { selection = _outlookSelection }));
+            }
+
+            if (string.Equals(command.ToolId, "outlook.draft_reply", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "outlook.create_reply_draft", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "outlook.create_reply_all_draft", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "outlook.create_forward_draft", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "outlook.create_mail_draft", StringComparison.OrdinalIgnoreCase))
             {
                 _outlookDraft = Argument(command, "body", string.Empty);
                 return ToolResult.Ok("drafted reply", JsonConvert.SerializeObject(new { body = _outlookDraft }));
+            }
+
+            if (string.Equals(command.ToolId, "outlook.set_categories", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.ToolId, "outlook.mark_as_read", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Ok("updated Outlook mail");
             }
 
             if (string.Equals(command.ToolId, "outlook.collect_folder_mail", StringComparison.OrdinalIgnoreCase) ||
@@ -509,6 +694,19 @@ namespace RNAssistant.Harness
                 for (var c = 0; c < values[r].Count; c++)
                 {
                     sheet.Cells[CellKey(start.Row + r, start.Column + c)] = values[r][c] ?? string.Empty;
+                }
+            }
+        }
+
+        private void ClearRange(string sheetName, string range)
+        {
+            var sheet = EnsureSheet(sheetName);
+            var bounds = ParseRange(range);
+            for (var row = bounds.Start.Row; row <= bounds.End.Row; row++)
+            {
+                for (var column = bounds.Start.Column; column <= bounds.End.Column; column++)
+                {
+                    sheet.Cells.Remove(CellKey(row, column));
                 }
             }
         }
@@ -580,9 +778,21 @@ namespace RNAssistant.Harness
             {
                 name = s.Name,
                 cellCount = s.Cells.Count,
+                tableCount = s.Tables.Count,
                 chartCount = s.Charts.Count,
+                tables = s.Tables.ToArray(),
                 charts = s.Charts.Select(c => new { title = c.Title, sourceRange = c.SourceRange, chartType = c.ChartType }).ToArray()
             }).ToArray());
+        }
+
+        private FakeSlide LastOrNewSlide()
+        {
+            if (_slides.Count == 0)
+            {
+                _slides.Add(new FakeSlide());
+            }
+
+            return _slides[_slides.Count - 1];
         }
 
         private static FakeRange ParseRange(string value)
@@ -665,16 +875,31 @@ namespace RNAssistant.Harness
         {
             return new[]
             {
+                BuiltIn("Excel", "excel.get_context", false, false, true),
+                BuiltIn("Excel", "excel.get_selection", false, false, true),
                 BuiltIn("Excel", "excel.workbook_summary", false, false, true),
                 BuiltIn("Excel", "excel.list_sheets", false, false, true),
                 BuiltIn("Excel", "excel.read_range", false, false, true),
+                BuiltIn("Excel", "excel.read_formula_range", false, false, true),
                 BuiltIn("Excel", "excel.profile_range", false, false, true),
+                BuiltIn("Excel", "excel.find_cells", false, false, true),
+                BuiltIn("Excel", "excel.create_chat_chart", false, false, true),
                 BuiltIn("Excel", "excel.list_charts", false, false, true),
+                BuiltIn("Excel", "excel.list_tables", false, false, true),
+                BuiltIn("Excel", "excel.list_names", false, false, true),
+                BuiltIn("Excel", "excel.list_shapes", false, false, true),
                 BuiltIn("Excel", "excel.write_range", false, true, true),
                 BuiltIn("Excel", "excel.write_table", false, true, true),
+                BuiltIn("Excel", "excel.set_formula", false, true, true),
+                BuiltIn("Excel", "excel.add_table", false, true, true),
                 BuiltIn("Excel", "excel.add_chart", false, true, true),
+                BuiltIn("Excel", "excel.format_range", false, true, true),
                 BuiltIn("Excel", "excel.autofit", false, true, true),
                 BuiltIn("Excel", "excel.add_sheet", false, true, true),
+                BuiltIn("Excel", "excel.rename_sheet", false, true, false),
+                BuiltIn("Excel", "excel.clear_range", false, true, false),
+                BuiltIn("Excel", "excel.sort_range", false, true, false),
+                BuiltIn("Excel", "excel.filter_range", false, true, false),
                 BuiltIn("Excel", "excel.vba_read_project", false, false, true),
                 BuiltIn("Excel", "excel.vba_read_module", false, false, true),
                 BuiltIn("Excel", "excel.vba_replace_module", false, true, false),
@@ -687,10 +912,24 @@ namespace RNAssistant.Harness
         {
             return new[]
             {
+                BuiltIn("Word", "word.get_context", false, false, true),
+                BuiltIn("Word", "word.get_selection_text", false, false, true),
                 BuiltIn("Word", "word.read_document", false, false, true),
                 BuiltIn("Word", "word.read_selection", false, false, true),
+                BuiltIn("Word", "word.read_range", false, false, true),
+                BuiltIn("Word", "word.find_text", false, false, true),
+                BuiltIn("Word", "word.read_headings", false, false, true),
+                BuiltIn("Word", "word.read_tables", false, false, true),
+                BuiltIn("Word", "word.list_comments", false, false, true),
+                BuiltIn("Word", "word.document_stats", false, false, true),
                 BuiltIn("Word", "word.insert_text", false, true, true),
+                BuiltIn("Word", "word.insert_paragraph", false, true, true),
                 BuiltIn("Word", "word.replace_selection", false, true, true),
+                BuiltIn("Word", "word.replace_text", false, true, true),
+                BuiltIn("Word", "word.apply_style", false, true, true),
+                BuiltIn("Word", "word.format_selection", false, true, true),
+                BuiltIn("Word", "word.add_table", false, true, true),
+                BuiltIn("Word", "word.insert_page_break", false, true, true),
                 BuiltIn("Word", "word.add_comment", false, true, true),
                 BuiltIn("Word", "word.vba_read_project", false, false, true),
                 BuiltIn("Word", "word.vba_read_module", false, false, true),
@@ -704,9 +943,22 @@ namespace RNAssistant.Harness
         {
             return new[]
             {
+                BuiltIn("PowerPoint", "powerpoint.get_context", false, false, true),
+                BuiltIn("PowerPoint", "powerpoint.get_selection", false, false, true),
                 BuiltIn("PowerPoint", "powerpoint.read_slides", false, false, true),
+                BuiltIn("PowerPoint", "powerpoint.read_slide", false, false, true),
+                BuiltIn("PowerPoint", "powerpoint.list_slides", false, false, true),
+                BuiltIn("PowerPoint", "powerpoint.list_shapes", false, false, true),
+                BuiltIn("PowerPoint", "powerpoint.read_speaker_notes", false, false, true),
                 BuiltIn("PowerPoint", "powerpoint.add_slide", false, true, true),
                 BuiltIn("PowerPoint", "powerpoint.replace_selection_text", false, true, true),
+                BuiltIn("PowerPoint", "powerpoint.set_speaker_notes", false, true, true),
+                BuiltIn("PowerPoint", "powerpoint.add_text_box", false, true, true),
+                BuiltIn("PowerPoint", "powerpoint.set_shape_text", false, true, true),
+                BuiltIn("PowerPoint", "powerpoint.add_picture", false, true, true),
+                BuiltIn("PowerPoint", "powerpoint.add_table", false, true, true),
+                BuiltIn("PowerPoint", "powerpoint.duplicate_slide", false, true, true),
+                BuiltIn("PowerPoint", "powerpoint.move_slide", false, true, false),
                 BuiltIn("PowerPoint", "powerpoint.vba_read_project", false, false, true),
                 BuiltIn("PowerPoint", "powerpoint.vba_read_module", false, false, true),
                 BuiltIn("PowerPoint", "powerpoint.vba_replace_module", false, true, false),
@@ -719,8 +971,19 @@ namespace RNAssistant.Harness
         {
             return new[]
             {
+                BuiltIn("Outlook", "outlook.get_context", false, false, true),
+                BuiltIn("Outlook", "outlook.read_current_mail", false, false, true),
                 BuiltIn("Outlook", "outlook.read_selection", false, false, true),
+                BuiltIn("Outlook", "outlook.read_mail_by_entry_id", false, false, true),
+                BuiltIn("Outlook", "outlook.search_mail", false, false, true),
+                BuiltIn("Outlook", "outlook.list_attachments", false, false, true),
+                BuiltIn("Outlook", "outlook.create_mail_draft", false, true, true),
+                BuiltIn("Outlook", "outlook.create_reply_draft", false, true, true),
                 BuiltIn("Outlook", "outlook.draft_reply", false, true, true),
+                BuiltIn("Outlook", "outlook.create_reply_all_draft", false, true, true),
+                BuiltIn("Outlook", "outlook.create_forward_draft", false, true, true),
+                BuiltIn("Outlook", "outlook.set_categories", false, true, false),
+                BuiltIn("Outlook", "outlook.mark_as_read", false, true, false),
                 BuiltIn("Outlook", "outlook.collect_folder_mail", false, false, true),
                 BuiltIn("Outlook", "outlook.collect_monthly_summary_data", false, false, true)
             };
@@ -733,6 +996,8 @@ namespace RNAssistant.Harness
                 Id = id,
                 Host = host,
                 Name = id,
+                Description = (mutatesDocument ? "Mutates document: " : "Read-only: ") + id,
+                ArgumentSchemaJson = "{}",
                 Enabled = true,
                 BuiltIn = true,
                 RequiresConfirmation = requiresConfirmation,
@@ -791,11 +1056,13 @@ namespace RNAssistant.Harness
             public string Name { get; set; }
             public Dictionary<string, string> Cells { get; private set; }
             public List<FakeChart> Charts { get; private set; }
+            public List<string> Tables { get; private set; }
 
             public FakeSheet()
             {
                 Cells = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 Charts = new List<FakeChart>();
+                Tables = new List<string>();
             }
         }
 
@@ -810,6 +1077,7 @@ namespace RNAssistant.Harness
         {
             public string Title { get; set; }
             public string Body { get; set; }
+            public string Notes { get; set; }
         }
 
         private sealed class FakeCellAddress

@@ -14,7 +14,7 @@ namespace RNAssistant.Office.Tools
                 Id = "common.render_html",
                 Host = "Common",
                 Name = "render_html",
-                Description = "Experimental: render a raw HTML component in the chat. The HTML may include scripts, but RNAssistant shows it only when unsafe HTML artifacts are enabled in Settings and renders it in a sandboxed iframe without Office bridge access.",
+                Description = "Read-only: Render a raw HTML component in chat when unsafe HTML artifacts are enabled.",
                 ArgumentSchemaJson = "{\"title\":\"Component title\",\"html\":\"<html or fragment>\",\"height\":360}",
                 BuiltIn = true,
                 Enabled = true,

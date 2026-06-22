@@ -113,13 +113,21 @@ namespace RNAssistant.OfficeHosts
         {
             return new[]
             {
-                Skill("outlook.get_context", "Return active Outlook mail or folder context.", "{}"),
-                Skill("outlook.read_current_mail", "Read selected or open Outlook mail.", "{\"maxChars\":12000}"),
-                Skill("outlook.read_selection", "Read selected email metadata and body.", "{\"maxChars\":12000}"),
-                Skill("outlook.create_reply_draft", "Create and display a reply draft for selected email.", "{\"body\":\"Reply body\"}", true, true),
-                Skill("outlook.draft_reply", "Create and display a reply draft for selected email.", "{\"body\":\"Reply body\"}", true, true),
-                Skill("outlook.collect_folder_mail", "Collect recent mail metadata from current folder for LLM analysis.", "{\"maxItems\":100,\"maxBodyChars\":1000}"),
-                Skill("outlook.collect_monthly_summary_data", "Collect current folder mail grouped by month for archive summary.", "{\"maxItems\":500,\"maxBodyChars\":500}")
+                Skill("outlook.get_context", "Read-only: Return active mail or folder context.", "{}"),
+                Skill("outlook.read_current_mail", "Read-only: Read selected or open mail.", "{\"maxChars\":12000}"),
+                Skill("outlook.read_selection", "Read-only: Read selected email metadata and body.", "{\"maxChars\":12000}"),
+                Skill("outlook.read_mail_by_entry_id", "Read-only: Read one mail item by EntryID.", "{\"entryId\":\"\",\"maxChars\":12000}"),
+                Skill("outlook.search_mail", "Read-only: Search recent mail in the current folder by text.", "{\"query\":\"text\",\"maxItems\":100,\"maxBodyChars\":1000}"),
+                Skill("outlook.list_attachments", "Read-only: List attachments for selected mail or EntryID.", "{\"entryId\":\"\"}"),
+                Skill("outlook.create_mail_draft", "Mutates document: Create and display a new mail draft without sending it.", "{\"to\":\"person@example.com\",\"cc\":\"\",\"bcc\":\"\",\"subject\":\"Subject\",\"body\":\"Body\"}", true, true),
+                Skill("outlook.create_reply_draft", "Mutates document: Create and display a reply draft for selected mail.", "{\"body\":\"Reply body\"}", true, true),
+                Skill("outlook.draft_reply", "Mutates document: Compatibility alias for outlook.create_reply_draft; prefer outlook.create_reply_draft.", "{\"body\":\"Reply body\"}", true, true),
+                Skill("outlook.create_reply_all_draft", "Mutates document: Create and display a reply-all draft for selected mail.", "{\"body\":\"Reply body\"}", true, true),
+                Skill("outlook.create_forward_draft", "Mutates document: Create and display a forward draft for selected mail.", "{\"to\":\"person@example.com\",\"body\":\"Forward body\"}", true, true),
+                Skill("outlook.set_categories", "Mutates document: Set categories on selected mail.", "{\"categories\":\"Category A, Category B\"}", true, false),
+                Skill("outlook.mark_as_read", "Mutates document: Mark selected mail as read.", "{}", true, false),
+                Skill("outlook.collect_folder_mail", "Read-only: Collect recent mail metadata from current folder for analysis.", "{\"maxItems\":100,\"maxBodyChars\":1000}"),
+                Skill("outlook.collect_monthly_summary_data", "Read-only: Collect current folder mail grouped by month for archive summary.", "{\"maxItems\":500,\"maxBodyChars\":500}")
             };
         }
 
@@ -203,9 +211,25 @@ namespace RNAssistant.OfficeHosts
                     case "outlook.read_current_mail":
                     case "outlook.read_selection":
                         return ReadSelection(command);
+                    case "outlook.read_mail_by_entry_id":
+                        return ReadMailByEntryId(command);
+                    case "outlook.search_mail":
+                        return SearchMail(command);
+                    case "outlook.list_attachments":
+                        return ListAttachments(command);
+                    case "outlook.create_mail_draft":
+                        return CreateMailDraft(command);
                     case "outlook.create_reply_draft":
                     case "outlook.draft_reply":
                         return DraftReply(command);
+                    case "outlook.create_reply_all_draft":
+                        return DraftReplyAll(command);
+                    case "outlook.create_forward_draft":
+                        return DraftForward(command);
+                    case "outlook.set_categories":
+                        return SetCategories(command);
+                    case "outlook.mark_as_read":
+                        return MarkAsRead();
                     case "outlook.collect_folder_mail":
                         return CollectFolderMail(command, false);
                     case "outlook.collect_monthly_summary_data":
@@ -224,14 +248,112 @@ namespace RNAssistant.OfficeHosts
         {
             var mail = RequireSelectedMail();
             var maxChars = ToolArgumentReader.Int32(command.Arguments, "maxChars", 12000);
-            return ToolResult.Ok("Selected email read.", JsonConvert.SerializeObject(new
+            return ToolResult.Ok("Selected email read.", JsonConvert.SerializeObject(MailPayload(mail, maxChars)));
+        }
+
+        private ToolResult ReadMailByEntryId(ToolCommand command)
+        {
+            var entryId = ToolArgumentReader.String(command.Arguments, "entryId", string.Empty);
+            if (string.IsNullOrWhiteSpace(entryId))
             {
-                subject = mail.Subject,
-                sender = mail.SenderName,
-                senderEmail = mail.SenderEmailAddress,
-                received = mail.ReceivedTime,
-                body = Trim(mail.Body, maxChars)
-            }));
+                return ToolResult.Fail("entryId is required.");
+            }
+
+            var mail = _application.Session.GetItemFromID(entryId, Type.Missing) as Outlook.MailItem;
+            if (mail == null)
+            {
+                return ToolResult.Fail("Mail item not found: " + entryId);
+            }
+
+            var maxChars = ToolArgumentReader.Int32(command.Arguments, "maxChars", 12000);
+            return ToolResult.Ok("Email read by EntryID.", JsonConvert.SerializeObject(MailPayload(mail, maxChars)));
+        }
+
+        private ToolResult SearchMail(ToolCommand command)
+        {
+            var query = ToolArgumentReader.String(command.Arguments, "query", string.Empty);
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                return ToolResult.Fail("query is required.");
+            }
+
+            var folder = CurrentFolder();
+            if (folder == null)
+            {
+                return ToolResult.Fail("No current Outlook folder.");
+            }
+
+            var maxItems = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxItems", 100)));
+            var maxBodyChars = ToolArgumentReader.Int32(command.Arguments, "maxBodyChars", 1000);
+            var matches = new List<object>();
+            var items = folder.Items;
+            items.Sort("[ReceivedTime]", true);
+            for (var i = 1; i <= items.Count && matches.Count < maxItems; i++)
+            {
+                var mail = items[i] as Outlook.MailItem;
+                if (mail == null)
+                {
+                    continue;
+                }
+
+                var haystack = (mail.Subject ?? string.Empty) + "\n" +
+                    (mail.SenderName ?? string.Empty) + "\n" +
+                    (mail.SenderEmailAddress ?? string.Empty) + "\n" +
+                    (mail.Body ?? string.Empty);
+                if (haystack.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    continue;
+                }
+
+                matches.Add(MailPayload(mail, maxBodyChars));
+            }
+
+            return ToolResult.Ok("Mail search matches: " + matches.Count, JsonConvert.SerializeObject(new { folder = folder.FolderPath, messages = matches }));
+        }
+
+        private ToolResult ListAttachments(ToolCommand command)
+        {
+            var entryId = ToolArgumentReader.String(command.Arguments, "entryId", string.Empty);
+            var mail = string.IsNullOrWhiteSpace(entryId)
+                ? RequireSelectedMail()
+                : _application.Session.GetItemFromID(entryId, Type.Missing) as Outlook.MailItem;
+            if (mail == null)
+            {
+                return ToolResult.Fail("Mail item not found.");
+            }
+
+            var attachments = new List<object>();
+            for (var i = 1; i <= mail.Attachments.Count; i++)
+            {
+                var attachment = mail.Attachments[i];
+                attachments.Add(new
+                {
+                    index = i,
+                    fileName = attachment.FileName,
+                    displayName = attachment.DisplayName,
+                    size = attachment.Size,
+                    type = attachment.Type.ToString()
+                });
+            }
+
+            return ToolResult.Ok("Attachments listed: " + attachments.Count, JsonConvert.SerializeObject(attachments));
+        }
+
+        private ToolResult CreateMailDraft(ToolCommand command)
+        {
+            var mail = _application.CreateItem(Outlook.OlItemType.olMailItem) as Outlook.MailItem;
+            if (mail == null)
+            {
+                return ToolResult.Fail("Could not create mail draft.");
+            }
+
+            mail.To = ToolArgumentReader.String(command.Arguments, "to", string.Empty);
+            mail.CC = ToolArgumentReader.String(command.Arguments, "cc", string.Empty);
+            mail.BCC = ToolArgumentReader.String(command.Arguments, "bcc", string.Empty);
+            mail.Subject = ToolArgumentReader.String(command.Arguments, "subject", string.Empty);
+            mail.Body = ToolArgumentReader.String(command.Arguments, "body", string.Empty);
+            mail.Display(false);
+            return ToolResult.Ok("Mail draft displayed.");
         }
 
         private ToolResult DraftReply(ToolCommand command)
@@ -247,6 +369,53 @@ namespace RNAssistant.OfficeHosts
             reply.Body = body + "\n\n" + reply.Body;
             reply.Display(false);
             return ToolResult.Ok("Reply draft displayed.");
+        }
+
+        private ToolResult DraftReplyAll(ToolCommand command)
+        {
+            var mail = RequireSelectedMail();
+            var body = ToolArgumentReader.String(command.Arguments, "body", string.Empty);
+            var reply = mail.ReplyAll() as Outlook.MailItem;
+            if (reply == null)
+            {
+                return ToolResult.Fail("Could not create reply-all draft.");
+            }
+
+            reply.Body = body + "\n\n" + reply.Body;
+            reply.Display(false);
+            return ToolResult.Ok("Reply-all draft displayed.");
+        }
+
+        private ToolResult DraftForward(ToolCommand command)
+        {
+            var mail = RequireSelectedMail();
+            var body = ToolArgumentReader.String(command.Arguments, "body", string.Empty);
+            var forward = mail.Forward() as Outlook.MailItem;
+            if (forward == null)
+            {
+                return ToolResult.Fail("Could not create forward draft.");
+            }
+
+            forward.To = ToolArgumentReader.String(command.Arguments, "to", string.Empty);
+            forward.Body = body + "\n\n" + forward.Body;
+            forward.Display(false);
+            return ToolResult.Ok("Forward draft displayed.");
+        }
+
+        private ToolResult SetCategories(ToolCommand command)
+        {
+            var mail = RequireSelectedMail();
+            mail.Categories = ToolArgumentReader.String(command.Arguments, "categories", string.Empty);
+            mail.Save();
+            return ToolResult.Ok("Mail categories updated.");
+        }
+
+        private ToolResult MarkAsRead()
+        {
+            var mail = RequireSelectedMail();
+            mail.UnRead = false;
+            mail.Save();
+            return ToolResult.Ok("Mail marked as read.");
         }
 
         private ToolResult CollectFolderMail(ToolCommand command, bool groupedByMonth)
@@ -300,6 +469,21 @@ namespace RNAssistant.OfficeHosts
                 ? JsonConvert.SerializeObject(new { folder = folder.FolderPath, months = monthly })
                 : JsonConvert.SerializeObject(new { folder = folder.FolderPath, messages = rows });
             return ToolResult.Ok("Mail data collected.", data);
+        }
+
+        private static object MailPayload(Outlook.MailItem mail, int maxBodyChars)
+        {
+            return new
+            {
+                entryId = mail.EntryID,
+                subject = mail.Subject,
+                sender = mail.SenderName,
+                senderEmail = mail.SenderEmailAddress,
+                received = mail.ReceivedTime,
+                categories = mail.Categories,
+                unread = mail.UnRead,
+                body = Trim(mail.Body, maxBodyChars)
+            };
         }
 
         private Outlook.MailItem SelectedMail()

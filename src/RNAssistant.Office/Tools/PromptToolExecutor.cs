@@ -24,11 +24,12 @@ namespace RNAssistant.Office.Tools
                 yield break;
             }
 
-            yield return ControllerTool("common.prompts_read", "Read RNAssistant editable agent prompt templates from Settings.", "{}", false);
+            yield return ControllerTool("common.prompts_read", "Read-only: Read RNAssistant editable agent prompt templates from Settings.", "{}", false);
+            yield return ControllerTool("common.prompts_read_defaults", "Read-only: Read current RNAssistant prompts and built-in default prompt templates.", "{}", false);
             yield return ControllerTool(
                 "common.prompts_save",
-                "Self-improvement tool: update RNAssistant agent prompt templates in Settings after proposing and reviewing improved Markdown prompt text. Use only when the user asks to edit/improve RNAssistant prompts.",
-                "{\"systemPrompt\":\"optional\",\"agentPrompt\":\"optional\",\"toolProtocolPrompt\":\"optional\",\"toolRoutingPrompt\":\"optional\",\"forceToolUsePrompt\":\"optional\",\"repairMalformedToolBlockPrompt\":\"optional\",\"afterToolResultsPrompt\":\"optional\",\"verifyMutationPrompt\":\"optional\",\"confirmedToolContinuationPrompt\":\"optional\",\"retryFailedToolPrompt\":\"optional\"}",
+                "Mutates settings: Update RNAssistant agent prompt templates after the user asks to edit or improve RNAssistant prompts.",
+                "{\"systemPrompt\":\"\",\"agentPrompt\":\"\",\"toolProtocolPrompt\":\"\",\"toolRoutingPrompt\":\"\",\"forceToolUsePrompt\":\"\",\"repairMalformedToolBlockPrompt\":\"\",\"afterToolResultsPrompt\":\"\",\"verifyMutationPrompt\":\"\",\"confirmedToolContinuationPrompt\":\"\",\"retryFailedToolPrompt\":\"\"}",
                 true);
         }
 
@@ -48,6 +49,16 @@ namespace RNAssistant.Office.Tools
             {
                 var current = _loadSettings();
                 return ToolResult.Ok("Agent prompt templates read.", JsonConvert.SerializeObject(ToPayload(current)));
+            }
+
+            if (string.Equals(command.ToolId, "common.prompts_read_defaults", StringComparison.OrdinalIgnoreCase))
+            {
+                var current = _loadSettings();
+                return ToolResult.Ok("Agent prompt templates and defaults read.", JsonConvert.SerializeObject(new
+                {
+                    current = ToPayload(current),
+                    defaults = ToPayload(new AppSettings())
+                }));
             }
 
             if (string.Equals(command.ToolId, "common.prompts_save", StringComparison.OrdinalIgnoreCase))

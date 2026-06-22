@@ -31,10 +31,10 @@ namespace RNAssistant.Office.Tools
                 yield break;
             }
 
-            yield return ControllerTool(ToolId("vba_list_backups"), "List RNAssistant VBA rollback backups for the current document.", "{}", false);
-            yield return ControllerTool(ToolId("vba_restore_backup"), "Restore a VBA module from a prior RNAssistant backup by backupId, or latest backup for moduleName.", "{\"backupId\":\"optional\",\"moduleName\":\"Module1\"}", true);
-            yield return ControllerTool(ToolId("vba_replace_text"), "Replace an exact text fragment inside one VBA module; safer than replacing the whole module and creates a rollback backup.", "{\"moduleName\":\"Module1\",\"find\":\"old code\",\"replace\":\"new code\"}", true);
-            yield return ControllerTool(ToolId("vba_apply_patch"), "Apply structured VBA code patches: replace exact text, insert before/after exact text, or replace line ranges; creates rollback backup.", "{\"moduleName\":\"Module1\",\"patch\":[{\"op\":\"replace\",\"find\":\"old\",\"text\":\"new\"},{\"op\":\"replaceLines\",\"startLine\":10,\"deleteCount\":2,\"text\":\"new code\"}]}", true);
+            yield return ControllerTool(ToolId("vba_list_backups"), "Read-only: List RNAssistant VBA rollback backups for the current document.", "{}", false);
+            yield return ControllerTool(ToolId("vba_restore_backup"), "Mutates document: Restore a VBA module from a backupId or from the latest backup for moduleName.", "{\"backupId\":\"\",\"moduleName\":\"Module1\"}", true);
+            yield return ControllerTool(ToolId("vba_replace_text"), "Mutates document: Replace an exact text fragment inside one VBA module and create a rollback backup.", "{\"moduleName\":\"Module1\",\"find\":\"old code\",\"replace\":\"new code\"}", true);
+            yield return ControllerTool(ToolId("vba_apply_patch"), "Mutates document: Apply structured VBA code patches and create a rollback backup.", "{\"moduleName\":\"Module1\",\"patch\":[{\"op\":\"replace\",\"find\":\"old\",\"text\":\"new\"},{\"op\":\"replaceLines\",\"startLine\":10,\"deleteCount\":2,\"text\":\"new code\"}]}", true);
         }
 
         public string ToolId(string suffix)

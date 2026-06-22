@@ -23,10 +23,10 @@ namespace RNAssistant.Office.Tools
 
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
-            yield return ControllerTool("common.skills_list", "List markdown skills visible to the current Office host.", "{}", false);
-            yield return ControllerTool("common.skills_read", "Read one markdown skill by id.", "{\"id\":\"common.skill_authoring\"}", false);
-            yield return ControllerTool("common.skills_save", "Create or update a markdown skill SKILL.md file.", "{\"id\":\"common.my_skill\",\"host\":\"Common\",\"name\":\"My skill\",\"description\":\"When to use it\",\"tags\":\"tag1, tag2\",\"bodyMarkdown\":\"# My skill\\n...\",\"enabled\":true}", true);
-            yield return ControllerTool("common.skills_delete", "Delete a custom markdown skill by id.", "{\"id\":\"common.my_skill\"}", true);
+            yield return ControllerTool("common.skills_list", "Read-only: List markdown skills visible to the current Office host.", "{}", false);
+            yield return ControllerTool("common.skills_read", "Read-only: Read one markdown skill by id.", "{\"id\":\"common.skill_authoring\"}", false);
+            yield return ControllerTool("common.skills_save", "Mutates settings: Create or update a markdown skill SKILL.md file.", "{\"id\":\"common.my_skill\",\"host\":\"Common\",\"name\":\"My skill\",\"description\":\"When to use it\",\"tags\":\"tag1, tag2\",\"bodyMarkdown\":\"# My skill\\n...\",\"enabled\":true}", true);
+            yield return ControllerTool("common.skills_delete", "Mutates settings: Delete a custom markdown skill by id.", "{\"id\":\"common.my_skill\"}", true);
         }
 
         public bool IsControllerTool(string toolId)

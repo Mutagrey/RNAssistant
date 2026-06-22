@@ -45,6 +45,54 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ExpandedBuiltInToolsAreVisible()
+        {
+            var excel = new List<ToolDefinition>(FakeOfficeAdapter.ForHost("Excel").GetBuiltInTools());
+            AssertTrue(HasTool(excel, "excel.read_formula_range"), "excel formula reader visible");
+            AssertTrue(HasTool(excel, "excel.find_cells"), "excel find cells visible");
+            AssertTrue(HasTool(excel, "excel.add_table"), "excel add table visible");
+            AssertTrue(!FindTool(excel, "excel.clear_range").AgentCanRun, "excel clear requires confirmation");
+
+            var word = new List<ToolDefinition>(FakeOfficeAdapter.ForHost("Word").GetBuiltInTools());
+            AssertTrue(HasTool(word, "word.find_text"), "word find text visible");
+            AssertTrue(HasTool(word, "word.add_table"), "word add table visible");
+
+            var powerpoint = new List<ToolDefinition>(FakeOfficeAdapter.ForHost("PowerPoint").GetBuiltInTools());
+            AssertTrue(HasTool(powerpoint, "powerpoint.list_shapes"), "powerpoint list shapes visible");
+            AssertTrue(HasTool(powerpoint, "powerpoint.set_speaker_notes"), "powerpoint notes writer visible");
+            AssertTrue(!FindTool(powerpoint, "powerpoint.move_slide").AgentCanRun, "powerpoint move requires confirmation");
+
+            var outlook = new List<ToolDefinition>(FakeOfficeAdapter.ForHost("Outlook").GetBuiltInTools());
+            AssertTrue(HasTool(outlook, "outlook.search_mail"), "outlook search visible");
+            AssertTrue(HasTool(outlook, "outlook.create_mail_draft"), "outlook draft visible");
+            AssertTrue(!FindTool(outlook, "outlook.mark_as_read").AgentCanRun, "outlook mark read requires confirmation");
+        }
+
+        private static void PromptToolMetadataIsWeakModelFriendly()
+        {
+            var adapter = FakeOfficeAdapter.ForHost("Excel");
+            WithTempExecutor(adapter, delegate(OfficeToolExecutor executor, FakeOfficeAdapter fake)
+            {
+                var tools = new List<ToolDefinition>(fake.GetBuiltInTools());
+                tools.AddRange(executor.GetControllerTools());
+                var prompt = new PromptComposer().ComposeSystemPrompt(
+                    new AppSettings { AgentModeEnabled = true },
+                    fake.HostName,
+                    string.Empty,
+                    string.Empty,
+                    tools,
+                    new SkillDefinition[0],
+                    null);
+
+                AssertContains(prompt, "mode: read-only", "prompt includes read-only mode");
+                AssertContains(prompt, "mode: mutation", "prompt includes mutation mode");
+                AssertContains(prompt, "confirmation: required unless auto-confirm is enabled", "prompt includes confirmation metadata");
+                AssertTrue(prompt.IndexOf("\"optional\"", StringComparison.OrdinalIgnoreCase) < 0, "prompt has no literal optional args");
+                AssertContains(prompt, "common.tools_validate", "prompt includes tool validation");
+                AssertContains(prompt, "common.prompts_read_defaults", "prompt includes prompt defaults reader");
+            });
+        }
+
         private static void ToolStoreSavesAndUpdatesCustomTools()
         {
             WithTempPaths(delegate(AppDataPaths paths)

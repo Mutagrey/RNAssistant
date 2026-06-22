@@ -26,10 +26,11 @@ namespace RNAssistant.Office.Tools
                 yield break;
             }
 
-            yield return ControllerTool("common.tools_list", "List custom executable RNAssistant tools visible to the current Office host.", "{}", false);
-            yield return ControllerTool("common.tools_read", "Read one custom RNAssistant tool by id, including metadata, README, pipeline, and VBA code.", "{\"id\":\"excel.my_tool\"}", false);
-            yield return ControllerTool("common.tools_save", "Create or update a custom RNAssistant pipeline or VBA tool.", "{\"id\":\"excel.my_tool\",\"host\":\"Excel\",\"name\":\"My tool\",\"description\":\"What it does\",\"argumentSchemaJson\":\"{}\",\"executor\":\"pipeline|vba\",\"pipelineJson\":\"{\\\"steps\\\":[]}\",\"code\":\"optional VBA\",\"readme\":\"markdown\",\"enabled\":true,\"requiresConfirmation\":true,\"mutatesDocument\":true,\"agentCanRun\":false}", true);
-            yield return ControllerTool("common.tools_delete", "Delete a custom RNAssistant tool by id.", "{\"id\":\"excel.my_tool\"}", true);
+            yield return ControllerTool("common.tools_list", "Read-only: List custom executable RNAssistant tools visible to the current Office host.", "{}", false);
+            yield return ControllerTool("common.tools_read", "Read-only: Read one custom RNAssistant tool by id, including metadata, README, pipeline, and VBA code.", "{\"id\":\"excel.my_tool\"}", false);
+            yield return ControllerTool("common.tools_validate", "Read-only: Validate a custom RNAssistant pipeline or VBA tool payload without saving it.", "{\"id\":\"excel.my_tool\",\"host\":\"Excel\",\"name\":\"My tool\",\"description\":\"What it does\",\"argumentSchemaJson\":\"{}\",\"executor\":\"pipeline\",\"pipelineJson\":\"{\\\"steps\\\":[{\\\"toolId\\\":\\\"excel.list_sheets\\\",\\\"arguments\\\":{}}]}\",\"code\":\"\",\"readme\":\"markdown\",\"enabled\":true,\"requiresConfirmation\":true,\"mutatesDocument\":true,\"agentCanRun\":false}", false);
+            yield return ControllerTool("common.tools_save", "Mutates settings: Create or update a custom RNAssistant pipeline or VBA tool.", "{\"id\":\"excel.my_tool\",\"host\":\"Excel\",\"name\":\"My tool\",\"description\":\"What it does\",\"argumentSchemaJson\":\"{}\",\"executor\":\"pipeline\",\"pipelineJson\":\"{\\\"steps\\\":[{\\\"toolId\\\":\\\"excel.list_sheets\\\",\\\"arguments\\\":{}}]}\",\"code\":\"\",\"readme\":\"markdown\",\"enabled\":true,\"requiresConfirmation\":true,\"mutatesDocument\":true,\"agentCanRun\":false}", true);
+            yield return ControllerTool("common.tools_delete", "Mutates settings: Delete a custom RNAssistant tool by id.", "{\"id\":\"excel.my_tool\"}", true);
         }
 
         public bool IsControllerTool(string toolId)
@@ -62,6 +63,11 @@ namespace RNAssistant.Office.Tools
             if (string.Equals(command.ToolId, "common.tools_read", StringComparison.OrdinalIgnoreCase))
             {
                 return ReadTool(command);
+            }
+
+            if (string.Equals(command.ToolId, "common.tools_validate", StringComparison.OrdinalIgnoreCase))
+            {
+                return ValidateToolPayload(command);
             }
 
             if (string.Equals(command.ToolId, "common.tools_save", StringComparison.OrdinalIgnoreCase))
@@ -104,6 +110,18 @@ namespace RNAssistant.Office.Tools
             }
 
             return ToolResult.Ok("Custom tool read: " + tool.Id, JsonConvert.SerializeObject(tool));
+        }
+
+        private ToolResult ValidateToolPayload(ToolCommand command)
+        {
+            var tool = ReadToolDefinition(command);
+            var validation = ValidateTool(tool);
+            if (!validation.Success)
+            {
+                return validation;
+            }
+
+            return ToolResult.Ok("Tool definition is valid: " + tool.Id, JsonConvert.SerializeObject(tool));
         }
 
         private ToolResult SaveTool(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)

@@ -48,20 +48,23 @@ namespace RNAssistant.Core.Llm
             AppendPromptBlock(builder, PromptOrDefault(agentPrompts.ToolProtocolPrompt, new AgentPromptSettings().ToolProtocolPrompt));
             AppendPromptBlock(builder, PromptOrDefault(agentPrompts.ToolRoutingPrompt, new AgentPromptSettings().ToolRoutingPrompt));
             builder.AppendLine();
-            AppendSkills(builder, skills, SkillBodyLimit(settings));
             builder.AppendLine("Available tools:");
             builder.AppendLine("Use only these exact tool ids in rnassistant-agent steps. Copy the full id, including the host prefix before the dot.");
             foreach (var tool in tools)
             {
                 builder.AppendLine("- " + tool.Id + " (" + tool.Host + "): " + tool.Description);
+                builder.AppendLine("  mode: " + ToolMode(tool));
+                builder.AppendLine("  confirmation: " + ToolConfirmation(tool));
                 builder.AppendLine("  args: " + tool.ArgumentSchemaJson);
                 if (!tool.BuiltIn)
                 {
                     builder.AppendLine("  executor: " + (string.IsNullOrWhiteSpace(tool.Executor) ? "pipeline" : tool.Executor));
-                    builder.AppendLine("  requiresConfirmation: " + tool.RequiresConfirmation);
                     AppendToolSource(builder, tool);
                 }
             }
+
+            builder.AppendLine();
+            AppendSkills(builder, skills, SkillBodyLimit(settings));
 
             if (!string.IsNullOrWhiteSpace(documentSnapshot))
             {
@@ -93,6 +96,31 @@ namespace RNAssistant.Core.Llm
         private static string PromptOrDefault(string value, string fallback)
         {
             return string.IsNullOrWhiteSpace(value) ? fallback : value;
+        }
+
+        private static string ToolMode(ToolDefinition tool)
+        {
+            return tool != null && tool.MutatesDocument ? "mutation" : "read-only";
+        }
+
+        private static string ToolConfirmation(ToolDefinition tool)
+        {
+            if (tool == null)
+            {
+                return "normal";
+            }
+
+            if (tool.RequiresConfirmation)
+            {
+                return "required";
+            }
+
+            if (tool.MutatesDocument && (!tool.BuiltIn || !tool.AgentCanRun))
+            {
+                return "required unless auto-confirm is enabled";
+            }
+
+            return "normal";
         }
 
         private static void AppendSkills(StringBuilder builder, IEnumerable<SkillDefinition> skills, int bodyCharLimit)
