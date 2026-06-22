@@ -92,7 +92,7 @@ function populateChatModelSelect(select) {
 
   var defaultOption = document.createElement("option");
   defaultOption.value = "";
-  defaultOption.textContent = defaultModel ? ("По умолчанию: " + defaultModel) : "Модель";
+  defaultOption.textContent = defaultModel ? ("По умолчанию: " + defaultModel) : "По умолчанию";
   select.appendChild(defaultOption);
 
   if (selected && !findModel(selected)) {

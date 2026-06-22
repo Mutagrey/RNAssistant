@@ -207,9 +207,9 @@
   }
 
   .composer-model {
-    flex: 1 1 82px;
-    min-width: 72px;
-    max-width: 112px;
+    flex: 1 1 104px;
+    min-width: 92px;
+    max-width: 138px;
   }
 
   .composer-actions {
