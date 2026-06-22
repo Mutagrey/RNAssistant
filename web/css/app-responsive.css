@@ -34,9 +34,9 @@
   }
 
   .composer-model {
-    flex: 0 1 132px;
+    flex: 1 1 132px;
     min-width: 86px;
-    max-width: 150px;
+    max-width: min(240px, 100%);
   }
 
   .context-meter em {
@@ -207,9 +207,9 @@
   }
 
   .composer-model {
-    flex: 1 1 82px;
+    flex: 1 1 96px;
     min-width: 72px;
-    max-width: 112px;
+    max-width: min(170px, 100%);
   }
 
   .composer-actions {
