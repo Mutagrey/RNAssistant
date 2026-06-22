@@ -92,7 +92,7 @@ function populateChatModelSelect(select) {
 
   var defaultOption = document.createElement("option");
   defaultOption.value = "";
-  defaultOption.textContent = defaultModel ? ("По умолчанию: " + defaultModel) : "По умолчанию";
+  defaultOption.textContent = defaultModel || "Не выбрана";
   select.appendChild(defaultOption);
 
   if (selected && !findModel(selected)) {
@@ -111,7 +111,7 @@ function populateChatModelSelect(select) {
   });
 
   select.value = selected;
-  select.title = selected ? ("Модель чата: " + selected) : ("Используется модель по умолчанию: " + (defaultModel || ""));
+  select.title = selected || defaultModel ? ("Модель чата: " + (selected || defaultModel)) : "Модель чата не выбрана";
   select.disabled = state.modelCatalog.loading || state.modelSaving || !!state.activeSend || !state.activeChatId;
 }
 
