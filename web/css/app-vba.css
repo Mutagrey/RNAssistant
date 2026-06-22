@@ -52,6 +52,10 @@
   line-height: 1.4;
 }
 
+.vba-empty-state button {
+  margin-top: 8px;
+}
+
 .vba-editor.is-empty .vba-empty-state {
   display: grid;
 }

@@ -271,6 +271,7 @@
             <div class="vba-empty-state" id="vbaEmptyState">
               <div class="vba-empty-title">VBA не загружен</div>
               <div class="vba-empty-text">Загрузите VBA-проект, чтобы редактировать модули, сравнивать diff и сохранять изменения.</div>
+              <button class="primary" id="refreshVbaEmptyButton" type="button">Загрузить VBA</button>
             </div>
             <div class="vba-runbar">
               <label class="inline-field">Макрос<input id="vbaMacroInput" autocomplete="off" placeholder="Module1.Main"></label>
@@ -290,13 +291,8 @@
                 <button class="secondary" id="reviewVbaButton" type="button">Обсудить код</button>
               </div>
               <div class="action-group action-group-end">
+                <button class="secondary" id="restoreVbaButton" type="button">Восстановить из копии</button>
                 <button class="accent-soft" id="saveVbaButton" type="button">Сохранить</button>
-                <details class="toolbar-menu">
-                  <summary>Действия</summary>
-                  <div class="toolbar-menu-body">
-                    <button class="secondary" id="restoreVbaButton" type="button">Восстановить копию</button>
-                  </div>
-                </details>
               </div>
             </div>
           </section>

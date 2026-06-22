@@ -43,6 +43,7 @@ function renderVbaProject() {
   backupSelect.disabled = state.bridgeUnavailable || !state.vba.backups.length;
   $("vbaModuleSearchInput").disabled = state.bridgeUnavailable;
   $("refreshVbaButton").disabled = state.bridgeUnavailable;
+  $("refreshVbaEmptyButton").disabled = state.bridgeUnavailable;
   var editorPanel = document.querySelector(".vba-editor");
   var emptyState = $("vbaEmptyState");
   var isEmpty = state.bridgeUnavailable || !renderedModules;
@@ -397,6 +398,7 @@ async function runVbaMacro() {
 
 function bindVbaActions() {
   $("refreshVbaButton").addEventListener("click", refreshVbaProject);
+  $("refreshVbaEmptyButton").addEventListener("click", refreshVbaProject);
   $("vbaModuleSearchInput").addEventListener("input", renderVbaProject);
   $("vbaModuleSelect").addEventListener("change", renderSelectedVbaModule);
   $("vbaCodeInput").addEventListener("input", markVbaEditorDirty);
