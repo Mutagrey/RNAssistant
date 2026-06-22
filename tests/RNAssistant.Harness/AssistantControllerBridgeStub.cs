@@ -33,6 +33,7 @@ namespace RNAssistant.Office
         public ChatStateResponse SelectChat(string chatId) { return ChatState(null, chatId); }
         public ChatStateResponse RenameChat(string chatId, string title) { return ChatState(title, chatId); }
         public ChatStateResponse SetChatModel(string chatId, string model) { return ChatState(model, chatId); }
+        public ChatStateResponse SetChatHtmlMode(string chatId, bool enabled) { return ChatState(enabled ? "html" : string.Empty, chatId); }
         public ChatStateResponse ClearChat(string chatId) { return ChatState(null, chatId); }
         public ChatStateResponse DeleteChat(string chatId) { return ChatState(null, chatId); }
         public ChatStateResponse DeleteMessage(string id, int index, string chatId = null) { return ChatState(id, chatId); }
@@ -92,6 +93,7 @@ namespace RNAssistant.Office
         public HtmlWorkspaceResponse SaveHtmlWorkspaceFile(string chatId, string path, string kind, string content, bool setActive) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace { ActiveFileId = path ?? string.Empty } }; }
         public HtmlWorkspaceResponse SaveHtmlWorkspaceData(string chatId, string name, string json) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace() }; }
         public HtmlWorkspaceResponse SetActiveHtmlWorkspaceFile(string chatId, string path) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace { ActiveFileId = path ?? string.Empty } }; }
+        public HtmlWorkspaceResponse RestoreHtmlWorkspaceSnapshot(string chatId, string snapshotId) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace() }; }
         public DocumentContext GetContext(string chatId = null) { return new DocumentContext { DocumentKey = chatId ?? string.Empty }; }
         public DocumentContext AddSelectionContextFromBridge(string mode, string chatId = null) { return new DocumentContext { Title = mode ?? string.Empty }; }
 

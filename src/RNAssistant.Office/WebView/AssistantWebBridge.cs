@@ -79,6 +79,10 @@ namespace RNAssistant.Office.WebView
                         var setChatModel = Payload<SetChatModelPayload>(payload);
                         responsePayload = _controller.SetChatModel(setChatModel.ChatId, setChatModel.Model);
                         break;
+                    case "setChatHtmlMode":
+                        var setChatHtmlMode = Payload<SetChatHtmlModePayload>(payload);
+                        responsePayload = _controller.SetChatHtmlMode(setChatHtmlMode.ChatId, setChatHtmlMode.Enabled == true);
+                        break;
                     case "clearChat":
                         responsePayload = _controller.ClearChat(Payload<ChatPayload>(payload).ChatId);
                         break;
@@ -197,6 +201,12 @@ namespace RNAssistant.Office.WebView
                         responsePayload = _controller.SetActiveHtmlWorkspaceFile(
                             htmlActive.ChatId,
                             htmlActive.Path);
+                        break;
+                    case "restoreHtmlWorkspaceSnapshot":
+                        var htmlRestore = Payload<HtmlWorkspaceRestorePayload>(payload);
+                        responsePayload = _controller.RestoreHtmlWorkspaceSnapshot(
+                            htmlRestore.ChatId,
+                            htmlRestore.SnapshotId);
                         break;
                     case "getContext":
                         responsePayload = _controller.GetContext(Payload<ChatPayload>(payload).ChatId);

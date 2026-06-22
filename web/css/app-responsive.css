@@ -15,7 +15,8 @@
   }
 
   .composer-toolbar #addSelectionContextButton,
-  .composer-toolbar #toggleVbaContextButton {
+  .composer-toolbar #toggleVbaContextButton,
+  .composer-toolbar #toggleHtmlModeButton {
     flex: 0 0 auto;
     width: auto;
     margin-right: 0;
@@ -211,14 +212,16 @@
   }
 
   .composer-toolbar #addSelectionContextButton,
-  .composer-toolbar #toggleVbaContextButton {
+  .composer-toolbar #toggleVbaContextButton,
+  .composer-toolbar #toggleHtmlModeButton {
     flex: 0 0 32px;
     width: 32px;
     padding: 0;
   }
 
   .composer-toolbar #addSelectionContextButton span,
-  .composer-toolbar #toggleVbaContextButton span {
+  .composer-toolbar #toggleVbaContextButton span,
+  .composer-toolbar #toggleHtmlModeButton span {
     display: none;
   }
 

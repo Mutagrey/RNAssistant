@@ -83,6 +83,7 @@ namespace RNAssistant.Office
                 OfficeContext = CaptureOfficeContext(),
                 ActiveChatId = activeId,
                 ActiveChatModel = session == null ? string.Empty : session.Model,
+                ActiveChatHtmlMode = session != null && session.HtmlModeEnabled,
                 Chats = _chatSessions.GetChatSummaries(activeId),
                 Settings = settings,
                 HasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey()),
@@ -127,7 +128,7 @@ namespace RNAssistant.Office
             {
                 var emptySession = LoadSession(chatId, true);
                 var emptyId = ChatStore.GetSessionId(emptySession);
-                return new SendChatResponse { Message = string.Empty, ToolResults = new object[0], ActiveChatId = emptyId, ActiveChatModel = emptySession.Model, Chats = _chatSessions.GetChatSummaries(emptyId), Context = LoadContext(emptySession), Messages = emptySession.Messages, ContextUsage = ContextUsageEstimator.FromSession(emptySession, _settingsService.Load()), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(emptySession.HtmlWorkspace) };
+                return new SendChatResponse { Message = string.Empty, ToolResults = new object[0], ActiveChatId = emptyId, ActiveChatModel = emptySession.Model, ActiveChatHtmlMode = emptySession.HtmlModeEnabled, Chats = _chatSessions.GetChatSummaries(emptyId), Context = LoadContext(emptySession), Messages = emptySession.Messages, ContextUsage = ContextUsageEstimator.FromSession(emptySession, _settingsService.Load()), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(emptySession.HtmlWorkspace) };
             }
 
             var settings = _settingsService.Load();
@@ -151,7 +152,7 @@ namespace RNAssistant.Office
                 StartChatTitleGeneration(session, text, completion.AssistantText, settings, chatStateChanged);
             }
 
-            return new SendChatResponse { Message = completion.AssistantText, ToolResults = completion.ToolResults, ActiveChatId = activeId, ActiveChatModel = session.Model, Chats = _chatSessions.GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace) };
+            return new SendChatResponse { Message = completion.AssistantText, ToolResults = completion.ToolResults, ActiveChatId = activeId, ActiveChatModel = session.Model, ActiveChatHtmlMode = session.HtmlModeEnabled, Chats = _chatSessions.GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace) };
         }
 
         private void StartChatTitleGeneration(ChatSession session, string userText, string assistantText, AppSettings settings, Action<ChatStateResponse> chatStateChanged)
@@ -216,6 +217,12 @@ namespace RNAssistant.Office
                     DocumentTitle = s.DocumentTitle,
                     Title = s.Title,
                     Model = s.Model,
+                    HtmlModeEnabled = s.HtmlModeEnabled,
+                    HasHtmlWorkspace = s.HtmlWorkspace != null &&
+                        ((s.HtmlWorkspace.Files != null && s.HtmlWorkspace.Files.Count > 0) ||
+                         (s.HtmlWorkspace.DataSources != null && s.HtmlWorkspace.DataSources.Count > 0)),
+                    HtmlFileCount = s.HtmlWorkspace == null || s.HtmlWorkspace.Files == null ? 0 : s.HtmlWorkspace.Files.Count,
+                    HtmlDataSourceCount = s.HtmlWorkspace == null || s.HtmlWorkspace.DataSources == null ? 0 : s.HtmlWorkspace.DataSources.Count,
                     CreatedUtc = s.CreatedUtc,
                     UpdatedUtc = s.UpdatedUtc,
                     MessageCount = s.Messages == null ? 0 : s.Messages.Count
@@ -226,6 +233,7 @@ namespace RNAssistant.Office
             {
                 ActiveChatId = activeId,
                 ActiveChatModel = active == null ? string.Empty : active.Model,
+                ActiveChatHtmlMode = active != null && active.HtmlModeEnabled,
                 Chats = chats
             };
         }

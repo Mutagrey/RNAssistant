@@ -155,6 +155,23 @@ namespace RNAssistant.MockDemo
                 token).ConfigureAwait(false);
             var htmlEditPayload = Payload(htmlEdit);
             AssertHtmlWorkspace(htmlEditPayload, true);
+
+            var htmlModeChat = await SendAsync(
+                bridge,
+                "7",
+                "createChat",
+                new { title = "Manual HTML mode" },
+                token).ConfigureAwait(false);
+            var htmlModeChatId = Payload(htmlModeChat)["activeChatId"].ToString();
+            await SendAsync(bridge, "8", "setChatModel", new { chatId = htmlModeChatId, model = model }, token).ConfigureAwait(false);
+            await SendAsync(bridge, "9", "setChatHtmlMode", new { chatId = htmlModeChatId, enabled = true }, token).ConfigureAwait(false);
+            var htmlModeCreate = await SendAsync(
+                bridge,
+                "10",
+                "sendChat",
+                new { chatId = htmlModeChatId, text = "Сделай отчет продаж." },
+                token).ConfigureAwait(false);
+            AssertHtmlWorkspace(Payload(htmlModeCreate), false);
         }
 
         private static void AssertHtmlWorkspace(JObject payload, bool expectEdit)

@@ -41,6 +41,43 @@ function appendContextPopover(chip, note) {
   chip.appendChild(popover);
 }
 
+function positionContextPopover(chip) {
+  var popover = chip.querySelector(".context-popover");
+  if (!popover) {
+    return;
+  }
+
+  var previousDisplay = popover.style.display;
+  var previousVisibility = popover.style.visibility;
+  popover.style.display = "block";
+  popover.style.visibility = "hidden";
+
+  var chipRect = chip.getBoundingClientRect();
+  var popoverRect = popover.getBoundingClientRect();
+  var gap = 8;
+  var viewportPadding = 12;
+  var maxLeft = Math.max(viewportPadding, window.innerWidth - popoverRect.width - viewportPadding);
+  var left = Math.min(Math.max(chipRect.left, viewportPadding), maxLeft);
+  var top = chipRect.top - popoverRect.height - gap;
+
+  if (top < viewportPadding) {
+    top = Math.min(chipRect.bottom + gap, window.innerHeight - popoverRect.height - viewportPadding);
+  }
+
+  popover.style.setProperty("--context-popover-left", left + "px");
+  popover.style.setProperty("--context-popover-top", Math.max(viewportPadding, top) + "px");
+  popover.style.display = previousDisplay;
+  popover.style.visibility = previousVisibility;
+}
+
+function bindContextPopover(chip) {
+  var update = function () {
+    positionContextPopover(chip);
+  };
+  chip.addEventListener("pointerenter", update);
+  chip.addEventListener("focusin", update);
+}
+
 function renderContextChips(notes) {
   var strip = $("contextStrip");
   var chips = $("contextChips");
@@ -68,6 +105,7 @@ function renderContextChips(notes) {
     chip.appendChild(main);
     chip.appendChild(createRemoveContextButton(note));
     appendContextPopover(chip, note);
+    bindContextPopover(chip);
     chips.appendChild(chip);
   });
 }

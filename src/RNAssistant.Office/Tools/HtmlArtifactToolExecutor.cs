@@ -17,6 +17,7 @@ namespace RNAssistant.Office.Tools
 
         private const int MaxHtmlChars = 300000;
         private const int MaxDataChars = 300000;
+        private const int MaxHistoryItems = 20;
 
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
@@ -25,12 +26,12 @@ namespace RNAssistant.Office.Tools
                 Id = RenderHtmlToolId,
                 Host = "Common",
                 Name = "render_html",
-                Description = "Read-only: Render a raw HTML component in chat when unsafe HTML artifacts are enabled.",
+                Description = "Legacy one-off inline chat artifact. Prefer common.html_workspace_upsert_file/data for HTML pages, reports, dashboards, or editable UI.",
                 ArgumentSchemaJson = "{\"title\":\"Component title\",\"html\":\"<html or fragment>\",\"height\":360}",
                 BuiltIn = true,
                 Enabled = true,
                 MutatesDocument = false,
-                AgentCanRun = true
+                AgentCanRun = false
             };
             yield return new ToolDefinition
             {
@@ -186,6 +187,10 @@ namespace RNAssistant.Office.Tools
             {
                 workspace.DataSources = new List<HtmlWorkspaceDataSource>();
             }
+            if (workspace.History == null)
+            {
+                workspace.History = new List<HtmlWorkspaceSnapshot>();
+            }
 
             foreach (var file in workspace.Files.Where(f => f != null))
             {
@@ -218,6 +223,45 @@ namespace RNAssistant.Office.Tools
                 }
             }
 
+            foreach (var snapshot in workspace.History.Where(h => h != null))
+            {
+                if (string.IsNullOrWhiteSpace(snapshot.Id))
+                {
+                    snapshot.Id = Guid.NewGuid().ToString("N");
+                }
+                snapshot.Label = string.IsNullOrWhiteSpace(snapshot.Label) ? "HTML workspace snapshot" : snapshot.Label.Trim();
+                if (snapshot.CreatedUtc == default(DateTime))
+                {
+                    snapshot.CreatedUtc = DateTime.UtcNow;
+                }
+                if (snapshot.Files == null)
+                {
+                    snapshot.Files = new List<HtmlWorkspaceFile>();
+                }
+                if (snapshot.DataSources == null)
+                {
+                    snapshot.DataSources = new List<HtmlWorkspaceDataSource>();
+                }
+                foreach (var file in snapshot.Files.Where(f => f != null))
+                {
+                    file.Path = NormalizePath(string.IsNullOrWhiteSpace(file.Path) ? file.Id : file.Path);
+                    file.Id = FileId(file.Path);
+                    file.Kind = NormalizeKind(file.Kind, file.Path);
+                    file.Content = file.Content ?? string.Empty;
+                }
+                foreach (var dataSource in snapshot.DataSources.Where(d => d != null))
+                {
+                    dataSource.Name = NormalizeDataName(string.IsNullOrWhiteSpace(dataSource.Name) ? dataSource.Id : dataSource.Name);
+                    dataSource.Id = DataSourceId(dataSource.Name);
+                    dataSource.Json = dataSource.Json ?? "{}";
+                }
+            }
+            workspace.History = workspace.History
+                .Where(h => h != null)
+                .OrderByDescending(h => h.CreatedUtc)
+                .Take(MaxHistoryItems)
+                .ToList();
+
             if (string.IsNullOrWhiteSpace(workspace.ActiveFileId) ||
                 !workspace.Files.Any(f => f != null && string.Equals(f.Id, workspace.ActiveFileId, StringComparison.OrdinalIgnoreCase)))
             {
@@ -243,6 +287,7 @@ namespace RNAssistant.Office.Tools
 
             ValidateFile(path, kind, content);
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
+            PushHistory(session.HtmlWorkspace, "Before saving " + NormalizePath(path));
             var normalizedPath = NormalizePath(path);
             var id = FileId(normalizedPath);
             var now = DateTime.UtcNow;
@@ -281,6 +326,7 @@ namespace RNAssistant.Office.Tools
 
             ValidateDataSource(name, json);
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
+            PushHistory(session.HtmlWorkspace, "Before saving data " + NormalizeDataName(name));
             var normalizedName = NormalizeDataName(name);
             var id = DataSourceId(normalizedName);
             var now = DateTime.UtcNow;
@@ -313,6 +359,7 @@ namespace RNAssistant.Office.Tools
 
             ValidatePath(path);
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
+            PushHistory(session.HtmlWorkspace, "Before selecting " + NormalizePath(path));
             var id = FileId(NormalizePath(path));
             var file = session.HtmlWorkspace.Files.FirstOrDefault(f =>
                 f != null && string.Equals(f.Id, id, StringComparison.OrdinalIgnoreCase));
@@ -324,6 +371,31 @@ namespace RNAssistant.Office.Tools
             session.HtmlWorkspace.ActiveFileId = file.Id;
             session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
             return file;
+        }
+
+        public static HtmlWorkspaceSnapshot RestoreSnapshot(ChatSession session, string snapshotId)
+        {
+            if (session == null)
+            {
+                throw new InvalidOperationException("Chat session is required.");
+            }
+
+            session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
+            var snapshot = string.IsNullOrWhiteSpace(snapshotId)
+                ? session.HtmlWorkspace.History.OrderByDescending(h => h.CreatedUtc).FirstOrDefault()
+                : session.HtmlWorkspace.History.FirstOrDefault(h => h != null && string.Equals(h.Id, snapshotId, StringComparison.OrdinalIgnoreCase));
+            if (snapshot == null)
+            {
+                throw new InvalidOperationException("HTML workspace snapshot was not found.");
+            }
+
+            session.HtmlWorkspace.Files = snapshot.Files.Where(f => f != null).Select(CloneFile).ToList();
+            session.HtmlWorkspace.DataSources = snapshot.DataSources.Where(d => d != null).Select(CloneDataSource).ToList();
+            session.HtmlWorkspace.ActiveFileId = snapshot.ActiveFileId;
+            session.HtmlWorkspace.History.RemoveAll(h => h != null && string.Equals(h.Id, snapshot.Id, StringComparison.OrdinalIgnoreCase));
+            session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
+            NormalizeWorkspace(session.HtmlWorkspace);
+            return snapshot;
         }
 
         private static ToolResult RenderHtmlArtifact(ToolCommand command, AppSettings settings)
@@ -364,6 +436,79 @@ namespace RNAssistant.Office.Tools
                 version = 1,
                 workspace = NormalizeWorkspace(workspace)
             });
+        }
+
+        private static void PushHistory(HtmlWorkspace workspace, string label)
+        {
+            workspace = NormalizeWorkspace(workspace);
+            if (!HasWorkspaceContent(workspace))
+            {
+                return;
+            }
+
+            var snapshot = new HtmlWorkspaceSnapshot
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Label = string.IsNullOrWhiteSpace(label) ? "HTML workspace snapshot" : label,
+                ActiveFileId = workspace.ActiveFileId,
+                Files = workspace.Files.Where(f => f != null).Select(CloneFile).ToList(),
+                DataSources = workspace.DataSources.Where(d => d != null).Select(CloneDataSource).ToList(),
+                CreatedUtc = DateTime.UtcNow
+            };
+            if (workspace.History.Count > 0 && SnapshotEquals(snapshot, workspace.History[0]))
+            {
+                return;
+            }
+
+            workspace.History.Insert(0, snapshot);
+            if (workspace.History.Count > MaxHistoryItems)
+            {
+                workspace.History.RemoveRange(MaxHistoryItems, workspace.History.Count - MaxHistoryItems);
+            }
+        }
+
+        private static bool HasWorkspaceContent(HtmlWorkspace workspace)
+        {
+            return workspace != null &&
+                (((workspace.Files != null) && workspace.Files.Any(f => f != null)) ||
+                 ((workspace.DataSources != null) && workspace.DataSources.Any(d => d != null)));
+        }
+
+        private static bool SnapshotEquals(HtmlWorkspaceSnapshot left, HtmlWorkspaceSnapshot right)
+        {
+            if (left == null || right == null)
+            {
+                return false;
+            }
+
+            return string.Equals(left.ActiveFileId, right.ActiveFileId, StringComparison.OrdinalIgnoreCase) &&
+                JsonConvert.SerializeObject(left.Files) == JsonConvert.SerializeObject(right.Files) &&
+                JsonConvert.SerializeObject(left.DataSources) == JsonConvert.SerializeObject(right.DataSources);
+        }
+
+        private static HtmlWorkspaceFile CloneFile(HtmlWorkspaceFile file)
+        {
+            return new HtmlWorkspaceFile
+            {
+                Id = file.Id,
+                Path = file.Path,
+                Kind = file.Kind,
+                Content = file.Content,
+                CreatedUtc = file.CreatedUtc,
+                UpdatedUtc = file.UpdatedUtc
+            };
+        }
+
+        private static HtmlWorkspaceDataSource CloneDataSource(HtmlWorkspaceDataSource dataSource)
+        {
+            return new HtmlWorkspaceDataSource
+            {
+                Id = dataSource.Id,
+                Name = dataSource.Name,
+                Json = dataSource.Json,
+                CreatedUtc = dataSource.CreatedUtc,
+                UpdatedUtc = dataSource.UpdatedUtc
+            };
         }
 
         private static void ValidateFile(string path, string kind, string content)

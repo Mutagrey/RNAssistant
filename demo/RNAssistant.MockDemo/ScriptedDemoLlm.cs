@@ -27,7 +27,8 @@ namespace RNAssistant.MockDemo
             var prompt = Flatten(messages);
             var lastUser = LastUserMessage(messages);
             var isMetaPrompt = IsAgentMetaPrompt(lastUser);
-            var isHtmlTask = isMetaPrompt ? LooksLikeHtmlConversation(prompt) : LooksLikeHtmlTask(lastUser);
+            var htmlModeEnabled = Contains(prompt, "HTML MODE IS ENABLED");
+            var isHtmlTask = htmlModeEnabled || (isMetaPrompt ? LooksLikeHtmlConversation(prompt) : LooksLikeHtmlTask(lastUser));
             var isHtmlEdit = isMetaPrompt ? LooksLikeHtmlEditConversation(prompt) : LooksLikeHtmlEdit(lastUser);
             string content;
 

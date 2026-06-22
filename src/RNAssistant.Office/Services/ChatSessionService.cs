@@ -147,11 +147,22 @@ namespace RNAssistant.Office.Services
                     DocumentTitle = s.DocumentTitle,
                     Title = s.Title,
                     Model = s.Model,
+                    HtmlModeEnabled = s.HtmlModeEnabled,
+                    HasHtmlWorkspace = HasHtmlWorkspace(s.HtmlWorkspace),
+                    HtmlFileCount = s.HtmlWorkspace == null || s.HtmlWorkspace.Files == null ? 0 : s.HtmlWorkspace.Files.Count,
+                    HtmlDataSourceCount = s.HtmlWorkspace == null || s.HtmlWorkspace.DataSources == null ? 0 : s.HtmlWorkspace.DataSources.Count,
                     CreatedUtc = s.CreatedUtc,
                     UpdatedUtc = s.UpdatedUtc,
                     MessageCount = s.Messages == null ? 0 : s.Messages.Count
                 })
                 .ToList();
+        }
+
+        private static bool HasHtmlWorkspace(HtmlWorkspace workspace)
+        {
+            return workspace != null &&
+                ((workspace.Files != null && workspace.Files.Count > 0) ||
+                 (workspace.DataSources != null && workspace.DataSources.Count > 0));
         }
 
         public static string BuildForkTitle(ChatSession source)

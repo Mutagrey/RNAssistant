@@ -16,11 +16,12 @@ function renderChatSessions() {
     var option = document.createElement("option");
     option.value = chatId(chat);
     var model = chatModel(chat);
-    option.textContent = chatTitle(chat) + " (" + chatMessageCount(chat) + ")" + (model ? " - " + model : "");
+    option.textContent = (chatHasHtml(chat) ? "[HTML] " : "") + chatTitle(chat) + " (" + chatMessageCount(chat) + ")" + (model ? " - " + model : "");
     select.appendChild(option);
   });
   select.value = state.activeChatId || "";
   select.disabled = !chats.length || state.bridgeUnavailable;
+  renderChatSessionList(chats);
 
   var hasActive = !!state.activeChatId;
   var hasMessages = !!(state.messages && state.messages.length);
@@ -29,6 +30,7 @@ function renderChatSessions() {
   $("clearChatButton").disabled = !hasActive || !hasMessages;
   $("clearChatButton").hidden = !hasActive || !hasMessages;
   $("deleteChatButton").disabled = !hasActive;
+  renderHtmlModeToggle();
 }
 
 function applyChatState(response) {
@@ -36,6 +38,9 @@ function applyChatState(response) {
   state.activeChatId = response.activeChatId || response.ActiveChatId || state.activeChatId || "";
   if (response.activeChatModel !== undefined || response.ActiveChatModel !== undefined) {
     state.activeChatModel = response.activeChatModel || response.ActiveChatModel || "";
+  }
+  if (response.activeChatHtmlMode !== undefined || response.ActiveChatHtmlMode !== undefined) {
+    state.activeChatHtmlMode = !!(response.activeChatHtmlMode || response.ActiveChatHtmlMode);
   }
   if (response.chats || response.Chats) {
     state.chats = response.chats || response.Chats || [];
@@ -62,6 +67,82 @@ function applyChatState(response) {
   if (typeof renderHtmlWorkspace === "function") {
     renderHtmlWorkspace();
   }
+}
+
+function renderChatSessionList(chats) {
+  var list = $("chatSessionList");
+  if (!list) {
+    return;
+  }
+
+  list.innerHTML = "";
+  if (!chats.length) {
+    list.classList.add("is-empty");
+    return;
+  }
+  list.classList.remove("is-empty");
+
+  chats.forEach(function (chat) {
+    var id = chatId(chat);
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "chat-session-row" + (id === state.activeChatId ? " active" : "");
+    button.disabled = !!state.bridgeUnavailable;
+    button.addEventListener("click", function () { selectChat(id); });
+
+    var title = document.createElement("span");
+    title.className = "chat-session-title";
+    title.textContent = chatTitle(chat);
+    button.appendChild(title);
+
+    var meta = document.createElement("span");
+    meta.className = "chat-session-meta";
+    meta.textContent = chatMessageCount(chat) + " msg" + (chatModel(chat) ? " · " + chatModel(chat) : "");
+    button.appendChild(meta);
+
+    if (chatHtmlModeEnabled(chat)) {
+      button.appendChild(createChatSessionBadge("HTML mode", "mode"));
+    } else if (chatHasHtml(chat)) {
+      button.appendChild(createChatSessionBadge("HTML " + chatHtmlFileCount(chat) + "/" + chatHtmlDataSourceCount(chat), "workspace"));
+    }
+    list.appendChild(button);
+  });
+}
+
+function createChatSessionBadge(text, kind) {
+  var badge = document.createElement("span");
+  badge.className = "chat-session-badge is-" + kind;
+  badge.textContent = text;
+  return badge;
+}
+
+function renderHtmlModeToggle() {
+  var button = $("toggleHtmlModeButton");
+  if (!button) {
+    return;
+  }
+
+  button.classList.toggle("active", !!state.activeChatHtmlMode);
+  button.setAttribute("aria-pressed", state.activeChatHtmlMode ? "true" : "false");
+  button.title = state.activeChatHtmlMode
+    ? "HTML mode включен: агент будет работать через HTML workspace"
+    : "Вести этот чат как HTML workspace";
+}
+
+function chatHasHtml(chat) {
+  return !!(chat && (chat.hasHtmlWorkspace || chat.HasHtmlWorkspace || chatHtmlModeEnabled(chat)));
+}
+
+function chatHtmlModeEnabled(chat) {
+  return !!(chat && (chat.htmlModeEnabled || chat.HtmlModeEnabled));
+}
+
+function chatHtmlFileCount(chat) {
+  return Number((chat && (chat.htmlFileCount || chat.HtmlFileCount)) || 0);
+}
+
+function chatHtmlDataSourceCount(chat) {
+  return Number((chat && (chat.htmlDataSourceCount || chat.HtmlDataSourceCount)) || 0);
 }
 
 function logToolResult(prefix, toolId, result) {

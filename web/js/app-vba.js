@@ -91,14 +91,13 @@ function renderVbaModuleList(modules, query) {
 
   var selectedName = $("vbaModuleSelect").value;
   groupVbaModules(modules).forEach(function (group) {
-    var section = document.createElement("div");
-    section.className = "vba-module-group";
+    var section = createResourceGroup({
+      key: "vba:" + group.label,
+      title: group.label,
+      count: group.modules.length
+    });
+    section.className += " vba-module-group";
     section.setAttribute("role", "group");
-
-    var title = document.createElement("div");
-    title.className = "vba-module-group-title";
-    title.textContent = group.label;
-    section.appendChild(title);
 
     group.modules.forEach(function (module) {
       var name = vbaModuleName(module);
@@ -110,6 +109,7 @@ function renderVbaModuleList(modules, query) {
         active: name === selectedName,
         meta: type + (lineCount ? " - " + lineCount + " строк" : ""),
         description: firstVbaProcedureName(vbaModuleCode(module)) || "VBA module",
+        compact: true,
         onClick: function () {
           $("vbaModuleSelect").value = name;
           state.vba.selectedModule = name;

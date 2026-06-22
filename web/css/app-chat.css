@@ -10,15 +10,19 @@
 .chatbar {
   display: flex;
   gap: 7px;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 8px;
   padding: 0 2px 8px;
   border-bottom: 1px solid #e7ebf1;
 }
 
-.chatbar select {
+.chat-session-picker {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.chatbar select {
+  width: 100%;
   height: 32px;
   border: 1px solid #cfd8e6;
   border-radius: 6px;
@@ -28,6 +32,85 @@
   font-size: 12px;
   font-weight: var(--label-font-weight);
   transition: border-color 0.12s ease, outline-color 0.12s ease;
+}
+
+.chat-session-list {
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+  margin-top: 5px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.chat-session-list.is-empty {
+  display: none;
+}
+
+.chat-session-row {
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) auto;
+  grid-template-areas:
+    "title badge"
+    "meta badge";
+  flex: 0 0 min(220px, 75vw);
+  align-items: center;
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid #d9e1ec;
+  border-radius: 7px;
+  padding: 5px 7px;
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+}
+
+.chat-session-row:hover,
+.chat-session-row.active {
+  border-color: rgba(37, 99, 235, 0.28);
+  background: var(--secondary-bg);
+}
+
+.chat-session-row.active {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.chat-session-title {
+  grid-area: title;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: var(--title-font-weight);
+}
+
+.chat-session-meta {
+  grid-area: meta;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: var(--meta-font-weight);
+}
+
+.chat-session-badge {
+  grid-area: badge;
+  justify-self: end;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  padding: 2px 6px;
+  background: #ecfdf3;
+  color: #027a48;
+  font-size: 10px;
+  font-weight: var(--label-font-weight);
+  white-space: nowrap;
+}
+
+.chat-session-badge.is-mode {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 .chatbar-actions {

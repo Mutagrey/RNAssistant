@@ -35,7 +35,7 @@ namespace RNAssistant.Office
             }
 
             var activeId = ChatStore.GetSessionId(session);
-            return new ChatStateResponse { ActiveChatId = activeId, ActiveChatModel = session.Model, Chats = _chatSessions.GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load()), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace) };
+            return new ChatStateResponse { ActiveChatId = activeId, ActiveChatModel = session.Model, ActiveChatHtmlMode = session.HtmlModeEnabled, Chats = _chatSessions.GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load()), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace) };
         }
 
         public ChatStateResponse ForkChat(string id, int index, string chatId = null)
@@ -58,6 +58,7 @@ namespace RNAssistant.Office
 
             var fork = _chatStore.Create(source.Host, source.DocumentKey, source.DocumentTitle, ChatSessionService.BuildForkTitle(source));
             fork.Model = source.Model;
+            fork.HtmlModeEnabled = source.HtmlModeEnabled;
             fork.Context = ChatCloneService.CloneContext(LoadContext(source)) ?? CreateEmptyContext();
             fork.HtmlWorkspace = ChatCloneService.CloneHtmlWorkspace(source.HtmlWorkspace);
             fork.Messages = targetIndex < 0
@@ -139,6 +140,14 @@ namespace RNAssistant.Office
             return ChatState(session);
         }
 
+        public ChatStateResponse SetChatHtmlMode(string chatId, bool enabled)
+        {
+            var session = LoadSession(chatId);
+            session.HtmlModeEnabled = enabled;
+            _chatStore.Save(session);
+            return ChatState(session);
+        }
+
         public ChatStateResponse ClearChat(string chatId)
         {
             var session = LoadSession(chatId);
@@ -171,6 +180,7 @@ namespace RNAssistant.Office
             {
                 ActiveChatId = activeId,
                 ActiveChatModel = session == null ? string.Empty : session.Model,
+                ActiveChatHtmlMode = session != null && session.HtmlModeEnabled,
                 Chats = _chatSessions.GetChatSummaries(activeId),
                 Context = session == null ? CreateEmptyContext() : LoadContext(session),
                 Messages = session == null ? new List<ChatMessage>() : session.Messages,

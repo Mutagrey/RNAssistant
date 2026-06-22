@@ -11,6 +11,10 @@ function renderTools() {
     enabled: function (tool) { return tool.Enabled !== false; },
     meta: function (tool) { return (tool.Host || "Common") + " - " + (tool.Executor || (tool.BuiltIn ? "builtin" : "pipeline")); },
     description: function (tool) { return tool.Description || (tool.BuiltIn ? "Встроенный Office-инструмент" : "Пользовательский инструмент"); },
+    groupKey: function (tool) { return (tool.Host || "Common") + ":" + (tool.BuiltIn ? "builtin" : "custom"); },
+    groupLabel: function (tool) { return (tool.Host || "Common") + " · " + (tool.BuiltIn ? "built-in" : "custom"); },
+    groupStoragePrefix: "tools",
+    compact: true,
     syncEditor: syncSelectedToolFromEditor,
     renderEditor: renderToolEditor,
     renderList: renderTools

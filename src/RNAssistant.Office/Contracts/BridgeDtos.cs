@@ -113,6 +113,12 @@ namespace RNAssistant.Office.Contracts
         public string Model { get; set; }
     }
 
+    public sealed class SetChatHtmlModePayload : ChatPayload
+    {
+        [JsonProperty("enabled")]
+        public bool? Enabled { get; set; }
+    }
+
     public sealed class SendChatPayload : ChatPayload
     {
         [JsonProperty("text")]
@@ -270,6 +276,12 @@ namespace RNAssistant.Office.Contracts
         public string Path { get; set; }
     }
 
+    public sealed class HtmlWorkspaceRestorePayload : ChatPayload
+    {
+        [JsonProperty("snapshotId")]
+        public string SnapshotId { get; set; }
+    }
+
     public sealed class RemoveContextItemPayload : ChatPayload
     {
         [JsonProperty("id")]
@@ -332,6 +344,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("activeChatModel")]
         public string ActiveChatModel { get; set; }
 
+        [JsonProperty("activeChatHtmlMode")]
+        public bool ActiveChatHtmlMode { get; set; }
+
         [JsonProperty("chats")]
         public IReadOnlyList<ChatSessionSummary> Chats { get; set; }
 
@@ -367,6 +382,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("activeChatModel")]
         public string ActiveChatModel { get; set; }
+
+        [JsonProperty("activeChatHtmlMode")]
+        public bool ActiveChatHtmlMode { get; set; }
 
         [JsonProperty("chats")]
         public IReadOnlyList<ChatSessionSummary> Chats { get; set; }

@@ -8,6 +8,7 @@
     var current = state.htmlWorkspace || {};
     current.files = prop(current, "Files", "files", []) || [];
     current.dataSources = prop(current, "DataSources", "dataSources", []) || [];
+    current.history = prop(current, "History", "history", []) || [];
     current.activeFileId = prop(current, "ActiveFileId", "activeFileId", "") || "";
     state.htmlWorkspace = current;
     return current;
@@ -19,6 +20,10 @@
 
   function dataSources() {
     return workspace().dataSources;
+  }
+
+  function historyItems() {
+    return workspace().history || [];
   }
 
   function fileId(file) {
@@ -181,11 +186,17 @@
       } else if (!files().length && !dataSources().length) {
         status.textContent = "HTML workspace пуст.";
       } else {
-        status.textContent = (files().length || 0) + " file(s), " + (dataSources().length || 0) + " data source(s)" + (state.htmlWorkspaceDirty ? " · не сохранено" : "");
+        status.textContent = (files().length || 0) + " file(s), " + (dataSources().length || 0) + " data source(s), " + historyItems().length + " version(s)" + (state.htmlWorkspaceDirty ? " · не сохранено" : "");
       }
     }
     if (save) {
       save.disabled = state.bridgeUnavailable || !selected;
+    }
+    if ($("undoHtmlWorkspaceButton")) {
+      $("undoHtmlWorkspaceButton").disabled = state.bridgeUnavailable || !historyItems().length;
+      $("undoHtmlWorkspaceButton").title = historyItems().length
+        ? "Вернуть: " + snapshotLabel(historyItems()[0])
+        : "Нет предыдущих версий";
     }
   }
 
@@ -223,9 +234,9 @@
     tree.innerHTML = "";
     var rendered = 0;
     var workspaceFiles = files();
-    rendered += renderFileGroup(tree, "Artifacts", workspaceFiles.filter(function (file) { return !isScriptFile(file); }), query);
-    rendered += renderFileGroup(tree, "Scripts", workspaceFiles.filter(isScriptFile), query);
-    rendered += renderDataGroup(tree, "Data", dataSources(), query);
+    rendered += renderFileGroup(tree, "Artifacts", "html-artifacts", workspaceFiles.filter(function (file) { return !isScriptFile(file); }), query);
+    rendered += renderFileGroup(tree, "Scripts", "html-scripts", workspaceFiles.filter(isScriptFile), query);
+    rendered += renderDataGroup(tree, "Data", "html-data", dataSources(), query);
     if (!rendered) {
       tree.appendChild(createResourceEmptyState(query ? "Ничего не найдено." : "Workspace пуст."));
     }
@@ -235,18 +246,10 @@
     return !query || String(text || "").toLowerCase().indexOf(query) >= 0;
   }
 
-  function appendGroupTitle(parent, label) {
-    var title = document.createElement("div");
-    title.className = "html-workspace-group-title";
-    title.textContent = label;
-    parent.appendChild(title);
-  }
-
-  function renderFileGroup(parent, label, items, query) {
+  function renderFileGroup(parent, label, key, items, query) {
     var count = 0;
-    var group = document.createElement("div");
-    group.className = "html-workspace-group";
-    appendGroupTitle(group, label);
+    var group = createResourceGroup({ key: key, title: label, count: items.length });
+    group.className += " html-workspace-group";
     items.forEach(function (file) {
       var text = [filePath(file), fileKind(file), fileContent(file)].join(" ");
       if (!matchesText(text, query)) {
@@ -256,7 +259,9 @@
         title: filePath(file),
         active: selectedKey() === selectionKey("file", fileId(file)),
         meta: fileKind(file) || "file",
+        icon: fileListIcon(file),
         description: firstLine(fileContent(file)) || "HTML workspace file",
+        compact: true,
         onClick: function () { selectHtmlWorkspaceItem("file", fileId(file)); }
       }));
       count += 1;
@@ -267,11 +272,10 @@
     return count;
   }
 
-  function renderDataGroup(parent, label, items, query) {
+  function renderDataGroup(parent, label, key, items, query) {
     var count = 0;
-    var group = document.createElement("div");
-    group.className = "html-workspace-group";
-    appendGroupTitle(group, label);
+    var group = createResourceGroup({ key: key, title: label, count: items.length });
+    group.className += " html-workspace-group";
     items.forEach(function (data) {
       var text = [dataName(data), dataJson(data)].join(" ");
       if (!matchesText(text, query)) {
@@ -281,7 +285,9 @@
         title: dataName(data),
         active: selectedKey() === selectionKey("data", dataId(data)),
         meta: "data/*.json",
+        icon: "JSON",
         description: firstLine(dataJson(data)) || "JSON data source",
+        compact: true,
         onClick: function () { selectHtmlWorkspaceItem("data", dataId(data)); }
       }));
       count += 1;
@@ -294,6 +300,21 @@
 
   function firstLine(value) {
     return String(value || "").split(/\r?\n/)[0].trim().slice(0, 140);
+  }
+
+  function fileListIcon(file) {
+    var kind = fileKind(file);
+    if (kind === "css") {
+      return "CSS";
+    }
+    if (isScriptFile(file)) {
+      return "JS";
+    }
+    return "HTML";
+  }
+
+  function snapshotLabel(snapshot) {
+    return prop(snapshot || {}, "Label", "label", "HTML workspace snapshot");
   }
 
   function selectHtmlWorkspaceItem(type, id) {
@@ -472,6 +493,29 @@
     }
   }
 
+  async function undoHtmlWorkspace() {
+    if (state.bridgeUnavailable || !historyItems().length) {
+      return;
+    }
+    if (state.htmlWorkspaceDirty && !window.confirm("Есть несохраненные изменения. Вернуть предыдущую версию?")) {
+      return;
+    }
+
+    setActivity("restoring", "Восстанавливаю HTML workspace...");
+    try {
+      applyHtmlWorkspaceResponse(await send("restoreHtmlWorkspaceSnapshot", {
+        chatId: state.activeChatId,
+        snapshotId: prop(historyItems()[0], "Id", "id", "")
+      }));
+      log("HTML workspace восстановлен.");
+    } catch (error) {
+      log(error.detail || error.message);
+      window.alert(error.message || "HTML workspace не восстановлен.");
+    } finally {
+      clearActivity();
+    }
+  }
+
   async function addHtmlWorkspaceFile(kind) {
     if (state.bridgeUnavailable) {
       return;
@@ -562,6 +606,7 @@
   function bindHtmlWorkspaceActions() {
     $("htmlWorkspaceSearchInput").addEventListener("input", renderHtmlWorkspaceList);
     $("saveHtmlWorkspaceButton").addEventListener("click", saveHtmlWorkspaceSelection);
+    $("undoHtmlWorkspaceButton").addEventListener("click", undoHtmlWorkspace);
     $("toggleHtmlSidebarButton").addEventListener("click", toggleHtmlWorkspaceSidebar);
     $("addHtmlFileButton").addEventListener("click", function () { addHtmlWorkspaceFile("html"); });
     $("addCssFileButton").addEventListener("click", function () { addHtmlWorkspaceFile("css"); });

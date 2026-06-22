@@ -143,6 +143,7 @@ function applyInitState(init) {
   state.htmlWorkspaceDirty = false;
   state.activeChatId = init.activeChatId || "";
   state.activeChatModel = init.activeChatModel || "";
+  state.activeChatHtmlMode = !!(init.activeChatHtmlMode || init.ActiveChatHtmlMode);
   state.chats = init.chats || [];
   state.messages = init.messages || [];
   $("docLine").textContent = formatOfficeContextLine(init.officeContext, init.host, init.title);
@@ -176,6 +177,7 @@ function applyBridgeUnavailableState(error) {
   state.officeContext = null;
   state.chats = [];
   state.activeChatId = "";
+  state.activeChatHtmlMode = false;
   state.messages = [];
   state.tools = [];
   state.skills = [];
@@ -302,6 +304,12 @@ function renderSendControls() {
   }
   if ($("toggleVbaContextButton")) {
     $("toggleVbaContextButton").disabled = isSending || state.bridgeUnavailable;
+  }
+  if ($("toggleHtmlModeButton")) {
+    $("toggleHtmlModeButton").disabled = isSending || state.bridgeUnavailable || !state.activeChatId;
+  }
+  if (typeof renderHtmlModeToggle === "function") {
+    renderHtmlModeToggle();
   }
   updateComposerInputState();
 }
@@ -485,11 +493,31 @@ async function runQuickAction(action) {
   switchTab("chat");
 }
 
+async function toggleChatHtmlMode() {
+  if (!state.activeChatId || state.bridgeUnavailable || state.activeSend) {
+    return;
+  }
+
+  setActivity("saving", "Переключаю HTML mode...");
+  try {
+    applyChatState(await send("setChatHtmlMode", {
+      chatId: state.activeChatId,
+      enabled: !state.activeChatHtmlMode
+    }));
+    log(state.activeChatHtmlMode ? "HTML mode включен." : "HTML mode выключен.");
+  } catch (error) {
+    log(error.detail || error.message);
+  } finally {
+    clearActivity();
+  }
+}
+
 function bindChatActions() {
   bindMessageScrollControls();
   $("refreshButton").addEventListener("click", initialize);
   $("chatSessionSelect").addEventListener("change", function () { selectChat($("chatSessionSelect").value); });
   $("newChatButton").addEventListener("click", createChat);
+  $("toggleHtmlModeButton").addEventListener("click", toggleChatHtmlMode);
   $("renameChatButton").addEventListener("click", renameChat);
   $("clearChatButton").addEventListener("click", clearChat);
   $("deleteChatButton").addEventListener("click", deleteChat);

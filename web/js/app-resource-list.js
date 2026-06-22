@@ -3,7 +3,7 @@ function createResourceListItem(options) {
 
   var item = document.createElement("button");
   item.type = "button";
-  item.className = "tool-list-item" + (options.active ? " active" : "");
+  item.className = "tool-list-item" + (options.active ? " active" : "") + (options.compact ? " is-compact" : "");
 
   var top = document.createElement("div");
   top.className = "tool-list-top";
@@ -12,6 +12,13 @@ function createResourceListItem(options) {
   title.className = "tool-list-title";
   title.textContent = options.title || "";
   top.appendChild(title);
+
+  if (options.icon) {
+    var icon = document.createElement("span");
+    icon.className = "tool-list-icon";
+    icon.textContent = options.icon;
+    top.appendChild(icon);
+  }
 
   if (typeof options.enabled === "boolean") {
     var badge = document.createElement("div");
@@ -32,13 +39,41 @@ function createResourceListItem(options) {
 
   item.appendChild(top);
   item.appendChild(meta);
-  item.appendChild(description);
+  if (!options.compact && options.description) {
+    item.appendChild(description);
+  }
 
   if (typeof options.onClick === "function") {
     item.addEventListener("click", options.onClick);
   }
 
   return item;
+}
+
+function createResourceGroup(options) {
+  options = options || {};
+  var key = options.key || options.title || "group";
+  var collapsed = state.collapsedResourceGroups && state.collapsedResourceGroups[key] === true;
+  var details = document.createElement("details");
+  details.className = "resource-tree-group";
+  details.open = !collapsed;
+
+  var summary = document.createElement("summary");
+  summary.className = "resource-tree-group-title";
+  var title = document.createElement("span");
+  title.textContent = options.title || "";
+  summary.appendChild(title);
+  if (options.count !== undefined) {
+    var count = document.createElement("em");
+    count.textContent = String(options.count);
+    summary.appendChild(count);
+  }
+  details.appendChild(summary);
+  details.addEventListener("toggle", function () {
+    state.collapsedResourceGroups = state.collapsedResourceGroups || {};
+    state.collapsedResourceGroups[key] = !details.open;
+  });
+  return details;
 }
 
 function createResourceEmptyState(text) {
@@ -75,24 +110,68 @@ function renderResourceList(options) {
   }
 
   var rendered = 0;
+  var grouped = [];
+  var groupMap = {};
   items.forEach(function (item, index) {
     if (query && !options.matches(item, query)) {
       return;
     }
 
-    list.appendChild(createResourceListItem({
+    var row = {
+      item: item,
+      index: index
+    };
+    if (typeof options.groupKey === "function") {
+      var key = options.groupKey(item) || "Other";
+      if (!groupMap[key]) {
+        groupMap[key] = {
+          key: key,
+          label: typeof options.groupLabel === "function" ? options.groupLabel(item, key) : key,
+          rows: []
+        };
+        grouped.push(groupMap[key]);
+      }
+      groupMap[key].rows.push(row);
+    } else {
+      grouped.push({
+        key: "flat",
+        label: "",
+        rows: [row],
+        flat: true
+      });
+    }
+    rendered += 1;
+  });
+
+  grouped.forEach(function (group) {
+    var parent = list;
+    if (!group.flat) {
+      parent = createResourceGroup({
+        key: (options.groupStoragePrefix || options.listId || "resource") + ":" + group.key,
+        title: group.label,
+        count: group.rows.length
+      });
+      list.appendChild(parent);
+    }
+
+    group.rows.forEach(function (row) {
+      var item = row.item;
+      var index = row.index;
+      parent.appendChild(createResourceListItem({
       title: options.title(item),
       enabled: options.enabled(item),
+      icon: typeof options.icon === "function" ? options.icon(item) : "",
       active: index === selectedIndex,
       meta: options.meta(item),
       description: options.description(item),
+      compact: !!options.compact,
       onClick: function () {
         options.syncEditor();
         options.setSelectedIndex(index);
         options.renderList();
       }
     }));
-    rendered += 1;
+    });
   });
 
   if (!rendered) {

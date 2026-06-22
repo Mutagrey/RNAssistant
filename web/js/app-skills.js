@@ -11,6 +11,10 @@ function renderSkills() {
     enabled: function (skill) { return skill.Enabled !== false; },
     meta: function (skill) { return (skill.Host || "Common") + " - " + (skill.BuiltIn ? "built-in" : "custom"); },
     description: function (skill) { return skill.Description || ((skill.Tags || []).join(", ") || "Инструкция навыка"); },
+    groupKey: function (skill) { return (skill.Host || "Common") + ":" + (skill.BuiltIn ? "builtin" : "custom"); },
+    groupLabel: function (skill) { return (skill.Host || "Common") + " · " + (skill.BuiltIn ? "built-in" : "custom"); },
+    groupStoragePrefix: "skills",
+    compact: true,
     syncEditor: syncSelectedSkillFromEditor,
     renderEditor: renderSkillEditor,
     renderList: renderSkills

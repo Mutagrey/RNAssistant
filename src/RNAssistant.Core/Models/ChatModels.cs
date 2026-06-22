@@ -51,6 +51,7 @@ namespace RNAssistant.Core.Models
         public string DocumentTitle { get; set; }
         public string Title { get; set; }
         public string Model { get; set; }
+        public bool HtmlModeEnabled { get; set; }
         public DateTime CreatedUtc { get; set; }
         public DateTime UpdatedUtc { get; set; }
         public DocumentContext Context { get; set; }
@@ -77,6 +78,10 @@ namespace RNAssistant.Core.Models
         public string DocumentTitle { get; set; }
         public string Title { get; set; }
         public string Model { get; set; }
+        public bool HtmlModeEnabled { get; set; }
+        public bool HasHtmlWorkspace { get; set; }
+        public int HtmlFileCount { get; set; }
+        public int HtmlDataSourceCount { get; set; }
         public DateTime CreatedUtc { get; set; }
         public DateTime UpdatedUtc { get; set; }
         public int MessageCount { get; set; }
@@ -87,13 +92,33 @@ namespace RNAssistant.Core.Models
         public string ActiveFileId { get; set; }
         public List<HtmlWorkspaceFile> Files { get; set; }
         public List<HtmlWorkspaceDataSource> DataSources { get; set; }
+        public List<HtmlWorkspaceSnapshot> History { get; set; }
         public DateTime UpdatedUtc { get; set; }
 
         public HtmlWorkspace()
         {
             Files = new List<HtmlWorkspaceFile>();
             DataSources = new List<HtmlWorkspaceDataSource>();
+            History = new List<HtmlWorkspaceSnapshot>();
             UpdatedUtc = DateTime.UtcNow;
+        }
+    }
+
+    public sealed class HtmlWorkspaceSnapshot
+    {
+        public string Id { get; set; }
+        public string Label { get; set; }
+        public string ActiveFileId { get; set; }
+        public List<HtmlWorkspaceFile> Files { get; set; }
+        public List<HtmlWorkspaceDataSource> DataSources { get; set; }
+        public DateTime CreatedUtc { get; set; }
+
+        public HtmlWorkspaceSnapshot()
+        {
+            Id = Guid.NewGuid().ToString("N");
+            Files = new List<HtmlWorkspaceFile>();
+            DataSources = new List<HtmlWorkspaceDataSource>();
+            CreatedUtc = DateTime.UtcNow;
         }
     }
 

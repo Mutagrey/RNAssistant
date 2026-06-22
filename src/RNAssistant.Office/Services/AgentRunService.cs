@@ -99,6 +99,15 @@ namespace RNAssistant.Office.Services
                 tools,
                 skills,
                 null);
+            if (session != null && session.HtmlModeEnabled)
+            {
+                systemPrompt += "\n\nHTML MODE IS ENABLED FOR THIS CHAT.\n" +
+                    "Treat this turn as an HTML workspace task unless the user explicitly says otherwise. " +
+                    "For an existing HTML workspace, call common.html_workspace_read before editing. " +
+                    "Create or update files with common.html_workspace_upsert_file using kind html, css, or script. " +
+                    "Create or update dynamic JSON data with common.html_workspace_upsert_data; preview exposes it as window.RNAssistantData[name]. " +
+                    "Do not use inline chat HTML artifact tools in HTML mode.";
+            }
             var contextPrompt = _promptComposer.ComposeContextPrompt(documentContext);
             if (!string.IsNullOrWhiteSpace(contextPrompt) && documentContext != null)
             {
@@ -437,7 +446,7 @@ namespace RNAssistant.Office.Services
         private static string AvailableToolIdsText(IEnumerable<ToolDefinition> tools)
         {
             var ids = (tools ?? new ToolDefinition[0])
-                .Where(tool => tool != null && tool.Enabled && !string.IsNullOrWhiteSpace(tool.Id))
+                .Where(tool => tool != null && tool.Enabled && (tool.AgentCanRun || tool.MutatesDocument || tool.RequiresConfirmation) && !string.IsNullOrWhiteSpace(tool.Id))
                 .Select(tool => tool.Id)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(id => id)

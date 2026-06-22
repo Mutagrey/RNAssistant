@@ -52,6 +52,11 @@ namespace RNAssistant.Core.Llm
             builder.AppendLine("Use only these exact tool ids in rnassistant-agent steps. Copy the full id, including the host prefix before the dot.");
             foreach (var tool in tools)
             {
+                if (tool == null || !tool.Enabled || (!tool.AgentCanRun && !tool.MutatesDocument && !tool.RequiresConfirmation))
+                {
+                    continue;
+                }
+
                 builder.AppendLine("- " + tool.Id + " (" + tool.Host + "): " + tool.Description);
                 builder.AppendLine("  mode: " + ToolMode(tool));
                 builder.AppendLine("  confirmation: " + ToolConfirmation(tool));

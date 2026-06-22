@@ -79,6 +79,10 @@
       enabled: function () { return null; },
       meta: function (def) { return def.group + " - " + def.field; },
       description: function (def) { return def.description; },
+      groupKey: function (def) { return def.group; },
+      groupLabel: function (def) { return def.group; },
+      groupStoragePrefix: "prompts",
+      compact: true,
       syncEditor: syncSelectedPromptFromEditor,
       renderEditor: renderPromptEditor,
       renderList: renderPromptList

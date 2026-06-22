@@ -205,6 +205,22 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void HtmlWorkspaceUndoRestoresPreviousVersion()
+        {
+            var session = new ChatSession { Title = "HTML undo" };
+            HtmlArtifactToolExecutor.UpsertDataSource(session, "sales", "{\"rows\":[1]}");
+            HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "<h1>First</h1>", true);
+            HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "<h1>Second</h1>", true);
+
+            AssertTrue(session.HtmlWorkspace.History.Count > 0, "html history created");
+            var historyCount = session.HtmlWorkspace.History.Count;
+            HtmlArtifactToolExecutor.RestoreSnapshot(session, session.HtmlWorkspace.History[0].Id);
+            AssertContains(session.HtmlWorkspace.Files[0].Content, "First", "html undo restores previous file content");
+            AssertEqual("index.html", session.HtmlWorkspace.ActiveFileId, "html undo keeps active file");
+            AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "html undo keeps data");
+            AssertEqual(historyCount - 1, session.HtmlWorkspace.History.Count, "html undo consumes restored version");
+        }
+
         private static void ChatAgentCreatesHtmlWorkspace()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
@@ -237,6 +253,31 @@ namespace RNAssistant.Harness
                 AssertContains(FlattenMessages(calls[0]), "common.html_workspace_upsert_file", "prompt exposes html file tool");
                 AssertContains(FlattenMessages(calls[0]), "html|css|script", "prompt exposes script file kind");
                 AssertContains(FlattenMessages(calls[0]), "window.RNAssistantData", "prompt explains data injection");
+            });
+        }
+
+        private static void ChatHtmlModeForcesWorkspacePrompt()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(adapter, executor, calls, "Готово.");
+                var session = NewSession(adapter);
+                session.HtmlModeEnabled = true;
+
+                service.ExecuteAsync(
+                    "Сделай отчет по продажам.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000 },
+                    new List<ToolDefinition>(executor.GetControllerTools()),
+                    null).GetAwaiter().GetResult();
+
+                var prompt = FlattenMessages(calls[0]);
+                AssertContains(prompt, "HTML MODE IS ENABLED", "html mode prompt marker");
+                AssertContains(prompt, "common.html_workspace_upsert_file", "html mode exposes workspace file tool");
+                AssertContains(prompt, "common.html_workspace_upsert_data", "html mode exposes data tool");
+                AssertTrue(prompt.IndexOf("common.render_html", StringComparison.OrdinalIgnoreCase) < 0, "html mode prompt omits legacy inline render tool");
             });
         }
 
