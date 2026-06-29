@@ -89,8 +89,9 @@ namespace RNAssistant.Core.Llm
                     }
                 }
 
-                var apiMessages = ToApiMessages(messages);
-                var hasImages = messages != null && messages.Any(m =>
+                var messageList = messages == null ? new List<ChatMessage>() : messages.ToList();
+                var apiMessages = ToApiMessages(messageList);
+                var hasImages = messageList.Any(m =>
                     m != null && m.Attachments != null && m.Attachments.Any(a => a != null && a.Kind == "image"));
                 if (apiMessages.Count == 0)
                 {

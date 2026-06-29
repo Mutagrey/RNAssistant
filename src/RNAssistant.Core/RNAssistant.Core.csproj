@@ -50,27 +50,27 @@
       <Private>True</Private>
     </Reference>
     <Reference Include="UglyToad.PdfPig">
-      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net462\UglyToad.PdfPig.dll</HintPath>
+      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net471\UglyToad.PdfPig.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="UglyToad.PdfPig.Core">
-      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net462\UglyToad.PdfPig.Core.dll</HintPath>
+      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net471\UglyToad.PdfPig.Core.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="UglyToad.PdfPig.DocumentLayoutAnalysis">
-      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net462\UglyToad.PdfPig.DocumentLayoutAnalysis.dll</HintPath>
+      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net471\UglyToad.PdfPig.DocumentLayoutAnalysis.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="UglyToad.PdfPig.Fonts">
-      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net462\UglyToad.PdfPig.Fonts.dll</HintPath>
+      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net471\UglyToad.PdfPig.Fonts.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="UglyToad.PdfPig.Tokenization">
-      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net462\UglyToad.PdfPig.Tokenization.dll</HintPath>
+      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net471\UglyToad.PdfPig.Tokenization.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="UglyToad.PdfPig.Tokens">
-      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net462\UglyToad.PdfPig.Tokens.dll</HintPath>
+      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net471\UglyToad.PdfPig.Tokens.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System" />

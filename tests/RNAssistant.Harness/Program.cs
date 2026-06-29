@@ -63,6 +63,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "attachments: multimodal api payload", Run = AttachmentMultimodalApiPayload },
                 new HarnessTest { Name = "attachments: extracts pdf text", Run = AttachmentExtractsPdfText },
                 new HarnessTest { Name = "attachments: rejects unsupported file", Run = AttachmentRejectsUnsupportedFile },
+                new HarnessTest { Name = "attachments: cleans stale drafts", Run = AttachmentCleansStaleDrafts },
                 new HarnessTest { Name = "chat sessions: document key migration", Run = ChatSessionServiceMigratesDocumentKey },
                 new HarnessTest { Name = "chat sessions: legacy document key migration", Run = ChatSessionServiceMigratesLegacyDocumentKey },
                 new HarnessTest { Name = "chat sessions: stale requested id fallback", Run = ChatSessionServiceFallsBackForStaleRequestedId },

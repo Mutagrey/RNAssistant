@@ -90,5 +90,26 @@ namespace RNAssistant.Harness
                 AssertTrue(rejected, "unsupported attachment");
             });
         }
+
+        private static void AttachmentCleansStaleDrafts()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var store = new AttachmentStore(paths);
+                var attachment = store.Import(
+                    "old.txt",
+                    "text/plain",
+                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("old")));
+                store.SaveDraftMetadata(attachment);
+                var staging = Path.Combine(paths.AttachmentDirectory, "staging");
+                foreach (var path in Directory.GetFiles(staging, attachment.Id + ".*"))
+                {
+                    File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddDays(-2));
+                }
+
+                new AttachmentStore(paths);
+                AssertEqual(0, Directory.GetFiles(staging, attachment.Id + ".*").Length, "stale draft files");
+            });
+        }
     }
 }

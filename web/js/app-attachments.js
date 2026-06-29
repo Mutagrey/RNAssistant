@@ -22,9 +22,14 @@ function activeModelSupportsImages() {
   if (typeof findModel !== "function") return null;
   var model = findModel(activeChatModel() || settingsModel());
   if (!model) return null;
-  if (model.supportsImages !== null && model.supportsImages !== undefined) return !!model.supportsImages;
+  if (model.supportsImages !== null && model.supportsImages !== undefined) {
+    if (typeof model.supportsImages === "string") return model.supportsImages.toLowerCase() === "true";
+    return !!model.supportsImages;
+  }
   var modalities = model.inputModalities || [];
-  if (modalities.length) return modalities.indexOf("image") >= 0;
+  if (modalities.length) {
+    return modalities.some(function (item) { return String(item || "").toLowerCase() === "image"; });
+  }
   return null;
 }
 
@@ -79,6 +84,7 @@ async function addAttachmentFiles(files) {
     }
   } catch (error) {
     log(error.detail || error.message);
+    return;
   } finally {
     clearActivity();
   }
@@ -89,6 +95,7 @@ async function removeDraftAttachment(item) {
     await send("deleteDraftAttachment", { id: attachmentId(item) });
   } catch (error) {
     log(error.detail || error.message);
+    return;
   }
   if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
   state.draftAttachments = state.draftAttachments.filter(function (candidate) { return attachmentId(candidate) !== attachmentId(item); });
@@ -170,7 +177,14 @@ function bindAttachmentActions() {
     });
   });
   $("chatInput").addEventListener("paste", function (event) {
-    var files = event.clipboardData && event.clipboardData.files;
+    var clipboard = event.clipboardData;
+    var files = clipboard && clipboard.files ? Array.prototype.slice.call(clipboard.files) : [];
+    if (!files.length && clipboard && clipboard.items) {
+      files = Array.prototype.slice.call(clipboard.items)
+        .filter(function (item) { return item.kind === "file"; })
+        .map(function (item) { return item.getAsFile(); })
+        .filter(function (file) { return !!file; });
+    }
     if (files && files.length) {
       event.preventDefault();
       addAttachmentFiles(files);

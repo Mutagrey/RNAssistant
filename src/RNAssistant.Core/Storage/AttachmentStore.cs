@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using RNAssistant.Core.Models;
 using UglyToad.PdfPig;
+using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
 
 namespace RNAssistant.Core.Storage
 {
@@ -19,6 +20,7 @@ namespace RNAssistant.Core.Storage
         public AttachmentStore(AppDataPaths paths)
         {
             _paths = paths ?? throw new ArgumentNullException("paths");
+            CleanupExpiredDrafts(DateTime.UtcNow.AddDays(-1));
         }
 
         public ChatAttachment Import(string fileName, string contentType, string base64)
@@ -222,7 +224,7 @@ namespace RNAssistant.Core.Storage
                     {
                         break;
                     }
-                    builder.AppendLine(page.Text);
+                    builder.AppendLine(ContentOrderTextExtractor.GetText(page));
                 }
             }
             SetExtractedText(attachment, builder.ToString());
@@ -243,6 +245,31 @@ namespace RNAssistant.Core.Storage
                 return null;
             }
             return Newtonsoft.Json.JsonConvert.DeserializeObject<ChatAttachment>(File.ReadAllText(path, Encoding.UTF8));
+        }
+
+        private void CleanupExpiredDrafts(DateTime cutoffUtc)
+        {
+            var directory = StagingDirectory();
+            if (!Directory.Exists(directory))
+            {
+                return;
+            }
+            try
+            {
+                foreach (var path in Directory.GetFiles(directory))
+                {
+                    if (File.GetLastWriteTimeUtc(path) < cutoffUtc)
+                    {
+                        SafeDeleteFile(path);
+                    }
+                }
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
         }
 
         private string StagingDirectory() { return Path.Combine(_paths.AttachmentDirectory, "staging"); }
