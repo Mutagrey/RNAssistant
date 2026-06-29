@@ -188,6 +188,16 @@ function renderMessageArticle(message, index) {
   var node = document.createElement("article");
   node.className = "message " + messageRole(message) + (message.Pending ? " pending" : "") + (message.Failed ? " failed" : "");
   var activity = messageActivity(message);
+  var attachments = messageAttachments(message);
+
+  if (attachments.length) {
+    var attachmentBox = document.createElement("div");
+    attachmentBox.className = "message-attachments";
+    attachments.forEach(function (attachment) {
+      attachmentBox.appendChild(attachmentCard(attachment, false));
+    });
+    node.appendChild(attachmentBox);
+  }
 
   var body = document.createElement("div");
   if (activity) {

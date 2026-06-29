@@ -274,6 +274,13 @@ namespace RNAssistant.Core.Storage
             {
                 session.Messages = new List<ChatMessage>();
             }
+            foreach (var message in session.Messages.Where(m => m != null))
+            {
+                if (message.Attachments == null)
+                {
+                    message.Attachments = new List<ChatAttachment>();
+                }
+            }
             if (session.Context == null)
             {
                 session.Context = new DocumentContext();

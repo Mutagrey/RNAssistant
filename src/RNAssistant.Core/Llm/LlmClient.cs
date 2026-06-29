@@ -25,10 +25,12 @@ namespace RNAssistant.Core.Llm
     public sealed class LlmClient
     {
         private readonly Func<string> _apiKeyProvider;
+        private readonly Func<ChatAttachment, byte[]> _attachmentReader;
 
-        public LlmClient(Func<string> apiKeyProvider)
+        public LlmClient(Func<string> apiKeyProvider, Func<ChatAttachment, byte[]> attachmentReader = null)
         {
             _apiKeyProvider = apiKeyProvider;
+            _attachmentReader = attachmentReader;
         }
 
         public async Task<LlmCompletionResult> CompleteAsync(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken = default(CancellationToken))
@@ -88,6 +90,8 @@ namespace RNAssistant.Core.Llm
                 }
 
                 var apiMessages = ToApiMessages(messages);
+                var hasImages = messages != null && messages.Any(m =>
+                    m != null && m.Attachments != null && m.Attachments.Any(a => a != null && a.Kind == "image"));
                 if (apiMessages.Count == 0)
                 {
                     throw new InvalidOperationException("LLM request has no messages.");
@@ -118,6 +122,12 @@ namespace RNAssistant.Core.Llm
                     var responseJson = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                     if (!response.IsSuccessStatusCode)
                     {
+                        if (hasImages && (int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
+                        {
+                            throw new InvalidOperationException(
+                                "Выбранная модель или endpoint не принял изображения. Выберите мультимодальную модель с supports_images/input_modalities=image. HTTP " +
+                                (int)response.StatusCode + ". Response: " + responseJson);
+                        }
                         throw new InvalidOperationException("LLM request failed: HTTP " + (int)response.StatusCode + " " + response.ReasonPhrase + ". " + diagnostics + ". Response: " + responseJson);
                     }
 
@@ -404,7 +414,7 @@ namespace RNAssistant.Core.Llm
                 ". Headers: [" + string.Join(", ", headerNames.ToArray()) + "]";
         }
 
-        private static List<object> ToApiMessages(IEnumerable<ChatMessage> messages)
+        private List<object> ToApiMessages(IEnumerable<ChatMessage> messages)
         {
             var result = new List<object>();
             if (messages == null)
@@ -419,14 +429,57 @@ namespace RNAssistant.Core.Llm
                     continue;
                 }
 
-                result.Add(new
+                var attachments = message.Attachments ?? new List<ChatAttachment>();
+                var text = AppendExtractedText(message.Content ?? string.Empty, attachments);
+                var images = attachments.Where(a => a != null && a.Kind == "image").ToList();
+                if (images.Count == 0)
                 {
-                    role = message.Role,
-                    content = message.Content ?? string.Empty
-                });
+                    result.Add(new { role = message.Role, content = text });
+                    continue;
+                }
+
+                var parts = new List<object> { new { type = "text", text = text } };
+                foreach (var image in images)
+                {
+                    var bytes = _attachmentReader == null ? null : _attachmentReader(image);
+                    if (bytes == null || bytes.Length == 0)
+                    {
+                        throw new InvalidOperationException("Attachment file is missing: " + (image.FileName ?? image.Id));
+                    }
+                    parts.Add(new
+                    {
+                        type = "image_url",
+                        image_url = new { url = "data:" + image.ContentType + ";base64," + Convert.ToBase64String(bytes) }
+                    });
+                }
+                result.Add(new { role = message.Role, content = parts });
             }
 
             return result;
+        }
+
+        private static string AppendExtractedText(string content, IEnumerable<ChatAttachment> attachments)
+        {
+            var builder = new StringBuilder(content ?? string.Empty);
+            foreach (var attachment in attachments ?? new ChatAttachment[0])
+            {
+                if (attachment == null || string.IsNullOrWhiteSpace(attachment.ExtractedText))
+                {
+                    continue;
+                }
+                builder.AppendLine();
+                builder.AppendLine();
+                builder.AppendLine("[Attachment: " + attachment.FileName + "]");
+                builder.Append(attachment.ExtractedText);
+                if (attachment.TextTruncated)
+                {
+                    builder.AppendLine();
+                    builder.Append("[Content truncated]");
+                }
+                builder.AppendLine();
+                builder.Append("[End attachment]");
+            }
+            return builder.ToString();
         }
     }
 }

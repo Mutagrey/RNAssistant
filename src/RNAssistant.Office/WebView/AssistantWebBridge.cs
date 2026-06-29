@@ -94,9 +94,20 @@ namespace RNAssistant.Office.WebView
                         responsePayload = await _controller.SendChatAsync(
                             sendChat.Text,
                             sendChat.ChatId,
+                            sendChat.AttachmentIds,
                             (phase, message, activity) => ReportProgress(id, phase, message, activity),
                             ReportChatState,
                             cancellationToken);
+                        break;
+                    case "importAttachment":
+                        var importAttachment = Payload<ImportAttachmentPayload>(payload);
+                        responsePayload = _controller.ImportAttachment(
+                            importAttachment.FileName,
+                            importAttachment.ContentType,
+                            importAttachment.Base64);
+                        break;
+                    case "deleteDraftAttachment":
+                        responsePayload = _controller.DeleteDraftAttachment(Payload<DeleteDraftAttachmentPayload>(payload).Id);
                         break;
                     case "deleteMessage":
                         var deleteMessage = Payload<MessageActionPayload>(payload);

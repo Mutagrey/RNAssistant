@@ -59,12 +59,37 @@ namespace RNAssistant.Office.Services
                 Id = message.Id,
                 Role = message.Role,
                 Content = message.Content,
+                Attachments = message.Attachments == null
+                    ? new List<ChatAttachment>()
+                    : message.Attachments.Select(CloneAttachment).ToList(),
                 Activity = CloneActivity(message.Activity),
                 PromptTokens = message.PromptTokens,
                 CompletionTokens = message.CompletionTokens,
                 TotalTokens = message.TotalTokens,
                 UsageJson = message.UsageJson,
                 CreatedUtc = message.CreatedUtc
+            };
+        }
+
+        private static ChatAttachment CloneAttachment(ChatAttachment attachment)
+        {
+            if (attachment == null)
+            {
+                return null;
+            }
+            return new ChatAttachment
+            {
+                Id = attachment.Id,
+                FileName = attachment.FileName,
+                ContentType = attachment.ContentType,
+                Size = attachment.Size,
+                Kind = attachment.Kind,
+                RelativePath = attachment.RelativePath,
+                ExtractedText = attachment.ExtractedText,
+                TextTruncated = attachment.TextTruncated,
+                Status = attachment.Status,
+                Error = attachment.Error,
+                CreatedUtc = attachment.CreatedUtc
             };
         }
 

@@ -16,6 +16,7 @@ namespace RNAssistant.Core.Storage
         public string ChatDirectory { get; private set; }
         public string ContextDirectory { get; private set; }
         public string WebViewUserDataDirectory { get; private set; }
+        public string AttachmentDirectory { get; private set; }
 
         public static AppDataPaths CreateDefault()
         {
@@ -40,6 +41,7 @@ namespace RNAssistant.Core.Storage
                 VbaBackupDirectory = Path.Combine(root, "vba-backups"),
                 ChatDirectory = Path.Combine(root, "chats"),
                 ContextDirectory = Path.Combine(root, "contexts"),
+                AttachmentDirectory = Path.Combine(root, "attachments"),
                 WebViewUserDataDirectory = Path.Combine(root, "webview")
             };
             paths.Ensure();
@@ -54,6 +56,7 @@ namespace RNAssistant.Core.Storage
             Directory.CreateDirectory(VbaBackupDirectory);
             Directory.CreateDirectory(ChatDirectory);
             Directory.CreateDirectory(ContextDirectory);
+            Directory.CreateDirectory(AttachmentDirectory);
             Directory.CreateDirectory(WebViewUserDataDirectory);
         }
 
@@ -62,6 +65,7 @@ namespace RNAssistant.Core.Storage
             ClearDirectory(ChatDirectory);
             ClearDirectory(ContextDirectory);
             ClearDirectory(VbaBackupDirectory);
+            ClearDirectory(AttachmentDirectory);
             ClearDirectory(WebViewUserDataDirectory);
             Ensure();
         }

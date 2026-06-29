@@ -16,6 +16,10 @@
     return objectValue(message, "Content", "content", "") || "";
   };
 
+  window.messageAttachments = function (message) {
+    return objectValue(message, "Attachments", "attachments", []) || [];
+  };
+
   window.messageActivity = function (message) {
     return objectValue(message, "Activity", "activity", null);
   };

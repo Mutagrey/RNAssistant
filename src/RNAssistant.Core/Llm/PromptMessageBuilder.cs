@@ -21,7 +21,7 @@ namespace RNAssistant.Core.Llm
             foreach (var message in (sessionMessages ?? new ChatMessage[0]).Reverse())
             {
                 var promptContent = ContentForPrompt(message);
-                if (string.IsNullOrEmpty(promptContent))
+                if (string.IsNullOrEmpty(promptContent) && (message.Attachments == null || message.Attachments.Count == 0))
                 {
                     continue;
                 }
@@ -37,6 +37,7 @@ namespace RNAssistant.Core.Llm
                     Id = message.Id,
                     Role = message.Role,
                     Content = promptContent,
+                    Attachments = message.Attachments == null ? new List<ChatAttachment>() : new List<ChatAttachment>(message.Attachments),
                     PromptTokens = message.PromptTokens,
                     CompletionTokens = message.CompletionTokens,
                     TotalTokens = message.TotalTokens,
@@ -137,6 +138,9 @@ namespace RNAssistant.Core.Llm
                     }
 
                     used += (message.Content ?? string.Empty).Length;
+                    used += (message.Attachments ?? new List<ChatAttachment>())
+                        .Where(a => a != null)
+                        .Sum(a => (a.ExtractedText ?? string.Empty).Length);
                     count += 1;
                 }
             }
@@ -159,6 +163,9 @@ namespace RNAssistant.Core.Llm
                     }
 
                     used += (message.Content ?? string.Empty).Length;
+                    used += (message.Attachments ?? new List<ChatAttachment>())
+                        .Where(a => a != null)
+                        .Sum(a => (a.ExtractedText ?? string.Empty).Length);
                     count += 1;
                 }
             }

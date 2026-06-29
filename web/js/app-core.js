@@ -13,6 +13,7 @@ var state = {
   activeChatHtmlMode: false,
   bridgeToken: "",
   messages: [],
+  draftAttachments: [],
   failedSend: null,
   activeSend: null,
   liveActivity: null,

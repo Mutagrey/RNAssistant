@@ -116,6 +116,7 @@ namespace RNAssistant.Office
         public Task<SendChatResponse> SendChatAsync(
             string text,
             string chatId = null,
+            IReadOnlyList<string> attachmentIds = null,
             Action<string, string, ChatActivity> progress = null,
             Action<ChatStateResponse> chatStateChanged = null,
             CancellationToken cancellationToken = default(CancellationToken))
@@ -133,6 +134,16 @@ namespace RNAssistant.Office
             }
             return Task.FromResult(new SendChatResponse { Message = "ok" });
         }
+
+        public AttachmentResponse ImportAttachment(string fileName, string contentType, string base64)
+        {
+            return new AttachmentResponse
+            {
+                Attachment = new ChatAttachment { FileName = fileName, ContentType = contentType, Kind = "image" }
+            };
+        }
+
+        public object DeleteDraftAttachment(string id) { return new { deleted = true }; }
 
         public ToolResult RunTool(string toolId, IDictionary<string, object> arguments, bool dryRun, Action<string, string> progress = null, CancellationToken cancellationToken = default(CancellationToken))
         {

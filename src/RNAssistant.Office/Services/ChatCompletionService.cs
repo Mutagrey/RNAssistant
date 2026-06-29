@@ -40,8 +40,23 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<SkillDefinition> skills = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
+            return ExecuteAsync(text, session, documentContext, settings, tools, null, progress, pendingToolRegistrar, skills, cancellationToken);
+        }
+
+        public Task<ChatCompletionResult> ExecuteAsync(
+            string text,
+            ChatSession session,
+            DocumentContext documentContext,
+            AppSettings settings,
+            IReadOnlyList<ToolDefinition> tools,
+            IReadOnlyList<ChatAttachment> attachments,
+            Action<string, string, ChatActivity> progress,
+            PendingToolRegistrar pendingToolRegistrar = null,
+            IReadOnlyList<SkillDefinition> skills = null,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
             ApplyChatModel(settings, session);
-            return _agentRunService.RunUserTurnAsync(text, session, documentContext, settings, tools, progress, pendingToolRegistrar, skills, cancellationToken);
+            return _agentRunService.RunUserTurnAsync(text, session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, cancellationToken);
         }
 
         public Task<ChatCompletionResult> ContinueAfterToolAsync(

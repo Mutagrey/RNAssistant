@@ -123,6 +123,27 @@ namespace RNAssistant.Office.Contracts
     {
         [JsonProperty("text")]
         public string Text { get; set; }
+
+        [JsonProperty("attachmentIds")]
+        public List<string> AttachmentIds { get; set; }
+    }
+
+    public sealed class ImportAttachmentPayload
+    {
+        [JsonProperty("fileName")]
+        public string FileName { get; set; }
+
+        [JsonProperty("contentType")]
+        public string ContentType { get; set; }
+
+        [JsonProperty("base64")]
+        public string Base64 { get; set; }
+    }
+
+    public sealed class DeleteDraftAttachmentPayload
+    {
+        [JsonProperty("id")]
+        public string Id { get; set; }
     }
 
     public sealed class CancelRequestPayload
@@ -433,5 +454,10 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("toolResults")]
         public IReadOnlyList<object> ToolResults { get; set; }
+    }
+
+    public sealed class AttachmentResponse
+    {
+        public ChatAttachment Attachment { get; set; }
     }
 }

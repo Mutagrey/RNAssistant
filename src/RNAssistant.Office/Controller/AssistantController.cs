@@ -19,6 +19,7 @@ namespace RNAssistant.Office
         private readonly AppDataPaths _paths;
         private readonly SettingsService _settingsService;
         private readonly ChatStore _chatStore;
+        private readonly AttachmentStore _attachmentStore;
         private readonly ToolStore _toolStore;
         private readonly SkillStore _skillStore;
         private readonly VbaBackupStore _vbaBackupStore;
@@ -47,6 +48,7 @@ namespace RNAssistant.Office
             _paths = paths ?? AppDataPaths.CreateDefault();
             _settingsService = new SettingsService(_paths);
             _chatStore = new ChatStore(_paths);
+            _attachmentStore = new AttachmentStore(_paths);
             _toolStore = new ToolStore(_paths);
             _skillStore = new SkillStore(_paths);
             _vbaBackupStore = new VbaBackupStore(_paths);
@@ -60,7 +62,7 @@ namespace RNAssistant.Office
             _toolCatalog = new ToolCatalogService(_adapter, _toolExecutor, _toolStore);
             _skillCatalog = new SkillCatalogService(_adapter, _skillStore);
             _chatSessions = new ChatSessionService(_adapter, _chatStore);
-            _llmClient = new LlmClient(() => _settingsService.LoadApiKey());
+            _llmClient = new LlmClient(() => _settingsService.LoadApiKey(), attachment => AttachmentImageService.ReadForModel(_attachmentStore, attachment));
             _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, completeAsync ?? _llmClient.CompleteAsync);
             _contextService = new ContextService(_adapter);
             _syncRoot = new object();
@@ -120,11 +122,12 @@ namespace RNAssistant.Office
         public async Task<SendChatResponse> SendChatAsync(
             string text,
             string chatId = null,
+            IReadOnlyList<string> attachmentIds = null,
             Action<string, string, ChatActivity> progress = null,
             Action<ChatStateResponse> chatStateChanged = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            if (string.IsNullOrWhiteSpace(text))
+            if (string.IsNullOrWhiteSpace(text) && (attachmentIds == null || attachmentIds.Count == 0))
             {
                 var emptySession = LoadSession(chatId, true);
                 var emptyId = ChatStore.GetSessionId(emptySession);
@@ -133,11 +136,17 @@ namespace RNAssistant.Office
 
             var settings = _settingsService.Load();
             var session = LoadSession(chatId, true);
+            var attachments = _attachmentStore.LoadDrafts(attachmentIds);
+            var invalidAttachment = attachments.FirstOrDefault(a => a != null && a.Status == "error");
+            if (invalidAttachment != null)
+            {
+                throw new InvalidOperationException(invalidAttachment.FileName + ": " + invalidAttachment.Error);
+            }
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
             var documentContext = LoadContext(session);
             var skills = _skillCatalog.SelectRelevantSkills(text, documentContext, 5);
             var shouldGenerateLlmTitle = settings.SmartChatTitles != false && ChatTitleBuilder.ShouldAssign(session);
-            var completion = await _chatCompletionService.ExecuteAsync(text, session, documentContext, settings, tools, progress, RegisterPendingAgentTool, skills, cancellationToken);
+            var completion = await _chatCompletionService.ExecuteAsync(text ?? string.Empty, session, documentContext, settings, tools, attachments, progress, RegisterPendingAgentTool, skills, cancellationToken);
             if (settings.SmartChatTitles == false)
             {
                 ChatTitleBuilder.ApplyFallback(session, text, completion.AssistantText);
@@ -145,6 +154,8 @@ namespace RNAssistant.Office
 
             ReportProgress(progress, "saving", "Сохраняю историю...");
             cancellationToken.ThrowIfCancellationRequested();
+            var userMessage = session.Messages.LastOrDefault(m => m != null && string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase));
+            _attachmentStore.Commit(ChatStore.GetSessionId(session), userMessage);
             _chatStore.Save(session);
             var activeId = ChatStore.GetSessionId(session);
             if (shouldGenerateLlmTitle)
@@ -153,6 +164,19 @@ namespace RNAssistant.Office
             }
 
             return new SendChatResponse { Message = completion.AssistantText, ToolResults = completion.ToolResults, ActiveChatId = activeId, ActiveChatModel = session.Model, ActiveChatHtmlMode = session.HtmlModeEnabled, Chats = _chatSessions.GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace) };
+        }
+
+        public AttachmentResponse ImportAttachment(string fileName, string contentType, string base64)
+        {
+            var attachment = _attachmentStore.Import(fileName, contentType, base64);
+            _attachmentStore.SaveDraftMetadata(attachment);
+            return new AttachmentResponse { Attachment = attachment };
+        }
+
+        public object DeleteDraftAttachment(string id)
+        {
+            _attachmentStore.DeleteDraft(id);
+            return new { deleted = true };
         }
 
         private void StartChatTitleGeneration(ChatSession session, string userText, string assistantText, AppSettings settings, Action<ChatStateResponse> chatStateChanged)

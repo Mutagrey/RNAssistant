@@ -104,6 +104,7 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
             </button>
           </div>
+          <div class="attachment-drafts hidden" id="attachmentDrafts" aria-live="polite"></div>
           <div class="context-strip hidden" id="contextStrip">
             <div class="context-strip-head">
               <button type="button" class="context-manage-button" id="openContextTabButton" title="Управлять контекстом" aria-label="Управлять контекстом" aria-expanded="false">
@@ -131,6 +132,11 @@
               </div>
               <label class="composer-model" title="Модель чата"><select id="chatModelSelect" aria-label="Модель чата"></select></label>
             </div>
+            <button type="button" class="secondary icon-text-button" id="attachFileButton" title="Добавить изображение или файл">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.4 11.6-8.9 8.9a6 6 0 0 1-8.5-8.5l9.6-9.6a4 4 0 0 1 5.7 5.7l-9.6 9.6a2 2 0 1 1-2.8-2.8l8.9-8.9"/></svg>
+              <span>Файл</span>
+            </button>
+            <input id="attachmentFileInput" type="file" multiple hidden accept=".png,.jpg,.jpeg,.webp,.gif,.pdf,.txt,.md,.json,.csv,image/*,application/pdf,text/plain,text/markdown,application/json,text/csv">
             <button type="button" class="secondary icon-text-button" id="addSelectionContextButton" title="Добавить текущее выделение Office в контекст">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
               <span>Выделение</span>
@@ -633,6 +639,7 @@
   <script src="js/app-html-artifacts.js?v=chatui-20260622-3"></script>
   <script src="js/app-agent.js?v=chatui-20260622-3"></script>
   <script src="js/app-messages.js?v=chatui-20260622-3"></script>
+  <script src="js/app-attachments.js?v=attachments-20260629-1"></script>
   <script src="js/app-chat.js?v=chatui-20260622-5"></script>
   <script src="js/app.js?v=chatui-20260621-2"></script>
 </body>

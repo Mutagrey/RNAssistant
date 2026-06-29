@@ -29,6 +29,50 @@
       <HintPath>..\..\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="Microsoft.Bcl.HashCode">
+      <HintPath>..\..\packages\Microsoft.Bcl.HashCode.6.0.0\lib\net462\Microsoft.Bcl.HashCode.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System.Buffers">
+      <HintPath>..\..\packages\System.Buffers.4.6.0\lib\net462\System.Buffers.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System.Memory">
+      <HintPath>..\..\packages\System.Memory.4.6.0\lib\net462\System.Memory.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System.Numerics.Vectors">
+      <HintPath>..\..\packages\System.Numerics.Vectors.4.6.0\lib\net462\System.Numerics.Vectors.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System.Runtime.CompilerServices.Unsafe">
+      <HintPath>..\..\packages\System.Runtime.CompilerServices.Unsafe.6.1.0\lib\net462\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="UglyToad.PdfPig">
+      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net462\UglyToad.PdfPig.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="UglyToad.PdfPig.Core">
+      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net462\UglyToad.PdfPig.Core.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="UglyToad.PdfPig.DocumentLayoutAnalysis">
+      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net462\UglyToad.PdfPig.DocumentLayoutAnalysis.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="UglyToad.PdfPig.Fonts">
+      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net462\UglyToad.PdfPig.Fonts.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="UglyToad.PdfPig.Tokenization">
+      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net462\UglyToad.PdfPig.Tokenization.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="UglyToad.PdfPig.Tokens">
+      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net462\UglyToad.PdfPig.Tokens.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Net.Http" />
@@ -53,6 +97,7 @@
     <Compile Include="Services\ContextNormalizer.cs" />
     <Compile Include="Services\ChartArtifactBuilder.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
+    <Compile Include="Storage\AttachmentStore.cs" />
     <Compile Include="Storage\ChatStore.cs" />
     <Compile Include="Storage\JsonFileStore.cs" />
     <Compile Include="Storage\ProtectedSecretStore.cs" />

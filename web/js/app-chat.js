@@ -308,6 +308,9 @@ function renderSendControls() {
   if ($("toggleHtmlModeButton")) {
     $("toggleHtmlModeButton").disabled = isSending || state.bridgeUnavailable || !state.activeChatId;
   }
+  if ($("attachFileButton")) {
+    $("attachFileButton").disabled = isSending || state.bridgeUnavailable || !state.activeChatId;
+  }
   if (typeof renderHtmlModeToggle === "function") {
     renderHtmlModeToggle();
   }
@@ -319,9 +322,10 @@ function updateComposerInputState() {
   var form = $("chatForm");
   var clearButton = $("clearInputButton");
   var hasText = !!(input && input.value.trim());
+  var hasAttachments = !!(state.draftAttachments && state.draftAttachments.length);
 
   if (form) {
-    form.classList.toggle("has-input", hasText);
+    form.classList.toggle("has-input", hasText || hasAttachments);
   }
   if (clearButton) {
     clearButton.hidden = !hasText;
@@ -351,15 +355,21 @@ function removeLocalMessage(text) {
   return false;
 }
 
-async function sendChat(text) {
+async function sendChat(text, attachments) {
+  attachments = attachments || [];
   setActivity("thinking", "Модель думает...");
-  var request = send("sendChat", { chatId: state.activeChatId, text: text });
-  state.activeSend = { requestId: request.requestId, text: text, canceling: false };
+  var request = send("sendChat", {
+    chatId: state.activeChatId,
+    text: text,
+    attachmentIds: attachments.map(attachmentId)
+  });
+  state.activeSend = { requestId: request.requestId, text: text, attachments: attachments, canceling: false };
   state.liveAgentRun = [];
   renderSendControls();
   try {
     var response = await request;
     applyChatState(response);
+    clearDraftAttachments();
     clearSendError();
     if (response.toolResults && response.toolResults.length) {
       logToolResults(response.toolResults);
@@ -379,6 +389,7 @@ async function sendChat(text) {
       markLocalMessage(text, { Pending: false, Failed: true });
       renderMessages();
       showSendError(error.detail || error.message, text);
+      state.failedSend.attachments = attachments;
       log(error.message);
       if (error.detail && error.detail !== error.message) {
         log(error.detail);
@@ -402,22 +413,23 @@ function submitChatInput() {
   }
 
   var text = $("chatInput").value.trim();
-  if (!text) {
+  var attachments = (state.draftAttachments || []).slice();
+  if (!text && !attachments.length) {
     return;
   }
 
   setChatInputText("", false);
   clearSendError();
-  state.messages.push({ Id: "local-" + Date.now(), Role: "user", Content: text, Local: true, Pending: true });
+  state.messages.push({ Id: "local-" + Date.now(), Role: "user", Content: text, Attachments: attachments, Local: true, Pending: true });
   updateEstimatedContextUsage();
   renderMessages({ forceScroll: true });
   renderChatSessions();
   renderContextMeter();
-  sendChat(text);
+  sendChat(text, attachments);
 }
 
 function retryFailedSend() {
-  if (state.activeSend || !state.failedSend || !state.failedSend.text) {
+  if (state.activeSend || !state.failedSend || (!state.failedSend.text && !(state.failedSend.attachments || []).length)) {
     return;
   }
 
@@ -427,8 +439,9 @@ function retryFailedSend() {
   renderChatSessions();
   renderContextMeter();
   var text = state.failedSend.text;
+  var attachments = state.failedSend.attachments || [];
   clearSendError();
-  sendChat(text);
+  sendChat(text, attachments);
 }
 
 function stopActiveSend() {
@@ -514,6 +527,7 @@ async function toggleChatHtmlMode() {
 
 function bindChatActions() {
   bindMessageScrollControls();
+  bindAttachmentActions();
   $("refreshButton").addEventListener("click", initialize);
   $("chatSessionSelect").addEventListener("change", function () { selectChat($("chatSessionSelect").value); });
   $("newChatButton").addEventListener("click", createChat);

@@ -49,13 +49,19 @@ namespace RNAssistant.Office.Services
             DocumentContext documentContext,
             AppSettings settings,
             IReadOnlyList<ToolDefinition> tools,
+            IReadOnlyList<ChatAttachment> attachments,
             Action<string, string, ChatActivity> progress,
             ChatCompletionService.PendingToolRegistrar pendingToolRegistrar,
             IReadOnlyList<SkillDefinition> skills,
             CancellationToken cancellationToken)
         {
-            session.Messages.Add(new ChatMessage { Role = "user", Content = text });
-            return await RunLoopAsync(text, null, false, session, documentContext, settings, tools, progress, pendingToolRegistrar, skills, cancellationToken).ConfigureAwait(false);
+            session.Messages.Add(new ChatMessage
+            {
+                Role = "user",
+                Content = text,
+                Attachments = attachments == null ? new List<ChatAttachment>() : new List<ChatAttachment>(attachments)
+            });
+            return await RunLoopAsync(text, null, false, session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, cancellationToken).ConfigureAwait(false);
         }
 
         public async Task<ChatCompletionResult> ContinueAfterToolAsync(
@@ -71,7 +77,7 @@ namespace RNAssistant.Office.Services
         {
             var prompt = PromptText(settings, p => p.ConfirmedToolContinuationPrompt);
             var taskText = LatestUserRequest(session, prompt);
-            return await RunLoopAsync(taskText, prompt, CommandMutates(confirmedCommand, tools), session, documentContext, settings, tools, progress, pendingToolRegistrar, skills, cancellationToken).ConfigureAwait(false);
+            return await RunLoopAsync(taskText, prompt, CommandMutates(confirmedCommand, tools), session, documentContext, settings, tools, null, progress, pendingToolRegistrar, skills, cancellationToken).ConfigureAwait(false);
         }
 
         public bool CommandMutates(ToolCommand command, IReadOnlyList<ToolDefinition> tools)
@@ -94,13 +100,14 @@ namespace RNAssistant.Office.Services
             DocumentContext documentContext,
             AppSettings settings,
             IReadOnlyList<ToolDefinition> tools,
+            IReadOnlyList<ChatAttachment> attachments,
             Action<string, string, ChatActivity> progress,
             ChatCompletionService.PendingToolRegistrar pendingToolRegistrar,
             IReadOnlyList<SkillDefinition> skills,
             CancellationToken cancellationToken)
         {
             settings = settings ?? new AppSettings();
-            return await RunControlledLoopAsync(taskText, initialFollowUpPrompt, initialVerificationRequired, session, documentContext, settings, tools, progress, pendingToolRegistrar, skills, cancellationToken).ConfigureAwait(false);
+            return await RunControlledLoopAsync(taskText, initialFollowUpPrompt, initialVerificationRequired, session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, cancellationToken).ConfigureAwait(false);
         }
 
         private async Task<ChatCompletionResult> RunControlledLoopAsync(
@@ -111,6 +118,7 @@ namespace RNAssistant.Office.Services
             DocumentContext documentContext,
             AppSettings settings,
             IReadOnlyList<ToolDefinition> tools,
+            IReadOnlyList<ChatAttachment> attachments,
             Action<string, string, ChatActivity> progress,
             ChatCompletionService.PendingToolRegistrar pendingToolRegistrar,
             IReadOnlyList<SkillDefinition> skills,
@@ -157,6 +165,7 @@ namespace RNAssistant.Office.Services
                     ? taskText
                     : taskText + "\n\nContinuation: " + initialFollowUpPrompt;
                 var messages = _plannerPromptComposer.BuildMessages(requestText, snapshot, route, slice, observations, documentContext, skills, settings);
+                ApplyAttachments(messages, attachments);
                 contextUsage = ContextUsageEstimator.FromPrompt(messages, settings);
                 ReportProgress(progress, "thinking", iteration == 0 ? "Планировщик думает..." : "Планировщик выбирает следующий шаг...");
                 var completion = await _completeAsync(settings, messages, cancellationToken).ConfigureAwait(false);
@@ -388,6 +397,22 @@ namespace RNAssistant.Office.Services
                 ToolResults = resultLog,
                 ContextUsage = contextUsage ?? ContextUsageEstimator.FromSession(session, settings)
             };
+        }
+
+        private static void ApplyAttachments(IList<ChatMessage> messages, IReadOnlyList<ChatAttachment> attachments)
+        {
+            if (messages == null || attachments == null || attachments.Count == 0)
+            {
+                return;
+            }
+            for (var index = messages.Count - 1; index >= 0; index--)
+            {
+                if (messages[index] != null && string.Equals(messages[index].Role, "user", StringComparison.OrdinalIgnoreCase))
+                {
+                    messages[index].Attachments = new List<ChatAttachment>(attachments);
+                    return;
+                }
+            }
         }
 
         private void AddToolObservation(ToolCommand command, ToolDefinition tool, ToolResult result, ICollection<AgentObservation> observations, ICollection<object> resultLog, ChatSession session)

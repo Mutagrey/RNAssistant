@@ -8,6 +8,7 @@ namespace RNAssistant.Core.Models
         public string Id { get; set; }
         public string Role { get; set; }
         public string Content { get; set; }
+        public List<ChatAttachment> Attachments { get; set; }
         public ChatActivity Activity { get; set; }
         public int? PromptTokens { get; set; }
         public int? CompletionTokens { get; set; }
@@ -19,6 +20,29 @@ namespace RNAssistant.Core.Models
         {
             Id = Guid.NewGuid().ToString("N");
             CreatedUtc = DateTime.UtcNow;
+            Attachments = new List<ChatAttachment>();
+        }
+    }
+
+    public sealed class ChatAttachment
+    {
+        public string Id { get; set; }
+        public string FileName { get; set; }
+        public string ContentType { get; set; }
+        public long Size { get; set; }
+        public string Kind { get; set; }
+        public string RelativePath { get; set; }
+        public string ExtractedText { get; set; }
+        public bool TextTruncated { get; set; }
+        public string Status { get; set; }
+        public string Error { get; set; }
+        public DateTime CreatedUtc { get; set; }
+
+        public ChatAttachment()
+        {
+            Id = Guid.NewGuid().ToString("N");
+            CreatedUtc = DateTime.UtcNow;
+            Status = "ready";
         }
     }
 

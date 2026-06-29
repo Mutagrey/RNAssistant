@@ -48,7 +48,9 @@ function normalizeModelCatalog(payload) {
       maxTokens: modelField(item, "MaxTokens", "max_tokens", "maxTokens", null),
       systemPrompt: modelField(item, "SystemPrompt", "system_prompt", "systemPrompt", "") || "",
       temperature: modelField(item, "Temperature", "temperature", "temperature", null),
-      topP: modelField(item, "TopP", "top_p", "topP", null)
+      topP: modelField(item, "TopP", "top_p", "topP", null),
+      supportsImages: modelField(item, "SupportsImages", "supports_images", "supportsImages", null),
+      inputModalities: modelField(item, "InputModalities", "input_modalities", "inputModalities", []) || []
     });
   });
 

@@ -18,19 +18,23 @@ namespace RNAssistant.Office
         {
             var session = LoadSession(chatId);
             var removed = false;
+            ChatMessage removedMessage = null;
             if (!string.IsNullOrWhiteSpace(id))
             {
-                removed = session.Messages.RemoveAll(m => m != null && string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase)) > 0;
+                removedMessage = session.Messages.FirstOrDefault(m => m != null && string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase));
+                removed = removedMessage != null && session.Messages.Remove(removedMessage);
             }
 
             if (!removed && index >= 0 && index < session.Messages.Count)
             {
+                removedMessage = session.Messages[index];
                 session.Messages.RemoveAt(index);
                 removed = true;
             }
 
             if (removed)
             {
+                _attachmentStore.DeleteMessage(removedMessage);
                 _chatStore.Save(session);
             }
 
@@ -64,6 +68,10 @@ namespace RNAssistant.Office
             fork.Messages = targetIndex < 0
                 ? new List<ChatMessage>()
                 : ChatCloneService.CloneMessages(sourceMessages.Take(targetIndex + 1));
+            foreach (var message in fork.Messages)
+            {
+                _attachmentStore.CloneMessageAttachments(ChatStore.GetSessionId(fork), message);
+            }
             NormalizeContext(fork.Context, fork);
             _chatStore.Save(fork);
             _chatSessions.SetActiveSession(fork);
@@ -151,6 +159,7 @@ namespace RNAssistant.Office
         public ChatStateResponse ClearChat(string chatId)
         {
             var session = LoadSession(chatId);
+            _attachmentStore.DeleteSession(ChatStore.GetSessionId(session));
             session.Messages.Clear();
             _chatStore.Save(session);
             return ChatState(session);
@@ -159,6 +168,7 @@ namespace RNAssistant.Office
         public ChatStateResponse DeleteChat(string chatId)
         {
             var current = LoadSession(chatId);
+            _attachmentStore.DeleteSession(ChatStore.GetSessionId(current));
             var next = _chatSessions.DeleteAndSelectNext(ChatStore.GetSessionId(current));
             return ChatState(next);
         }
