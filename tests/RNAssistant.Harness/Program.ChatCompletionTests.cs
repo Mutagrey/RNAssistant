@@ -36,7 +36,7 @@ namespace RNAssistant.Harness
                         capturedMessages = new List<ChatMessage>(messages ?? new ChatMessage[0]);
                         return Task.FromResult(new LlmCompletionResult
                         {
-                            Content = "Done.",
+                            Content = FinalBlock("Done."),
                             PromptTokens = 10,
                             CompletionTokens = 2,
                             TotalTokens = 12
@@ -69,7 +69,7 @@ namespace RNAssistant.Harness
                     "hello world",
                     session,
                     context,
-                    new AppSettings { AgentModeEnabled = false, ContextCharLimit = 8000 },
+                    new AppSettings { ContextCharLimit = 8000 },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -78,7 +78,7 @@ namespace RNAssistant.Harness
                 AssertEqual("hello world", session.Messages[0].Content, "user message");
                 AssertEqual("Done.", session.Messages[1].Content, "assistant message");
                 AssertEqual("New chat", session.Title, "session title");
-                AssertTrue(ContainsMessage(capturedMessages, "User-added context attachments"), "context prompt captured");
+                AssertTrue(ContainsMessage(capturedMessages, "User-added context:"), "context prompt captured");
             });
         }
 

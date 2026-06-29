@@ -26,7 +26,6 @@ function renderSettings() {
   $("uiFontScaleInput").value = Math.round(clampUiFontScale(s.UiFontScale || s.uiFontScale || 1) * 100);
   $("contextLimitInput").value = s.ContextCharLimit || s.contextCharLimit || 24000;
   $("streamInput").checked = !!(s.StreamResponses || s.streamResponses);
-  $("agentModeInput").checked = (s.AgentModeEnabled !== false && s.agentModeEnabled !== false);
   $("autoRunToolsInput").checked = (s.AutoRunToolCalls !== false && s.autoRunToolCalls !== false);
   $("autoConfirmToolsInput").checked = !!(s.AutoConfirmToolActions || s.autoConfirmToolActions);
   $("autoRetryToolsInput").checked = (s.AutoRetryToolErrors !== false && s.autoRetryToolErrors !== false);
@@ -64,7 +63,6 @@ function readSettings() {
     UiFontScale: clampUiFontScale(Number($("uiFontScaleInput").value || 100) / 100),
     ContextCharLimit: Number($("contextLimitInput").value || 24000),
     StreamResponses: $("streamInput").checked,
-    AgentModeEnabled: $("agentModeInput").checked,
     AutoRunToolCalls: $("autoRunToolsInput").checked,
     AutoConfirmToolActions: $("autoConfirmToolsInput").checked,
     AutoRetryToolErrors: $("autoRetryToolsInput").checked,

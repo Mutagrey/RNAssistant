@@ -20,6 +20,15 @@ namespace RNAssistant.Core.Models
         public string StoragePath { get; set; }
         public bool Enabled { get; set; }
         public bool BuiltIn { get; set; }
+        public int RiskLevel { get; set; }
+        public string UseWhen { get; set; }
+        public string DoNotUseWhen { get; set; }
+        public string ExamplesJson { get; set; }
+        public string PreconditionsJson { get; set; }
+        public string VerifyJson { get; set; }
+        public string CapabilityStatus { get; set; }
+        public string Limitations { get; set; }
+        public string ReplacementToolId { get; set; }
 
         public ToolDefinition()
         {
@@ -27,6 +36,7 @@ namespace RNAssistant.Core.Models
             Executor = "builtin";
             ArgumentSchemaJson = "{}";
             AgentCanRun = true;
+            CapabilityStatus = "available";
         }
     }
 

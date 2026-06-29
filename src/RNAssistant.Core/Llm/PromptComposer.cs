@@ -24,32 +24,25 @@ namespace RNAssistant.Core.Llm
             builder.AppendLine("RNAssistant runtime protocol. These instructions are mandatory and override conflicting custom system prompt text.");
             builder.AppendLine();
             builder.AppendLine("Host application: " + host);
-            builder.AppendLine("Agent mode: " + (settings.AgentModeEnabled != false ? "enabled" : "disabled"));
+            builder.AppendLine("Planner protocol: strict JSON envelope");
             builder.AppendLine("Auto-run local tool blocks: " + (settings.AutoRunToolCalls != false ? "enabled" : "disabled"));
             builder.AppendLine("Auto-confirm tool actions: " + (settings.AutoConfirmToolActions ? "enabled" : "disabled"));
             builder.AppendLine("Mutation verification: " + (settings.RequireVerificationForMutations != false ? "required" : "not required"));
             builder.AppendLine("Unsafe HTML preview and legacy chat artifacts: " + (settings.AllowUnsafeHtmlArtifacts ? "enabled" : "disabled"));
-            builder.AppendLine("Do not rely on native API tool_calls. Local Office actions are executed through parseable RNAssistant JSON in text; compatibility conversion exists only for endpoints that return tool_calls anyway.");
-            if (settings.AgentModeEnabled != false)
+            builder.AppendLine("Do not rely on native API tool_calls. Local Office actions are executed only through the RNAssistant strict JSON planner envelope.");
+            builder.AppendLine("When the user asks only to analyze, review, explain, or suggest improvements, inspect the Office context if needed and return kind=final without mutating the document.");
+            builder.AppendLine("When the user explicitly approves implementation or asks to create, edit, transform, format, insert, replace, calculate, chart, or otherwise change Office content, return kind=tool_plan with available tools instead of only explaining.");
+            builder.AppendLine("Break the task into small steps. Return exactly one JSON object.");
+            if (!string.IsNullOrWhiteSpace(settings.AgentPrompt))
             {
-                builder.AppendLine("When the user asks only to analyze, review, explain, or suggest improvements, inspect the Office context if needed and answer in chat without mutating the document.");
-                builder.AppendLine("When the user explicitly approves implementation or asks to create, edit, transform, format, insert, replace, calculate, chart, or otherwise change Office content, you MUST use available tools instead of only explaining.");
-                builder.AppendLine("Break the task into small steps. Return one fenced rnassistant-agent block containing only the next executable tool calls.");
-                if (!string.IsNullOrWhiteSpace(settings.AgentPrompt))
-                {
-                    builder.AppendLine("Editable Agent prompt from Settings:");
-                    builder.AppendLine(settings.AgentPrompt);
-                }
-            }
-            else
-            {
-                builder.AppendLine("Normal chat mode is enabled. Answer in prose unless the user explicitly asks you to run an Office action.");
+                builder.AppendLine("Editable Agent prompt from Settings:");
+                builder.AppendLine(settings.AgentPrompt);
             }
             AppendPromptBlock(builder, PromptOrDefault(agentPrompts.ToolProtocolPrompt, new AgentPromptSettings().ToolProtocolPrompt));
             AppendPromptBlock(builder, PromptOrDefault(agentPrompts.ToolRoutingPrompt, new AgentPromptSettings().ToolRoutingPrompt));
             builder.AppendLine();
             builder.AppendLine("Available tools:");
-            builder.AppendLine("Use only these exact tool ids in rnassistant-agent steps. Copy the full id, including the host prefix before the dot.");
+            builder.AppendLine("Use only these exact tool ids in tool_plan steps. Copy the full id, including the host prefix before the dot.");
             foreach (var tool in tools)
             {
                 if (tool == null || !tool.Enabled || (!tool.AgentCanRun && !tool.MutatesDocument && !tool.RequiresConfirmation))

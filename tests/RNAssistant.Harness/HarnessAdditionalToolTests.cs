@@ -405,19 +405,18 @@ namespace RNAssistant.Harness
                     "Create a new worksheet named Report.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000 },
+                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("Done.", result.AssistantText, "assistant text");
                 AssertEqual(3, calls.Count, "llm call count");
-                AssertContains(FlattenMessages(calls[1]), "Use only these exact available tool ids", "retry available ids prompt");
+                AssertContains(FlattenMessages(calls[1]), "Tool is not available in the current route/phase", "validation observation prompt");
                 AssertContains(FlattenMessages(calls[1]), "excel.add_sheet", "retry prompt contains exact tool id");
                 AssertEqual(1, adapter.Executed.Count, "adapter execution count");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "retry tool");
                 var resultJson = Newtonsoft.Json.JsonConvert.SerializeObject(result.ToolResults);
-                AssertTrue(resultJson.IndexOf("create_worksheet", StringComparison.OrdinalIgnoreCase) < 0, "recovered unknown tool not logged");
-                AssertTrue(resultJson.IndexOf("Unknown tool id", StringComparison.OrdinalIgnoreCase) < 0, "recovered unknown failure not logged");
+                AssertContains(resultJson, "create_worksheet", "validation transcript keeps unknown tool");
                 AssertContains(resultJson, "excel.add_sheet", "retry success logged");
             });
         }

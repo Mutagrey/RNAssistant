@@ -143,7 +143,7 @@ namespace RNAssistant.Harness
                 var command = new ToolCommand { ToolId = "excel.make_report" };
                 command.Arguments["sheet"] = "Report";
 
-                var result = executor.Execute(command, tools, new AppSettings { AgentModeEnabled = false, AutoConfirmToolActions = false }, false, false);
+                var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = false }, false, false);
 
                 AssertTrue(!result.Success, "pipeline should fail");
                 AssertContains(result.Message, "requires confirmation", "confirmation message");

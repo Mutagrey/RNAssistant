@@ -86,10 +86,6 @@ namespace RNAssistant.Core.Storage
             {
                 settings.ContextCharLimit = defaults.ContextCharLimit;
             }
-            if (!settings.AgentModeEnabled.HasValue)
-            {
-                settings.AgentModeEnabled = defaults.AgentModeEnabled;
-            }
             if (!settings.AutoRunToolCalls.HasValue)
             {
                 settings.AutoRunToolCalls = defaults.AutoRunToolCalls;

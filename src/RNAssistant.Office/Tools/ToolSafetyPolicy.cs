@@ -42,9 +42,7 @@ namespace RNAssistant.Office.Tools
 
         public static bool CanAgentRunMutation(ToolDefinition tool, AppSettings settings)
         {
-            return settings != null &&
-                settings.AgentModeEnabled != false &&
-                tool != null &&
+            return tool != null &&
                 tool.BuiltIn &&
                 tool.AgentCanRun;
         }

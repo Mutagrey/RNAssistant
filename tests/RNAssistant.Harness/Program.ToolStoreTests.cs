@@ -76,7 +76,7 @@ namespace RNAssistant.Harness
                 var tools = new List<ToolDefinition>(fake.GetBuiltInTools());
                 tools.AddRange(executor.GetControllerTools());
                 var prompt = new PromptComposer().ComposeSystemPrompt(
-                    new AppSettings { AgentModeEnabled = true },
+                    new AppSettings(),
                     fake.HostName,
                     string.Empty,
                     string.Empty,
@@ -166,12 +166,7 @@ namespace RNAssistant.Harness
                 });
                 var command = new ToolCommand { ToolId = "excel.metadata_mutation" };
 
-                var blocked = executor.Execute(command, tools, new AppSettings { AgentModeEnabled = false, AutoConfirmToolActions = false }, false, false);
-                AssertTrue(!blocked.Success, "metadata mutation blocked");
-                AssertContains(blocked.Message, "requires confirmation", "metadata block message");
-                AssertEqual(0, adapter.Executed.Count, "blocked adapter execution count");
-
-                var allowed = executor.Execute(command, tools, new AppSettings { AgentModeEnabled = true, AutoConfirmToolActions = false }, false, false);
+                var allowed = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = false }, false, false);
                 AssertTrue(allowed.Success, "metadata mutation allowed in agent mode");
                 AssertEqual(1, adapter.Executed.Count, "allowed adapter execution count");
             });

@@ -95,7 +95,11 @@ namespace RNAssistant.Office.Tools
                 enabled = t.Enabled,
                 requiresConfirmation = t.RequiresConfirmation,
                 mutatesDocument = t.MutatesDocument,
-                agentCanRun = t.AgentCanRun
+                agentCanRun = t.AgentCanRun,
+                riskLevel = t.RiskLevel,
+                capabilityStatus = t.CapabilityStatus,
+                limitations = t.Limitations,
+                replacementToolId = t.ReplacementToolId
             }).ToArray();
             return ToolResult.Ok("Custom tools listed.", JsonConvert.SerializeObject(tools));
         }
@@ -188,8 +192,27 @@ namespace RNAssistant.Office.Tools
                 RequiresConfirmation = ReadBool(command, "requiresConfirmation", true),
                 MutatesDocument = ReadBool(command, "mutatesDocument", true),
                 AgentCanRun = ReadBool(command, "agentCanRun", false),
-                BuiltIn = false
+                BuiltIn = false,
+                RiskLevel = ReadInt(command, "riskLevel", 0),
+                UseWhen = ToolArgumentReader.String(command.Arguments, "useWhen", string.Empty),
+                DoNotUseWhen = ToolArgumentReader.String(command.Arguments, "doNotUseWhen", string.Empty),
+                ExamplesJson = ToolArgumentReader.String(command.Arguments, "examplesJson", string.Empty),
+                PreconditionsJson = ToolArgumentReader.String(command.Arguments, "preconditionsJson", string.Empty),
+                VerifyJson = ToolArgumentReader.String(command.Arguments, "verifyJson", string.Empty),
+                CapabilityStatus = ToolArgumentReader.String(command.Arguments, "capabilityStatus", "available"),
+                Limitations = ToolArgumentReader.String(command.Arguments, "limitations", string.Empty),
+                ReplacementToolId = ToolArgumentReader.String(command.Arguments, "replacementToolId", string.Empty)
             };
+        }
+
+        private static int ReadInt(ToolCommand command, string name, int fallback)
+        {
+            if (command == null || command.Arguments == null || !command.Arguments.ContainsKey(name) || command.Arguments[name] == null)
+            {
+                return fallback;
+            }
+            int value;
+            return int.TryParse(Convert.ToString(command.Arguments[name]), out value) ? value : fallback;
         }
 
         private static ToolResult ValidateTool(ToolDefinition tool)

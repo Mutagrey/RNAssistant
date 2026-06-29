@@ -35,7 +35,7 @@ namespace RNAssistant.Harness
                 command.Arguments["find"] = "\"old\"";
                 command.Arguments["replace"] = "\"new\"";
 
-                var blocked = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AgentModeEnabled = true, AutoConfirmToolActions = false }, false, false);
+                var blocked = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = false }, false, false);
                 AssertTrue(!blocked.Success, "vba replace blocked");
                 AssertEqual(0, adapter.Executed.Count, "blocked vba adapter execution count");
 

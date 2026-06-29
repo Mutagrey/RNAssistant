@@ -28,7 +28,7 @@ web static UI
 ## Current Code Zones
 
 - `src/RNAssistant.Core/Llm`: API client, prompt composition, prompt message trimming, context usage estimates.
-- `src/RNAssistant.Core/Tools`: parsing model text into local `ToolCommand`.
+- `src/RNAssistant.Core/Tools`: strict planner JSON parsing plus legacy command parsing compatibility.
 - `src/RNAssistant.Core/Skills`: built-in markdown skill provider.
 - `src/RNAssistant.Core/Services`: Office-agnostic model services such as context normalization.
 - `src/RNAssistant.Core/Storage`: JSON file storage under `%AppData%/RNAssistant`.
@@ -41,7 +41,8 @@ web static UI
 - `src/RNAssistant.Office/Vba`: shared VBA project support.
 - `src/RNAssistant.Office/Agent`: agent transcript/plan formatting and retry policy.
 - `src/RNAssistant.Office/Services`: host-neutral application services used by controller orchestration, such as chat/session lifecycle, tool/skill catalog composition, context normalization, and chat completion flow.
-- `src/RNAssistant.Office/Services/AgentRunService.cs`: iterative agent loop, tool observations, retries, mutation verification prompts, VBA context capture, and confirmation resume continuation.
+- `src/RNAssistant.Office/Services/AgentRunService.cs`: controlled planner loop, route/slice/validate/execute flow, normalized observations, deterministic mutation verification, VBA context capture, and confirmation resume continuation.
+- `src/RNAssistant.Office/Services/AgentPlannerRuntime.cs`: deterministic router, tool catalog slicer, planner prompt context, action validator, observation normalizer, recipe expansion, and verification command selection.
 - `src/RNAssistant.Office/Tools`: tool execution, pipelines, tool/skill CRUD tools, VBA patch/backup workflow.
 - `src/RNAssistant.OfficeHosts`: shared Excel/Word/PowerPoint/Outlook COM adapters and desktop target descriptors.
 - `src/RNAssistant.Desktop`: standalone WinForms shell, explicit Office target picker, manual foreground attach, single-instance JSON pipe activation, and ROT-based adapter creation with hwnd validation.
@@ -51,10 +52,10 @@ web static UI
 
 ## Non-Negotiable Boundaries
 
-- Parser converts text/native-compatible shapes to `ToolCommand`; executor decides whether command may run.
+- Agent mode expects one strict planner JSON envelope. Legacy text/native-compatible parsing exists only for compatibility paths.
 - Tools are executable actions described by `ToolDefinition`; skills are markdown guidance described by `SkillDefinition`.
-- Tool safety belongs to `ToolDefinition` metadata: `MutatesDocument`, `AgentCanRun`, and `RequiresConfirmation`.
-- Agent runs are bounded by settings for max iterations and max tool steps; confirmed pending tools may resume the same run, and mutation runs ask for read-only verification before final prose.
+- Tool safety belongs to `ToolDefinition` metadata: `MutatesDocument`, `AgentCanRun`, `RequiresConfirmation`, risk/capability fields, and verification metadata.
+- Agent runs are bounded by settings for max iterations and max tool steps; confirmed pending tools may resume the same run, and mutation runs use deterministic verification tools before final prose.
 - Controller coordinates request flow; it should not contain pipeline execution, VBA patch logic, or JS rendering logic.
 - Office host adapters expose executable capabilities through `ToolDefinition` and `ExecuteTool`; they should not know chat/session/storage details.
 - Desktop target descriptors must be validated before tool execution; a closed or mismatched target should fail instead of falling back to an unrelated active document.
@@ -81,12 +82,13 @@ dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj
 
 Current coverage:
 
-- parser fixtures: fenced `rnassistant-agent`, bare JSON arrays, native `tool_calls`, malformed JSON;
+- parser fixtures: strict planner JSON envelope, fenced legacy `rnassistant-agent`, bare JSON arrays, native `tool_calls`, malformed JSON;
 - chat/tool/skill/VBA store fixtures using temp directories, including broken files being skipped;
 - chat session lifecycle fixtures, including document-key migration;
 - pipeline dry-run and execution fixtures with fake `IOfficeApplicationAdapter`;
 - pipeline failure diagnostics and confirmation gates for custom tools and Agent Mode built-in mutations;
-- agent runtime guards for disabled Agent mode, waiting confirmations, stopped batches, max iterations, max tool steps, mutation verification follow-up, and VBA context prompt inclusion;
+- agent runtime guards for strict planner repair, sliced tools, waiting confirmations, stopped batches, max iterations, max tool steps, deterministic mutation verification, and VBA context prompt inclusion;
+- model-quality fixtures that catch final answers when Office tool use is required;
 - markdown skill store/catalog/prompt separation, prompt body limiting, and agent skill-save confirmation;
 - agent custom tool save/read confirmation and validation;
 - metadata-driven mutation safety gates;

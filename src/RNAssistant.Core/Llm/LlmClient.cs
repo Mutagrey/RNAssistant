@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -319,12 +320,49 @@ namespace RNAssistant.Core.Llm
                 return content;
             }
 
-            var block = "```rnassistant-agent\n" +
-                new JObject { ["tool_calls"] = toolCalls.DeepClone() }.ToString(Formatting.None) +
-                "\n```";
-            return string.IsNullOrWhiteSpace(content)
-                ? block
-                : content + "\n\n" + block;
+            var steps = new JArray();
+            foreach (var call in toolCalls.OfType<JObject>())
+            {
+                var function = call["function"] as JObject;
+                if (function == null)
+                {
+                    continue;
+                }
+
+                var arguments = ParseArgumentsObject((string)function["arguments"]);
+                steps.Add(new JObject
+                {
+                    ["toolId"] = (string)function["name"] ?? string.Empty,
+                    ["arguments"] = arguments,
+                    ["reason"] = "Native tool call converted to RNAssistant planner step."
+                });
+            }
+
+            return new JObject
+            {
+                ["kind"] = "tool_plan",
+                ["intent"] = "mutate",
+                ["message"] = string.IsNullOrWhiteSpace(content) ? null : content,
+                ["steps"] = steps,
+                ["expectedOutcome"] = "Execute converted native tool call steps."
+            }.ToString(Formatting.None);
+        }
+
+        private static JObject ParseArgumentsObject(string arguments)
+        {
+            if (string.IsNullOrWhiteSpace(arguments))
+            {
+                return new JObject();
+            }
+
+            try
+            {
+                return JObject.Parse(arguments);
+            }
+            catch (JsonException)
+            {
+                return new JObject { ["rawArguments"] = arguments };
+            }
         }
 
         private static string DeepestMessage(Exception exception)

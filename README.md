@@ -159,32 +159,29 @@ Word, Excel and PowerPoint documents are identified by a custom document propert
 The API is OpenAI-compatible chat completions: `/v1/chat/completions`.
 Endpoint compatibility details are in `docs/model-endpoint-compatibility.md`.
 
-Native tool calling is not required. The model is prompted to return local actions as:
+Native tool calling is not required. In Agent mode, the model is a controlled planner and must return exactly one JSON object, without markdown or prose:
 
-````
-```rnassistant-agent
-{"toolId":"excel.read_range","arguments":{"address":"A1:D20"}}
+```json
+{
+  "kind": "tool_plan",
+  "intent": "read",
+  "message": null,
+  "steps": [
+    {
+      "toolId": "excel.read_range",
+      "arguments": { "address": "A1:D20" },
+      "reason": "Need table values before editing."
+    }
+  ],
+  "expectedOutcome": "Read selected table data."
+}
 ```
-````
 
-The add-in parses these blocks and executes known local tools when `Auto-run tool calls from LLM` is enabled.
+Final/clarifying answers use the same envelope with `kind` set to `final`, `clarify`, or `cannot_do` and an empty `steps` array. The runtime routes the user request, slices the tool catalog, validates the planner response, gates risk/confirmation, executes tools, normalizes observations, and runs deterministic verification for mutations.
 
-Agent responses may also use:
+The old fenced `rnassistant-agent` parser remains only for non-planner compatibility paths. Native API `tool_calls` are still accepted as compatibility input by the low-level client, but the controlled agent loop expects the strict planner JSON envelope.
 
-````
-```rnassistant-agent
-[
-  {"toolId":"excel.read_range","arguments":{"address":"A1:D20"}},
-  {"toolId":"excel.add_chart","arguments":{"sourceRange":"A1:B20","chartType":"line","title":"Sales"}}
-]
-```
-````
-
-Pure JSON arrays/objects with `toolId`, `tool`, `action`, or `name` are accepted too. Native API `tool_calls` are not required; if an endpoint returns them anyway, RNAssistant converts them into the same local text protocol before parsing. In Agent mode, built-in Office tools can run automatically; custom tools marked `requiresConfirmation` and VBA mutation tools still require confirmation unless `Auto-confirm tool actions` is enabled. Waiting agent steps carry typed statuses such as `waiting_confirmation` or `skipped_auto_run`; the task pane can confirm or cancel the exact pending command. Confirmed tools can continue the same run, and mutation runs ask the model to verify results with read-only tools before the final answer.
-
-`System prompt` in Settings is treated as additional custom instruction. The fixed RNAssistant tool protocol is always appended as mandatory runtime protocol so custom text cannot disable parsing or tool execution rules. Agent prompts can be inspected with `common.prompts_read` or `common.prompts_read_defaults`; saving prompt edits uses `common.prompts_save`.
-
-When `Agent mode for Office actions` is enabled, ordinary Office requests such as creating sheets, writing data, adding charts, editing documents, or creating slides should return a `rnassistant-agent` block. If the first model answer is prose-only for an obvious Office action, RNAssistant asks the model once more to return an executable agent block.
+In Agent mode, tools are available only when selected by the deterministic router and current phase. Level 2/3 or confirmation-required actions pause for user confirmation unless `Auto-confirm tool actions` is enabled. Confirmed tools can continue the same run.
 
 ## HTML Workspace
 
@@ -277,7 +274,7 @@ In chat, ask for the desired Office action in normal language. For example:
 
 `Создай новый лист Sales Demo, сгенерируй таблицу продаж по месяцам и построй линейный график.`
 
-The model can respond with one `rnassistant-agent` block containing ordered `toolId` calls, for example `excel.add_sheet`, `excel.write_table`, and `excel.add_chart`. If `Auto-run tool calls from LLM` is enabled, the add-in executes those tools in order. If `Auto-retry failed tool calls` is enabled, one failed tool call is sent back to the LLM once so it can return a corrected tool call.
+The model responds with the strict planner JSON envelope. The runtime may execute ordered `toolId` calls such as `excel.add_sheet`, `excel.write_table`, and `excel.add_chart` only after router slicing, validation, risk gating, and confirmation checks. Recoverable tool failures are recorded as observations and the planner can choose a corrected next step.
 
 Use the Tools tab to create or edit reusable tools:
 

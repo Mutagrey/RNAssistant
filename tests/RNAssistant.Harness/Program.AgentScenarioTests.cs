@@ -30,17 +30,17 @@ namespace RNAssistant.Harness
                             Command("excel.add_sheet", "name", "Report"),
                             Command("excel.write_table", "sheet", "Report", "startAddress", "A1", "values", "[[\"Month\",\"Sales\"],[\"Jan\",10]]"),
                             Command("excel.add_chart", "sheet", "Report", "sourceRange", "A1:B2", "chartType", "column", "title", "Sales Chart")),
-                        "Required tool response format",
+                        "RNAssistant Office Action Planner",
+                        "ROUTE:",
                         "excel.add_sheet",
-                        "excel.read_range",
                         "Reporting Guard",
-                        "User-added context attachments")
+                        "User-added context")
                     .Add(
                         AgentBlock(
-                            Command("excel.read_range", "sheet", "Report", "range", "A1:B2"),
+                            Command("excel.list_sheets"),
                             Command("excel.list_charts")),
-                        "verify the result",
-                        "added chart")
+                        "OBSERVATIONS",
+                        "excel.add_chart succeeded")
                     .Add(
                         "Verified report table and chart.",
                         "Month",
@@ -54,7 +54,7 @@ namespace RNAssistant.Harness
                     "Создай отчет продаж с таблицей и диаграммой.",
                     session,
                     context,
-                    new AppSettings { ContextCharLimit = 12000, RequireVerificationForMutations = true },
+                    new AppSettings { ContextCharLimit = 12000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null,
                     null,
@@ -66,7 +66,7 @@ namespace RNAssistant.Harness
                 AssertEqual("10", adapter.CellValue("Report", "B2"), "value cell");
                 AssertEqual(1, adapter.ChartCount("Report"), "chart count");
                 AssertEqual(5, adapter.Executed.Count, "executed tool count");
-                AssertEqual("excel.read_range", adapter.Executed[3].ToolId, "verification range tool");
+                AssertEqual("excel.list_sheets", adapter.Executed[3].ToolId, "verification sheets tool");
                 AssertEqual("excel.list_charts", adapter.Executed[4].ToolId, "verification chart tool");
             });
         }
@@ -85,16 +85,19 @@ namespace RNAssistant.Harness
                 };
                 var llm = new ScenarioLlm()
                     .Add(
-                        "Done.",
+                        AgentBlock(Command("excel.read_range", "sheet", "Data", "address", "A1:B4")),
                         new[]
                         {
-                            "RNAssistant runtime protocol",
-                            "Available tools",
-                            "excel.add_sheet",
+                            "RNAssistant Office Action Planner",
+                            "AVAILABLE_TOOLS",
+                            "excel.read_range",
                             "Contract Skill",
                             "Pinned context"
                         },
-                        new[] { "word.insert_text" });
+                        new[] { "word.insert_text" })
+                    .Add(
+                        "Done.",
+                        "OBSERVATIONS");
                 var context = NewContext(adapter);
                 context.Notes.Add(new ContextNote { Host = "Excel", Kind = "note", Title = "Pinned", Reference = "manual", Text = "Pinned context" });
 
@@ -109,7 +112,7 @@ namespace RNAssistant.Harness
                     new[] { skill }).GetAwaiter().GetResult();
 
                 AssertEqual("Done.", result.AssistantText, "assistant text");
-                AssertEqual(1, llm.Calls.Count, "scenario call count");
+                AssertEqual(2, llm.Calls.Count, "scenario call count");
             });
         }
 
@@ -134,7 +137,7 @@ namespace RNAssistant.Harness
                 var result = executor.Execute(
                     new ToolCommand { ToolId = "excel.lying_pipeline" },
                     new List<ToolDefinition> { tool },
-                    new AppSettings { AgentModeEnabled = true, AutoConfirmToolActions = false },
+                    new AppSettings { AutoConfirmToolActions = false },
                     false,
                     false);
 
@@ -145,7 +148,7 @@ namespace RNAssistant.Harness
                 var confirmed = executor.Execute(
                     new ToolCommand { ToolId = "excel.lying_pipeline" },
                     new List<ToolDefinition> { tool },
-                    new AppSettings { AgentModeEnabled = true, AutoConfirmToolActions = true },
+                    new AppSettings { AutoConfirmToolActions = true },
                     false,
                     false);
                 AssertTrue(confirmed.Success, "confirmed lying pipeline succeeds");

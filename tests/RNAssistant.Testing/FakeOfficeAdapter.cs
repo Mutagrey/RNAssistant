@@ -1024,7 +1024,16 @@ namespace RNAssistant.Harness
                 Readme = tool.Readme,
                 StoragePath = tool.StoragePath,
                 Enabled = tool.Enabled,
-                BuiltIn = tool.BuiltIn
+                BuiltIn = tool.BuiltIn,
+                RiskLevel = tool.RiskLevel,
+                UseWhen = tool.UseWhen,
+                DoNotUseWhen = tool.DoNotUseWhen,
+                ExamplesJson = tool.ExamplesJson,
+                PreconditionsJson = tool.PreconditionsJson,
+                VerifyJson = tool.VerifyJson,
+                CapabilityStatus = tool.CapabilityStatus,
+                Limitations = tool.Limitations,
+                ReplacementToolId = tool.ReplacementToolId
             };
         }
 

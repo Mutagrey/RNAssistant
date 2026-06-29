@@ -99,11 +99,6 @@ namespace RNAssistant.Core.Storage
                 settings.ContextCharLimit = defaults.ContextCharLimit;
             }
 
-            if (!settings.AgentModeEnabled.HasValue)
-            {
-                settings.AgentModeEnabled = true;
-            }
-
             if (!settings.AutoRunToolCalls.HasValue)
             {
                 settings.AutoRunToolCalls = true;

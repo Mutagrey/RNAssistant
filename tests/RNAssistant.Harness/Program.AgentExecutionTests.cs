@@ -79,7 +79,7 @@ namespace RNAssistant.Harness
                         scenario.UserText,
                         session,
                         context,
-                        new AppSettings { ContextCharLimit = 8000 },
+                        new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
                         new List<ToolDefinition>(adapter.GetBuiltInTools()),
                         null).GetAwaiter().GetResult();
 
@@ -89,7 +89,7 @@ namespace RNAssistant.Harness
                     {
                         AssertEqual(scenario.ExpectedTools[toolIndex], adapter.Executed[toolIndex].ToolId, scenario.Host + " tool " + toolIndex);
                     }
-                    AssertTrue(ContainsMessage(calls[0], "User-added context attachments"), scenario.Host + " context prompt");
+                    AssertTrue(ContainsMessage(calls[0], "User-added context"), scenario.Host + " context prompt");
                     AssertTrue(ContainsMessage(session.Messages, "Agent plan"), scenario.Host + " plan recorded");
                     AssertTrue(ContainsMessage(session.Messages, "Agent step"), scenario.Host + " result recorded");
                 });
@@ -114,13 +114,13 @@ namespace RNAssistant.Harness
                     "Create a new sheet named Report.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000 },
+                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("Done.", result.AssistantText, "assistant text");
                 AssertEqual(3, calls.Count, "llm call count");
-                AssertTrue(ContainsMessage(calls[1], "prose-only answer is not acceptable"), "forced follow-up prompt");
+                AssertTrue(ContainsMessage(calls[1], "requires Office tool use"), "forced follow-up prompt");
                 AssertEqual(1, adapter.Executed.Count, "adapter execution count");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "executed tool");
             });
@@ -135,7 +135,7 @@ namespace RNAssistant.Harness
                     adapter,
                     executor,
                     calls,
-                    "```rnassistant-agent\n{\"steps\":[\n```",
+                    RawResponse("```rnassistant-agent\n{\"steps\":[\n```"),
                     AgentBlock(Command("excel.add_sheet", "name", "Report")),
                     "Done.");
                 var session = NewSession(adapter);
@@ -144,13 +144,13 @@ namespace RNAssistant.Harness
                     "Create a new sheet named Report.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000 },
+                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("Done.", result.AssistantText, "assistant text");
                 AssertEqual(3, calls.Count, "llm call count");
-                AssertTrue(ContainsMessage(calls[1], "could not recover executable JSON"), "repair prompt");
+                AssertTrue(ContainsMessage(calls[1], "previous RNAssistant planner output was invalid"), "repair prompt");
                 AssertEqual(1, adapter.Executed.Count, "adapter execution count");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "executed tool");
             });
@@ -169,7 +169,7 @@ namespace RNAssistant.Harness
                     AgentBlock(Command("excel.add_sheet", "name", "Report")),
                     "Done.");
                 var session = NewSession(adapter);
-                var settings = new AppSettings { ContextCharLimit = 8000 };
+                var settings = new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false };
                 settings.AgentPrompts.ForceToolUsePrompt = "CUSTOM_FORCE_TOOL_PROMPT";
 
                 var result = service.ExecuteAsync(

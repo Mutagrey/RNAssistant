@@ -22,28 +22,6 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static void ChatAgentDisabledSkipsToolBlock()
-        {
-            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                var service = ChatServiceWithResponses(adapter, executor, null, AgentBlock(Command("word.insert_text", "text", "Hello")));
-                var session = NewSession(adapter);
-
-                var result = service.ExecuteAsync(
-                    "Insert text into the document.",
-                    session,
-                    NewContext(adapter),
-                    new AppSettings { AgentModeEnabled = false, AutoConfirmToolActions = true, ContextCharLimit = 8000 },
-                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
-                    null).GetAwaiter().GetResult();
-
-                AssertEqual(0, adapter.Executed.Count, "adapter execution count");
-                AssertEqual(0, result.ToolResults.Count, "tool result count");
-                AssertContains(result.AssistantText, "Agent mode is disabled", "assistant text");
-                AssertTrue(ContainsMessage(session.Messages, "Agent mode is disabled"), "disabled message recorded");
-            });
-        }
-
         private static void ChatWaitingToolGetsPendingId()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
@@ -56,7 +34,7 @@ namespace RNAssistant.Harness
                     "Replace a VBA module.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { AgentModeEnabled = true, AutoConfirmToolActions = false, ContextCharLimit = 8000 },
+                    new AppSettings { AutoConfirmToolActions = false, ContextCharLimit = 8000 },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null,
                     delegate(ChatSession pendingSession, ToolCommand pendingCommand, ToolResult pendingResult)
@@ -87,14 +65,14 @@ namespace RNAssistant.Harness
                     null,
                     AgentBlock(
                         Command("word.vba_replace_module", "moduleName", "Module1", "code", "Sub Test()\nEnd Sub"),
-                        Command("word.insert_text", "text", "Should not run")));
+                        Command("word.vba_read_module", "moduleName", "Module1")));
                 var session = NewSession(adapter);
 
                 var result = service.ExecuteAsync(
                     "Replace VBA and then insert text.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { AgentModeEnabled = true, AutoConfirmToolActions = false, ContextCharLimit = 8000 },
+                    new AppSettings { AutoConfirmToolActions = false, ContextCharLimit = 8000 },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null,
                     delegate(ChatSession pendingSession, ToolCommand pendingCommand, ToolResult pendingResult)
@@ -146,8 +124,8 @@ namespace RNAssistant.Harness
                     executor,
                     null,
                     AgentBlock(
-                        Command("excel.list_sheets"),
-                        Command("excel.workbook_summary")));
+                        Command("excel.get_context"),
+                        Command("excel.get_selection")));
                 var session = NewSession(adapter);
 
                 var result = service.ExecuteAsync(
@@ -176,7 +154,7 @@ namespace RNAssistant.Harness
                     "Insert text into the document.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { AutoRunToolCalls = false, ContextCharLimit = 8000 },
+                    new AppSettings { AutoRunToolCalls = false, AutoConfirmToolActions = true, ContextCharLimit = 8000 },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -187,27 +165,28 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void ChatMalformedToolResponseStaysProse()
+        private static void ChatMalformedPlannerResponseIsRepaired()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("PowerPoint"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 var malformed = "I tried this but it is broken:\n```rnassistant-agent\n{\"steps\":[\n```\nExtra noisy text.";
-                var service = ChatServiceWithResponses(adapter, executor, calls, malformed);
+                var service = ChatServiceWithResponses(adapter, executor, calls, RawResponse(malformed));
                 var session = NewSession(adapter);
 
                 var result = service.ExecuteAsync(
                     "Summarize the presentation.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { AgentModeEnabled = false, ContextCharLimit = 8000 },
+                    new AppSettings { ContextCharLimit = 8000 },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
-                AssertEqual(malformed, result.AssistantText, "assistant text");
+                AssertEqual("Done.", result.AssistantText, "assistant text");
                 AssertEqual(0, adapter.Executed.Count, "adapter execution count");
                 AssertEqual(2, session.Messages.Count, "session message count");
-                AssertEqual(malformed, session.Messages[1].Content, "assistant transcript");
+                AssertEqual("Done.", session.Messages[1].Content, "assistant transcript");
+                AssertEqual(2, calls.Count, "llm call count");
             });
         }
     }

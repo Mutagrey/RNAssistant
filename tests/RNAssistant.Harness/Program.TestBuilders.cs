@@ -163,16 +163,35 @@ namespace RNAssistant.Harness
 
         private static string AgentBlock(params ToolCommand[] commands)
         {
-            return "```rnassistant-agent\n" +
-                JsonConvert.SerializeObject(new
+            return JsonConvert.SerializeObject(new
+            {
+                kind = "tool_plan",
+                intent = "mutate",
+                message = (string)null,
+                steps = (commands ?? new ToolCommand[0]).Select(command => new
                 {
-                    steps = (commands ?? new ToolCommand[0]).Select(command => new
-                    {
-                        toolId = command.ToolId,
-                        arguments = command.Arguments
-                    }).ToArray()
-                }) +
-                "\n```";
+                    toolId = command.ToolId,
+                    arguments = command.Arguments,
+                    reason = "test step"
+                }).ToArray(),
+                expectedOutcome = "Execute test steps."
+            });
+        }
+
+        private static string FinalBlock(string message)
+        {
+            return JsonConvert.SerializeObject(new
+            {
+                kind = "final",
+                intent = "answer",
+                message = message ?? string.Empty,
+                steps = new object[0]
+            });
+        }
+
+        private static string RawResponse(string response)
+        {
+            return "RAW:" + (response ?? string.Empty);
         }
 
         private static ChatCompletionService ChatServiceWithResponses(
@@ -197,6 +216,7 @@ namespace RNAssistant.Harness
                         ? responses[index]
                         : "Done.";
                     index += 1;
+                    content = NormalizeScriptedResponse(content);
                     return Task.FromResult(new LlmCompletionResult
                     {
                         Content = content,
@@ -258,7 +278,7 @@ namespace RNAssistant.Harness
                 _index += 1;
                 return Task.FromResult(new LlmCompletionResult
                 {
-                    Content = turn.Response,
+                    Content = NormalizeScriptedResponse(turn.Response),
                     PromptTokens = 10,
                     CompletionTokens = 2,
                     TotalTokens = 12
@@ -276,6 +296,24 @@ namespace RNAssistant.Harness
                 public string[] MustContain { get; set; }
                 public string[] MustNotContain { get; set; }
             }
+        }
+
+        private static string NormalizeScriptedResponse(string content)
+        {
+            if (content == null)
+            {
+                return FinalBlock(string.Empty);
+            }
+            if (content.StartsWith("RAW:", StringComparison.Ordinal))
+            {
+                return content.Substring(4);
+            }
+            var trimmed = content.TrimStart();
+            if (trimmed.StartsWith("{", StringComparison.Ordinal))
+            {
+                return content;
+            }
+            return FinalBlock(content);
         }
 
         private static ChatSession NewSession(FakeOfficeAdapter adapter)

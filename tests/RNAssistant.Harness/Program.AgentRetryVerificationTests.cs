@@ -40,7 +40,7 @@ namespace RNAssistant.Harness
                     "Write a report table.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000 },
+                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -51,9 +51,9 @@ namespace RNAssistant.Harness
                 AssertTrue(!adapter.Executed[0].Arguments.ContainsKey("values"), "first command missing values");
                 AssertEqual("[[\"Month\",\"Sales\"]]", adapter.Executed[1].Arguments["values"], "retry values");
                 var resultJson = JsonConvert.SerializeObject(result.ToolResults);
-                AssertTrue(resultJson.IndexOf("No table values provided", StringComparison.OrdinalIgnoreCase) < 0, "recovered failure not logged");
+                AssertContains(resultJson, "No table values provided", "recoverable failure logged");
                 AssertContains(resultJson, "wrote 1 row", "retry result logged");
-                AssertTrue(!ContainsMessage(session.Messages, "No table values provided"), "recovered failure not persisted");
+                AssertTrue(session.Messages.Any(m => m != null && m.Activity != null && (m.Activity.ResultMessage ?? string.Empty).IndexOf("No table values provided", StringComparison.OrdinalIgnoreCase) >= 0), "recoverable failure persisted in activity");
                 AssertTrue(ContainsMessage(session.Messages, "Local skill retry result") || ContainsMessage(session.Messages, "Agent step"), "retry transcript recorded");
             });
         }
@@ -77,7 +77,7 @@ namespace RNAssistant.Harness
                     "Write a report table.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000 },
+                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -97,7 +97,6 @@ namespace RNAssistant.Harness
                     executor,
                     calls,
                     AgentBlock(Command("excel.add_sheet", "name", "Report")),
-                    AgentBlock(Command("excel.workbook_summary")),
                     "Verified.");
                 var session = NewSession(adapter);
 
@@ -105,13 +104,13 @@ namespace RNAssistant.Harness
                     "Create a report sheet.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000, RequireVerificationForMutations = true },
+                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = true },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("Verified.", result.AssistantText, "assistant text");
                 AssertTrue(calls.Count >= 2, "llm call count");
-                AssertContains(FlattenMessages(calls[1]), "verify the result", "verification follow-up");
+                AssertContains(FlattenMessages(calls[1]), "excel.workbook_summary succeeded", "verification observation");
                 AssertEqual(2, adapter.Executed.Count, "adapter execution count");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "mutation tool");
                 AssertEqual("excel.workbook_summary", adapter.Executed[1].ToolId, "verification tool");

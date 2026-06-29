@@ -101,7 +101,6 @@ namespace RNAssistant.Office.Services
                 TopP = source.TopP <= 0 ? 1.0 : Math.Min(source.TopP, 1.0),
                 ContextCharLimit = source.ContextCharLimit,
                 StreamResponses = false,
-                AgentModeEnabled = source.AgentModeEnabled,
                 AutoRunToolCalls = source.AutoRunToolCalls,
                 AutoConfirmToolActions = source.AutoConfirmToolActions,
                 AutoRetryToolErrors = source.AutoRetryToolErrors,

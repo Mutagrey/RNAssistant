@@ -133,7 +133,16 @@ namespace RNAssistant.Core.Storage
                 MutatesDocument = tool.MutatesDocument,
                 AgentCanRun = tool.AgentCanRun,
                 Enabled = tool.Enabled,
-                BuiltIn = false
+                BuiltIn = false,
+                RiskLevel = tool.RiskLevel,
+                UseWhen = tool.UseWhen,
+                DoNotUseWhen = tool.DoNotUseWhen,
+                ExamplesJson = tool.ExamplesJson,
+                PreconditionsJson = tool.PreconditionsJson,
+                VerifyJson = tool.VerifyJson,
+                CapabilityStatus = string.IsNullOrWhiteSpace(tool.CapabilityStatus) ? "available" : tool.CapabilityStatus,
+                Limitations = tool.Limitations,
+                ReplacementToolId = tool.ReplacementToolId
             };
 
             _json.Save(Path.Combine(directory, "tool.json"), metadata);

@@ -110,7 +110,7 @@ namespace RNAssistant.Harness
         private static void PromptSeparatesSkillsFromTools()
         {
             var prompt = new PromptComposer().ComposeSystemPrompt(
-                new AppSettings { AgentModeEnabled = true },
+                new AppSettings(),
                 "Excel",
                 string.Empty,
                 string.Empty,
@@ -141,7 +141,7 @@ namespace RNAssistant.Harness
 
             AssertContains(prompt, "Relevant markdown skills", "skills section");
             AssertContains(prompt, "Available tools", "tools section");
-            AssertContains(prompt, "\"toolId\":\"tool.id\"", "tool id protocol");
+            AssertContains(prompt, "\"toolId\":\"exact tool id from AVAILABLE_TOOLS\"", "tool id protocol");
             AssertContains(prompt, "Skills are guidance documents only", "skill guidance boundary");
         }
 
@@ -149,7 +149,7 @@ namespace RNAssistant.Harness
         {
             var longBody = "# Long skill\n" + new string('a', 2500) + "TAIL_MARKER";
             var prompt = new PromptComposer().ComposeSystemPrompt(
-                new AppSettings { AgentModeEnabled = true, ContextCharLimit = 4000 },
+                new AppSettings { ContextCharLimit = 4000 },
                 "Excel",
                 string.Empty,
                 string.Empty,
@@ -174,7 +174,7 @@ namespace RNAssistant.Harness
 
         private static void PromptUsesEditableAgentPromptBlocks()
         {
-            var settings = new AppSettings { AgentModeEnabled = true };
+            var settings = new AppSettings();
             settings.AgentPrompts.ToolProtocolPrompt = "CUSTOM_TOOL_PROTOCOL";
             settings.AgentPrompts.ToolRoutingPrompt = "CUSTOM_TOOL_ROUTING";
 
