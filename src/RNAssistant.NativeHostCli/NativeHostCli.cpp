@@ -41,14 +41,14 @@ public:
 public ref class ManagedPanelHost abstract sealed
 {
 private:
-    static Form^ _form;
-    static Object^ _session;
-    static String^ _rootPath;
-    static IntPtr _officeHwnd;
-    static int _hostKind;
-    static PanelOwnerMode _ownerMode;
-    static String^ _lastError;
-    static bool _resolverInstalled;
+    static Form^ _form = nullptr;
+    static Object^ _session = nullptr;
+    static String^ _rootPath = nullptr;
+    static IntPtr _officeHwnd = IntPtr::Zero;
+    static int _hostKind = 0;
+    static PanelOwnerMode _ownerMode = PanelOwnerMode::OwnerWindow;
+    static String^ _lastError = String::Empty;
+    static bool _resolverInstalled = false;
 
 public:
     static int ShowPanel(IntPtr officeHwnd, String^ rootPath, int hostKind)
@@ -199,7 +199,8 @@ private:
     {
         try
         {
-            String^ simpleName = gcnew AssemblyName(args->Name)->Name;
+            AssemblyName^ assemblyName = gcnew AssemblyName(args->Name);
+            String^ simpleName = assemblyName->Name;
             String^ candidate = Path::Combine(_rootPath, simpleName + ".dll");
             return File::Exists(candidate) ? Assembly::LoadFrom(candidate) : nullptr;
         }
@@ -266,7 +267,7 @@ private:
         {
             if (_form != nullptr && !_form->IsDisposed)
             {
-                _form->Dispose();
+                delete _form;
             }
             _form = nullptr;
             DisposeSession();
@@ -335,7 +336,8 @@ private:
             throw gcnew InvalidOperationException("GetWindowRect failed for Office HWND.");
         }
 
-        Rectangle workingArea = Screen::FromHandle(officeHwnd)->WorkingArea;
+        System::Drawing::Rectangle workingArea =
+            Screen::FromHandle(officeHwnd)->WorkingArea;
         const int panelWidth = 480;
         const int topOffset = 120;
         const int rightMargin = 20;
@@ -349,7 +351,7 @@ private:
         left = Math::Max(workingArea.Left, Math::Min(left, workingArea.Right - width));
         top = Math::Max(workingArea.Top, Math::Min(top, workingArea.Bottom - height));
 
-        form->Bounds = Rectangle(left, top, width, height);
+        form->Bounds = System::Drawing::Rectangle(left, top, width, height);
     }
 
     static void OnFormClosed(Object^ sender, FormClosedEventArgs^ e)
@@ -365,7 +367,7 @@ private:
         IDisposable^ disposable = dynamic_cast<IDisposable^>(_session);
         if (disposable != nullptr)
         {
-            disposable->Dispose();
+            delete disposable;
         }
         _session = nullptr;
     }
@@ -410,15 +412,6 @@ private:
         _lastError = String::Empty;
     }
 };
-
-Form^ ManagedPanelHost::_form = nullptr;
-Object^ ManagedPanelHost::_session = nullptr;
-String^ ManagedPanelHost::_rootPath = nullptr;
-IntPtr ManagedPanelHost::_officeHwnd = IntPtr::Zero;
-int ManagedPanelHost::_hostKind = 0;
-PanelOwnerMode ManagedPanelHost::_ownerMode = PanelOwnerMode::OwnerWindow;
-String^ ManagedPanelHost::_lastError = String::Empty;
-bool ManagedPanelHost::_resolverInstalled = false;
 
 extern "C" __declspec(dllexport)
 int __stdcall Host_ShowPanelEx(HWND officeHwnd, const wchar_t* rootPath, int hostKind)
