@@ -1,92 +1,90 @@
 Attribute VB_Name = "RNAssistantWord"
 Option Explicit
 
+#If VBA7 Then
+Private Declare PtrSafe Function SetDllDirectoryW Lib "kernel32" (ByVal lpPathName As LongPtr) As Long
+Private Declare PtrSafe Function Host_ShowPanelEx Lib "RNAssistant.NativeHostCli.dll" (ByVal officeHwnd As LongPtr, ByVal rootPath As LongPtr, ByVal hostKind As Long) As Long
+Private Declare PtrSafe Function Host_ClosePanel Lib "RNAssistant.NativeHostCli.dll" () As Long
+Private Declare PtrSafe Function Host_SetPanelVisible Lib "RNAssistant.NativeHostCli.dll" (ByVal visible As Long) As Long
+Private Declare PtrSafe Function Host_GetLastErrorMessage Lib "RNAssistant.NativeHostCli.dll" (ByVal buffer As LongPtr, ByVal bufferChars As Long) As Long
+#End If
+
 Public Sub RNAssistant_Open()
-    LaunchRNAssistant ""
+    ShowPanelCore
 End Sub
 
-Public Sub RNAssistant_Summarize()
-    LaunchRNAssistant "summarize"
+Public Sub ShowAiPanel()
+    ShowPanelCore
 End Sub
 
-Public Sub RNAssistant_ExplainSelection()
-    LaunchRNAssistant "explain-selection"
+Public Sub RNAssistant_Close()
+    ReportHostResult Host_ClosePanel()
 End Sub
 
-Public Sub RNAssistant_DraftRewrite()
-    LaunchRNAssistant "draft-rewrite"
+Public Sub CloseAiPanel()
+    RNAssistant_Close
 End Sub
 
-Public Sub RNAssistant_RunSkill()
-    LaunchRNAssistant "run-skill"
+Public Sub RNAssistant_Hide()
+    ReportHostResult Host_SetPanelVisible(0)
 End Sub
 
-Public Sub RNAssistant_Settings()
-    LaunchRNAssistant "settings"
+Public Sub RNAssistant_RibbonOpen(ByVal control As IRibbonControl)
+    ShowPanelCore
 End Sub
 
-Public Sub RNAssistant_Context()
-    LaunchRNAssistant "context"
+Public Sub RNAssistant_RibbonClose(ByVal control As IRibbonControl)
+    RNAssistant_Close
 End Sub
 
-Private Sub LaunchRNAssistant(ByVal actionName As String)
-    Dim exePath As String
-    exePath = Environ$("RNASSISTANT_DESKTOP_EXE")
-    If Len(exePath) = 0 Then
-        MsgBox "Set RNASSISTANT_DESKTOP_EXE to RNAssistant.Desktop.exe.", vbExclamation, "RN Assistant"
-        Exit Sub
+Private Sub ShowPanelCore()
+    On Error GoTo Failed
+    Dim rootPath As String
+    Dim officeHwnd As LongPtr
+    rootPath = ResolvePortableRoot(ThisDocument.Path)
+    officeHwnd = ActiveWindow.Hwnd
+    If officeHwnd = 0 Then Err.Raise vbObjectError + 2000, , "Word HWND not found."
+    PrepareDllFolder rootPath
+    ReportHostResult Host_ShowPanelEx(officeHwnd, StrPtr(rootPath), 2)
+    Exit Sub
+Failed:
+    MsgBox Err.Description, vbExclamation, "RN Assistant"
+End Sub
+
+Private Function ResolvePortableRoot(ByVal containerFolder As String) As String
+    If DllExists(containerFolder) Then
+        ResolvePortableRoot = containerFolder
+    ElseIf DllExists(ParentFolder(containerFolder)) Then
+        ResolvePortableRoot = ParentFolder(containerFolder)
+    Else
+        ResolvePortableRoot = containerFolder
     End If
+End Function
 
-    Dim command As String
-    command = QuoteArg(exePath) & " --host Word --hwnd " & CStr(CurrentHwnd()) & " --target-base64 " & QuoteArg(Base64Utf8(BuildTargetJson()))
-    If Len(actionName) > 0 Then command = command & " --action " & QuoteArg(actionName)
-    CreateObject("WScript.Shell").Run command, 1, False
+Private Sub PrepareDllFolder(ByVal rootPath As String)
+    If Len(rootPath) = 0 Then Err.Raise vbObjectError + 2001, , "Word template path is empty."
+    If Not DllExists(rootPath) Then Err.Raise vbObjectError + 2002, , "RNAssistant.NativeHostCli.dll not found: " & rootPath
+    If SetDllDirectoryW(StrPtr(rootPath)) = 0 Then Err.Raise vbObjectError + 2003, , "SetDllDirectoryW failed: " & rootPath
 End Sub
 
-Private Function BuildTargetJson() As String
-    If Documents.Count = 0 Then
-        BuildTargetJson = "{""Host"":""Word"",""Hwnd"":" & CStr(CurrentHwnd()) & "}"
-        Exit Function
-    End If
-
-    Dim doc As Document
-    Set doc = ActiveDocument
-    BuildTargetJson = "{""Host"":""Word"",""Hwnd"":" & CStr(CurrentHwnd()) & ",""FullName"":""" & JsonEscape(doc.FullName) & """,""Path"":""" & JsonEscape(doc.FullName) & """,""Name"":""" & JsonEscape(doc.Name) & """,""Selection"":""" & JsonEscape(CStr(Selection.Start) & ":" & CStr(Selection.End)) & """}"
+Private Function DllExists(ByVal folder As String) As Boolean
+    If Len(folder) > 0 Then DllExists = Len(Dir$(folder & "\RNAssistant.NativeHostCli.dll")) > 0
 End Function
 
-Private Function CurrentHwnd() As Long
-    On Error Resume Next
-    CurrentHwnd = Application.ActiveWindow.Hwnd
-    On Error GoTo 0
+Private Function ParentFolder(ByVal folder As String) As String
+    Dim p As Long
+    p = InStrRev(folder, "\")
+    If p > 1 Then ParentFolder = Left$(folder, p - 1)
 End Function
 
-Private Function QuoteArg(ByVal value As String) As String
-    QuoteArg = Chr$(34) & Replace(value, Chr$(34), "\" & Chr$(34)) & Chr$(34)
-End Function
+Private Sub ReportHostResult(ByVal result As Long)
+    If result <> 0 Then MsgBox "Native host error " & result & ":" & vbCrLf & LastHostError(), vbExclamation, "RN Assistant"
+End Sub
 
-Private Function JsonEscape(ByVal value As String) As String
-    JsonEscape = Replace(Replace(value, "\", "\\"), Chr$(34), "\" & Chr$(34))
-End Function
-
-Private Function Base64Utf8(ByVal value As String) As String
-    Dim stream As Object
-    Set stream = CreateObject("ADODB.Stream")
-    stream.Type = 2
-    stream.Charset = "utf-8"
-    stream.Open
-    stream.WriteText value
-    stream.Position = 0
-    stream.Type = 1
-
-    Dim bytes As Variant
-    bytes = stream.Read
-    stream.Close
-
-    Dim xml As Object
-    Set xml = CreateObject("MSXML2.DOMDocument.6.0")
-    Dim node As Object
-    Set node = xml.createElement("b64")
-    node.DataType = "bin.base64"
-    node.nodeTypedValue = bytes
-    Base64Utf8 = Replace(Replace(node.Text, vbCr, ""), vbLf, "")
+Private Function LastHostError() As String
+    Dim buffer As String
+    Dim chars As Long
+    buffer = String$(4096, vbNullChar)
+    chars = Host_GetLastErrorMessage(StrPtr(buffer), Len(buffer))
+    If chars > 0 Then LastHostError = Left$(buffer, chars)
 End Function

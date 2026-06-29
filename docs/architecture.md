@@ -4,7 +4,8 @@
 
 Локальный Office assistant для Word, Excel, PowerPoint и Outlook:
 
-- standalone desktop WebView2 UI плюс VSTO task pane compatibility mode;
+- standalone desktop WebView2 UI, VSTO task pane compatibility mode и
+  no-registration VBA/C++/CLI in-process mode;
 - пер-документные чаты и контекст;
 - OpenAI-compatible chat completions endpoint;
 - локальные Office tools, pipelines и VBA rollback workflow;
@@ -22,6 +23,19 @@ web static UI
                 -> RNAssistant.OfficeHosts COM adapters
                     -> VSTO add-ins or RNAssistant.Desktop target provider
 ```
+
+Альтернативный portable runtime path:
+
+```text
+VBA add-in/macro
+    -> RNAssistant.NativeHostCli.dll (__stdcall exports, C++/CLI)
+        -> owned WinForms window + RNAssistant.Office WebView control
+            -> RNAssistant.OfficeHosts COM adapter
+```
+
+Native host устанавливает `AssemblyResolve` для portable root до загрузки
+managed assemblies. Это обязательно: внутри Office `AppDomain.BaseDirectory`
+указывает на каталог Office, а не на каталог DLL.
 
 `Core` не знает про Office. `Office` не знает про Word/Excel COM types. `OfficeHosts` знает про host-specific COM и реализует `IOfficeApplicationAdapter`. VSTO projects и desktop exe только выбирают shell/target.
 
@@ -46,6 +60,8 @@ web static UI
 - `src/RNAssistant.Office/Tools`: tool execution, pipelines, tool/skill CRUD tools, VBA patch/backup workflow.
 - `src/RNAssistant.OfficeHosts`: shared Excel/Word/PowerPoint/Outlook COM adapters and desktop target descriptors.
 - `src/RNAssistant.Desktop`: standalone WinForms shell, explicit Office target picker, manual foreground attach, single-instance JSON pipe activation, and ROT-based adapter creation with hwnd validation.
+- `src/RNAssistant.NativeHostCli`: thin C++/CLI exported-DLL host for VBA; owns
+  only modeless window lifecycle, owner/positioning and managed assembly loading.
 - `src/RNAssistant.*AddIn`: VSTO compatibility wiring; no host adapter ownership.
 - `wrappers/native`: VBA source modules for Office-native launchers.
 - `web`: static HTML/CSS/JS task pane. `web/js/app-core.js` owns state and WebView bridge wiring; `app-settings.js`, `app-tools.js`, `app-skills.js`, `app-vba.js`, `app-context.js`, and `app-chat.js` own their feature flows; `app-utils.js` owns pure browser helpers; `app.js` is boot plus shared rendering helpers.
@@ -108,6 +124,9 @@ Windows-only validation remains separate:
 - open solution in VS 2022;
 - build `Debug | x64`;
 - smoke-test each Office host;
-- smoke-test Desktop attach from foreground Office and native wrapper `--hwnd` launch;
+- smoke-test VBA `Declare PtrSafe` loading for each Office host and verify the
+  native DLL/WebView2Loader bitness matches Office;
+- smoke-test Desktop attach from foreground Office;
+- smoke-test VBA native-host Show/Hide/Close and last-error exports;
 - test WebView2 fixed runtime fallback;
 - test VBA trust-disabled path and rollback restore.

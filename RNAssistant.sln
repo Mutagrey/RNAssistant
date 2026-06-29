@@ -20,6 +20,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.PowerPointAddIn
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.OutlookAddIn", "src\RNAssistant.OutlookAddIn\RNAssistant.OutlookAddIn.csproj", "{E06F859E-68DE-4A9D-9D66-6CAD15FD31E6}"
 EndProject
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "RNAssistant.NativeHostCli", "src\RNAssistant.NativeHostCli\RNAssistant.NativeHostCli.vcxproj", "{C66CD365-420C-4753-99F8-833301A2BC21}"
+EndProject
 Global
   GlobalSection(SolutionConfigurationPlatforms) = preSolution
     Debug|x64 = Debug|x64
@@ -62,6 +64,10 @@ Global
     {E06F859E-68DE-4A9D-9D66-6CAD15FD31E6}.Debug|x64.Build.0 = Debug|x64
     {E06F859E-68DE-4A9D-9D66-6CAD15FD31E6}.Release|x64.ActiveCfg = Release|x64
     {E06F859E-68DE-4A9D-9D66-6CAD15FD31E6}.Release|x64.Build.0 = Release|x64
+    {C66CD365-420C-4753-99F8-833301A2BC21}.Debug|x64.ActiveCfg = Debug|x64
+    {C66CD365-420C-4753-99F8-833301A2BC21}.Debug|x64.Build.0 = Debug|x64
+    {C66CD365-420C-4753-99F8-833301A2BC21}.Release|x64.ActiveCfg = Release|x64
+    {C66CD365-420C-4753-99F8-833301A2BC21}.Release|x64.Build.0 = Release|x64
   EndGlobalSection
   GlobalSection(SolutionProperties) = preSolution
     HideSolutionNode = FALSE

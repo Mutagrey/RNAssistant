@@ -57,6 +57,7 @@
     <Compile Include="Controller\AssistantController.Chats.cs" />
     <Compile Include="Controller\AssistantController.Context.cs" />
     <Compile Include="Controller\AssistantController.HtmlWorkspace.cs" />
+    <Compile Include="Diagnostics\RuntimeLog.cs" />
     <Compile Include="Runtime\AssistantRuntime.cs" />
     <Compile Include="Runtime\DispatchedOfficeApplicationAdapter.cs" />
     <Compile Include="Agent\AgentTranscript.cs" />

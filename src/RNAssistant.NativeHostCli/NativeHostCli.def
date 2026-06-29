@@ -1,0 +1,8 @@
+LIBRARY RNAssistant.NativeHostCli
+
+EXPORTS
+    Host_ShowPanel
+    Host_ShowPanelEx
+    Host_ClosePanel
+    Host_SetPanelVisible
+    Host_GetLastErrorMessage

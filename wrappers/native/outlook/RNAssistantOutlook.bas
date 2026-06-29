@@ -1,110 +1,71 @@
 Attribute VB_Name = "RNAssistantOutlook"
 Option Explicit
 
+#If VBA7 Then
+Private Declare PtrSafe Function SetDllDirectoryW Lib "kernel32" (ByVal lpPathName As LongPtr) As Long
+Private Declare PtrSafe Function FindWindowW Lib "user32" (ByVal lpClassName As LongPtr, ByVal lpWindowName As LongPtr) As LongPtr
+Private Declare PtrSafe Function Host_ShowPanelEx Lib "RNAssistant.NativeHostCli.dll" (ByVal officeHwnd As LongPtr, ByVal rootPath As LongPtr, ByVal hostKind As Long) As Long
+Private Declare PtrSafe Function Host_ClosePanel Lib "RNAssistant.NativeHostCli.dll" () As Long
+Private Declare PtrSafe Function Host_SetPanelVisible Lib "RNAssistant.NativeHostCli.dll" (ByVal visible As Long) As Long
+Private Declare PtrSafe Function Host_GetLastErrorMessage Lib "RNAssistant.NativeHostCli.dll" (ByVal buffer As LongPtr, ByVal bufferChars As Long) As Long
+#End If
+
 Public Sub RNAssistant_Open()
-    LaunchRNAssistant ""
+    On Error GoTo Failed
+    Dim rootPath As String
+    Dim officeHwnd As LongPtr
+    rootPath = GetRootPath()
+    officeHwnd = CurrentHwnd()
+    If officeHwnd = 0 Then Err.Raise vbObjectError + 4000, , "Outlook HWND not found."
+    PrepareDllFolder rootPath
+    ReportHostResult Host_ShowPanelEx(officeHwnd, StrPtr(rootPath), 4)
+    Exit Sub
+Failed:
+    MsgBox Err.Description, vbExclamation, "RN Assistant"
 End Sub
 
-Public Sub RNAssistant_Summarize()
-    LaunchRNAssistant "summarize"
+Public Sub ShowAiPanel()
+    RNAssistant_Open
 End Sub
 
-Public Sub RNAssistant_ExplainSelection()
-    LaunchRNAssistant "explain-selection"
+Public Sub RNAssistant_Close()
+    ReportHostResult Host_ClosePanel()
 End Sub
 
-Public Sub RNAssistant_DraftRewrite()
-    LaunchRNAssistant "draft-rewrite"
+Public Sub CloseAiPanel()
+    RNAssistant_Close
 End Sub
 
-Public Sub RNAssistant_RunSkill()
-    LaunchRNAssistant "run-skill"
+Public Sub RNAssistant_Hide()
+    ReportHostResult Host_SetPanelVisible(0)
 End Sub
 
-Public Sub RNAssistant_Settings()
-    LaunchRNAssistant "settings"
-End Sub
-
-Public Sub RNAssistant_Context()
-    LaunchRNAssistant "context"
-End Sub
-
-Private Sub LaunchRNAssistant(ByVal actionName As String)
-    Dim exePath As String
-    exePath = Environ$("RNASSISTANT_DESKTOP_EXE")
-    If Len(exePath) = 0 Then
-        MsgBox "Set RNASSISTANT_DESKTOP_EXE to RNAssistant.Desktop.exe.", vbExclamation, "RN Assistant"
-        Exit Sub
-    End If
-
-    Dim command As String
-    command = QuoteArg(exePath) & " --host Outlook --hwnd " & CStr(CurrentHwnd()) & " --target-base64 " & QuoteArg(Base64Utf8(BuildTargetJson()))
-    If Len(actionName) > 0 Then command = command & " --action " & QuoteArg(actionName)
-    CreateObject("WScript.Shell").Run command, 1, False
-End Sub
-
-Private Function BuildTargetJson() As String
-    Dim explorer As Explorer
-    Set explorer = Application.ActiveExplorer
-
-    If Not explorer Is Nothing Then
-        If explorer.Selection.Count > 0 Then
-            If TypeOf explorer.Selection.Item(1) Is MailItem Then
-                Dim mail As MailItem
-                Set mail = explorer.Selection.Item(1)
-                BuildTargetJson = "{""Host"":""Outlook"",""Hwnd"":" & CStr(CurrentHwnd()) & ",""EntryId"":""" & JsonEscape(mail.EntryID) & """,""Name"":""" & JsonEscape(mail.Subject) & """}"
-                Exit Function
-            End If
-        End If
-
-        If Not explorer.CurrentFolder Is Nothing Then
-            BuildTargetJson = "{""Host"":""Outlook"",""Hwnd"":" & CStr(CurrentHwnd()) & ",""FolderPath"":""" & JsonEscape(explorer.CurrentFolder.FolderPath) & """,""Name"":""" & JsonEscape(explorer.CurrentFolder.Name) & """}"
-            Exit Function
-        End If
-    End If
-
-    BuildTargetJson = "{""Host"":""Outlook"",""Hwnd"":" & CStr(CurrentHwnd()) & "}"
+Private Function GetRootPath() As String
+    GetRootPath = Environ$("RNASSISTANT_ROOT")
+    If Len(GetRootPath) = 0 Then GetRootPath = "C:\Temp\RNAssistant"
 End Function
 
-Private Function CurrentHwnd() As Long
+Private Function CurrentHwnd() As LongPtr
     On Error Resume Next
-    If Not Application.ActiveInspector Is Nothing Then
-        CurrentHwnd = Application.ActiveInspector.HWND
-        If CurrentHwnd <> 0 Then Exit Function
-    End If
-    If Not Application.ActiveExplorer Is Nothing Then
-        CurrentHwnd = Application.ActiveExplorer.HWND
-    End If
+    If Not Application.ActiveInspector Is Nothing Then CurrentHwnd = Application.ActiveInspector.HWND
+    If CurrentHwnd = 0 And Not Application.ActiveExplorer Is Nothing Then CurrentHwnd = Application.ActiveExplorer.HWND
     On Error GoTo 0
+    If CurrentHwnd = 0 Then CurrentHwnd = FindWindowW(StrPtr("rctrl_renwnd32"), 0)
 End Function
 
-Private Function QuoteArg(ByVal value As String) As String
-    QuoteArg = Chr$(34) & Replace(value, Chr$(34), "\" & Chr$(34)) & Chr$(34)
-End Function
+Private Sub PrepareDllFolder(ByVal rootPath As String)
+    If Len(Dir$(rootPath & "\RNAssistant.NativeHostCli.dll")) = 0 Then Err.Raise vbObjectError + 4001, , "RNAssistant.NativeHostCli.dll not found: " & rootPath
+    If SetDllDirectoryW(StrPtr(rootPath)) = 0 Then Err.Raise vbObjectError + 4002, , "SetDllDirectoryW failed: " & rootPath
+End Sub
 
-Private Function JsonEscape(ByVal value As String) As String
-    JsonEscape = Replace(Replace(value, "\", "\\"), Chr$(34), "\" & Chr$(34))
-End Function
+Private Sub ReportHostResult(ByVal result As Long)
+    If result <> 0 Then MsgBox "Native host error " & result & ":" & vbCrLf & LastHostError(), vbExclamation, "RN Assistant"
+End Sub
 
-Private Function Base64Utf8(ByVal value As String) As String
-    Dim stream As Object
-    Set stream = CreateObject("ADODB.Stream")
-    stream.Type = 2
-    stream.Charset = "utf-8"
-    stream.Open
-    stream.WriteText value
-    stream.Position = 0
-    stream.Type = 1
-
-    Dim bytes As Variant
-    bytes = stream.Read
-    stream.Close
-
-    Dim xml As Object
-    Set xml = CreateObject("MSXML2.DOMDocument.6.0")
-    Dim node As Object
-    Set node = xml.createElement("b64")
-    node.DataType = "bin.base64"
-    node.nodeTypedValue = bytes
-    Base64Utf8 = Replace(Replace(node.Text, vbCr, ""), vbLf, "")
+Private Function LastHostError() As String
+    Dim buffer As String
+    Dim chars As Long
+    buffer = String$(4096, vbNullChar)
+    chars = Host_GetLastErrorMessage(StrPtr(buffer), Len(buffer))
+    If chars > 0 Then LastHostError = Left$(buffer, chars)
 End Function

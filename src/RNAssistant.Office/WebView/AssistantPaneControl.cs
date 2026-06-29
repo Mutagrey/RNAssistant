@@ -11,7 +11,9 @@ using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Diagnostics;
 
 namespace RNAssistant.Office.WebView
 {
@@ -85,6 +87,7 @@ namespace RNAssistant.Office.WebView
 
         private async Task InitializeAsync()
         {
+            RuntimeLog.Info("WebView2 initialization started. WebRoot=" + _webRoot);
             var errors = new StringBuilder();
             var candidates = BuildEnvironmentCandidates();
             for (var i = 0; i < candidates.Count; i++)
@@ -98,6 +101,7 @@ namespace RNAssistant.Office.WebView
                     }
 
                     Directory.CreateDirectory(candidate.UserDataFolder);
+                    RuntimeLog.Info("WebView2 candidate=" + candidate.Name + ", userData=" + candidate.UserDataFolder);
                     var environment = await CoreWebView2Environment.CreateAsync(candidate.BrowserFolder, candidate.UserDataFolder).ConfigureAwait(true);
                     await _webView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
                     ConfigureInitializedWebView();
@@ -108,6 +112,7 @@ namespace RNAssistant.Office.WebView
                     var baseException = ex.GetBaseException();
                     errors.AppendLine(candidate.Name + ": " + baseException.Message);
                     Debug.WriteLine("RNAssistant WebView2 startup failed for " + candidate.Name + ": " + baseException);
+                    RuntimeLog.Error("WebView2 candidate failed: " + candidate.Name, baseException);
                 }
             }
 
@@ -124,10 +129,12 @@ namespace RNAssistant.Office.WebView
             var indexPath = Path.Combine(_webRoot, "index.html");
             if (!File.Exists(indexPath))
             {
+                RuntimeLog.Error("WebView index was not found: " + indexPath);
                 _webView.NavigateToString("<html><body style='font-family:Segoe UI;padding:20px'><h3>RN Assistant</h3><p>web/index.html not found.</p></body></html>");
                 return;
             }
 
+            RuntimeLog.Info("WebView navigating to " + indexPath);
             _webView.Source = new Uri(indexPath);
         }
 
@@ -148,7 +155,7 @@ namespace RNAssistant.Office.WebView
             CreateWebViewControl();
         }
 
-        private static IReadOnlyList<WebViewEnvironmentCandidate> BuildEnvironmentCandidates()
+        private IReadOnlyList<WebViewEnvironmentCandidate> BuildEnvironmentCandidates()
         {
             var candidates = new List<WebViewEnvironmentCandidate>();
             var root = RNAssistant.Core.Storage.AppDataPaths.CreateDefault().WebViewUserDataDirectory;
@@ -221,6 +228,7 @@ namespace RNAssistant.Office.WebView
             try
             {
                 var requestJson = e.WebMessageAsJson;
+                RuntimeLog.Info("Web message received: " + DescribeMessageForLog(requestJson));
                 if (TryHandleHostStateMessage(requestJson))
                 {
                     return;
@@ -231,6 +239,7 @@ namespace RNAssistant.Office.WebView
             }
             catch (Exception ex)
             {
+                RuntimeLog.Error("Web message handling failed.", ex);
                 PostBridgeMessage("{\"ok\":false,\"error\":\"" + EscapeJson(ex.Message) + "\"}");
             }
         }
@@ -248,9 +257,19 @@ namespace RNAssistant.Office.WebView
             return true;
         }
 
-        private static string ResolveFixedRuntimeFolder()
+        private string ResolveFixedRuntimeFolder()
         {
-            var root = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "vendor", "webview2-runtime");
+            var portableRoot = string.IsNullOrWhiteSpace(_webRoot)
+                ? null
+                : Directory.GetParent(Path.GetFullPath(_webRoot));
+            var root = portableRoot == null
+                ? null
+                : Path.Combine(portableRoot.FullName, "vendor", "webview2-runtime");
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            {
+                root = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "vendor", "webview2-runtime");
+            }
+
             if (!Directory.Exists(root))
             {
                 return null;
@@ -388,6 +407,20 @@ namespace RNAssistant.Office.WebView
         private static string EscapeJson(string value)
         {
             return (value ?? string.Empty).Replace("\\", "\\\\").Replace("\"", "\\\"");
+        }
+
+        private static string DescribeMessageForLog(string value)
+        {
+            try
+            {
+                var message = JObject.Parse(value ?? "{}");
+                return "type=" + (message.Value<string>("type") ?? string.Empty)
+                    + ", id=" + (message.Value<string>("id") ?? string.Empty);
+            }
+            catch
+            {
+                return "invalid JSON, chars=" + (value == null ? 0 : value.Length);
+            }
         }
 
         private bool IsKeyboardFocusInsidePane(IntPtr focusedWindow)

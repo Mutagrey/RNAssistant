@@ -1,0 +1,19 @@
+<customUI xmlns="http://schemas.microsoft.com/office/2009/07/customui">
+  <ribbon>
+    <tabs>
+      <tab id="tabRNAssistant" label="RN Assistant">
+        <group id="groupRNAssistant" label="Assistant">
+          <button id="buttonRNAssistantOpen"
+                  label="Show panel"
+                  size="large"
+                  imageMso="ResearchPane"
+                  onAction="RNAssistant_RibbonOpen"/>
+          <button id="buttonRNAssistantClose"
+                  label="Close panel"
+                  imageMso="WindowClose"
+                  onAction="RNAssistant_RibbonClose"/>
+        </group>
+      </tab>
+    </tabs>
+  </ribbon>
+</customUI>

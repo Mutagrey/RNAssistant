@@ -16,6 +16,7 @@ Local AI assistant for Excel, Word, PowerPoint and Outlook.
 - `src/RNAssistant.Core` - settings, DPAPI secret storage, chat/context stores, OpenAI-compatible chat client, skill parser.
 - `src/RNAssistant.Office` - shared WebView2 task pane, JS bridge, ribbon XML and assistant controller.
 - `src/RNAssistant.OfficeHosts` - shared Excel/Word/PowerPoint/Outlook COM adapters.
+- `src/RNAssistant.NativeHostCli` - C++/CLI in-process DLL host for VBA.
 - `src/RNAssistant.Desktop` - standalone WinForms/WebView2 desktop shell.
 - `src/RNAssistant.*AddIn` - VSTO compatibility add-ins and ribbon/task pane wiring.
 - `wrappers/native` - VBA source modules for Office-native launcher wrappers.
@@ -25,19 +26,35 @@ Local AI assistant for Excel, Word, PowerPoint and Outlook.
 
 Development rules are in `AGENTS.md`. Architecture boundaries and refactoring targets are in `docs/architecture.md`; review findings and roadmap are in `docs/review-roadmap.md`.
 
+## In-process VBA Quick Start
+
+This mode runs the existing WebView2 panel inside Office without an RNAssistant
+EXE, VSTO startup, COM registration or RegAsm.
+
+1. Build `RNAssistant.NativeHostCli`, `RNAssistant.Core`, `RNAssistant.Office`
+   and `RNAssistant.OfficeHosts` in Visual Studio 2022 using the same bitness as
+   Office.
+2. Publish the portable folder:
+
+```powershell
+.\tools\Publish-NativePortable.ps1 -Configuration Release -Architecture x64 -Destination C:\Temp\RNAssistant
+```
+
+3. Package/import the VBA and Ribbon sources from `wrappers\native`; see
+   `wrappers\native\README.md`.
+
 ## Windows Desktop Quick Start
 
-The preferred local mode is `RNAssistant.Desktop.exe` plus native Office wrapper
-files. This avoids VSTO ClickOnce manifest signing for the main assistant UI.
+The standalone desktop mode remains available:
 
 ```cmd
 install-desktop-local.cmd
 ```
 
 This builds `RNAssistant.Desktop` and writes `RNASSISTANT_DESKTOP_EXE` to the
-CurrentUser environment. Import the relevant module from `wrappers\native` into
-an Excel `.xlam`, Word `.dotm`, PowerPoint `.ppam`/`.potm`, or Outlook VBA
-project, then wire ribbon buttons to the public `RNAssistant_*` macros.
+CurrentUser environment. The current `wrappers\native` modules target the
+in-process DLL path; the desktop executable can be launched directly with the
+arguments below.
 
 The desktop shell accepts:
 
