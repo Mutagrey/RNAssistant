@@ -28,6 +28,7 @@ namespace RNAssistant.Office
         private readonly SkillCatalogService _skillCatalog;
         private readonly ChatSessionService _chatSessions;
         private readonly ChatCompletionService _chatCompletionService;
+        private readonly OfflineChatService _offlineChatService;
         private readonly ContextService _contextService;
         private readonly LlmClient _llmClient;
         private readonly object _syncRoot;
@@ -63,7 +64,9 @@ namespace RNAssistant.Office
             _skillCatalog = new SkillCatalogService(_adapter, _skillStore);
             _chatSessions = new ChatSessionService(_adapter, _chatStore);
             _llmClient = new LlmClient(() => _settingsService.LoadApiKey(), attachment => AttachmentImageService.ReadForModel(_attachmentStore, attachment));
-            _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, completeAsync ?? _llmClient.CompleteAsync);
+            var completion = completeAsync ?? _llmClient.CompleteAsync;
+            _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, completion);
+            _offlineChatService = new OfflineChatService(_toolExecutor, completion);
             _contextService = new ContextService(_adapter);
             _syncRoot = new object();
             _pendingAgentTools = new Dictionary<string, PendingAgentTool>(StringComparer.OrdinalIgnoreCase);
@@ -142,11 +145,24 @@ namespace RNAssistant.Office
             {
                 throw new InvalidOperationException(invalidAttachment.FileName + ": " + invalidAttachment.Error);
             }
-            var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
             var documentContext = LoadContext(session);
             var skills = _skillCatalog.SelectRelevantSkills(text, documentContext, 5);
             var shouldGenerateLlmTitle = settings.SmartChatTitles != false && ChatTitleBuilder.ShouldAssign(session);
-            var completion = await _chatCompletionService.ExecuteAsync(text ?? string.Empty, session, documentContext, settings, tools, attachments, progress, RegisterPendingAgentTool, skills, cancellationToken);
+            ChatCompletionResult completion;
+            if (_chatSessions.IsCurrentDocument(session))
+            {
+                var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
+                completion = await _chatCompletionService.ExecuteAsync(text ?? string.Empty, session, documentContext, settings, tools, attachments, progress, RegisterPendingAgentTool, skills, cancellationToken);
+            }
+            else
+            {
+                var offlineTools = _toolCatalog.GetVisibleTools()
+                    .Where(s => s.Enabled &&
+                        string.Equals(s.Host, "Common", StringComparison.OrdinalIgnoreCase) &&
+                        !string.Equals(s.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                completion = await _offlineChatService.ExecuteAsync(text ?? string.Empty, session, documentContext, settings, offlineTools, attachments, progress, RegisterPendingAgentTool, skills, cancellationToken);
+            }
             if (settings.SmartChatTitles == false)
             {
                 ChatTitleBuilder.ApplyFallback(session, text, completion.AssistantText);

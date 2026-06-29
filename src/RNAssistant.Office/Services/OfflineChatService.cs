@@ -1,0 +1,64 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using RNAssistant.Core.Llm;
+using RNAssistant.Core.Models;
+using RNAssistant.Office.Tools;
+
+namespace RNAssistant.Office.Services
+{
+    public sealed class OfflineChatService
+    {
+        private readonly OfficeToolExecutor _toolExecutor;
+        private readonly Func<AppSettings, IEnumerable<ChatMessage>, CancellationToken, Task<LlmCompletionResult>> _completeAsync;
+
+        public OfflineChatService(
+            OfficeToolExecutor toolExecutor,
+            Func<AppSettings, IEnumerable<ChatMessage>, CancellationToken, Task<LlmCompletionResult>> completeAsync)
+        {
+            _toolExecutor = toolExecutor;
+            _completeAsync = completeAsync;
+        }
+
+        public Task<ChatCompletionResult> ExecuteAsync(
+            string text,
+            ChatSession session,
+            DocumentContext context,
+            AppSettings settings,
+            IReadOnlyList<ToolDefinition> tools,
+            IReadOnlyList<ChatAttachment> attachments,
+            Action<string, string, ChatActivity> progress,
+            ChatCompletionService.PendingToolRegistrar pendingToolRegistrar,
+            IReadOnlyList<SkillDefinition> skills,
+            CancellationToken cancellationToken)
+        {
+            var adapter = new ClosedDocumentAdapter(session);
+            var runner = new AgentRunService(adapter, _toolExecutor, _completeAsync, false);
+            var service = new ChatCompletionService(runner);
+            return service.ExecuteAsync(text, session, context, settings, tools, attachments, progress, pendingToolRegistrar, skills, cancellationToken);
+        }
+
+        private sealed class ClosedDocumentAdapter : IOfficeApplicationAdapter
+        {
+            private readonly ChatSession _session;
+
+            public ClosedDocumentAdapter(ChatSession session)
+            {
+                _session = session ?? new ChatSession();
+            }
+
+            public string HostName { get { return _session.Host ?? "Office"; } }
+            public string DocumentKey { get { return _session.DocumentKey ?? string.Empty; } }
+            public string LegacyDocumentKey { get { return DocumentKey; } }
+            public string RuntimeDocumentKey { get { return "closed:" + DocumentKey; } }
+            public string DocumentTitle { get { return _session.DocumentTitle ?? _session.Title ?? "Closed document"; } }
+            public string GetDocumentSnapshot(int maxChars) { return "Document is closed. Only saved chat context is available; Office actions require opening the file."; }
+            public string GetVbaSnapshot(int maxChars) { return string.Empty; }
+            public void PrepareForContextCapture() { }
+            public ContextNote CaptureSelectionContext(string mode, int maxChars) { return null; }
+            public IEnumerable<ToolDefinition> GetBuiltInTools() { return new ToolDefinition[0]; }
+            public ToolResult ExecuteTool(ToolCommand command) { return ToolResult.Fail("Document is closed."); }
+        }
+    }
+}

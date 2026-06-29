@@ -24,11 +24,13 @@ namespace RNAssistant.Office.Services
         private readonly ObservationNormalizer _observationNormalizer;
         private readonly VerificationRunner _verificationRunner;
         private readonly RecipeExpander _recipeExpander;
+        private readonly bool _includeControllerTools;
 
         public AgentRunService(
             IOfficeApplicationAdapter adapter,
             OfficeToolExecutor toolExecutor,
-            Func<AppSettings, IEnumerable<ChatMessage>, CancellationToken, Task<LlmCompletionResult>> completeAsync)
+            Func<AppSettings, IEnumerable<ChatMessage>, CancellationToken, Task<LlmCompletionResult>> completeAsync,
+            bool includeControllerTools = true)
         {
             _adapter = adapter;
             _toolExecutor = toolExecutor;
@@ -41,6 +43,7 @@ namespace RNAssistant.Office.Services
             _observationNormalizer = new ObservationNormalizer();
             _verificationRunner = new VerificationRunner();
             _recipeExpander = new RecipeExpander();
+            _includeControllerTools = includeControllerTools;
         }
 
         public async Task<ChatCompletionResult> RunUserTurnAsync(
@@ -467,7 +470,7 @@ namespace RNAssistant.Office.Services
             {
                 AddKnownTool(result, tool);
             }
-            foreach (var tool in _toolExecutor.GetControllerTools())
+            foreach (var tool in _includeControllerTools ? _toolExecutor.GetControllerTools() : new ToolDefinition[0])
             {
                 AddKnownTool(result, tool);
             }

@@ -39,6 +39,7 @@ namespace RNAssistant.Office
         {
             var settings = _settingsService.Load();
             var session = LoadSession(chatId, true);
+            EnsureCurrentDocument(session);
             var limit = maxChars <= 0 ? settings.VbaContextCharLimit : maxChars;
             var snapshot = _adapter.GetVbaSnapshot(Math.Max(1000, limit));
             if (string.IsNullOrWhiteSpace(snapshot) ||
@@ -74,6 +75,7 @@ namespace RNAssistant.Office
         {
             var settings = _settingsService.Load();
             var session = LoadSession(chatId, true);
+            EnsureCurrentDocument(session);
             var context = LoadContext(session);
             try
             {
@@ -147,6 +149,14 @@ namespace RNAssistant.Office
         private void NormalizeContext(DocumentContext context, ChatSession session)
         {
             _contextService.NormalizeContext(context, session);
+        }
+
+        private void EnsureCurrentDocument(ChatSession session)
+        {
+            if (!_chatSessions.IsCurrentDocument(session))
+            {
+                throw new InvalidOperationException("Документ закрыт. Откройте файл, чтобы использовать Office context и инструменты.");
+            }
         }
     }
 }

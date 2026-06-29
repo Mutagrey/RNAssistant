@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -126,6 +128,24 @@ namespace RNAssistant.Office
         {
             var session = LoadSession(chatId);
             return ChatState(session);
+        }
+
+        public OpenDocumentResponse OpenDocument(string chatId)
+        {
+            var session = LoadSession(chatId);
+            if (_chatSessions.IsCurrentDocument(session))
+            {
+                return new OpenDocumentResponse { Path = _chatSessions.GetDocumentPath(session), Launched = false };
+            }
+
+            var path = _chatSessions.GetDocumentPath(session);
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                throw new InvalidOperationException("Путь к документу недоступен. Откройте файл вручную.");
+            }
+
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            return new OpenDocumentResponse { Path = path, Launched = true };
         }
 
         public ChatStateResponse RenameChat(string chatId, string title)

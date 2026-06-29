@@ -31,6 +31,7 @@ namespace RNAssistant.Office
         public ChatStateResponse ListChats() { return ChatState(); }
         public ChatStateResponse CreateChat(string title) { return ChatState(title); }
         public ChatStateResponse SelectChat(string chatId) { return ChatState(null, chatId); }
+        public OpenDocumentResponse OpenDocument(string chatId) { return new OpenDocumentResponse { Path = string.Empty, Launched = false }; }
         public ChatStateResponse RenameChat(string chatId, string title) { return ChatState(title, chatId); }
         public ChatStateResponse SetChatModel(string chatId, string model) { return ChatState(model, chatId); }
         public ChatStateResponse SetChatHtmlMode(string chatId, bool enabled) { return ChatState(enabled ? "html" : string.Empty, chatId); }

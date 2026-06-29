@@ -289,39 +289,26 @@ button.danger-soft:hover {
 
 .activity {
   display: flex;
-  gap: 8px;
   align-items: center;
-  padding: 7px 14px;
-  border-bottom: 1px solid #cbd9f2;
-  background: #edf4ff;
-  color: #174ea6;
+  padding: 5px 14px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
   font-size: 12px;
   font-weight: var(--label-font-weight);
 }
 
-.activity.hidden {
-  display: none;
+.activity:not(.hidden) #activityText {
+  background: linear-gradient(90deg, #667085 20%, #1d4ed8 48%, #667085 76%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: text-shimmer 1.8s linear infinite;
 }
 
-.activity-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: activity-pulse 1s ease-in-out infinite;
-}
-
-@keyframes activity-pulse {
-  0%,
-  100% {
-    opacity: 0.35;
-    transform: scale(0.85);
-  }
-
-  50% {
-    opacity: 1;
-    transform: scale(1);
-  }
+@keyframes text-shimmer {
+  to { background-position: -220% 0; }
 }
 
 .content {

@@ -92,6 +92,9 @@ function activityTimeText(context) {
 
 function activityHasDetails(activity) {
   return !!(activityChildren(activity).length ||
+    activityArgumentsJson(activity) ||
+    activityDataJson(activity) ||
+    activityResultMessage(activity) ||
     activityStatus(activity) === "failed" ||
     (activityPendingId(activity) && activityStatus(activity) === "waiting"));
 }
@@ -172,6 +175,19 @@ function appendActivityDetailsContent(node, activity, context) {
   appendActivityConfirmationPanel(body, activity);
   appendActivityErrorPanel(body, activity);
 
+  if (activityStatus(activity) !== "failed" && activityResultMessage(activity)) {
+    var result = document.createElement("div");
+    result.className = "agent-activity-result";
+    result.textContent = activityResultMessage(activity);
+    body.appendChild(result);
+  }
+  if (typeof appendArgumentsData === "function") {
+    appendArgumentsData(body, activityArgumentsJson(activity));
+  }
+  if (typeof appendActivityData === "function") {
+    appendActivityData(body, "Данные результата", activityDataJson(activity), "Копировать результат");
+  }
+
   if (children.length) {
     var childList = document.createElement("div");
     childList.className = "agent-activity-children";
@@ -240,13 +256,15 @@ function appendActivityTreeArtifacts(parent, activity, context) {
 function appendAgentRunProcess(parent, timeline, stats, finalMessage) {
   var process = document.createElement("details");
   process.className = "agent-run-process status-" + stats.status;
-  process.open = !hasAgentFinalAnswer(finalMessage) || stats.status === "running" || stats.status === "waiting" || stats.status === "failed";
+  process.open = stats.status === "waiting" || stats.status === "failed";
 
   var summary = document.createElement("summary");
   summary.className = "agent-run-process-summary";
   var label = document.createElement("span");
   label.className = "agent-run-process-label";
-  label.textContent = "Этапы: " + ((timeline && timeline.length) || 0);
+  label.textContent = stats.status === "running" && stats.current
+    ? activityTitle(stats.current)
+    : "Ход работы · " + ((timeline && timeline.length) || 0);
   summary.appendChild(label);
 
   var meta = document.createElement("span");

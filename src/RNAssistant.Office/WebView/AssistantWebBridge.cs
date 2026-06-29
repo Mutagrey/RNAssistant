@@ -71,6 +71,9 @@ namespace RNAssistant.Office.WebView
                     case "selectChat":
                         responsePayload = _controller.SelectChat(Payload<ChatPayload>(payload).ChatId);
                         break;
+                    case "openDocument":
+                        responsePayload = _controller.OpenDocument(Payload<ChatPayload>(payload).ChatId);
+                        break;
                     case "renameChat":
                         var renameChat = Payload<RenameChatPayload>(payload);
                         responsePayload = _controller.RenameChat(renameChat.ChatId, renameChat.Title);

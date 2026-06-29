@@ -55,21 +55,30 @@
     </nav>
 
     <div class="activity hidden" id="activityStatus" role="status" aria-live="polite">
-      <span class="activity-dot"></span>
       <span id="activityText">Выполняю...</span>
     </div>
 
     <main class="content">
       <section class="panel active" id="tab-chat">
+        <div class="chat-workspace">
+          <aside class="chat-sidebar" aria-label="Документы и чаты">
+            <div class="chat-sidebar-head">
+              <button type="button" class="chat-new-button" id="newChatButton" title="Новый чат">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                <span>Новый чат</span>
+              </button>
+              <input id="chatSearchInput" class="chat-search" type="search" placeholder="Поиск чатов..." autocomplete="off">
+            </div>
+            <select id="chatSessionSelect" class="hidden" aria-label="Сессия чата"></select>
+            <div class="chat-session-list" id="chatSessionList" aria-label="Все документы и чаты"></div>
+          </aside>
+          <div class="chat-main">
         <div class="chatbar">
-          <div class="chat-session-picker">
-            <select id="chatSessionSelect" aria-label="Сессия чата"></select>
-            <div class="chat-session-list" id="chatSessionList" aria-label="Чаты"></div>
+          <div class="chat-title-block">
+            <strong id="activeChatTitle">Новый чат</strong>
+            <span id="activeChatDocument"></span>
           </div>
           <div class="chatbar-actions">
-            <button type="button" class="icon-button secondary" id="newChatButton" title="Новый чат" aria-label="Новый чат">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-            </button>
             <button type="button" class="icon-button secondary" id="renameChatButton" title="Переименовать чат" aria-label="Переименовать чат">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
             </button>
@@ -80,6 +89,10 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
             </button>
           </div>
+        </div>
+        <div class="offline-notice hidden" id="offlineNotice">
+          <span>Документ закрыт: доступны история, сохранённый контекст и локальные инструменты.</span>
+          <button type="button" class="link-button" id="openDocumentButton">Открыть файл</button>
         </div>
         <div class="chat-scroll-region">
           <div class="messages" id="messages"></div>
@@ -161,6 +174,8 @@
             </div>
           </div>
         </form>
+          </div>
+        </div>
       </section>
 
       <section class="panel" id="tab-tools">

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
@@ -60,6 +61,13 @@ namespace RNAssistant.Office.Services
             if (!string.IsNullOrWhiteSpace(requestedSessionId))
             {
                 session = _chatStore.Load(host, documentKey, requestedSessionId);
+                if (session == null &&
+                    (!allowMissingRequestedFallback ||
+                     (string.IsNullOrWhiteSpace(_activeRuntimeDocumentKey) &&
+                      string.Equals(requestedSessionId, _activeSessionId, StringComparison.OrdinalIgnoreCase))))
+                {
+                    session = _chatStore.Load(requestedSessionId);
+                }
                 if (session == null && !allowMissingRequestedFallback)
                 {
                     throw new InvalidOperationException("Chat session was not found.");
@@ -78,6 +86,7 @@ namespace RNAssistant.Office.Services
             }
 
             SetActiveSession(session);
+            UpdateCurrentDocumentMetadata(session);
             return session;
         }
 
@@ -105,17 +114,23 @@ namespace RNAssistant.Office.Services
                 _adapter.DocumentKey,
                 _adapter.DocumentTitle,
                 string.IsNullOrWhiteSpace(title) ? "New chat" : title.Trim());
+            UpdateCurrentDocumentMetadata(session);
             SetActiveSession(session);
             return session;
         }
 
         public ChatSession DeleteAndSelectNext(string sessionId)
         {
-            _chatStore.Delete(_adapter.HostName, _adapter.DocumentKey, sessionId);
-            var next = _chatStore.List(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle).FirstOrDefault();
+            var current = _chatStore.Load(sessionId);
+            var host = current == null ? _adapter.HostName : current.Host;
+            var documentKey = current == null ? _adapter.DocumentKey : current.DocumentKey;
+            var documentTitle = current == null ? _adapter.DocumentTitle : current.DocumentTitle;
+            _chatStore.Delete(host, documentKey, sessionId);
+            var next = _chatStore.List(host, documentKey, documentTitle).FirstOrDefault();
             if (next == null)
             {
-                next = _chatStore.Create(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle, "New chat");
+                next = _chatStore.List(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle).FirstOrDefault()
+                    ?? _chatStore.Create(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle, "New chat");
             }
 
             SetActiveSession(next);
@@ -132,19 +147,20 @@ namespace RNAssistant.Office.Services
             _activeSessionId = ChatStore.GetSessionId(session);
             _activeHost = session.Host;
             _activeDocumentKey = session.DocumentKey;
-            _activeRuntimeDocumentKey = _adapter.RuntimeDocumentKey;
+            _activeRuntimeDocumentKey = IsCurrentDocument(session) ? _adapter.RuntimeDocumentKey : null;
             _chatStore.SaveActiveSessionId(session.Host, session.DocumentKey, _activeSessionId);
         }
 
         public IReadOnlyList<ChatSessionSummary> GetChatSummaries(string activeId)
         {
-            return _chatStore.List(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle)
+            return _chatStore.List()
                 .Select(s => new ChatSessionSummary
                 {
                     Id = ChatStore.GetSessionId(s),
                     Host = s.Host,
                     DocumentKey = s.DocumentKey,
                     DocumentTitle = s.DocumentTitle,
+                    DocumentPath = ResolveDocumentPath(s),
                     Title = s.Title,
                     Model = s.Model,
                     HtmlModeEnabled = s.HtmlModeEnabled,
@@ -153,9 +169,60 @@ namespace RNAssistant.Office.Services
                     HtmlDataSourceCount = s.HtmlWorkspace == null || s.HtmlWorkspace.DataSources == null ? 0 : s.HtmlWorkspace.DataSources.Count,
                     CreatedUtc = s.CreatedUtc,
                     UpdatedUtc = s.UpdatedUtc,
-                    MessageCount = s.Messages == null ? 0 : s.Messages.Count
+                    MessageCount = s.Messages == null ? 0 : s.Messages.Count,
+                    IsCurrentDocument = IsCurrentDocument(s)
                 })
                 .ToList();
+        }
+
+        public bool IsCurrentDocument(ChatSession session)
+        {
+            return session != null &&
+                string.Equals(session.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(session.DocumentKey, _adapter.DocumentKey, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public string GetDocumentPath(ChatSession session)
+        {
+            return ResolveDocumentPath(session);
+        }
+
+        private void UpdateCurrentDocumentMetadata(ChatSession session)
+        {
+            if (!IsCurrentDocument(session))
+            {
+                return;
+            }
+
+            var provider = _adapter as IOfficeContextProvider;
+            var officeContext = provider == null ? null : provider.GetOfficeContext();
+            var path = officeContext == null ? string.Empty : officeContext.DocumentPath;
+            if (!string.IsNullOrWhiteSpace(path) && !string.Equals(session.DocumentPath, path, StringComparison.OrdinalIgnoreCase))
+            {
+                session.DocumentPath = path;
+                _chatStore.Save(session);
+            }
+        }
+
+        private static string ResolveDocumentPath(ChatSession session)
+        {
+            if (session == null)
+            {
+                return string.Empty;
+            }
+            if (!string.IsNullOrWhiteSpace(session.DocumentPath))
+            {
+                return session.DocumentPath;
+            }
+
+            var marker = ":Path:";
+            var key = session.DocumentKey ?? string.Empty;
+            var markerIndex = key.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (markerIndex >= 0)
+            {
+                return key.Substring(markerIndex + marker.Length);
+            }
+            return Path.IsPathRooted(key) ? key : string.Empty;
         }
 
         private static bool HasHtmlWorkspace(HtmlWorkspace workspace)

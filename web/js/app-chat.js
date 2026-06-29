@@ -29,6 +29,19 @@ async function selectChat(id) {
   }
 }
 
+async function openActiveDocument() {
+  if (!state.activeChatId) {
+    return;
+  }
+  try {
+    var result = await send("openDocument", { chatId: state.activeChatId });
+    log(result && result.launched ? "Документ открыт." : "Документ уже активен.");
+  } catch (error) {
+    log(error.detail || error.message);
+    window.alert(error.detail || error.message);
+  }
+}
+
 async function renameChat() {
   if (!state.activeChatId) {
     return;
@@ -275,6 +288,7 @@ function renderSendControls() {
   var input = $("chatInput");
   var clearButton = $("clearInputButton");
   var modelSelect = $("chatModelSelect");
+  var currentDocumentAvailable = typeof activeChatUsesCurrentDocument !== "function" || activeChatUsesCurrentDocument();
 
   if (sendButton) {
     sendButton.classList.toggle("hidden", isSending);
@@ -291,7 +305,7 @@ function renderSendControls() {
     input.readOnly = isSending || state.bridgeUnavailable;
     input.placeholder = state.bridgeUnavailable
       ? "Откройте RNAssistant внутри Office, чтобы начать чат..."
-      : "Спросите про текущий документ...";
+      : (currentDocumentAvailable ? "Спросите про текущий документ..." : "Обсудите сохранённый контекст...");
   }
   if (clearButton) {
     clearButton.disabled = isSending;
@@ -300,10 +314,10 @@ function renderSendControls() {
     modelSelect.disabled = isSending || state.modelCatalog.loading || state.modelSaving || state.bridgeUnavailable || !state.activeChatId;
   }
   if ($("addSelectionContextButton")) {
-    $("addSelectionContextButton").disabled = isSending || state.bridgeUnavailable;
+    $("addSelectionContextButton").disabled = isSending || state.bridgeUnavailable || !currentDocumentAvailable;
   }
   if ($("toggleVbaContextButton")) {
-    $("toggleVbaContextButton").disabled = isSending || state.bridgeUnavailable;
+    $("toggleVbaContextButton").disabled = isSending || state.bridgeUnavailable || !currentDocumentAvailable;
   }
   if ($("toggleHtmlModeButton")) {
     $("toggleHtmlModeButton").disabled = isSending || state.bridgeUnavailable || !state.activeChatId;
@@ -531,6 +545,11 @@ function bindChatActions() {
   $("refreshButton").addEventListener("click", initialize);
   $("chatSessionSelect").addEventListener("change", function () { selectChat($("chatSessionSelect").value); });
   $("newChatButton").addEventListener("click", createChat);
+  $("openDocumentButton").addEventListener("click", openActiveDocument);
+  $("chatSearchInput").addEventListener("input", function () {
+    state.chatSearch = $("chatSearchInput").value || "";
+    renderChatSessionList(state.chats || []);
+  });
   $("toggleHtmlModeButton").addEventListener("click", toggleChatHtmlMode);
   $("renameChatButton").addEventListener("click", renameChat);
   $("clearChatButton").addEventListener("click", clearChat);

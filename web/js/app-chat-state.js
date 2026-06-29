@@ -23,6 +23,15 @@ function renderChatSessions() {
   select.disabled = !chats.length || state.bridgeUnavailable;
   renderChatSessionList(chats);
 
+  var activeChat = activeChatSummary();
+  var isCurrentDocument = !activeChat || chatIsCurrentDocument(activeChat);
+  $("activeChatTitle").textContent = activeChat ? chatTitle(activeChat) : "Новый чат";
+  $("activeChatDocument").textContent = activeChat
+    ? [chatDocumentTitle(activeChat), chatHost(activeChat)].filter(Boolean).join(" · ")
+    : "";
+  $("offlineNotice").classList.toggle("hidden", isCurrentDocument);
+  $("openDocumentButton").hidden = isCurrentDocument || !chatDocumentPath(activeChat);
+
   var hasActive = !!state.activeChatId;
   var hasMessages = !!(state.messages && state.messages.length);
   $("newChatButton").disabled = !!state.bridgeUnavailable;
@@ -31,6 +40,18 @@ function renderChatSessions() {
   $("clearChatButton").hidden = !hasActive || !hasMessages;
   $("deleteChatButton").disabled = !hasActive;
   renderHtmlModeToggle();
+  renderSendControls();
+}
+
+function activeChatSummary() {
+  return (state.chats || []).filter(function (chat) {
+    return chatId(chat) === state.activeChatId;
+  })[0] || null;
+}
+
+function activeChatUsesCurrentDocument() {
+  var active = activeChatSummary();
+  return !active || chatIsCurrentDocument(active);
 }
 
 function applyChatState(response) {
@@ -82,31 +103,87 @@ function renderChatSessionList(chats) {
   }
   list.classList.remove("is-empty");
 
+  var query = (state.chatSearch || "").trim().toLowerCase();
+  var documents = {};
   chats.forEach(function (chat) {
-    var id = chatId(chat);
-    var button = document.createElement("button");
-    button.type = "button";
-    button.className = "chat-session-row" + (id === state.activeChatId ? " active" : "");
-    button.disabled = !!state.bridgeUnavailable;
-    button.addEventListener("click", function () { selectChat(id); });
-
-    var title = document.createElement("span");
-    title.className = "chat-session-title";
-    title.textContent = chatTitle(chat);
-    button.appendChild(title);
-
-    var meta = document.createElement("span");
-    meta.className = "chat-session-meta";
-    meta.textContent = chatMessageCount(chat) + " msg" + (chatModel(chat) ? " · " + chatModel(chat) : "");
-    button.appendChild(meta);
-
-    if (chatHtmlModeEnabled(chat)) {
-      button.appendChild(createChatSessionBadge("HTML mode", "mode"));
-    } else if (chatHasHtml(chat)) {
-      button.appendChild(createChatSessionBadge("HTML " + chatHtmlFileCount(chat) + "/" + chatHtmlDataSourceCount(chat), "workspace"));
+    if (query && [chatTitle(chat), chatDocumentTitle(chat), chatHost(chat)].join(" ").toLowerCase().indexOf(query) < 0) {
+      return;
     }
-    list.appendChild(button);
+    var key = chatHost(chat) + "|" + chatDocumentKey(chat);
+    if (!documents[key]) {
+      documents[key] = { key: key, title: chatDocumentTitle(chat), host: chatHost(chat), chats: [], current: false, path: "" };
+    }
+    documents[key].chats.push(chat);
+    documents[key].current = documents[key].current || chatIsCurrentDocument(chat);
+    documents[key].path = documents[key].path || chatDocumentPath(chat);
   });
+
+  Object.keys(documents).sort(function (left, right) {
+    var a = documents[left];
+    var b = documents[right];
+    if (a.current !== b.current) {
+      return a.current ? -1 : 1;
+    }
+    return a.title.localeCompare(b.title);
+  }).forEach(function (key) {
+    list.appendChild(renderChatDocumentNode(documents[key], query));
+  });
+}
+
+function renderChatDocumentNode(documentItem, query) {
+  var group = document.createElement("section");
+  group.className = "chat-document" + (documentItem.current ? " is-current" : " is-closed");
+  var selectedInside = documentItem.chats.some(function (chat) { return chatId(chat) === state.activeChatId; });
+  var collapsed = !query && !selectedInside && !!state.collapsedChatDocuments[documentItem.key];
+
+  var header = document.createElement("button");
+  header.type = "button";
+  header.className = "chat-document-row";
+  header.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  header.innerHTML =
+    "<span class=\"chat-document-caret\">›</span>" +
+    "<span class=\"chat-document-icon\">" + documentHostInitial(documentItem.host) + "</span>" +
+    "<span class=\"chat-document-name\"></span>" +
+    "<span class=\"chat-document-state\">" + (documentItem.current ? "Открыт" : "Закрыт") + "</span>";
+  header.querySelector(".chat-document-name").textContent = documentItem.title;
+  header.addEventListener("click", function () {
+    state.collapsedChatDocuments[documentItem.key] = !collapsed;
+    renderChatSessionList(state.chats || []);
+  });
+  group.appendChild(header);
+
+  var children = document.createElement("div");
+  children.className = "chat-document-children";
+  children.hidden = collapsed;
+  documentItem.chats.forEach(function (chat) {
+    children.appendChild(renderChatTreeRow(chat));
+  });
+  group.appendChild(children);
+  return group;
+}
+
+function renderChatTreeRow(chat) {
+  var button = document.createElement("button");
+  var id = chatId(chat);
+  button.type = "button";
+  button.className = "chat-session-row" + (id === state.activeChatId ? " active" : "");
+  button.disabled = !!state.bridgeUnavailable;
+  button.addEventListener("click", function () { selectChat(id); });
+
+  var title = document.createElement("span");
+  title.className = "chat-session-title";
+  title.textContent = chatTitle(chat);
+  button.appendChild(title);
+  var meta = document.createElement("span");
+  meta.className = "chat-session-meta";
+  meta.textContent = chatMessageCount(chat) + " сообщ.";
+  button.appendChild(meta);
+  return button;
+}
+
+function documentHostInitial(host) {
+  var values = { Excel: "X", Word: "W", PowerPoint: "P", Outlook: "O" };
+  return values[host] || (host || "?").charAt(0).toUpperCase();
 }
 
 function createChatSessionBadge(text, kind) {

@@ -5,15 +5,41 @@
     <LangVersion>7.3</LangVersion>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
+    <UseSystemDrawing>true</UseSystemDrawing>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Newtonsoft.Json">
       <HintPath>..\..\packages\Newtonsoft.Json.13.0.3\lib\net6.0\Newtonsoft.Json.dll</HintPath>
       <Private>true</Private>
     </Reference>
+    <Reference Include="UglyToad.PdfPig">
+      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net8.0\UglyToad.PdfPig.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UglyToad.PdfPig.Core">
+      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net8.0\UglyToad.PdfPig.Core.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UglyToad.PdfPig.DocumentLayoutAnalysis">
+      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net8.0\UglyToad.PdfPig.DocumentLayoutAnalysis.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UglyToad.PdfPig.Fonts">
+      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net8.0\UglyToad.PdfPig.Fonts.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UglyToad.PdfPig.Tokenization">
+      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net8.0\UglyToad.PdfPig.Tokenization.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UglyToad.PdfPig.Tokens">
+      <HintPath>..\..\packages\PdfPig.0.1.15\lib\net8.0\UglyToad.PdfPig.Tokens.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\..\src\RNAssistant.Core\Models\AppSettings.cs" Link="Core\Models\AppSettings.cs" />
+    <Compile Include="..\..\src\RNAssistant.Core\Models\AgentPlannerModels.cs" Link="Core\Models\AgentPlannerModels.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Models\ChatModels.cs" Link="Core\Models\ChatModels.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Models\ChartArtifactModels.cs" Link="Core\Models\ChartArtifactModels.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Models\ContextModels.cs" Link="Core\Models\ContextModels.cs" />
@@ -24,11 +50,13 @@
     <Compile Include="..\..\src\RNAssistant.Core\Llm\PromptComposer.cs" Link="Core\Llm\PromptComposer.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Llm\PromptMessageBuilder.cs" Link="Core\Llm\PromptMessageBuilder.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Tools\ToolArgumentNormalizer.cs" Link="Core\Tools\ToolArgumentNormalizer.cs" />
+    <Compile Include="..\..\src\RNAssistant.Core\Tools\AgentPlannerResponseParser.cs" Link="Core\Tools\AgentPlannerResponseParser.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Tools\ToolCommandParser.cs" Link="Core\Tools\ToolCommandParser.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Skills\BuiltInSkillProvider.cs" Link="Core\Skills\BuiltInSkillProvider.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Services\ContextNormalizer.cs" Link="Core\Services\ContextNormalizer.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Services\ChartArtifactBuilder.cs" Link="Core\Services\ChartArtifactBuilder.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Storage\AppDataPaths.cs" Link="Core\Storage\AppDataPaths.cs" />
+    <Compile Include="..\..\src\RNAssistant.Core\Storage\AttachmentStore.cs" Link="Core\Storage\AttachmentStore.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Storage\ChatStore.cs" Link="Core\Storage\ChatStore.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Storage\JsonFileStore.cs" Link="Core\Storage\JsonFileStore.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Storage\SkillStore.cs" Link="Core\Storage\SkillStore.cs" />
@@ -43,8 +71,10 @@
     <Compile Include="..\..\src\RNAssistant.Office\Controller\AssistantController.Context.cs" Link="Office\Controller\AssistantController.Context.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Controller\AssistantController.HtmlWorkspace.cs" Link="Office\Controller\AssistantController.HtmlWorkspace.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\AgentRunService.cs" Link="Office\Services\AgentRunService.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Services\AgentPlannerRuntime.cs" Link="Office\Services\AgentPlannerRuntime.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatCloneService.cs" Link="Office\Services\ChatCloneService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatCompletionService.cs" Link="Office\Services\ChatCompletionService.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Services\OfflineChatService.cs" Link="Office\Services\OfflineChatService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatSessionService.cs" Link="Office\Services\ChatSessionService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatTitleBuilder.cs" Link="Office\Services\ChatTitleBuilder.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ContextService.cs" Link="Office\Services\ContextService.cs" />

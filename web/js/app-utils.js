@@ -56,6 +56,26 @@
     return objectValue(chat, "Model", "model", "") || "";
   };
 
+  window.chatHost = function (chat) {
+    return objectValue(chat, "Host", "host", "") || "";
+  };
+
+  window.chatDocumentKey = function (chat) {
+    return objectValue(chat, "DocumentKey", "documentKey", "") || "";
+  };
+
+  window.chatDocumentTitle = function (chat) {
+    return objectValue(chat, "DocumentTitle", "documentTitle", "Документ") || "Документ";
+  };
+
+  window.chatDocumentPath = function (chat) {
+    return objectValue(chat, "DocumentPath", "documentPath", "") || "";
+  };
+
+  window.chatIsCurrentDocument = function (chat) {
+    return !!objectValue(chat, "IsCurrentDocument", "isCurrentDocument", false);
+  };
+
   window.detectCodeLanguage = function (code) {
     var classes = (code.className || "").split(/\s+/);
     for (var i = 0; i < classes.length; i++) {

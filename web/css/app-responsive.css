@@ -329,3 +329,42 @@
     padding: 11px;
   }
 }
+
+@media (max-width: 700px) {
+  .chat-workspace {
+    grid-template-columns: minmax(118px, 34vw) minmax(0, 1fr);
+  }
+
+  .chat-sidebar-head {
+    padding: 7px 6px;
+  }
+
+  .chat-new-button {
+    padding: 0 6px;
+  }
+
+  .chat-session-list {
+    padding: 4px 2px;
+  }
+
+  .chat-document-row {
+    grid-template-columns: 10px 18px minmax(0, 1fr);
+    gap: 3px;
+    padding-right: 3px;
+    padding-left: 3px;
+  }
+
+  .chat-document-state,
+  .chat-session-meta {
+    display: none;
+  }
+
+  .chat-session-row {
+    display: block;
+    padding-left: 31px;
+  }
+
+  .chat-main {
+    padding: 8px;
+  }
+}

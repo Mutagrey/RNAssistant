@@ -66,6 +66,17 @@ namespace RNAssistant.Core.Storage
             return session;
         }
 
+        public ChatSession Load(string sessionId)
+        {
+            if (string.IsNullOrWhiteSpace(sessionId))
+            {
+                return null;
+            }
+
+            return List().FirstOrDefault(s =>
+                string.Equals(GetSessionId(s), sessionId, StringComparison.OrdinalIgnoreCase));
+        }
+
         public void Save(ChatSession session)
         {
             NormalizeSession(session, session == null ? null : session.Host, session == null ? null : session.DocumentKey, session == null ? null : session.DocumentTitle);

@@ -29,6 +29,11 @@ namespace RNAssistant.Office.Services
             _agentRunService = new AgentRunService(adapter, toolExecutor, completeAsync);
         }
 
+        internal ChatCompletionService(AgentRunService agentRunService)
+        {
+            _agentRunService = agentRunService;
+        }
+
         public Task<ChatCompletionResult> ExecuteAsync(
             string text,
             ChatSession session,

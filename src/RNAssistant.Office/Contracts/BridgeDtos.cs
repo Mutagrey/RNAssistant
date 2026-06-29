@@ -357,6 +357,15 @@ namespace RNAssistant.Office.Contracts
         public string Prompt { get; set; }
     }
 
+    public sealed class OpenDocumentResponse
+    {
+        [JsonProperty("path")]
+        public string Path { get; set; }
+
+        [JsonProperty("launched")]
+        public bool Launched { get; set; }
+    }
+
     public class ChatStateResponse
     {
         [JsonProperty("activeChatId")]

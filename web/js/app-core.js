@@ -8,6 +8,8 @@ var state = {
   context: {},
   contextUsage: {},
   chats: [],
+  chatSearch: "",
+  collapsedChatDocuments: {},
   activeChatId: "",
   activeChatModel: "",
   activeChatHtmlMode: false,
