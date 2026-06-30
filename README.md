@@ -22,6 +22,7 @@ Local AI assistant for Excel, Word, PowerPoint and Outlook.
 - `wrappers/native` - VBA source modules for Office-native launcher wrappers.
 - `web` - static local task pane UI, no npm build.
 - `packages` - vendored NuGet packages for offline restore.
+- `vendor/pdf-rendering` - vendored PDFtoImage/PDFium/SkiaSharp binaries for Windows x64.
 - `vendor/webview2-runtime` - optional fixed WebView2 x64 runtime folder.
 
 Development rules are in `AGENTS.md`. Architecture boundaries and refactoring targets are in `docs/architecture.md`; review findings and roadmap are in `docs/review-roadmap.md`.

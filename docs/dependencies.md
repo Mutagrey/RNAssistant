@@ -4,6 +4,18 @@ NuGet packages are committed in `packages/`:
 
 - `Microsoft.Web.WebView2 1.0.2903.40`
 - `Newtonsoft.Json 13.0.3`
+- `PdfPig 0.1.15` and its managed dependencies
+
+PDF rendering dependencies are committed as selected binaries in
+`vendor/pdf-rendering/` and referenced directly by `RNAssistant.Office`:
+
+- `PDFtoImage 5.2.1`
+- `SkiaSharp 3.119.2`
+- `bblanchon.PDFium.Win32 147.0.7690`
+
+Only Windows x64 native binaries are included because the supported target is
+Office x64. Building and running PDF page rendering does not require restoring
+these NuGet packages.
 
 Task pane JS/CSS is committed in `web/`:
 
