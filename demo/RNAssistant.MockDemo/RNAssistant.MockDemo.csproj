@@ -12,6 +12,14 @@
       <HintPath>..\..\packages\Newtonsoft.Json.13.0.3\lib\net6.0\Newtonsoft.Json.dll</HintPath>
       <Private>true</Private>
     </Reference>
+    <Reference Include="PDFtoImage">
+      <HintPath>..\..\vendor\pdf-rendering\managed\net8.0\PDFtoImage.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="SkiaSharp">
+      <HintPath>..\..\vendor\pdf-rendering\managed\net8.0\SkiaSharp.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
     <Reference Include="UglyToad.PdfPig">
       <HintPath>..\..\packages\PdfPig.0.1.15\lib\net8.0\UglyToad.PdfPig.dll</HintPath>
       <Private>true</Private>
@@ -47,6 +55,7 @@
     <Compile Include="..\..\src\RNAssistant.Core\Models\ToolModels.cs" Link="Core\Models\ToolModels.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Models\VbaModels.cs" Link="Core\Models\VbaModels.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Llm\LlmClient.cs" Link="Core\Llm\LlmClient.cs" />
+    <Compile Include="..\..\src\RNAssistant.Core\Llm\ModelContextBudget.cs" Link="Core\Llm\ModelContextBudget.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Llm\PromptComposer.cs" Link="Core\Llm\PromptComposer.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Llm\PromptMessageBuilder.cs" Link="Core\Llm\PromptMessageBuilder.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Tools\ToolArgumentNormalizer.cs" Link="Core\Tools\ToolArgumentNormalizer.cs" />
@@ -78,6 +87,8 @@
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatSessionService.cs" Link="Office\Services\ChatSessionService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatTitleBuilder.cs" Link="Office\Services\ChatTitleBuilder.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ContextService.cs" Link="Office\Services\ContextService.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Services\ModelAttachmentService.cs" Link="Office\Services\ModelAttachmentService.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Services\ModelCapabilityService.cs" Link="Office\Services\ModelCapabilityService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\SkillCatalogService.cs" Link="Office\Services\SkillCatalogService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ToolCatalogService.cs" Link="Office\Services\ToolCatalogService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\HtmlArtifactToolExecutor.cs" Link="Office\Tools\HtmlArtifactToolExecutor.cs" />
@@ -91,5 +102,13 @@
     <Compile Include="..\..\src\RNAssistant.Office\Tools\VbaToolExecutor.cs" Link="Office\Tools\VbaToolExecutor.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.cs" Link="Office\WebView\AssistantWebBridge.cs" />
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.cs" Link="Testing\FakeOfficeAdapter.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\vendor\pdf-rendering\runtimes\win-x64\native\pdfium.dll"
+          Link="pdfium.dll"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\vendor\pdf-rendering\runtimes\win-x64\native\libSkiaSharp.dll"
+          Link="libSkiaSharp.dll"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
