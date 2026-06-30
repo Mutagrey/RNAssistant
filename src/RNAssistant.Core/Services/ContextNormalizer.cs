@@ -146,7 +146,6 @@ namespace RNAssistant.Core.Services
             existing.Text = note.Text;
             existing.Preview = note.Preview;
             existing.DetailsJson = note.DetailsJson;
-            existing.CreatedUtc = note.CreatedUtc == default(DateTime) ? DateTime.UtcNow : note.CreatedUtc;
         }
 
         public static string TrimForContext(string text, int maxChars)
@@ -168,8 +167,7 @@ namespace RNAssistant.Core.Services
 
             return string.Equals(left.Host, right.Host, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(left.Kind, right.Kind, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(left.Reference, right.Reference, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(left.DetailsJson, right.DetailsJson, StringComparison.Ordinal);
+                string.Equals(left.Reference, right.Reference, StringComparison.OrdinalIgnoreCase);
         }
 
         private static string FirstNonEmpty(params string[] values)

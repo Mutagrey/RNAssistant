@@ -353,15 +353,31 @@ function renderContextMeter() {
 function updateEstimatedContextUsage() {
   var used = 0;
   state.messages.forEach(function (message) {
-    used += 4 + estimateTextTokens(messageContent(message));
-    messageAttachments(message).forEach(function (attachment) {
-      var chars = Number(attachment.ExtractedCharCount || attachment.extractedCharCount || 0);
-      used += Math.ceil(chars / 2);
-      if (attachmentKind(attachment) === "image") used += 4096;
-    });
+    if (messageActivity(message)) return;
+    var role = messageRole(message).toLowerCase();
+    if (role !== "user" && role !== "assistant") return;
+    var content = messageContent(message);
+    var pending = message.Local || message.local || message.Pending || message.pending;
+    if (!content.trim() && !pending) return;
+    if (content.trim()) used += 4 + estimateTextTokens(content);
+    if (pending) {
+      messageAttachments(message).forEach(function (attachment) {
+        var chars = Number(attachment.ExtractedCharCount || attachment.extractedCharCount || 0);
+        used += Math.ceil(chars / 2);
+        if (attachmentKind(attachment) === "image") used += 4096;
+      });
+    }
   });
+  var includedContext = {};
   contextNotes().forEach(function (note) {
-    used += estimateTextTokens(noteText(note));
+    var text = noteText(note);
+    var reference = noteReference(note);
+    var identity = reference
+      ? [noteHost(note), noteKind(note), reference].join("|").toLowerCase()
+      : noteId(note);
+    if (!text.trim() || includedContext[identity]) return;
+    includedContext[identity] = true;
+    used += estimateTextTokens(text);
   });
 
   var settings = state.settings || {};

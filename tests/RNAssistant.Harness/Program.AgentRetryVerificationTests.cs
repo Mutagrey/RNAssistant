@@ -87,6 +87,68 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ChatAdapterExceptionRequiresSuccessfulRetry()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.ThrowOnToolId = "excel.add_sheet";
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    AgentBlock(Command("excel.add_sheet", "name", "Report")),
+                    FinalBlock("Done without retry."),
+                    AgentBlock(Command("excel.add_sheet", "name", "Report")),
+                    FinalBlock("Done after retry."));
+
+                var result = service.ExecuteAsync(
+                    "Create a report sheet.",
+                    NewSession(adapter),
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual(4, calls.Count, "adapter exception retry call count");
+                AssertEqual(2, adapter.Executed.Count, "adapter exception execution count");
+                AssertContains(FlattenMessages(calls[1]), "scripted adapter failure", "adapter exception becomes observation");
+                AssertContains(FlattenMessages(calls[2]), "requires Office tool use", "failed tool does not satisfy required tool gate");
+                AssertEqual("Done after retry.", result.AssistantText, "final after successful retry");
+            });
+        }
+
+        private static void ChatInspectionDoesNotSatisfyMutationRoute()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    AgentBlock(Command("excel.get_context")),
+                    FinalBlock("Inspected, so formatting is done."),
+                    AgentBlock(Command("excel.format_range", "sheet", "Data", "address", "A1:B4")),
+                    FinalBlock("Formatting done."));
+
+                var result = service.ExecuteAsync(
+                    "Оформи текущую таблицу красиво.",
+                    NewSession(adapter),
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual(4, calls.Count, "inspection mutation call count");
+                AssertEqual(2, adapter.Executed.Count, "inspection and mutation executed");
+                AssertEqual("excel.get_context", adapter.Executed[0].ToolId, "inspection tool");
+                AssertEqual("excel.format_range", adapter.Executed[1].ToolId, "mutation tool");
+                AssertContains(FlattenMessages(calls[2]), "requires Office tool use", "premature final corrected");
+                AssertEqual("Formatting done.", result.AssistantText, "final after mutation");
+            });
+        }
+
         private static void ChatMutationRequestsVerificationFollowUp()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

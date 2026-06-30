@@ -20,6 +20,10 @@ namespace RNAssistant.Office
 
         public DocumentContext AddTextContext(string kind, string title, string reference, string text, string detailsJson, string chatId = null)
         {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                throw new ArgumentException("Context text is empty.", "text");
+            }
             var settings = _settingsService.Load();
             var session = LoadSession(chatId, true);
             var context = AddContextNote(session, new ContextNote

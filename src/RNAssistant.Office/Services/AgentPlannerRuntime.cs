@@ -91,12 +91,12 @@ namespace RNAssistant.Office.Services
                 RequiresInspection = false
             };
 
-            if (LooksLikeGeneralQuestion(value))
+            if (LooksLikeGeneralQuestion(value) && !LooksLikeCurrentOfficeQuestion(value))
             {
                 return route;
             }
 
-            if (ContainsAny(value, "удали", "delete", "remove", "clear", "очисти") &&
+            if ((ContainsAny(value, "удали", "очисти") || ContainsAnyToken(value, "delete", "remove", "clear")) &&
                 !ContainsAny(value, "custom tool", "tools", "prompt", "prompts", "skill", "skills", "инструмент", "промпт", "скилл"))
             {
                 route.Mode = "destructive_mutation";
@@ -132,7 +132,8 @@ namespace RNAssistant.Office.Services
                 return route;
             }
 
-            if (ContainsAny(value, "html", "страниц", "page", "ui", "dashboard", "дашборд"))
+            if (ContainsAny(value, "html", "страниц", "web page", "webpage", "dashboard", "дашборд") ||
+                ContainsAnyToken(value, "ui"))
             {
                 route.Mode = "mutate_html";
                 route.TaskType = "html";
@@ -145,7 +146,9 @@ namespace RNAssistant.Office.Services
 
             if (ContainsAny(value, "custom tool", "tools", "prompt", "prompts", "skill", "skills", "инструмент", "промпт", "скилл"))
             {
-                var mutatesCatalog = ContainsAny(value, "создай", "создать", "добавь", "измени", "обнови", "удали", "сохрани", "create", "add", "update", "delete", "remove", "save");
+                var mutatesCatalog =
+                    ContainsAny(value, "создай", "создать", "добавь", "измени", "обнови", "удали", "сохрани") ||
+                    ContainsAnyToken(value, "create", "add", "update", "delete", "remove", "save");
                 route.Mode = mutatesCatalog ? "mutate_tool_authoring" : "read_tool_authoring";
                 route.TaskType = "tool_authoring";
                 route.Phase = mutatesCatalog ? AgentPhases.Mutation : AgentPhases.ReadOnly;
@@ -155,7 +158,8 @@ namespace RNAssistant.Office.Services
                 return route;
             }
 
-            if (ContainsAny(value, "сделай", "создай", "создать", "построй", "сгенерируй", "заполни", "вставь", "замени", "измени", "добавь", "напиши", "create", "make", "add", "insert", "replace", "update", "write", "generate", "build", "draft"))
+            if (ContainsAny(value, "сделай", "создай", "создать", "построй", "сгенерируй", "заполни", "вставь", "замени", "измени", "добавь", "напиши") ||
+                ContainsAnyToken(value, "create", "make", "add", "insert", "replace", "update", "write", "generate", "build", "draft"))
             {
                 route.RequiresTool = true;
                 route.RiskAllowed = 2;
@@ -164,7 +168,8 @@ namespace RNAssistant.Office.Services
                 route.TaskType = "content";
             }
 
-            if (ContainsAny(value, "красив", "оформи", "format", "style", "pretty", "autofit", "автоподбор"))
+            if (ContainsAny(value, "красив", "оформи", "автоподбор") ||
+                ContainsAnyToken(value, "format", "style", "pretty", "autofit"))
             {
                 route.RequiresTool = true;
                 route.Mode = "mutate_formatting";
@@ -173,8 +178,9 @@ namespace RNAssistant.Office.Services
                 route.RiskAllowed = 1;
                 route.RequiresInspection = true;
             }
-            else if (ContainsAny(value, "график", "диаграм", "chart", "plot") &&
-                !ContainsAny(value, "создай", "создать", "create", "generate", "сгенерируй", "report", "отчет"))
+            else if ((ContainsAny(value, "график", "диаграм") || ContainsAnyToken(value, "chart", "plot")) &&
+                !ContainsAny(value, "создай", "создать", "сгенерируй", "отчет") &&
+                !ContainsAnyToken(value, "create", "generate", "report"))
             {
                 route.RequiresTool = true;
                 route.Mode = "mutate_chart";
@@ -183,10 +189,16 @@ namespace RNAssistant.Office.Services
                 route.RiskAllowed = 2;
                 route.RequiresInspection = true;
             }
-            else if (!route.RequiresTool && ContainsAny(value, "прочитай", "покажи", "найди", "поиск", "перечисли", "summarize", "summary", "перескажи", "analyze", "review", "inspect", "read", "search", "find", "list"))
+            else if (!route.RequiresTool &&
+                (ContainsAny(value, "прочитай", "покажи", "найди", "поиск", "перечисли", "перескажи", "проанализ", "проверь", "сводк", "резюм") ||
+                 ContainsAnyToken(value, "summarize", "summarise", "summary", "analyze", "review", "inspect", "check", "read", "search", "find", "list") ||
+                 LooksLikeCurrentOfficeQuestion(value)))
             {
                 route.RequiresTool = true;
-                route.Mode = ContainsAny(value, "summarize", "summary", "перескажи", "analyze", "review") ? "analyze" : "read";
+                route.Mode = ContainsAny(value, "перескажи", "проанализ", "сводк", "резюм") ||
+                    ContainsAnyToken(value, "summarize", "summarise", "summary", "analyze", "review")
+                    ? "analyze"
+                    : "read";
                 route.TaskType = ContainsAny(value, "mail", "email", "письм") ? "mail_search" : "read";
                 route.Phase = AgentPhases.ReadOnly;
                 route.RiskAllowed = 0;
@@ -220,6 +232,58 @@ namespace RNAssistant.Office.Services
                 value.StartsWith("explain ", StringComparison.OrdinalIgnoreCase) ||
                 value.StartsWith("how ", StringComparison.OrdinalIgnoreCase) ||
                 value.StartsWith("why ", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool LooksLikeCurrentOfficeQuestion(string value)
+        {
+            return (ContainsAny(value, "текущ", "этой таблиц", "этом документ", "выделен", "лист", "книг", "слайд", "презентац", "письм") ||
+                    ContainsAnyToken(value, "workbook", "spreadsheet", "document", "selection", "sheet", "slide", "presentation", "email")) &&
+                (ContainsAny(value, "что", "какие", "где", "сколько") ||
+                 ContainsAnyToken(value, "what", "which", "where") ||
+                 value.IndexOf("how many", StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private static bool ContainsAnyToken(string value, params string[] terms)
+        {
+            foreach (var term in terms ?? new string[0])
+            {
+                if (ContainsToken(value, term))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool ContainsToken(string value, string term)
+        {
+            if (string.IsNullOrWhiteSpace(value) || string.IsNullOrWhiteSpace(term))
+            {
+                return false;
+            }
+            var start = 0;
+            while (start < value.Length)
+            {
+                var index = value.IndexOf(term, start, StringComparison.OrdinalIgnoreCase);
+                if (index < 0)
+                {
+                    return false;
+                }
+                var before = index == 0 || !IsWordCharacter(value[index - 1]);
+                var end = index + term.Length;
+                var after = end >= value.Length || !IsWordCharacter(value[end]);
+                if (before && after)
+                {
+                    return true;
+                }
+                start = index + 1;
+            }
+            return false;
+        }
+
+        private static bool IsWordCharacter(char value)
+        {
+            return char.IsLetterOrDigit(value) || value == '_';
         }
 
         private static string FirstNonEmpty(params string[] values)
@@ -446,13 +510,10 @@ namespace RNAssistant.Office.Services
 
             var budget = ModelContextBudget.InputBudgetTokens(settings);
             var used = ModelContextBudget.EstimateMessagesTokens(messages) + EstimateAttachmentTokens(currentAttachments);
-            var history = session == null || session.Messages == null
-                ? new List<ChatMessage>()
-                : session.Messages.Take(Math.Max(0, session.Messages.Count - 1))
-                    .Where(message => message != null && message.Activity == null &&
-                        (string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase)))
-                    .ToList();
+            current.Attachments = currentAttachments == null
+                ? new List<ChatAttachment>()
+                : new List<ChatAttachment>(currentAttachments);
+            var history = ConversationHistory(session);
             for (var index = history.Count - 1; index >= 0; index--)
             {
                 var source = history[index];
@@ -468,6 +529,37 @@ namespace RNAssistant.Office.Services
             return messages;
         }
 
+        private static List<ChatMessage> ConversationHistory(ChatSession session)
+        {
+            if (session == null || session.Messages == null)
+            {
+                return new List<ChatMessage>();
+            }
+
+            var activeUserIndex = -1;
+            for (var index = session.Messages.Count - 1; index >= 0; index--)
+            {
+                var message = session.Messages[index];
+                if (message != null &&
+                    message.Activity == null &&
+                    string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase))
+                {
+                    activeUserIndex = index;
+                    break;
+                }
+            }
+
+            return session.Messages
+                .Where((message, index) =>
+                    index != activeUserIndex &&
+                    message != null &&
+                    message.Activity == null &&
+                    !string.IsNullOrWhiteSpace(message.Content) &&
+                    (string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+        }
+
         private static int EstimateAttachmentTokens(IEnumerable<ChatAttachment> attachments)
         {
             var total = 0;
@@ -477,7 +569,9 @@ namespace RNAssistant.Office.Services
                 {
                     continue;
                 }
-                total += Math.Max(0, attachment.ExtractedCharCount) / 2;
+                total += Math.Max(
+                    Math.Max(0, attachment.ExtractedCharCount),
+                    (attachment.ExtractedText ?? string.Empty).Length) / 2;
                 if (attachment.Kind == "image")
                 {
                     total += ModelContextBudget.EstimatedImageTokens;
@@ -491,6 +585,7 @@ namespace RNAssistant.Office.Services
             return "You are RNAssistant Office Action Planner.\n" +
                 "Return exactly one JSON object. No markdown. No code fences. No prose outside JSON.\n" +
                 "Allowed shape: {\"kind\":\"tool_plan|final|clarify|cannot_do\",\"intent\":\"read|analyze|mutate|verify|answer|clarify\",\"message\":\"string|null\",\"steps\":[{\"toolId\":\"exact tool id from AVAILABLE_TOOLS\",\"arguments\":{},\"reason\":\"short reason\"}],\"expectedOutcome\":\"string|null\"}.\n" +
+                "The output object may contain only kind, intent, message, steps, and expectedOutcome. Do not copy USER_REQUEST, ROUTE, CURRENT_OFFICE_CONTEXT, AVAILABLE_TOOLS, or OBSERVATIONS into the output. Do not wrap the envelope in plan.\n" +
                 "Use only AVAILABLE_TOOLS. Never invent tool ids, workbook, sheet, range, email, or document content.\n" +
                 "Call a context/read tool only when the request depends on current Office content or ROUTE requires inspection. Do not inspect Office for general questions.\n" +
                 "A mutation with an explicit target and complete arguments does not need a preliminary read unless ROUTE requires inspection.\n" +
@@ -603,23 +698,41 @@ namespace RNAssistant.Office.Services
             {
                 return;
             }
-            builder.AppendLine("User-added context:");
             var usedTokens = 0;
+            var included = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var wroteAny = false;
             foreach (var note in context.Notes)
             {
                 if (note == null)
                 {
                     continue;
                 }
-                var entry = "- " + FirstNonEmpty(note.Title, note.Reference, note.Kind) + ": " + FirstNonEmpty(note.Text, note.Preview);
+                var content = FirstNonEmpty(note.Text, note.Preview);
+                if (string.IsNullOrWhiteSpace(content))
+                {
+                    continue;
+                }
+                var identity = !string.IsNullOrWhiteSpace(note.Reference)
+                    ? note.Host + "|" + note.Kind + "|" + note.Reference
+                    : note.Id;
+                if (!included.Add(identity))
+                {
+                    continue;
+                }
+                var entry = "- " + FirstNonEmpty(note.Title, note.Reference, note.Kind) + ": " + content;
                 var remaining = maxTokens - usedTokens;
                 if (remaining <= 0)
                 {
                     builder.AppendLine("[additional context omitted by token budget]");
                     break;
                 }
+                if (!wroteAny)
+                {
+                    builder.AppendLine("User-added context:");
+                }
                 var selected = TruncateToTokens(entry, remaining);
                 builder.AppendLine(selected);
+                wroteAny = true;
                 usedTokens += ModelContextBudget.EstimateTextTokens(selected);
                 if (selected.Length < entry.Length)
                 {

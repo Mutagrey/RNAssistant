@@ -22,6 +22,32 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ChatLegacyGreetingNeedsNoRepair()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var photographedResponse =
+                    "```rnassistant-agent\n" +
+                    "{\"USER_REQUEST\":\"Привет\",\"ROUTE\":{\"app\":\"Excel\",\"mode\":\"answer\",\"requiresTool\":false}," +
+                    "\"AVAILABLE_TOOLS\":[],\"plan\":{\"steps\":[],\"response\":\"Здравствуйте! Чем могу помочь?\"}}\n" +
+                    "```";
+                var service = ChatServiceWithResponses(adapter, executor, calls, RawResponse(photographedResponse));
+
+                var result = service.ExecuteAsync(
+                    "Привет",
+                    NewSession(adapter),
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000 },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Здравствуйте! Чем могу помочь?", result.AssistantText, "legacy greeting answer");
+                AssertEqual(1, calls.Count, "legacy greeting does not invoke repair");
+                AssertEqual(0, adapter.Executed.Count, "legacy greeting executes no tools");
+            });
+        }
+
         private static void ChatGeneralAnswerSkipsOfficeReadsAndTools()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
@@ -42,6 +68,76 @@ namespace RNAssistant.Harness
                 AssertEqual(0, adapter.Executed.Count, "executed tools");
                 AssertContains(FlattenMessages(calls[0]), "requiresTool: false", "answer route");
                 AssertTrue(FlattenMessages(calls[0]).IndexOf("excel.read_range", StringComparison.OrdinalIgnoreCase) < 0, "tool catalog is empty");
+            });
+        }
+
+        private static void ChatRoutingAvoidsSubstringFalsePositives()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var buildCalls = new List<IReadOnlyList<ChatMessage>>();
+                var buildService = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    buildCalls,
+                    AgentBlock(Command("excel.add_sheet", "name", "Report")),
+                    FinalBlock("Done."));
+
+                buildService.ExecuteAsync(
+                    "Build a sales report.",
+                    NewSession(adapter),
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertContains(FlattenMessages(buildCalls[0]), "taskType: content", "build routes to Office content");
+                AssertTrue(FlattenMessages(buildCalls[0]).IndexOf("HTML MODE IS ENABLED", StringComparison.OrdinalIgnoreCase) < 0, "build does not match ui substring");
+                AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "build report tool");
+            });
+
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(adapter, executor, calls, FinalBlock("Explanation."));
+
+                service.ExecuteAsync(
+                    "Clearly explain address notation.",
+                    NewSession(adapter),
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000 },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertContains(FlattenMessages(calls[0]), "requiresTool: false", "clear/add substrings do not route as actions");
+                AssertEqual(0, adapter.Executed.Count, "false positive route executes no tool");
+            });
+        }
+
+        private static void ChatCurrentDocumentQuestionUsesReadTool()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    AgentBlock(Command("excel.get_context")),
+                    FinalBlock("В таблице есть данные."));
+
+                var result = service.ExecuteAsync(
+                    "Что в текущей таблице?",
+                    NewSession(adapter),
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000 },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertContains(FlattenMessages(calls[0]), "requiresTool: true", "current document question requires read");
+                AssertEqual(1, adapter.Executed.Count, "current document read executed");
+                AssertEqual("excel.get_context", adapter.Executed[0].ToolId, "current document read tool");
+                AssertContains(result.AssistantText, "данные", "current document final answer");
             });
         }
 
@@ -133,6 +229,14 @@ namespace RNAssistant.Harness
                     AgentBlock(Command("excel.add_sheet", "name", "Report")),
                     "Done.");
                 var session = NewSession(adapter);
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "Earlier tool context" });
+                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Earlier tool answer" });
+                var attachment = new ChatAttachment
+                {
+                    FileName = "instruction.txt",
+                    Kind = "text",
+                    ExtractedText = "ATTACHMENT_CORRECTION_SENTINEL"
+                };
 
                 var result = service.ExecuteAsync(
                     "Create a new sheet named Report.",
@@ -140,11 +244,14 @@ namespace RNAssistant.Harness
                     NewContext(adapter),
                     new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    new[] { attachment },
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("Done.", result.AssistantText, "assistant text");
                 AssertEqual(3, calls.Count, "llm call count");
                 AssertTrue(ContainsMessage(calls[1], "requires Office tool use"), "forced follow-up prompt");
+                AssertTrue(ContainsMessage(calls[1], "Earlier tool context"), "forced follow-up keeps history");
+                AssertEqual(1, calls[1].Sum(message => message.Attachments.Count(item => item.FileName == "instruction.txt")), "forced follow-up keeps current attachment");
                 AssertEqual(1, adapter.Executed.Count, "adapter execution count");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "executed tool");
             });
@@ -179,6 +286,92 @@ namespace RNAssistant.Harness
                 AssertTrue(ContainsMessage(calls[1], "excel.add_sheet"), "repair keeps available tools");
                 AssertEqual(1, adapter.Executed.Count, "adapter execution count");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "executed tool");
+            });
+        }
+
+        private static void ChatRepairThenFinalStillForcesTool()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    RawResponse("{broken"),
+                    FinalBlock("I will do it without a tool."),
+                    AgentBlock(Command("excel.add_sheet", "name", "Report")),
+                    FinalBlock("Done."));
+
+                var result = service.ExecuteAsync(
+                    "Create a new sheet named Report.",
+                    NewSession(adapter),
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual(4, calls.Count, "repair then correction call count");
+                AssertTrue(ContainsMessage(calls[1], "previous RNAssistant planner output was invalid"), "format repair requested");
+                AssertTrue(ContainsMessage(calls[2], "requires Office tool use"), "tool correction requested after repair");
+                AssertEqual(1, adapter.Executed.Count, "tool executed after repair and correction");
+                AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "corrected tool id");
+                AssertEqual("Done.", result.AssistantText, "final answer");
+            });
+        }
+
+        private static void ChatInvalidToolCorrectionDoesNotFallbackToFinal()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var session = NewSession(adapter);
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    FinalBlock("I can do that without tools."),
+                    RawResponse("invalid correction"),
+                    RawResponse("invalid correction repair"));
+
+                var result = service.ExecuteAsync(
+                    "Create a new sheet named Report.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual(3, calls.Count, "invalid correction repair call count");
+                AssertEqual(0, adapter.Executed.Count, "invalid correction executes no tools");
+                AssertContains(result.AssistantText, "not_json_object", "invalid correction result");
+                AssertEqual("Planner correction invalid", session.Messages.Last().Activity.Title, "correction diagnostic");
+            });
+        }
+
+        private static void ChatRepeatedFinalForRequiredToolFailsClosed()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var session = NewSession(adapter);
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    null,
+                    FinalBlock("No tool needed."),
+                    FinalBlock("Still no tool needed."));
+
+                var result = service.ExecuteAsync(
+                    "Create a new sheet named Report.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual(0, adapter.Executed.Count, "repeated final executes no tools");
+                AssertContains(result.AssistantText, "required_tool_plan", "required tool quality error");
+                AssertEqual("Planner tool use required", session.Messages.Last().Activity.Title, "quality diagnostic");
             });
         }
 

@@ -170,7 +170,10 @@ namespace RNAssistant.Harness
                     .Add(
                         AgentBlock(Command("word.vba_read_module", "moduleName", "Module1")),
                         "user confirmed",
-                        "verify")
+                        "verify",
+                        "Confirmed tool:",
+                        "word.vba_replace_module",
+                        "status: completed")
                     .Add(
                         "Confirmed and verified.",
                         "ChangedMacro");

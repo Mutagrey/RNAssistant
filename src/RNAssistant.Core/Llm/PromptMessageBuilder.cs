@@ -171,26 +171,23 @@ namespace RNAssistant.Core.Llm
             {
                 foreach (var message in session.Messages)
                 {
-                    if (message == null)
+                    if (message == null ||
+                        message.Activity != null ||
+                        string.IsNullOrWhiteSpace(message.Content) ||
+                        (!string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) &&
+                         !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase)))
                     {
                         continue;
                     }
 
                     usedChars += (message.Content ?? string.Empty).Length;
                     usedTokens += 4 + ModelContextBudget.EstimateTextTokens(message.Content);
-                    foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
-                    {
-                        if (attachment == null) continue;
-                        var chars = Math.Max(attachment.ExtractedCharCount, (attachment.ExtractedText ?? string.Empty).Length);
-                        usedChars += chars;
-                        usedTokens += chars / 2;
-                        if (attachment.Kind == "image") usedTokens += ModelContextBudget.EstimatedImageTokens;
-                    }
                     count += 1;
                 }
             }
             if (session != null && session.Context != null && session.Context.Notes != null)
             {
+                var included = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var note in session.Context.Notes)
                 {
                     if (note == null)
@@ -199,6 +196,13 @@ namespace RNAssistant.Core.Llm
                     }
 
                     var text = note.Text ?? note.Preview ?? string.Empty;
+                    var identity = !string.IsNullOrWhiteSpace(note.Reference)
+                        ? note.Host + "|" + note.Kind + "|" + note.Reference
+                        : note.Id;
+                    if (string.IsNullOrWhiteSpace(text) || !included.Add(identity))
+                    {
+                        continue;
+                    }
                     usedChars += text.Length;
                     usedTokens += ModelContextBudget.EstimateTextTokens(text);
                 }

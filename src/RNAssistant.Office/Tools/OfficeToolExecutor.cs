@@ -51,7 +51,7 @@ namespace RNAssistant.Office.Tools
 
         public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, bool dryRun, bool manualRun, ChatSession session, CancellationToken cancellationToken = default(CancellationToken))
         {
-            return ExecuteCommand(command, skills, settings, 0, dryRun, manualRun, session, cancellationToken);
+            return ExecuteCommandSafely(command, skills, settings, 0, dryRun, manualRun, session, cancellationToken);
         }
 
         public string VbaToolId(string suffix)
@@ -62,6 +62,23 @@ namespace RNAssistant.Office.Tools
         public ToolResult ValidateToolDefinition(ToolDefinition tool)
         {
             return ToolAuthoringExecutor.ValidateToolDefinition(tool);
+        }
+
+        private ToolResult ExecuteCommandSafely(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun, ChatSession session, CancellationToken cancellationToken)
+        {
+            try
+            {
+                return ExecuteCommand(command, skills, settings, depth, dryRun, manualRun, session, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                var toolId = command == null ? string.Empty : command.ToolId ?? string.Empty;
+                return ToolResult.Fail("Tool execution failed: " + toolId + ". " + DeepestMessage(ex));
+            }
         }
 
         private ToolResult ExecuteCommand(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun, ChatSession session, CancellationToken cancellationToken)
@@ -108,7 +125,7 @@ namespace RNAssistant.Office.Tools
                     dryRun,
                     manualRun,
                     (nested, nestedSkills, nestedSettings, nestedDepth, nestedDryRun, nestedManualRun, nestedCancellationToken) =>
-                        ExecuteCommand(nested, nestedSkills, nestedSettings, nestedDepth, nestedDryRun, nestedManualRun, session, nestedCancellationToken),
+                        ExecuteCommandSafely(nested, nestedSkills, nestedSettings, nestedDepth, nestedDryRun, nestedManualRun, session, nestedCancellationToken),
                     cancellationToken);
             }
 
@@ -132,7 +149,7 @@ namespace RNAssistant.Office.Tools
                     dryRun,
                     manualRun,
                     (nested, nestedSkills, nestedSettings, nestedDepth, nestedDryRun, nestedManualRun, nestedCancellationToken) =>
-                        ExecuteCommand(nested, nestedSkills, nestedSettings, nestedDepth, nestedDryRun, nestedManualRun, session, nestedCancellationToken),
+                        ExecuteCommandSafely(nested, nestedSkills, nestedSettings, nestedDepth, nestedDryRun, nestedManualRun, session, nestedCancellationToken),
                     cancellationToken);
             }
 
@@ -172,6 +189,16 @@ namespace RNAssistant.Office.Tools
 
             cancellationToken.ThrowIfCancellationRequested();
             return _adapter.ExecuteTool(command);
+        }
+
+        private static string DeepestMessage(Exception exception)
+        {
+            var current = exception;
+            while (current != null && current.InnerException != null)
+            {
+                current = current.InnerException;
+            }
+            return current == null ? "Unknown error." : current.Message;
         }
 
         private static ToolDefinition EffectiveTool(ToolDefinition tool, IReadOnlyList<ToolDefinition> knownTools)

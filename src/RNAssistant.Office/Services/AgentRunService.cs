@@ -92,7 +92,10 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<SkillDefinition> skills,
             CancellationToken cancellationToken)
         {
-            var prompt = PromptText(settings, p => p.ConfirmedToolContinuationPrompt);
+            var prompt = BuildConfirmedToolContinuation(
+                confirmedCommand,
+                session,
+                PromptText(settings, p => p.ConfirmedToolContinuationPrompt));
             var taskText = LatestUserRequest(session, prompt);
             return await RunLoopAsync(taskText, prompt, CommandMutates(confirmedCommand, tools), session, documentContext, settings, tools, null, progress, pendingToolRegistrar, skills, cancellationToken).ConfigureAwait(false);
         }
@@ -176,7 +179,8 @@ namespace RNAssistant.Office.Services
             var maxIterations = Math.Max(1, settings.MaxAgentIterations);
             var maxToolSteps = Math.Max(1, settings.MaxAgentToolSteps);
             var totalToolSteps = 0;
-            var repairUsed = false;
+            var formatRepairUsed = false;
+            var toolCorrectionUsed = false;
             var allTools = AllKnownTools(tools);
 
             for (var iteration = 0; iteration < maxIterations; iteration++)
@@ -197,7 +201,6 @@ namespace RNAssistant.Office.Services
                     settings,
                     session,
                     attachments);
-                ApplyAttachments(messages, attachments);
                 contextUsage = ContextUsageEstimator.FromPrompt(messages, settings);
                 ReportProgress(progress, "thinking", iteration == 0 ? "Планировщик думает..." : "Планировщик выбирает следующий шаг...");
                 var completion = await CompleteWithProgressAsync(settings, messages, progress, cancellationToken).ConfigureAwait(false);
@@ -207,9 +210,9 @@ namespace RNAssistant.Office.Services
 
                 ReportProgress(progress, "processing", "Проверяю JSON planner response...");
                 var parsed = _plannerParser.Parse(plannerText);
-                if (!parsed.Success && !repairUsed)
+                if (!parsed.Success && !formatRepairUsed)
                 {
-                    repairUsed = true;
+                    formatRepairUsed = true;
                     ReportProgress(progress, "repairing", "Planner вернул невалидный JSON, запрашиваю исправление...");
                     var repairMessages = BuildStrictRepairMessages(messages, plannerText, parsed, settings);
                     completion = await CompleteWithProgressAsync(settings, repairMessages, progress, cancellationToken).ConfigureAwait(false);
@@ -220,17 +223,7 @@ namespace RNAssistant.Office.Services
 
                 if (!parsed.Success)
                 {
-                    assistantText = "Planner response is invalid: " + parsed.ErrorCode + ". " + parsed.ErrorMessage;
-                    var diagnostic = BuildPlannerDiagnostic(plannerText, parsed);
-                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, completion, new ChatActivity
-                    {
-                        Kind = "diagnostic",
-                        Title = "Planner JSON invalid",
-                        Subtitle = parsed.SourceFormat,
-                        Status = "failed",
-                        ExecutionStatus = parsed.ErrorCode,
-                        ResultMessage = diagnostic
-                    }));
+                    assistantText = RecordPlannerFailure(session, completion, plannerText, parsed, "Planner JSON invalid");
                     break;
                 }
                 if (!string.Equals(parsed.SourceFormat, "strict_json", StringComparison.OrdinalIgnoreCase))
@@ -241,17 +234,52 @@ namespace RNAssistant.Office.Services
                 var response = parsed.Response;
                 if (!string.Equals(response.Kind, AgentResponseKinds.ToolPlan, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (route.RequiresTool && resultLog.Count == 0 && string.Equals(response.Kind, AgentResponseKinds.Final, StringComparison.OrdinalIgnoreCase) && !repairUsed)
+                    if (route.RequiresTool &&
+                        !IsRouteComplete(route) &&
+                        string.Equals(response.Kind, AgentResponseKinds.Final, StringComparison.OrdinalIgnoreCase) &&
+                        !toolCorrectionUsed)
                     {
-                        repairUsed = true;
-                        var forced = BuildPlannerCorrectionMessages("This task requires Office tool use before a final answer.", snapshot, route, slice, observations, documentContext, skills, settings, taskText);
+                        toolCorrectionUsed = true;
+                        var forced = BuildPlannerCorrectionMessages("This task requires Office tool use before a final answer.", snapshot, route, slice, observations, documentContext, skills, settings, requestText, session, attachments);
                         var correctionCompletion = await CompleteWithProgressAsync(settings, forced, progress, cancellationToken).ConfigureAwait(false);
-                        var retryParsed = _plannerParser.Parse(correctionCompletion.Content ?? string.Empty);
-                        if (retryParsed.Success)
+                        contextUsage = ContextUsageEstimator.FromPrompt(forced, settings, correctionCompletion.PromptTokens);
+                        var correctionText = correctionCompletion.Content ?? string.Empty;
+                        var retryParsed = _plannerParser.Parse(correctionText);
+                        if (!retryParsed.Success && !formatRepairUsed)
                         {
-                            response = retryParsed.Response;
-                            completion = correctionCompletion;
+                            formatRepairUsed = true;
+                            ReportProgress(progress, "repairing", "Correction planner вернул невалидный JSON, запрашиваю исправление...");
+                            var repairMessages = BuildStrictRepairMessages(forced, correctionText, retryParsed, settings);
+                            correctionCompletion = await CompleteWithProgressAsync(settings, repairMessages, progress, cancellationToken).ConfigureAwait(false);
+                            contextUsage = ContextUsageEstimator.FromPrompt(repairMessages, settings, correctionCompletion.PromptTokens);
+                            correctionText = correctionCompletion.Content ?? string.Empty;
+                            retryParsed = _plannerParser.Parse(correctionText);
                         }
+                        if (!retryParsed.Success)
+                        {
+                            assistantText = RecordPlannerFailure(session, correctionCompletion, correctionText, retryParsed, "Planner correction invalid");
+                            break;
+                        }
+                        response = retryParsed.Response;
+                        completion = correctionCompletion;
+                    }
+
+                    if (route.RequiresTool &&
+                        !IsRouteComplete(route) &&
+                        string.Equals(response.Kind, AgentResponseKinds.Final, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var qualityFailure = AgentPlannerParseResult.Fail(
+                            "required_tool_plan",
+                            "Planner returned final although this request requires an available Office tool.",
+                            "validated_json",
+                            JsonConvert.SerializeObject(response));
+                        assistantText = RecordPlannerFailure(
+                            session,
+                            completion,
+                            qualityFailure.NormalizedText,
+                            qualityFailure,
+                            "Planner tool use required");
+                        break;
                     }
 
                     if (!string.Equals(response.Kind, AgentResponseKinds.ToolPlan, StringComparison.OrdinalIgnoreCase))
@@ -429,6 +457,7 @@ namespace RNAssistant.Office.Services
             if (string.IsNullOrWhiteSpace(assistantText))
             {
                 assistantText = resultLog.Count == 0 ? "Planner completed without a final text response." : AgentTranscript.CreateRunSummary(resultLog);
+                session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, null));
             }
 
             return new ChatCompletionResult
@@ -437,22 +466,6 @@ namespace RNAssistant.Office.Services
                 ToolResults = resultLog,
                 ContextUsage = contextUsage ?? ContextUsageEstimator.FromSession(session, settings)
             };
-        }
-
-        private static void ApplyAttachments(IList<ChatMessage> messages, IReadOnlyList<ChatAttachment> attachments)
-        {
-            if (messages == null || attachments == null || attachments.Count == 0)
-            {
-                return;
-            }
-            for (var index = messages.Count - 1; index >= 0; index--)
-            {
-                if (messages[index] != null && string.Equals(messages[index].Role, "user", StringComparison.OrdinalIgnoreCase))
-                {
-                    messages[index].Attachments = new List<ChatAttachment>(attachments);
-                    return;
-                }
-            }
         }
 
         private void AddToolObservation(ToolCommand command, ToolDefinition tool, ToolResult result, ICollection<AgentObservation> observations, ICollection<object> resultLog, ChatSession session)
@@ -600,7 +613,12 @@ namespace RNAssistant.Office.Services
                     route.Phase = AgentPhases.Final;
                 }
             }
-            else if (string.Equals(route.Phase, AgentPhases.Mutation, StringComparison.OrdinalIgnoreCase) && HasSuccessfulMutation(observations))
+            else if (string.Equals(route.Phase, AgentPhases.Mutation, StringComparison.OrdinalIgnoreCase) &&
+                (HasSuccessfulMutation(observations) || HasSuccessfulRouteMutation(route, observations)))
+            {
+                route.Phase = AgentPhases.Final;
+            }
+            else if (string.Equals(route.Phase, AgentPhases.Verification, StringComparison.OrdinalIgnoreCase) && HasSuccessfulRead(observations))
             {
                 route.Phase = AgentPhases.Final;
             }
@@ -611,9 +629,44 @@ namespace RNAssistant.Office.Services
             return (observations ?? new AgentObservation[0]).Any(o => o != null && string.Equals(o.Status, "success", StringComparison.OrdinalIgnoreCase) && !o.Mutation);
         }
 
+        private static bool IsRouteComplete(RoutedTask route)
+        {
+            return route == null ||
+                !route.RequiresTool ||
+                string.Equals(route.Phase, AgentPhases.Final, StringComparison.OrdinalIgnoreCase);
+        }
+
         private static bool HasSuccessfulMutation(IEnumerable<AgentObservation> observations)
         {
             return (observations ?? new AgentObservation[0]).Any(o => o != null && string.Equals(o.Status, "success", StringComparison.OrdinalIgnoreCase) && o.Mutation);
+        }
+
+        private static bool HasSuccessfulRouteMutation(RoutedTask route, IEnumerable<AgentObservation> observations)
+        {
+            if (route == null)
+            {
+                return false;
+            }
+            foreach (var observation in observations ?? new AgentObservation[0])
+            {
+                if (observation == null ||
+                    !string.Equals(observation.Status, "success", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                var id = observation.ToolId ?? string.Empty;
+                if (string.Equals(route.TaskType, "html", StringComparison.OrdinalIgnoreCase) &&
+                    ContainsAny(id, "html_workspace_upsert_", "html_workspace_set_active", "render_html"))
+                {
+                    return true;
+                }
+                if (string.Equals(route.TaskType, "tool_authoring", StringComparison.OrdinalIgnoreCase) &&
+                    ContainsAny(id, "_save", "_delete"))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static bool RequiresMutationPhase(string mode)
@@ -642,6 +695,68 @@ namespace RNAssistant.Office.Services
             return fallback ?? string.Empty;
         }
 
+        private static string BuildConfirmedToolContinuation(ToolCommand command, ChatSession session, string prompt)
+        {
+            var builder = new StringBuilder();
+            builder.AppendLine(prompt ?? string.Empty);
+            builder.AppendLine("Confirmed tool:");
+            builder.AppendLine("toolId: " + (command == null ? string.Empty : command.ToolId));
+            builder.AppendLine("arguments: " + TrimDiagnosticText(
+                JsonConvert.SerializeObject(command == null ? null : command.Arguments),
+                2000));
+
+            var activity = FindLatestToolActivity(session, command == null ? null : command.ToolId);
+            if (activity != null)
+            {
+                builder.AppendLine("status: " + (activity.ExecutionStatus ?? activity.Status ?? string.Empty));
+                builder.AppendLine("result: " + TrimDiagnosticText(activity.ResultMessage, 1200));
+                if (!string.IsNullOrWhiteSpace(activity.DataJson))
+                {
+                    builder.AppendLine("data: " + TrimDiagnosticText(activity.DataJson, 2000));
+                }
+            }
+            return builder.ToString().Trim();
+        }
+
+        private static ChatActivity FindLatestToolActivity(ChatSession session, string toolId)
+        {
+            if (session == null || session.Messages == null || string.IsNullOrWhiteSpace(toolId))
+            {
+                return null;
+            }
+            for (var index = session.Messages.Count - 1; index >= 0; index--)
+            {
+                var found = FindToolActivity(session.Messages[index] == null ? null : session.Messages[index].Activity, toolId);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+            return null;
+        }
+
+        private static ChatActivity FindToolActivity(ChatActivity activity, string toolId)
+        {
+            if (activity == null)
+            {
+                return null;
+            }
+            if (string.Equals(activity.ToolId, toolId, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(activity.Status, "planned", StringComparison.OrdinalIgnoreCase))
+            {
+                return activity;
+            }
+            foreach (var child in activity.Children ?? new List<ChatActivity>())
+            {
+                var found = FindToolActivity(child, toolId);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+            return null;
+        }
+
         private List<ChatMessage> BuildStrictRepairMessages(
             IEnumerable<ChatMessage> originalMessages,
             string badText,
@@ -660,14 +775,25 @@ namespace RNAssistant.Office.Services
                 Content = PromptText(settings, p => p.RepairMalformedToolBlockPrompt) +
                     "\nValidation error: " +
                     (parseResult == null ? string.Empty : parseResult.ErrorCode + " " + parseResult.ErrorMessage) +
-                    "\nKeep the original USER_REQUEST, ROUTE and AVAILABLE_TOOLS unchanged."
+                    "\nUse the original request, route and available tools only as input. Do not copy them into the response. Return only kind, intent, message, steps and expectedOutcome."
             });
             return messages;
         }
 
-        private List<ChatMessage> BuildPlannerCorrectionMessages(string correction, OfficeSnapshot snapshot, RoutedTask route, ToolCatalogSlice slice, IEnumerable<AgentObservation> observations, DocumentContext context, IEnumerable<SkillDefinition> skills, AppSettings settings, string taskText)
+        private List<ChatMessage> BuildPlannerCorrectionMessages(
+            string correction,
+            OfficeSnapshot snapshot,
+            RoutedTask route,
+            ToolCatalogSlice slice,
+            IEnumerable<AgentObservation> observations,
+            DocumentContext context,
+            IEnumerable<SkillDefinition> skills,
+            AppSettings settings,
+            string taskText,
+            ChatSession session,
+            IReadOnlyList<ChatAttachment> attachments)
         {
-            var messages = _plannerPromptComposer.BuildMessages(taskText, snapshot, route, slice, observations, context, skills, settings);
+            var messages = _plannerPromptComposer.BuildMessages(taskText, snapshot, route, slice, observations, context, skills, settings, session, attachments);
             messages.Add(new ChatMessage
             {
                 Role = "user",
@@ -717,6 +843,30 @@ namespace RNAssistant.Office.Services
             return "format=" + (parseResult == null ? "unknown" : parseResult.SourceFormat ?? "unknown") +
                 "; error=" + (parseResult == null ? "unknown" : parseResult.ErrorCode + ": " + parseResult.ErrorMessage) +
                 "; response=" + TrimDiagnosticText(rawText, 1200);
+        }
+
+        private static string RecordPlannerFailure(
+            ChatSession session,
+            LlmCompletionResult completion,
+            string rawText,
+            AgentPlannerParseResult parseResult,
+            string title)
+        {
+            var assistantText = "Planner response is invalid: " +
+                (parseResult == null ? "unknown" : parseResult.ErrorCode + ". " + parseResult.ErrorMessage);
+            if (session != null)
+            {
+                session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, completion, new ChatActivity
+                {
+                    Kind = "diagnostic",
+                    Title = title,
+                    Subtitle = parseResult == null ? "unknown" : parseResult.SourceFormat,
+                    Status = "failed",
+                    ExecutionStatus = parseResult == null ? "unknown" : parseResult.ErrorCode,
+                    ResultMessage = BuildPlannerDiagnostic(rawText, parseResult)
+                }));
+            }
+            return assistantText;
         }
 
         private static string TrimDiagnosticText(string value, int maxChars)
@@ -843,7 +993,7 @@ namespace RNAssistant.Office.Services
                 },
                 cancellationToken).ConfigureAwait(false);
             flush(true);
-            return completion;
+            return completion ?? new LlmCompletionResult();
         }
 
         private static void ReportProgress(Action<string, string, ChatActivity> progress, string phase, string message)

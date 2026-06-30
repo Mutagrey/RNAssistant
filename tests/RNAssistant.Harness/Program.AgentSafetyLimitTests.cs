@@ -112,6 +112,7 @@ namespace RNAssistant.Harness
 
                 AssertContains(result.AssistantText, "Agent executed", "summary text");
                 AssertTrue(result.AssistantText.IndexOf("rnassistant-agent", StringComparison.OrdinalIgnoreCase) < 0, "no raw agent block");
+                AssertTrue(ContainsMessage(session.Messages, "Agent executed"), "runtime summary persisted");
             });
         }
 
@@ -171,7 +172,13 @@ namespace RNAssistant.Harness
             {
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 var malformed = "I tried this but it is broken:\n```rnassistant-agent\n{\"steps\":[\n```\nExtra noisy text.";
-                var service = ChatServiceWithResponses(adapter, executor, calls, RawResponse(malformed));
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    RawResponse(malformed),
+                    AgentBlock(Command("powerpoint.read_slides", "maxSlides", 20)),
+                    FinalBlock("Done."));
                 var session = NewSession(adapter);
 
                 var result = service.ExecuteAsync(
@@ -183,10 +190,10 @@ namespace RNAssistant.Harness
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("Done.", result.AssistantText, "assistant text");
-                AssertEqual(0, adapter.Executed.Count, "adapter execution count");
-                AssertEqual(2, session.Messages.Count, "session message count");
-                AssertEqual("Done.", session.Messages[1].Content, "assistant transcript");
-                AssertEqual(2, calls.Count, "llm call count");
+                AssertEqual(1, adapter.Executed.Count, "adapter execution count");
+                AssertEqual("powerpoint.read_slides", adapter.Executed[0].ToolId, "repair tool id");
+                AssertTrue(ContainsMessage(session.Messages, "Done."), "assistant transcript");
+                AssertEqual(3, calls.Count, "llm call count");
             });
         }
 
@@ -216,6 +223,35 @@ namespace RNAssistant.Harness
                 AssertEqual("Planner JSON invalid", diagnostic.Title, "diagnostic title");
                 AssertContains(diagnostic.ResultMessage, "format=unrecognized_text", "diagnostic format");
                 AssertContains(diagnostic.ResultMessage, "not json after repair", "diagnostic response preview");
+            });
+        }
+
+        private static void ChatNullCompletionBecomesPlannerDiagnostic()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = 0;
+                var service = new ChatCompletionService(
+                    adapter,
+                    executor,
+                    delegate(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
+                    {
+                        calls += 1;
+                        return Task.FromResult<LlmCompletionResult>(null);
+                    });
+                var session = NewSession(adapter);
+
+                var result = service.ExecuteAsync(
+                    "Hello.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000 },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual(2, calls, "null completion repair count");
+                AssertContains(result.AssistantText, "empty_response", "null completion error");
+                AssertEqual("Planner JSON invalid", session.Messages.Last().Activity.Title, "null completion diagnostic");
             });
         }
     }

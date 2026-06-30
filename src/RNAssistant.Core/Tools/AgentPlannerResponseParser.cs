@@ -14,7 +14,7 @@ namespace RNAssistant.Core.Tools
                 return AgentPlannerParseResult.Fail("empty_response", "Planner response is empty.");
             }
 
-            var trimmed = text.Trim();
+            var trimmed = text.Trim().TrimStart('\uFEFF');
             string normalized;
             string sourceFormat;
             if (!TryUnwrapSingleFence(trimmed, out normalized, out sourceFormat))
@@ -26,6 +26,15 @@ namespace RNAssistant.Core.Tools
             }
 
             var parsed = ParseStrict(normalized);
+            if (!parsed.Success)
+            {
+                AgentPlannerParseResult legacy;
+                if (TryParseLegacyPlanEnvelope(normalized, out legacy))
+                {
+                    parsed = legacy;
+                    sourceFormat += "_legacy_plan";
+                }
+            }
             parsed.SourceFormat = sourceFormat;
             parsed.NormalizedText = normalized;
             return parsed;
@@ -38,7 +47,7 @@ namespace RNAssistant.Core.Tools
                 return AgentPlannerParseResult.Fail("empty_response", "Planner response is empty.");
             }
 
-            var trimmed = text.Trim();
+            var trimmed = text.Trim().TrimStart('\uFEFF');
             if (!trimmed.StartsWith("{", StringComparison.Ordinal) || !trimmed.EndsWith("}", StringComparison.Ordinal))
             {
                 return AgentPlannerParseResult.Fail("not_json_object", "Planner response must be exactly one JSON object.");
@@ -52,6 +61,30 @@ namespace RNAssistant.Core.Tools
             catch (JsonException ex)
             {
                 return AgentPlannerParseResult.Fail("invalid_json", ex.Message);
+            }
+
+            foreach (var property in obj.Properties())
+            {
+                if (!IsAllowedRootProperty(property.Name))
+                {
+                    return AgentPlannerParseResult.Fail("unexpected_field", "Planner response contains unsupported field: " + property.Name);
+                }
+            }
+            if (!IsStringProperty(obj, "kind", false))
+            {
+                return AgentPlannerParseResult.Fail("invalid_kind", "Planner response kind must be a string.");
+            }
+            if (!IsStringProperty(obj, "intent", true))
+            {
+                return AgentPlannerParseResult.Fail("invalid_intent", "Planner response intent must be a string or null.");
+            }
+            if (!IsStringProperty(obj, "message", true))
+            {
+                return AgentPlannerParseResult.Fail("invalid_message", "Planner response message must be a string or null.");
+            }
+            if (!IsStringProperty(obj, "expectedOutcome", true))
+            {
+                return AgentPlannerParseResult.Fail("invalid_expected_outcome", "Planner response expectedOutcome must be a string or null.");
             }
 
             var response = new AgentPlannerResponse
@@ -92,6 +125,21 @@ namespace RNAssistant.Core.Tools
                 if (stepObject == null)
                 {
                     return AgentPlannerParseResult.Fail("invalid_step", "Each planner step must be an object.");
+                }
+                foreach (var property in stepObject.Properties())
+                {
+                    if (!IsAllowedStepProperty(property.Name))
+                    {
+                        return AgentPlannerParseResult.Fail("unexpected_step_field", "Planner step contains unsupported field: " + property.Name);
+                    }
+                }
+                if (!IsStringProperty(stepObject, "toolId", false))
+                {
+                    return AgentPlannerParseResult.Fail("missing_tool_id", "Each planner step requires a string toolId.");
+                }
+                if (!IsStringProperty(stepObject, "reason", true))
+                {
+                    return AgentPlannerParseResult.Fail("invalid_reason", "Planner step reason must be a string or null.");
                 }
 
                 var step = new AgentPlannerStep
@@ -141,6 +189,32 @@ namespace RNAssistant.Core.Tools
             return AgentPlannerParseResult.Ok(response, "strict_json", trimmed);
         }
 
+        private static bool IsAllowedRootProperty(string name)
+        {
+            return string.Equals(name, "kind", StringComparison.Ordinal) ||
+                string.Equals(name, "intent", StringComparison.Ordinal) ||
+                string.Equals(name, "message", StringComparison.Ordinal) ||
+                string.Equals(name, "steps", StringComparison.Ordinal) ||
+                string.Equals(name, "expectedOutcome", StringComparison.Ordinal);
+        }
+
+        private static bool IsAllowedStepProperty(string name)
+        {
+            return string.Equals(name, "toolId", StringComparison.Ordinal) ||
+                string.Equals(name, "arguments", StringComparison.Ordinal) ||
+                string.Equals(name, "reason", StringComparison.Ordinal);
+        }
+
+        private static bool IsStringProperty(JObject obj, string name, bool allowNullOrMissing)
+        {
+            var token = obj == null ? null : obj[name];
+            if (token == null || token.Type == JTokenType.Null)
+            {
+                return allowNullOrMissing;
+            }
+            return token.Type == JTokenType.String;
+        }
+
         private static bool TryUnwrapSingleFence(string text, out string normalized, out string sourceFormat)
         {
             normalized = null;
@@ -174,6 +248,96 @@ namespace RNAssistant.Core.Tools
                 ? "json_fence"
                 : "rnassistant_agent_fence";
             return true;
+        }
+
+        private static bool TryParseLegacyPlanEnvelope(string text, out AgentPlannerParseResult result)
+        {
+            result = null;
+            JObject root;
+            try
+            {
+                root = JObject.Parse(text);
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+
+            var plan = root["plan"] as JObject;
+            var steps = plan == null ? null : plan["steps"] as JArray;
+            if (plan == null || steps == null)
+            {
+                return false;
+            }
+
+            var response = new AgentPlannerResponse();
+            foreach (var token in steps)
+            {
+                var stepObject = token as JObject;
+                var toolId = ReadString(stepObject, "toolId");
+                if (stepObject == null || string.IsNullOrWhiteSpace(toolId))
+                {
+                    result = AgentPlannerParseResult.Fail("missing_tool_id", "Each legacy planner step requires toolId.");
+                    return true;
+                }
+
+                var step = new AgentPlannerStep
+                {
+                    ToolId = toolId,
+                    Reason = FirstNonEmpty(ReadString(stepObject, "reason"), ReadString(stepObject, "description"))
+                };
+                var arguments = stepObject["arguments"];
+                if (arguments != null && arguments.Type != JTokenType.Null)
+                {
+                    var argumentObject = arguments as JObject;
+                    if (argumentObject == null)
+                    {
+                        result = AgentPlannerParseResult.Fail("invalid_arguments", "Legacy planner step arguments must be an object.");
+                        return true;
+                    }
+                    foreach (var property in argumentObject.Properties())
+                    {
+                        step.Arguments[property.Name] = ToObjectValue(property.Value);
+                    }
+                }
+                response.Steps.Add(step);
+            }
+
+            if (response.Steps.Count > 0)
+            {
+                response.Kind = AgentResponseKinds.ToolPlan;
+                response.Intent = AgentIntents.Read;
+                response.Message = ReadString(plan, "response");
+                result = AgentPlannerParseResult.Ok(response);
+                return true;
+            }
+
+            response.Kind = AgentResponseKinds.Final;
+            response.Intent = AgentIntents.Answer;
+            response.Message = FirstNonEmpty(
+                ReadString(plan, "response"),
+                ReadString(plan, "message"),
+                ReadString(plan, "answer"));
+            if (string.IsNullOrWhiteSpace(response.Message))
+            {
+                result = AgentPlannerParseResult.Fail("missing_message", "Legacy planner final response requires response text.");
+                return true;
+            }
+
+            result = AgentPlannerParseResult.Ok(response);
+            return true;
+        }
+
+        private static string FirstNonEmpty(params string[] values)
+        {
+            foreach (var value in values ?? new string[0])
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+            return null;
         }
 
         private static string ReadString(JObject obj, string name)

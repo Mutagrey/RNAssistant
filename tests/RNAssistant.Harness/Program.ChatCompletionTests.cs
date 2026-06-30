@@ -51,6 +51,117 @@ namespace RNAssistant.Harness
                 "data: {\"choices\":[{\"delta\":{\"content\":\"<think>check facts</think>{\\\"kind\\\":\\\"final\\\",\\\"intent\\\":\\\"answer\\\",\\\"message\\\":\\\"ok\\\",\\\"steps\\\":[]}\"}}]}\n\ndata: [DONE]\n\n");
             AssertEqual("check facts", result.ReasoningContent, "think tag reasoning");
             AssertTrue(result.Content.StartsWith("{\"kind\":\"final\"", StringComparison.Ordinal), "think tag final content");
+
+            var duplicateReasoning = LlmClient.ParseCompletionResponse(
+                "{\"choices\":[{\"message\":{\"reasoning_content\":\"provider reasoning\",\"content\":\"\\n<think>duplicate</think>{\\\"kind\\\":\\\"final\\\",\\\"intent\\\":\\\"answer\\\",\\\"message\\\":\\\"ok\\\",\\\"steps\\\":[]}\"}}]}");
+            AssertEqual("provider reasoning", duplicateReasoning.ReasoningContent, "provider reasoning preserved");
+            AssertTrue(duplicateReasoning.Content.StartsWith("{\"kind\":\"final\"", StringComparison.Ordinal), "duplicate think tag removed");
+        }
+
+        private static void LlmCompletionFormatsAreNormalized()
+        {
+            var canonical =
+                "{\"kind\":\"final\",\"intent\":\"answer\",\"message\":\"ok\",\"steps\":[]}";
+            var response = new JObject
+            {
+                ["choices"] = new JArray
+                {
+                    new JObject
+                    {
+                        ["message"] = new JObject
+                        {
+                            ["content"] = new JArray
+                            {
+                                new JObject { ["type"] = "text", ["text"] = canonical.Substring(0, 30) },
+                                new JObject
+                                {
+                                    ["type"] = "text",
+                                    ["text"] = new JObject { ["value"] = canonical.Substring(30) }
+                                }
+                            }
+                        }
+                    }
+                },
+                ["usage"] = new JObject { ["input_tokens"] = 7, ["output_tokens"] = 3 }
+            };
+            var parts = LlmClient.ParseCompletionResponse(response.ToString(Formatting.None));
+            var parsedParts = new AgentPlannerResponseParser().Parse(parts.Content);
+
+            AssertTrue(parsedParts.Success, "content parts normalized");
+            AssertEqual("ok", parsedParts.Response.Message, "content parts message");
+            AssertEqual(10, parts.TotalTokens.Value, "token aliases total");
+
+            var legacyCallResponse = new JObject
+            {
+                ["choices"] = new JArray
+                {
+                    new JObject
+                    {
+                        ["message"] = new JObject
+                        {
+                            ["content"] = null,
+                            ["function_call"] = new JObject
+                            {
+                                ["name"] = "excel.add_sheet",
+                                ["arguments"] = new JObject { ["name"] = "Report" }
+                            }
+                        }
+                    }
+                }
+            };
+            var legacyCall = LlmClient.ParseCompletionResponse(legacyCallResponse.ToString(Formatting.None));
+            var parsedCall = new AgentPlannerResponseParser().Parse(legacyCall.Content);
+
+            AssertTrue(parsedCall.Success, "legacy function_call normalized");
+            AssertEqual("excel.add_sheet", parsedCall.Response.Steps[0].ToolId, "legacy function name");
+            AssertEqual("Report", parsedCall.Response.Steps[0].Arguments["name"], "legacy function argument");
+        }
+
+        private static void LlmMalformedNativeArgumentsAreRejected()
+        {
+            var sse =
+                "data: {\"choices\":[{\"delta\":{\"function_call\":{\"name\":\"excel.add_sheet\",\"arguments\":\"{broken\"}}}]}\n\n" +
+                "data: [DONE]\n\n";
+            var completion = LlmClient.ParseStreamingResponse(sse);
+            var parsed = new AgentPlannerResponseParser().Parse(completion.Content);
+
+            AssertTrue(!parsed.Success, "malformed native arguments rejected");
+            AssertEqual("invalid_arguments", parsed.ErrorCode, "malformed native argument error");
+            AssertTrue(completion.Content.IndexOf("rawArguments", StringComparison.OrdinalIgnoreCase) < 0, "no fake rawArguments object");
+        }
+
+        private static void LlmInvalidResponseEnvelopeIsReported()
+        {
+            try
+            {
+                LlmClient.ParseCompletionResponse("{\"error\":{\"message\":\"model unavailable\"}}");
+                throw new InvalidOperationException("missing message response was accepted");
+            }
+            catch (InvalidOperationException ex)
+            {
+                AssertContains(ex.Message, "no choices[0].message", "missing message error");
+                AssertContains(ex.Message, "model unavailable", "endpoint error detail");
+            }
+
+            try
+            {
+                LlmClient.ParseCompletionResponse("not-json");
+                throw new InvalidOperationException("invalid JSON response was accepted");
+            }
+            catch (InvalidOperationException ex)
+            {
+                AssertContains(ex.Message, "not valid JSON", "invalid transport JSON error");
+            }
+
+            try
+            {
+                LlmClient.ParseStreamingResponse("data: not-json\n\n");
+                throw new InvalidOperationException("invalid stream chunk was accepted");
+            }
+            catch (InvalidOperationException ex)
+            {
+                AssertContains(ex.Message, "stream chunk is not valid JSON", "invalid stream JSON error");
+            }
         }
 
         private static void ChatPlannerIncludesRecentHistory()
@@ -70,18 +181,46 @@ namespace RNAssistant.Harness
                         });
                     });
                 var session = NewSession(adapter);
-                session.Messages.Add(new ChatMessage { Role = "user", Content = "Earlier question" });
+                session.Messages.Add(new ChatMessage
+                {
+                    Role = "user",
+                    Content = "Earlier question",
+                    Attachments = new List<ChatAttachment>
+                    {
+                        new ChatAttachment { FileName = "old.txt", Kind = "text", ExtractedText = "OLD_ATTACHMENT_SENTINEL" }
+                    }
+                });
                 session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Earlier answer" });
+                session.Messages.Add(new ChatMessage
+                {
+                    Role = "assistant",
+                    Content = "INTERNAL_DIAGNOSTIC_SENTINEL",
+                    Activity = new ChatActivity { Kind = "diagnostic", Status = "failed" }
+                });
+                var currentAttachment = new ChatAttachment
+                {
+                    FileName = "current.txt",
+                    Kind = "text",
+                    ExtractedText = "CURRENT_ATTACHMENT_SENTINEL"
+                };
                 service.ExecuteAsync(
                     "Follow up",
                     session,
                     NewContext(adapter),
                     new AppSettings { ContextWindowOverrideTokens = 32768 },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    new[] { currentAttachment },
                     null).GetAwaiter().GetResult();
 
                 AssertTrue(ContainsMessage(captured, "Earlier question"), "recent user history");
                 AssertTrue(ContainsMessage(captured, "Earlier answer"), "recent assistant history");
+                AssertTrue(!ContainsMessage(captured, "INTERNAL_DIAGNOSTIC_SENTINEL"), "internal activity excluded");
+                AssertEqual(
+                    1,
+                    FlattenMessages(captured).Split(new[] { "Follow up" }, StringSplitOptions.None).Length - 1,
+                    "active request is not duplicated");
+                AssertTrue(captured.All(message => message.Attachments.All(item => item.FileName != "old.txt")), "old attachments excluded");
+                AssertEqual(1, captured.Sum(message => message.Attachments.Count(item => item.FileName == "current.txt")), "current attachment included once");
             });
         }
 
@@ -121,11 +260,28 @@ namespace RNAssistant.Harness
                 };
                 context.Notes.Add(new ContextNote
                 {
+                    Id = "selection-1",
                     Host = "Excel",
                     Kind = "selection",
                     Title = "Selection",
                     Reference = "A1",
                     Text = "Selected cells"
+                });
+                context.Notes.Add(new ContextNote
+                {
+                    Id = "selection-duplicate",
+                    Host = "Excel",
+                    Kind = "selection",
+                    Title = "Duplicate",
+                    Reference = "A1",
+                    Text = "DUPLICATE_CONTEXT_SENTINEL"
+                });
+                context.Notes.Add(new ContextNote
+                {
+                    Host = "Excel",
+                    Kind = "note",
+                    Title = "EMPTY_CONTEXT_SENTINEL",
+                    Reference = "empty"
                 });
 
                 var result = service.ExecuteAsync(
@@ -142,6 +298,8 @@ namespace RNAssistant.Harness
                 AssertEqual("Done.", session.Messages[1].Content, "assistant message");
                 AssertEqual("New chat", session.Title, "session title");
                 AssertTrue(ContainsMessage(capturedMessages, "User-added context:"), "context prompt captured");
+                AssertTrue(!ContainsMessage(capturedMessages, "DUPLICATE_CONTEXT_SENTINEL"), "duplicate context excluded");
+                AssertTrue(!ContainsMessage(capturedMessages, "EMPTY_CONTEXT_SENTINEL"), "empty context excluded");
             });
         }
 

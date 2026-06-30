@@ -71,11 +71,13 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - Agent mode expects one strict planner JSON envelope. A single complete JSON fence and native `tool_calls` are normalized as compatibility input; prose extraction is not allowed.
 - Model reasoning is transport metadata (`reasoning_content`, `reasoning`, or compatibility `<think>`), stored and rendered separately; it is never mixed into planner JSON or replayed as chat history.
 - Context limits are token budgets resolved from the active model capability catalog. The legacy character limit is read only for settings compatibility.
+- Planner context uses only the active chat's non-empty, reference-deduplicated pinned notes plus recent user/final-assistant messages. Agent activity/diagnostics and old attachments stay in the transcript but are not replayed; only current-turn attachments are sent.
 - Text/PDF attachments are normalized locally. PDF text uses PdfPig; vision-capable models may also receive selected PDF pages rendered by the host-neutral Office service. Raw PDF files are not sent through the OpenAI-compatible chat payload.
 - Routing precedes Office context capture. General-answer routes expose no tools and do not read document content; document-dependent state is obtained through explicit read tools.
 - Tools are executable actions described by `ToolDefinition`; skills are markdown guidance described by `SkillDefinition`.
 - Tool safety belongs to `ToolDefinition` metadata: `MutatesDocument`, `AgentCanRun`, `RequiresConfirmation`, risk/capability fields, and verification metadata.
 - Agent runs are bounded by settings for max iterations and max tool steps; confirmed pending tools may resume the same run, and mutation runs use deterministic verification tools before final prose.
+- A required-tool route accepts `final` only after its route phase reaches `final_phase`; inspection alone cannot complete a pending mutation. Format repair and required-tool correction have separate one-shot guards.
 - Controller coordinates request flow; it should not contain pipeline execution, VBA patch logic, or JS rendering logic.
 - Office host adapters expose executable capabilities through `ToolDefinition` and `ExecuteTool`; they should not know chat/session/storage details.
 - Desktop target descriptors must be validated before tool execution; a closed or mismatched target should fail instead of falling back to an unrelated active document.

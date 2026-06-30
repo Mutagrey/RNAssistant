@@ -15,6 +15,7 @@ namespace RNAssistant.Harness
         public string VbaModuleType = "StdModule";
         public readonly List<string> RanMacros = new List<string>();
         public bool FailUnknownSkills { get; set; }
+        public string ThrowOnToolId { get; set; }
         public string DocumentKeyValue { get; set; }
         public string RuntimeDocumentKeyValue { get; set; }
 
@@ -250,6 +251,12 @@ namespace RNAssistant.Harness
         public ToolResult ExecuteTool(ToolCommand command)
         {
             Executed.Add(Clone(command));
+            if (!string.IsNullOrWhiteSpace(ThrowOnToolId) &&
+                string.Equals(ThrowOnToolId, command == null ? null : command.ToolId, StringComparison.OrdinalIgnoreCase))
+            {
+                ThrowOnToolId = null;
+                throw new InvalidOperationException("scripted adapter failure");
+            }
             ToolResult scripted;
             if (TryDequeueResult(command.ToolId, out scripted))
             {

@@ -125,6 +125,7 @@ namespace RNAssistant.Harness
             service.NormalizeContextNote(note, "selection");
             ContextService.UpsertContextNote(context, note);
             AssertEqual(1, context.Notes.Count, "note count after insert");
+            var originalCreatedUtc = context.Notes[0].CreatedUtc;
             AssertEqual("Excel", context.Notes[0].Host, "note host");
             AssertEqual("selection", context.Notes[0].Kind, "note kind");
             AssertEqual("Harness.xlsx", context.Notes[0].Title, "note title");
@@ -139,12 +140,13 @@ namespace RNAssistant.Harness
                 Source = "A1",
                 Text = "second",
                 Preview = "second",
-                DetailsJson = "{\"range\":\"A1\"}"
+                DetailsJson = "{\"range\":\"A1\",\"updated\":true}"
             };
             ContextService.UpsertContextNote(context, replacement);
             AssertEqual(1, context.Notes.Count, "note count after update");
             AssertEqual("Changed", context.Notes[0].Title, "updated note title");
             AssertEqual("second", context.Notes[0].Text, "updated note text");
+            AssertEqual(originalCreatedUtc, context.Notes[0].CreatedUtc, "created time preserved on update");
         }
 
         private static void ContextNormalizerUsesCoreModelsOnly()

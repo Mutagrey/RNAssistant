@@ -127,7 +127,21 @@ namespace RNAssistant.Harness
             AssertTrue(promptUsage["actual"].Value<bool>(), "prompt actual");
 
             var session = new ChatSession();
-            session.Messages.Add(new ChatMessage { Role = "user", Content = "hello" });
+            session.Messages.Add(new ChatMessage
+            {
+                Role = "user",
+                Content = "hello",
+                Attachments = new List<ChatAttachment>
+                {
+                    new ChatAttachment { Kind = "image", ExtractedCharCount = 10000 }
+                }
+            });
+            session.Messages.Add(new ChatMessage
+            {
+                Role = "assistant",
+                Content = "internal activity",
+                Activity = new ChatActivity { Kind = "tool" }
+            });
             session.Context.Notes.Add(new ContextNote { Text = "selection!" });
             var sessionUsage = JObject.FromObject(ContextUsageEstimator.FromSession(session, settings));
             AssertEqual(15, sessionUsage["usedChars"].Value<int>(), "session used chars");
