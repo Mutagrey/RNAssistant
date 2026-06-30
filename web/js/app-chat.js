@@ -29,12 +29,13 @@ async function selectChat(id) {
   }
 }
 
-async function openActiveDocument() {
-  if (!state.activeChatId) {
+async function openActiveDocument(chatIdValue) {
+  var targetChatId = typeof chatIdValue === "string" ? chatIdValue : state.activeChatId;
+  if (!targetChatId) {
     return;
   }
   try {
-    var result = await send("openDocument", { chatId: state.activeChatId });
+    var result = await send("openDocument", { chatId: targetChatId });
     log(result && result.launched ? "Документ открыт." : "Документ уже активен.");
   } catch (error) {
     log(error.detail || error.message);
@@ -42,14 +43,28 @@ async function openActiveDocument() {
   }
 }
 
-async function renameChat() {
-  if (!state.activeChatId) {
+async function activateDocument(documentKey) {
+  if (!documentKey) return;
+  setActivity("loading", "Активирую документ...");
+  try {
+    await send("activateDocument", { documentKey: documentKey });
+    await initialize();
+  } catch (error) {
+    log(error.detail || error.message);
+  } finally {
+    clearActivity();
+  }
+}
+
+async function renameChat(chatIdValue) {
+  var targetChatId = typeof chatIdValue === "string" ? chatIdValue : state.activeChatId;
+  if (!targetChatId) {
     return;
   }
 
   var current = "";
   (state.chats || []).forEach(function (chat) {
-    if (chatId(chat) === state.activeChatId) {
+    if (chatId(chat) === targetChatId) {
       current = chatTitle(chat);
     }
   });
@@ -60,7 +75,7 @@ async function renameChat() {
   }
 
   try {
-    applyChatState(await send("renameChat", { chatId: state.activeChatId, title: title.trim() }));
+    applyChatState(await send("renameChat", { chatId: targetChatId, title: title.trim() }));
     log("Чат переименован.");
   } catch (error) {
     log(error.detail || error.message);
@@ -84,14 +99,15 @@ async function clearChat() {
   }
 }
 
-async function deleteChat() {
-  if (!state.activeChatId || !window.confirm("Удалить этот чат?")) {
+async function deleteChat(chatIdValue) {
+  var targetChatId = typeof chatIdValue === "string" ? chatIdValue : state.activeChatId;
+  if (!targetChatId || !window.confirm("Удалить этот чат?")) {
     return;
   }
 
   setActivity("clearing", "Удаляю чат...");
   try {
-    applyChatState(await send("deleteChat", { chatId: state.activeChatId }));
+    applyChatState(await send("deleteChat", { chatId: targetChatId }));
     clearSendError();
     log("Чат удален.");
   } catch (error) {
@@ -158,6 +174,7 @@ function applyInitState(init) {
   state.activeChatModel = init.activeChatModel || "";
   state.activeChatHtmlMode = !!(init.activeChatHtmlMode || init.ActiveChatHtmlMode);
   state.chats = init.chats || [];
+  state.documents = init.documents || init.Documents || [];
   state.messages = init.messages || [];
   $("docLine").textContent = formatOfficeContextLine(init.officeContext, init.host, init.title);
     $("toolsPath").textContent = state.toolsPath ? "Хранилище: " + state.toolsPath : "";
@@ -189,6 +206,7 @@ function applyBridgeUnavailableState(error) {
   state.title = "";
   state.officeContext = null;
   state.chats = [];
+  state.documents = [];
   state.activeChatId = "";
   state.activeChatHtmlMode = false;
   state.messages = [];
@@ -224,6 +242,33 @@ function applyBridgeUnavailableState(error) {
     updateVbaMacroRunState();
   }
   log((error && (error.detail || error.message)) || "WebView bridge is not available.");
+}
+
+function chatNavigationSignature(payload) {
+  var chats = payload.chats || payload.Chats || [];
+  var documents = payload.documents || payload.Documents || [];
+  return JSON.stringify({
+    activeChatId: payload.activeChatId || payload.ActiveChatId || "",
+    chats: chats.map(function (chat) {
+      return [chatId(chat), chatTitle(chat), chatMessageCount(chat), chat.DocumentKey || chat.documentKey || "", chat.UpdatedUtc || chat.updatedUtc || ""];
+    }),
+    documents: documents.map(function (item) {
+      return [item.documentKey || item.DocumentKey || "", item.title || item.Title || "", !!(item.isActive || item.IsActive)];
+    })
+  });
+}
+
+async function synchronizeChatState() {
+  if (state.bridgeUnavailable || state.activeSend || document.hidden) return;
+  try {
+    var response = await send("listChats", {});
+    var current = { activeChatId: state.activeChatId, chats: state.chats, documents: state.documents };
+    if (chatNavigationSignature(response) !== chatNavigationSignature(current)) {
+      applyChatState(response);
+    }
+  } catch (error) {
+    logOnce("Не удалось синхронизировать список чатов: " + (error.detail || error.message));
+  }
 }
 
 function formatOfficeContextLine(context, host, title) {
@@ -545,15 +590,28 @@ function bindChatActions() {
   $("refreshButton").addEventListener("click", initialize);
   $("chatSessionSelect").addEventListener("change", function () { selectChat($("chatSessionSelect").value); });
   $("newChatButton").addEventListener("click", createChat);
+  $("collapseChatTreeButton").addEventListener("click", function () {
+    (state.chats || []).forEach(function (chat) {
+      state.collapsedChatDocuments[chatHost(chat) + "|" + chatDocumentKey(chat)] = true;
+    });
+    (state.documents || []).forEach(function (item) {
+      var host = item.host || item.Host || state.host || "";
+      var key = item.documentKey || item.DocumentKey || "";
+      state.collapsedChatDocuments[host + "|" + key] = true;
+    });
+    renderChatSessionList(state.chats || []);
+  });
+  $("expandChatTreeButton").addEventListener("click", function () {
+    state.collapsedChatDocuments = {};
+    renderChatSessionList(state.chats || []);
+  });
   $("openDocumentButton").addEventListener("click", openActiveDocument);
   $("chatSearchInput").addEventListener("input", function () {
     state.chatSearch = $("chatSearchInput").value || "";
     renderChatSessionList(state.chats || []);
   });
   $("toggleHtmlModeButton").addEventListener("click", toggleChatHtmlMode);
-  $("renameChatButton").addEventListener("click", renameChat);
   $("clearChatButton").addEventListener("click", clearChat);
-  $("deleteChatButton").addEventListener("click", deleteChat);
   $("retrySendButton").addEventListener("click", retryFailedSend);
   $("stopButton").addEventListener("click", stopActiveSend);
   $("clearInputButton").addEventListener("click", function () { setChatInputText("", true); });

@@ -67,6 +67,14 @@ namespace RNAssistant.Office
             }
         }
 
+        public void RefreshState()
+        {
+            if (_paneControl != null)
+            {
+                _paneControl.RefreshState();
+            }
+        }
+
         private static string ResolveWebRoot(string rootPath)
         {
             if (!string.IsNullOrWhiteSpace(rootPath))

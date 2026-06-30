@@ -54,6 +54,21 @@ function bindModelActions() {
     }
   });
   $("modelInput").addEventListener("input", renderModelControls);
+  $("modelImageSupportInput").addEventListener("change", function () {
+    var value = formModel();
+    if (!value) return;
+    var settings = state.settings || {};
+    var overrides = settings.ModelImageSupportOverrides || settings.modelImageSupportOverrides || {};
+    settings.ModelImageSupportOverrides = overrides;
+    if ($("modelImageSupportInput").value === "") {
+      delete overrides[value];
+    } else {
+      overrides[value] = $("modelImageSupportInput").value === "true";
+    }
+    settingsDirty = true;
+    updateSettingsSaveButton();
+    renderModelImageSupport();
+  });
   $("chatModelSelect").addEventListener("change", function () {
     setChatModelSelectWidth($("chatModelSelect"));
     saveChatModelSelection($("chatModelSelect").value);

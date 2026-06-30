@@ -60,20 +60,33 @@ namespace RNAssistant.Core.Models
         public AgentPlannerResponse Response { get; set; }
         public string ErrorCode { get; set; }
         public string ErrorMessage { get; set; }
+        public string SourceFormat { get; set; }
+        public string NormalizedText { get; set; }
 
         public bool Success
         {
             get { return Response != null && string.IsNullOrWhiteSpace(ErrorCode); }
         }
 
-        public static AgentPlannerParseResult Ok(AgentPlannerResponse response)
+        public static AgentPlannerParseResult Ok(AgentPlannerResponse response, string sourceFormat = "strict_json", string normalizedText = null)
         {
-            return new AgentPlannerParseResult { Response = response };
+            return new AgentPlannerParseResult
+            {
+                Response = response,
+                SourceFormat = sourceFormat,
+                NormalizedText = normalizedText
+            };
         }
 
-        public static AgentPlannerParseResult Fail(string code, string message)
+        public static AgentPlannerParseResult Fail(string code, string message, string sourceFormat = "unknown", string normalizedText = null)
         {
-            return new AgentPlannerParseResult { ErrorCode = code, ErrorMessage = message };
+            return new AgentPlannerParseResult
+            {
+                ErrorCode = code,
+                ErrorMessage = message,
+                SourceFormat = sourceFormat,
+                NormalizedText = normalizedText
+            };
         }
     }
 }

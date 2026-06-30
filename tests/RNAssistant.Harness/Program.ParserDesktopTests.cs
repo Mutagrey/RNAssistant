@@ -145,10 +145,11 @@ namespace RNAssistant.Harness
         private static void TargetRegistryManualModeKeepsSelection()
         {
             var registry = new OfficeTargetRegistry();
+            registry.Mode = TargetSelectionMode.Manual;
             var first = registry.Select(new OfficeTargetDescriptor { Host = "Excel", Hwnd = 1, FullName = "C:\\Docs\\A.xlsx", Name = "A.xlsx" });
             var second = registry.Upsert(new OfficeTargetDescriptor { Host = "Word", Hwnd = 2, FullName = "C:\\Docs\\B.docx", Name = "B.docx" });
 
-            AssertEqual(TargetSelectionMode.Manual, registry.Mode, "default mode");
+            AssertEqual(TargetSelectionMode.Manual, registry.Mode, "manual mode");
             AssertEqual(first.Id, registry.SelectedTargetId, "manual selected id");
             AssertEqual("A.xlsx", registry.SelectedTarget.Target.Name, "manual selected target");
             AssertTrue(second != null, "second target added");

@@ -128,12 +128,11 @@ namespace RNAssistant.Office.Services
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            ReportProgress(progress, "context", "Читаю документ...");
             settings = settings ?? new AppSettings();
             tools = tools ?? new ToolDefinition[0];
             skills = skills ?? new SkillDefinition[0];
 
-            var snapshot = CaptureOfficeSnapshot(settings, taskText);
+            var snapshot = new OfficeSnapshot { Host = _adapter.HostName };
             var route = _intentRouter.Route(taskText, snapshot);
             if (session != null && session.HtmlModeEnabled)
             {
@@ -148,6 +147,12 @@ namespace RNAssistant.Office.Services
             {
                 route.Phase = AgentPhases.Verification;
                 route.RequiresTool = true;
+            }
+            if (route.RequiresInspection || settings.IncludeVbaContext || LooksLikeVbaTask(taskText))
+            {
+                ReportProgress(progress, "context", "Собираю необходимый контекст Office...");
+                snapshot = CaptureOfficeSnapshot(settings, taskText);
+                route.App = FirstNonEmpty(snapshot.Host, route.App);
             }
 
             var observations = new List<AgentObservation>();
@@ -176,29 +181,35 @@ namespace RNAssistant.Office.Services
                 var plannerText = completion.Content ?? string.Empty;
 
                 ReportProgress(progress, "processing", "Проверяю JSON planner response...");
-                var parsed = _plannerParser.ParseStrict(plannerText);
+                var parsed = _plannerParser.Parse(plannerText);
                 if (!parsed.Success && !repairUsed)
                 {
                     repairUsed = true;
                     ReportProgress(progress, "repairing", "Planner вернул невалидный JSON, запрашиваю исправление...");
-                    var repairMessages = BuildStrictRepairMessages(plannerText, parsed);
+                    var repairMessages = BuildStrictRepairMessages(messages, plannerText, parsed, settings);
                     completion = await _completeAsync(settings, repairMessages, cancellationToken).ConfigureAwait(false);
                     plannerText = completion.Content ?? string.Empty;
-                    parsed = _plannerParser.ParseStrict(plannerText);
+                    parsed = _plannerParser.Parse(plannerText);
                 }
 
                 if (!parsed.Success)
                 {
                     assistantText = "Planner response is invalid: " + parsed.ErrorCode + ". " + parsed.ErrorMessage;
+                    var diagnostic = BuildPlannerDiagnostic(plannerText, parsed);
                     session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, completion, new ChatActivity
                     {
                         Kind = "diagnostic",
                         Title = "Planner JSON invalid",
+                        Subtitle = parsed.SourceFormat,
                         Status = "failed",
                         ExecutionStatus = parsed.ErrorCode,
-                        ResultMessage = parsed.ErrorMessage
+                        ResultMessage = diagnostic
                     }));
                     break;
+                }
+                if (!string.Equals(parsed.SourceFormat, "strict_json", StringComparison.OrdinalIgnoreCase))
+                {
+                    ReportProgress(progress, "processing", "Planner response normalized from " + parsed.SourceFormat + ".");
                 }
 
                 var response = parsed.Response;
@@ -209,7 +220,7 @@ namespace RNAssistant.Office.Services
                         repairUsed = true;
                         var forced = BuildPlannerCorrectionMessages("This task requires Office tool use before a final answer.", snapshot, route, slice, observations, documentContext, skills, settings, taskText);
                         var correctionCompletion = await _completeAsync(settings, forced, cancellationToken).ConfigureAwait(false);
-                        var retryParsed = _plannerParser.ParseStrict(correctionCompletion.Content ?? string.Empty);
+                        var retryParsed = _plannerParser.Parse(correctionCompletion.Content ?? string.Empty);
                         if (retryParsed.Success)
                         {
                             response = retryParsed.Response;
@@ -431,8 +442,7 @@ namespace RNAssistant.Office.Services
             var snapshot = new OfficeSnapshot
             {
                 Host = _adapter.HostName,
-                DocumentTitle = SafeRead(() => _adapter.DocumentTitle),
-                SnapshotText = CaptureDocumentSnapshot(settings)
+                DocumentTitle = SafeRead(() => _adapter.DocumentTitle)
             };
 
             var contextProvider = _adapter as IOfficeContextProvider;
@@ -606,21 +616,27 @@ namespace RNAssistant.Office.Services
             return fallback ?? string.Empty;
         }
 
-        private List<ChatMessage> BuildStrictRepairMessages(string badText, AgentPlannerParseResult parseResult)
+        private List<ChatMessage> BuildStrictRepairMessages(
+            IEnumerable<ChatMessage> originalMessages,
+            string badText,
+            AgentPlannerParseResult parseResult,
+            AppSettings settings)
         {
-            return new List<ChatMessage>
+            var messages = new List<ChatMessage>(originalMessages ?? new ChatMessage[0]);
+            messages.Add(new ChatMessage
             {
-                new ChatMessage
-                {
-                    Role = "system",
-                    Content = "Your previous RNAssistant planner output was invalid. Return exactly one JSON object. No markdown. No prose. Shape: {\"kind\":\"tool_plan|final|clarify|cannot_do\",\"intent\":\"read|analyze|mutate|verify|answer|clarify\",\"message\":\"string|null\",\"steps\":[{\"toolId\":\"exact tool id\",\"arguments\":{},\"reason\":\"short reason\"}],\"expectedOutcome\":\"string|null\"}."
-                },
-                new ChatMessage
-                {
-                    Role = "user",
-                    Content = "Error: " + (parseResult == null ? string.Empty : parseResult.ErrorCode + " " + parseResult.ErrorMessage) + "\nPrevious output:\n" + (badText ?? string.Empty)
-                }
-            };
+                Role = "assistant",
+                Content = TrimDiagnosticText(badText, 4000)
+            });
+            messages.Add(new ChatMessage
+            {
+                Role = "user",
+                Content = PromptText(settings, p => p.RepairMalformedToolBlockPrompt) +
+                    "\nValidation error: " +
+                    (parseResult == null ? string.Empty : parseResult.ErrorCode + " " + parseResult.ErrorMessage) +
+                    "\nKeep the original USER_REQUEST, ROUTE and AVAILABLE_TOOLS unchanged."
+            });
+            return messages;
         }
 
         private List<ChatMessage> BuildPlannerCorrectionMessages(string correction, OfficeSnapshot snapshot, RoutedTask route, ToolCatalogSlice slice, IEnumerable<AgentObservation> observations, DocumentContext context, IEnumerable<SkillDefinition> skills, AppSettings settings, string taskText)
@@ -670,16 +686,17 @@ namespace RNAssistant.Office.Services
             return string.Empty;
         }
 
-        private string CaptureDocumentSnapshot(AppSettings settings)
+        private static string BuildPlannerDiagnostic(string rawText, AgentPlannerParseResult parseResult)
         {
-            try
-            {
-                return _adapter.GetDocumentSnapshot((settings ?? new AppSettings()).ContextCharLimit);
-            }
-            catch (Exception ex)
-            {
-                return "Document snapshot could not be read: " + ex.Message;
-            }
+            return "format=" + (parseResult == null ? "unknown" : parseResult.SourceFormat ?? "unknown") +
+                "; error=" + (parseResult == null ? "unknown" : parseResult.ErrorCode + ": " + parseResult.ErrorMessage) +
+                "; response=" + TrimDiagnosticText(rawText, 1200);
+        }
+
+        private static string TrimDiagnosticText(string value, int maxChars)
+        {
+            value = value ?? string.Empty;
+            return value.Length <= maxChars ? value : value.Substring(0, maxChars) + "\n[truncated]";
         }
 
         private string CaptureVbaSnapshot(AppSettings settings, string taskText)

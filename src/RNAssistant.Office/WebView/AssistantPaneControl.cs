@@ -68,6 +68,11 @@ namespace RNAssistant.Office.WebView
             ExecuteScript("window.RNAssistantHost && window.RNAssistantHost.refreshContext && window.RNAssistantHost.refreshContext();");
         }
 
+        public void RefreshState()
+        {
+            ExecuteScript("window.RNAssistantHost && window.RNAssistantHost.refreshState && window.RNAssistantHost.refreshState();");
+        }
+
         public void RunQuickAction(string action)
         {
             ExecuteScript("window.RNAssistantHost && window.RNAssistantHost.runQuickAction && window.RNAssistantHost.runQuickAction(" + JsonConvert.SerializeObject(action ?? string.Empty) + ");");

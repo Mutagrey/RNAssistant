@@ -8,6 +8,7 @@ var state = {
   context: {},
   contextUsage: {},
   chats: [],
+  documents: [],
   chatSearch: "",
   collapsedChatDocuments: {},
   activeChatId: "",
@@ -46,7 +47,8 @@ var state = {
   highlightLog: {},
   highlightRetryScheduled: false,
   highlightRetryAttempts: 0,
-  highlightLoadLogged: false
+  highlightLoadLogged: false,
+  syncTimer: null
 };
 
 function $(id) {
@@ -66,6 +68,9 @@ window.RNAssistantHost = {
   },
   refreshContext: function () {
     refreshContext();
+  },
+  refreshState: function () {
+    initialize();
   },
   runQuickAction: function (action) {
     runQuickAction(action);
@@ -98,7 +103,7 @@ function setActivity(phase, message) {
   }
 
   state.activity = { visible: true, phase: phase || "working", message: message || "Выполняю..." };
-  status.classList.remove("hidden");
+  status.classList.add("is-active");
   status.dataset.phase = state.activity.phase;
   text.textContent = state.activity.message;
 }
@@ -110,7 +115,10 @@ function clearActivity() {
   }
 
   state.activity = { visible: false, phase: "", message: "" };
-  status.classList.add("hidden");
+  status.classList.remove("is-active");
+  if ($("activityText")) {
+    $("activityText").textContent = "";
+  }
   status.removeAttribute("data-phase");
 }
 
@@ -125,6 +133,19 @@ function hideHelp() {
   var modal = $("helpModal");
   if (modal) {
     modal.classList.add("hidden");
+  }
+}
+
+function toggleFullscreen() {
+  var root = document.documentElement;
+  if (document.fullscreenElement) {
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    }
+    return;
+  }
+  if (root.requestFullscreen) {
+    root.requestFullscreen().catch(function (error) { log(error.message); });
   }
 }
 

@@ -149,7 +149,8 @@
 
 .settings-page {
   display: none;
-  max-width: 860px;
+  width: 100%;
+  max-width: none;
 }
 
 .settings-page.active {

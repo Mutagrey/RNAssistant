@@ -119,7 +119,7 @@ namespace RNAssistant.Office.Tools
         private ToolResult ValidateToolPayload(ToolCommand command)
         {
             var tool = ReadToolDefinition(command);
-            var validation = ValidateTool(tool);
+            var validation = ValidateToolDefinition(tool);
             if (!validation.Success)
             {
                 return validation;
@@ -136,7 +136,7 @@ namespace RNAssistant.Office.Tools
             }
 
             var tool = ReadToolDefinition(command);
-            var validation = ValidateTool(tool);
+            var validation = ValidateToolDefinition(tool);
             if (!validation.Success)
             {
                 return validation;
@@ -215,11 +215,15 @@ namespace RNAssistant.Office.Tools
             return int.TryParse(Convert.ToString(command.Arguments[name]), out value) ? value : fallback;
         }
 
-        private static ToolResult ValidateTool(ToolDefinition tool)
+        internal static ToolResult ValidateToolDefinition(ToolDefinition tool)
         {
             if (tool == null || string.IsNullOrWhiteSpace(tool.Id))
             {
                 return ToolResult.Fail("Tool id is required.");
+            }
+            if (tool.Id.Any(char.IsWhiteSpace))
+            {
+                return ToolResult.Fail("Tool id cannot contain whitespace: " + tool.Id);
             }
             if (string.IsNullOrWhiteSpace(tool.Host))
             {
@@ -234,7 +238,10 @@ namespace RNAssistant.Office.Tools
 
             try
             {
-                JToken.Parse(string.IsNullOrWhiteSpace(tool.ArgumentSchemaJson) ? "{}" : tool.ArgumentSchemaJson);
+                if (!(JToken.Parse(string.IsNullOrWhiteSpace(tool.ArgumentSchemaJson) ? "{}" : tool.ArgumentSchemaJson) is JObject))
+                {
+                    return ToolResult.Fail("argumentSchemaJson must be a JSON object.");
+                }
             }
             catch (JsonException ex)
             {
@@ -255,6 +262,22 @@ namespace RNAssistant.Office.Tools
                     if (steps == null || steps.Count == 0)
                     {
                         return ToolResult.Fail("Pipeline tool requires at least one step.");
+                    }
+                    foreach (var stepToken in steps)
+                    {
+                        var step = stepToken as JObject;
+                        if (step == null)
+                        {
+                            return ToolResult.Fail("Each pipeline step must be a JSON object.");
+                        }
+                        if (string.IsNullOrWhiteSpace((string)step["toolId"]))
+                        {
+                            return ToolResult.Fail("Each pipeline step requires toolId.");
+                        }
+                        if (step["arguments"] != null && step["arguments"].Type != JTokenType.Null && !(step["arguments"] is JObject))
+                        {
+                            return ToolResult.Fail("Pipeline step arguments must be a JSON object.");
+                        }
                     }
                 }
                 catch (JsonException ex)

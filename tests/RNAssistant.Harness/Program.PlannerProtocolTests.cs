@@ -25,6 +25,34 @@ namespace RNAssistant.Harness
             AssertEqual("not_json_object", prose.ErrorCode, "prose error code");
         }
 
+        private static void PlannerCompatibilityUnwrapsSingleFence()
+        {
+            var parser = new AgentPlannerResponseParser();
+            var jsonFence = parser.Parse("```json\n{\"kind\":\"final\",\"intent\":\"answer\",\"message\":\"Done.\",\"steps\":[]}\n```");
+            var agentFence = parser.Parse("```rnassistant-agent\n{\"kind\":\"final\",\"intent\":\"answer\",\"message\":\"Done.\",\"steps\":[]}\n```");
+            var noisy = parser.Parse("Result:\n```json\n{\"kind\":\"final\",\"intent\":\"answer\",\"message\":\"Done.\",\"steps\":[]}\n```");
+
+            AssertTrue(jsonFence.Success, "json fence accepted");
+            AssertEqual("json_fence", jsonFence.SourceFormat, "json fence source");
+            AssertTrue(agentFence.Success, "agent fence accepted");
+            AssertEqual("rnassistant_agent_fence", agentFence.SourceFormat, "agent fence source");
+            AssertTrue(!noisy.Success, "prose around fence rejected");
+        }
+
+        private static void PlannerRejectsInvalidIntentAndSteps()
+        {
+            var parser = new AgentPlannerResponseParser();
+            var intent = parser.Parse("{\"kind\":\"final\",\"intent\":\"browse\",\"message\":\"Done.\",\"steps\":[]}");
+            var toolId = parser.Parse("{\"kind\":\"tool_plan\",\"intent\":\"read\",\"message\":null,\"steps\":[{\"arguments\":{}}]}");
+            var arguments = parser.Parse("{\"kind\":\"tool_plan\",\"intent\":\"read\",\"message\":null,\"steps\":[{\"toolId\":\"excel.read_range\",\"arguments\":[]}]}");
+            var missingSteps = parser.Parse("{\"kind\":\"final\",\"intent\":\"answer\",\"message\":\"Done.\"}");
+
+            AssertEqual("invalid_intent", intent.ErrorCode, "invalid intent");
+            AssertEqual("missing_tool_id", toolId.ErrorCode, "missing tool id");
+            AssertEqual("invalid_arguments", arguments.ErrorCode, "invalid arguments");
+            AssertEqual("missing_steps", missingSteps.ErrorCode, "missing steps");
+        }
+
         private static void ModelQualityRequiresToolRejectsFinal()
         {
             var parsed = new AgentPlannerResponseParser().ParseStrict("{\"kind\":\"final\",\"intent\":\"answer\",\"message\":\"I can explain how to do it.\",\"steps\":[]}");

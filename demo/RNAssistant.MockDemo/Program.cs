@@ -110,7 +110,9 @@ namespace RNAssistant.MockDemo
             var message = payload["message"] == null ? string.Empty : payload["message"].ToString();
             if (message.IndexOf("Demo Report", StringComparison.OrdinalIgnoreCase) < 0)
             {
-                throw new InvalidOperationException("final answer did not mention Demo Report: " + message);
+                throw new InvalidOperationException(
+                    "final answer did not mention Demo Report: " + message +
+                    "; toolResults=" + (payload["toolResults"] == null ? "null" : payload["toolResults"].ToString(Formatting.None)));
             }
 
             var messages = payload["messages"] as JArray;
@@ -186,7 +188,7 @@ namespace RNAssistant.MockDemo
             var dataSources = (workspace["dataSources"] ?? workspace["DataSources"]) as JArray;
             if (files == null || files.Count < 3)
             {
-                throw new InvalidOperationException("HTML workspace files were not created");
+                throw new InvalidOperationException("HTML workspace files were not created: " + workspace.ToString(Formatting.None));
             }
             if (dataSources == null || dataSources.Count != 1)
             {

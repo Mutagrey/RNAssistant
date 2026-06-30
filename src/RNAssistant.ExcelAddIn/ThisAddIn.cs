@@ -17,12 +17,18 @@ namespace RNAssistant.ExcelAddIn
         {
             _runtime = new AssistantRuntime(new ExcelAdapter(Application));
             Application.SheetSelectionChange += Application_SheetSelectionChange;
+            Application.WorkbookActivate += Application_WorkbookChanged;
+            Application.WorkbookOpen += Application_WorkbookChanged;
+            Application.WorkbookBeforeClose += Application_WorkbookBeforeClose;
             InstallContextMenus();
         }
 
         private void ThisAddIn_Shutdown(object sender, EventArgs e)
         {
             Application.SheetSelectionChange -= Application_SheetSelectionChange;
+            Application.WorkbookActivate -= Application_WorkbookChanged;
+            Application.WorkbookOpen -= Application_WorkbookChanged;
+            Application.WorkbookBeforeClose -= Application_WorkbookBeforeClose;
             RemoveContextMenus();
         }
 
@@ -31,7 +37,7 @@ namespace RNAssistant.ExcelAddIn
             if (_pane == null)
             {
                 _pane = CustomTaskPanes.Add(_runtime.CreatePaneControl(), "RN Assistant");
-                _pane.Width = 520;
+                _pane.Width = 1200;
             }
 
             if (!string.IsNullOrWhiteSpace(quickAction))
@@ -53,6 +59,29 @@ namespace RNAssistant.ExcelAddIn
             if (_runtime != null)
             {
                 _runtime.BlurComposer();
+            }
+        }
+
+        private void Application_WorkbookChanged(Excel.Workbook workbook)
+        {
+            if (_runtime != null)
+            {
+                _runtime.RefreshState();
+            }
+        }
+
+        private void Application_WorkbookBeforeClose(Excel.Workbook workbook, ref bool cancel)
+        {
+            if (!cancel && _runtime != null)
+            {
+                var timer = new System.Windows.Forms.Timer { Interval = 150 };
+                timer.Tick += delegate
+                {
+                    timer.Stop();
+                    timer.Dispose();
+                    _runtime.RefreshState();
+                };
+                timer.Start();
             }
         }
 

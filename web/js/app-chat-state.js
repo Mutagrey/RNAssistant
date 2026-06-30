@@ -35,10 +35,8 @@ function renderChatSessions() {
   var hasActive = !!state.activeChatId;
   var hasMessages = !!(state.messages && state.messages.length);
   $("newChatButton").disabled = !!state.bridgeUnavailable;
-  $("renameChatButton").disabled = !hasActive;
   $("clearChatButton").disabled = !hasActive || !hasMessages;
   $("clearChatButton").hidden = !hasActive || !hasMessages;
-  $("deleteChatButton").disabled = !hasActive;
   renderHtmlModeToggle();
   renderSendControls();
 }
@@ -63,8 +61,11 @@ function applyChatState(response) {
   if (response.activeChatHtmlMode !== undefined || response.ActiveChatHtmlMode !== undefined) {
     state.activeChatHtmlMode = !!(response.activeChatHtmlMode || response.ActiveChatHtmlMode);
   }
-  if (response.chats || response.Chats) {
+  if (response.chats !== undefined || response.Chats !== undefined) {
     state.chats = response.chats || response.Chats || [];
+  }
+  if (response.documents !== undefined || response.Documents !== undefined) {
+    state.documents = response.documents || response.Documents || [];
   }
   if (response.context || response.Context) {
     state.context = response.context || response.Context || {};
@@ -97,8 +98,12 @@ function renderChatSessionList(chats) {
   }
 
   list.innerHTML = "";
-  if (!chats.length) {
+  if (!chats.length && !(state.documents || []).length) {
     list.classList.add("is-empty");
+    var empty = document.createElement("div");
+    empty.className = "chat-tree-empty";
+    empty.textContent = state.bridgeUnavailable ? "Office bridge недоступен." : "Чатов пока нет.";
+    list.appendChild(empty);
     return;
   }
   list.classList.remove("is-empty");
@@ -111,11 +116,36 @@ function renderChatSessionList(chats) {
     }
     var key = chatHost(chat) + "|" + chatDocumentKey(chat);
     if (!documents[key]) {
-      documents[key] = { key: key, title: chatDocumentTitle(chat), host: chatHost(chat), chats: [], current: false, path: "" };
+      documents[key] = { key: key, documentKey: chatDocumentKey(chat), title: chatDocumentTitle(chat), host: chatHost(chat), chats: [], current: false, open: false, path: "" };
     }
     documents[key].chats.push(chat);
     documents[key].current = documents[key].current || chatIsCurrentDocument(chat);
+    documents[key].open = documents[key].open || chatIsCurrentDocument(chat);
     documents[key].path = documents[key].path || chatDocumentPath(chat);
+  });
+
+  (state.documents || []).forEach(function (item) {
+    var host = item.host || item.Host || state.host || "";
+    var documentKey = item.documentKey || item.DocumentKey || "";
+    var key = host + "|" + documentKey;
+    if (!documents[key]) {
+      documents[key] = {
+        key: key,
+        documentKey: documentKey,
+        title: item.title || item.Title || "Документ",
+        host: host,
+        chats: [],
+        current: !!(item.isActive || item.IsActive),
+        open: true,
+        path: item.path || item.Path || ""
+      };
+    } else {
+      documents[key].documentKey = documentKey;
+      documents[key].title = item.title || item.Title || documents[key].title;
+      documents[key].current = !!(item.isActive || item.IsActive);
+      documents[key].open = true;
+      documents[key].path = item.path || item.Path || documents[key].path;
+    }
   });
 
   Object.keys(documents).sort(function (left, right) {
@@ -123,6 +153,9 @@ function renderChatSessionList(chats) {
     var b = documents[right];
     if (a.current !== b.current) {
       return a.current ? -1 : 1;
+    }
+    if (a.open !== b.open) {
+      return a.open ? -1 : 1;
     }
     return a.title.localeCompare(b.title);
   }).forEach(function (key) {
@@ -132,23 +165,30 @@ function renderChatSessionList(chats) {
 
 function renderChatDocumentNode(documentItem, query) {
   var group = document.createElement("section");
-  group.className = "chat-document" + (documentItem.current ? " is-current" : " is-closed");
-  var selectedInside = documentItem.chats.some(function (chat) { return chatId(chat) === state.activeChatId; });
-  var collapsed = !query && !selectedInside && !!state.collapsedChatDocuments[documentItem.key];
+  group.className = "chat-document" + (documentItem.current ? " is-current" : (documentItem.open ? " is-open" : " is-closed"));
+  var collapsed = !query && !!state.collapsedChatDocuments[documentItem.key];
 
-  var header = document.createElement("button");
-  header.type = "button";
+  var header = document.createElement("div");
   header.className = "chat-document-row";
   header.setAttribute("aria-expanded", collapsed ? "false" : "true");
   header.innerHTML =
+    "<button type=\"button\" class=\"chat-document-toggle\" aria-label=\"Свернуть или развернуть документ\">" +
     "<span class=\"chat-document-caret\">›</span>" +
     "<span class=\"chat-document-icon\">" + documentHostInitial(documentItem.host) + "</span>" +
     "<span class=\"chat-document-name\"></span>" +
-    "<span class=\"chat-document-state\">" + (documentItem.current ? "Открыт" : "Закрыт") + "</span>";
+    "<span class=\"chat-document-state\">" + (documentItem.current ? "Активен" : (documentItem.open ? "Открыт" : "Закрыт")) + "</span></button>" +
+    "<button type=\"button\" class=\"chat-row-action chat-document-open\" title=\"" + (documentItem.open ? "Активировать документ" : "Открыть документ") + "\" aria-label=\"" + (documentItem.open ? "Активировать документ" : "Открыть документ") + "\">↗</button>";
   header.querySelector(".chat-document-name").textContent = documentItem.title;
-  header.addEventListener("click", function () {
-    state.collapsedChatDocuments[documentItem.key] = !collapsed;
+  header.querySelector(".chat-document-toggle").addEventListener("click", function () {
+    state.collapsedChatDocuments[documentItem.key] = !children.hidden;
     renderChatSessionList(state.chats || []);
+  });
+  header.querySelector(".chat-document-open").addEventListener("click", function () {
+    if (documentItem.open) {
+      activateDocument(documentItem.documentKey);
+    } else if (documentItem.chats.length) {
+      openActiveDocument(chatId(documentItem.chats[0]));
+    }
   });
   group.appendChild(header);
 
@@ -158,15 +198,23 @@ function renderChatDocumentNode(documentItem, query) {
   documentItem.chats.forEach(function (chat) {
     children.appendChild(renderChatTreeRow(chat));
   });
+  if (!documentItem.chats.length) {
+    var empty = document.createElement("div");
+    empty.className = "chat-document-empty";
+    empty.textContent = "Нет чатов";
+    children.appendChild(empty);
+  }
   group.appendChild(children);
   return group;
 }
 
 function renderChatTreeRow(chat) {
-  var button = document.createElement("button");
+  var row = document.createElement("div");
   var id = chatId(chat);
+  row.className = "chat-session-row" + (id === state.activeChatId ? " active" : "");
+  var button = document.createElement("button");
   button.type = "button";
-  button.className = "chat-session-row" + (id === state.activeChatId ? " active" : "");
+  button.className = "chat-session-select";
   button.disabled = !!state.bridgeUnavailable;
   button.addEventListener("click", function () { selectChat(id); });
 
@@ -178,7 +226,14 @@ function renderChatTreeRow(chat) {
   meta.className = "chat-session-meta";
   meta.textContent = chatMessageCount(chat) + " сообщ.";
   button.appendChild(meta);
-  return button;
+  row.appendChild(button);
+  var actions = document.createElement("span");
+  actions.className = "chat-row-actions";
+  actions.innerHTML = "<button type=\"button\" class=\"chat-row-action chat-edit\" title=\"Переименовать\" aria-label=\"Переименовать чат\">✎</button><button type=\"button\" class=\"chat-row-action chat-delete\" title=\"Удалить\" aria-label=\"Удалить чат\">⌫</button>";
+  actions.querySelector(".chat-edit").addEventListener("click", function () { renameChat(id); });
+  actions.querySelector(".chat-delete").addEventListener("click", function () { deleteChat(id); });
+  row.appendChild(actions);
+  return row;
 }
 
 function documentHostInitial(host) {

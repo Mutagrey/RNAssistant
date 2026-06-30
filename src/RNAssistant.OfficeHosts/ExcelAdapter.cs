@@ -8,11 +8,12 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Office;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.OfficeHosts
 {
-    public sealed class ExcelAdapter : IOfficeApplicationAdapter, IOfficeContextProvider
+    public sealed class ExcelAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeDocumentCatalog
     {
         private readonly Excel.Application _application;
         private readonly OfficeTargetDescriptor _target;
@@ -113,6 +114,62 @@ namespace RNAssistant.OfficeHosts
             }
 
             return context;
+        }
+
+        public IReadOnlyList<OpenOfficeDocumentDto> ListOpenDocuments()
+        {
+            var active = ActiveWorkbook();
+            var result = new List<OpenOfficeDocumentDto>();
+            foreach (Excel.Workbook workbook in _application.Workbooks)
+            {
+                result.Add(new OpenOfficeDocumentDto
+                {
+                    Host = HostName,
+                    DocumentKey = KeyForWorkbook(workbook),
+                    Title = SafeString(delegate { return workbook.Name; }),
+                    Path = SafeString(delegate { return workbook.FullName; }),
+                    IsActive = active != null && SameWorkbook(active, workbook)
+                });
+            }
+            return result;
+        }
+
+        public bool ActivateDocument(string documentKey)
+        {
+            if (string.IsNullOrWhiteSpace(documentKey))
+            {
+                return false;
+            }
+
+            foreach (Excel.Workbook workbook in _application.Workbooks)
+            {
+                if (!string.Equals(KeyForWorkbook(workbook), documentKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                workbook.Activate();
+                if (workbook.Windows != null && workbook.Windows.Count > 0)
+                {
+                    workbook.Windows[1].Activate();
+                }
+                return true;
+            }
+            return false;
+        }
+
+        private string KeyForWorkbook(Excel.Workbook workbook)
+        {
+            if (workbook == null)
+            {
+                return "Excel:NoWorkbook";
+            }
+            var runtimeKey = "Excel:Runtime:" + workbook.GetHashCode().ToString("x");
+            return DocumentIdentity.ForOfficeDocument(
+                HostName,
+                SafeString(delegate { return workbook.Path; }),
+                runtimeKey,
+                () => workbook.CustomDocumentProperties);
         }
 
         public IEnumerable<ToolDefinition> GetBuiltInTools()

@@ -95,6 +95,30 @@ namespace RNAssistant.Office.Contracts
         public string ChatId { get; set; }
     }
 
+    public sealed class DocumentPayload
+    {
+        [JsonProperty("documentKey")]
+        public string DocumentKey { get; set; }
+    }
+
+    public sealed class OpenOfficeDocumentDto
+    {
+        [JsonProperty("host")]
+        public string Host { get; set; }
+
+        [JsonProperty("documentKey")]
+        public string DocumentKey { get; set; }
+
+        [JsonProperty("title")]
+        public string Title { get; set; }
+
+        [JsonProperty("path")]
+        public string Path { get; set; }
+
+        [JsonProperty("isActive")]
+        public bool IsActive { get; set; }
+    }
+
     public sealed class CreateChatPayload
     {
         [JsonProperty("title")]
@@ -380,6 +404,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("chats")]
         public IReadOnlyList<ChatSessionSummary> Chats { get; set; }
 
+        [JsonProperty("documents")]
+        public IReadOnlyList<OpenOfficeDocumentDto> Documents { get; set; }
+
         [JsonProperty("context")]
         public DocumentContext Context { get; set; }
 
@@ -418,6 +445,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("chats")]
         public IReadOnlyList<ChatSessionSummary> Chats { get; set; }
+
+        [JsonProperty("documents")]
+        public IReadOnlyList<OpenOfficeDocumentDto> Documents { get; set; }
 
         [JsonProperty("settings")]
         public AppSettings Settings { get; set; }

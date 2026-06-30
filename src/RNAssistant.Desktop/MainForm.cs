@@ -15,6 +15,9 @@ namespace RNAssistant.Desktop
         private Label _placeholder;
         private AssistantRuntime _runtime;
         private IDisposable _currentAdapter;
+        private Rectangle _restoreBounds;
+        private FormWindowState _restoreWindowState;
+        private bool _fullScreen;
 
         public MainForm()
         {
@@ -22,9 +25,11 @@ namespace RNAssistant.Desktop
             _targetRegistry = new OfficeTargetRegistry();
             _targetBar = new TargetSelectionBar();
             Text = "RN Assistant";
-            Width = 720;
+            Width = 1200;
             Height = 820;
+            MinimumSize = new Size(900, 640);
             StartPosition = FormStartPosition.CenterScreen;
+            KeyPreview = true;
             _content = new Panel { Dock = DockStyle.Fill };
             Controls.Add(_content);
             Controls.Add(_targetBar);
@@ -34,6 +39,36 @@ namespace RNAssistant.Desktop
             _targetBar.TargetSelected += SelectTarget;
             _targetBar.ModeChanged += SetTargetMode;
             ShowPlaceholder("No Office attached.", true);
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.F11)
+            {
+                ToggleFullScreen();
+                e.Handled = true;
+            }
+            base.OnKeyDown(e);
+        }
+
+        private void ToggleFullScreen()
+        {
+            if (_fullScreen)
+            {
+                _fullScreen = false;
+                FormBorderStyle = FormBorderStyle.Sizable;
+                WindowState = FormWindowState.Normal;
+                Bounds = _restoreBounds;
+                WindowState = _restoreWindowState;
+                return;
+            }
+
+            _restoreBounds = Bounds;
+            _restoreWindowState = WindowState;
+            _fullScreen = true;
+            WindowState = FormWindowState.Normal;
+            FormBorderStyle = FormBorderStyle.None;
+            WindowState = FormWindowState.Maximized;
         }
 
         public void ApplyActivation(string[] args)

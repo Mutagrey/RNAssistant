@@ -5,10 +5,11 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Office;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Harness
 {
-    internal sealed class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider
+    internal sealed class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeDocumentCatalog
     {
         public readonly List<ToolCommand> Executed = new List<ToolCommand>();
         public string VbaModuleType = "StdModule";
@@ -18,7 +19,7 @@ namespace RNAssistant.Harness
         public string RuntimeDocumentKeyValue { get; set; }
 
         private readonly string _hostName;
-        private readonly string _documentTitle;
+        private string _documentTitle;
         private readonly string _documentSnapshot;
         private readonly List<ToolDefinition> _builtInTools;
         private readonly Dictionary<string, Queue<ToolResult>> _scriptedResults;
@@ -89,6 +90,7 @@ namespace RNAssistant.Harness
         public string OutlookDraft { get { return _outlookDraft; } }
         public int WordCommentCount { get { return _wordComments.Count; } }
         public int SlideCount { get { return _slides.Count; } }
+        public int DocumentSnapshotReadCount { get; private set; }
 
         public OfficeContext GetOfficeContext()
         {
@@ -102,8 +104,40 @@ namespace RNAssistant.Harness
             };
         }
 
+        public IReadOnlyList<OpenOfficeDocumentDto> ListOpenDocuments()
+        {
+            if (!string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase))
+            {
+                return new[]
+                {
+                    new OpenOfficeDocumentDto { Host = _hostName, DocumentKey = DocumentKey, Title = DocumentTitle, IsActive = true }
+                };
+            }
+
+            return new[]
+            {
+                new OpenOfficeDocumentDto { Host = "Excel", DocumentKey = "doc", Title = "MockWorkbook.xlsx", Path = "C:\\Demo\\MockWorkbook.xlsx", IsActive = DocumentKeyValue == "doc" },
+                new OpenOfficeDocumentDto { Host = "Excel", DocumentKey = "forecast-doc", Title = "Forecast.xlsx", Path = "C:\\Demo\\Forecast.xlsx", IsActive = DocumentKeyValue == "forecast-doc" }
+            };
+        }
+
+        public bool ActivateDocument(string documentKey)
+        {
+            var document = ListOpenDocuments().FirstOrDefault(item =>
+                string.Equals(item.DocumentKey, documentKey, StringComparison.OrdinalIgnoreCase));
+            if (document == null)
+            {
+                return false;
+            }
+            DocumentKeyValue = document.DocumentKey;
+            RuntimeDocumentKeyValue = "runtime-" + document.DocumentKey;
+            _documentTitle = document.Title;
+            return true;
+        }
+
         public string GetDocumentSnapshot(int maxChars)
         {
+            DocumentSnapshotReadCount += 1;
             var snapshot = string.Empty;
             if (string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase))
             {

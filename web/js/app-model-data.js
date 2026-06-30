@@ -74,3 +74,29 @@ function findModel(value) {
   }
   return null;
 }
+
+function modelImageSupportOverrides() {
+  var settings = state.settings || {};
+  return settings.ModelImageSupportOverrides || settings.modelImageSupportOverrides || {};
+}
+
+function catalogModelSupportsImages(model) {
+  if (!model) return null;
+  if (model.supportsImages !== null && model.supportsImages !== undefined) {
+    if (typeof model.supportsImages === "string") return model.supportsImages.toLowerCase() === "true";
+    return !!model.supportsImages;
+  }
+  var modalities = model.inputModalities || [];
+  return modalities.length
+    ? modalities.some(function (item) { return String(item || "").toLowerCase() === "image"; })
+    : null;
+}
+
+function effectiveModelSupportsImages(value) {
+  value = String(value || "").trim();
+  var overrides = modelImageSupportOverrides();
+  if (Object.prototype.hasOwnProperty.call(overrides, value) && overrides[value] !== null) {
+    return !!overrides[value];
+  }
+  return catalogModelSupportsImages(findModel(value));
+}

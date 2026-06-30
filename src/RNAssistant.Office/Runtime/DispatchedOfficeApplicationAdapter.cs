@@ -2,10 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office
 {
-    public sealed class DispatchedOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IDisposable
+    public sealed class DispatchedOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeDocumentCatalog, IDisposable
     {
         private readonly Func<IOfficeApplicationAdapter> _adapterFactory;
         private readonly OfficeStaDispatcher _dispatcher;
@@ -97,6 +98,26 @@ namespace RNAssistant.Office
             {
                 var provider = Inner as IOfficeContextProvider;
                 return provider == null ? null : provider.GetOfficeContext();
+            });
+        }
+
+        public IReadOnlyList<OpenOfficeDocumentDto> ListOpenDocuments()
+        {
+            return _dispatcher.Invoke(delegate
+            {
+                var catalog = Inner as IOfficeDocumentCatalog;
+                return catalog == null
+                    ? (IReadOnlyList<OpenOfficeDocumentDto>)new OpenOfficeDocumentDto[0]
+                    : catalog.ListOpenDocuments().ToArray();
+            });
+        }
+
+        public bool ActivateDocument(string documentKey)
+        {
+            return _dispatcher.Invoke(delegate
+            {
+                var catalog = Inner as IOfficeDocumentCatalog;
+                return catalog != null && catalog.ActivateDocument(documentKey);
             });
         }
 

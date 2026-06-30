@@ -19,18 +19,9 @@ function formatAttachmentSize(bytes) {
 }
 
 function activeModelSupportsImages() {
-  if (typeof findModel !== "function") return null;
-  var model = findModel(activeChatModel() || settingsModel());
-  if (!model) return null;
-  if (model.supportsImages !== null && model.supportsImages !== undefined) {
-    if (typeof model.supportsImages === "string") return model.supportsImages.toLowerCase() === "true";
-    return !!model.supportsImages;
-  }
-  var modalities = model.inputModalities || [];
-  if (modalities.length) {
-    return modalities.some(function (item) { return String(item || "").toLowerCase() === "image"; });
-  }
-  return null;
+  return typeof effectiveModelSupportsImages === "function"
+    ? effectiveModelSupportsImages(activeChatModel() || settingsModel())
+    : null;
 }
 
 function fileToBase64(file) {

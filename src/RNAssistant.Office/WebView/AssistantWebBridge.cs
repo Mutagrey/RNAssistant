@@ -74,6 +74,9 @@ namespace RNAssistant.Office.WebView
                     case "openDocument":
                         responsePayload = _controller.OpenDocument(Payload<ChatPayload>(payload).ChatId);
                         break;
+                    case "activateDocument":
+                        responsePayload = _controller.ActivateDocument(Payload<DocumentPayload>(payload).DocumentKey);
+                        break;
                     case "renameChat":
                         var renameChat = Payload<RenameChatPayload>(payload);
                         responsePayload = _controller.RenameChat(renameChat.ChatId, renameChat.Title);

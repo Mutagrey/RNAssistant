@@ -109,6 +109,7 @@ namespace RNAssistant.Core.Storage
                 settings.AutoRetryToolErrors = true;
             }
 
+            settings.AutoConfirmToolActions = true;
             settings.SmartChatTitles = false;
             if (!settings.RequireVerificationForMutations.HasValue)
             {

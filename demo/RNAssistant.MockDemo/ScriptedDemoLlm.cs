@@ -26,15 +26,16 @@ namespace RNAssistant.MockDemo
             var model = NormalizeModel(settings == null ? null : settings.Model);
             var prompt = Flatten(messages);
             var lastUser = LastUserMessage(messages);
-            var isMetaPrompt = IsAgentMetaPrompt(lastUser);
+            var plannerRequest = ExtractPlannerRequest(prompt);
             var htmlModeEnabled = Contains(prompt, "HTML MODE IS ENABLED");
-            var isHtmlTask = htmlModeEnabled || (isMetaPrompt ? LooksLikeHtmlConversation(prompt) : LooksLikeHtmlTask(lastUser));
-            var isHtmlEdit = isMetaPrompt ? LooksLikeHtmlEditConversation(prompt) : LooksLikeHtmlEdit(lastUser);
+            var isHtmlTask = htmlModeEnabled || LooksLikeHtmlTask(plannerRequest);
+            var isHtmlEdit = LooksLikeHtmlEdit(plannerRequest);
             string content;
 
             if (Contains(lastUser, "A local tool call failed") ||
                 Contains(lastUser, "Unknown tool id") ||
-                Contains(lastUser, "Use only these exact available tool ids"))
+                Contains(lastUser, "Use only these exact available tool ids") ||
+                Contains(lastUser, "previous RNAssistant planner output was invalid"))
             {
                 content = AgentBlock(isHtmlTask ? HtmlCommands(isHtmlEdit, false) : InitialCommands(_host, false));
             }
@@ -52,7 +53,12 @@ namespace RNAssistant.MockDemo
             }
             else if (Contains(lastUser, "If the task is complete, answer the user normally"))
             {
-                content = isHtmlTask ? HtmlFinalAnswer(isHtmlEdit) : FinalAnswer(_host);
+                content = FinalBlock(isHtmlTask ? HtmlFinalAnswer(isHtmlEdit) : FinalAnswer(_host));
+            }
+            else if (Contains(lastUser, "Local normalized observations are available") ||
+                Contains(lastUser, "Local deterministic verification observations are available"))
+            {
+                content = FinalBlock(isHtmlTask ? HtmlFinalAnswer(isHtmlEdit) : FinalAnswer(_host));
             }
             else if (isHtmlTask)
             {
@@ -75,9 +81,9 @@ namespace RNAssistant.MockDemo
                     content = AgentBlock(HtmlCommands(isHtmlEdit, false));
                 }
             }
-            else if (!LooksLikeOfficeAction(lastUser))
+            else if (!LooksLikeOfficeAction(plannerRequest))
             {
-                content = ProseAnswer(lastUser);
+                content = FinalBlock(ProseAnswer(plannerRequest));
             }
             else if (string.Equals(model, "mock-glm5", StringComparison.OrdinalIgnoreCase))
             {
@@ -117,7 +123,7 @@ namespace RNAssistant.MockDemo
                 {
                     Model("mock-strict", "Mock strict", "Clean RNAssistant JSON for the happy path."),
                     Model("mock-glm5", "Mock GLM 5.0", "Starts with a wrong tool id, then follows retry guidance."),
-                    Model("mock-qwen80b", "Mock Qwen 80B", "Adds prose around a valid fenced JSON block."),
+                    Model("mock-qwen80b", "Mock Qwen 80B", "Adds prose around a valid planner JSON object."),
                     Model("mock-deepseek", "Mock DeepSeek", "Starts with malformed tool JSON, then repairs it.")
                 }
             });
@@ -294,17 +300,30 @@ namespace RNAssistant.MockDemo
 
         private static string AgentBlock(IEnumerable<DemoCommand> commands)
         {
-            return "```rnassistant-agent\n" +
-                JsonConvert.SerializeObject(new
+            return JsonConvert.SerializeObject(new
+            {
+                kind = "tool_plan",
+                intent = "mutate",
+                message = (string)null,
+                steps = (commands ?? new DemoCommand[0]).Select(command => new
                 {
-                    description = "mock demo plan",
-                    steps = (commands ?? new DemoCommand[0]).Select(command => new
-                    {
-                        toolId = command.ToolId,
-                        arguments = command.Arguments
-                    }).ToArray()
-                }) +
-                "\n```";
+                    toolId = command.ToolId,
+                    arguments = command.Arguments,
+                    reason = "mock demo step"
+                }).ToArray(),
+                expectedOutcome = "Execute mock demo steps."
+            });
+        }
+
+        private static string FinalBlock(string message)
+        {
+            return JsonConvert.SerializeObject(new
+            {
+                kind = "final",
+                intent = "answer",
+                message = message ?? string.Empty,
+                steps = new object[0]
+            });
         }
 
         private static DemoCommand Cmd(string toolId, params object[] keyValues)
@@ -351,6 +370,38 @@ namespace RNAssistant.MockDemo
             return last == null ? string.Empty : last.Content ?? string.Empty;
         }
 
+        private static string ExtractPlannerRequest(string text)
+        {
+            var value = text ?? string.Empty;
+            var marker = "USER_REQUEST:";
+            var start = value.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (start < 0)
+            {
+                return LastNonEmptyLine(value);
+            }
+
+            start += marker.Length;
+            var end = value.IndexOf("\n\nROUTE:", start, StringComparison.OrdinalIgnoreCase);
+            if (end < 0)
+            {
+                end = value.Length;
+            }
+            return value.Substring(start, end - start).Trim();
+        }
+
+        private static string LastNonEmptyLine(string value)
+        {
+            var lines = (value ?? string.Empty).Split('\n');
+            for (var index = lines.Length - 1; index >= 0; index--)
+            {
+                if (!string.IsNullOrWhiteSpace(lines[index]))
+                {
+                    return lines[index].Trim();
+                }
+            }
+            return string.Empty;
+        }
+
         private static bool LooksLikeOfficeAction(string text)
         {
             var value = (text ?? string.Empty).ToLowerInvariant();
@@ -385,7 +436,9 @@ namespace RNAssistant.MockDemo
                 Contains(text, "Return only one ```rnassistant-agent") ||
                 Contains(text, "verify the result") ||
                 Contains(text, "Before the final answer, verify") ||
-                Contains(text, "If the task is complete, answer the user normally");
+                Contains(text, "If the task is complete, answer the user normally") ||
+                Contains(text, "Local normalized observations are available") ||
+                Contains(text, "Local deterministic verification observations are available");
         }
 
         private static bool LooksLikeHtmlConversation(string text)

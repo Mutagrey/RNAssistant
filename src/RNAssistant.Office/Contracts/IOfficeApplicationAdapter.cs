@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using RNAssistant.Core.Models;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office
 {
@@ -21,5 +22,11 @@ namespace RNAssistant.Office
     public interface IOfficeContextProvider
     {
         OfficeContext GetOfficeContext();
+    }
+
+    public interface IOfficeDocumentCatalog
+    {
+        IReadOnlyList<OpenOfficeDocumentDto> ListOpenDocuments();
+        bool ActivateDocument(string documentKey);
     }
 }

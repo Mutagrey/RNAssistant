@@ -232,4 +232,32 @@ function renderModelControls() {
   populateChatModelSelect($("chatModelSelect"));
   renderModelInfo(formModel());
   renderModelStatus();
+  renderModelImageSupport();
+  renderActiveModelCapability();
+}
+
+function renderActiveModelCapability() {
+  var indicator = $("modelCapabilityIndicator");
+  if (!indicator) return;
+  var value = activeChatModel() || settingsModel();
+  var support = effectiveModelSupportsImages(value);
+  indicator.textContent = support === true ? "Изображения" : (support === false ? "Только текст" : "Модальность ?");
+  indicator.className = "model-capability-indicator " +
+    (support === true ? "is-enabled" : (support === false ? "is-disabled" : "is-unknown"));
+  indicator.title = "Модель: " + (value || "не выбрана") + ". " +
+    (support === true ? "Изображения поддерживаются." : (support === false ? "Изображения отключены." : "Поддержка изображений не определена."));
+}
+
+function renderModelImageSupport() {
+  var input = $("modelImageSupportInput");
+  var status = $("modelImageSupportStatus");
+  if (!input || !status) return;
+  var value = formModel();
+  var overrides = modelImageSupportOverrides();
+  var hasOverride = Object.prototype.hasOwnProperty.call(overrides, value) && overrides[value] !== null;
+  input.value = hasOverride ? String(!!overrides[value]) : "";
+  var effective = effectiveModelSupportsImages(value);
+  status.textContent = "Текущий статус: " +
+    (effective === true ? "изображения включены" : (effective === false ? "изображения выключены" : "не определён")) +
+    " · источник: " + (hasOverride ? "ручная настройка" : "каталог моделей");
 }

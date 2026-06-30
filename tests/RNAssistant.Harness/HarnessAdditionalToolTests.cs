@@ -413,6 +413,8 @@ namespace RNAssistant.Harness
                 AssertEqual(3, calls.Count, "llm call count");
                 AssertContains(FlattenMessages(calls[1]), "Tool is not available in the current route/phase", "validation observation prompt");
                 AssertContains(FlattenMessages(calls[1]), "excel.add_sheet", "retry prompt contains exact tool id");
+                AssertContains(FlattenMessages(calls[2]), "Local normalized observations are available", "successful retry clears stale failure directive");
+                AssertTrue(FlattenMessages(calls[2]).IndexOf("failed or was rejected", StringComparison.OrdinalIgnoreCase) < 0, "successful retry does not keep failure directive");
                 AssertEqual(1, adapter.Executed.Count, "adapter execution count");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "retry tool");
                 var resultJson = Newtonsoft.Json.JsonConvert.SerializeObject(result.ToolResults);

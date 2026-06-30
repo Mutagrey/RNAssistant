@@ -22,6 +22,104 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ValidatesToolSaveAndPreservesMetadata()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var store = new ToolStore(paths);
+                var executor = new OfficeToolExecutor(
+                    adapter,
+                    new VbaBackupStore(paths),
+                    new SkillStore(paths),
+                    store);
+                var invalid = new ToolDefinition
+                {
+                    Id = "excel.invalid",
+                    Host = "Excel",
+                    Executor = "pipeline",
+                    PipelineJson = "{\"steps\":[]}",
+                    Enabled = true
+                };
+
+                var invalidResult = executor.ValidateToolDefinition(invalid);
+                AssertTrue(!invalidResult.Success, "invalid tool rejected");
+                AssertContains(invalidResult.Message, "at least one step", "invalid tool error");
+
+                var valid = new ToolDefinition
+                {
+                    Id = "excel.safe_report",
+                    Host = "Excel",
+                    Name = "Safe report",
+                    Description = "Create report.",
+                    ArgumentSchemaJson = "{\"sheet\":\"Report\"}",
+                    Executor = "pipeline",
+                    PipelineJson = "{\"steps\":[{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}]}",
+                    Enabled = true,
+                    RequiresConfirmation = true,
+                    MutatesDocument = true,
+                    AgentCanRun = false,
+                    RiskLevel = 2,
+                    UseWhen = "Create a report.",
+                    VerifyJson = "{\"toolId\":\"excel.list_sheets\"}",
+                    CapabilityStatus = "available"
+                };
+
+                AssertTrue(executor.ValidateToolDefinition(valid).Success, "valid tool accepted");
+                store.SaveOne(valid);
+                var loaded = store.Load().First(t => string.Equals(t.Id, valid.Id, StringComparison.OrdinalIgnoreCase));
+                AssertTrue(loaded.MutatesDocument, "mutation metadata preserved");
+                AssertTrue(!loaded.AgentCanRun, "agent run metadata preserved");
+                AssertEqual(2, loaded.RiskLevel, "risk metadata preserved");
+                AssertEqual(valid.UseWhen, loaded.UseWhen, "useWhen preserved");
+                AssertEqual(valid.VerifyJson, loaded.VerifyJson, "verify metadata preserved");
+            });
+        }
+
+        private static void AgentValidatesAndCreatesCustomTool()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var definitionArgs = new object[]
+                {
+                    "id", "excel.agent_report",
+                    "host", "Excel",
+                    "name", "Agent report",
+                    "description", "Create an agent report.",
+                    "argumentSchemaJson", "{\"sheet\":\"Report\"}",
+                    "executor", "pipeline",
+                    "pipelineJson", "{\"steps\":[{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}]}",
+                    "enabled", true,
+                    "requiresConfirmation", true,
+                    "mutatesDocument", true,
+                    "agentCanRun", false
+                };
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    null,
+                    AgentBlock(
+                        Command("common.tools_validate", definitionArgs),
+                        Command("common.tools_save", definitionArgs)),
+                    FinalBlock("Tool created."));
+
+                var result = service.ExecuteAsync(
+                    "Создай пользовательский инструмент для отчета.",
+                    NewSession(adapter),
+                    NewContext(adapter),
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                    new List<ToolDefinition>(executor.GetControllerTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Tool created.", result.AssistantText, "agent tool creation final");
+                var read = new ToolCommand { ToolId = "common.tools_read" };
+                read.Arguments["id"] = "excel.agent_report";
+                var readResult = executor.Execute(read, new List<ToolDefinition>(executor.GetControllerTools()), new AppSettings(), false, true);
+                AssertTrue(readResult.Success, "agent-created tool readable");
+                AssertContains(readResult.DataJson, "excel.add_sheet", "agent-created pipeline preserved");
+            });
+        }
+
         private static void ToolCatalogMergesVisibleTools()
         {
             WithTempPaths(delegate(AppDataPaths paths)

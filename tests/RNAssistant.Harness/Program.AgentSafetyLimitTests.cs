@@ -189,5 +189,34 @@ namespace RNAssistant.Harness
                 AssertEqual(2, calls.Count, "llm call count");
             });
         }
+
+        private static void ChatInvalidPlannerRecordsResponseDiagnostics()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("PowerPoint"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    null,
+                    RawResponse("not json first"),
+                    RawResponse("not json after repair"));
+                var session = NewSession(adapter);
+
+                var result = service.ExecuteAsync(
+                    "Summarize the presentation.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000 },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertContains(result.AssistantText, "not_json_object", "invalid response result");
+                var diagnostic = session.Messages.Last().Activity;
+                AssertTrue(diagnostic != null, "diagnostic activity");
+                AssertEqual("Planner JSON invalid", diagnostic.Title, "diagnostic title");
+                AssertContains(diagnostic.ResultMessage, "format=unrecognized_text", "diagnostic format");
+                AssertContains(diagnostic.ResultMessage, "not json after repair", "diagnostic response preview");
+            });
+        }
     }
 }

@@ -90,6 +90,11 @@ namespace RNAssistant.Office.Services
                 RequiresInspection = false
             };
 
+            if (LooksLikeGeneralQuestion(value))
+            {
+                return route;
+            }
+
             if (ContainsAny(value, "удали", "delete", "remove", "clear", "очисти") &&
                 !ContainsAny(value, "custom tool", "tools", "prompt", "prompts", "skill", "skills", "инструмент", "промпт", "скилл"))
             {
@@ -177,7 +182,7 @@ namespace RNAssistant.Office.Services
                 route.RiskAllowed = 2;
                 route.RequiresInspection = true;
             }
-            else if (!route.RequiresTool && ContainsAny(value, "прочитай", "покажи", "найди", "поиск", "summarize", "summary", "перескажи", "analyze", "review", "inspect", "read", "search", "find"))
+            else if (!route.RequiresTool && ContainsAny(value, "прочитай", "покажи", "найди", "поиск", "перечисли", "summarize", "summary", "перескажи", "analyze", "review", "inspect", "read", "search", "find", "list"))
             {
                 route.RequiresTool = true;
                 route.Mode = ContainsAny(value, "summarize", "summary", "перескажи", "analyze", "review") ? "analyze" : "read";
@@ -187,21 +192,7 @@ namespace RNAssistant.Office.Services
                 route.RequiresInspection = false;
             }
 
-            if (!route.RequiresTool && LooksLikeOfficeObject(value))
-            {
-                route.RequiresTool = true;
-                route.Mode = "read";
-                route.TaskType = "read";
-                route.Phase = AgentPhases.ReadOnly;
-                route.RiskAllowed = 0;
-            }
-
             return route;
-        }
-
-        private static bool LooksLikeOfficeObject(string value)
-        {
-            return ContainsAny(value, "таблиц", "диапазон", "ячейк", "лист", "слайд", "документ", "письм", "sheet", "table", "range", "cell", "slide", "document", "mail", "email");
         }
 
         private static bool ContainsAny(string value, params string[] terms)
@@ -214,6 +205,20 @@ namespace RNAssistant.Office.Services
                 }
             }
             return false;
+        }
+
+        private static bool LooksLikeGeneralQuestion(string value)
+        {
+            value = (value ?? string.Empty).TrimStart();
+            return value.StartsWith("что такое ", StringComparison.OrdinalIgnoreCase) ||
+                value.StartsWith("объясни ", StringComparison.OrdinalIgnoreCase) ||
+                value.StartsWith("расскажи ", StringComparison.OrdinalIgnoreCase) ||
+                value.StartsWith("как ", StringComparison.OrdinalIgnoreCase) ||
+                value.StartsWith("почему ", StringComparison.OrdinalIgnoreCase) ||
+                value.StartsWith("what is ", StringComparison.OrdinalIgnoreCase) ||
+                value.StartsWith("explain ", StringComparison.OrdinalIgnoreCase) ||
+                value.StartsWith("how ", StringComparison.OrdinalIgnoreCase) ||
+                value.StartsWith("why ", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string FirstNonEmpty(params string[] values)
@@ -234,6 +239,10 @@ namespace RNAssistant.Office.Services
         public ToolCatalogSlice Slice(RoutedTask route, IEnumerable<ToolDefinition> tools, IReadOnlyList<AgentObservation> observations)
         {
             var slice = new ToolCatalogSlice();
+            if (route != null && !route.RequiresTool)
+            {
+                return slice;
+            }
             var host = route == null ? string.Empty : route.App ?? string.Empty;
             foreach (var tool in tools ?? new ToolDefinition[0])
             {
@@ -425,8 +434,9 @@ namespace RNAssistant.Office.Services
                 "Return exactly one JSON object. No markdown. No code fences. No prose outside JSON.\n" +
                 "Allowed shape: {\"kind\":\"tool_plan|final|clarify|cannot_do\",\"intent\":\"read|analyze|mutate|verify|answer|clarify\",\"message\":\"string|null\",\"steps\":[{\"toolId\":\"exact tool id from AVAILABLE_TOOLS\",\"arguments\":{},\"reason\":\"short reason\"}],\"expectedOutcome\":\"string|null\"}.\n" +
                 "Use only AVAILABLE_TOOLS. Never invent tool ids, workbook, sheet, range, email, or document content.\n" +
-                "If current Office state is unknown, call a context/read tool first. For mutations, inspect the target before editing.\n" +
-                "For final answers, use only OBSERVATIONS. If no tool is needed, return kind=final.";
+                "Call a context/read tool only when the request depends on current Office content or ROUTE requires inspection. Do not inspect Office for general questions.\n" +
+                "A mutation with an explicit target and complete arguments does not need a preliminary read unless ROUTE requires inspection.\n" +
+                "For claims about current Office content, use only CURRENT_OFFICE_CONTEXT and OBSERVATIONS. If no tool is needed, return kind=final.";
         }
 
         private static string BuildPlannerContext(string userText, OfficeSnapshot snapshot, RoutedTask route, ToolCatalogSlice tools, IEnumerable<AgentObservation> observations, DocumentContext context, IEnumerable<SkillDefinition> skills, AppSettings settings)
@@ -441,6 +451,8 @@ namespace RNAssistant.Office.Services
             builder.AppendLine("taskType: " + (route == null ? string.Empty : route.TaskType));
             builder.AppendLine("riskAllowed: level_" + (route == null ? 0 : route.RiskAllowed));
             builder.AppendLine("phase: " + (route == null ? string.Empty : route.Phase));
+            builder.AppendLine("requiresTool: " + (route != null && route.RequiresTool ? "true" : "false"));
+            builder.AppendLine("requiresInspection: " + (route != null && route.RequiresInspection ? "true" : "false"));
             if (route != null && string.Equals(route.TaskType, "html", StringComparison.OrdinalIgnoreCase))
             {
                 builder.AppendLine("HTML MODE IS ENABLED FOR THIS CHAT.");
@@ -500,6 +512,28 @@ namespace RNAssistant.Office.Services
             if (!any)
             {
                 builder.AppendLine("none");
+            }
+            else
+            {
+                builder.AppendLine();
+                builder.AppendLine("PLANNER_DIRECTIVE:");
+                var promptSettings = settings == null || settings.AgentPrompts == null
+                    ? new AgentPromptSettings()
+                    : settings.AgentPrompts;
+                var observationList = (observations ?? new AgentObservation[0]).Where(o => o != null).ToList();
+                var latestObservation = observationList.LastOrDefault();
+                if (latestObservation != null && !string.Equals(latestObservation.Status, "success", StringComparison.OrdinalIgnoreCase))
+                {
+                    builder.AppendLine("A local tool call failed or was rejected. Use the error observation to return a corrected tool_plan, or cannot_do if it cannot be corrected.");
+                }
+                else if (observationList.Any(o => o.Mutation) && (settings == null || settings.RequireVerificationForMutations != false))
+                {
+                    builder.AppendLine(promptSettings.VerifyMutationPrompt);
+                }
+                else
+                {
+                    builder.AppendLine(promptSettings.AfterToolResultsPrompt);
+                }
             }
             AppendSkills(builder, skills, settings);
             return builder.ToString();

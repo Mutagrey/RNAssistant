@@ -49,7 +49,7 @@ namespace RNAssistant.Desktop
             _modeCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill, Margin = new Padding(0, 3, 6, 3) };
             _modeCombo.Items.Add("Manual");
             _modeCombo.Items.Add("Auto follow");
-            _modeCombo.SelectedIndex = 0;
+            _modeCombo.SelectedIndex = 1;
             _modeCombo.SelectedIndexChanged += delegate
             {
                 if (_updating) return;

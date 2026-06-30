@@ -77,6 +77,7 @@ function readSettings() {
     SystemPrompt: promptSettings.SystemPrompt,
     AgentPrompt: promptSettings.AgentPrompt,
     AgentPrompts: promptSettings.AgentPrompts,
+    ModelImageSupportOverrides: modelImageSupportOverrides(),
     CustomHeaders: textToHeaders($("headersInput").value)
   };
 }
@@ -114,8 +115,9 @@ function bindSettingsActions() {
     try {
       button.disabled = true;
       var apiKey = $("apiKeyInput").value;
-      var response = await send("saveSettings", { settings: readSettings(), apiKey: apiKey || null });
-      state.settings = response.settings;
+      var nextSettings = readSettings();
+      var response = await send("saveSettings", { settings: nextSettings, apiKey: apiKey || null });
+      state.settings = response.settings || response.Settings || nextSettings;
       $("apiKeyInput").value = "";
       renderSettings();
       updateEstimatedContextUsage();

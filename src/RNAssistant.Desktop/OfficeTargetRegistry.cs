@@ -18,7 +18,7 @@ namespace RNAssistant.Desktop
         public OfficeTargetRegistry()
         {
             _targets = new List<OfficeTargetEntry>();
-            Mode = TargetSelectionMode.Manual;
+            Mode = TargetSelectionMode.AutoFollow;
         }
 
         public TargetSelectionMode Mode { get; set; }

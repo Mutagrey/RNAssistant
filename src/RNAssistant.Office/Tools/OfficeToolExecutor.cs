@@ -59,6 +59,11 @@ namespace RNAssistant.Office.Tools
             return _vbaExecutor.ToolId(suffix);
         }
 
+        public ToolResult ValidateToolDefinition(ToolDefinition tool)
+        {
+            return ToolAuthoringExecutor.ValidateToolDefinition(tool);
+        }
+
         private ToolResult ExecuteCommand(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun, ChatSession session, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();

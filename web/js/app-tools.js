@@ -160,7 +160,18 @@ function readTools() {
       Code: skill.Code || "",
       Readme: skill.Readme || "",
       Enabled: skill.Enabled !== false,
-      BuiltIn: !!skill.BuiltIn
+      BuiltIn: !!skill.BuiltIn,
+      MutatesDocument: !!skill.MutatesDocument,
+      AgentCanRun: !!skill.AgentCanRun,
+      RiskLevel: Number(skill.RiskLevel || 0),
+      UseWhen: skill.UseWhen || "",
+      DoNotUseWhen: skill.DoNotUseWhen || "",
+      ExamplesJson: skill.ExamplesJson || "",
+      PreconditionsJson: skill.PreconditionsJson || "",
+      VerifyJson: skill.VerifyJson || "",
+      CapabilityStatus: skill.CapabilityStatus || "available",
+      Limitations: skill.Limitations || "",
+      ReplacementToolId: skill.ReplacementToolId || ""
     };
   });
 }
@@ -256,7 +267,11 @@ function bindToolActions() {
       Code: "",
       Readme: "",
       Enabled: true,
-      BuiltIn: false
+      BuiltIn: false,
+      MutatesDocument: true,
+      AgentCanRun: false,
+      RiskLevel: 1,
+      CapabilityStatus: "available"
     });
     state.selectedToolIndex = state.tools.length - 1;
     renderTools();
@@ -282,7 +297,18 @@ function bindToolActions() {
       Code: source.Code || "",
       Readme: source.Readme || "",
       Enabled: true,
-      BuiltIn: false
+      BuiltIn: false,
+      MutatesDocument: source.BuiltIn ? true : !!source.MutatesDocument,
+      AgentCanRun: source.BuiltIn ? false : !!source.AgentCanRun,
+      RiskLevel: Number(source.RiskLevel || (source.BuiltIn ? 1 : 0)),
+      UseWhen: source.UseWhen || "",
+      DoNotUseWhen: source.DoNotUseWhen || "",
+      ExamplesJson: source.ExamplesJson || "",
+      PreconditionsJson: source.PreconditionsJson || "",
+      VerifyJson: source.VerifyJson || "",
+      CapabilityStatus: source.CapabilityStatus || "available",
+      Limitations: source.Limitations || "",
+      ReplacementToolId: source.ReplacementToolId || ""
     });
     state.selectedToolIndex = state.tools.length - 1;
     renderTools();
@@ -290,8 +316,14 @@ function bindToolActions() {
 
   $("saveToolsButton").addEventListener("click", async function () {
     try {
+      syncSelectedToolFromEditor();
+      var selected = state.tools[state.selectedToolIndex];
+      var selectedId = selected ? selected.Id : "";
       var response = await send("saveTools", { tools: readTools() });
       state.tools = response || [];
+      state.selectedToolIndex = selectedId
+        ? state.tools.findIndex(function (tool) { return tool && String(tool.Id || "").toLowerCase() === String(selectedId).toLowerCase(); })
+        : -1;
       renderTools();
       log("Инструменты сохранены.");
     } catch (error) {

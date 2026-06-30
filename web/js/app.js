@@ -26,6 +26,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   $("helpButton").addEventListener("click", showHelp);
+  $("fullscreenButton").addEventListener("click", toggleFullscreen);
   $("closeHelpButton").addEventListener("click", hideHelp);
   $("clearLogButton").addEventListener("click", function () {
     $("logBox").textContent = "";
@@ -63,4 +64,5 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   initialize();
+  state.syncTimer = window.setInterval(synchronizeChatState, 5000);
 });

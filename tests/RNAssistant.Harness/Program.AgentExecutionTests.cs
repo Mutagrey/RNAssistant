@@ -22,6 +22,29 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ChatGeneralAnswerSkipsOfficeReadsAndTools()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(adapter, executor, calls, FinalBlock("Таблица — это данные в строках и столбцах."));
+
+                var result = service.ExecuteAsync(
+                    "Что такое таблица?",
+                    NewSession(adapter),
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000 },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertContains(result.AssistantText, "строках", "general answer");
+                AssertEqual(0, adapter.DocumentSnapshotReadCount, "document snapshot reads");
+                AssertEqual(0, adapter.Executed.Count, "executed tools");
+                AssertContains(FlattenMessages(calls[0]), "requiresTool: false", "answer route");
+                AssertTrue(FlattenMessages(calls[0]).IndexOf("excel.read_range", StringComparison.OrdinalIgnoreCase) < 0, "tool catalog is empty");
+            });
+        }
+
         private static void ChatExecutesTypicalHostTasks()
         {
             var scenarios = new[]
@@ -84,6 +107,7 @@ namespace RNAssistant.Harness
                         null).GetAwaiter().GetResult();
 
                     AssertEqual("Done.", result.AssistantText, scenario.Host + " assistant text");
+                    AssertEqual(0, adapter.DocumentSnapshotReadCount, scenario.Host + " eager snapshot reads");
                     AssertEqual(scenario.ExpectedTools.Length, adapter.Executed.Count, scenario.Host + " executed count");
                     for (var toolIndex = 0; toolIndex < scenario.ExpectedTools.Length; toolIndex++)
                     {
@@ -151,6 +175,8 @@ namespace RNAssistant.Harness
                 AssertEqual("Done.", result.AssistantText, "assistant text");
                 AssertEqual(3, calls.Count, "llm call count");
                 AssertTrue(ContainsMessage(calls[1], "previous RNAssistant planner output was invalid"), "repair prompt");
+                AssertTrue(ContainsMessage(calls[1], "Create a new sheet named Report."), "repair keeps original request");
+                AssertTrue(ContainsMessage(calls[1], "excel.add_sheet"), "repair keeps available tools");
                 AssertEqual(1, adapter.Executed.Count, "adapter execution count");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "executed tool");
             });

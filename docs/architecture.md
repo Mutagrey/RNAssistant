@@ -68,7 +68,8 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 
 ## Non-Negotiable Boundaries
 
-- Agent mode expects one strict planner JSON envelope. Legacy text/native-compatible parsing exists only for compatibility paths.
+- Agent mode expects one strict planner JSON envelope. A single complete JSON fence and native `tool_calls` are normalized as compatibility input; prose extraction is not allowed.
+- Routing precedes Office context capture. General-answer routes expose no tools and do not read document content; document-dependent state is obtained through explicit read tools.
 - Tools are executable actions described by `ToolDefinition`; skills are markdown guidance described by `SkillDefinition`.
 - Tool safety belongs to `ToolDefinition` metadata: `MutatesDocument`, `AgentCanRun`, `RequiresConfirmation`, risk/capability fields, and verification metadata.
 - Agent runs are bounded by settings for max iterations and max tool steps; confirmed pending tools may resume the same run, and mutation runs use deterministic verification tools before final prose.

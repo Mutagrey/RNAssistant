@@ -90,6 +90,7 @@ namespace RNAssistant.Office
                 ActiveChatModel = session == null ? string.Empty : session.Model,
                 ActiveChatHtmlMode = session != null && session.HtmlModeEnabled,
                 Chats = _chatSessions.GetChatSummaries(activeId),
+                Documents = ListOpenDocuments(),
                 Settings = settings,
                 HasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey()),
                 Tools = _toolCatalog.GetVisibleTools(),
@@ -120,6 +121,35 @@ namespace RNAssistant.Office
             {
                 return null;
             }
+        }
+
+        internal IReadOnlyList<OpenOfficeDocumentDto> ListOpenDocuments()
+        {
+            var catalog = _adapter as IOfficeDocumentCatalog;
+            if (catalog == null)
+            {
+                return new OpenOfficeDocumentDto[0];
+            }
+
+            try
+            {
+                return catalog.ListOpenDocuments() ?? new OpenOfficeDocumentDto[0];
+            }
+            catch
+            {
+                return new OpenOfficeDocumentDto[0];
+            }
+        }
+
+        public ChatStateResponse ActivateDocument(string documentKey)
+        {
+            var catalog = _adapter as IOfficeDocumentCatalog;
+            if (catalog == null || !catalog.ActivateDocument(documentKey))
+            {
+                throw new InvalidOperationException("Не удалось активировать документ.");
+            }
+
+            return ListChats();
         }
 
         public async Task<SendChatResponse> SendChatAsync(
@@ -248,25 +278,7 @@ namespace RNAssistant.Office
         {
             var activeId = _chatStore.LoadActiveSessionId(host, documentKey);
             var active = string.IsNullOrWhiteSpace(activeId) ? null : _chatStore.Load(host, documentKey, activeId);
-            var chats = _chatStore.List(host, documentKey, documentTitle)
-                .Select(s => new ChatSessionSummary
-                {
-                    Id = ChatStore.GetSessionId(s),
-                    Host = s.Host,
-                    DocumentKey = s.DocumentKey,
-                    DocumentTitle = s.DocumentTitle,
-                    Title = s.Title,
-                    Model = s.Model,
-                    HtmlModeEnabled = s.HtmlModeEnabled,
-                    HasHtmlWorkspace = s.HtmlWorkspace != null &&
-                        ((s.HtmlWorkspace.Files != null && s.HtmlWorkspace.Files.Count > 0) ||
-                         (s.HtmlWorkspace.DataSources != null && s.HtmlWorkspace.DataSources.Count > 0)),
-                    HtmlFileCount = s.HtmlWorkspace == null || s.HtmlWorkspace.Files == null ? 0 : s.HtmlWorkspace.Files.Count,
-                    HtmlDataSourceCount = s.HtmlWorkspace == null || s.HtmlWorkspace.DataSources == null ? 0 : s.HtmlWorkspace.DataSources.Count,
-                    CreatedUtc = s.CreatedUtc,
-                    UpdatedUtc = s.UpdatedUtc,
-                    MessageCount = s.Messages == null ? 0 : s.Messages.Count
-                })
+            var chats = _chatSessions.GetChatSummaries(activeId)
                 .ToList();
 
             return new ChatStateResponse
@@ -274,7 +286,8 @@ namespace RNAssistant.Office
                 ActiveChatId = activeId,
                 ActiveChatModel = active == null ? string.Empty : active.Model,
                 ActiveChatHtmlMode = active != null && active.HtmlModeEnabled,
-                Chats = chats
+                Chats = chats,
+                Documents = ListOpenDocuments()
             };
         }
 
@@ -330,7 +343,16 @@ namespace RNAssistant.Office
 
         public IReadOnlyList<ToolDefinition> SaveTools(IEnumerable<ToolDefinition> tools)
         {
-            _toolStore.Save((tools ?? new ToolDefinition[0]).Where(s => !s.BuiltIn), _adapter.HostName);
+            var customTools = (tools ?? new ToolDefinition[0]).Where(s => s != null && !s.BuiltIn).ToList();
+            foreach (var tool in customTools)
+            {
+                var validation = _toolExecutor.ValidateToolDefinition(tool);
+                if (!validation.Success)
+                {
+                    throw new InvalidOperationException(validation.Message);
+                }
+            }
+            _toolStore.Save(customTools, _adapter.HostName);
             return GetTools();
         }
 

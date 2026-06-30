@@ -73,6 +73,7 @@ namespace RNAssistant.Core.Models
         public AgentPromptSettings AgentPrompts { get; set; }
         public double UiFontScale { get; set; }
         public Dictionary<string, string> CustomHeaders { get; set; }
+        public Dictionary<string, bool?> ModelImageSupportOverrides { get; set; }
 
         public AppSettings()
         {
@@ -100,6 +101,7 @@ namespace RNAssistant.Core.Models
             AgentPrompts = new AgentPromptSettings();
             UiFontScale = 1.0;
             CustomHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            ModelImageSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
         }
     }
 }

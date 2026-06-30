@@ -41,7 +41,7 @@ namespace RNAssistant.Office
             }
 
             var activeId = ChatStore.GetSessionId(session);
-            return new ChatStateResponse { ActiveChatId = activeId, ActiveChatModel = session.Model, ActiveChatHtmlMode = session.HtmlModeEnabled, Chats = _chatSessions.GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load()), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace) };
+            return new ChatStateResponse { ActiveChatId = activeId, ActiveChatModel = session.Model, ActiveChatHtmlMode = session.HtmlModeEnabled, Chats = _chatSessions.GetChatSummaries(activeId), Documents = ListOpenDocuments(), Context = LoadContext(session), Messages = session.Messages, ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load()), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace) };
         }
 
         public ChatStateResponse ForkChat(string id, int index, string chatId = null)
@@ -133,6 +133,11 @@ namespace RNAssistant.Office
         public OpenDocumentResponse OpenDocument(string chatId)
         {
             var session = LoadSession(chatId);
+            var catalog = _adapter as IOfficeDocumentCatalog;
+            if (catalog != null && catalog.ActivateDocument(session.DocumentKey))
+            {
+                return new OpenDocumentResponse { Path = _chatSessions.GetDocumentPath(session), Launched = false };
+            }
             if (_chatSessions.IsCurrentDocument(session))
             {
                 return new OpenDocumentResponse { Path = _chatSessions.GetDocumentPath(session), Launched = false };
@@ -212,6 +217,7 @@ namespace RNAssistant.Office
                 ActiveChatModel = session == null ? string.Empty : session.Model,
                 ActiveChatHtmlMode = session != null && session.HtmlModeEnabled,
                 Chats = _chatSessions.GetChatSummaries(activeId),
+                Documents = ListOpenDocuments(),
                 Context = session == null ? CreateEmptyContext() : LoadContext(session),
                 Messages = session == null ? new List<ChatMessage>() : session.Messages,
                 ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load()),
