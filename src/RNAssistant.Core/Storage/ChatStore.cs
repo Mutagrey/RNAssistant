@@ -291,6 +291,13 @@ namespace RNAssistant.Core.Storage
                 {
                     message.Attachments = new List<ChatAttachment>();
                 }
+                foreach (var attachment in message.Attachments.Where(a => a != null))
+                {
+                    if (attachment.PageTextLengths == null)
+                    {
+                        attachment.PageTextLengths = new List<int>();
+                    }
+                }
             }
             if (session.Context == null)
             {

@@ -209,5 +209,19 @@ namespace RNAssistant.Harness
             AssertTrue(createdOnThread != 0, "created thread");
             AssertEqual(createdOnThread, executeOnThread, "execute thread");
         }
+
+        private static void DocumentCatalogActivatesSelectedDocument()
+        {
+            var adapter = FakeOfficeAdapter.ForHost("Excel");
+            var catalog = (IOfficeDocumentCatalog)adapter;
+            var before = catalog.ListOpenDocuments();
+
+            AssertEqual(2, before.Count, "open document count");
+            AssertTrue(before.Any(item => item.DocumentKey == "forecast-doc" && !item.IsActive), "forecast initially inactive");
+            AssertTrue(catalog.ActivateDocument("forecast-doc"), "forecast activation succeeds");
+            AssertEqual("forecast-doc", adapter.DocumentKey, "active document key");
+            AssertEqual("Forecast.xlsx", adapter.DocumentTitle, "active document title");
+            AssertTrue(catalog.ListOpenDocuments().Any(item => item.DocumentKey == "forecast-doc" && item.IsActive), "forecast marked active");
+        }
     }
 }

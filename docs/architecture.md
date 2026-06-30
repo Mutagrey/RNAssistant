@@ -77,10 +77,12 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - Office host adapters expose executable capabilities through `ToolDefinition` and `ExecuteTool`; they should not know chat/session/storage details.
 - Desktop target descriptors must be validated before tool execution; a closed or mismatched target should fail instead of falling back to an unrelated active document.
 - `OfficeContext` is a Core DTO. Host adapters may implement `IOfficeContextProvider`; bridge responses can expose this without requiring every adapter/fake to implement it.
+- Host adapters may implement `IOfficeDocumentCatalog`; typed bridge responses merge its open-document list with persisted chat summaries, and document activation is dispatched by stable document key.
 - Desktop COM automation must enter host adapters through `DispatchedOfficeApplicationAdapter`/`OfficeStaDispatcher`; VSTO task panes already run inside their Office host process and remain Windows-validation-only.
-- Desktop target selection is explicit by default. `Manual` mode keeps the selected working target stable when the user switches Office windows; `Auto follow` may switch from launcher activation.
+- Desktop target selection uses `Auto follow` by default. `Manual` mode pins the selected working target; Excel task panes refresh on workbook activate/open/close events.
 - The Desktop target registry stores only lightweight descriptors, not long-lived Office COM objects.
 - UI sends typed bridge messages; business rules stay in C# unless they are purely presentation behavior.
+- Concurrent task-pane/desktop WebViews periodically reconcile typed chat/document state from the shared local stores; mutation and Office targeting remain in C#.
 - WebView response serialization belongs in `AssistantWebBridge`; controller methods should return DTOs or domain models.
 
 ## Known Oversized Areas

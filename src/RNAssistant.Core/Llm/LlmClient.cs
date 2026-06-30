@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -16,24 +17,64 @@ namespace RNAssistant.Core.Llm
     public sealed class LlmCompletionResult
     {
         public string Content { get; set; }
+        public string ReasoningContent { get; set; }
+        public int? ReasoningTokens { get; set; }
+        public bool ReasoningTruncated { get; set; }
         public int? PromptTokens { get; set; }
         public int? CompletionTokens { get; set; }
         public int? TotalTokens { get; set; }
         public string UsageJson { get; set; }
     }
 
+    public sealed class LlmStreamUpdate
+    {
+        public string ContentDelta { get; set; }
+        public string ReasoningDelta { get; set; }
+        public bool Completed { get; set; }
+    }
+
+    public sealed class ModelImagePart
+    {
+        public string ContentType { get; set; }
+        public byte[] Bytes { get; set; }
+        public string Label { get; set; }
+    }
+
     public sealed class LlmClient
     {
+        private const int MaxStoredReasoningChars = 100000;
         private readonly Func<string> _apiKeyProvider;
         private readonly Func<ChatAttachment, byte[]> _attachmentReader;
+        private readonly Func<ChatAttachment, string> _attachmentTextReader;
+        private readonly Func<AppSettings, ChatAttachment, IReadOnlyList<ModelImagePart>> _modelImageProvider;
 
         public LlmClient(Func<string> apiKeyProvider, Func<ChatAttachment, byte[]> attachmentReader = null)
+            : this(apiKeyProvider, attachmentReader, null, null)
+        {
+        }
+
+        public LlmClient(
+            Func<string> apiKeyProvider,
+            Func<ChatAttachment, byte[]> attachmentReader,
+            Func<ChatAttachment, string> attachmentTextReader,
+            Func<AppSettings, ChatAttachment, IReadOnlyList<ModelImagePart>> modelImageProvider)
         {
             _apiKeyProvider = apiKeyProvider;
             _attachmentReader = attachmentReader;
+            _attachmentTextReader = attachmentTextReader;
+            _modelImageProvider = modelImageProvider;
         }
 
         public async Task<LlmCompletionResult> CompleteAsync(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            return await CompleteAsync(settings, messages, null, cancellationToken).ConfigureAwait(false);
+        }
+
+        public async Task<LlmCompletionResult> CompleteAsync(
+            AppSettings settings,
+            IEnumerable<ChatMessage> messages,
+            Action<LlmStreamUpdate> streamProgress,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
             if (settings == null)
             {
@@ -54,7 +95,8 @@ namespace RNAssistant.Core.Llm
             {
                 client.Timeout = TimeSpan.FromSeconds(Math.Max(30, settings.RequestTimeoutSeconds <= 0 ? 300 : settings.RequestTimeoutSeconds));
                 client.DefaultRequestHeaders.Accept.Clear();
-                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue(
+                    settings.StreamResponses ? "text/event-stream" : "application/json"));
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("RNAssistant/0.1");
                 if (!string.IsNullOrWhiteSpace(apiKey))
                 {
@@ -90,9 +132,9 @@ namespace RNAssistant.Core.Llm
                 }
 
                 var messageList = messages == null ? new List<ChatMessage>() : messages.ToList();
-                var apiMessages = ToApiMessages(messageList);
-                var hasImages = messageList.Any(m =>
-                    m != null && m.Attachments != null && m.Attachments.Any(a => a != null && a.Kind == "image"));
+                var apiBuild = BuildApiMessages(messageList, settings);
+                var apiMessages = apiBuild.Messages;
+                var hasImages = apiBuild.HasImages;
                 if (apiMessages.Count == 0)
                 {
                     throw new InvalidOperationException("LLM request has no messages.");
@@ -105,7 +147,7 @@ namespace RNAssistant.Core.Llm
                     max_tokens = settings.MaxTokens,
                     temperature = settings.Temperature,
                     top_p = settings.TopP,
-                    stream = false
+                    stream = settings.StreamResponses
                 };
 
                 var json = JsonConvert.SerializeObject(body, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
@@ -119,8 +161,19 @@ namespace RNAssistant.Core.Llm
                         requestContent.Headers.ContentType = MediaTypeHeaderValue.Parse(contentTypeOverride);
                     }
 
-                    var response = await client.PostAsync(requestUri, requestContent, cancellationToken).ConfigureAwait(false);
-                    var responseJson = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    HttpResponseMessage response;
+                    if (settings.StreamResponses)
+                    {
+                        var request = new HttpRequestMessage(HttpMethod.Post, requestUri) { Content = requestContent };
+                        response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        response = await client.PostAsync(requestUri, requestContent, cancellationToken).ConfigureAwait(false);
+                    }
+                    var responseJson = response.IsSuccessStatusCode && settings.StreamResponses
+                        ? null
+                        : await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                     if (!response.IsSuccessStatusCode)
                     {
                         if (hasImages && (int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
@@ -130,6 +183,15 @@ namespace RNAssistant.Core.Llm
                                 (int)response.StatusCode + ". Response: " + responseJson);
                         }
                         throw new InvalidOperationException("LLM request failed: HTTP " + (int)response.StatusCode + " " + response.ReasonPhrase + ". " + diagnostics + ". Response: " + responseJson);
+                    }
+
+                    if (settings.StreamResponses)
+                    {
+                        using (response)
+                        using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                        {
+                            return await ReadStreamingResponseAsync(stream, streamProgress, cancellationToken).ConfigureAwait(false);
+                        }
                     }
 
                     var parsed = JObject.Parse(responseJson);
@@ -145,6 +207,9 @@ namespace RNAssistant.Core.Llm
                     return new LlmCompletionResult
                     {
                         Content = ReadAssistantContent(message),
+                        ReasoningContent = ReadReasoningContent(message),
+                        ReasoningTokens = ReadReasoningTokens(usage),
+                        ReasoningTruncated = ReadReasoningContent(message).Length >= MaxStoredReasoningChars,
                         PromptTokens = promptTokens,
                         CompletionTokens = completionTokens,
                         TotalTokens = totalTokens,
@@ -169,6 +234,222 @@ namespace RNAssistant.Core.Llm
                     throw new InvalidOperationException("LLM network error. " + diagnostics + ". " + DeepestMessage(ex), ex);
                 }
             }
+        }
+
+        internal static LlmCompletionResult ParseStreamingResponse(string sse)
+        {
+            var state = new StreamingCompletionState();
+            using (var reader = new StringReader(sse ?? string.Empty))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    ProcessStreamingLine(line, state);
+                }
+            }
+            return state.ToResult();
+        }
+
+        private static async Task<LlmCompletionResult> ReadStreamingResponseAsync(
+            Stream stream,
+            Action<LlmStreamUpdate> streamProgress,
+            CancellationToken cancellationToken)
+        {
+            var state = new StreamingCompletionState(streamProgress);
+            using (var reader = new StreamReader(stream, Encoding.UTF8, true, 4096, true))
+            {
+                while (!reader.EndOfStream)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var line = await reader.ReadLineAsync().ConfigureAwait(false);
+                    ProcessStreamingLine(line, state);
+                }
+            }
+            var result = state.ToResult();
+            if (streamProgress != null)
+            {
+                streamProgress(new LlmStreamUpdate { Completed = true });
+            }
+            return result;
+        }
+
+        private static void ProcessStreamingLine(string line, StreamingCompletionState state)
+        {
+            if (state == null || string.IsNullOrWhiteSpace(line))
+            {
+                return;
+            }
+
+            var trimmed = line.Trim();
+            if (!trimmed.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            var data = trimmed.Substring(5).Trim();
+            if (string.Equals(data, "[DONE]", StringComparison.OrdinalIgnoreCase) || data.Length == 0)
+            {
+                return;
+            }
+
+            var chunk = JObject.Parse(data);
+            state.Add(chunk);
+        }
+
+        private sealed class StreamingCompletionState
+        {
+            private readonly StringBuilder _content = new StringBuilder();
+            private readonly StringBuilder _reasoning = new StringBuilder();
+            private readonly SortedDictionary<int, StreamingToolCall> _toolCalls = new SortedDictionary<int, StreamingToolCall>();
+            private readonly Action<LlmStreamUpdate> _progress;
+            private JObject _usage;
+
+            public StreamingCompletionState(Action<LlmStreamUpdate> progress = null)
+            {
+                _progress = progress;
+            }
+
+            public void Add(JObject chunk)
+            {
+                if (chunk == null)
+                {
+                    return;
+                }
+
+                var usage = chunk["usage"] as JObject;
+                if (usage != null)
+                {
+                    _usage = usage;
+                }
+
+                var delta = chunk.SelectToken("choices[0].delta") as JObject;
+                if (delta == null)
+                {
+                    return;
+                }
+
+                var content = delta["content"];
+                if (content != null && content.Type == JTokenType.String)
+                {
+                    var value = content.Value<string>() ?? string.Empty;
+                    _content.Append(value);
+                    if (_progress != null && value.Length > 0)
+                    {
+                        _progress(new LlmStreamUpdate { ContentDelta = value });
+                    }
+                }
+
+                var reasoning = delta["reasoning_content"] ?? delta["reasoning"];
+                if (reasoning != null && reasoning.Type == JTokenType.String)
+                {
+                    var value = reasoning.Value<string>() ?? string.Empty;
+                    _reasoning.Append(value);
+                    if (_progress != null && value.Length > 0)
+                    {
+                        _progress(new LlmStreamUpdate { ReasoningDelta = value });
+                    }
+                }
+
+                var calls = delta["tool_calls"] as JArray;
+                if (calls == null)
+                {
+                    return;
+                }
+
+                foreach (var token in calls.OfType<JObject>())
+                {
+                    var index = token["index"] == null ? 0 : token["index"].Value<int>();
+                    StreamingToolCall call;
+                    if (!_toolCalls.TryGetValue(index, out call))
+                    {
+                        call = new StreamingToolCall();
+                        _toolCalls[index] = call;
+                    }
+
+                    if (token["id"] != null)
+                    {
+                        call.Id = AppendFragment(call.Id, token["id"].Value<string>());
+                    }
+                    var function = token["function"] as JObject;
+                    if (function != null)
+                    {
+                        if (function["name"] != null)
+                        {
+                            call.Name = AppendFragment(call.Name, function["name"].Value<string>());
+                        }
+                        if (function["arguments"] != null)
+                        {
+                            call.Arguments.Append(function["arguments"].Value<string>() ?? string.Empty);
+                        }
+                    }
+                }
+            }
+
+            public LlmCompletionResult ToResult()
+            {
+                var message = new JObject
+                {
+                    ["content"] = _content.ToString(),
+                    ["reasoning_content"] = _reasoning.ToString()
+                };
+                if (_toolCalls.Count > 0)
+                {
+                    var calls = new JArray();
+                    foreach (var pair in _toolCalls)
+                    {
+                        calls.Add(new JObject
+                        {
+                            ["id"] = pair.Value.Id,
+                            ["type"] = "function",
+                            ["function"] = new JObject
+                            {
+                                ["name"] = pair.Value.Name,
+                                ["arguments"] = pair.Value.Arguments.ToString()
+                            }
+                        });
+                    }
+                    message["tool_calls"] = calls;
+                }
+
+                var promptTokens = ReadInt(_usage, "prompt_tokens", "input_tokens");
+                var completionTokens = ReadInt(_usage, "completion_tokens", "output_tokens");
+                var totalTokens = ReadInt(_usage, "total_tokens");
+                if (totalTokens == null && promptTokens != null && completionTokens != null)
+                {
+                    totalTokens = promptTokens.Value + completionTokens.Value;
+                }
+                return new LlmCompletionResult
+                {
+                    Content = ReadAssistantContent(message),
+                    ReasoningContent = ReadReasoningContent(message),
+                    ReasoningTokens = ReadReasoningTokens(_usage),
+                    ReasoningTruncated = ReadReasoningContent(message).Length >= MaxStoredReasoningChars,
+                    PromptTokens = promptTokens,
+                    CompletionTokens = completionTokens,
+                    TotalTokens = totalTokens,
+                    UsageJson = _usage == null ? null : _usage.ToString(Formatting.None)
+                };
+            }
+
+            private static string AppendFragment(string current, string fragment)
+            {
+                if (string.IsNullOrEmpty(fragment))
+                {
+                    return current ?? string.Empty;
+                }
+                if (!string.IsNullOrEmpty(current) && string.Equals(current, fragment, StringComparison.Ordinal))
+                {
+                    return current;
+                }
+                return (current ?? string.Empty) + fragment;
+            }
+        }
+
+        private sealed class StreamingToolCall
+        {
+            public string Id { get; set; }
+            public string Name { get; set; }
+            public StringBuilder Arguments { get; private set; } = new StringBuilder();
         }
 
         public async Task<string> GetModelsConfigJsonAsync(AppSettings settings, string apiKeyOverride)
@@ -322,6 +603,7 @@ namespace RNAssistant.Core.Llm
                 return string.Empty;
             }
 
+            NormalizeReasoningFields(message);
             var content = message["content"] == null || message["content"].Type == JTokenType.Null
                 ? string.Empty
                 : message["content"].Value<string>() ?? string.Empty;
@@ -357,6 +639,52 @@ namespace RNAssistant.Core.Llm
                 ["steps"] = steps,
                 ["expectedOutcome"] = "Execute converted native tool call steps."
             }.ToString(Formatting.None);
+        }
+
+        private static string ReadReasoningContent(JObject message)
+        {
+            if (message == null)
+            {
+                return string.Empty;
+            }
+            NormalizeReasoningFields(message);
+            var token = message["reasoning_content"] ?? message["reasoning"];
+            var value = token == null || token.Type == JTokenType.Null ? string.Empty : token.Value<string>() ?? string.Empty;
+            return value.Length > MaxStoredReasoningChars ? value.Substring(0, MaxStoredReasoningChars) : value;
+        }
+
+        private static int? ReadReasoningTokens(JObject usage)
+        {
+            var details = usage == null ? null : usage["completion_tokens_details"] as JObject;
+            return ReadInt(details, "reasoning_tokens");
+        }
+
+        private static void NormalizeReasoningFields(JObject message)
+        {
+            if (message == null)
+            {
+                return;
+            }
+            var reasoning = message["reasoning_content"] ?? message["reasoning"];
+            if (reasoning != null && reasoning.Type == JTokenType.String && !string.IsNullOrWhiteSpace(reasoning.Value<string>()))
+            {
+                return;
+            }
+            var contentToken = message["content"];
+            var content = contentToken == null || contentToken.Type != JTokenType.String
+                ? string.Empty
+                : contentToken.Value<string>() ?? string.Empty;
+            if (!content.StartsWith("<think>", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+            var close = content.IndexOf("</think>", StringComparison.OrdinalIgnoreCase);
+            if (close < 0)
+            {
+                return;
+            }
+            message["reasoning_content"] = content.Substring(7, close - 7).Trim();
+            message["content"] = content.Substring(close + 8).TrimStart();
         }
 
         private static JObject ParseArgumentsObject(string arguments)
@@ -417,10 +745,15 @@ namespace RNAssistant.Core.Llm
 
         private List<object> ToApiMessages(IEnumerable<ChatMessage> messages)
         {
-            var result = new List<object>();
+            return BuildApiMessages(messages, null).Messages;
+        }
+
+        private ApiMessageBuildResult BuildApiMessages(IEnumerable<ChatMessage> messages, AppSettings settings)
+        {
+            var build = new ApiMessageBuildResult();
             if (messages == null)
             {
-                return result;
+                return build;
             }
 
             foreach (var message in messages)
@@ -432,46 +765,83 @@ namespace RNAssistant.Core.Llm
 
                 var attachments = message.Attachments ?? new List<ChatAttachment>();
                 var text = AppendExtractedText(message.Content ?? string.Empty, attachments);
-                var images = attachments.Where(a => a != null && a.Kind == "image").ToList();
-                if (images.Count == 0)
+                var imageParts = new List<ModelImagePart>();
+                foreach (var attachment in attachments.Where(a => a != null))
                 {
-                    result.Add(new { role = message.Role, content = text });
+                    imageParts.AddRange(ReadModelImages(settings, attachment));
+                }
+                if (imageParts.Count == 0)
+                {
+                    var unreadablePdf = attachments.FirstOrDefault(a =>
+                        a != null && a.Kind == "pdf" &&
+                        (a.PageTextLengths == null || a.PageTextLengths.Count == 0 || a.PageTextLengths.All(length => length < 20)));
+                    if (unreadablePdf != null)
+                    {
+                        throw new InvalidOperationException(
+                            unreadablePdf.FileName + ": PDF contains no usable text and the selected model does not support visual PDF pages.");
+                    }
+                    build.Messages.Add(new { role = message.Role, content = text });
                     continue;
                 }
 
                 var parts = new List<object> { new { type = "text", text = text } };
-                foreach (var image in images)
+                foreach (var image in imageParts)
                 {
-                    var bytes = _attachmentReader == null ? null : _attachmentReader(image);
-                    if (bytes == null || bytes.Length == 0)
+                    if (image == null || image.Bytes == null || image.Bytes.Length == 0)
                     {
-                        throw new InvalidOperationException("Attachment file is missing: " + (image.FileName ?? image.Id));
+                        continue;
                     }
                     parts.Add(new
                     {
                         type = "image_url",
-                        image_url = new { url = "data:" + image.ContentType + ";base64," + Convert.ToBase64String(bytes) }
+                        image_url = new { url = "data:" + image.ContentType + ";base64," + Convert.ToBase64String(image.Bytes) }
                     });
+                    build.HasImages = true;
                 }
-                result.Add(new { role = message.Role, content = parts });
+                build.Messages.Add(new { role = message.Role, content = parts });
             }
 
-            return result;
+            return build;
         }
 
-        private static string AppendExtractedText(string content, IEnumerable<ChatAttachment> attachments)
+        private IEnumerable<ModelImagePart> ReadModelImages(AppSettings settings, ChatAttachment attachment)
+        {
+            var supplied = _modelImageProvider == null ? null : _modelImageProvider(settings, attachment);
+            if (supplied != null && supplied.Count > 0)
+            {
+                return supplied.Where(part => part != null).ToList();
+            }
+            if (attachment == null || attachment.Kind != "image")
+            {
+                return new ModelImagePart[0];
+            }
+            var bytes = _attachmentReader == null ? null : _attachmentReader(attachment);
+            if (bytes == null || bytes.Length == 0)
+            {
+                throw new InvalidOperationException("Attachment file is missing: " + (attachment.FileName ?? attachment.Id));
+            }
+            return new[]
+            {
+                new ModelImagePart { Bytes = bytes, ContentType = attachment.ContentType, Label = attachment.FileName }
+            };
+        }
+
+        private string AppendExtractedText(string content, IEnumerable<ChatAttachment> attachments)
         {
             var builder = new StringBuilder(content ?? string.Empty);
             foreach (var attachment in attachments ?? new ChatAttachment[0])
             {
-                if (attachment == null || string.IsNullOrWhiteSpace(attachment.ExtractedText))
+                var extracted = attachment == null
+                    ? string.Empty
+                    : (_attachmentTextReader == null ? attachment.ExtractedText : _attachmentTextReader(attachment));
+                if (string.IsNullOrWhiteSpace(extracted))
                 {
                     continue;
                 }
                 builder.AppendLine();
                 builder.AppendLine();
                 builder.AppendLine("[Attachment: " + attachment.FileName + "]");
-                builder.Append(attachment.ExtractedText);
+                builder.Append(extracted);
                 if (attachment.TextTruncated)
                 {
                     builder.AppendLine();
@@ -481,6 +851,12 @@ namespace RNAssistant.Core.Llm
                 builder.Append("[End attachment]");
             }
             return builder.ToString();
+        }
+
+        private sealed class ApiMessageBuildResult
+        {
+            public List<object> Messages { get; private set; } = new List<object>();
+            public bool HasImages { get; set; }
         }
     }
 }

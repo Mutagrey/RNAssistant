@@ -394,12 +394,6 @@ namespace RNAssistant.Office.Tools
 
         private static ToolResult RenderHtmlArtifact(ToolCommand command, AppSettings settings)
         {
-            settings = settings ?? new AppSettings();
-            if (!settings.AllowUnsafeHtmlArtifacts)
-            {
-                return ToolResult.Fail("Unsafe HTML artifacts are disabled. Enable them in Settings > Interface before using common.render_html.");
-            }
-
             var html = ToolArgumentReader.String(command.Arguments, "html", string.Empty);
             if (string.IsNullOrWhiteSpace(html))
             {

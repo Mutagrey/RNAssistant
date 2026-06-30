@@ -99,7 +99,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void HtmlArtifactToolRequiresSetting()
+        private static void HtmlArtifactToolIsAlwaysAvailable()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -108,19 +108,10 @@ namespace RNAssistant.Harness
                 command.Arguments["html"] = "<div><script>window.demo=1</script>Demo</div>";
                 command.Arguments["height"] = 240;
 
-                var blocked = executor.Execute(
-                    command,
-                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
-                    new AppSettings { AllowUnsafeHtmlArtifacts = false },
-                    false,
-                    false);
-                AssertTrue(!blocked.Success, "html artifact disabled");
-                AssertContains(blocked.Message, "disabled", "disabled message");
-
                 var allowed = executor.Execute(
                     command,
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
-                    new AppSettings { AllowUnsafeHtmlArtifacts = true },
+                    new AppSettings(),
                     false,
                     false);
                 AssertTrue(allowed.Success, "html artifact enabled");

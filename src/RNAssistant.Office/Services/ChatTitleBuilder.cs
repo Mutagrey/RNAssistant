@@ -111,7 +111,6 @@ namespace RNAssistant.Office.Services
                 MaxAgentToolSteps = source.MaxAgentToolSteps,
                 RequireVerificationForMutations = source.RequireVerificationForMutations,
                 AutoContinueAfterConfirmation = source.AutoContinueAfterConfirmation,
-                AllowUnsafeHtmlArtifacts = source.AllowUnsafeHtmlArtifacts,
                 AgentPrompts = source.AgentPrompts,
                 UiFontScale = source.UiFontScale,
                 CustomHeaders = source.CustomHeaders == null

@@ -261,14 +261,30 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\"},\"apiKey\":\"secret\"}}")
+                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"modelImageSupportOverrides\":{\"gpt-test\":true}},\"apiKey\":\"secret\"}}")
                 .GetAwaiter()
                 .GetResult();
 
             var response = JObject.Parse(responseJson);
             AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
             AssertEqual("gpt-test", controller.LastSettings.Model, "settings model");
+            AssertEqual(true, controller.LastSettings.ModelImageSupportOverrides["gpt-test"].Value, "model image override");
             AssertEqual("secret", controller.LastApiKey, "api key");
+        }
+
+        private static void BridgeUsesTypedDocumentPayload()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
+            var responseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"doc1\",\"type\":\"activateDocument\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"documentKey\":\"forecast-doc\"}}")
+                .GetAwaiter()
+                .GetResult();
+
+            var response = JObject.Parse(responseJson);
+            AssertTrue(response["ok"].Value<bool>(), "document activation response ok");
+            AssertEqual("forecast-doc", response["payload"]["activeChatId"].Value<string>(), "document key payload");
         }
 
         private static void BridgeUsesTypedToolAndSkillPayloads()

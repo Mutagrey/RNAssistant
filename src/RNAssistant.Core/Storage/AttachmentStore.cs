@@ -14,7 +14,20 @@ namespace RNAssistant.Core.Storage
         public const int MaxFilesPerMessage = 10;
         public const long MaxFileBytes = 20L * 1024L * 1024L;
         public const long MaxMessageBytes = 50L * 1024L * 1024L;
-        private const int MaxExtractedChars = 100000;
+        private const int MaxExtractedChars = 1000000;
+        private const int MaxInlinePreviewChars = 4000;
+        private static readonly HashSet<string> TextExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".txt", ".md", ".markdown", ".mdx", ".json", ".jsonl", ".ndjson", ".csv", ".tsv",
+            ".xml", ".xaml", ".svg", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".config",
+            ".env", ".properties", ".log", ".sql", ".html", ".htm", ".css", ".scss", ".sass", ".less",
+            ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".vue", ".svelte", ".cs", ".vb", ".fs",
+            ".fsx", ".java", ".kt", ".kts", ".c", ".h", ".cpp", ".hpp", ".cc", ".go", ".rs", ".py",
+            ".rb", ".php", ".swift", ".r", ".sh", ".bash", ".zsh", ".ps1", ".bat", ".cmd", ".vba",
+            ".bas", ".cls", ".frm", ".tex", ".rst", ".adoc", ".diff", ".patch", ".rtf", ".eml",
+            ".ics", ".vcf", ".csproj", ".vbproj", ".fsproj", ".props", ".targets", ".sln", ".gradle",
+            ".gitignore", ".gitattributes", ".editorconfig", ".dockerfile"
+        };
         private readonly AppDataPaths _paths;
 
         public AttachmentStore(AppDataPaths paths)
@@ -48,7 +61,7 @@ namespace RNAssistant.Core.Storage
             var kind = DetectKind(fileName, contentType, bytes);
             if (kind == null)
             {
-                throw new InvalidOperationException("Unsupported attachment type. Use PNG, JPEG, WebP, GIF, PDF, TXT, MD, JSON or CSV.");
+                throw new InvalidOperationException("Unsupported or binary attachment type. Use images, PDF or a text-based file.");
             }
 
             contentType = NormalizeContentType(kind, contentType, bytes);
@@ -148,6 +161,13 @@ namespace RNAssistant.Core.Storage
                 var target = Path.Combine(directory, attachment.Id + Path.GetExtension(source));
                 File.Copy(source, target, true);
                 attachment.RelativePath = RelativePath(target);
+                var extractedSource = ExtractedTextAbsolutePath(attachment);
+                if (!string.IsNullOrWhiteSpace(extractedSource) && File.Exists(extractedSource))
+                {
+                    var extractedTarget = Path.Combine(directory, attachment.Id + ".extracted.txt");
+                    File.Copy(extractedSource, extractedTarget, true);
+                    attachment.ExtractedTextPath = RelativePath(extractedTarget);
+                }
                 DeleteDraft(attachment.Id);
             }
         }
@@ -160,6 +180,11 @@ namespace RNAssistant.Core.Storage
             foreach (var attachment in attachments)
             {
                 SafeDeleteFile(AbsolutePath(attachment.RelativePath));
+                var extractedPath = ExtractedTextAbsolutePath(attachment);
+                if (!string.IsNullOrWhiteSpace(extractedPath))
+                {
+                    SafeDeleteFile(extractedPath);
+                }
             }
         }
 
@@ -190,6 +215,13 @@ namespace RNAssistant.Core.Storage
                 var target = Path.Combine(directory, cloneId + Path.GetExtension(source));
                 File.Copy(source, target, true);
                 attachment.RelativePath = RelativePath(target);
+                var extractedSource = ExtractedTextAbsolutePath(attachment);
+                if (!string.IsNullOrWhiteSpace(extractedSource) && File.Exists(extractedSource))
+                {
+                    var extractedTarget = Path.Combine(directory, cloneId + ".extracted.txt");
+                    File.Copy(extractedSource, extractedTarget, true);
+                    attachment.ExtractedTextPath = RelativePath(extractedTarget);
+                }
             }
         }
 
@@ -203,11 +235,30 @@ namespace RNAssistant.Core.Storage
             return File.Exists(path) ? File.ReadAllBytes(path) : null;
         }
 
+        public string ReadExtractedText(ChatAttachment attachment)
+        {
+            if (attachment == null)
+            {
+                return string.Empty;
+            }
+            var path = ExtractedTextAbsolutePath(attachment);
+            if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            {
+                return File.ReadAllText(path, Encoding.UTF8);
+            }
+            return attachment.ExtractedText ?? string.Empty;
+        }
+
         private void ExtractText(ChatAttachment attachment, string path)
         {
             if (attachment.Kind == "text")
             {
-                SetExtractedText(attachment, File.ReadAllText(path, Encoding.UTF8));
+                string text;
+                if (!TryDecodeText(File.ReadAllBytes(path), true, out text))
+                {
+                    throw new InvalidOperationException("The file does not contain supported text.");
+                }
+                SetExtractedText(attachment, path, text);
                 return;
             }
             if (attachment.Kind != "pdf")
@@ -218,23 +269,42 @@ namespace RNAssistant.Core.Storage
             var builder = new StringBuilder();
             using (var document = PdfDocument.Open(path))
             {
+                attachment.PageCount = document.NumberOfPages;
                 foreach (var page in document.GetPages())
                 {
                     if (builder.Length >= MaxExtractedChars)
                     {
                         break;
                     }
-                    builder.AppendLine(ContentOrderTextExtractor.GetText(page));
+                    var pageText = ContentOrderTextExtractor.GetText(page) ?? string.Empty;
+                    attachment.PageTextLengths.Add(pageText.Trim().Length);
+                    builder.AppendLine("[PDF page " + page.Number + "]");
+                    builder.AppendLine(pageText);
                 }
             }
-            SetExtractedText(attachment, builder.ToString());
+            SetExtractedText(attachment, path, builder.ToString());
+            if (attachment.PageTextLengths.Count == 0 || attachment.PageTextLengths.All(length => length < 20))
+            {
+                attachment.ExtractionWarning = "PDF contains little or no extractable text; a vision model is required for scanned pages.";
+            }
         }
 
-        private static void SetExtractedText(ChatAttachment attachment, string text)
+        private void SetExtractedText(ChatAttachment attachment, string sourcePath, string text)
         {
             text = text ?? string.Empty;
             attachment.TextTruncated = text.Length > MaxExtractedChars;
-            attachment.ExtractedText = attachment.TextTruncated ? text.Substring(0, MaxExtractedChars) : text;
+            if (attachment.TextTruncated)
+            {
+                text = text.Substring(0, MaxExtractedChars);
+                attachment.ExtractionWarning = "Extracted text was truncated at 1,000,000 characters.";
+            }
+            attachment.ExtractedCharCount = text.Length;
+            attachment.ExtractedText = text.Length > MaxInlinePreviewChars
+                ? text.Substring(0, MaxInlinePreviewChars)
+                : text;
+            var sidecarPath = Path.Combine(Path.GetDirectoryName(sourcePath), attachment.Id + ".extracted.txt");
+            File.WriteAllText(sidecarPath, text, new UTF8Encoding(false));
+            attachment.ExtractedTextPath = RelativePath(sidecarPath);
         }
 
         private ChatAttachment LoadMetadata(string id)
@@ -288,13 +358,106 @@ namespace RNAssistant.Core.Storage
             return path;
         }
 
+        private string ExtractedTextAbsolutePath(ChatAttachment attachment)
+        {
+            return attachment == null || string.IsNullOrWhiteSpace(attachment.ExtractedTextPath)
+                ? null
+                : AbsolutePath(attachment.ExtractedTextPath);
+        }
+
         private static string DetectKind(string name, string contentType, byte[] bytes)
         {
             var extension = Path.GetExtension(name).ToLowerInvariant();
             if (IsImageSignature(bytes)) return "image";
             if (bytes.Length >= 5 && Encoding.ASCII.GetString(bytes, 0, 5) == "%PDF-") return "pdf";
-            if (new[] { ".txt", ".md", ".json", ".csv" }.Contains(extension)) return "text";
+            if (IsKnownBinarySignature(bytes)) return null;
+            var likelyText = TextExtensions.Contains(extension)
+                || string.IsNullOrWhiteSpace(extension)
+                || (!string.IsNullOrWhiteSpace(contentType) && contentType.StartsWith("text/", StringComparison.OrdinalIgnoreCase));
+            string ignored;
+            if (likelyText && TryDecodeText(bytes, true, out ignored)) return "text";
             return null;
+        }
+
+        private static bool IsKnownBinarySignature(byte[] bytes)
+        {
+            if (bytes == null || bytes.Length < 2) return false;
+            if (bytes[0] == (byte)'M' && bytes[1] == (byte)'Z') return true;
+            if (bytes.Length >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4b && bytes[2] >= 0x03 && bytes[2] <= 0x07) return true;
+            if (bytes.Length >= 8 && bytes[0] == 0xd0 && bytes[1] == 0xcf && bytes[2] == 0x11 && bytes[3] == 0xe0) return true;
+            if (bytes.Length >= 16 && Encoding.ASCII.GetString(bytes, 0, 16) == "SQLite format 3\0") return true;
+            if (bytes.Length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b) return true;
+            if (bytes.Length >= 6 && bytes[0] == 0x37 && bytes[1] == 0x7a && bytes[2] == 0xbc && bytes[3] == 0xaf) return true;
+            if (bytes.Length >= 4 && bytes[0] == 0x7f && bytes[1] == (byte)'E' && bytes[2] == (byte)'L' && bytes[3] == (byte)'F') return true;
+            return false;
+        }
+
+        private static bool TryDecodeText(byte[] bytes, bool allowWindows1251, out string text)
+        {
+            text = string.Empty;
+            if (bytes == null || bytes.Length == 0)
+            {
+                return false;
+            }
+            try
+            {
+                if (bytes.Length >= 4 && bytes[0] == 0xff && bytes[1] == 0xfe && bytes[2] == 0 && bytes[3] == 0)
+                    text = Encoding.UTF32.GetString(bytes, 4, bytes.Length - 4);
+                else if (bytes.Length >= 4 && bytes[0] == 0 && bytes[1] == 0 && bytes[2] == 0xfe && bytes[3] == 0xff)
+                    text = new UTF32Encoding(true, true, true).GetString(bytes, 4, bytes.Length - 4);
+                else if (bytes.Length >= 2 && bytes[0] == 0xff && bytes[1] == 0xfe)
+                    text = Encoding.Unicode.GetString(bytes, 2, bytes.Length - 2);
+                else if (bytes.Length >= 2 && bytes[0] == 0xfe && bytes[1] == 0xff)
+                    text = Encoding.BigEndianUnicode.GetString(bytes, 2, bytes.Length - 2);
+                else
+                {
+                    var offset = bytes.Length >= 3 && bytes[0] == 0xef && bytes[1] == 0xbb && bytes[2] == 0xbf ? 3 : 0;
+                    text = new UTF8Encoding(false, true).GetString(bytes, offset, bytes.Length - offset);
+                }
+            }
+            catch (DecoderFallbackException)
+            {
+                if (!allowWindows1251)
+                {
+                    return false;
+                }
+                text = DecodeWindows1251(bytes);
+            }
+            return LooksLikeText(text);
+        }
+
+        private static bool LooksLikeText(string text)
+        {
+            if (text == null) return false;
+            var sampleLength = Math.Min(text.Length, 32768);
+            if (sampleLength == 0) return true;
+            var controls = 0;
+            for (var i = 0; i < sampleLength; i++)
+            {
+                var ch = text[i];
+                if (ch == '\0') return false;
+                if (char.IsControl(ch) && ch != '\r' && ch != '\n' && ch != '\t' && ch != '\f') controls++;
+            }
+            return controls * 100 <= sampleLength;
+        }
+
+        private static string DecodeWindows1251(byte[] bytes)
+        {
+            const string high =
+                "\u0402\u0403\u201A\u0453\u201E\u2026\u2020\u2021\u20AC\u2030\u0409\u2039\u040A\u040C\u040B\u040F" +
+                "\u0452\u2018\u2019\u201C\u201D\u2022\u2013\u2014\u0098\u2122\u0459\u203A\u045A\u045C\u045B\u045F" +
+                "\u00A0\u040E\u045E\u0408\u00A4\u0490\u00A6\u00A7\u0401\u00A9\u0404\u00AB\u00AC\u00AD\u00AE\u0407" +
+                "\u00B0\u00B1\u0406\u0456\u0491\u00B5\u00B6\u00B7\u0451\u2116\u0454\u00BB\u0458\u0405\u0455\u0457" +
+                "\u0410\u0411\u0412\u0413\u0414\u0415\u0416\u0417\u0418\u0419\u041A\u041B\u041C\u041D\u041E\u041F" +
+                "\u0420\u0421\u0422\u0423\u0424\u0425\u0426\u0427\u0428\u0429\u042A\u042B\u042C\u042D\u042E\u042F" +
+                "\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043A\u043B\u043C\u043D\u043E\u043F" +
+                "\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044A\u044B\u044C\u044D\u044E\u044F";
+            var chars = new char[bytes.Length];
+            for (var i = 0; i < bytes.Length; i++)
+            {
+                chars[i] = bytes[i] < 128 ? (char)bytes[i] : high[bytes[i] - 128];
+            }
+            return new string(chars);
         }
 
         private static bool IsImageSignature(byte[] b)

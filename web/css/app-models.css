@@ -60,12 +60,100 @@
   font-size: 11px;
   font-weight: var(--label-font-weight);
 }
-.model-capability-status {
-  display: flex;
+.model-capability-section {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.model-capability-heading h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: var(--title-font-weight);
+}
+
+.model-capability-heading p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.model-capability-list {
+  max-height: 280px;
+  margin-top: 9px;
+  overflow: auto;
+  border: 1px solid var(--control-border);
+  border-radius: calc(var(--radius) - 2px);
+}
+
+.model-capability-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto 46px;
+  gap: 8px;
   align-items: center;
-  min-height: var(--control-height);
+  min-height: 42px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--control-border);
+}
+
+.model-capability-row:last-child {
+  border-bottom: 0;
+}
+
+.model-capability-row:hover {
+  background: var(--hover);
+}
+
+.model-capability-row input {
+  margin: 0;
+}
+
+.model-capability-text {
+  min-width: 0;
+}
+
+.model-capability-title,
+.model-capability-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-capability-title {
+  font-size: 12px;
+  font-weight: var(--label-font-weight);
+}
+
+.model-capability-id {
+  margin-top: 2px;
+  color: var(--muted);
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: 10px;
+}
+
+.model-capability-source {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.model-capability-source.is-manual {
+  color: var(--accent);
+}
+
+.model-capability-reset {
+  min-height: 25px;
+  padding: 3px 6px;
+  font-size: 10px;
+}
+
+.model-capability-empty {
+  padding: 14px;
   color: var(--muted);
   font-size: 12px;
+  text-align: center;
 }
 
 .model-capability-indicator {

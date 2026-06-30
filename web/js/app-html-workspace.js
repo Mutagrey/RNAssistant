@@ -158,8 +158,7 @@
   }
 
   function htmlPreviewEnabled() {
-    var settings = state.settings || {};
-    return !!(settings.AllowUnsafeHtmlArtifacts || settings.allowUnsafeHtmlArtifacts);
+    return true;
   }
 
   function syncHtmlEditorToState() {

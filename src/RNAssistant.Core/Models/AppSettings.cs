@@ -3,6 +3,13 @@ using System.Collections.Generic;
 
 namespace RNAssistant.Core.Models
 {
+    public sealed class ModelCapabilitySettings
+    {
+        public int? MaxContextTokens { get; set; }
+        public bool? SupportsImages { get; set; }
+        public int? MaxImagesPerPrompt { get; set; }
+    }
+
     public sealed class AgentPromptSettings
     {
         public string ToolProtocolPrompt { get; set; }
@@ -58,6 +65,7 @@ namespace RNAssistant.Core.Models
         public double Temperature { get; set; }
         public double TopP { get; set; }
         public int ContextCharLimit { get; set; }
+        public int ContextWindowOverrideTokens { get; set; }
         public bool StreamResponses { get; set; }
         public bool? AutoRunToolCalls { get; set; }
         public bool AutoConfirmToolActions { get; set; }
@@ -69,11 +77,11 @@ namespace RNAssistant.Core.Models
         public int MaxAgentToolSteps { get; set; }
         public bool? RequireVerificationForMutations { get; set; }
         public bool? AutoContinueAfterConfirmation { get; set; }
-        public bool AllowUnsafeHtmlArtifacts { get; set; }
         public AgentPromptSettings AgentPrompts { get; set; }
         public double UiFontScale { get; set; }
         public Dictionary<string, string> CustomHeaders { get; set; }
         public Dictionary<string, bool?> ModelImageSupportOverrides { get; set; }
+        public Dictionary<string, ModelCapabilitySettings> ModelCapabilities { get; set; }
 
         public AppSettings()
         {
@@ -86,7 +94,8 @@ namespace RNAssistant.Core.Models
             Temperature = 0.2;
             TopP = 1.0;
             ContextCharLimit = 24000;
-            StreamResponses = false;
+            ContextWindowOverrideTokens = 0;
+            StreamResponses = true;
             AutoRunToolCalls = true;
             AutoConfirmToolActions = false;
             AutoRetryToolErrors = true;
@@ -97,11 +106,11 @@ namespace RNAssistant.Core.Models
             MaxAgentToolSteps = 40;
             RequireVerificationForMutations = true;
             AutoContinueAfterConfirmation = true;
-            AllowUnsafeHtmlArtifacts = false;
             AgentPrompts = new AgentPromptSettings();
             UiFontScale = 1.0;
             CustomHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             ModelImageSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
+            ModelCapabilities = new Dictionary<string, ModelCapabilitySettings>(StringComparer.OrdinalIgnoreCase);
         }
     }
 }

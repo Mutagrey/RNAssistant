@@ -12,6 +12,7 @@ namespace RNAssistant.Desktop
         private readonly OfficeTargetRegistry _targetRegistry;
         private readonly TargetSelectionBar _targetBar;
         private readonly Panel _content;
+        private readonly Timer _autoFollowTimer;
         private Label _placeholder;
         private AssistantRuntime _runtime;
         private IDisposable _currentAdapter;
@@ -31,6 +32,26 @@ namespace RNAssistant.Desktop
             StartPosition = FormStartPosition.CenterScreen;
             KeyPreview = true;
             _content = new Panel { Dock = DockStyle.Fill };
+            _autoFollowTimer = new Timer { Interval = 750 };
+            _autoFollowTimer.Tick += delegate
+            {
+                if (_targetRegistry.Mode != TargetSelectionMode.AutoFollow)
+                {
+                    return;
+                }
+                try
+                {
+                    var activation = ForegroundOfficeDetector.Detect();
+                    if (activation != null && !string.IsNullOrWhiteSpace(activation.Host))
+                    {
+                        ApplyActivation(activation, false);
+                    }
+                }
+                catch
+                {
+                }
+            };
+            _autoFollowTimer.Start();
             Controls.Add(_content);
             Controls.Add(_targetBar);
             _targetBar.UseActiveRequested += AttachForegroundOffice;
@@ -113,6 +134,13 @@ namespace RNAssistant.Desktop
                 return;
             }
 
+            if (!forceSelect && _runtime != null &&
+                string.Equals(entry.Id, _targetRegistry.SelectedTargetId, StringComparison.OrdinalIgnoreCase))
+            {
+                RefreshTargetUi(null);
+                return;
+            }
+
             _targetRegistry.Select(entry.Id);
             AttachTarget(entry, activation.Action);
         }
@@ -170,6 +198,8 @@ namespace RNAssistant.Desktop
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            _autoFollowTimer.Stop();
+            _autoFollowTimer.Dispose();
             ClearContent();
             DisposeCurrentAdapter();
             base.OnFormClosed(e);

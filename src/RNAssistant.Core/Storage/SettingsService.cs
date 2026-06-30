@@ -44,6 +44,14 @@ namespace RNAssistant.Core.Storage
             {
                 settings.CustomHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             }
+            if (settings.ModelImageSupportOverrides == null)
+            {
+                settings.ModelImageSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
+            }
+            if (settings.ModelCapabilities == null)
+            {
+                settings.ModelCapabilities = new Dictionary<string, ModelCapabilitySettings>(StringComparer.OrdinalIgnoreCase);
+            }
             if (string.IsNullOrWhiteSpace(settings.BaseUrl))
             {
                 settings.BaseUrl = defaults.BaseUrl;
@@ -85,6 +93,14 @@ namespace RNAssistant.Core.Storage
             if (settings.ContextCharLimit <= 0)
             {
                 settings.ContextCharLimit = defaults.ContextCharLimit;
+            }
+            if (settings.ContextWindowOverrideTokens < 0)
+            {
+                settings.ContextWindowOverrideTokens = 0;
+            }
+            if (settings.ContextWindowOverrideTokens > 1000000)
+            {
+                settings.ContextWindowOverrideTokens = 1000000;
             }
             if (!settings.AutoRunToolCalls.HasValue)
             {

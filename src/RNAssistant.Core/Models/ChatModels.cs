@@ -14,6 +14,9 @@ namespace RNAssistant.Core.Models
         public int? CompletionTokens { get; set; }
         public int? TotalTokens { get; set; }
         public string UsageJson { get; set; }
+        public string ReasoningContent { get; set; }
+        public int? ReasoningTokens { get; set; }
+        public bool ReasoningTruncated { get; set; }
         public DateTime CreatedUtc { get; set; }
 
         public ChatMessage()
@@ -33,7 +36,12 @@ namespace RNAssistant.Core.Models
         public string Kind { get; set; }
         public string RelativePath { get; set; }
         public string ExtractedText { get; set; }
+        public string ExtractedTextPath { get; set; }
+        public int ExtractedCharCount { get; set; }
         public bool TextTruncated { get; set; }
+        public int PageCount { get; set; }
+        public List<int> PageTextLengths { get; set; }
+        public string ExtractionWarning { get; set; }
         public string Status { get; set; }
         public string Error { get; set; }
         public DateTime CreatedUtc { get; set; }
@@ -43,6 +51,7 @@ namespace RNAssistant.Core.Models
             Id = Guid.NewGuid().ToString("N");
             CreatedUtc = DateTime.UtcNow;
             Status = "ready";
+            PageTextLengths = new List<int>();
         }
     }
 

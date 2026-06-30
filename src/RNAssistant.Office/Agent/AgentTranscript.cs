@@ -39,7 +39,10 @@ namespace RNAssistant.Office
                 PromptTokens = completion == null ? null : completion.PromptTokens,
                 CompletionTokens = completion == null ? null : completion.CompletionTokens,
                 TotalTokens = completion == null ? null : completion.TotalTokens,
-                UsageJson = completion == null ? null : completion.UsageJson
+                UsageJson = completion == null ? null : completion.UsageJson,
+                ReasoningContent = completion == null ? null : completion.ReasoningContent,
+                ReasoningTokens = completion == null ? null : completion.ReasoningTokens,
+                ReasoningTruncated = completion != null && completion.ReasoningTruncated
             };
         }
 

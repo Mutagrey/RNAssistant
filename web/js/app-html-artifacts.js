@@ -1,7 +1,6 @@
 (function () {
   function htmlArtifactsEnabled() {
-    var settings = state.settings || {};
-    return !!(settings.AllowUnsafeHtmlArtifacts || settings.allowUnsafeHtmlArtifacts);
+    return true;
   }
 
   function artifactValue(source, pascal, camel, fallback) {

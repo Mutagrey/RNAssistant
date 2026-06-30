@@ -8,15 +8,15 @@
   <link rel="stylesheet" href="css/vendor/katex.min.css">
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
-  <link rel="stylesheet" href="css/app.css?v=chatui-20260630-1">
-  <link rel="stylesheet" href="css/app-chat.css?v=chatui-20260630-1">
+  <link rel="stylesheet" href="css/app.css?v=chatui-20260630-2">
+  <link rel="stylesheet" href="css/app-chat.css?v=chatui-20260630-6">
   <link rel="stylesheet" href="css/app-markdown.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-composer.css?v=chatui-20260622-10">
   <link rel="stylesheet" href="css/app-context-chips.css?v=chatui-20260622-1">
-  <link rel="stylesheet" href="css/app-models.css?v=chatui-20260630-1">
+  <link rel="stylesheet" href="css/app-models.css?v=chatui-20260630-3">
   <link rel="stylesheet" href="css/app-workspace.css?v=chatui-20260630-1">
   <link rel="stylesheet" href="css/app-tools.css?v=chatui-20260622-5">
-  <link rel="stylesheet" href="css/app-prompts.css?v=chatui-20260630-1">
+  <link rel="stylesheet" href="css/app-prompts.css?v=chatui-20260630-2">
   <link rel="stylesheet" href="css/app-vba.css?v=chatui-20260622-7">
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
@@ -67,8 +67,7 @@
           <aside class="chat-sidebar" aria-label="Документы и чаты">
             <div class="chat-sidebar-head">
               <div class="chat-tree-toolbar">
-                <button type="button" class="icon-button secondary" id="collapseChatTreeButton" title="Свернуть всё" aria-label="Свернуть всё"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 14 5-5 5 5"/></svg></button>
-                <button type="button" class="icon-button secondary" id="expandChatTreeButton" title="Развернуть всё" aria-label="Развернуть всё"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></button>
+                <button type="button" class="icon-button secondary" id="toggleChatTreeButton" title="Свернуть всё дерево" aria-label="Свернуть всё дерево"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 9 4-4 4 4"/><path d="m8 15 4 4 4-4"/></svg></button>
                 <button type="button" class="icon-button secondary" id="newChatButton" title="Новый чат" aria-label="Новый чат"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg></button>
               </div>
               <input id="chatSearchInput" class="chat-search" type="search" placeholder="Поиск чатов..." autocomplete="off">
@@ -79,6 +78,9 @@
           <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину дерева документов и чатов"></div>
           <div class="chat-main">
         <div class="chatbar">
+          <button class="icon-button secondary html-sidebar-toggle-button" id="toggleChatSidebarButton" type="button" title="Скрыть список" aria-label="Скрыть список">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></svg>
+          </button>
           <div class="chat-title-block">
             <strong id="activeChatTitle">Новый чат</strong>
             <span id="activeChatDocument"></span>
@@ -444,16 +446,23 @@
               </div>
               <div class="form-grid two-columns">
                 <label><span>Модель по умолчанию</span><select id="modelSelect"></select></label>
-                <label><span>Резервная модель</span><input id="modelInput" autocomplete="off"></label>
+                <label><span>ID модели вручную</span><input id="modelInput" autocomplete="off" placeholder="Если модели нет в каталоге"></label>
                 <div class="model-info wide" id="modelInfo"></div>
-                <label><span>Поддержка изображений</span><select id="modelImageSupportInput"><option value="">Авто (из каталога)</option><option value="true">Да</option><option value="false">Нет</option></select></label>
-                <div class="model-capability-status" id="modelImageSupportStatus"></div>
+                <section class="model-capability-section wide" aria-labelledby="modelCapabilityTitle">
+                  <div class="model-capability-heading">
+                    <div>
+                      <h3 id="modelCapabilityTitle">Поддержка изображений</h3>
+                      <p>Галочка задаёт ручной статус. «Авто» возвращает значение из каталога.</p>
+                    </div>
+                  </div>
+                  <div class="model-capability-list" id="modelCapabilityList"></div>
+                </section>
                 <label><span>Макс. токены ответа</span><input id="maxTokensInput" type="number" min="1" max="200000"></label>
                 <label><span>Таймаут запроса, сек</span><input id="requestTimeoutInput" type="number" min="30" max="3600"></label>
                 <label><span>Temperature</span><input id="temperatureInput" type="number" min="0" max="2" step="0.1"></label>
                 <label><span>Top P</span><input id="topPInput" type="number" min="0" max="1" step="0.01"></label>
                 <label><span>Лимит контекста, символы</span><input id="contextLimitInput" type="number" min="1000" max="200000"></label>
-                <label class="checkline"><input id="streamInput" type="checkbox"><span>Потоковые ответы</span></label>
+                <label class="checkline"><input id="streamInput" type="checkbox"><span>Потоковый API (SSE)</span></label>
               </div>
               <div class="toolbar">
                 <button class="secondary" id="loadModelsButton" type="button">Обновить список моделей</button>
@@ -487,9 +496,8 @@
               <div class="form-grid two-columns">
                 <label><span>Размер шрифта, %</span><input id="uiFontScaleInput" type="number" min="85" max="130" step="5"></label>
                 <label class="checkline"><input id="smartChatTitlesInput" type="checkbox"><span>Умные названия чатов</span></label>
-                <label class="checkline"><input id="allowUnsafeHtmlArtifactsInput" type="checkbox"><span>HTML preview и артефакты</span></label>
               </div>
-              <div class="setting-note">HTML preview выполняется в sandboxed iframe. Включайте только для тестов с доверенным содержимым.</div>
+              <div class="setting-note">HTML preview всегда доступен и выполняется в sandboxed iframe.</div>
             </section>
 
             <section class="settings-page" data-settings-page="prompts">
@@ -630,7 +638,7 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=chatui-20260630-1"></script>
+  <script src="js/app-core.js?v=chatui-20260630-3"></script>
   <script src="js/app-utils.js?v=chatui-20260620-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
@@ -638,10 +646,10 @@
   <script src="js/app-settings.js?v=chatui-20260630-1"></script>
   <script src="js/app-prompts.js?v=chatui-20260622-3"></script>
   <script src="js/app-model-data.js?v=chatui-20260630-1"></script>
-  <script src="js/app-model-render.js?v=chatui-20260630-1"></script>
-  <script src="js/app-models.js?v=chatui-20260630-1"></script>
+  <script src="js/app-model-render.js?v=chatui-20260630-3"></script>
+  <script src="js/app-models.js?v=chatui-20260630-2"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=chatui-20260630-1"></script>
+  <script src="js/app-chat-state.js?v=chatui-20260630-4"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
   <script src="js/app-tools.js?v=chatui-20260622-4"></script>
   <script src="js/app-skills.js?v=chatui-20260622-4"></script>
@@ -655,7 +663,7 @@
   <script src="js/app-agent.js?v=chatui-20260622-3"></script>
   <script src="js/app-messages.js?v=chatui-20260622-3"></script>
   <script src="js/app-attachments.js?v=attachments-20260630-1"></script>
-  <script src="js/app-chat.js?v=chatui-20260630-1"></script>
-  <script src="js/app.js?v=chatui-20260621-2"></script>
+  <script src="js/app-chat.js?v=chatui-20260630-3"></script>
+  <script src="js/app.js?v=chatui-20260630-3"></script>
 </body>
 </html>

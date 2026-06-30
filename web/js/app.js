@@ -14,6 +14,11 @@ function switchTab(name) {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
+  try {
+    state.chatSidebarHidden = window.localStorage.getItem("rnassistant.chat.sidebar.hidden") === "1";
+  } catch (error) {
+    state.chatSidebarHidden = false;
+  }
   ["focusin", "focusout", "selectionchange", "mouseup", "keyup"].forEach(function (name) {
     document.addEventListener(name, scheduleFocusStateReport);
   });

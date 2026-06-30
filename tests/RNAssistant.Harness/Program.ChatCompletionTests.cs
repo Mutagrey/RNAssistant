@@ -22,6 +22,25 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void LlmStreamingResponseIsAggregated()
+        {
+            var sse =
+                "data: {\"choices\":[{\"delta\":{\"content\":\"Hello \"}}]}\\n\\n" +
+                "data: {\"choices\":[{\"delta\":{\"content\":\"world\"}}]}\\n\\n" +
+                "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"excel.read_range\",\"arguments\":\"{\\\"address\\\":\"}}]}}]}\\n\\n" +
+                "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"A1:B2\\\"}\"}}]}}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}\\n\\n" +
+                "data: [DONE]\\n\\n";
+
+            var result = LlmClient.ParseStreamingResponse(sse.Replace("\\n", "\n"));
+
+            AssertContains(result.Content, "\"kind\":\"tool_plan\"", "stream tool plan");
+            AssertContains(result.Content, "excel.read_range", "stream tool name");
+            AssertContains(result.Content, "A1:B2", "stream tool arguments");
+            AssertEqual(10, result.PromptTokens.Value, "stream prompt tokens");
+            AssertEqual(5, result.CompletionTokens.Value, "stream completion tokens");
+            AssertEqual(15, result.TotalTokens.Value, "stream total tokens");
+        }
+
         private static void ChatCompletionServiceRecordsProseResponse()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

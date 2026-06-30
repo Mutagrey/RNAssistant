@@ -11,6 +11,8 @@ var state = {
   documents: [],
   chatSearch: "",
   collapsedChatDocuments: {},
+  chatSidebarHidden: false,
+  chatTreeCollapsedAll: false,
   activeChatId: "",
   activeChatModel: "",
   activeChatHtmlMode: false,

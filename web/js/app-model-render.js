@@ -160,7 +160,7 @@ function renderModelInfo(selectedValue) {
   var title = document.createElement("div");
   title.className = "model-info-title";
   var titleText = document.createElement("span");
-  titleText.textContent = model ? model.title : "Резервная модель по умолчанию";
+  titleText.textContent = model ? model.title : "Модель, заданная вручную";
   title.appendChild(titleText);
 
   if (model && state.modelCatalog.defaultModel &&
@@ -232,7 +232,7 @@ function renderModelControls() {
   populateChatModelSelect($("chatModelSelect"));
   renderModelInfo(formModel());
   renderModelStatus();
-  renderModelImageSupport();
+  renderModelCapabilityList();
   renderActiveModelCapability();
 }
 
@@ -248,16 +248,92 @@ function renderActiveModelCapability() {
     (support === true ? "Изображения поддерживаются." : (support === false ? "Изображения отключены." : "Поддержка изображений не определена."));
 }
 
-function renderModelImageSupport() {
-  var input = $("modelImageSupportInput");
-  var status = $("modelImageSupportStatus");
-  if (!input || !status) return;
-  var value = formModel();
+function setModelImageSupportOverride(value, enabled) {
+  value = String(value || "").trim();
+  if (!value) return;
+  var settings = state.settings || (state.settings = {});
   var overrides = modelImageSupportOverrides();
-  var hasOverride = Object.prototype.hasOwnProperty.call(overrides, value) && overrides[value] !== null;
-  input.value = hasOverride ? String(!!overrides[value]) : "";
-  var effective = effectiveModelSupportsImages(value);
-  status.textContent = "Текущий статус: " +
-    (effective === true ? "изображения включены" : (effective === false ? "изображения выключены" : "не определён")) +
-    " · источник: " + (hasOverride ? "ручная настройка" : "каталог моделей");
+  settings.ModelImageSupportOverrides = overrides;
+  if (enabled === null) {
+    delete overrides[value];
+  } else {
+    overrides[value] = !!enabled;
+  }
+  settingsDirty = true;
+  updateSettingsSaveButton();
+  renderModelControls();
+}
+
+function renderModelCapabilityList() {
+  var list = $("modelCapabilityList");
+  if (!list) return;
+
+  var models = (state.modelCatalog.models || []).slice();
+  var manualValue = formModel();
+  if (manualValue && !findModel(manualValue)) {
+    models.unshift({ value: manualValue, title: manualValue, supportsImages: null, inputModalities: [] });
+  }
+  list.innerHTML = "";
+
+  if (!models.length) {
+    var empty = document.createElement("div");
+    empty.className = "model-capability-empty";
+    empty.textContent = state.modelCatalog.loading ? "Загрузка моделей..." : "Загрузите каталог моделей.";
+    list.appendChild(empty);
+    return;
+  }
+
+  var overrides = modelImageSupportOverrides();
+  models.forEach(function (model) {
+    var value = model.value;
+    var hasOverride = Object.prototype.hasOwnProperty.call(overrides, value) && overrides[value] !== null;
+    var catalogSupport = catalogModelSupportsImages(model);
+    var effective = hasOverride ? !!overrides[value] : catalogSupport;
+
+    var row = document.createElement("div");
+    row.className = "model-capability-row";
+
+    var toggle = document.createElement("input");
+    toggle.type = "checkbox";
+    toggle.checked = effective === true;
+    toggle.indeterminate = effective === null;
+    toggle.setAttribute("aria-label", "Поддержка изображений: " + value);
+    toggle.addEventListener("change", function () {
+      setModelImageSupportOverride(value, toggle.checked);
+    });
+    row.appendChild(toggle);
+
+    var text = document.createElement("div");
+    text.className = "model-capability-text";
+    var title = document.createElement("div");
+    title.className = "model-capability-title";
+    title.textContent = model.title || value;
+    text.appendChild(title);
+    if (model.title && model.title !== value) {
+      var id = document.createElement("div");
+      id.className = "model-capability-id";
+      id.textContent = value;
+      text.appendChild(id);
+    }
+    row.appendChild(text);
+
+    var source = document.createElement("span");
+    source.className = "model-capability-source " + (hasOverride ? "is-manual" : "");
+    source.textContent = hasOverride
+      ? "Вручную"
+      : (catalogSupport === true ? "Каталог: да" : (catalogSupport === false ? "Каталог: нет" : "Не определено"));
+    row.appendChild(source);
+
+    var reset = document.createElement("button");
+    reset.type = "button";
+    reset.className = "model-capability-reset";
+    reset.textContent = "Авто";
+    reset.disabled = !hasOverride;
+    reset.title = hasOverride ? "Использовать статус из каталога" : "Уже используется статус из каталога";
+    reset.addEventListener("click", function () {
+      setModelImageSupportOverride(value, null);
+    });
+    row.appendChild(reset);
+    list.appendChild(row);
+  });
 }

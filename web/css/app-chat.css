@@ -12,6 +12,19 @@
   background: #fff;
 }
 
+.chat-workspace.is-sidebar-hidden {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.chat-workspace.is-sidebar-hidden .chat-sidebar,
+.chat-workspace.is-sidebar-hidden > .splitter {
+  display: none;
+}
+
+.chat-workspace.is-sidebar-hidden .chat-main {
+  grid-column: 1;
+}
+
 .chat-sidebar {
   display: flex;
   min-width: 0;
@@ -69,6 +82,7 @@
 
 .chat-title-block {
   display: grid;
+  flex: 1 1 auto;
   min-width: 0;
   gap: 2px;
 }
@@ -174,6 +188,11 @@
   font-size: 14px;
 }
 
+.chat-row-action svg {
+  width: 13px;
+  height: 13px;
+}
+
 .chat-row-action:hover {
   border: 0;
   background: #e3eaf3;
@@ -231,12 +250,19 @@
 }
 
 .chat-document-open {
-  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
 }
 
 .chat-document-row:hover .chat-document-open,
 .chat-document-row:focus-within .chat-document-open {
-  visibility: visible;
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .chat-document-open {
+    opacity: 1;
+  }
 }
 
 .chat-document-caret {

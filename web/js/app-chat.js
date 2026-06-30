@@ -590,20 +590,23 @@ function bindChatActions() {
   $("refreshButton").addEventListener("click", initialize);
   $("chatSessionSelect").addEventListener("change", function () { selectChat($("chatSessionSelect").value); });
   $("newChatButton").addEventListener("click", createChat);
-  $("collapseChatTreeButton").addEventListener("click", function () {
-    (state.chats || []).forEach(function (chat) {
-      state.collapsedChatDocuments[chatHost(chat) + "|" + chatDocumentKey(chat)] = true;
-    });
-    (state.documents || []).forEach(function (item) {
-      var host = item.host || item.Host || state.host || "";
-      var key = item.documentKey || item.DocumentKey || "";
-      state.collapsedChatDocuments[host + "|" + key] = true;
-    });
+  $("toggleChatTreeButton").addEventListener("click", function () {
+    state.chatTreeCollapsedAll = !state.chatTreeCollapsedAll;
+    if (!state.chatTreeCollapsedAll) {
+      state.collapsedChatDocuments = {};
+    }
     renderChatSessionList(state.chats || []);
   });
-  $("expandChatTreeButton").addEventListener("click", function () {
-    state.collapsedChatDocuments = {};
-    renderChatSessionList(state.chats || []);
+  $("toggleChatSidebarButton").addEventListener("click", function () {
+    state.chatSidebarHidden = !state.chatSidebarHidden;
+    try {
+      window.localStorage.setItem("rnassistant.chat.sidebar.hidden", state.chatSidebarHidden ? "1" : "0");
+    } catch (error) {
+    }
+    renderChatTreeControls();
+    if (typeof refreshCodeEditors === "function") {
+      refreshCodeEditors();
+    }
   });
   $("openDocumentButton").addEventListener("click", openActiveDocument);
   $("chatSearchInput").addEventListener("input", function () {

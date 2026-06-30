@@ -98,6 +98,7 @@ function renderChatSessionList(chats) {
   }
 
   list.innerHTML = "";
+  renderChatTreeControls();
   if (!chats.length && !(state.documents || []).length) {
     list.classList.add("is-empty");
     var empty = document.createElement("div");
@@ -166,7 +167,7 @@ function renderChatSessionList(chats) {
 function renderChatDocumentNode(documentItem, query) {
   var group = document.createElement("section");
   group.className = "chat-document" + (documentItem.current ? " is-current" : (documentItem.open ? " is-open" : " is-closed"));
-  var collapsed = !query && !!state.collapsedChatDocuments[documentItem.key];
+  var collapsed = !query && (state.chatTreeCollapsedAll || !!state.collapsedChatDocuments[documentItem.key]);
 
   var header = document.createElement("div");
   header.className = "chat-document-row";
@@ -177,9 +178,10 @@ function renderChatDocumentNode(documentItem, query) {
     "<span class=\"chat-document-icon\">" + documentHostInitial(documentItem.host) + "</span>" +
     "<span class=\"chat-document-name\"></span>" +
     "<span class=\"chat-document-state\">" + (documentItem.current ? "Активен" : (documentItem.open ? "Открыт" : "Закрыт")) + "</span></button>" +
-    "<button type=\"button\" class=\"chat-row-action chat-document-open\" title=\"" + (documentItem.open ? "Активировать документ" : "Открыть документ") + "\" aria-label=\"" + (documentItem.open ? "Активировать документ" : "Открыть документ") + "\">↗</button>";
+    "<button type=\"button\" class=\"chat-row-action chat-document-open\" title=\"" + (documentItem.open ? "Активировать документ" : "Открыть документ") + "\" aria-label=\"" + (documentItem.open ? "Активировать документ" : "Открыть документ") + "\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"4\" y=\"7\" width=\"11\" height=\"11\" rx=\"1.5\"/><path d=\"M9 7V5.5A1.5 1.5 0 0 1 10.5 4H19a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-4\"/><path d=\"M11 12h8\"/><path d=\"m16 9 3 3-3 3\"/></svg></button>";
   header.querySelector(".chat-document-name").textContent = documentItem.title;
   header.querySelector(".chat-document-toggle").addEventListener("click", function () {
+    state.chatTreeCollapsedAll = false;
     state.collapsedChatDocuments[documentItem.key] = !children.hidden;
     renderChatSessionList(state.chats || []);
   });
@@ -208,6 +210,31 @@ function renderChatDocumentNode(documentItem, query) {
   return group;
 }
 
+function renderChatTreeControls() {
+  var treeButton = $("toggleChatTreeButton");
+  if (treeButton) {
+    var collapse = !state.chatTreeCollapsedAll;
+    treeButton.title = collapse ? "Свернуть всё дерево" : "Развернуть всё дерево";
+    treeButton.setAttribute("aria-label", treeButton.title);
+    treeButton.setAttribute("aria-pressed", state.chatTreeCollapsedAll ? "true" : "false");
+    treeButton.innerHTML = state.chatTreeCollapsedAll
+      ? "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m8 8 4 4 4-4\"/><path d=\"m8 14 4 4 4-4\"/></svg>"
+      : "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m8 10 4-4 4 4\"/><path d=\"m8 16 4-4 4 4\"/></svg>";
+  }
+
+  var layout = $("chatLayout");
+  var sidebarButton = $("toggleChatSidebarButton");
+  if (layout) {
+    layout.classList.toggle("is-sidebar-hidden", !!state.chatSidebarHidden);
+  }
+  if (sidebarButton) {
+    var label = state.chatSidebarHidden ? "Показать список" : "Скрыть список";
+    sidebarButton.title = label;
+    sidebarButton.setAttribute("aria-label", label);
+    sidebarButton.setAttribute("aria-pressed", state.chatSidebarHidden ? "true" : "false");
+  }
+}
+
 function renderChatTreeRow(chat) {
   var row = document.createElement("div");
   var id = chatId(chat);
@@ -229,7 +256,7 @@ function renderChatTreeRow(chat) {
   row.appendChild(button);
   var actions = document.createElement("span");
   actions.className = "chat-row-actions";
-  actions.innerHTML = "<button type=\"button\" class=\"chat-row-action chat-edit\" title=\"Переименовать\" aria-label=\"Переименовать чат\">✎</button><button type=\"button\" class=\"chat-row-action chat-delete\" title=\"Удалить\" aria-label=\"Удалить чат\">⌫</button>";
+  actions.innerHTML = "<button type=\"button\" class=\"chat-row-action chat-edit\" title=\"Переименовать\" aria-label=\"Переименовать чат\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 20h9\"/><path d=\"M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z\"/></svg></button><button type=\"button\" class=\"chat-row-action chat-delete\" title=\"Удалить\" aria-label=\"Удалить чат\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 6h18\"/><path d=\"M8 6V4h8v2\"/><path d=\"m19 6-1 14H6L5 6\"/><path d=\"M10 11v5\"/><path d=\"M14 11v5\"/></svg></button>";
   actions.querySelector(".chat-edit").addEventListener("click", function () { renameChat(id); });
   actions.querySelector(".chat-delete").addEventListener("click", function () { deleteChat(id); });
   row.appendChild(actions);

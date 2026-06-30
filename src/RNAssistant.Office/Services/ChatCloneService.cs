@@ -67,6 +67,9 @@ namespace RNAssistant.Office.Services
                 CompletionTokens = message.CompletionTokens,
                 TotalTokens = message.TotalTokens,
                 UsageJson = message.UsageJson,
+                ReasoningContent = message.ReasoningContent,
+                ReasoningTokens = message.ReasoningTokens,
+                ReasoningTruncated = message.ReasoningTruncated,
                 CreatedUtc = message.CreatedUtc
             };
         }
@@ -86,7 +89,12 @@ namespace RNAssistant.Office.Services
                 Kind = attachment.Kind,
                 RelativePath = attachment.RelativePath,
                 ExtractedText = attachment.ExtractedText,
+                ExtractedTextPath = attachment.ExtractedTextPath,
+                ExtractedCharCount = attachment.ExtractedCharCount,
                 TextTruncated = attachment.TextTruncated,
+                PageCount = attachment.PageCount,
+                PageTextLengths = attachment.PageTextLengths == null ? new List<int>() : new List<int>(attachment.PageTextLengths),
+                ExtractionWarning = attachment.ExtractionWarning,
                 Status = attachment.Status,
                 Error = attachment.Error,
                 CreatedUtc = attachment.CreatedUtc
