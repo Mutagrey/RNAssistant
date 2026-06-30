@@ -25,10 +25,12 @@ namespace RNAssistant.Harness
         private static void LlmStreamingResponseIsAggregated()
         {
             var sse =
+                "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"Check range. \"}}]}\\n\\n" +
+                "data: {\"choices\":[{\"delta\":{\"reasoning\":\"Use tool.\"}}]}\\n\\n" +
                 "data: {\"choices\":[{\"delta\":{\"content\":\"Hello \"}}]}\\n\\n" +
                 "data: {\"choices\":[{\"delta\":{\"content\":\"world\"}}]}\\n\\n" +
                 "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"excel.read_range\",\"arguments\":\"{\\\"address\\\":\"}}]}}]}\\n\\n" +
-                "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"A1:B2\\\"}\"}}]}}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}\\n\\n" +
+                "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"A1:B2\\\"}\"}}]}}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15,\"completion_tokens_details\":{\"reasoning_tokens\":2}}}\\n\\n" +
                 "data: [DONE]\\n\\n";
 
             var result = LlmClient.ParseStreamingResponse(sse.Replace("\\n", "\n"));
@@ -36,9 +38,51 @@ namespace RNAssistant.Harness
             AssertContains(result.Content, "\"kind\":\"tool_plan\"", "stream tool plan");
             AssertContains(result.Content, "excel.read_range", "stream tool name");
             AssertContains(result.Content, "A1:B2", "stream tool arguments");
+            AssertEqual("Check range. Use tool.", result.ReasoningContent, "stream reasoning");
+            AssertEqual(2, result.ReasoningTokens.Value, "stream reasoning tokens");
             AssertEqual(10, result.PromptTokens.Value, "stream prompt tokens");
             AssertEqual(5, result.CompletionTokens.Value, "stream completion tokens");
             AssertEqual(15, result.TotalTokens.Value, "stream total tokens");
+        }
+
+        private static void LlmThinkTagsAreSeparated()
+        {
+            var result = LlmClient.ParseStreamingResponse(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"<think>check facts</think>{\\\"kind\\\":\\\"final\\\",\\\"intent\\\":\\\"answer\\\",\\\"message\\\":\\\"ok\\\",\\\"steps\\\":[]}\"}}]}\n\ndata: [DONE]\n\n");
+            AssertEqual("check facts", result.ReasoningContent, "think tag reasoning");
+            AssertTrue(result.Content.StartsWith("{\"kind\":\"final\"", StringComparison.Ordinal), "think tag final content");
+        }
+
+        private static void ChatPlannerIncludesRecentHistory()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var captured = new List<ChatMessage>();
+                var service = new ChatCompletionService(
+                    adapter,
+                    executor,
+                    delegate(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
+                    {
+                        captured = new List<ChatMessage>(messages);
+                        return Task.FromResult(new LlmCompletionResult
+                        {
+                            Content = "{\"kind\":\"final\",\"intent\":\"answer\",\"message\":\"done\",\"steps\":[]}"
+                        });
+                    });
+                var session = NewSession(adapter);
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "Earlier question" });
+                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Earlier answer" });
+                service.ExecuteAsync(
+                    "Follow up",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { ContextWindowOverrideTokens = 32768 },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertTrue(ContainsMessage(captured, "Earlier question"), "recent user history");
+                AssertTrue(ContainsMessage(captured, "Earlier answer"), "recent assistant history");
+            });
         }
 
         private static void ChatCompletionServiceRecordsProseResponse()

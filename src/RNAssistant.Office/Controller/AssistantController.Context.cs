@@ -1,5 +1,6 @@
 using System;
 using Newtonsoft.Json;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Services;
 
@@ -28,7 +29,7 @@ namespace RNAssistant.Office
                 Title = string.IsNullOrWhiteSpace(title) ? "Context" : title.Trim(),
                 Reference = string.IsNullOrWhiteSpace(reference) ? title : reference.Trim(),
                 Source = string.IsNullOrWhiteSpace(reference) ? title : reference.Trim(),
-                Text = ContextService.TrimForContext(text ?? string.Empty, Math.Max(1000, settings.ContextCharLimit)),
+                Text = ContextService.TrimForContext(text ?? string.Empty, ModelContextBudget.InputBudgetTokens(settings) * 3),
                 Preview = ContextService.TrimForContext(text ?? string.Empty, 360),
                 DetailsJson = detailsJson
             }, kind);
@@ -84,7 +85,7 @@ namespace RNAssistant.Office
             catch
             {
             }
-            var note = _adapter.CaptureSelectionContext(mode, Math.Min(Math.Max(1000, settings.ContextCharLimit), 12000));
+            var note = _adapter.CaptureSelectionContext(mode, ModelContextBudget.InputBudgetTokens(settings) * 3);
             if (note == null)
             {
                 throw new InvalidOperationException("No selectable Office context was found.");

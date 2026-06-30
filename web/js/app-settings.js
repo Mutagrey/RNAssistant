@@ -24,7 +24,7 @@ function renderSettings() {
   $("temperatureInput").value = s.Temperature || s.temperature || 0.2;
   $("topPInput").value = s.TopP || s.topP || 1;
   $("uiFontScaleInput").value = Math.round(clampUiFontScale(s.UiFontScale || s.uiFontScale || 1) * 100);
-  $("contextLimitInput").value = s.ContextCharLimit || s.contextCharLimit || 24000;
+  $("contextLimitInput").value = s.ContextWindowOverrideTokens || s.contextWindowOverrideTokens || 0;
   $("streamInput").checked = !!(s.StreamResponses || s.streamResponses);
   $("autoRunToolsInput").checked = (s.AutoRunToolCalls !== false && s.autoRunToolCalls !== false);
   $("autoConfirmToolsInput").checked = !!(s.AutoConfirmToolActions || s.autoConfirmToolActions);
@@ -60,7 +60,7 @@ function readSettings() {
     Temperature: Number($("temperatureInput").value || 0.2),
     TopP: Number($("topPInput").value || 1),
     UiFontScale: clampUiFontScale(Number($("uiFontScaleInput").value || 100) / 100),
-    ContextCharLimit: Number($("contextLimitInput").value || 24000),
+    ContextWindowOverrideTokens: Number($("contextLimitInput").value || 0),
     StreamResponses: $("streamInput").checked,
     AutoRunToolCalls: $("autoRunToolsInput").checked,
     AutoConfirmToolActions: $("autoConfirmToolsInput").checked,
@@ -76,6 +76,7 @@ function readSettings() {
     AgentPrompt: promptSettings.AgentPrompt,
     AgentPrompts: promptSettings.AgentPrompts,
     ModelImageSupportOverrides: modelImageSupportOverrides(),
+    ModelCapabilities: modelCapabilitiesForSettings(),
     CustomHeaders: textToHeaders($("headersInput").value)
   };
 }

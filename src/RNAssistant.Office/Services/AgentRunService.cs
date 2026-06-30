@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -15,7 +16,7 @@ namespace RNAssistant.Office.Services
     {
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly OfficeToolExecutor _toolExecutor;
-        private readonly Func<AppSettings, IEnumerable<ChatMessage>, CancellationToken, Task<LlmCompletionResult>> _completeAsync;
+        private readonly ChatCompletionService.CompletionDelegate _completeAsync;
         private readonly AgentPlannerResponseParser _plannerParser;
         private readonly OfficeIntentRouter _intentRouter;
         private readonly ToolCatalogSlicer _toolCatalogSlicer;
@@ -30,6 +31,19 @@ namespace RNAssistant.Office.Services
             IOfficeApplicationAdapter adapter,
             OfficeToolExecutor toolExecutor,
             Func<AppSettings, IEnumerable<ChatMessage>, CancellationToken, Task<LlmCompletionResult>> completeAsync,
+            bool includeControllerTools = true)
+            : this(
+                adapter,
+                toolExecutor,
+                (settings, messages, streamProgress, cancellationToken) => completeAsync(settings, messages, cancellationToken),
+                includeControllerTools)
+        {
+        }
+
+        public AgentRunService(
+            IOfficeApplicationAdapter adapter,
+            OfficeToolExecutor toolExecutor,
+            ChatCompletionService.CompletionDelegate completeAsync,
             bool includeControllerTools = true)
         {
             _adapter = adapter;
@@ -172,11 +186,22 @@ namespace RNAssistant.Office.Services
                 var requestText = string.IsNullOrWhiteSpace(initialFollowUpPrompt)
                     ? taskText
                     : taskText + "\n\nContinuation: " + initialFollowUpPrompt;
-                var messages = _plannerPromptComposer.BuildMessages(requestText, snapshot, route, slice, observations, documentContext, skills, settings);
+                var messages = _plannerPromptComposer.BuildMessages(
+                    requestText,
+                    snapshot,
+                    route,
+                    slice,
+                    observations,
+                    documentContext,
+                    skills,
+                    settings,
+                    session,
+                    attachments);
                 ApplyAttachments(messages, attachments);
                 contextUsage = ContextUsageEstimator.FromPrompt(messages, settings);
                 ReportProgress(progress, "thinking", iteration == 0 ? "Планировщик думает..." : "Планировщик выбирает следующий шаг...");
-                var completion = await _completeAsync(settings, messages, cancellationToken).ConfigureAwait(false);
+                var completion = await CompleteWithProgressAsync(settings, messages, progress, cancellationToken).ConfigureAwait(false);
+                contextUsage = ContextUsageEstimator.FromPrompt(messages, settings, completion.PromptTokens);
                 cancellationToken.ThrowIfCancellationRequested();
                 var plannerText = completion.Content ?? string.Empty;
 
@@ -187,7 +212,8 @@ namespace RNAssistant.Office.Services
                     repairUsed = true;
                     ReportProgress(progress, "repairing", "Planner вернул невалидный JSON, запрашиваю исправление...");
                     var repairMessages = BuildStrictRepairMessages(messages, plannerText, parsed, settings);
-                    completion = await _completeAsync(settings, repairMessages, cancellationToken).ConfigureAwait(false);
+                    completion = await CompleteWithProgressAsync(settings, repairMessages, progress, cancellationToken).ConfigureAwait(false);
+                    contextUsage = ContextUsageEstimator.FromPrompt(repairMessages, settings, completion.PromptTokens);
                     plannerText = completion.Content ?? string.Empty;
                     parsed = _plannerParser.Parse(plannerText);
                 }
@@ -219,7 +245,7 @@ namespace RNAssistant.Office.Services
                     {
                         repairUsed = true;
                         var forced = BuildPlannerCorrectionMessages("This task requires Office tool use before a final answer.", snapshot, route, slice, observations, documentContext, skills, settings, taskText);
-                        var correctionCompletion = await _completeAsync(settings, forced, cancellationToken).ConfigureAwait(false);
+                        var correctionCompletion = await CompleteWithProgressAsync(settings, forced, progress, cancellationToken).ConfigureAwait(false);
                         var retryParsed = _plannerParser.Parse(correctionCompletion.Content ?? string.Empty);
                         if (retryParsed.Success)
                         {
@@ -761,6 +787,63 @@ namespace RNAssistant.Office.Services
                 ToolId = command == null ? string.Empty : command.ToolId,
                 ArgumentsJson = command == null ? null : JsonConvert.SerializeObject(command.Arguments, Formatting.Indented)
             };
+        }
+
+        private async Task<LlmCompletionResult> CompleteWithProgressAsync(
+            AppSettings settings,
+            IEnumerable<ChatMessage> messages,
+            Action<string, string, ChatActivity> progress,
+            CancellationToken cancellationToken)
+        {
+            var pendingReasoning = new StringBuilder();
+            var lastReportUtc = DateTime.UtcNow;
+            var reasoningSeen = false;
+            var completionReported = false;
+            Action<bool> flush = completed =>
+            {
+                if (completed && completionReported ||
+                    pendingReasoning.Length == 0 && (!completed || !reasoningSeen))
+                {
+                    return;
+                }
+                ReportProgress(progress, "thinking", completed ? "Рассуждение завершено." : "Модель рассуждает...", new ChatActivity
+                {
+                    Kind = "reasoning",
+                    Title = "Ход рассуждения",
+                    Status = completed ? "completed" : "running",
+                    ResultMessage = pendingReasoning.ToString()
+                });
+                pendingReasoning.Clear();
+                lastReportUtc = DateTime.UtcNow;
+                if (completed)
+                {
+                    completionReported = true;
+                }
+            };
+            var completion = await _completeAsync(
+                settings,
+                messages,
+                update =>
+                {
+                    if (update == null)
+                    {
+                        return;
+                    }
+                    if (!string.IsNullOrEmpty(update.ReasoningDelta))
+                    {
+                        reasoningSeen = true;
+                        pendingReasoning.Append(update.ReasoningDelta);
+                    }
+                    if (update.Completed ||
+                        pendingReasoning.Length >= 256 ||
+                        pendingReasoning.Length > 0 && DateTime.UtcNow - lastReportUtc >= TimeSpan.FromMilliseconds(100))
+                    {
+                        flush(update.Completed);
+                    }
+                },
+                cancellationToken).ConfigureAwait(false);
+            flush(true);
+            return completion;
         }
 
         private static void ReportProgress(Action<string, string, ChatActivity> progress, string phase, string message)

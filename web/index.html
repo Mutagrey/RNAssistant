@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="css/app-chat.css?v=chatui-20260630-6">
   <link rel="stylesheet" href="css/app-markdown.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-composer.css?v=chatui-20260622-10">
+  <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260630-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-models.css?v=chatui-20260630-3">
   <link rel="stylesheet" href="css/app-workspace.css?v=chatui-20260630-1">
@@ -151,7 +152,7 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.4 11.6-8.9 8.9a6 6 0 0 1-8.5-8.5l9.6-9.6a4 4 0 0 1 5.7 5.7l-9.6 9.6a2 2 0 1 1-2.8-2.8l8.9-8.9"/></svg>
               <span>Файл</span>
             </button>
-            <input id="attachmentFileInput" type="file" multiple hidden accept=".png,.jpg,.jpeg,.webp,.gif,.pdf,.txt,.md,.json,.csv,image/*,application/pdf,text/plain,text/markdown,application/json,text/csv">
+            <input id="attachmentFileInput" type="file" multiple hidden>
             <button type="button" class="secondary icon-text-button" id="addSelectionContextButton" title="Добавить текущее выделение Office в контекст">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
               <span>Выделение</span>
@@ -461,7 +462,7 @@
                 <label><span>Таймаут запроса, сек</span><input id="requestTimeoutInput" type="number" min="30" max="3600"></label>
                 <label><span>Temperature</span><input id="temperatureInput" type="number" min="0" max="2" step="0.1"></label>
                 <label><span>Top P</span><input id="topPInput" type="number" min="0" max="1" step="0.01"></label>
-                <label><span>Лимит контекста, символы</span><input id="contextLimitInput" type="number" min="1000" max="200000"></label>
+                <label><span>Окно контекста, токены (0 = авто)</span><input id="contextLimitInput" type="number" min="0" max="1000000"></label>
                 <label class="checkline"><input id="streamInput" type="checkbox"><span>Потоковый API (SSE)</span></label>
               </div>
               <div class="toolbar">
@@ -662,6 +663,7 @@
   <script src="js/app-html-artifacts.js?v=chatui-20260622-3"></script>
   <script src="js/app-agent.js?v=chatui-20260622-3"></script>
   <script src="js/app-messages.js?v=chatui-20260622-3"></script>
+  <script src="js/app-reasoning.js?v=reasoning-20260630-1"></script>
   <script src="js/app-attachments.js?v=attachments-20260630-1"></script>
   <script src="js/app-chat.js?v=chatui-20260630-3"></script>
   <script src="js/app.js?v=chatui-20260630-3"></script>

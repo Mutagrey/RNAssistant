@@ -147,9 +147,9 @@ namespace RNAssistant.Harness
 
         private static void PromptLimitsSkillBodies()
         {
-            var longBody = "# Long skill\n" + new string('a', 2500) + "TAIL_MARKER";
+            var longBody = "# Long skill\n" + new string('a', 5000) + "TAIL_MARKER";
             var prompt = new PromptComposer().ComposeSystemPrompt(
-                new AppSettings { ContextCharLimit = 4000 },
+                new AppSettings { ContextWindowOverrideTokens = 4096 },
                 "Excel",
                 string.Empty,
                 string.Empty,

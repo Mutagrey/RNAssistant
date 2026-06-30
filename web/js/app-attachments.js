@@ -115,7 +115,9 @@ function attachmentCard(item, removable) {
   copy.appendChild(name);
   var meta = document.createElement("div");
   meta.className = "attachment-meta";
-  meta.textContent = formatAttachmentSize(attachmentSize(item));
+  var warning = attachmentValue(item, "ExtractionWarning", "extractionWarning", "");
+  meta.textContent = formatAttachmentSize(attachmentSize(item)) + (warning ? " · требуется внимание" : "");
+  if (warning) meta.title = warning;
   copy.appendChild(meta);
   card.appendChild(copy);
   if (removable) {

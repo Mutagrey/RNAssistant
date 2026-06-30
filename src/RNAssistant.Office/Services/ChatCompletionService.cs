@@ -18,6 +18,11 @@ namespace RNAssistant.Office.Services
     public sealed class ChatCompletionService
     {
         public delegate string PendingToolRegistrar(ChatSession session, ToolCommand command, ToolResult result);
+        public delegate Task<LlmCompletionResult> CompletionDelegate(
+            AppSettings settings,
+            IEnumerable<ChatMessage> messages,
+            Action<LlmStreamUpdate> streamProgress,
+            CancellationToken cancellationToken);
 
         private readonly AgentRunService _agentRunService;
 
@@ -25,6 +30,14 @@ namespace RNAssistant.Office.Services
             IOfficeApplicationAdapter adapter,
             OfficeToolExecutor toolExecutor,
             Func<AppSettings, IEnumerable<ChatMessage>, CancellationToken, Task<LlmCompletionResult>> completeAsync)
+        {
+            _agentRunService = new AgentRunService(adapter, toolExecutor, completeAsync);
+        }
+
+        public ChatCompletionService(
+            IOfficeApplicationAdapter adapter,
+            OfficeToolExecutor toolExecutor,
+            CompletionDelegate completeAsync)
         {
             _agentRunService = new AgentRunService(adapter, toolExecutor, completeAsync);
         }

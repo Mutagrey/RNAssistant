@@ -39,6 +39,14 @@
       <HintPath>..\..\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="PDFtoImage">
+      <HintPath>..\..\packages\PDFtoImage.5.2.1\lib\net471\PDFtoImage.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="SkiaSharp">
+      <HintPath>..\..\packages\SkiaSharp.3.119.2\lib\net462\SkiaSharp.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
@@ -72,6 +80,8 @@
     <Compile Include="Services\ChatCompletionService.cs" />
     <Compile Include="Services\OfflineChatService.cs" />
     <Compile Include="Services\AttachmentImageService.cs" />
+    <Compile Include="Services\ModelAttachmentService.cs" />
+    <Compile Include="Services\ModelCapabilityService.cs" />
     <Compile Include="Services\ChatTitleBuilder.cs" />
     <Compile Include="Services\ChatSessionService.cs" />
     <Compile Include="Services\ContextService.cs" />
@@ -94,5 +104,7 @@
     <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <Import Project="..\..\packages\bblanchon.PDFium.Win32.147.0.7690\build\net461\bblanchon.PDFium.Win32.targets" Condition="Exists('..\..\packages\bblanchon.PDFium.Win32.147.0.7690\build\net461\bblanchon.PDFium.Win32.targets')" />
+  <Import Project="..\..\packages\SkiaSharp.NativeAssets.Win32.3.119.2\build\net462\SkiaSharp.NativeAssets.Win32.targets" Condition="Exists('..\..\packages\SkiaSharp.NativeAssets.Win32.3.119.2\build\net462\SkiaSharp.NativeAssets.Win32.targets')" />
   <Import Project="..\..\packages\Microsoft.Web.WebView2.1.0.2903.40\build\Microsoft.Web.WebView2.targets" Condition="Exists('..\..\packages\Microsoft.Web.WebView2.1.0.2903.40\build\Microsoft.Web.WebView2.targets')" />
 </Project>

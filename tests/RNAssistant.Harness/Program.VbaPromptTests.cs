@@ -114,14 +114,15 @@ namespace RNAssistant.Harness
 
         private static void ContextUsageEstimatorCountsPromptAndSession()
         {
-            var settings = new AppSettings { ContextCharLimit = 8000 };
+            var settings = new AppSettings { ContextWindowOverrideTokens = 8000 };
             var promptUsage = JObject.FromObject(ContextUsageEstimator.FromPrompt(new[]
             {
                 new ChatMessage { Role = "system", Content = "abc" },
                 new ChatMessage { Role = "user", Content = "defg" }
-            }, settings));
+            }, settings, 12));
             AssertEqual(7, promptUsage["usedChars"].Value<int>(), "prompt used chars");
-            AssertEqual(8000, promptUsage["limitChars"].Value<int>(), "prompt limit chars");
+            AssertEqual(12, promptUsage["usedTokens"].Value<int>(), "prompt used tokens");
+            AssertEqual(4928, promptUsage["limitTokens"].Value<int>(), "prompt input token budget");
             AssertEqual(2, promptUsage["messageCount"].Value<int>(), "prompt message count");
             AssertTrue(promptUsage["actual"].Value<bool>(), "prompt actual");
 

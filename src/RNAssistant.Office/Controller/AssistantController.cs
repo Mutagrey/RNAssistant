@@ -63,10 +63,24 @@ namespace RNAssistant.Office
             _toolCatalog = new ToolCatalogService(_adapter, _toolExecutor, _toolStore);
             _skillCatalog = new SkillCatalogService(_adapter, _skillStore);
             _chatSessions = new ChatSessionService(_adapter, _chatStore);
-            _llmClient = new LlmClient(() => _settingsService.LoadApiKey(), attachment => AttachmentImageService.ReadForModel(_attachmentStore, attachment));
-            var completion = completeAsync ?? _llmClient.CompleteAsync;
-            _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, completion);
-            _offlineChatService = new OfflineChatService(_toolExecutor, completion);
+            _llmClient = new LlmClient(
+                () => _settingsService.LoadApiKey(),
+                attachment => AttachmentImageService.ReadForModel(_attachmentStore, attachment),
+                attachment => _attachmentStore.ReadExtractedText(attachment),
+                (settings, attachment) => ModelAttachmentService.ReadForModel(_attachmentStore, settings, attachment));
+            if (completeAsync == null)
+            {
+                ChatCompletionService.CompletionDelegate streamingCompletion =
+                    (settings, messages, streamProgress, cancellationToken) =>
+                        _llmClient.CompleteAsync(settings, messages, streamProgress, cancellationToken);
+                _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, streamingCompletion);
+                _offlineChatService = new OfflineChatService(_toolExecutor, streamingCompletion);
+            }
+            else
+            {
+                _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, completeAsync);
+                _offlineChatService = new OfflineChatService(_toolExecutor, completeAsync);
+            }
             _contextService = new ContextService(_adapter);
             _syncRoot = new object();
             _pendingAgentTools = new Dictionary<string, PendingAgentTool>(StringComparer.OrdinalIgnoreCase);
@@ -306,11 +320,17 @@ namespace RNAssistant.Office
             var json = await _llmClient.GetModelsConfigJsonAsync(
                 settings,
                 string.IsNullOrWhiteSpace(apiKey) ? null : apiKey).ConfigureAwait(false);
+            var catalog = JToken.Parse(json);
+            var storedSettings = _settingsService.Load();
+            if (ModelCapabilityService.Merge(storedSettings, catalog))
+            {
+                _settingsService.Save(storedSettings);
+            }
 
             return new ModelCatalogResponse
             {
                 ConfigUrl = LlmClient.BuildModelsConfigUrl(settings.BaseUrl),
-                Catalog = JToken.Parse(json)
+                Catalog = catalog
             };
         }
 

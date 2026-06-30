@@ -328,8 +328,8 @@ function lastTokenUsageText() {
 
 function renderContextMeter() {
   var usage = state.contextUsage || {};
-  var used = Number(usage.usedChars || usage.UsedChars || 0);
-  var limit = Number(usage.limitChars || usage.LimitChars || 0);
+  var used = Number(usage.usedTokens || usage.UsedTokens || 0);
+  var limit = Number(usage.limitTokens || usage.LimitTokens || 0);
   var percent = Number(usage.percent || usage.Percent || (limit ? Math.round(used * 100 / limit) : 0));
   var value = $("contextMeterValue");
   var detail = $("contextMeterDetail");
@@ -339,7 +339,7 @@ function renderContextMeter() {
   }
 
   percent = Math.max(0, Math.min(100, percent));
-  var detailText = formatNumber(used) + " / " + formatNumber(limit) + " символов" + (usage.actual || usage.Actual ? "" : " · оценка") + lastTokenUsageText();
+  var detailText = formatNumber(used) + " / " + formatNumber(limit) + " токенов" + (usage.actual || usage.Actual ? " · API usage" : " · оценка") + lastTokenUsageText();
   var level = percent >= 90 ? "danger" : (percent >= 70 ? "warn" : "ok");
   meter.dataset.level = level;
   meter.style.setProperty("--context-meter-percent", percent + "%");
@@ -353,19 +353,44 @@ function renderContextMeter() {
 function updateEstimatedContextUsage() {
   var used = 0;
   state.messages.forEach(function (message) {
-    used += messageContent(message).length;
+    used += 4 + estimateTextTokens(messageContent(message));
+    messageAttachments(message).forEach(function (attachment) {
+      var chars = Number(attachment.ExtractedCharCount || attachment.extractedCharCount || 0);
+      used += Math.ceil(chars / 2);
+      if (attachmentKind(attachment) === "image") used += 4096;
+    });
   });
   contextNotes().forEach(function (note) {
-    used += noteText(note).length;
+    used += estimateTextTokens(noteText(note));
   });
 
-  var limit = Number((state.settings && (state.settings.ContextCharLimit || state.settings.contextCharLimit)) || 24000);
+  var settings = state.settings || {};
+  var override = Number(settings.ContextWindowOverrideTokens || settings.contextWindowOverrideTokens || 0);
+  var modelName = activeChatModel() || settingsModel();
+  var model = typeof findModel === "function" ? findModel(modelName) : null;
+  var capabilities = settings.ModelCapabilities || settings.modelCapabilities || {};
+  var capability = capabilities[modelName] || {};
+  var windowTokens = override || Number((model && model.maxContextTokens) || capability.MaxContextTokens || capability.maxContextTokens || 32768);
+  var maxOutput = Number(settings.MaxTokens || settings.maxTokens || 2048);
+  var limit = Math.max(1024, windowTokens - maxOutput - Math.max(1024, Math.ceil(windowTokens * 0.05)));
   state.contextUsage = {
-    usedChars: used,
-    limitChars: limit,
+    usedTokens: used,
+    limitTokens: limit,
     percent: limit ? Math.min(100, Math.round(used * 100 / limit)) : 0,
     actual: false
   };
+}
+
+function estimateTextTokens(text) {
+  text = String(text || "");
+  if (!text) return 0;
+  var bytes;
+  if (window.TextEncoder) {
+    bytes = new TextEncoder().encode(text).length;
+  } else {
+    bytes = unescape(encodeURIComponent(text)).length;
+  }
+  return Math.max(1, Math.ceil(bytes / 3));
 }
 
 function showSendError(error, text) {

@@ -78,6 +78,12 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("activity", NullValueHandling = NullValueHandling.Ignore)]
         public ChatActivity Activity { get; set; }
+
+        [JsonProperty("reasoningDelta", NullValueHandling = NullValueHandling.Ignore)]
+        public string ReasoningDelta { get; set; }
+
+        [JsonProperty("reasoningComplete", NullValueHandling = NullValueHandling.Ignore)]
+        public bool? ReasoningComplete { get; set; }
     }
 
     public sealed class ChatStateMessage

@@ -391,7 +391,13 @@ namespace RNAssistant.Office.WebView
                 {
                     Phase = phase,
                     Message = message,
-                    Activity = activity
+                    Activity = activity,
+                    ReasoningDelta = activity != null && string.Equals(activity.Kind, "reasoning", StringComparison.OrdinalIgnoreCase)
+                        ? activity.ResultMessage
+                        : null,
+                    ReasoningComplete = activity != null && string.Equals(activity.Kind, "reasoning", StringComparison.OrdinalIgnoreCase)
+                        ? (bool?)(string.Equals(activity.Status, "completed", StringComparison.OrdinalIgnoreCase))
+                        : null
                 }
             }));
         }

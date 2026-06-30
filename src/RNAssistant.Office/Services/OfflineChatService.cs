@@ -11,11 +11,20 @@ namespace RNAssistant.Office.Services
     public sealed class OfflineChatService
     {
         private readonly OfficeToolExecutor _toolExecutor;
-        private readonly Func<AppSettings, IEnumerable<ChatMessage>, CancellationToken, Task<LlmCompletionResult>> _completeAsync;
+        private readonly ChatCompletionService.CompletionDelegate _completeAsync;
 
         public OfflineChatService(
             OfficeToolExecutor toolExecutor,
             Func<AppSettings, IEnumerable<ChatMessage>, CancellationToken, Task<LlmCompletionResult>> completeAsync)
+        {
+            _toolExecutor = toolExecutor;
+            _completeAsync = (settings, messages, streamProgress, cancellationToken) =>
+                completeAsync(settings, messages, cancellationToken);
+        }
+
+        public OfflineChatService(
+            OfficeToolExecutor toolExecutor,
+            ChatCompletionService.CompletionDelegate completeAsync)
         {
             _toolExecutor = toolExecutor;
             _completeAsync = completeAsync;

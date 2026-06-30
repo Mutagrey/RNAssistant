@@ -50,6 +50,7 @@ function normalizeModelCatalog(payload) {
       temperature: modelField(item, "Temperature", "temperature", "temperature", null),
       topP: modelField(item, "TopP", "top_p", "topP", null),
       supportsImages: modelField(item, "SupportsImages", "supports_images", "supportsImages", null),
+      maxImagesPerPrompt: modelField(item, "MaxImagesPerPrompt", "max_images_per_prompt", "maxImagesPerPrompt", null),
       inputModalities: modelField(item, "InputModalities", "input_modalities", "inputModalities", []) || []
     });
   });
@@ -62,6 +63,23 @@ function normalizeModelCatalog(payload) {
     loading: false,
     error: ""
   };
+}
+
+function modelCapabilitiesForSettings() {
+  var settings = state.settings || {};
+  var existing = settings.ModelCapabilities || settings.modelCapabilities || {};
+  var result = {};
+  Object.keys(existing).forEach(function (key) {
+    result[key] = existing[key];
+  });
+  (state.modelCatalog.models || []).forEach(function (model) {
+    result[model.value] = {
+      MaxContextTokens: model.maxContextTokens || null,
+      SupportsImages: catalogModelSupportsImages(model),
+      MaxImagesPerPrompt: model.maxImagesPerPrompt || null
+    };
+  });
+  return result;
 }
 
 function findModel(value) {

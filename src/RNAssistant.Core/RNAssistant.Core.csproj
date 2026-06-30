@@ -88,6 +88,7 @@
     <Compile Include="Models\ToolModels.cs" />
     <Compile Include="Models\VbaModels.cs" />
     <Compile Include="Llm\LlmClient.cs" />
+    <Compile Include="Llm\ModelContextBudget.cs" />
     <Compile Include="Llm\PromptMessageBuilder.cs" />
     <Compile Include="Llm\PromptComposer.cs" />
     <Compile Include="Tools\ToolArgumentNormalizer.cs" />

@@ -1,0 +1,29 @@
+.reasoning-block {
+  margin: 0 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+
+.reasoning-block summary {
+  padding: 7px 10px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  user-select: none;
+}
+
+.reasoning-block pre {
+  max-height: 320px;
+  margin: 0;
+  padding: 0 10px 10px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font: 12px/1.45 Consolas, "Courier New", monospace;
+}
+
+.reasoning-block.is-live {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+}

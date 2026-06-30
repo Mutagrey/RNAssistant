@@ -375,7 +375,7 @@ namespace RNAssistant.Core.Storage
                 || string.IsNullOrWhiteSpace(extension)
                 || (!string.IsNullOrWhiteSpace(contentType) && contentType.StartsWith("text/", StringComparison.OrdinalIgnoreCase));
             string ignored;
-            if (likelyText && TryDecodeText(bytes, true, out ignored)) return "text";
+            if (TryDecodeText(bytes, likelyText, out ignored)) return "text";
             return null;
         }
 

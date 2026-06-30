@@ -47,6 +47,7 @@
     <Compile Include="..\..\src\RNAssistant.Core\Models\ToolModels.cs" Link="Core\Models\ToolModels.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Models\VbaModels.cs" Link="Core\Models\VbaModels.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Llm\LlmClient.cs" Link="Core\Llm\LlmClient.cs" />
+    <Compile Include="..\..\src\RNAssistant.Core\Llm\ModelContextBudget.cs" Link="Core\Llm\ModelContextBudget.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Llm\PromptComposer.cs" Link="Core\Llm\PromptComposer.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Llm\PromptMessageBuilder.cs" Link="Core\Llm\PromptMessageBuilder.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Tools\ToolArgumentNormalizer.cs" Link="Core\Tools\ToolArgumentNormalizer.cs" />

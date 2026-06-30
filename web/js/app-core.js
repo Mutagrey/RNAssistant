@@ -225,9 +225,11 @@ if (window.chrome && window.chrome.webview) {
       var progressPending = state.pending[response.id];
       setActivity(progress.phase || "working", progress.message || "Выполняю...");
       if (progressPending && progressPending.type === "sendChat") {
-        state.liveActivity = normalizeProgressActivity(progress);
-        if (typeof recordLiveAgentActivity === "function") {
-          recordLiveAgentActivity(state.liveActivity);
+        if (!(progress.reasoningDelta || progress.ReasoningDelta || progress.reasoningComplete || progress.ReasoningComplete)) {
+          state.liveActivity = normalizeProgressActivity(progress);
+          if (typeof recordLiveAgentActivity === "function") {
+            recordLiveAgentActivity(state.liveActivity);
+          }
         }
         renderMessages();
       }

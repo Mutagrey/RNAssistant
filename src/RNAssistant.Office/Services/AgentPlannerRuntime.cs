@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Services
@@ -422,10 +423,67 @@ namespace RNAssistant.Office.Services
     {
         public List<ChatMessage> BuildMessages(string userText, OfficeSnapshot snapshot, RoutedTask route, ToolCatalogSlice tools, IEnumerable<AgentObservation> observations, DocumentContext context, IEnumerable<SkillDefinition> skills, AppSettings settings)
         {
+            return BuildMessages(userText, snapshot, route, tools, observations, context, skills, settings, null, null);
+        }
+
+        public List<ChatMessage> BuildMessages(
+            string userText,
+            OfficeSnapshot snapshot,
+            RoutedTask route,
+            ToolCatalogSlice tools,
+            IEnumerable<AgentObservation> observations,
+            DocumentContext context,
+            IEnumerable<SkillDefinition> skills,
+            AppSettings settings,
+            ChatSession session,
+            IReadOnlyList<ChatAttachment> currentAttachments)
+        {
             var messages = new List<ChatMessage>();
-            messages.Add(new ChatMessage { Role = "system", Content = BuildSystemPrompt() });
-            messages.Add(new ChatMessage { Role = "user", Content = BuildPlannerContext(userText, snapshot, route, tools, observations, context, skills, settings) });
+            var system = new ChatMessage { Role = "system", Content = BuildSystemPrompt() };
+            var current = new ChatMessage { Role = "user", Content = BuildPlannerContext(userText, snapshot, route, tools, observations, context, skills, settings) };
+            messages.Add(system);
+            messages.Add(current);
+
+            var budget = ModelContextBudget.InputBudgetTokens(settings);
+            var used = ModelContextBudget.EstimateMessagesTokens(messages) + EstimateAttachmentTokens(currentAttachments);
+            var history = session == null || session.Messages == null
+                ? new List<ChatMessage>()
+                : session.Messages.Take(Math.Max(0, session.Messages.Count - 1))
+                    .Where(message => message != null && message.Activity == null &&
+                        (string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase)))
+                    .ToList();
+            for (var index = history.Count - 1; index >= 0; index--)
+            {
+                var source = history[index];
+                var candidate = new ChatMessage { Role = source.Role, Content = source.Content ?? string.Empty };
+                var estimate = ModelContextBudget.EstimateMessagesTokens(new[] { candidate });
+                if (used + estimate > budget)
+                {
+                    break;
+                }
+                messages.Insert(1, candidate);
+                used += estimate;
+            }
             return messages;
+        }
+
+        private static int EstimateAttachmentTokens(IEnumerable<ChatAttachment> attachments)
+        {
+            var total = 0;
+            foreach (var attachment in attachments ?? new ChatAttachment[0])
+            {
+                if (attachment == null)
+                {
+                    continue;
+                }
+                total += Math.Max(0, attachment.ExtractedCharCount) / 2;
+                if (attachment.Kind == "image")
+                {
+                    total += ModelContextBudget.EstimatedImageTokens;
+                }
+            }
+            return total;
         }
 
         private static string BuildSystemPrompt()
@@ -473,7 +531,7 @@ namespace RNAssistant.Office.Services
                 builder.AppendLine("Snapshot summary:");
                 builder.AppendLine(Trim(snapshot.SnapshotText, 1800));
             }
-            AppendUserContext(builder, context);
+            AppendUserContext(builder, context, Math.Max(512, ModelContextBudget.InputBudgetTokens(settings) / 3));
             builder.AppendLine();
             builder.AppendLine("AVAILABLE_TOOLS:");
             var index = 1;
@@ -539,26 +597,60 @@ namespace RNAssistant.Office.Services
             return builder.ToString();
         }
 
-        private static void AppendUserContext(StringBuilder builder, DocumentContext context)
+        private static void AppendUserContext(StringBuilder builder, DocumentContext context, int maxTokens)
         {
             if (context == null || context.Notes == null || context.Notes.Count == 0)
             {
                 return;
             }
             builder.AppendLine("User-added context:");
-            foreach (var note in context.Notes.Take(5))
+            var usedTokens = 0;
+            foreach (var note in context.Notes)
             {
                 if (note == null)
                 {
                     continue;
                 }
-                builder.AppendLine("- " + FirstNonEmpty(note.Title, note.Reference, note.Kind) + ": " + Trim(FirstNonEmpty(note.Text, note.Preview), 700));
+                var entry = "- " + FirstNonEmpty(note.Title, note.Reference, note.Kind) + ": " + FirstNonEmpty(note.Text, note.Preview);
+                var remaining = maxTokens - usedTokens;
+                if (remaining <= 0)
+                {
+                    builder.AppendLine("[additional context omitted by token budget]");
+                    break;
+                }
+                var selected = TruncateToTokens(entry, remaining);
+                builder.AppendLine(selected);
+                usedTokens += ModelContextBudget.EstimateTextTokens(selected);
+                if (selected.Length < entry.Length)
+                {
+                    builder.AppendLine("[context truncated]");
+                    break;
+                }
             }
+        }
+
+        private static string TruncateToTokens(string value, int maxTokens)
+        {
+            if (string.IsNullOrEmpty(value) || ModelContextBudget.EstimateTextTokens(value) <= maxTokens)
+            {
+                return value ?? string.Empty;
+            }
+            var low = 0;
+            var high = value.Length;
+            while (low < high)
+            {
+                var middle = low + (high - low + 1) / 2;
+                if (ModelContextBudget.EstimateTextTokens(value.Substring(0, middle)) <= maxTokens)
+                    low = middle;
+                else
+                    high = middle - 1;
+            }
+            return value.Substring(0, low);
         }
 
         private static void AppendSkills(StringBuilder builder, IEnumerable<SkillDefinition> skills, AppSettings settings)
         {
-            var limit = Math.Max(1000, Math.Min(3000, (settings == null ? 12000 : settings.ContextCharLimit) / 8));
+            var limit = Math.Max(1000, Math.Min(12000, ModelContextBudget.InputBudgetTokens(settings) * 3 / 8));
             var used = 0;
             var any = false;
             foreach (var skill in skills ?? new SkillDefinition[0])

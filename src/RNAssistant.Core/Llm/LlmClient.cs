@@ -147,7 +147,8 @@ namespace RNAssistant.Core.Llm
                     max_tokens = settings.MaxTokens,
                     temperature = settings.Temperature,
                     top_p = settings.TopP,
-                    stream = settings.StreamResponses
+                    stream = settings.StreamResponses,
+                    stream_options = settings.StreamResponses ? new { include_usage = true } : null
                 };
 
                 var json = JsonConvert.SerializeObject(body, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
@@ -171,7 +172,11 @@ namespace RNAssistant.Core.Llm
                     {
                         response = await client.PostAsync(requestUri, requestContent, cancellationToken).ConfigureAwait(false);
                     }
-                    var responseJson = response.IsSuccessStatusCode && settings.StreamResponses
+                    var responseMediaType = response.Content.Headers.ContentType == null
+                        ? string.Empty
+                        : response.Content.Headers.ContentType.MediaType ?? string.Empty;
+                    var isEventStream = responseMediaType.IndexOf("text/event-stream", StringComparison.OrdinalIgnoreCase) >= 0;
+                    var responseJson = response.IsSuccessStatusCode && settings.StreamResponses && isEventStream
                         ? null
                         : await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                     if (!response.IsSuccessStatusCode)
@@ -185,13 +190,18 @@ namespace RNAssistant.Core.Llm
                         throw new InvalidOperationException("LLM request failed: HTTP " + (int)response.StatusCode + " " + response.ReasonPhrase + ". " + diagnostics + ". Response: " + responseJson);
                     }
 
-                    if (settings.StreamResponses)
+                    if (settings.StreamResponses && isEventStream)
                     {
                         using (response)
                         using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
                         {
                             return await ReadStreamingResponseAsync(stream, streamProgress, cancellationToken).ConfigureAwait(false);
                         }
+                    }
+                    if (settings.StreamResponses && !string.IsNullOrWhiteSpace(responseJson) &&
+                        responseJson.TrimStart().StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return ParseStreamingResponse(responseJson);
                     }
 
                     var parsed = JObject.Parse(responseJson);
@@ -209,7 +219,7 @@ namespace RNAssistant.Core.Llm
                         Content = ReadAssistantContent(message),
                         ReasoningContent = ReadReasoningContent(message),
                         ReasoningTokens = ReadReasoningTokens(usage),
-                        ReasoningTruncated = ReadReasoningContent(message).Length >= MaxStoredReasoningChars,
+                        ReasoningTruncated = IsReasoningTruncated(message),
                         PromptTokens = promptTokens,
                         CompletionTokens = completionTokens,
                         TotalTokens = totalTokens,
@@ -423,7 +433,7 @@ namespace RNAssistant.Core.Llm
                     Content = ReadAssistantContent(message),
                     ReasoningContent = ReadReasoningContent(message),
                     ReasoningTokens = ReadReasoningTokens(_usage),
-                    ReasoningTruncated = ReadReasoningContent(message).Length >= MaxStoredReasoningChars,
+                    ReasoningTruncated = IsReasoningTruncated(message),
                     PromptTokens = promptTokens,
                     CompletionTokens = completionTokens,
                     TotalTokens = totalTokens,
@@ -653,6 +663,18 @@ namespace RNAssistant.Core.Llm
             return value.Length > MaxStoredReasoningChars ? value.Substring(0, MaxStoredReasoningChars) : value;
         }
 
+        private static bool IsReasoningTruncated(JObject message)
+        {
+            if (message == null)
+            {
+                return false;
+            }
+            NormalizeReasoningFields(message);
+            var token = message["reasoning_content"] ?? message["reasoning"];
+            return token != null && token.Type == JTokenType.String &&
+                (token.Value<string>() ?? string.Empty).Length > MaxStoredReasoningChars;
+        }
+
         private static int? ReadReasoningTokens(JObject usage)
         {
             var details = usage == null ? null : usage["completion_tokens_details"] as JObject;
@@ -755,8 +777,14 @@ namespace RNAssistant.Core.Llm
             {
                 return build;
             }
+            var messageList = messages.ToList();
+            var remainingAttachmentTokens = Math.Max(
+                0,
+                ModelContextBudget.InputBudgetTokens(settings) -
+                ModelContextBudget.EstimateMessagesTokens(messageList) -
+                EstimatePdfImageTokens(messageList, settings));
 
-            foreach (var message in messages)
+            foreach (var message in messageList)
             {
                 if (message == null || string.IsNullOrWhiteSpace(message.Role))
                 {
@@ -764,11 +792,24 @@ namespace RNAssistant.Core.Llm
                 }
 
                 var attachments = message.Attachments ?? new List<ChatAttachment>();
-                var text = AppendExtractedText(message.Content ?? string.Empty, attachments);
+                var text = AppendExtractedText(message.Content ?? string.Empty, attachments, ref remainingAttachmentTokens);
                 var imageParts = new List<ModelImagePart>();
-                foreach (var attachment in attachments.Where(a => a != null))
+                var imageLimit = ModelContextBudget.MaxImagesPerPrompt(settings);
+                foreach (var attachment in attachments.Where(a => a != null && a.Kind == "image"))
                 {
                     imageParts.AddRange(ReadModelImages(settings, attachment));
+                }
+                foreach (var attachment in attachments.Where(a => a != null && a.Kind == "pdf"))
+                {
+                    if (imageParts.Count >= imageLimit)
+                    {
+                        break;
+                    }
+                    imageParts.AddRange(ReadModelImages(settings, attachment).Take(imageLimit - imageParts.Count));
+                }
+                if (imageParts.Count > imageLimit)
+                {
+                    imageParts = imageParts.Take(imageLimit).ToList();
                 }
                 if (imageParts.Count == 0)
                 {
@@ -804,6 +845,30 @@ namespace RNAssistant.Core.Llm
             return build;
         }
 
+        private static int EstimatePdfImageTokens(IEnumerable<ChatMessage> messages, AppSettings settings)
+        {
+            if (!ModelContextBudget.SupportsImages(settings))
+            {
+                return 0;
+            }
+            var maxImages = ModelContextBudget.MaxImagesPerPrompt(settings);
+            var count = 0;
+            foreach (var message in messages ?? new ChatMessage[0])
+            {
+                var attachments = message == null ? null : message.Attachments;
+                var ordinary = (attachments ?? new List<ChatAttachment>()).Count(attachment => attachment != null && attachment.Kind == "image");
+                var remaining = Math.Max(0, maxImages - ordinary);
+                foreach (var pdf in (attachments ?? new List<ChatAttachment>()).Where(attachment => attachment != null && attachment.Kind == "pdf"))
+                {
+                    if (remaining <= 0) break;
+                    var pages = Math.Min(remaining, Math.Max(1, pdf.PageCount));
+                    count += pages;
+                    remaining -= pages;
+                }
+            }
+            return count * ModelContextBudget.EstimatedImageTokens;
+        }
+
         private IEnumerable<ModelImagePart> ReadModelImages(AppSettings settings, ChatAttachment attachment)
         {
             var supplied = _modelImageProvider == null ? null : _modelImageProvider(settings, attachment);
@@ -826,7 +891,10 @@ namespace RNAssistant.Core.Llm
             };
         }
 
-        private string AppendExtractedText(string content, IEnumerable<ChatAttachment> attachments)
+        private string AppendExtractedText(
+            string content,
+            IEnumerable<ChatAttachment> attachments,
+            ref int remainingTokens)
         {
             var builder = new StringBuilder(content ?? string.Empty);
             foreach (var attachment in attachments ?? new ChatAttachment[0])
@@ -838,11 +906,14 @@ namespace RNAssistant.Core.Llm
                 {
                     continue;
                 }
+                var selected = TruncateToEstimatedTokens(extracted, remainingTokens);
+                var selectedTokens = ModelContextBudget.EstimateTextTokens(selected);
+                remainingTokens = Math.Max(0, remainingTokens - selectedTokens);
                 builder.AppendLine();
                 builder.AppendLine();
                 builder.AppendLine("[Attachment: " + attachment.FileName + "]");
-                builder.Append(extracted);
-                if (attachment.TextTruncated)
+                builder.Append(selected);
+                if (attachment.TextTruncated || selected.Length < extracted.Length)
                 {
                     builder.AppendLine();
                     builder.Append("[Content truncated]");
@@ -851,6 +922,33 @@ namespace RNAssistant.Core.Llm
                 builder.Append("[End attachment]");
             }
             return builder.ToString();
+        }
+
+        private static string TruncateToEstimatedTokens(string text, int maxTokens)
+        {
+            if (string.IsNullOrEmpty(text) || maxTokens <= 0)
+            {
+                return string.Empty;
+            }
+            if (ModelContextBudget.EstimateTextTokens(text) <= maxTokens)
+            {
+                return text;
+            }
+            var low = 0;
+            var high = text.Length;
+            while (low < high)
+            {
+                var middle = low + (high - low + 1) / 2;
+                if (ModelContextBudget.EstimateTextTokens(text.Substring(0, middle)) <= maxTokens)
+                {
+                    low = middle;
+                }
+                else
+                {
+                    high = middle - 1;
+                }
+            }
+            return text.Substring(0, low);
         }
 
         private sealed class ApiMessageBuildResult

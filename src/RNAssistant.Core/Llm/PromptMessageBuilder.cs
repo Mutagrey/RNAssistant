@@ -125,8 +125,14 @@ namespace RNAssistant.Core.Llm
     {
         public static object FromPrompt(IEnumerable<ChatMessage> promptMessages, AppSettings settings)
         {
-            var limit = Math.Max(4000, settings == null ? 24000 : settings.ContextCharLimit);
-            var used = 0;
+            return FromPrompt(promptMessages, settings, null);
+        }
+
+        public static object FromPrompt(IEnumerable<ChatMessage> promptMessages, AppSettings settings, int? actualPromptTokens)
+        {
+            var limit = ModelContextBudget.InputBudgetTokens(settings);
+            var usedChars = 0;
+            var estimatedTokens = 0;
             var count = 0;
             if (promptMessages != null)
             {
@@ -137,21 +143,29 @@ namespace RNAssistant.Core.Llm
                         continue;
                     }
 
-                    used += (message.Content ?? string.Empty).Length;
-                    used += (message.Attachments ?? new List<ChatAttachment>())
-                        .Where(a => a != null)
-                        .Sum(a => (a.ExtractedText ?? string.Empty).Length);
+                    usedChars += (message.Content ?? string.Empty).Length;
+                    estimatedTokens += 4 + ModelContextBudget.EstimateTextTokens(message.Content);
+                    foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
+                    {
+                        if (attachment == null) continue;
+                        usedChars += attachment.ExtractedCharCount > 0
+                            ? attachment.ExtractedCharCount
+                            : (attachment.ExtractedText ?? string.Empty).Length;
+                        estimatedTokens += Math.Max(attachment.ExtractedCharCount, (attachment.ExtractedText ?? string.Empty).Length) / 2;
+                        if (attachment.Kind == "image") estimatedTokens += ModelContextBudget.EstimatedImageTokens;
+                    }
                     count += 1;
                 }
             }
 
-            return Usage(used, limit, count, true);
+            return Usage(usedChars, actualPromptTokens ?? estimatedTokens, limit, count, actualPromptTokens.HasValue);
         }
 
         public static object FromSession(ChatSession session, AppSettings settings)
         {
-            var limit = Math.Max(4000, settings == null ? 24000 : settings.ContextCharLimit);
-            var used = 0;
+            var limit = ModelContextBudget.InputBudgetTokens(settings);
+            var usedChars = 0;
+            var usedTokens = 0;
             var count = 0;
             if (session != null && session.Messages != null)
             {
@@ -162,10 +176,16 @@ namespace RNAssistant.Core.Llm
                         continue;
                     }
 
-                    used += (message.Content ?? string.Empty).Length;
-                    used += (message.Attachments ?? new List<ChatAttachment>())
-                        .Where(a => a != null)
-                        .Sum(a => (a.ExtractedText ?? string.Empty).Length);
+                    usedChars += (message.Content ?? string.Empty).Length;
+                    usedTokens += 4 + ModelContextBudget.EstimateTextTokens(message.Content);
+                    foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
+                    {
+                        if (attachment == null) continue;
+                        var chars = Math.Max(attachment.ExtractedCharCount, (attachment.ExtractedText ?? string.Empty).Length);
+                        usedChars += chars;
+                        usedTokens += chars / 2;
+                        if (attachment.Kind == "image") usedTokens += ModelContextBudget.EstimatedImageTokens;
+                    }
                     count += 1;
                 }
             }
@@ -178,20 +198,24 @@ namespace RNAssistant.Core.Llm
                         continue;
                     }
 
-                    used += (note.Text ?? note.Preview ?? string.Empty).Length;
+                    var text = note.Text ?? note.Preview ?? string.Empty;
+                    usedChars += text.Length;
+                    usedTokens += ModelContextBudget.EstimateTextTokens(text);
                 }
             }
 
-            return Usage(used, limit, count, false);
+            return Usage(usedChars, usedTokens, limit, count, false);
         }
 
-        private static object Usage(int used, int limit, int count, bool actual)
+        private static object Usage(int usedChars, int usedTokens, int limitTokens, int count, bool actual)
         {
             return new
             {
-                usedChars = used,
-                limitChars = limit,
-                percent = limit <= 0 ? 0 : Math.Min(100, (int)Math.Round(used * 100.0 / limit)),
+                usedChars = usedChars,
+                limitChars = 0,
+                usedTokens = usedTokens,
+                limitTokens = limitTokens,
+                percent = limitTokens <= 0 ? 0 : Math.Min(100, (int)Math.Round(usedTokens * 100.0 / limitTokens)),
                 messageCount = count,
                 actual = actual
             };

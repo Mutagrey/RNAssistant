@@ -179,7 +179,7 @@ namespace RNAssistant.Core.Llm
 
         private static int SkillBodyLimit(AppSettings settings)
         {
-            var contextLimit = Math.Max(4000, settings == null ? 24000 : settings.ContextCharLimit);
+            var contextLimit = ModelContextBudget.InputBudgetTokens(settings) * 3;
             return Math.Max(2000, Math.Min(DefaultSkillBodyLimit, contextLimit / 4));
         }
 

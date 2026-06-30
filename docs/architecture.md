@@ -41,7 +41,7 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 
 ## Current Code Zones
 
-- `src/RNAssistant.Core/Llm`: API client, prompt composition, prompt message trimming, context usage estimates.
+- `src/RNAssistant.Core/Llm`: API client, SSE/reasoning parsing, model capability budgeting, prompt composition and context usage estimates.
 - `src/RNAssistant.Core/Tools`: strict planner JSON parsing plus legacy command parsing compatibility.
 - `src/RNAssistant.Core/Skills`: built-in markdown skill provider.
 - `src/RNAssistant.Core/Services`: Office-agnostic model services such as context normalization.
@@ -69,6 +69,9 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 ## Non-Negotiable Boundaries
 
 - Agent mode expects one strict planner JSON envelope. A single complete JSON fence and native `tool_calls` are normalized as compatibility input; prose extraction is not allowed.
+- Model reasoning is transport metadata (`reasoning_content`, `reasoning`, or compatibility `<think>`), stored and rendered separately; it is never mixed into planner JSON or replayed as chat history.
+- Context limits are token budgets resolved from the active model capability catalog. The legacy character limit is read only for settings compatibility.
+- Text/PDF attachments are normalized locally. PDF text uses PdfPig; vision-capable models may also receive selected PDF pages rendered by the host-neutral Office service. Raw PDF files are not sent through the OpenAI-compatible chat payload.
 - Routing precedes Office context capture. General-answer routes expose no tools and do not read document content; document-dependent state is obtained through explicit read tools.
 - Tools are executable actions described by `ToolDefinition`; skills are markdown guidance described by `SkillDefinition`.
 - Tool safety belongs to `ToolDefinition` metadata: `MutatesDocument`, `AgentCanRun`, `RequiresConfirmation`, risk/capability fields, and verification metadata.
