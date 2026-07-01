@@ -19,15 +19,18 @@ namespace RNAssistant.Core.Models
         public string AfterToolResultsPrompt { get; set; }
         public string VerifyMutationPrompt { get; set; }
         public string ConfirmedToolContinuationPrompt { get; set; }
-        public string RetryFailedToolPrompt { get; set; }
 
         public AgentPromptSettings()
         {
             ToolProtocolPrompt =
                 "Return exactly one JSON object. No markdown. No code fences. No prose outside JSON.\n" +
-                "Allowed shape: {\"kind\":\"tool_plan|final|clarify|cannot_do\",\"intent\":\"read|analyze|mutate|verify|answer|clarify\",\"message\":\"string|null\",\"steps\":[{\"toolId\":\"exact tool id from AVAILABLE_TOOLS\",\"arguments\":{},\"reason\":\"short reason\"}],\"expectedOutcome\":\"string|null\"}.";
+                "Allowed shape: {\"kind\":\"tool_plan|final|clarify|cannot_do\",\"intent\":\"read|analyze|mutate|verify|answer|clarify\",\"message\":\"string|null\",\"steps\":[{\"toolId\":\"exact tool id from AVAILABLE_TOOLS\",\"arguments\":{},\"reason\":\"short reason\"}],\"expectedOutcome\":\"string|null\"}.\n" +
+                "The object may contain only kind, intent, message, steps, and expectedOutcome. Each step may contain only toolId, arguments, and reason.\n" +
+                "Do not copy USER_REQUEST, ROUTE, CURRENT_OFFICE_CONTEXT, AVAILABLE_TOOLS, OBSERVATIONS, or RELEVANT_SKILLS into the response.";
             ToolRoutingPrompt =
-                "Never invent tool ids or use API-style aliases such as create_worksheet, addWorksheet, create_sheet, worksheet.create, or action names.\n" +
+                "Use only exact tool ids from AVAILABLE_TOOLS. Never invent workbook, sheet, range, slide, email, or document content.\n" +
+                "Call a read tool only when the request depends on current Office content or ROUTE requires inspection. Do not inspect Office for general questions.\n" +
+                "A mutation with an explicit target and complete arguments does not need a preliminary read unless ROUTE requires inspection.\n" +
                 "Inspect unknown targets before mutation. Use read-only tools first when sheet, range, slide, selection, mail, or document location is unclear.\n" +
                 "After tool results, return kind=final if complete; otherwise return the next tool_plan.\n" +
                 "If no available tool can satisfy the request, say exactly what is missing.\n" +
@@ -42,15 +45,6 @@ namespace RNAssistant.Core.Models
             AfterToolResultsPrompt = "Local normalized observations are available. If the task is complete, return kind=final. If more Office actions are needed, return the next tool_plan.";
             VerifyMutationPrompt = "Local deterministic verification observations are available. If verification succeeded, return kind=final with what changed and what was verified. If verification failed, return a corrective tool_plan or cannot_do.";
             ConfirmedToolContinuationPrompt = "The user confirmed and RNAssistant executed the pending local tool. Continue the same task from normalized observations.";
-            RetryFailedToolPrompt =
-                "A local tool call failed. Return exactly one corrected planner JSON object, no markdown and no prose.\n" +
-                "Use only these exact available tool ids: {{availableToolIds}}\n" +
-                "Original command: `{{toolId}}` with arguments:\n" +
-                "```json\n" +
-                "{{argumentsJson}}\n" +
-                "```\n" +
-                "Error: {{error}}\n" +
-                "{{dataJsonBlock}}";
         }
     }
 
@@ -59,7 +53,7 @@ namespace RNAssistant.Core.Models
         public string BaseUrl { get; set; }
         public string Model { get; set; }
         public string SystemPrompt { get; set; }
-        public string AgentPrompt { get; set; }
+        public string SystemPromptRole { get; set; }
         public int MaxTokens { get; set; }
         public int RequestTimeoutSeconds { get; set; }
         public double Temperature { get; set; }
@@ -87,8 +81,8 @@ namespace RNAssistant.Core.Models
         {
             BaseUrl = "https://api.openai.com";
             Model = "gpt-4o-mini";
-            SystemPrompt = "You are an Office AI assistant. Always return the RNAssistant strict JSON planner envelope.";
-            AgentPrompt = "For Office actions, make small executable steps, use exact available tool ids, return strict planner JSON, and summarize only in final.message after observations. Use VBA only for macros or when built-in tools are not enough.";
+            SystemPrompt = "You are RNAssistant Office Action Planner.";
+            SystemPromptRole = "user";
             MaxTokens = 2048;
             RequestTimeoutSeconds = 300;
             Temperature = 0.2;

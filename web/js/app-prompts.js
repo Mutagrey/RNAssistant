@@ -1,15 +1,13 @@
 (function () {
   var promptDefinitions = [
-    { key: "systemPrompt", label: "Системный промпт", group: "Base", source: "root", field: "SystemPrompt", description: "Стиль и общий контекст ассистента." },
-    { key: "agentPrompt", label: "Промпт агента", group: "Base", source: "root", field: "AgentPrompt", description: "Общее поведение агента при Office-действиях." },
+    { key: "systemPrompt", label: "Базовый промпт", group: "Base", source: "root", field: "SystemPrompt", description: "Роль и общий контекст planner." },
     { key: "toolProtocolPrompt", label: "Протокол planner JSON", group: "Runtime", source: "agent", field: "ToolProtocolPrompt", description: "Формат strict JSON envelope и аргументов." },
     { key: "toolRoutingPrompt", label: "Routing tools", group: "Runtime", source: "agent", field: "ToolRoutingPrompt", description: "Правила выбора tool, VBA, chart/html artifacts и проверок." },
     { key: "forceToolUsePrompt", label: "Force tool use", group: "Recovery", source: "agent", field: "ForceToolUsePrompt", description: "Follow-up, когда модель ответила текстом на явное действие." },
     { key: "repairMalformedToolBlockPrompt", label: "Repair malformed JSON", group: "Recovery", source: "agent", field: "RepairMalformedToolBlockPrompt", description: "Follow-up для невалидного planner JSON." },
     { key: "afterToolResultsPrompt", label: "After tool results", group: "Loop", source: "agent", field: "AfterToolResultsPrompt", description: "Продолжение после успешных локальных tool results." },
     { key: "verifyMutationPrompt", label: "Verify mutation", group: "Loop", source: "agent", field: "VerifyMutationPrompt", description: "Проверка после мутации документа или VBA." },
-    { key: "confirmedToolContinuationPrompt", label: "After confirmation", group: "Loop", source: "agent", field: "ConfirmedToolContinuationPrompt", description: "Продолжение после ручного подтверждения tool." },
-    { key: "retryFailedToolPrompt", label: "Retry failed tool", group: "Recovery", source: "agent", field: "RetryFailedToolPrompt", description: "Шаблон авторемонта упавшего tool с placeholders." }
+    { key: "confirmedToolContinuationPrompt", label: "After confirmation", group: "Loop", source: "agent", field: "ConfirmedToolContinuationPrompt", description: "Продолжение после ручного подтверждения tool." }
   ];
 
   function promptValue(settings, def) {
@@ -188,7 +186,6 @@
     syncSelectedPromptFromEditor();
     var result = {
       SystemPrompt: state.promptDrafts.systemPrompt || "",
-      AgentPrompt: state.promptDrafts.agentPrompt || "",
       AgentPrompts: {}
     };
     promptDefinitions.forEach(function (def) {

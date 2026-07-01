@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
   <link rel="stylesheet" href="css/app.css?v=chatui-20260630-2">
-  <link rel="stylesheet" href="css/app-chat.css?v=chatui-20260630-6">
+  <link rel="stylesheet" href="css/app-chat.css?v=chatui-20260701-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-composer.css?v=chatui-20260622-10">
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260630-1">
@@ -67,11 +67,11 @@
         <div class="chat-workspace split-layout" id="chatLayout" data-split-key="chat-tree" data-default-ratio="0.27" data-min-left="240" data-min-ratio="0.2" data-max-ratio="0.42">
           <aside class="chat-sidebar" aria-label="Документы и чаты">
             <div class="chat-sidebar-head">
+              <input id="chatSearchInput" class="chat-search" type="search" placeholder="Поиск по документам и чатам..." autocomplete="off">
               <div class="chat-tree-toolbar">
                 <button type="button" class="icon-button secondary" id="toggleChatTreeButton" title="Свернуть всё дерево" aria-label="Свернуть всё дерево"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 9 4-4 4 4"/><path d="m8 15 4 4 4-4"/></svg></button>
                 <button type="button" class="icon-button secondary" id="newChatButton" title="Новый чат" aria-label="Новый чат"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg></button>
               </div>
-              <input id="chatSearchInput" class="chat-search" type="search" placeholder="Поиск чатов..." autocomplete="off">
             </div>
             <select id="chatSessionSelect" class="hidden" aria-label="Сессия чата"></select>
             <div class="chat-session-list" id="chatSessionList" aria-label="Все документы и чаты"></div>
@@ -506,6 +506,16 @@
                 <h2>Промпты</h2>
                 <p>Редактируемые prompt-блоки агента. Текст можно писать как Markdown.</p>
               </div>
+              <div class="form-grid two-columns">
+                <label>
+                  <span>Роль инструкций</span>
+                  <select id="systemPromptRoleInput">
+                    <option value="user">user — по умолчанию</option>
+                    <option value="system">system</option>
+                  </select>
+                </label>
+                <div class="setting-note">Роль сообщения с базовым, protocol и routing prompts.</div>
+              </div>
               <div class="prompt-layout split-layout" id="promptsLayout" data-split-key="prompts" data-default-ratio="0.3" data-min-left="180" data-min-ratio="0.2" data-max-ratio="0.48">
                 <div class="tool-list-panel surface-panel">
                   <input class="tool-search" id="promptSearchInput" placeholder="Поиск промптов..." autocomplete="off">
@@ -639,18 +649,18 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=chatui-20260630-3"></script>
+  <script src="js/app-core.js?v=chatui-20260701-1"></script>
   <script src="js/app-utils.js?v=chatui-20260620-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
   <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js?v=chatui-20260630-1"></script>
-  <script src="js/app-prompts.js?v=chatui-20260622-3"></script>
+  <script src="js/app-settings.js?v=chatui-20260701-1"></script>
+  <script src="js/app-prompts.js?v=chatui-20260701-1"></script>
   <script src="js/app-model-data.js?v=chatui-20260630-1"></script>
   <script src="js/app-model-render.js?v=chatui-20260630-3"></script>
   <script src="js/app-models.js?v=chatui-20260630-2"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=chatui-20260630-5"></script>
+  <script src="js/app-chat-state.js?v=chatui-20260701-1"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
   <script src="js/app-tools.js?v=chatui-20260622-4"></script>
   <script src="js/app-skills.js?v=chatui-20260622-4"></script>
@@ -665,7 +675,7 @@
   <script src="js/app-messages.js?v=chatui-20260622-3"></script>
   <script src="js/app-reasoning.js?v=reasoning-20260630-1"></script>
   <script src="js/app-attachments.js?v=attachments-20260630-1"></script>
-  <script src="js/app-chat.js?v=chatui-20260630-3"></script>
+  <script src="js/app-chat.js?v=chatui-20260701-1"></script>
   <script src="js/app.js?v=chatui-20260630-3"></script>
 </body>
 </html>

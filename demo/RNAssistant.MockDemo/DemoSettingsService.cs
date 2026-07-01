@@ -69,10 +69,9 @@ namespace RNAssistant.Core.Storage
                 settings.SystemPrompt = defaults.SystemPrompt;
             }
 
-            if (string.IsNullOrWhiteSpace(settings.AgentPrompt))
-            {
-                settings.AgentPrompt = defaults.AgentPrompt;
-            }
+            settings.SystemPromptRole = string.Equals(settings.SystemPromptRole, "system", StringComparison.OrdinalIgnoreCase)
+                ? "system"
+                : "user";
 
             if (settings.AgentPrompts == null)
             {

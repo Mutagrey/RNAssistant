@@ -50,6 +50,11 @@ namespace RNAssistant.Office
             _settingsService = new SettingsService(_paths);
             _chatStore = new ChatStore(_paths);
             _attachmentStore = new AttachmentStore(_paths);
+            foreach (var incomplete in _chatStore.List().Where(session => !HasCompletedExchange(session)).ToList())
+            {
+                _attachmentStore.DeleteSession(ChatStore.GetSessionId(incomplete));
+                _chatStore.Delete(incomplete.Host, incomplete.DocumentKey, ChatStore.GetSessionId(incomplete));
+            }
             _toolStore = new ToolStore(_paths);
             _skillStore = new SkillStore(_paths);
             _vbaBackupStore = new VbaBackupStore(_paths);
@@ -216,7 +221,7 @@ namespace RNAssistant.Office
             cancellationToken.ThrowIfCancellationRequested();
             var userMessage = session.Messages.LastOrDefault(m => m != null && string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase));
             _attachmentStore.Commit(ChatStore.GetSessionId(session), userMessage);
-            _chatStore.Save(session);
+            SaveSessionChanges(session);
             var activeId = ChatStore.GetSessionId(session);
             if (shouldGenerateLlmTitle)
             {
@@ -402,7 +407,7 @@ namespace RNAssistant.Office
             var result = _toolExecutor.Execute(command, tools, settings, dryRun, true, session, cancellationToken);
             if (!dryRun && IsHtmlWorkspaceTool(toolId))
             {
-                _chatStore.Save(session);
+                SaveSessionChanges(session);
             }
 
             return result;

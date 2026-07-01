@@ -173,18 +173,14 @@ namespace RNAssistant.Harness
             {
                 var tools = new List<ToolDefinition>(fake.GetBuiltInTools());
                 tools.AddRange(executor.GetControllerTools());
-                var prompt = new PromptComposer().ComposeSystemPrompt(
+                var prompt = FlattenMessages(BuildPlannerMessages(
                     new AppSettings(),
-                    fake.HostName,
-                    string.Empty,
-                    string.Empty,
                     tools,
-                    new SkillDefinition[0],
-                    null);
+                    new SkillDefinition[0]));
 
-                AssertContains(prompt, "mode: read-only", "prompt includes read-only mode");
+                AssertContains(prompt, "mode: read", "prompt includes read mode");
                 AssertContains(prompt, "mode: mutation", "prompt includes mutation mode");
-                AssertContains(prompt, "confirmation: required unless auto-confirm is enabled", "prompt includes confirmation metadata");
+                AssertContains(prompt, "confirmation: required", "prompt includes confirmation metadata");
                 AssertTrue(prompt.IndexOf("\"optional\"", StringComparison.OrdinalIgnoreCase) < 0, "prompt has no literal optional args");
                 AssertContains(prompt, "common.tools_validate", "prompt includes tool validation");
                 AssertContains(prompt, "common.prompts_read_defaults", "prompt includes prompt defaults reader");

@@ -29,7 +29,7 @@ namespace RNAssistant.Office.Tools
             yield return ControllerTool(
                 "common.prompts_save",
                 "Mutates settings: Update RNAssistant agent prompt templates after the user asks to edit or improve RNAssistant prompts.",
-                "{\"systemPrompt\":\"\",\"agentPrompt\":\"\",\"toolProtocolPrompt\":\"\",\"toolRoutingPrompt\":\"\",\"forceToolUsePrompt\":\"\",\"repairMalformedToolBlockPrompt\":\"\",\"afterToolResultsPrompt\":\"\",\"verifyMutationPrompt\":\"\",\"confirmedToolContinuationPrompt\":\"\",\"retryFailedToolPrompt\":\"\"}",
+                "{\"systemPrompt\":\"\",\"systemPromptRole\":\"user|system\",\"toolProtocolPrompt\":\"\",\"toolRoutingPrompt\":\"\",\"forceToolUsePrompt\":\"\",\"repairMalformedToolBlockPrompt\":\"\",\"afterToolResultsPrompt\":\"\",\"verifyMutationPrompt\":\"\",\"confirmedToolContinuationPrompt\":\"\"}",
                 true);
         }
 
@@ -38,7 +38,7 @@ namespace RNAssistant.Office.Tools
             return GetControllerTools().Any(tool => string.Equals(tool.Id, toolId, StringComparison.OrdinalIgnoreCase));
         }
 
-        public ToolResult ExecuteControllerTool(ToolCommand command, bool dryRun)
+        public ToolResult ExecuteControllerTool(ToolCommand command, AppSettings runtimeSettings, bool dryRun)
         {
             if (_loadSettings == null)
             {
@@ -63,24 +63,27 @@ namespace RNAssistant.Office.Tools
 
             if (string.Equals(command.ToolId, "common.prompts_save", StringComparison.OrdinalIgnoreCase))
             {
-                return SavePrompts(command, dryRun);
+                return SavePrompts(command, runtimeSettings, dryRun);
             }
 
             return ToolResult.Fail("Unknown prompt controller tool: " + command.ToolId);
         }
 
-        private ToolResult SavePrompts(ToolCommand command, bool dryRun)
+        private ToolResult SavePrompts(ToolCommand command, AppSettings runtimeSettings, bool dryRun)
         {
             if (_saveSettings == null)
             {
                 return ToolResult.Fail("Prompt settings store is read-only.");
             }
 
-            var settings = _loadSettings();
+            var source = runtimeSettings ?? _loadSettings();
+            var settings = dryRun
+                ? JsonConvert.DeserializeObject<AppSettings>(JsonConvert.SerializeObject(source)) ?? new AppSettings()
+                : source;
             settings.AgentPrompts = settings.AgentPrompts ?? new AgentPromptSettings();
 
             ApplyIfPresent(command, "systemPrompt", value => settings.SystemPrompt = value);
-            ApplyIfPresent(command, "agentPrompt", value => settings.AgentPrompt = value);
+            ApplyIfPresent(command, "systemPromptRole", value => settings.SystemPromptRole = NormalizePromptRole(value));
             ApplyIfPresent(command, "toolProtocolPrompt", value => settings.AgentPrompts.ToolProtocolPrompt = value);
             ApplyIfPresent(command, "toolRoutingPrompt", value => settings.AgentPrompts.ToolRoutingPrompt = value);
             ApplyIfPresent(command, "forceToolUsePrompt", value => settings.AgentPrompts.ForceToolUsePrompt = value);
@@ -88,7 +91,6 @@ namespace RNAssistant.Office.Tools
             ApplyIfPresent(command, "afterToolResultsPrompt", value => settings.AgentPrompts.AfterToolResultsPrompt = value);
             ApplyIfPresent(command, "verifyMutationPrompt", value => settings.AgentPrompts.VerifyMutationPrompt = value);
             ApplyIfPresent(command, "confirmedToolContinuationPrompt", value => settings.AgentPrompts.ConfirmedToolContinuationPrompt = value);
-            ApplyIfPresent(command, "retryFailedToolPrompt", value => settings.AgentPrompts.RetryFailedToolPrompt = value);
 
             if (dryRun)
             {
@@ -116,9 +118,16 @@ namespace RNAssistant.Office.Tools
             return new
             {
                 systemPrompt = settings.SystemPrompt,
-                agentPrompt = settings.AgentPrompt,
+                systemPromptRole = settings.SystemPromptRole,
                 agentPrompts = settings.AgentPrompts ?? new AgentPromptSettings()
             };
+        }
+
+        private static string NormalizePromptRole(string value)
+        {
+            return string.Equals(value, "system", StringComparison.OrdinalIgnoreCase)
+                ? "system"
+                : "user";
         }
 
         private static ToolDefinition ControllerTool(string id, string description, string schema, bool requiresConfirmation)

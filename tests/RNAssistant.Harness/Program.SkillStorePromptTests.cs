@@ -109,11 +109,8 @@ namespace RNAssistant.Harness
 
         private static void PromptSeparatesSkillsFromTools()
         {
-            var prompt = new PromptComposer().ComposeSystemPrompt(
+            var prompt = FlattenMessages(BuildPlannerMessages(
                 new AppSettings(),
-                "Excel",
-                string.Empty,
-                string.Empty,
                 new[]
                 {
                     new ToolDefinition
@@ -136,11 +133,10 @@ namespace RNAssistant.Harness
                         BodyMarkdown = "# Test skill\n\nUse guidance only.",
                         Enabled = true
                     }
-                },
-                null);
+                }));
 
-            AssertContains(prompt, "Relevant markdown skills", "skills section");
-            AssertContains(prompt, "Available tools", "tools section");
+            AssertContains(prompt, "RELEVANT_SKILLS", "skills section");
+            AssertContains(prompt, "AVAILABLE_TOOLS", "tools section");
             AssertContains(prompt, "\"toolId\":\"exact tool id from AVAILABLE_TOOLS\"", "tool id protocol");
             AssertContains(prompt, "Skills are guidance documents only", "skill guidance boundary");
         }
@@ -148,11 +144,8 @@ namespace RNAssistant.Harness
         private static void PromptLimitsSkillBodies()
         {
             var longBody = "# Long skill\n" + new string('a', 5000) + "TAIL_MARKER";
-            var prompt = new PromptComposer().ComposeSystemPrompt(
+            var prompt = FlattenMessages(BuildPlannerMessages(
                 new AppSettings { ContextWindowOverrideTokens = 4096 },
-                "Excel",
-                string.Empty,
-                string.Empty,
                 new ToolDefinition[0],
                 new[]
                 {
@@ -164,8 +157,7 @@ namespace RNAssistant.Harness
                         BodyMarkdown = longBody,
                         Enabled = true
                     }
-                },
-                null);
+                }));
 
             AssertContains(prompt, "common.long_skill", "skill id");
             AssertContains(prompt, "[truncated]", "skill body truncated");
@@ -178,18 +170,51 @@ namespace RNAssistant.Harness
             settings.AgentPrompts.ToolProtocolPrompt = "CUSTOM_TOOL_PROTOCOL";
             settings.AgentPrompts.ToolRoutingPrompt = "CUSTOM_TOOL_ROUTING";
 
-            var prompt = new PromptComposer().ComposeSystemPrompt(
-                settings,
-                "Excel",
-                string.Empty,
-                string.Empty,
-                new ToolDefinition[0],
-                new SkillDefinition[0],
-                null);
+            var messages = BuildPlannerMessages(settings, new ToolDefinition[0], new SkillDefinition[0]);
+            var prompt = FlattenMessages(messages);
 
             AssertContains(prompt, "CUSTOM_TOOL_PROTOCOL", "custom tool protocol prompt");
             AssertContains(prompt, "CUSTOM_TOOL_ROUTING", "custom tool routing prompt");
             AssertTrue(prompt.IndexOf("Required tool response format", StringComparison.OrdinalIgnoreCase) < 0, "default protocol replaced");
+            AssertEqual("user", messages[0].Role, "default instruction role");
+
+            settings.SystemPromptRole = "system";
+            AssertEqual("system", BuildPlannerMessages(settings, new ToolDefinition[0], new SkillDefinition[0])[0].Role, "system instruction role");
+        }
+
+        private static void PromptSettingsApplyOnNextRequest()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var store = new JsonFileStore();
+                var settings = new AppSettings
+                {
+                    SystemPrompt = "BASE_V1",
+                    SystemPromptRole = "user"
+                };
+                settings.AgentPrompts.ToolProtocolPrompt = "PROTOCOL_V1";
+                settings.AgentPrompts.ToolRoutingPrompt = "ROUTING_V1";
+                store.Save(paths.SettingsFile, settings);
+
+                var first = BuildPlannerMessages(store.Load(paths.SettingsFile, new AppSettings()), new ToolDefinition[0], new SkillDefinition[0]);
+                AssertEqual("user", first[0].Role, "first prompt role");
+                AssertContains(first[0].Content, "BASE_V1", "first base prompt");
+                AssertContains(first[0].Content, "PROTOCOL_V1", "first protocol prompt");
+                AssertContains(first[0].Content, "ROUTING_V1", "first routing prompt");
+
+                settings.SystemPrompt = "BASE_V2";
+                settings.SystemPromptRole = "system";
+                settings.AgentPrompts.ToolProtocolPrompt = "PROTOCOL_V2";
+                settings.AgentPrompts.ToolRoutingPrompt = "ROUTING_V2";
+                store.Save(paths.SettingsFile, settings);
+
+                var second = BuildPlannerMessages(store.Load(paths.SettingsFile, new AppSettings()), new ToolDefinition[0], new SkillDefinition[0]);
+                AssertEqual("system", second[0].Role, "updated prompt role");
+                AssertContains(second[0].Content, "BASE_V2", "updated base prompt");
+                AssertContains(second[0].Content, "PROTOCOL_V2", "updated protocol prompt");
+                AssertContains(second[0].Content, "ROUTING_V2", "updated routing prompt");
+                AssertTrue(second[0].Content.IndexOf("BASE_V1", StringComparison.Ordinal) < 0, "old prompt removed");
+            });
         }
 
         private static void AgentCanSaveSkillsWithConfirmation()

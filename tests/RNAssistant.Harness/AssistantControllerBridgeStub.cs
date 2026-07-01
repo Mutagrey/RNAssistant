@@ -26,6 +26,7 @@ namespace RNAssistant.Office
         public string LastContextText { get; private set; }
         public string LastToolsJson { get; private set; }
         public string LastSkillsJson { get; private set; }
+        public string LastDocumentHost { get; private set; }
 
         public InitResponse Initialize() { return new InitResponse { Host = "Excel", Title = "Harness.xlsx" }; }
         public ChatStateResponse ListChats() { return ChatState(); }
@@ -33,6 +34,11 @@ namespace RNAssistant.Office
         public ChatStateResponse SelectChat(string chatId) { return ChatState(null, chatId); }
         public OpenDocumentResponse OpenDocument(string chatId) { return new OpenDocumentResponse { Path = string.Empty, Launched = false }; }
         public ChatStateResponse ActivateDocument(string documentKey) { return ChatState(null, documentKey); }
+        public ChatStateResponse DeleteDocument(string host, string documentKey)
+        {
+            LastDocumentHost = host;
+            return ChatState(host, documentKey);
+        }
         public ChatStateResponse RenameChat(string chatId, string title) { return ChatState(title, chatId); }
         public ChatStateResponse SetChatModel(string chatId, string model) { return ChatState(model, chatId); }
         public ChatStateResponse SetChatHtmlMode(string chatId, bool enabled) { return ChatState(enabled ? "html" : string.Empty, chatId); }

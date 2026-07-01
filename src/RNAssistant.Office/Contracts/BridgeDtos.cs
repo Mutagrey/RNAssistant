@@ -103,6 +103,9 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class DocumentPayload
     {
+        [JsonProperty("host")]
+        public string Host { get; set; }
+
         [JsonProperty("documentKey")]
         public string DocumentKey { get; set; }
     }

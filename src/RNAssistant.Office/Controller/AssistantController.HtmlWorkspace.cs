@@ -17,7 +17,7 @@ namespace RNAssistant.Office
         {
             var session = LoadSession(chatId);
             HtmlArtifactToolExecutor.UpsertFile(session, path, kind, content, setActive);
-            _chatStore.Save(session);
+            SaveSessionChanges(session);
             return HtmlWorkspaceState(session);
         }
 
@@ -25,7 +25,7 @@ namespace RNAssistant.Office
         {
             var session = LoadSession(chatId);
             HtmlArtifactToolExecutor.UpsertDataSource(session, name, json);
-            _chatStore.Save(session);
+            SaveSessionChanges(session);
             return HtmlWorkspaceState(session);
         }
 
@@ -33,7 +33,7 @@ namespace RNAssistant.Office
         {
             var session = LoadSession(chatId);
             HtmlArtifactToolExecutor.SetActiveFile(session, path);
-            _chatStore.Save(session);
+            SaveSessionChanges(session);
             return HtmlWorkspaceState(session);
         }
 
@@ -41,7 +41,7 @@ namespace RNAssistant.Office
         {
             var session = LoadSession(chatId);
             HtmlArtifactToolExecutor.RestoreSnapshot(session, snapshotId);
-            _chatStore.Save(session);
+            SaveSessionChanges(session);
             return HtmlWorkspaceState(session);
         }
 
@@ -49,7 +49,7 @@ namespace RNAssistant.Office
         {
             var session = LoadSession(chatId);
             HtmlArtifactToolExecutor.RedoSnapshot(session, snapshotId);
-            _chatStore.Save(session);
+            SaveSessionChanges(session);
             return HtmlWorkspaceState(session);
         }
 

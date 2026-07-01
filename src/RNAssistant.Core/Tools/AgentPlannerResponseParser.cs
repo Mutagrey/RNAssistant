@@ -9,35 +9,11 @@ namespace RNAssistant.Core.Tools
     {
         public AgentPlannerParseResult Parse(string text)
         {
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                return AgentPlannerParseResult.Fail("empty_response", "Planner response is empty.");
-            }
-
-            var trimmed = text.Trim().TrimStart('\uFEFF');
-            string normalized;
-            string sourceFormat;
-            if (!TryUnwrapSingleFence(trimmed, out normalized, out sourceFormat))
-            {
-                normalized = trimmed;
-                sourceFormat = trimmed.StartsWith("{", StringComparison.Ordinal)
-                    ? "strict_json"
-                    : "unrecognized_text";
-            }
-
-            var parsed = ParseStrict(normalized);
-            if (!parsed.Success)
-            {
-                AgentPlannerParseResult legacy;
-                if (TryParseLegacyPlanEnvelope(normalized, out legacy))
-                {
-                    parsed = legacy;
-                    sourceFormat += "_legacy_plan";
-                }
-            }
-            parsed.SourceFormat = sourceFormat;
-            parsed.NormalizedText = normalized;
-            return parsed;
+            var normalized = (text ?? string.Empty).Trim().TrimStart('\uFEFF');
+            var result = ParseStrict(normalized);
+            result.SourceFormat = "strict_json";
+            result.NormalizedText = normalized;
+            return result;
         }
 
         public AgentPlannerParseResult ParseStrict(string text)
@@ -213,131 +189,6 @@ namespace RNAssistant.Core.Tools
                 return allowNullOrMissing;
             }
             return token.Type == JTokenType.String;
-        }
-
-        private static bool TryUnwrapSingleFence(string text, out string normalized, out string sourceFormat)
-        {
-            normalized = null;
-            sourceFormat = null;
-            if (string.IsNullOrWhiteSpace(text) || !text.StartsWith("```", StringComparison.Ordinal) || !text.EndsWith("```", StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            var firstLineEnd = text.IndexOf('\n');
-            if (firstLineEnd < 0)
-            {
-                return false;
-            }
-
-            var header = text.Substring(3, firstLineEnd - 3).Trim();
-            if (!string.Equals(header, "json", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(header, "rnassistant-agent", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            var bodyLength = text.Length - firstLineEnd - 1 - 3;
-            if (bodyLength < 0)
-            {
-                return false;
-            }
-
-            normalized = text.Substring(firstLineEnd + 1, bodyLength).Trim();
-            sourceFormat = string.Equals(header, "json", StringComparison.OrdinalIgnoreCase)
-                ? "json_fence"
-                : "rnassistant_agent_fence";
-            return true;
-        }
-
-        private static bool TryParseLegacyPlanEnvelope(string text, out AgentPlannerParseResult result)
-        {
-            result = null;
-            JObject root;
-            try
-            {
-                root = JObject.Parse(text);
-            }
-            catch (JsonException)
-            {
-                return false;
-            }
-
-            var plan = root["plan"] as JObject;
-            var steps = plan == null ? null : plan["steps"] as JArray;
-            if (plan == null || steps == null)
-            {
-                return false;
-            }
-
-            var response = new AgentPlannerResponse();
-            foreach (var token in steps)
-            {
-                var stepObject = token as JObject;
-                var toolId = ReadString(stepObject, "toolId");
-                if (stepObject == null || string.IsNullOrWhiteSpace(toolId))
-                {
-                    result = AgentPlannerParseResult.Fail("missing_tool_id", "Each legacy planner step requires toolId.");
-                    return true;
-                }
-
-                var step = new AgentPlannerStep
-                {
-                    ToolId = toolId,
-                    Reason = FirstNonEmpty(ReadString(stepObject, "reason"), ReadString(stepObject, "description"))
-                };
-                var arguments = stepObject["arguments"];
-                if (arguments != null && arguments.Type != JTokenType.Null)
-                {
-                    var argumentObject = arguments as JObject;
-                    if (argumentObject == null)
-                    {
-                        result = AgentPlannerParseResult.Fail("invalid_arguments", "Legacy planner step arguments must be an object.");
-                        return true;
-                    }
-                    foreach (var property in argumentObject.Properties())
-                    {
-                        step.Arguments[property.Name] = ToObjectValue(property.Value);
-                    }
-                }
-                response.Steps.Add(step);
-            }
-
-            if (response.Steps.Count > 0)
-            {
-                response.Kind = AgentResponseKinds.ToolPlan;
-                response.Intent = AgentIntents.Read;
-                response.Message = ReadString(plan, "response");
-                result = AgentPlannerParseResult.Ok(response);
-                return true;
-            }
-
-            response.Kind = AgentResponseKinds.Final;
-            response.Intent = AgentIntents.Answer;
-            response.Message = FirstNonEmpty(
-                ReadString(plan, "response"),
-                ReadString(plan, "message"),
-                ReadString(plan, "answer"));
-            if (string.IsNullOrWhiteSpace(response.Message))
-            {
-                result = AgentPlannerParseResult.Fail("missing_message", "Legacy planner final response requires response text.");
-                return true;
-            }
-
-            result = AgentPlannerParseResult.Ok(response);
-            return true;
-        }
-
-        private static string FirstNonEmpty(params string[] values)
-        {
-            foreach (var value in values ?? new string[0])
-            {
-                if (!string.IsNullOrWhiteSpace(value))
-                {
-                    return value;
-                }
-            }
-            return null;
         }
 
         private static string ReadString(JObject obj, string name)

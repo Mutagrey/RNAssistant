@@ -39,10 +39,7 @@ namespace RNAssistant.MockDemo
             {
                 content = AgentBlock(isHtmlTask ? HtmlCommands(isHtmlEdit, false) : InitialCommands(_host, false));
             }
-            else if (Contains(lastUser, "could not recover executable JSON") ||
-                Contains(lastUser, "ForceToolUsePrompt") ||
-                Contains(lastUser, "prose-only answer is not acceptable") ||
-                Contains(lastUser, "Return only one ```rnassistant-agent"))
+            else if (Contains(lastUser, "requires Office tool use before a final answer"))
             {
                 content = AgentBlock(isHtmlTask ? HtmlCommands(isHtmlEdit, false) : InitialCommands(_host, false));
             }
@@ -74,7 +71,7 @@ namespace RNAssistant.MockDemo
                 }
                 else if (string.Equals(model, "mock-deepseek", StringComparison.OrdinalIgnoreCase))
                 {
-                    content = "```rnassistant-agent\n{steps:[{toolId:'common.html_workspace_save_file', arguments:{path:'../bad.html'}}\n```\nЧерновик плана.";
+                    content = "{steps:[{toolId:'common.html_workspace_save_file', arguments:{path:'../bad.html'}}";
                 }
                 else
                 {
@@ -97,7 +94,7 @@ namespace RNAssistant.MockDemo
             }
             else if (string.Equals(model, "mock-deepseek", StringComparison.OrdinalIgnoreCase))
             {
-                content = "```rnassistant-agent\n{steps:[{toolId:'" + FirstToolId(_host) + "', arguments:{}}\n```\nЯ попробовал составить план.";
+                content = "{steps:[{toolId:'" + FirstToolId(_host) + "', arguments:{}}";
             }
             else
             {
@@ -430,10 +427,7 @@ namespace RNAssistant.MockDemo
             return Contains(text, "A local tool call failed") ||
                 Contains(text, "Unknown tool id") ||
                 Contains(text, "Use only these exact available tool ids") ||
-                Contains(text, "could not recover executable JSON") ||
-                Contains(text, "ForceToolUsePrompt") ||
-                Contains(text, "prose-only answer is not acceptable") ||
-                Contains(text, "Return only one ```rnassistant-agent") ||
+                Contains(text, "requires Office tool use before a final answer") ||
                 Contains(text, "verify the result") ||
                 Contains(text, "Before the final answer, verify") ||
                 Contains(text, "If the task is complete, answer the user normally") ||

@@ -221,7 +221,7 @@ namespace RNAssistant.Harness
                 var diagnostic = session.Messages.Last().Activity;
                 AssertTrue(diagnostic != null, "diagnostic activity");
                 AssertEqual("Planner JSON invalid", diagnostic.Title, "diagnostic title");
-                AssertContains(diagnostic.ResultMessage, "format=unrecognized_text", "diagnostic format");
+                AssertContains(diagnostic.ResultMessage, "format=strict_json", "diagnostic format");
                 AssertContains(diagnostic.ResultMessage, "not json after repair", "diagnostic response preview");
             });
         }

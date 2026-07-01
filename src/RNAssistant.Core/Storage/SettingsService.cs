@@ -65,10 +65,7 @@ namespace RNAssistant.Core.Storage
             {
                 settings.SystemPrompt = defaults.SystemPrompt;
             }
-            if (string.IsNullOrWhiteSpace(settings.AgentPrompt))
-            {
-                settings.AgentPrompt = defaults.AgentPrompt;
-            }
+            settings.SystemPromptRole = NormalizePromptRole(settings.SystemPromptRole);
             NormalizeAgentPrompts(settings);
             if (settings.MaxTokens <= 0)
             {
@@ -168,7 +165,13 @@ namespace RNAssistant.Core.Storage
             settings.AgentPrompts.AfterToolResultsPrompt = DefaultIfBlank(settings.AgentPrompts.AfterToolResultsPrompt, defaults.AfterToolResultsPrompt);
             settings.AgentPrompts.VerifyMutationPrompt = DefaultIfBlank(settings.AgentPrompts.VerifyMutationPrompt, defaults.VerifyMutationPrompt);
             settings.AgentPrompts.ConfirmedToolContinuationPrompt = DefaultIfBlank(settings.AgentPrompts.ConfirmedToolContinuationPrompt, defaults.ConfirmedToolContinuationPrompt);
-            settings.AgentPrompts.RetryFailedToolPrompt = DefaultIfBlank(settings.AgentPrompts.RetryFailedToolPrompt, defaults.RetryFailedToolPrompt);
+        }
+
+        private static string NormalizePromptRole(string value)
+        {
+            return string.Equals(value, "system", StringComparison.OrdinalIgnoreCase)
+                ? "system"
+                : "user";
         }
 
         private static string DefaultIfBlank(string value, string fallback)

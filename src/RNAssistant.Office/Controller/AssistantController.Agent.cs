@@ -48,7 +48,7 @@ namespace RNAssistant.Office
                     skills,
                     cancellationToken).ConfigureAwait(false);
             }
-            _chatStore.Save(session);
+            SaveSessionChanges(session);
             return ChatState(session);
         }
 
@@ -60,7 +60,7 @@ namespace RNAssistant.Office
             var result = ToolResult.Cancelled("Tool cancelled by user.");
             result.PendingId = pending.PendingId;
             UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
-            _chatStore.Save(session);
+            SaveSessionChanges(session);
             return ChatState(session);
         }
 

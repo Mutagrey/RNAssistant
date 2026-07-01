@@ -503,9 +503,18 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<ChatAttachment> currentAttachments)
         {
             var messages = new List<ChatMessage>();
-            var system = new ChatMessage { Role = "system", Content = BuildSystemPrompt() };
-            var current = new ChatMessage { Role = "user", Content = BuildPlannerContext(userText, snapshot, route, tools, observations, context, skills, settings) };
-            messages.Add(system);
+            var instruction = BuildInstructionPrompt(settings);
+            var plannerContext = BuildPlannerContext(userText, snapshot, route, tools, observations, context, skills, settings);
+            var systemRole = string.Equals(PromptRole(settings), "system", StringComparison.Ordinal);
+            if (systemRole)
+            {
+                messages.Add(new ChatMessage { Role = "system", Content = instruction });
+            }
+            var current = new ChatMessage
+            {
+                Role = "user",
+                Content = systemRole ? plannerContext : instruction + "\n\n" + plannerContext
+            };
             messages.Add(current);
 
             var budget = ModelContextBudget.InputBudgetTokens(settings);
@@ -514,6 +523,7 @@ namespace RNAssistant.Office.Services
                 ? new List<ChatAttachment>()
                 : new List<ChatAttachment>(currentAttachments);
             var history = ConversationHistory(session);
+            var historyInsertIndex = messages.Count - 1;
             for (var index = history.Count - 1; index >= 0; index--)
             {
                 var source = history[index];
@@ -523,7 +533,7 @@ namespace RNAssistant.Office.Services
                 {
                     break;
                 }
-                messages.Insert(1, candidate);
+                messages.Insert(historyInsertIndex, candidate);
                 used += estimate;
             }
             return messages;
@@ -580,16 +590,26 @@ namespace RNAssistant.Office.Services
             return total;
         }
 
-        private static string BuildSystemPrompt()
+        private static string BuildInstructionPrompt(AppSettings settings)
         {
-            return "You are RNAssistant Office Action Planner.\n" +
-                "Return exactly one JSON object. No markdown. No code fences. No prose outside JSON.\n" +
-                "Allowed shape: {\"kind\":\"tool_plan|final|clarify|cannot_do\",\"intent\":\"read|analyze|mutate|verify|answer|clarify\",\"message\":\"string|null\",\"steps\":[{\"toolId\":\"exact tool id from AVAILABLE_TOOLS\",\"arguments\":{},\"reason\":\"short reason\"}],\"expectedOutcome\":\"string|null\"}.\n" +
-                "The output object may contain only kind, intent, message, steps, and expectedOutcome. Do not copy USER_REQUEST, ROUTE, CURRENT_OFFICE_CONTEXT, AVAILABLE_TOOLS, or OBSERVATIONS into the output. Do not wrap the envelope in plan.\n" +
-                "Use only AVAILABLE_TOOLS. Never invent tool ids, workbook, sheet, range, email, or document content.\n" +
-                "Call a context/read tool only when the request depends on current Office content or ROUTE requires inspection. Do not inspect Office for general questions.\n" +
-                "A mutation with an explicit target and complete arguments does not need a preliminary read unless ROUTE requires inspection.\n" +
-                "For claims about current Office content, use only CURRENT_OFFICE_CONTEXT and OBSERVATIONS. If no tool is needed, return kind=final.";
+            settings = settings ?? new AppSettings();
+            var prompts = settings.AgentPrompts ?? new AgentPromptSettings();
+            return string.Join(
+                "\n\n",
+                new[]
+                {
+                    settings.SystemPrompt,
+                    prompts.ToolProtocolPrompt,
+                    prompts.ToolRoutingPrompt
+                }.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim()));
+        }
+
+        private static string PromptRole(AppSettings settings)
+        {
+            return settings != null &&
+                string.Equals(settings.SystemPromptRole, "system", StringComparison.OrdinalIgnoreCase)
+                ? "system"
+                : "user";
         }
 
         private static string BuildPlannerContext(string userText, OfficeSnapshot snapshot, RoutedTask route, ToolCatalogSlice tools, IEnumerable<AgentObservation> observations, DocumentContext context, IEnumerable<SkillDefinition> skills, AppSettings settings)
@@ -635,6 +655,7 @@ namespace RNAssistant.Office.Services
                 builder.AppendLine(index + ". " + tool.Id);
                 builder.AppendLine("   " + Trim(tool.Description, 240));
                 builder.AppendLine("   risk: level_" + tool.RiskLevel + "; mode: " + (tool.MutatesDocument ? "mutation" : "read"));
+                builder.AppendLine("   confirmation: " + (tool.RequiresConfirmation ? "required" : "runtime policy"));
                 builder.AppendLine("   args: " + (string.IsNullOrWhiteSpace(tool.ArgumentSchemaJson) ? "{}" : tool.ArgumentSchemaJson));
                 if (!string.IsNullOrWhiteSpace(tool.UseWhen))
                 {
@@ -776,6 +797,7 @@ namespace RNAssistant.Office.Services
                 {
                     builder.AppendLine();
                     builder.AppendLine("RELEVANT_SKILLS:");
+                    builder.AppendLine("Skills are guidance documents only; they are not executable tools.");
                     any = true;
                 }
                 var body = skill.BodyMarkdown ?? string.Empty;

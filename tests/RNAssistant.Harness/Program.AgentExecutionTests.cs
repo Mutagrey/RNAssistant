@@ -22,7 +22,7 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static void ChatLegacyGreetingNeedsNoRepair()
+        private static void ChatLegacyGreetingRequiresStrictRepair()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -32,7 +32,12 @@ namespace RNAssistant.Harness
                     "{\"USER_REQUEST\":\"Привет\",\"ROUTE\":{\"app\":\"Excel\",\"mode\":\"answer\",\"requiresTool\":false}," +
                     "\"AVAILABLE_TOOLS\":[],\"plan\":{\"steps\":[],\"response\":\"Здравствуйте! Чем могу помочь?\"}}\n" +
                     "```";
-                var service = ChatServiceWithResponses(adapter, executor, calls, RawResponse(photographedResponse));
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    RawResponse(photographedResponse),
+                    FinalBlock("Здравствуйте! Чем могу помочь?"));
 
                 var result = service.ExecuteAsync(
                     "Привет",
@@ -42,8 +47,8 @@ namespace RNAssistant.Harness
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
-                AssertEqual("Здравствуйте! Чем могу помочь?", result.AssistantText, "legacy greeting answer");
-                AssertEqual(1, calls.Count, "legacy greeting does not invoke repair");
+                AssertEqual("Здравствуйте! Чем могу помочь?", result.AssistantText, "repaired greeting answer");
+                AssertEqual(2, calls.Count, "legacy greeting invokes strict repair");
                 AssertEqual(0, adapter.Executed.Count, "legacy greeting executes no tools");
             });
         }
@@ -430,10 +435,6 @@ namespace RNAssistant.Harness
             AssertEqual(1, session.Messages.Count, "transcript message count");
             AssertTrue(session.Messages[0].Activity != null, "transcript activity exists");
             AssertContains(session.Messages[0].Content, "Agent step", "fallback content");
-            var promptMessages = PromptMessageBuilder.Build("system", string.Empty, session.Messages, 8000);
-            AssertContains(promptMessages.Last().Content, "Agent activity summary", "prompt activity marker");
-            AssertContains(promptMessages.Last().Content, "excel.make_report", "prompt activity data");
-            AssertTrue(promptMessages.Last().Content.IndexOf("arguments:", StringComparison.OrdinalIgnoreCase) < 0, "prompt omits arguments");
         }
     }
 }

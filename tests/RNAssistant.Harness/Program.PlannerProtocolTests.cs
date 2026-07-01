@@ -25,43 +25,22 @@ namespace RNAssistant.Harness
             AssertEqual("not_json_object", prose.ErrorCode, "prose error code");
         }
 
-        private static void PlannerCompatibilityUnwrapsSingleFence()
+        private static void PlannerRejectsAlternateEnvelopes()
         {
             var parser = new AgentPlannerResponseParser();
             var jsonFence = parser.Parse("```json\n{\"kind\":\"final\",\"intent\":\"answer\",\"message\":\"Done.\",\"steps\":[]}\n```");
             var agentFence = parser.Parse("```rnassistant-agent\n{\"kind\":\"final\",\"intent\":\"answer\",\"message\":\"Done.\",\"steps\":[]}\n```");
-            var bom = parser.Parse("\uFEFF{\"kind\":\"final\",\"intent\":\"answer\",\"message\":\"Done.\",\"steps\":[]}");
             var noisy = parser.Parse("Result:\n```json\n{\"kind\":\"final\",\"intent\":\"answer\",\"message\":\"Done.\",\"steps\":[]}\n```");
-
-            AssertTrue(jsonFence.Success, "json fence accepted");
-            AssertEqual("json_fence", jsonFence.SourceFormat, "json fence source");
-            AssertTrue(agentFence.Success, "agent fence accepted");
-            AssertEqual("rnassistant_agent_fence", agentFence.SourceFormat, "agent fence source");
-            AssertTrue(bom.Success, "utf8 bom accepted");
-            AssertTrue(!noisy.Success, "prose around fence rejected");
-        }
-
-        private static void PlannerCompatibilityMapsLegacyPlanEnvelope()
-        {
             var photographedResponse =
                 "```rnassistant-agent\n" +
                 "{\"USER_REQUEST\":\"Привет\",\"ROUTE\":{\"app\":\"Excel\",\"mode\":\"answer\",\"requiresTool\":false}," +
                 "\"AVAILABLE_TOOLS\":[],\"plan\":{\"steps\":[],\"response\":\"Здравствуйте! Чем могу помочь?\"}}\n" +
                 "```";
 
-            var parsed = new AgentPlannerResponseParser().Parse(photographedResponse);
-            var toolPlan = new AgentPlannerResponseParser().Parse(
-                "```rnassistant-agent\n" +
-                "{\"plan\":{\"steps\":[{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"},\"description\":\"Create sheet\"}],\"response\":null}}\n" +
-                "```");
-
-            AssertTrue(parsed.Success, "photographed legacy response accepted");
-            AssertEqual(AgentResponseKinds.Final, parsed.Response.Kind, "legacy response kind");
-            AssertEqual("Здравствуйте! Чем могу помочь?", parsed.Response.Message, "legacy response text");
-            AssertEqual("rnassistant_agent_fence_legacy_plan", parsed.SourceFormat, "legacy response source");
-            AssertTrue(toolPlan.Success, "legacy tool plan accepted");
-            AssertEqual(AgentResponseKinds.ToolPlan, toolPlan.Response.Kind, "legacy tool plan kind");
-            AssertEqual("excel.add_sheet", toolPlan.Response.Steps[0].ToolId, "legacy tool id");
+            AssertEqual("not_json_object", jsonFence.ErrorCode, "json fence rejected");
+            AssertEqual("not_json_object", agentFence.ErrorCode, "agent fence rejected");
+            AssertEqual("not_json_object", noisy.ErrorCode, "prose around fence rejected");
+            AssertEqual("not_json_object", parser.Parse(photographedResponse).ErrorCode, "legacy plan rejected");
         }
 
         private static void PlannerRejectsInvalidIntentAndSteps()

@@ -6,11 +6,12 @@ using Newtonsoft.Json.Linq;
 using Word = Microsoft.Office.Interop.Word;
 using RNAssistant.Core.Models;
 using RNAssistant.Office;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.OfficeHosts
 {
-    public sealed class WordAdapter : IOfficeApplicationAdapter, IOfficeContextProvider
+    public sealed class WordAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeDocumentCatalog
     {
         private readonly Word.Application _application;
         private readonly OfficeTargetDescriptor _target;
@@ -109,6 +110,63 @@ namespace RNAssistant.OfficeHosts
             }
 
             return context;
+        }
+
+        public IReadOnlyList<OpenOfficeDocumentDto> ListOpenDocuments()
+        {
+            Word.Document active;
+            try { active = _application.ActiveDocument; }
+            catch { active = null; }
+            var result = new List<OpenOfficeDocumentDto>();
+            foreach (Word.Document document in _application.Documents)
+            {
+                var path = SafeString(delegate { return document.Path; });
+                result.Add(new OpenOfficeDocumentDto
+                {
+                    Host = HostName,
+                    DocumentKey = KeyForDocument(document),
+                    Title = SafeString(delegate { return document.Name; }),
+                    Path = string.IsNullOrWhiteSpace(path) ? string.Empty : SafeString(delegate { return document.FullName; }),
+                    IsActive = active != null && string.Equals(KeyForDocument(active), KeyForDocument(document), StringComparison.OrdinalIgnoreCase)
+                });
+            }
+            return result;
+        }
+
+        public bool ActivateDocument(string documentKey)
+        {
+            if (string.IsNullOrWhiteSpace(documentKey))
+            {
+                return false;
+            }
+
+            foreach (Word.Document document in _application.Documents)
+            {
+                if (!string.Equals(KeyForDocument(document), documentKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                document.Activate();
+                NativeWindowInfo.BringToForeground(NativeWindowInfo.ReadLongMemberPath(_application, "ActiveWindow", "Hwnd"));
+                return true;
+            }
+            return false;
+        }
+
+        private string KeyForDocument(Word.Document document)
+        {
+            if (document == null)
+            {
+                return "Word:NoDocument";
+            }
+
+            var runtimeKey = "Word:Runtime:" + document.GetHashCode().ToString("x");
+            return DocumentIdentity.ForOfficeDocument(
+                HostName,
+                SafeString(delegate { return document.Path; }),
+                runtimeKey,
+                () => document.CustomDocumentProperties);
         }
 
         public IEnumerable<ToolDefinition> GetBuiltInTools()

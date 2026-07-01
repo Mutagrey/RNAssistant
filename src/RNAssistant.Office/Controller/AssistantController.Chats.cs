@@ -37,7 +37,7 @@ namespace RNAssistant.Office
             if (removed)
             {
                 _attachmentStore.DeleteMessage(removedMessage);
-                _chatStore.Save(session);
+                SaveSessionChanges(session);
             }
 
             var activeId = ChatStore.GetSessionId(session);
@@ -62,7 +62,7 @@ namespace RNAssistant.Office
                 targetIndex = sourceMessages.Count - 1;
             }
 
-            var fork = _chatStore.Create(source.Host, source.DocumentKey, source.DocumentTitle, ChatSessionService.BuildForkTitle(source));
+            var fork = _chatStore.CreateTransient(source.Host, source.DocumentKey, source.DocumentTitle, ChatSessionService.BuildForkTitle(source));
             fork.Model = source.Model;
             fork.HtmlModeEnabled = source.HtmlModeEnabled;
             fork.Context = ChatCloneService.CloneContext(LoadContext(source)) ?? CreateEmptyContext();
@@ -75,7 +75,7 @@ namespace RNAssistant.Office
                 _attachmentStore.CloneMessageAttachments(ChatStore.GetSessionId(fork), message);
             }
             NormalizeContext(fork.Context, fork);
-            _chatStore.Save(fork);
+            SaveSessionChanges(fork);
             _chatSessions.SetActiveSession(fork);
             return ChatState(fork);
         }
@@ -108,13 +108,13 @@ namespace RNAssistant.Office
             }
 
             message.Activity.DataJson = parsed.ToString(Formatting.None);
-            _chatStore.Save(session);
+            SaveSessionChanges(session);
             return ChatState(session);
         }
 
         public ChatStateResponse ListChats()
         {
-            var session = LoadSession(null);
+            var session = _chatSessions.GetActiveSession() ?? LoadSession(null);
             return ChatState(session);
         }
 
@@ -159,7 +159,7 @@ namespace RNAssistant.Office
             if (!string.IsNullOrWhiteSpace(title))
             {
                 session.Title = title.Trim();
-                _chatStore.Save(session);
+                SaveSessionChanges(session);
             }
 
             return ChatState(session);
@@ -169,7 +169,7 @@ namespace RNAssistant.Office
         {
             var session = LoadSession(chatId);
             session.Model = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
-            _chatStore.Save(session);
+            SaveSessionChanges(session);
             return ChatState(session);
         }
 
@@ -177,7 +177,7 @@ namespace RNAssistant.Office
         {
             var session = LoadSession(chatId);
             session.HtmlModeEnabled = enabled;
-            _chatStore.Save(session);
+            SaveSessionChanges(session);
             return ChatState(session);
         }
 
@@ -185,9 +185,8 @@ namespace RNAssistant.Office
         {
             var session = LoadSession(chatId);
             _attachmentStore.DeleteSession(ChatStore.GetSessionId(session));
-            session.Messages.Clear();
-            _chatStore.Save(session);
-            return ChatState(session);
+            var next = _chatSessions.DeleteAndSelectNext(ChatStore.GetSessionId(session));
+            return ChatState(next);
         }
 
         public ChatStateResponse DeleteChat(string chatId)
@@ -196,6 +195,24 @@ namespace RNAssistant.Office
             _attachmentStore.DeleteSession(ChatStore.GetSessionId(current));
             var next = _chatSessions.DeleteAndSelectNext(ChatStore.GetSessionId(current));
             return ChatState(next);
+        }
+
+        public ChatStateResponse DeleteDocument(string host, string documentKey)
+        {
+            if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(documentKey))
+            {
+                throw new InvalidOperationException("Документ не указан.");
+            }
+
+            var sessions = _chatStore.List(host, documentKey, string.Empty);
+            foreach (var session in sessions)
+            {
+                _attachmentStore.DeleteSession(ChatStore.GetSessionId(session));
+            }
+
+            _chatStore.DeleteDocument(host, documentKey);
+            _chatSessions.Reset();
+            return ChatState(LoadSession(null));
         }
 
         private ChatSession LoadSession(string requestedSessionId)
@@ -223,6 +240,25 @@ namespace RNAssistant.Office
                 ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load()),
                 HtmlWorkspace = session == null ? new HtmlWorkspace() : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace)
             };
+        }
+
+        private void SaveSessionChanges(ChatSession session)
+        {
+            if (session == null || (!_chatStore.IsPersisted(session) && !HasCompletedExchange(session)))
+            {
+                return;
+            }
+
+            _chatStore.Save(session);
+            _chatSessions.SetActiveSession(session);
+        }
+
+        private static bool HasCompletedExchange(ChatSession session)
+        {
+            var messages = session == null ? null : session.Messages;
+            return messages != null &&
+                messages.Any(message => message != null && string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase)) &&
+                messages.Any(message => message != null && string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase));
         }
 
     }

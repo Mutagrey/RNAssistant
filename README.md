@@ -197,7 +197,7 @@ Native tool calling is not required. In Agent mode, the model is a controlled pl
 
 Final/clarifying answers use the same envelope with `kind` set to `final`, `clarify`, or `cannot_do` and an empty `steps` array. The runtime routes the user request, slices the tool catalog, validates the planner response, gates risk/confirmation, executes tools, normalizes observations, and runs deterministic verification for mutations.
 
-The controlled agent loop expects the strict planner JSON envelope. As compatibility input it can unwrap one complete `json` or `rnassistant-agent` fence containing that envelope. Prose around the fence is rejected. Native API `tool_calls` are converted to planner steps by the low-level client.
+The controlled agent loop accepts only the strict planner JSON object in assistant text. Markdown fences, legacy envelopes, content-part arrays, native `tool_calls`, and `function_call` are rejected. One bounded repair request is made for malformed output.
 
 Routing happens before Office context capture. General questions receive an empty tool catalog and do not read the active document. Document-dependent requests use explicit read tools; mutations inspect first only when the route marks the target as unknown or risky.
 

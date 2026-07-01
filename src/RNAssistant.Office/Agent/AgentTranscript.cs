@@ -89,11 +89,6 @@ namespace RNAssistant.Office
 
         public static ChatActivity CreateAgentPlanActivity(IReadOnlyList<ToolCommand> commands)
         {
-            return CreateAgentPlanActivity(commands, null);
-        }
-
-        public static ChatActivity CreateAgentPlanActivity(IReadOnlyList<ToolCommand> commands, IReadOnlyList<ToolCommandParseDiagnostic> diagnostics)
-        {
             var activity = new ChatActivity
             {
                 Kind = "plan",
@@ -115,24 +110,6 @@ namespace RNAssistant.Office
                     Status = "planned",
                     ToolId = command == null ? string.Empty : command.ToolId,
                     ArgumentsJson = command == null ? null : JsonConvert.SerializeObject(command.Arguments, Formatting.Indented)
-                });
-            }
-
-            foreach (var diagnostic in diagnostics ?? new ToolCommandParseDiagnostic[0])
-            {
-                if (diagnostic == null || string.IsNullOrWhiteSpace(diagnostic.Code))
-                {
-                    continue;
-                }
-
-                activity.Children.Add(new ChatActivity
-                {
-                    Kind = "diagnostic",
-                    Title = "Protocol diagnostic",
-                    Subtitle = diagnostic.Code,
-                    Status = diagnostic.Recovered ? "completed" : "failed",
-                    ExecutionStatus = diagnostic.Recovered ? "recovered" : "failed",
-                    ResultMessage = diagnostic.Message
                 });
             }
 

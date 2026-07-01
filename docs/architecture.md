@@ -68,8 +68,8 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 
 ## Non-Negotiable Boundaries
 
-- Agent mode expects one strict planner JSON envelope. A single complete JSON fence and native `tool_calls` are normalized as compatibility input; prose extraction is not allowed.
-- Model reasoning is transport metadata (`reasoning_content`, `reasoning`, or compatibility `<think>`), stored and rendered separately; it is never mixed into planner JSON or replayed as chat history.
+- Agent mode accepts one strict planner JSON object in assistant text. Fences, legacy envelopes, content-part arrays, native `tool_calls`, and `function_call` are not supported.
+- Model reasoning is transport metadata (`reasoning_content` or `reasoning`), stored and rendered separately; it is never mixed into planner JSON or replayed as chat history.
 - Context limits are token budgets resolved from the active model capability catalog. The legacy character limit is read only for settings compatibility.
 - Planner context uses only the active chat's non-empty, reference-deduplicated pinned notes plus recent user/final-assistant messages. Agent activity/diagnostics and old attachments stay in the transcript but are not replayed; only current-turn attachments are sent.
 - Text/PDF attachments are normalized locally. PDF text uses PdfPig; vision-capable models may also receive selected PDF pages rendered by the host-neutral Office service. Raw PDF files are not sent through the OpenAI-compatible chat payload.
@@ -83,6 +83,8 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - Desktop target descriptors must be validated before tool execution; a closed or mismatched target should fail instead of falling back to an unrelated active document.
 - `OfficeContext` is a Core DTO. Host adapters may implement `IOfficeContextProvider`; bridge responses can expose this without requiring every adapter/fake to implement it.
 - Host adapters may implement `IOfficeDocumentCatalog`; typed bridge responses merge its open-document list with persisted chat summaries, and document activation is dispatched by stable document key.
+- Unsaved Office documents use the same custom document identity as saved files when custom properties are available; display names such as `Book1` are never storage keys.
+- New chat sessions remain transient until they contain a completed user/assistant exchange. Empty drafts are not written to the chat store, and document-history deletion removes every stored chat for that document without deleting the Office file.
 - Desktop COM automation must enter host adapters through `DispatchedOfficeApplicationAdapter`/`OfficeStaDispatcher`; VSTO task panes already run inside their Office host process and remain Windows-validation-only.
 - Desktop target selection uses `Auto follow` by default. `Manual` mode pins the selected working target; Excel task panes refresh on workbook activate/open/close events.
 - The Desktop target registry stores only lightweight descriptors, not long-lived Office COM objects.
@@ -106,7 +108,7 @@ dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj
 
 Current coverage:
 
-- parser fixtures: strict planner JSON envelope, fenced legacy `rnassistant-agent`, bare JSON arrays, native `tool_calls`, malformed JSON;
+- parser fixtures: strict planner JSON object plus rejection of fences, legacy envelopes, arrays, native `tool_calls`, and malformed JSON;
 - chat/tool/skill/VBA store fixtures using temp directories, including broken files being skipped;
 - chat session lifecycle fixtures, including document-key migration;
 - pipeline dry-run and execution fixtures with fake `IOfficeApplicationAdapter`;

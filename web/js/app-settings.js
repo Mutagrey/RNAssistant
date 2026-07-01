@@ -19,6 +19,7 @@ function renderSettings() {
   applyUiFontScale(s);
   $("baseUrlInput").value = s.BaseUrl || s.baseUrl || "";
   $("modelInput").value = s.Model || s.model || "";
+  $("systemPromptRoleInput").value = (s.SystemPromptRole || s.systemPromptRole || "user").toLowerCase() === "system" ? "system" : "user";
   $("maxTokensInput").value = s.MaxTokens || s.maxTokens || 2048;
   $("requestTimeoutInput").value = s.RequestTimeoutSeconds || s.requestTimeoutSeconds || 300;
   $("temperatureInput").value = s.Temperature || s.temperature || 0.2;
@@ -51,7 +52,7 @@ function readSettings() {
   }
   var promptSettings = typeof readPromptSettings === "function"
     ? readPromptSettings()
-    : { SystemPrompt: "", AgentPrompt: "", AgentPrompts: {} };
+    : { SystemPrompt: "", AgentPrompts: {} };
   return {
     BaseUrl: $("baseUrlInput").value.trim(),
     Model: $("modelInput").value.trim(),
@@ -73,7 +74,7 @@ function readSettings() {
     MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || 40),
     VbaContextCharLimit: Number($("vbaContextLimitInput").value || 30000),
     SystemPrompt: promptSettings.SystemPrompt,
-    AgentPrompt: promptSettings.AgentPrompt,
+    SystemPromptRole: $("systemPromptRoleInput").value === "system" ? "system" : "user",
     AgentPrompts: promptSettings.AgentPrompts,
     ModelImageSupportOverrides: modelImageSupportOverrides(),
     ModelCapabilities: modelCapabilitiesForSettings(),

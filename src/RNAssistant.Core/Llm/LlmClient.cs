@@ -327,7 +327,6 @@ namespace RNAssistant.Core.Llm
         {
             private readonly StringBuilder _content = new StringBuilder();
             private readonly StringBuilder _reasoning = new StringBuilder();
-            private readonly SortedDictionary<int, StreamingToolCall> _toolCalls = new SortedDictionary<int, StreamingToolCall>();
             private readonly Action<LlmStreamUpdate> _progress;
             private JObject _usage;
 
@@ -355,7 +354,7 @@ namespace RNAssistant.Core.Llm
                     return;
                 }
 
-                var content = ReadContentText(delta["content"]);
+                var content = ReadStringToken(delta["content"], "choices[0].delta.content");
                 if (!string.IsNullOrEmpty(content))
                 {
                     _content.Append(content);
@@ -365,67 +364,16 @@ namespace RNAssistant.Core.Llm
                     }
                 }
 
-                var reasoning = delta["reasoning_content"] ?? delta["reasoning"];
-                if (reasoning != null && reasoning.Type == JTokenType.String)
+                var reasoning = ReadStringToken(
+                    delta["reasoning_content"] ?? delta["reasoning"],
+                    "choices[0].delta.reasoning");
+                if (!string.IsNullOrEmpty(reasoning))
                 {
-                    var value = reasoning.Value<string>() ?? string.Empty;
-                    _reasoning.Append(value);
-                    if (_progress != null && value.Length > 0)
+                    _reasoning.Append(reasoning);
+                    if (_progress != null)
                     {
-                        _progress(new LlmStreamUpdate { ReasoningDelta = value });
+                        _progress(new LlmStreamUpdate { ReasoningDelta = reasoning });
                     }
-                }
-
-                var calls = delta["tool_calls"] as JArray;
-                if (calls != null)
-                {
-                    foreach (var token in calls.OfType<JObject>())
-                    {
-                        AddToolCallFragment(token);
-                    }
-                }
-
-                var legacyFunction = delta["function_call"] as JObject;
-                if (legacyFunction != null)
-                {
-                    AddToolCallFragment(new JObject
-                    {
-                        ["index"] = 0,
-                        ["function"] = legacyFunction.DeepClone()
-                    });
-                }
-            }
-
-            private void AddToolCallFragment(JObject token)
-            {
-                int index;
-                if (!int.TryParse((string)token["index"], out index))
-                {
-                    index = 0;
-                }
-                StreamingToolCall call;
-                if (!_toolCalls.TryGetValue(index, out call))
-                {
-                    call = new StreamingToolCall();
-                    _toolCalls[index] = call;
-                }
-
-                if (token["id"] != null)
-                {
-                    call.Id = AppendFragment(call.Id, ReadContentText(token["id"]));
-                }
-                var function = token["function"] as JObject;
-                if (function == null)
-                {
-                    return;
-                }
-                if (function["name"] != null)
-                {
-                    call.Name = AppendFragment(call.Name, ReadContentText(function["name"]));
-                }
-                if (function["arguments"] != null)
-                {
-                    call.Arguments.Append(ReadContentText(function["arguments"]));
                 }
             }
 
@@ -436,47 +384,8 @@ namespace RNAssistant.Core.Llm
                     ["content"] = _content.ToString(),
                     ["reasoning_content"] = _reasoning.ToString()
                 };
-                if (_toolCalls.Count > 0)
-                {
-                    var calls = new JArray();
-                    foreach (var pair in _toolCalls)
-                    {
-                        calls.Add(new JObject
-                        {
-                            ["id"] = pair.Value.Id,
-                            ["type"] = "function",
-                            ["function"] = new JObject
-                            {
-                                ["name"] = pair.Value.Name,
-                                ["arguments"] = pair.Value.Arguments.ToString()
-                            }
-                        });
-                    }
-                    message["tool_calls"] = calls;
-                }
-
                 return BuildCompletionResult(message, _usage);
             }
-
-            private static string AppendFragment(string current, string fragment)
-            {
-                if (string.IsNullOrEmpty(fragment))
-                {
-                    return current ?? string.Empty;
-                }
-                if (!string.IsNullOrEmpty(current) && string.Equals(current, fragment, StringComparison.Ordinal))
-                {
-                    return current;
-                }
-                return (current ?? string.Empty) + fragment;
-            }
-        }
-
-        private sealed class StreamingToolCall
-        {
-            public string Id { get; set; }
-            public string Name { get; set; }
-            public StringBuilder Arguments { get; private set; } = new StringBuilder();
         }
 
         public async Task<string> GetModelsConfigJsonAsync(AppSettings settings, string apiKeyOverride)
@@ -630,51 +539,7 @@ namespace RNAssistant.Core.Llm
                 return string.Empty;
             }
 
-            NormalizeReasoningFields(message);
-            var content = ReadContentText(message["content"]);
-            var toolCalls = message["tool_calls"] as JArray;
-            if ((toolCalls == null || toolCalls.Count == 0) && message["function_call"] is JObject)
-            {
-                toolCalls = new JArray
-                {
-                    new JObject
-                    {
-                        ["type"] = "function",
-                        ["function"] = message["function_call"].DeepClone()
-                    }
-                };
-            }
-            if (toolCalls == null || toolCalls.Count == 0)
-            {
-                return content;
-            }
-
-            var steps = new JArray();
-            foreach (var call in toolCalls.OfType<JObject>())
-            {
-                var function = call["function"] as JObject;
-                if (function == null)
-                {
-                    continue;
-                }
-
-                var arguments = ParseArgumentsToken(function["arguments"]);
-                steps.Add(new JObject
-                {
-                    ["toolId"] = ReadContentText(function["name"]),
-                    ["arguments"] = arguments,
-                    ["reason"] = "Native tool call converted to RNAssistant planner step."
-                });
-            }
-
-            return new JObject
-            {
-                ["kind"] = "tool_plan",
-                ["intent"] = "mutate",
-                ["message"] = string.IsNullOrWhiteSpace(content) ? null : content,
-                ["steps"] = steps,
-                ["expectedOutcome"] = "Execute converted native tool call steps."
-            }.ToString(Formatting.None);
+            return ReadStringToken(message["content"], "choices[0].message.content");
         }
 
         private static string ReadReasoningContent(JObject message)
@@ -683,9 +548,8 @@ namespace RNAssistant.Core.Llm
             {
                 return string.Empty;
             }
-            NormalizeReasoningFields(message);
             var token = message["reasoning_content"] ?? message["reasoning"];
-            var value = ReadContentText(token);
+            var value = ReadStringToken(token, "choices[0].message.reasoning");
             return value.Length > MaxStoredReasoningChars ? value.Substring(0, MaxStoredReasoningChars) : value;
         }
 
@@ -695,7 +559,6 @@ namespace RNAssistant.Core.Llm
             {
                 return false;
             }
-            NormalizeReasoningFields(message);
             var token = message["reasoning_content"] ?? message["reasoning"];
             return token != null && token.Type == JTokenType.String &&
                 (token.Value<string>() ?? string.Empty).Length > MaxStoredReasoningChars;
@@ -705,63 +568,6 @@ namespace RNAssistant.Core.Llm
         {
             var details = usage == null ? null : usage["completion_tokens_details"] as JObject;
             return ReadInt(details, "reasoning_tokens");
-        }
-
-        private static void NormalizeReasoningFields(JObject message)
-        {
-            if (message == null)
-            {
-                return;
-            }
-            var reasoning = message["reasoning_content"] ?? message["reasoning"];
-            var content = ReadContentText(message["content"]);
-            var normalizedContent = content.TrimStart();
-            if (!normalizedContent.StartsWith("<think>", StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-            var close = normalizedContent.IndexOf("</think>", StringComparison.OrdinalIgnoreCase);
-            if (close < 0)
-            {
-                return;
-            }
-            if (reasoning == null ||
-                reasoning.Type != JTokenType.String ||
-                string.IsNullOrWhiteSpace(reasoning.Value<string>()))
-            {
-                message["reasoning_content"] = normalizedContent.Substring(7, close - 7).Trim();
-            }
-            message["content"] = normalizedContent.Substring(close + 8).TrimStart();
-        }
-
-        private static JToken ParseArgumentsToken(JToken arguments)
-        {
-            if (arguments == null || arguments.Type == JTokenType.Null)
-            {
-                return new JObject();
-            }
-            if (arguments.Type == JTokenType.Object)
-            {
-                return arguments.DeepClone();
-            }
-            if (arguments.Type != JTokenType.String)
-            {
-                return arguments.DeepClone();
-            }
-
-            var text = arguments.Value<string>();
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                return new JObject();
-            }
-            try
-            {
-                return JToken.Parse(text);
-            }
-            catch (JsonException)
-            {
-                return new JValue(text);
-            }
         }
 
         private static LlmCompletionResult BuildCompletionResult(JObject message, JObject usage)
@@ -786,7 +592,7 @@ namespace RNAssistant.Core.Llm
             };
         }
 
-        private static string ReadContentText(JToken token)
+        private static string ReadStringToken(JToken token, string field)
         {
             if (token == null || token.Type == JTokenType.Null)
             {
@@ -796,48 +602,7 @@ namespace RNAssistant.Core.Llm
             {
                 return token.Value<string>() ?? string.Empty;
             }
-
-            var array = token as JArray;
-            if (array != null)
-            {
-                var builder = new StringBuilder();
-                var recognized = false;
-                foreach (var part in array)
-                {
-                    if (part == null || part.Type == JTokenType.Null)
-                    {
-                        continue;
-                    }
-                    if (part.Type == JTokenType.String)
-                    {
-                        builder.Append(part.Value<string>() ?? string.Empty);
-                        recognized = true;
-                        continue;
-                    }
-                    var partObject = part as JObject;
-                    if (partObject == null)
-                    {
-                        continue;
-                    }
-                    var text = partObject["text"];
-                    if (text is JObject && text["value"] != null)
-                    {
-                        text = text["value"];
-                    }
-                    if (text == null)
-                    {
-                        text = partObject["value"];
-                    }
-                    if (text != null && text.Type == JTokenType.String)
-                    {
-                        builder.Append(text.Value<string>() ?? string.Empty);
-                        recognized = true;
-                    }
-                }
-                return recognized ? builder.ToString() : token.ToString(Formatting.None);
-            }
-
-            return token.ToString(Formatting.None);
+            throw new InvalidOperationException(field + " must be a string or null.");
         }
 
         private static string DeepestMessage(Exception exception)

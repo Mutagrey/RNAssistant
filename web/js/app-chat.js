@@ -47,10 +47,30 @@ async function activateDocument(documentKey) {
   if (!documentKey) return;
   setActivity("loading", "Активирую документ...");
   try {
-    await send("activateDocument", { documentKey: documentKey });
-    await initialize();
+    applyChatState(await send("activateDocument", { documentKey: documentKey }));
+    log("Документ активирован.");
   } catch (error) {
     log(error.detail || error.message);
+    window.alert(error.detail || error.message);
+  } finally {
+    clearActivity();
+  }
+}
+
+async function deleteDocument(host, documentKey, title) {
+  if (!host || !documentKey ||
+      !window.confirm("Удалить документ «" + (title || "Документ") + "» из истории вместе со всеми чатами? Сам Office-файл удалён не будет.")) {
+    return;
+  }
+
+  setActivity("clearing", "Удаляю историю документа...");
+  try {
+    applyChatState(await send("deleteDocument", { host: host, documentKey: documentKey }));
+    clearSendError();
+    log("История документа удалена.");
+  } catch (error) {
+    log(error.detail || error.message);
+    window.alert(error.detail || error.message);
   } finally {
     clearActivity();
   }
@@ -591,10 +611,7 @@ function bindChatActions() {
   $("chatSessionSelect").addEventListener("change", function () { selectChat($("chatSessionSelect").value); });
   $("newChatButton").addEventListener("click", createChat);
   $("toggleChatTreeButton").addEventListener("click", function () {
-    state.chatTreeCollapsedAll = !state.chatTreeCollapsedAll;
-    if (!state.chatTreeCollapsedAll) {
-      state.collapsedChatDocuments = {};
-    }
+    setAllChatDocumentsCollapsed(!allChatDocumentsCollapsed());
     renderChatSessionList(state.chats || []);
   });
   $("toggleChatSidebarButton").addEventListener("click", function () {

@@ -118,7 +118,9 @@ namespace RNAssistant.OfficeHosts
 
         public IReadOnlyList<OpenOfficeDocumentDto> ListOpenDocuments()
         {
-            var active = ActiveWorkbook();
+            Excel.Workbook active;
+            try { active = _application.ActiveWorkbook; }
+            catch { active = null; }
             var result = new List<OpenOfficeDocumentDto>();
             foreach (Excel.Workbook workbook in _application.Workbooks)
             {
@@ -153,6 +155,7 @@ namespace RNAssistant.OfficeHosts
                 {
                     workbook.Windows[1].Activate();
                 }
+                NativeWindowInfo.BringToForeground(NativeWindowInfo.ReadLongMemberPath(_application, "Hwnd"));
                 return true;
             }
             return false;

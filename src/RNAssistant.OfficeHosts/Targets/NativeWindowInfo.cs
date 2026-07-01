@@ -53,7 +53,27 @@ namespace RNAssistant.OfficeHosts
             }
         }
 
+        public static void BringToForeground(long hwnd)
+        {
+            if (hwnd == 0)
+            {
+                return;
+            }
+
+            var handle = new IntPtr(hwnd);
+            ShowWindowAsync(handle, 9);
+            SetForegroundWindow(handle);
+        }
+
         [DllImport("user32.dll")]
         private static extern int GetWindowThreadProcessId(IntPtr hWnd, out int lpdwProcessId);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
     }
 }

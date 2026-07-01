@@ -74,6 +74,21 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void DeletesDocumentChats()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var store = new ChatStore(paths);
+                store.Create("Excel", "book-1", "Book1.xlsx", "First");
+                store.Create("Excel", "book-1", "Book1.xlsx", "Second");
+                store.Create("Excel", "book-2", "Book2.xlsx", "Keep");
+
+                AssertTrue(store.DeleteDocument("Excel", "book-1"), "document directory deleted");
+                AssertEqual(0, store.List("Excel", "book-1", "Book1.xlsx").Count, "document chats deleted");
+                AssertEqual(1, store.List("Excel", "book-2", "Book2.xlsx").Count, "other document preserved");
+            });
+        }
+
         private static void ChatSessionServiceMigratesDocumentKey()
         {
             WithTempPaths(delegate(AppDataPaths paths)
@@ -138,7 +153,25 @@ namespace RNAssistant.Harness
                 AssertEqual("other-doc", current.DocumentKey, "fallback document key");
                 AssertEqual(0, current.Messages.Count, "fallback message count");
                 AssertEqual(1, store.List("Excel", "doc", "Harness.xlsx").Count, "old document preserved");
-                AssertEqual(1, store.List("Excel", "other-doc", "Harness.xlsx").Count, "new document session");
+                AssertEqual(0, store.List("Excel", "other-doc", "Harness.xlsx").Count, "empty fallback remains transient");
+            });
+        }
+
+        private static void EmptyChatDraftsAreNotPersisted()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var service = new ChatSessionService(adapter, store);
+
+                var first = service.LoadSession(null);
+                var second = service.CreateChat("Another draft");
+
+                AssertTrue(!string.Equals(ChatStore.GetSessionId(first), ChatStore.GetSessionId(second), StringComparison.OrdinalIgnoreCase), "new draft id");
+                AssertEqual(0, store.List(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle).Count, "empty drafts not persisted");
+                AssertTrue(!store.IsPersisted(second), "active draft remains in memory");
+                AssertEqual(ChatStore.GetSessionId(second), ChatStore.GetSessionId(service.GetActiveSession()), "active draft survives list refresh");
             });
         }
     }

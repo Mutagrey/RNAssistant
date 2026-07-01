@@ -22,94 +22,6 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static void ParsesFencedAgentSteps()
-        {
-            var commands = new ToolCommandParser().Parse(
-                "```rnassistant-agent\n" +
-                "{\"steps\":[" +
-                "{\"description\":\"Add sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}," +
-                "{\"toolId\":\"excel.add_chart\",\"args\":{\"title\":\"Sales\"}}" +
-                "]}" +
-                "\n```");
-
-            AssertEqual(2, commands.Count, "command count");
-            AssertEqual("excel.add_sheet", commands[0].ToolId, "first tool id");
-            AssertEqual("Report", commands[0].Arguments["name"], "first arg");
-            AssertEqual("excel.add_chart", commands[1].ToolId, "second tool id");
-        }
-
-        private static void ParsesNativeToolCalls()
-        {
-            var commands = new ToolCommandParser().Parse(
-                "```rnassistant-agent\n" +
-                "{\"tool_calls\":[{\"id\":\"call_abc\",\"type\":\"function\",\"function\":{\"name\":\"excel.write_table\",\"arguments\":\"{\\\"sheet\\\":\\\"Data\\\",\\\"startAddress\\\":\\\"A1\\\"}\"}}]}" +
-                "\n```");
-
-            AssertEqual(1, commands.Count, "command count");
-            AssertEqual("excel.write_table", commands[0].ToolId, "tool id");
-            AssertEqual("Data", commands[0].Arguments["sheet"], "sheet arg");
-            AssertEqual("A1", commands[0].Arguments["startAddress"], "address arg");
-        }
-
-        private static void ParserNormalizesPrimitiveAndComplexArgs()
-        {
-            var commands = new ToolCommandParser().Parse(
-                "```rnassistant-agent\n" +
-                "{\"toolId\":\"excel.write_table\",\"arguments\":{\"sheet\":\"Data\",\"count\":2,\"enabled\":true,\"values\":[[\"Month\",\"Sales\"]],\"meta\":{\"source\":\"test\"}}}" +
-                "\n```");
-
-            AssertEqual(1, commands.Count, "command count");
-            AssertEqual("Data", commands[0].Arguments["sheet"], "string arg");
-            AssertEqual(2L, commands[0].Arguments["count"], "integer arg");
-            AssertEqual(true, commands[0].Arguments["enabled"], "bool arg");
-            AssertEqual("[[\"Month\",\"Sales\"]]", commands[0].Arguments["values"], "array arg");
-            AssertEqual("{\"source\":\"test\"}", commands[0].Arguments["meta"], "object arg");
-        }
-
-        private static void ParsesBareJsonArray()
-        {
-            var commands = new ToolCommandParser().Parse(
-                "[" +
-                "{\"tool\":\"word.insert_text\",\"parameters\":{\"text\":\"Hello\"}}," +
-                "{\"action\":\"excel.autofit\",\"input\":{\"sheet\":\"Data\"}}" +
-                "]");
-
-            AssertEqual(2, commands.Count, "command count");
-            AssertEqual("word.insert_text", commands[0].ToolId, "first tool id");
-            AssertEqual("Hello", commands[0].Arguments["text"], "text arg");
-            AssertEqual("excel.autofit", commands[1].ToolId, "second tool id");
-        }
-
-        private static void ParsesNoisyEmbeddedJson()
-        {
-            var commands = new ToolCommandParser().Parse(
-                "I will handle it. First, here is the plan: " +
-                "{\"steps\":[{\"toolId\":\"powerpoint.add_slide\",\"arguments\":{\"title\":\"Q1\",\"body\":\"Revenue grew\"}}]} " +
-                "Then I will summarize.");
-
-            AssertEqual(1, commands.Count, "command count");
-            AssertEqual("powerpoint.add_slide", commands[0].ToolId, "tool id");
-            AssertEqual("Q1", commands[0].Arguments["title"], "title arg");
-        }
-
-        private static void SkipsBadJson()
-        {
-            var commands = new ToolCommandParser().Parse("```rnassistant-agent\n{\"steps\":[\n```");
-            AssertEqual(0, commands.Count, "command count");
-        }
-
-        private static void RecoversMalformedAgentJson()
-        {
-            var result = new ToolCommandParser().ParseWithDiagnostics(
-                "```rnassistant-agent\n" +
-                "{\"steps\":[{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"},}\n```");
-
-            AssertEqual(1, result.Commands.Count, "command count");
-            AssertEqual("excel.add_sheet", result.Commands[0].ToolId, "tool id");
-            AssertEqual("Report", result.Commands[0].Arguments["name"], "sheet name");
-            AssertTrue(result.HasRecoveredCommands, "recovery diagnostic");
-        }
-
         private static void ParsesOfficeTargetJsonDescriptor()
         {
             var target = OfficeTargetDescriptor.FromJson("{\"Host\":\"Excel\",\"Hwnd\":123456,\"ProcessId\":4321,\"FullName\":\"C:\\\\Docs\\\\Book.xlsx\",\"Name\":\"Book.xlsx\",\"Selection\":\"Sheet1!A1:B2\"}");
@@ -222,6 +134,45 @@ namespace RNAssistant.Harness
             AssertEqual("forecast-doc", adapter.DocumentKey, "active document key");
             AssertEqual("Forecast.xlsx", adapter.DocumentTitle, "active document title");
             AssertTrue(catalog.ListOpenDocuments().Any(item => item.DocumentKey == "forecast-doc" && item.IsActive), "forecast marked active");
+        }
+
+        private static void UnsavedDocumentIdentityUsesStoredId()
+        {
+            var properties = new FakeDocumentProperties();
+            var first = DocumentIdentity.ForOfficeDocument("Excel", string.Empty, "Excel:Runtime:first", delegate { return properties; });
+            var second = DocumentIdentity.ForOfficeDocument("Excel", string.Empty, "Excel:Runtime:second", delegate { return properties; });
+
+            AssertTrue(first.StartsWith("Excel:DocumentId:", StringComparison.Ordinal), "unsaved document id prefix");
+            AssertEqual(first, second, "unsaved document id stable");
+        }
+
+        public sealed class FakeDocumentProperties
+        {
+            private readonly Dictionary<string, FakeDocumentProperty> _values =
+                new Dictionary<string, FakeDocumentProperty>(StringComparer.OrdinalIgnoreCase);
+
+            public FakeDocumentProperty this[string name]
+            {
+                get
+                {
+                    FakeDocumentProperty property;
+                    if (!_values.TryGetValue(name, out property))
+                    {
+                        throw new KeyNotFoundException();
+                    }
+                    return property;
+                }
+            }
+
+            public void Add(string name, bool linkToContent, int propertyType, string value)
+            {
+                _values[name] = new FakeDocumentProperty { Value = value };
+            }
+        }
+
+        public sealed class FakeDocumentProperty
+        {
+            public string Value { get; set; }
         }
     }
 }

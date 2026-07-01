@@ -263,13 +263,14 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"modelImageSupportOverrides\":{\"gpt-test\":true}},\"apiKey\":\"secret\"}}")
+                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"systemPromptRole\":\"system\",\"modelImageSupportOverrides\":{\"gpt-test\":true}},\"apiKey\":\"secret\"}}")
                 .GetAwaiter()
                 .GetResult();
 
             var response = JObject.Parse(responseJson);
             AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
             AssertEqual("gpt-test", controller.LastSettings.Model, "settings model");
+            AssertEqual("system", controller.LastSettings.SystemPromptRole, "system prompt role");
             AssertEqual(true, controller.LastSettings.ModelImageSupportOverrides["gpt-test"].Value, "model image override");
             AssertEqual("secret", controller.LastApiKey, "api key");
         }
@@ -287,6 +288,13 @@ namespace RNAssistant.Harness
             var response = JObject.Parse(responseJson);
             AssertTrue(response["ok"].Value<bool>(), "document activation response ok");
             AssertEqual("forecast-doc", response["payload"]["activeChatId"].Value<string>(), "document key payload");
+
+            var deleteResponseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"doc2\",\"type\":\"deleteDocument\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"host\":\"Excel\",\"documentKey\":\"forecast-doc\"}}")
+                .GetAwaiter()
+                .GetResult();
+            AssertTrue(JObject.Parse(deleteResponseJson)["ok"].Value<bool>(), "document delete response ok");
+            AssertEqual("Excel", controller.LastDocumentHost, "document delete host");
         }
 
         private static void BridgeUsesTypedToolAndSkillPayloads()

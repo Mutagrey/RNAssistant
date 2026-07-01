@@ -91,6 +91,17 @@ function applyChatState(response) {
   }
 }
 
+function applyChatCatalogState(response) {
+  response = response || {};
+  if (response.chats !== undefined || response.Chats !== undefined) {
+    state.chats = response.chats || response.Chats || [];
+  }
+  if (response.documents !== undefined || response.Documents !== undefined) {
+    state.documents = response.documents || response.Documents || [];
+  }
+  renderChatSessions();
+}
+
 function renderChatSessionList(chats) {
   var list = $("chatSessionList");
   if (!list) {
@@ -164,10 +175,41 @@ function renderChatSessionList(chats) {
   });
 }
 
+function chatDocumentTreeKeys() {
+  var keys = {};
+  (state.chats || []).forEach(function (chat) {
+    keys[chatHost(chat) + "|" + chatDocumentKey(chat)] = true;
+  });
+  (state.documents || []).forEach(function (item) {
+    var host = item.host || item.Host || state.host || "";
+    var documentKey = item.documentKey || item.DocumentKey || "";
+    keys[host + "|" + documentKey] = true;
+  });
+  return Object.keys(keys);
+}
+
+function allChatDocumentsCollapsed() {
+  var keys = chatDocumentTreeKeys();
+  return keys.length > 0 && keys.every(function (key) {
+    return !!state.collapsedChatDocuments[key];
+  });
+}
+
+function setAllChatDocumentsCollapsed(collapsed) {
+  chatDocumentTreeKeys().forEach(function (key) {
+    if (collapsed) {
+      state.collapsedChatDocuments[key] = true;
+    } else {
+      delete state.collapsedChatDocuments[key];
+    }
+  });
+  state.chatTreeCollapsedAll = !!collapsed;
+}
+
 function renderChatDocumentNode(documentItem, query) {
   var group = document.createElement("section");
   group.className = "chat-document" + (documentItem.current ? " is-current" : (documentItem.open ? " is-open" : " is-closed"));
-  var collapsed = !query && (state.chatTreeCollapsedAll || !!state.collapsedChatDocuments[documentItem.key]);
+  var collapsed = !query && !!state.collapsedChatDocuments[documentItem.key];
 
   var header = document.createElement("div");
   header.className = "chat-document-row";
@@ -178,11 +220,14 @@ function renderChatDocumentNode(documentItem, query) {
     "<span class=\"chat-document-icon\">" + documentHostInitial(documentItem.host) + "</span>" +
     "<span class=\"chat-document-name\"></span>" +
     "<span class=\"chat-document-state\">" + (documentItem.current ? "Активен" : (documentItem.open ? "Открыт" : "Закрыт")) + "</span></button>" +
-    "<button type=\"button\" class=\"chat-row-action chat-document-open\" title=\"" + (documentItem.open ? "Активировать документ" : "Открыть документ") + "\" aria-label=\"" + (documentItem.open ? "Активировать документ" : "Открыть документ") + "\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"4\" y=\"7\" width=\"11\" height=\"11\" rx=\"1.5\"/><path d=\"M9 7V5.5A1.5 1.5 0 0 1 10.5 4H19a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-4\"/><path d=\"M11 12h8\"/><path d=\"m16 9 3 3-3 3\"/></svg></button>";
+    "<span class=\"chat-document-actions\">" +
+    "<button type=\"button\" class=\"chat-row-action chat-document-open\" title=\"" + (documentItem.open ? "Активировать документ" : "Открыть документ") + "\" aria-label=\"" + (documentItem.open ? "Активировать документ" : "Открыть документ") + "\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M14 5h5v5\"/><path d=\"m19 5-8 8\"/><path d=\"M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5\"/></svg></button>" +
+    "<button type=\"button\" class=\"chat-row-action chat-document-delete\" title=\"Удалить документ и все чаты\" aria-label=\"Удалить документ и все чаты\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 6h18\"/><path d=\"M8 6V4h8v2\"/><path d=\"m19 6-1 14H6L5 6\"/><path d=\"M10 11v5\"/><path d=\"M14 11v5\"/></svg></button>" +
+    "</span>";
   header.querySelector(".chat-document-name").textContent = documentItem.title;
   header.querySelector(".chat-document-toggle").addEventListener("click", function () {
-    state.chatTreeCollapsedAll = false;
     state.collapsedChatDocuments[documentItem.key] = !children.hidden;
+    state.chatTreeCollapsedAll = allChatDocumentsCollapsed();
     renderChatSessionList(state.chats || []);
   });
   header.querySelector(".chat-document-open").addEventListener("click", function () {
@@ -191,6 +236,11 @@ function renderChatDocumentNode(documentItem, query) {
     } else if (documentItem.chats.length) {
       openActiveDocument(chatId(documentItem.chats[0]));
     }
+  });
+  var deleteButton = header.querySelector(".chat-document-delete");
+  deleteButton.hidden = documentItem.chats.length === 0;
+  deleteButton.addEventListener("click", function () {
+    deleteDocument(documentItem.host, documentItem.documentKey, documentItem.title);
   });
   group.appendChild(header);
 
@@ -213,6 +263,7 @@ function renderChatDocumentNode(documentItem, query) {
 function renderChatTreeControls() {
   var treeButton = $("toggleChatTreeButton");
   if (treeButton) {
+    state.chatTreeCollapsedAll = allChatDocumentsCollapsed();
     var collapse = !state.chatTreeCollapsedAll;
     treeButton.title = collapse ? "Свернуть всё дерево" : "Развернуть всё дерево";
     treeButton.setAttribute("aria-label", treeButton.title);

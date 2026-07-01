@@ -15,6 +15,8 @@ namespace RNAssistant.Office.Services
         private string _activeHost;
         private string _activeDocumentKey;
         private string _activeRuntimeDocumentKey;
+        private ChatSession _activeSession;
+        private bool _activeSessionPersisted;
 
         public ChatSessionService(IOfficeApplicationAdapter adapter, ChatStore chatStore)
         {
@@ -28,6 +30,8 @@ namespace RNAssistant.Office.Services
             _activeHost = null;
             _activeDocumentKey = null;
             _activeRuntimeDocumentKey = null;
+            _activeSession = null;
+            _activeSessionPersisted = false;
         }
 
         public ChatSession LoadSession(string requestedSessionId)
@@ -49,7 +53,23 @@ namespace RNAssistant.Office.Services
                 !string.Equals(_activeDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))
             {
                 var oldDocumentKey = _activeDocumentKey;
-                _chatStore.MoveDocument(_activeHost, oldDocumentKey, host, documentKey, title);
+                if (_chatStore.IsPersisted(_activeSession))
+                {
+                    var activeSessionId = _activeSessionId;
+                    _chatStore.MoveDocument(_activeHost, oldDocumentKey, host, documentKey, title);
+                    _activeSession = _chatStore.Load(host, documentKey, activeSessionId) ?? _activeSession;
+                }
+                else if (_activeSession != null)
+                {
+                    _activeSession.Host = host;
+                    _activeSession.DocumentKey = documentKey;
+                    _activeSession.DocumentTitle = title;
+                    if (_activeSession.Context != null)
+                    {
+                        _activeSession.Context.Host = host;
+                        _activeSession.Context.DocumentKey = documentKey;
+                    }
+                }
                 _activeHost = host;
                 _activeDocumentKey = documentKey;
                 _activeRuntimeDocumentKey = runtimeKey;
@@ -60,7 +80,17 @@ namespace RNAssistant.Office.Services
             ChatSession session = null;
             if (!string.IsNullOrWhiteSpace(requestedSessionId))
             {
-                session = _chatStore.Load(host, documentKey, requestedSessionId);
+                if (_activeSession != null &&
+                    string.Equals(requestedSessionId, _activeSessionId, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(_activeHost, host, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(_activeDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    session = _activeSession;
+                }
+                if (session == null)
+                {
+                    session = _chatStore.Load(host, documentKey, requestedSessionId);
+                }
                 if (session == null &&
                     (!allowMissingRequestedFallback ||
                      (string.IsNullOrWhiteSpace(_activeRuntimeDocumentKey) &&
@@ -77,7 +107,7 @@ namespace RNAssistant.Office.Services
                      string.Equals(_activeHost, host, StringComparison.OrdinalIgnoreCase) &&
                      string.Equals(_activeDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))
             {
-                session = _chatStore.Load(host, documentKey, _activeSessionId);
+                session = _activeSession ?? _chatStore.Load(host, documentKey, _activeSessionId);
             }
 
             if (session == null)
@@ -109,7 +139,7 @@ namespace RNAssistant.Office.Services
         public ChatSession CreateChat(string title)
         {
             LoadSession(null);
-            var session = _chatStore.Create(
+            var session = _chatStore.CreateTransient(
                 _adapter.HostName,
                 _adapter.DocumentKey,
                 _adapter.DocumentTitle,
@@ -130,7 +160,7 @@ namespace RNAssistant.Office.Services
             if (next == null)
             {
                 next = _chatStore.List(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle).FirstOrDefault()
-                    ?? _chatStore.Create(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle, "New chat");
+                    ?? _chatStore.CreateTransient(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle, "New chat");
             }
 
             SetActiveSession(next);
@@ -145,10 +175,36 @@ namespace RNAssistant.Office.Services
             }
 
             _activeSessionId = ChatStore.GetSessionId(session);
+            _activeSession = session;
             _activeHost = session.Host;
             _activeDocumentKey = session.DocumentKey;
             _activeRuntimeDocumentKey = IsCurrentDocument(session) ? _adapter.RuntimeDocumentKey : null;
-            _chatStore.SaveActiveSessionId(session.Host, session.DocumentKey, _activeSessionId);
+            _activeSessionPersisted = _chatStore.IsPersisted(session);
+            if (_activeSessionPersisted)
+            {
+                _chatStore.SaveActiveSessionId(session.Host, session.DocumentKey, _activeSessionId);
+            }
+        }
+
+        public ChatSession GetActiveSession()
+        {
+            if (_activeSession == null)
+            {
+                return null;
+            }
+
+            if (_activeSessionPersisted)
+            {
+                var stored = _chatStore.Load(_activeSessionId);
+                if (stored == null)
+                {
+                    Reset();
+                    return null;
+                }
+                _activeSession = stored;
+            }
+
+            return _activeSession;
         }
 
         public IReadOnlyList<ChatSessionSummary> GetChatSummaries(string activeId)
@@ -200,7 +256,10 @@ namespace RNAssistant.Office.Services
             if (!string.IsNullOrWhiteSpace(path) && !string.Equals(session.DocumentPath, path, StringComparison.OrdinalIgnoreCase))
             {
                 session.DocumentPath = path;
-                _chatStore.Save(session);
+                if (_chatStore.IsPersisted(session))
+                {
+                    _chatStore.Save(session);
+                }
             }
         }
 

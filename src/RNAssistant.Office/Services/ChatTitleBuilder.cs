@@ -37,21 +37,20 @@ namespace RNAssistant.Office.Services
                 return BuildFallback(assistantText, userText);
             }
 
-            var messages = new[]
-            {
-                new ChatMessage
+            var instruction = "Ты называешь чаты. Верни только короткое название на языке пользователя: 2-6 слов, без кавычек, точки, markdown и пояснений.";
+            var request =
+                "Запрос пользователя:\n" + Clip(CleanSource(userText), 1400) +
+                "\n\nОтвет ассистента:\n" + Clip(CleanSource(assistantText), 1800);
+            var messages = string.Equals(PromptRole(settings), "system", StringComparison.Ordinal)
+                ? new[]
                 {
-                    Role = "system",
-                    Content = "Ты называешь чаты. Верни только короткое название на языке пользователя: 2-6 слов, без кавычек, точки, markdown и пояснений."
-                },
-                new ChatMessage
-                {
-                    Role = "user",
-                    Content =
-                        "Запрос пользователя:\n" + Clip(CleanSource(userText), 1400) +
-                        "\n\nОтвет ассистента:\n" + Clip(CleanSource(assistantText), 1800)
+                    new ChatMessage { Role = "system", Content = instruction },
+                    new ChatMessage { Role = "user", Content = request }
                 }
-            };
+                : new[]
+                {
+                    new ChatMessage { Role = "user", Content = instruction + "\n\n" + request }
+                };
 
             var completion = await completeAsync(CreateTitleSettings(settings), messages, cancellationToken).ConfigureAwait(false);
             var title = CleanLlmTitle(completion == null ? null : completion.Content);
@@ -94,7 +93,7 @@ namespace RNAssistant.Office.Services
                 BaseUrl = source.BaseUrl,
                 Model = source.Model,
                 SystemPrompt = source.SystemPrompt,
-                AgentPrompt = source.AgentPrompt,
+                SystemPromptRole = source.SystemPromptRole,
                 MaxTokens = 32,
                 RequestTimeoutSeconds = Math.Max(30, Math.Min(source.RequestTimeoutSeconds <= 0 ? 300 : source.RequestTimeoutSeconds, 60)),
                 Temperature = Math.Min(Math.Max(source.Temperature, 0), 0.2),
@@ -117,6 +116,14 @@ namespace RNAssistant.Office.Services
                     ? null
                     : new Dictionary<string, string>(source.CustomHeaders, StringComparer.OrdinalIgnoreCase)
             };
+        }
+
+        private static string PromptRole(AppSettings settings)
+        {
+            return settings != null &&
+                string.Equals(settings.SystemPromptRole, "system", StringComparison.OrdinalIgnoreCase)
+                ? "system"
+                : "user";
         }
 
         private static string CleanLlmTitle(string text)

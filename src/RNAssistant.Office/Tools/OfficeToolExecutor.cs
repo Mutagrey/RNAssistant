@@ -168,7 +168,7 @@ namespace RNAssistant.Office.Tools
             if (_promptToolExecutor.IsControllerTool(command.ToolId))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                return _promptToolExecutor.ExecuteControllerTool(command, dryRun);
+                return _promptToolExecutor.ExecuteControllerTool(command, settings, dryRun);
             }
 
             if (_htmlArtifactExecutor.IsControllerTool(command.ToolId))

@@ -27,17 +27,13 @@ namespace RNAssistant.Harness
             var sse =
                 "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"Check range. \"}}]}\\n\\n" +
                 "data: {\"choices\":[{\"delta\":{\"reasoning\":\"Use tool.\"}}]}\\n\\n" +
-                "data: {\"choices\":[{\"delta\":{\"content\":\"Hello \"}}]}\\n\\n" +
-                "data: {\"choices\":[{\"delta\":{\"content\":\"world\"}}]}\\n\\n" +
-                "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"excel.read_range\",\"arguments\":\"{\\\"address\\\":\"}}]}}]}\\n\\n" +
-                "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"A1:B2\\\"}\"}}]}}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15,\"completion_tokens_details\":{\"reasoning_tokens\":2}}}\\n\\n" +
+                "data: {\"choices\":[{\"delta\":{\"content\":\"{\\\"kind\\\":\\\"final\\\",\\\"intent\\\":\\\"answer\\\",\"}}]}\\n\\n" +
+                "data: {\"choices\":[{\"delta\":{\"content\":\"\\\"message\\\":\\\"ok\\\",\\\"steps\\\":[]}\"}}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15,\"completion_tokens_details\":{\"reasoning_tokens\":2}}}\\n\\n" +
                 "data: [DONE]\\n\\n";
 
             var result = LlmClient.ParseStreamingResponse(sse.Replace("\\n", "\n"));
 
-            AssertContains(result.Content, "\"kind\":\"tool_plan\"", "stream tool plan");
-            AssertContains(result.Content, "excel.read_range", "stream tool name");
-            AssertContains(result.Content, "A1:B2", "stream tool arguments");
+            AssertTrue(new AgentPlannerResponseParser().Parse(result.Content).Success, "stream strict planner JSON");
             AssertEqual("Check range. Use tool.", result.ReasoningContent, "stream reasoning");
             AssertEqual(2, result.ReasoningTokens.Value, "stream reasoning tokens");
             AssertEqual(10, result.PromptTokens.Value, "stream prompt tokens");
@@ -45,20 +41,20 @@ namespace RNAssistant.Harness
             AssertEqual(15, result.TotalTokens.Value, "stream total tokens");
         }
 
-        private static void LlmThinkTagsAreSeparated()
+        private static void LlmReasoningMetadataIsSeparated()
         {
             var result = LlmClient.ParseStreamingResponse(
-                "data: {\"choices\":[{\"delta\":{\"content\":\"<think>check facts</think>{\\\"kind\\\":\\\"final\\\",\\\"intent\\\":\\\"answer\\\",\\\"message\\\":\\\"ok\\\",\\\"steps\\\":[]}\"}}]}\n\ndata: [DONE]\n\n");
-            AssertEqual("check facts", result.ReasoningContent, "think tag reasoning");
-            AssertTrue(result.Content.StartsWith("{\"kind\":\"final\"", StringComparison.Ordinal), "think tag final content");
+                "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"check facts\",\"content\":\"{\\\"kind\\\":\\\"final\\\",\\\"intent\\\":\\\"answer\\\",\\\"message\\\":\\\"ok\\\",\\\"steps\\\":[]}\"}}]}\n\ndata: [DONE]\n\n");
+            AssertEqual("check facts", result.ReasoningContent, "reasoning metadata");
+            AssertTrue(result.Content.StartsWith("{\"kind\":\"final\"", StringComparison.Ordinal), "planner content");
 
-            var duplicateReasoning = LlmClient.ParseCompletionResponse(
+            var embeddedThink = LlmClient.ParseCompletionResponse(
                 "{\"choices\":[{\"message\":{\"reasoning_content\":\"provider reasoning\",\"content\":\"\\n<think>duplicate</think>{\\\"kind\\\":\\\"final\\\",\\\"intent\\\":\\\"answer\\\",\\\"message\\\":\\\"ok\\\",\\\"steps\\\":[]}\"}}]}");
-            AssertEqual("provider reasoning", duplicateReasoning.ReasoningContent, "provider reasoning preserved");
-            AssertTrue(duplicateReasoning.Content.StartsWith("{\"kind\":\"final\"", StringComparison.Ordinal), "duplicate think tag removed");
+            AssertEqual("provider reasoning", embeddedThink.ReasoningContent, "provider reasoning preserved");
+            AssertEqual("not_json_object", new AgentPlannerResponseParser().Parse(embeddedThink.Content).ErrorCode, "embedded think tag rejected");
         }
 
-        private static void LlmCompletionFormatsAreNormalized()
+        private static void LlmAlternateCompletionFormatsAreRejected()
         {
             var canonical =
                 "{\"kind\":\"final\",\"intent\":\"answer\",\"message\":\"ok\",\"steps\":[]}";
@@ -84,14 +80,17 @@ namespace RNAssistant.Harness
                 },
                 ["usage"] = new JObject { ["input_tokens"] = 7, ["output_tokens"] = 3 }
             };
-            var parts = LlmClient.ParseCompletionResponse(response.ToString(Formatting.None));
-            var parsedParts = new AgentPlannerResponseParser().Parse(parts.Content);
+            try
+            {
+                LlmClient.ParseCompletionResponse(response.ToString(Formatting.None));
+                throw new InvalidOperationException("content parts were accepted");
+            }
+            catch (InvalidOperationException ex)
+            {
+                AssertContains(ex.Message, "content must be a string or null", "content parts rejected");
+            }
 
-            AssertTrue(parsedParts.Success, "content parts normalized");
-            AssertEqual("ok", parsedParts.Response.Message, "content parts message");
-            AssertEqual(10, parts.TotalTokens.Value, "token aliases total");
-
-            var legacyCallResponse = new JObject
+            var nativeCallResponse = new JObject
             {
                 ["choices"] = new JArray
                 {
@@ -100,34 +99,23 @@ namespace RNAssistant.Harness
                         ["message"] = new JObject
                         {
                             ["content"] = null,
-                            ["function_call"] = new JObject
+                            ["tool_calls"] = new JArray
                             {
-                                ["name"] = "excel.add_sheet",
-                                ["arguments"] = new JObject { ["name"] = "Report" }
+                                new JObject
+                                {
+                                    ["function"] = new JObject
+                                    {
+                                        ["name"] = "excel.add_sheet",
+                                        ["arguments"] = "{\"name\":\"Report\"}"
+                                    }
+                                }
                             }
                         }
                     }
                 }
             };
-            var legacyCall = LlmClient.ParseCompletionResponse(legacyCallResponse.ToString(Formatting.None));
-            var parsedCall = new AgentPlannerResponseParser().Parse(legacyCall.Content);
-
-            AssertTrue(parsedCall.Success, "legacy function_call normalized");
-            AssertEqual("excel.add_sheet", parsedCall.Response.Steps[0].ToolId, "legacy function name");
-            AssertEqual("Report", parsedCall.Response.Steps[0].Arguments["name"], "legacy function argument");
-        }
-
-        private static void LlmMalformedNativeArgumentsAreRejected()
-        {
-            var sse =
-                "data: {\"choices\":[{\"delta\":{\"function_call\":{\"name\":\"excel.add_sheet\",\"arguments\":\"{broken\"}}}]}\n\n" +
-                "data: [DONE]\n\n";
-            var completion = LlmClient.ParseStreamingResponse(sse);
-            var parsed = new AgentPlannerResponseParser().Parse(completion.Content);
-
-            AssertTrue(!parsed.Success, "malformed native arguments rejected");
-            AssertEqual("invalid_arguments", parsed.ErrorCode, "malformed native argument error");
-            AssertTrue(completion.Content.IndexOf("rawArguments", StringComparison.OrdinalIgnoreCase) < 0, "no fake rawArguments object");
+            var nativeCall = LlmClient.ParseCompletionResponse(nativeCallResponse.ToString(Formatting.None));
+            AssertEqual("empty_response", new AgentPlannerResponseParser().Parse(nativeCall.Content).ErrorCode, "native tool calls ignored");
         }
 
         private static void LlmInvalidResponseEnvelopeIsReported()

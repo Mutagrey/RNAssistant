@@ -48,11 +48,9 @@
     <Compile Include="..\..\src\RNAssistant.Core\Models\VbaModels.cs" Link="Core\Models\VbaModels.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Llm\LlmClient.cs" Link="Core\Llm\LlmClient.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Llm\ModelContextBudget.cs" Link="Core\Llm\ModelContextBudget.cs" />
-    <Compile Include="..\..\src\RNAssistant.Core\Llm\PromptComposer.cs" Link="Core\Llm\PromptComposer.cs" />
-    <Compile Include="..\..\src\RNAssistant.Core\Llm\PromptMessageBuilder.cs" Link="Core\Llm\PromptMessageBuilder.cs" />
+    <Compile Include="..\..\src\RNAssistant.Core\Llm\ContextUsageEstimator.cs" Link="Core\Llm\ContextUsageEstimator.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Tools\ToolArgumentNormalizer.cs" Link="Core\Tools\ToolArgumentNormalizer.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Tools\AgentPlannerResponseParser.cs" Link="Core\Tools\AgentPlannerResponseParser.cs" />
-    <Compile Include="..\..\src\RNAssistant.Core\Tools\ToolCommandParser.cs" Link="Core\Tools\ToolCommandParser.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Skills\BuiltInSkillProvider.cs" Link="Core\Skills\BuiltInSkillProvider.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Services\ContextNormalizer.cs" Link="Core\Services\ContextNormalizer.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Services\ChartArtifactBuilder.cs" Link="Core\Services\ChartArtifactBuilder.cs" />
@@ -90,5 +88,6 @@
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.cs" Link="Office\WebView\AssistantWebBridge.cs" />
     <Compile Include="..\..\src\RNAssistant.Desktop\OfficeTargetRegistry.cs" Link="Desktop\OfficeTargetRegistry.cs" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Targets\OfficeTargetDescriptor.cs" Link="OfficeHosts\Targets\OfficeTargetDescriptor.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Runtime\DocumentIdentity.cs" Link="Office\Runtime\DocumentIdentity.cs" />
   </ItemGroup>
 </Project>

@@ -237,7 +237,7 @@ if (window.chrome && window.chrome.webview) {
       return;
     }
     if (response && response.type === "chatState") {
-      applyChatState(response.payload || {});
+      applyChatCatalogState(response.payload || {});
       return;
     }
     var pending = state.pending[response.id];

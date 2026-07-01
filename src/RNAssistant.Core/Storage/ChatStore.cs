@@ -27,14 +27,25 @@ namespace RNAssistant.Core.Storage
             }
             if (session == null)
             {
-                session = Create(host, documentKey, documentTitle, "New chat");
+                session = CreateTransient(host, documentKey, documentTitle, "New chat");
             }
 
-            SaveActiveSessionId(host, documentKey, GetSessionId(session));
+            if (IsPersisted(session))
+            {
+                SaveActiveSessionId(host, documentKey, GetSessionId(session));
+            }
             return session;
         }
 
         public ChatSession Create(string host, string documentKey, string documentTitle, string title)
+        {
+            var session = CreateTransient(host, documentKey, documentTitle, title);
+            Save(session);
+            SaveActiveSessionId(host, documentKey, GetSessionId(session));
+            return session;
+        }
+
+        public ChatSession CreateTransient(string host, string documentKey, string documentTitle, string title)
         {
             var session = new ChatSession
             {
@@ -44,8 +55,6 @@ namespace RNAssistant.Core.Storage
                 Title = string.IsNullOrWhiteSpace(title) ? "New chat" : title
             };
             NormalizeSession(session, host, documentKey, documentTitle);
-            Save(session);
-            SaveActiveSessionId(host, documentKey, GetSessionId(session));
             return session;
         }
 
@@ -155,6 +164,24 @@ namespace RNAssistant.Core.Storage
             }
 
             return true;
+        }
+
+        public bool DeleteDocument(string host, string documentKey)
+        {
+            var directory = GetDocumentDirectory(host, documentKey);
+            if (!Directory.Exists(directory))
+            {
+                return false;
+            }
+
+            Directory.Delete(directory, true);
+            return true;
+        }
+
+        public bool IsPersisted(ChatSession session)
+        {
+            return session != null &&
+                File.Exists(GetSessionPath(session.Host, session.DocumentKey, GetSessionId(session)));
         }
 
         public IReadOnlyList<ChatSession> List()

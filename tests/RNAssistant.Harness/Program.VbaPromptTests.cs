@@ -92,26 +92,6 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void PromptBuilderTrimsOldestHistory()
-        {
-            var messages = PromptMessageBuilder.Build(
-                "system",
-                "context",
-                new[]
-                {
-                    new ChatMessage { Role = "user", Content = "old-" + new string('o', 3000) },
-                    new ChatMessage { Role = "assistant", Content = "middle-" + new string('m', 1500) },
-                    new ChatMessage { Role = "user", Content = "newest-" + new string('n', 1000) }
-                },
-                4000);
-
-            AssertEqual(4, messages.Count, "prompt message count");
-            AssertEqual("system", messages[0].Role, "system role");
-            AssertEqual("context", messages[1].Content, "context content");
-            AssertContains(messages[2].Content, "middle-", "middle message retained");
-            AssertContains(messages[3].Content, "newest-", "newest message retained");
-        }
-
         private static void ContextUsageEstimatorCountsPromptAndSession()
         {
             var settings = new AppSettings { ContextWindowOverrideTokens = 8000 };

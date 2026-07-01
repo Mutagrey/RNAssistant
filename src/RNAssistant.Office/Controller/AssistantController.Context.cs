@@ -148,7 +148,7 @@ namespace RNAssistant.Office
         private void SaveSessionContext(ChatSession session)
         {
             _contextService.NormalizeContext(LoadContext(session), session);
-            _chatStore.Save(session);
+            SaveSessionChanges(session);
         }
 
         private void NormalizeContext(DocumentContext context, ChatSession session)

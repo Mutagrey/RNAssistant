@@ -89,11 +89,9 @@
     <Compile Include="Models\VbaModels.cs" />
     <Compile Include="Llm\LlmClient.cs" />
     <Compile Include="Llm\ModelContextBudget.cs" />
-    <Compile Include="Llm\PromptMessageBuilder.cs" />
-    <Compile Include="Llm\PromptComposer.cs" />
+    <Compile Include="Llm\ContextUsageEstimator.cs" />
     <Compile Include="Tools\ToolArgumentNormalizer.cs" />
     <Compile Include="Tools\AgentPlannerResponseParser.cs" />
-    <Compile Include="Tools\ToolCommandParser.cs" />
     <Compile Include="Skills\BuiltInSkillProvider.cs" />
     <Compile Include="Services\ContextNormalizer.cs" />
     <Compile Include="Services\ChartArtifactBuilder.cs" />

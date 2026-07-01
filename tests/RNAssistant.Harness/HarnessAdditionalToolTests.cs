@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
+using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
@@ -294,7 +295,7 @@ namespace RNAssistant.Harness
                     value => settingsStore = value);
                 var command = new ToolCommand { ToolId = "common.prompts_save" };
                 command.Arguments["toolRoutingPrompt"] = "CUSTOM ROUTING";
-                command.Arguments["retryFailedToolPrompt"] = "Retry {{toolId}} with {{availableToolIds}}";
+                command.Arguments["systemPromptRole"] = "system";
 
                 var blocked = executor.Execute(
                     command,
@@ -304,16 +305,19 @@ namespace RNAssistant.Harness
                     false);
                 AssertContains(blocked.Status, "waiting_confirmation", "prompt save waits confirmation");
 
+                var runtimeSettings = new AppSettings { AutoConfirmToolActions = true };
                 var saved = executor.Execute(
                     command,
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
-                    new AppSettings { AutoConfirmToolActions = true },
+                    runtimeSettings,
                     false,
                     false);
                 AssertTrue(saved.Success, "prompt save succeeds");
 
                 AssertEqual("CUSTOM ROUTING", settingsStore.AgentPrompts.ToolRoutingPrompt, "routing prompt saved");
-                AssertContains(settingsStore.AgentPrompts.RetryFailedToolPrompt, "{{toolId}}", "retry prompt placeholder saved");
+                AssertEqual("system", settingsStore.SystemPromptRole, "prompt role saved");
+                AssertEqual("CUSTOM ROUTING", runtimeSettings.AgentPrompts.ToolRoutingPrompt, "runtime routing prompt updated");
+                AssertEqual("system", runtimeSettings.SystemPromptRole, "runtime prompt role updated");
 
                 var read = executor.Execute(
                     new ToolCommand { ToolId = "common.prompts_read" },
@@ -426,6 +430,30 @@ namespace RNAssistant.Harness
             }
 
             return string.Join("\n", values.ToArray());
+        }
+
+        private static List<ChatMessage> BuildPlannerMessages(
+            AppSettings settings,
+            IEnumerable<ToolDefinition> tools,
+            IEnumerable<SkillDefinition> skills)
+        {
+            return new PlannerPromptComposer().BuildMessages(
+                "Test request",
+                new OfficeSnapshot { Host = "Excel" },
+                new RoutedTask
+                {
+                    App = "Excel",
+                    Mode = "mutate",
+                    TaskType = "content",
+                    Phase = AgentPhases.Mutation,
+                    RiskAllowed = 2,
+                    RequiresTool = true
+                },
+                new ToolCatalogSlice { Tools = new List<ToolDefinition>(tools ?? new ToolDefinition[0]) },
+                new AgentObservation[0],
+                new DocumentContext(),
+                skills ?? new SkillDefinition[0],
+                settings ?? new AppSettings());
         }
 
         private static void ConfirmationMatrixCoversDryAndManualRuns()

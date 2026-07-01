@@ -6,14 +6,11 @@ RNAssistant talks to an OpenAI-compatible Chat Completions endpoint. Agent mode 
 
 - `POST /v1/chat/completions`, or a `BaseUrl` that already ends with `/chat/completions`.
 - JSON request body with `model`, `messages`, `max_tokens`, `temperature`, `top_p`, and `stream: false`.
-- Response shape compatible with `choices[0].message.content`.
+- Response shape compatible with `choices[0].message.content`, where `content` is a string or null.
 - Canonical assistant content in Agent mode is exactly one JSON object with `kind`, `intent`, `message`, and `steps`.
 
 ## Optional
 
-- `choices[0].message.tool_calls`: accepted as compatibility input by the low-level client, but default Agent mode uses the strict planner envelope.
-- Legacy `choices[0].message.function_call` and streamed `delta.function_call`: accepted as a single native compatibility call.
-- Assistant `content` may be a string or an array of text parts; text parts are concatenated before planner parsing.
 - `usage.prompt_tokens`, `usage.completion_tokens`, `usage.total_tokens`: stored when present. `input_tokens` and `output_tokens` aliases are also accepted.
 - `GET /config/models.json`: used only by the model picker. Manual model entry still works without it.
 - Custom request headers: supported from Settings, except unsafe headers such as `Content-Length` and `Host`.
@@ -30,11 +27,8 @@ RNAssistant talks to an OpenAI-compatible Chat Completions endpoint. Agent mode 
 | --- | --- |
 | Returns strict planner JSON | Router/validator/gates decide whether local tools can execute. |
 | Returns plain assistant text in Agent mode | Rejected by strict parser; Agent mode asks once for corrected JSON. |
-| Returns one complete `json` or `rnassistant-agent` fence containing the planner envelope | Fence is removed and the envelope is validated. |
-| Returns the observed legacy `{ "plan": { "steps": [], "response": "..." } }` object | It is converted to the canonical planner envelope; tool ids and arguments still pass normal route validation. |
-| Returns prose around JSON/fence | Rejected; Agent mode asks once for corrected JSON. |
-| Returns native `tool_calls` | Accepted as compatibility input, but not required or preferred. |
-| Returns malformed/non-object native tool arguments | Rejected by planner validation and sent through the bounded JSON repair path; they are never converted to executable placeholder arguments. |
+| Returns a fence, legacy envelope, prose around JSON, or a JSON array | Rejected; Agent mode asks once for corrected JSON. |
+| Returns native `tool_calls`, `function_call`, or content-part arrays | Not converted to local tools; missing/invalid assistant text is rejected. |
 | Returns malformed planner JSON | Records format/error and a bounded local response preview; Agent mode asks once for a corrected JSON object while preserving the task and available tools. |
 | Omits token usage | Chat still works; token counters show estimated/context-side data only. |
 | Lacks `/config/models.json` | Model catalog load fails, but manually entered model IDs can still be saved. |
@@ -44,4 +38,4 @@ RNAssistant talks to an OpenAI-compatible Chat Completions endpoint. Agent mode 
 - Non-streaming Chat Completions compatible response.
 - Strong instruction following for exact JSON object responses.
 - Long enough context window for document context.
-- Stable support for custom system prompts and ordinary `user`/`assistant` message history.
+- Stable support for ordinary `user`/`assistant` history. RNAssistant sends planner instructions as `user` by default; Settings can switch them to `system`.

@@ -7,11 +7,12 @@ using Newtonsoft.Json.Linq;
 using PowerPoint = Microsoft.Office.Interop.PowerPoint;
 using RNAssistant.Core.Models;
 using RNAssistant.Office;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.OfficeHosts
 {
-    public sealed class PowerPointAdapter : IOfficeApplicationAdapter, IOfficeContextProvider
+    public sealed class PowerPointAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeDocumentCatalog
     {
         private readonly PowerPoint.Application _application;
         private readonly OfficeTargetDescriptor _target;
@@ -119,6 +120,66 @@ namespace RNAssistant.OfficeHosts
             }
 
             return context;
+        }
+
+        public IReadOnlyList<OpenOfficeDocumentDto> ListOpenDocuments()
+        {
+            PowerPoint.Presentation active;
+            try { active = _application.ActivePresentation; }
+            catch { active = null; }
+            var result = new List<OpenOfficeDocumentDto>();
+            foreach (PowerPoint.Presentation presentation in _application.Presentations)
+            {
+                var path = SafeString(delegate { return presentation.Path; });
+                result.Add(new OpenOfficeDocumentDto
+                {
+                    Host = HostName,
+                    DocumentKey = KeyForPresentation(presentation),
+                    Title = SafeString(delegate { return presentation.Name; }),
+                    Path = string.IsNullOrWhiteSpace(path) ? string.Empty : SafeString(delegate { return presentation.FullName; }),
+                    IsActive = active != null && string.Equals(KeyForPresentation(active), KeyForPresentation(presentation), StringComparison.OrdinalIgnoreCase)
+                });
+            }
+            return result;
+        }
+
+        public bool ActivateDocument(string documentKey)
+        {
+            if (string.IsNullOrWhiteSpace(documentKey))
+            {
+                return false;
+            }
+
+            foreach (PowerPoint.Presentation presentation in _application.Presentations)
+            {
+                if (!string.Equals(KeyForPresentation(presentation), documentKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (presentation.Windows != null && presentation.Windows.Count > 0)
+                {
+                    presentation.Windows[1].Activate();
+                }
+                NativeWindowInfo.BringToForeground(NativeWindowInfo.ReadLongMemberPath(_application, "HWND"));
+                return true;
+            }
+            return false;
+        }
+
+        private string KeyForPresentation(PowerPoint.Presentation presentation)
+        {
+            if (presentation == null)
+            {
+                return "PowerPoint:NoPresentation";
+            }
+
+            var runtimeKey = "PowerPoint:Runtime:" + presentation.GetHashCode().ToString("x");
+            return DocumentIdentity.ForOfficeDocument(
+                HostName,
+                SafeString(delegate { return presentation.Path; }),
+                runtimeKey,
+                () => presentation.CustomDocumentProperties);
         }
 
         public IEnumerable<ToolDefinition> GetBuiltInTools()
