@@ -3,6 +3,19 @@ using System.Collections.Generic;
 
 namespace RNAssistant.Core.Models
 {
+    public static class ChatModes
+    {
+        public const string Chat = "chat";
+        public const string Auto = "auto";
+        public const string Agent = "agent";
+
+        public static string Normalize(string value)
+        {
+            value = (value ?? string.Empty).Trim().ToLowerInvariant();
+            return value == Auto || value == Agent ? value : Chat;
+        }
+    }
+
     public sealed class ChatMessage
     {
         public string Id { get; set; }
@@ -85,6 +98,7 @@ namespace RNAssistant.Core.Models
         public string DocumentPath { get; set; }
         public string Title { get; set; }
         public string Model { get; set; }
+        public string Mode { get; set; }
         public bool HtmlModeEnabled { get; set; }
         public DateTime CreatedUtc { get; set; }
         public DateTime UpdatedUtc { get; set; }
@@ -101,6 +115,7 @@ namespace RNAssistant.Core.Models
             Context = new DocumentContext();
             HtmlWorkspace = new HtmlWorkspace();
             Messages = new List<ChatMessage>();
+            Mode = ChatModes.Chat;
         }
     }
 
@@ -113,6 +128,7 @@ namespace RNAssistant.Core.Models
         public string DocumentPath { get; set; }
         public string Title { get; set; }
         public string Model { get; set; }
+        public string Mode { get; set; }
         public bool HtmlModeEnabled { get; set; }
         public bool HasHtmlWorkspace { get; set; }
         public int HtmlFileCount { get; set; }

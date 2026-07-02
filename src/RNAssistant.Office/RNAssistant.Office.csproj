@@ -78,6 +78,9 @@
     <Compile Include="Services\AgentRunService.cs" />
     <Compile Include="Services\AgentPlannerRuntime.cs" />
     <Compile Include="Services\ChatCompletionService.cs" />
+    <Compile Include="Services\ChatContextWindowBuilder.cs" />
+    <Compile Include="Services\ChatExecutionModeSelector.cs" />
+    <Compile Include="Services\PlainChatService.cs" />
     <Compile Include="Services\OfflineChatService.cs" />
     <Compile Include="Services\AttachmentImageService.cs" />
     <Compile Include="Services\ModelAttachmentService.cs" />

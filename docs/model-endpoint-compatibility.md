@@ -1,6 +1,6 @@
 # Model Endpoint Compatibility
 
-RNAssistant talks to an OpenAI-compatible Chat Completions endpoint. Agent mode uses a strict JSON planner envelope in assistant text; Office actions still execute locally.
+RNAssistant talks to an OpenAI-compatible Chat Completions endpoint. Chat mode uses ordinary assistant text. Agent mode uses a strict JSON planner envelope in assistant text; Office actions still execute locally. Auto mode selects one of these paths before the request.
 
 ## Required
 
@@ -25,6 +25,7 @@ RNAssistant talks to an OpenAI-compatible Chat Completions endpoint. Agent mode 
 
 | Endpoint behavior | RNAssistant behavior |
 | --- | --- |
+| Returns ordinary text in Chat mode | Stored as the assistant response; no planner parsing or local tool execution occurs. |
 | Returns strict planner JSON | Router/validator/gates decide whether local tools can execute. |
 | Returns plain assistant text in Agent mode | Rejected by strict parser; Agent mode asks once for corrected JSON. |
 | Returns a fence, legacy envelope, prose around JSON, or a JSON array | Rejected; Agent mode asks once for corrected JSON. |

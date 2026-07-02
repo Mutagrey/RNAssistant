@@ -124,7 +124,8 @@ namespace RNAssistant.Harness
             });
             session.Context.Notes.Add(new ContextNote { Text = "selection!" });
             var sessionUsage = JObject.FromObject(ContextUsageEstimator.FromSession(session, settings));
-            AssertEqual(15, sessionUsage["usedChars"].Value<int>(), "session used chars");
+            AssertEqual(10015, sessionUsage["usedChars"].Value<int>(), "session used chars");
+            AssertEqual(9106, sessionUsage["usedTokens"].Value<int>(), "session used tokens");
             AssertEqual(1, sessionUsage["messageCount"].Value<int>(), "session message count");
             AssertTrue(!sessionUsage["actual"].Value<bool>(), "session actual");
         }

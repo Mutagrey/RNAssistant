@@ -25,6 +25,7 @@ namespace RNAssistant.Harness
         private sealed class HarnessTest
         {
             public string Name { get; set; }
+            public string Category { get; set; }
             public Action Run { get; set; }
         }
 
@@ -45,6 +46,11 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "planner: rejects alternate envelopes", Run = PlannerRejectsAlternateEnvelopes },
                 new HarnessTest { Name = "planner: rejects invalid intent and steps", Run = PlannerRejectsInvalidIntentAndSteps },
                 new HarnessTest { Name = "planner quality: requires tool rejects final", Run = ModelQualityRequiresToolRejectsFinal },
+                new HarnessTest { Name = "modes: selects chat auto and agent", Run = ModesSelectChatAutoAndAgent },
+                new HarnessTest { Name = "modes: legacy session defaults to chat", Run = LegacySessionDefaultsToChatMode },
+                new HarnessTest { Name = "modes: plain chat omits planner and activities", Run = PlainChatOmitsPlannerAndActivities },
+                new HarnessTest { Name = "context: deleted message absent from rebuilt prompt", Run = DeletedMessageIsAbsentFromRebuiltContext },
+                new HarnessTest { Name = "routing: required empty tool slice stops before llm", Run = RequiredEmptyToolSliceStopsBeforeLlm },
                 new HarnessTest { Name = "desktop target: parses json descriptor", Run = ParsesOfficeTargetJsonDescriptor },
                 new HarnessTest { Name = "desktop target: parses base64 descriptor", Run = ParsesOfficeTargetBase64Descriptor },
                 new HarnessTest { Name = "desktop target: ignores utf8 bom", Run = OfficeTargetIgnoresUtf8Bom },
@@ -159,6 +165,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "bridge: rejects missing token", Run = BridgeRejectsMissingToken },
                 new HarnessTest { Name = "bridge: typed runTool payload", Run = BridgeUsesTypedRunToolPayload },
                 new HarnessTest { Name = "bridge: typed sendChat progress", Run = BridgeUsesTypedSendChatPayloadAndProgress },
+                new HarnessTest { Name = "bridge: typed chat mode payload", Run = BridgeUsesTypedChatModePayload },
                 new HarnessTest { Name = "bridge: typed settings payload", Run = BridgeUsesTypedSettingsPayload },
                 new HarnessTest { Name = "bridge: typed document activation", Run = BridgeUsesTypedDocumentPayload },
                 new HarnessTest { Name = "bridge: typed tool and skill payloads", Run = BridgeUsesTypedToolAndSkillPayloads },
@@ -166,8 +173,24 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "bridge: typed vba payload", Run = BridgeUsesTypedVbaPayload }
             };
 
-            var failed = 0;
             foreach (var test in tests)
+            {
+                test.Category = CategoryFromName(test.Name);
+            }
+            var filter = args == null || args.Length == 0 ? string.Empty : string.Join(" ", args).Trim();
+            var selected = string.IsNullOrWhiteSpace(filter)
+                ? tests
+                : tests.Where(test =>
+                    test.Category.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    test.Name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+            if (selected.Count == 0)
+            {
+                Console.WriteLine("No tests matched: " + filter);
+                return 2;
+            }
+
+            var failed = 0;
+            foreach (var test in selected)
             {
                 try
                 {
@@ -181,8 +204,27 @@ namespace RNAssistant.Harness
                 }
             }
 
-            Console.WriteLine(failed == 0 ? "OK" : "FAILED " + failed);
+            Console.WriteLine((failed == 0 ? "OK" : "FAILED") + " passed=" + (selected.Count - failed) + " failed=" + failed + " total=" + selected.Count);
             return failed == 0 ? 0 : 1;
+        }
+
+        private static string CategoryFromName(string name)
+        {
+            var separator = (name ?? string.Empty).IndexOf(':');
+            var prefix = separator <= 0 ? "other" : name.Substring(0, separator).Trim().ToLowerInvariant();
+            if (prefix == "chat" || prefix == "planner" || prefix == "prompt")
+            {
+                return "agent-loop";
+            }
+            if (prefix == "pipeline" || prefix == "tools" || prefix == "vba")
+            {
+                return "tools-safety";
+            }
+            if (prefix == "storage" || prefix == "attachments" || prefix == "chat sessions")
+            {
+                return "storage";
+            }
+            return prefix;
         }
 
     }

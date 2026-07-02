@@ -15,6 +15,7 @@ var state = {
   chatTreeCollapsedAll: false,
   activeChatId: "",
   activeChatModel: "",
+  activeChatMode: "chat",
   activeChatHtmlMode: false,
   bridgeToken: "",
   messages: [],

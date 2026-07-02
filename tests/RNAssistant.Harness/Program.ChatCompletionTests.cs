@@ -207,7 +207,7 @@ namespace RNAssistant.Harness
                     1,
                     FlattenMessages(captured).Split(new[] { "Follow up" }, StringSplitOptions.None).Length - 1,
                     "active request is not duplicated");
-                AssertTrue(captured.All(message => message.Attachments.All(item => item.FileName != "old.txt")), "old attachments excluded");
+                AssertEqual(1, captured.Sum(message => message.Attachments.Count(item => item.FileName == "old.txt")), "old attachment retained in history");
                 AssertEqual(1, captured.Sum(message => message.Attachments.Count(item => item.FileName == "current.txt")), "current attachment included once");
             });
         }

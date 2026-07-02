@@ -69,9 +69,10 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 ## Non-Negotiable Boundaries
 
 - Agent mode accepts one strict planner JSON object in assistant text. Fences, legacy envelopes, content-part arrays, native `tool_calls`, and `function_call` are not supported.
+- Chat mode is a plain completion path without planner/tool prompts. Auto mode chooses Chat or Agent before the model request; the selected mode is persisted per chat.
 - Model reasoning is transport metadata (`reasoning_content` or `reasoning`), stored and rendered separately; it is never mixed into planner JSON or replayed as chat history.
 - Context limits are token budgets resolved from the active model capability catalog. The legacy character limit is read only for settings compatibility.
-- Planner context uses only the active chat's non-empty, reference-deduplicated pinned notes plus recent user/final-assistant messages. Agent activity/diagnostics and old attachments stay in the transcript but are not replayed; only current-turn attachments are sent.
+- Chat and planner context are rebuilt from the active session for every request. They use reference-deduplicated notes plus recent user/assistant messages and their attachments; agent activity, diagnostics, and reasoning metadata are never replayed.
 - Text/PDF attachments are normalized locally. PDF text uses PdfPig; vision-capable models may also receive selected PDF pages rendered by the host-neutral Office service. Raw PDF files are not sent through the OpenAI-compatible chat payload.
 - Routing precedes Office context capture. General-answer routes expose no tools and do not read document content; document-dependent state is obtained through explicit read tools.
 - Tools are executable actions described by `ToolDefinition`; skills are markdown guidance described by `SkillDefinition`.
@@ -106,6 +107,8 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj
 ```
 
+Pass a category or name fragment for a focused run, for example `-- modes`, `-- routing`, or `-- context`.
+
 Current coverage:
 
 - parser fixtures: strict planner JSON object plus rejection of fences, legacy envelopes, arrays, native `tool_calls`, and malformed JSON;
@@ -121,6 +124,7 @@ Current coverage:
 - VBA replace-text flow with rollback backup using fake `IOfficeApplicationAdapter`;
 - tool catalog service merge/filter behavior;
 - prompt message trimming, context usage estimates, and basic no-network chat completion flow;
+- explicit Chat/Auto/Agent routing, plain-chat prompt isolation, rebuilt history after deletion, and empty-tool preflight diagnostics;
 - Core context normalization/upsert/trim behavior;
 - typed bridge settings/context/VBA/tool/chat payload parsing, agent pending-tool status, and progress envelope;
 - no Office COM dependency.

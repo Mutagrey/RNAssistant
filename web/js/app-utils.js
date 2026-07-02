@@ -56,6 +56,10 @@
     return objectValue(chat, "Model", "model", "") || "";
   };
 
+  window.chatMode = function (chat) {
+    return objectValue(chat, "Mode", "mode", "chat") || "chat";
+  };
+
   window.chatHost = function (chat) {
     return objectValue(chat, "Host", "host", "") || "";
   };

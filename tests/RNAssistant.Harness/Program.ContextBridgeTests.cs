@@ -257,6 +257,23 @@ namespace RNAssistant.Harness
             AssertEqual("chat-1", chatState["payload"]["activeChatId"].Value<string>(), "chat state active id");
         }
 
+        private static void BridgeUsesTypedChatModePayload()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
+            var responseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"mode1\",\"type\":\"setChatMode\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-1\",\"mode\":\"agent\"}}")
+                .GetAwaiter()
+                .GetResult();
+
+            var response = JObject.Parse(responseJson);
+            AssertTrue(response["ok"].Value<bool>(), "mode response ok");
+            AssertEqual("chat-1", controller.LastChatId, "mode chat id");
+            AssertEqual("agent", controller.LastChatMode, "mode payload");
+            AssertEqual("agent", response["payload"]["activeChatMode"].Value<string>(), "mode response");
+        }
+
         private static void BridgeUsesTypedSettingsPayload()
         {
             var controller = new AssistantController();

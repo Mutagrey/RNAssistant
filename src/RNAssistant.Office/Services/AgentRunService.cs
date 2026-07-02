@@ -187,6 +187,18 @@ namespace RNAssistant.Office.Services
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var slice = _toolCatalogSlicer.Slice(route, allTools, observations);
+                if (route.RequiresTool && slice.Tools.Count == 0)
+                {
+                    assistantText = RecordMissingTools(session, route, allTools);
+                    resultLog.Add(new
+                    {
+                        success = false,
+                        status = "no_available_tools",
+                        phase = route.Phase,
+                        taskType = route.TaskType
+                    });
+                    break;
+                }
                 var requestText = string.IsNullOrWhiteSpace(initialFollowUpPrompt)
                     ? taskText
                     : taskText + "\n\nContinuation: " + initialFollowUpPrompt;
@@ -865,6 +877,38 @@ namespace RNAssistant.Office.Services
                     ExecutionStatus = parseResult == null ? "unknown" : parseResult.ErrorCode,
                     ResultMessage = BuildPlannerDiagnostic(rawText, parseResult)
                 }));
+            }
+            return assistantText;
+        }
+
+        private static string RecordMissingTools(
+            ChatSession session,
+            RoutedTask route,
+            IEnumerable<ToolDefinition> knownTools)
+        {
+            var host = route == null ? string.Empty : route.App;
+            var enabledForHost = (knownTools ?? new ToolDefinition[0]).Count(tool =>
+                tool != null &&
+                tool.Enabled &&
+                (string.Equals(tool.Host, host, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(tool.Host, "Common", StringComparison.OrdinalIgnoreCase)));
+            var assistantText = "Нет доступного локального инструмента для этого этапа задачи.";
+            if (session != null)
+            {
+                session.Messages.Add(new ChatMessage
+                {
+                    Role = "assistant",
+                    Content = assistantText,
+                    Activity = new ChatActivity
+                    {
+                        Kind = "diagnostic",
+                        Title = "Tool routing",
+                        Subtitle = route == null ? string.Empty : route.TaskType + " / " + route.Phase,
+                        Status = "failed",
+                        ExecutionStatus = "no_available_tools",
+                        ResultMessage = "host=" + host + "; enabledForHost=" + enabledForHost
+                    }
+                });
             }
             return assistantText;
         }

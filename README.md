@@ -177,6 +177,12 @@ Word, Excel and PowerPoint documents are identified by a custom document propert
 The API is OpenAI-compatible chat completions: `/v1/chat/completions`.
 Endpoint compatibility details are in `docs/model-endpoint-compatibility.md`.
 
+Each chat stores an explicit execution mode:
+
+- `Chat` sends a normal completion without planner instructions, Office snapshots, or tools.
+- `Auto` deterministically chooses Chat or Agent before the model request.
+- `Agent` uses the local planner/tool loop. HTML workspace mode always uses Agent.
+
 Native tool calling is not required. In Agent mode, the model is a controlled planner and must return exactly one JSON object, without markdown or prose:
 
 ```json
@@ -202,6 +208,7 @@ The controlled agent loop accepts only the strict planner JSON object in assista
 Routing happens before Office context capture. General questions receive an empty tool catalog and do not read the active document. Document-dependent requests use explicit read tools; mutations inspect first only when the route marks the target as unknown or risky.
 
 In Agent mode, tools are available only when selected by the deterministic router and current phase. Level 2/3 or confirmation-required actions pause for user confirmation unless `Auto-confirm tool actions` is enabled. Confirmed tools can continue the same run.
+If a route requires a tool but filtering leaves no available tool, the runtime records a local diagnostic before calling the model.
 
 ## HTML Workspace
 

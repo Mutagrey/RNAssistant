@@ -192,6 +192,7 @@ function applyInitState(init) {
   state.htmlWorkspaceDirty = false;
   state.activeChatId = init.activeChatId || "";
   state.activeChatModel = init.activeChatModel || "";
+  state.activeChatMode = init.activeChatMode || init.ActiveChatMode || "chat";
   state.activeChatHtmlMode = !!(init.activeChatHtmlMode || init.ActiveChatHtmlMode);
   state.chats = init.chats || [];
   state.documents = init.documents || init.Documents || [];
@@ -353,6 +354,7 @@ function renderSendControls() {
   var input = $("chatInput");
   var clearButton = $("clearInputButton");
   var modelSelect = $("chatModelSelect");
+  var modeSelect = $("chatModeSelect");
   var currentDocumentAvailable = typeof activeChatUsesCurrentDocument !== "function" || activeChatUsesCurrentDocument();
 
   if (sendButton) {
@@ -377,6 +379,9 @@ function renderSendControls() {
   }
   if (modelSelect) {
     modelSelect.disabled = isSending || state.modelCatalog.loading || state.modelSaving || state.bridgeUnavailable || !state.activeChatId;
+  }
+  if (modeSelect) {
+    modeSelect.disabled = isSending || state.bridgeUnavailable || !state.activeChatId;
   }
   if ($("addSelectionContextButton")) {
     $("addSelectionContextButton").disabled = isSending || state.bridgeUnavailable || !currentDocumentAvailable;
@@ -604,6 +609,22 @@ async function toggleChatHtmlMode() {
   }
 }
 
+async function saveChatMode(mode) {
+  if (!state.activeChatId || state.bridgeUnavailable || state.activeSend) {
+    return;
+  }
+  try {
+    applyChatState(await send("setChatMode", {
+      chatId: state.activeChatId,
+      mode: mode || "chat"
+    }));
+    log("Режим чата: " + state.activeChatMode + ".");
+  } catch (error) {
+    $("chatModeSelect").value = state.activeChatMode || "chat";
+    log(error.detail || error.message);
+  }
+}
+
 function bindChatActions() {
   bindMessageScrollControls();
   bindAttachmentActions();
@@ -631,6 +652,9 @@ function bindChatActions() {
     renderChatSessionList(state.chats || []);
   });
   $("toggleHtmlModeButton").addEventListener("click", toggleChatHtmlMode);
+  $("chatModeSelect").addEventListener("change", function () {
+    saveChatMode($("chatModeSelect").value);
+  });
   $("clearChatButton").addEventListener("click", clearChat);
   $("retrySendButton").addEventListener("click", retryFailedSend);
   $("stopButton").addEventListener("click", stopActiveSend);

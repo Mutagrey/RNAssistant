@@ -89,6 +89,10 @@ namespace RNAssistant.Office.WebView
                         var setChatModel = Payload<SetChatModelPayload>(payload);
                         responsePayload = _controller.SetChatModel(setChatModel.ChatId, setChatModel.Model);
                         break;
+                    case "setChatMode":
+                        var setChatMode = Payload<SetChatModePayload>(payload);
+                        responsePayload = _controller.SetChatMode(setChatMode.ChatId, setChatMode.Mode);
+                        break;
                     case "setChatHtmlMode":
                         var setChatHtmlMode = Payload<SetChatHtmlModePayload>(payload);
                         responsePayload = _controller.SetChatHtmlMode(setChatHtmlMode.ChatId, setChatHtmlMode.Enabled == true);

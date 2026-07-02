@@ -115,6 +115,7 @@ namespace RNAssistant.Office.Services
                 session = _chatStore.LoadOrCreateActive(host, documentKey, title);
             }
 
+            session.Mode = ChatModes.Normalize(session.Mode);
             SetActiveSession(session);
             UpdateCurrentDocumentMetadata(session);
             return session;
@@ -219,6 +220,7 @@ namespace RNAssistant.Office.Services
                     DocumentPath = ResolveDocumentPath(s),
                     Title = s.Title,
                     Model = s.Model,
+                    Mode = ChatModes.Normalize(s.Mode),
                     HtmlModeEnabled = s.HtmlModeEnabled,
                     HasHtmlWorkspace = HasHtmlWorkspace(s.HtmlWorkspace),
                     HtmlFileCount = s.HtmlWorkspace == null || s.HtmlWorkspace.Files == null ? 0 : s.HtmlWorkspace.Files.Count,

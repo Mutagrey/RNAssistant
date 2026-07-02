@@ -128,6 +128,51 @@ namespace RNAssistant.Office
             }
         }
 
+        private void RemovePendingAgentToolsForSession(string sessionId)
+        {
+            lock (_syncRoot)
+            {
+                var ids = _pendingAgentTools
+                    .Where(pair => pair.Value != null &&
+                        string.Equals(pair.Value.SessionId, sessionId, StringComparison.OrdinalIgnoreCase))
+                    .Select(pair => pair.Key)
+                    .ToList();
+                foreach (var id in ids)
+                {
+                    _pendingAgentTools.Remove(id);
+                }
+            }
+        }
+
+        private static void CancelPendingActivities(ChatSession session, string reason)
+        {
+            foreach (var message in session == null || session.Messages == null
+                ? new List<ChatMessage>()
+                : session.Messages)
+            {
+                CancelPendingActivity(message == null ? null : message.Activity, reason);
+            }
+        }
+
+        private static void CancelPendingActivity(ChatActivity activity, string reason)
+        {
+            if (activity == null)
+            {
+                return;
+            }
+            if (!string.IsNullOrWhiteSpace(activity.PendingId))
+            {
+                activity.PendingId = null;
+                activity.Status = "cancelled";
+                activity.ExecutionStatus = "cancelled";
+                activity.ResultMessage = reason ?? "Pending action cancelled.";
+            }
+            foreach (var child in activity.Children ?? new List<ChatActivity>())
+            {
+                CancelPendingActivity(child, reason);
+            }
+        }
+
         private static ToolCommand CloneCommand(ToolCommand command)
         {
             var clone = new ToolCommand

@@ -100,6 +100,7 @@ namespace RNAssistant.MockDemo
             var token = Payload(init)["bridgeToken"].ToString();
             var chatId = Payload(init)["activeChatId"].ToString();
             await SendAsync(bridge, "2", "setChatModel", new { chatId = chatId, model = model }, token).ConfigureAwait(false);
+            await SendAsync(bridge, "2-mode", "setChatMode", new { chatId = chatId, mode = "auto" }, token).ConfigureAwait(false);
             var send = await SendAsync(
                 bridge,
                 "3",

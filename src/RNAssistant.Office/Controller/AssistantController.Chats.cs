@@ -37,11 +37,13 @@ namespace RNAssistant.Office
             if (removed)
             {
                 _attachmentStore.DeleteMessage(removedMessage);
+                RemovePendingAgentToolsForSession(ChatStore.GetSessionId(session));
+                CancelPendingActivities(session, "Pending action cancelled because chat history changed.");
                 SaveSessionChanges(session);
             }
 
             var activeId = ChatStore.GetSessionId(session);
-            return new ChatStateResponse { ActiveChatId = activeId, ActiveChatModel = session.Model, ActiveChatHtmlMode = session.HtmlModeEnabled, Chats = _chatSessions.GetChatSummaries(activeId), Documents = ListOpenDocuments(), Context = LoadContext(session), Messages = session.Messages, ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load()), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace) };
+            return new ChatStateResponse { ActiveChatId = activeId, ActiveChatModel = session.Model, ActiveChatMode = ChatModes.Normalize(session.Mode), ActiveChatHtmlMode = session.HtmlModeEnabled, Chats = _chatSessions.GetChatSummaries(activeId), Documents = ListOpenDocuments(), Context = LoadContext(session), Messages = session.Messages, ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load()), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace) };
         }
 
         public ChatStateResponse ForkChat(string id, int index, string chatId = null)
@@ -64,6 +66,7 @@ namespace RNAssistant.Office
 
             var fork = _chatStore.CreateTransient(source.Host, source.DocumentKey, source.DocumentTitle, ChatSessionService.BuildForkTitle(source));
             fork.Model = source.Model;
+            fork.Mode = ChatModes.Normalize(source.Mode);
             fork.HtmlModeEnabled = source.HtmlModeEnabled;
             fork.Context = ChatCloneService.CloneContext(LoadContext(source)) ?? CreateEmptyContext();
             fork.HtmlWorkspace = ChatCloneService.CloneHtmlWorkspace(source.HtmlWorkspace);
@@ -173,6 +176,16 @@ namespace RNAssistant.Office
             return ChatState(session);
         }
 
+        public ChatStateResponse SetChatMode(string chatId, string mode)
+        {
+            var session = LoadSession(chatId);
+            session.Mode = ChatModes.Normalize(mode);
+            RemovePendingAgentToolsForSession(ChatStore.GetSessionId(session));
+            CancelPendingActivities(session, "Pending action cancelled because chat mode changed.");
+            SaveSessionChanges(session);
+            return ChatState(session);
+        }
+
         public ChatStateResponse SetChatHtmlMode(string chatId, bool enabled)
         {
             var session = LoadSession(chatId);
@@ -184,16 +197,24 @@ namespace RNAssistant.Office
         public ChatStateResponse ClearChat(string chatId)
         {
             var session = LoadSession(chatId);
-            _attachmentStore.DeleteSession(ChatStore.GetSessionId(session));
-            var next = _chatSessions.DeleteAndSelectNext(ChatStore.GetSessionId(session));
-            return ChatState(next);
+            var sessionId = ChatStore.GetSessionId(session);
+            _attachmentStore.DeleteSession(sessionId);
+            RemovePendingAgentToolsForSession(sessionId);
+            session.Messages.Clear();
+            session.Context = CreateEmptyContext();
+            session.HtmlWorkspace = new HtmlWorkspace();
+            NormalizeContext(session.Context, session);
+            SaveSessionChanges(session);
+            return ChatState(session);
         }
 
         public ChatStateResponse DeleteChat(string chatId)
         {
             var current = LoadSession(chatId);
-            _attachmentStore.DeleteSession(ChatStore.GetSessionId(current));
-            var next = _chatSessions.DeleteAndSelectNext(ChatStore.GetSessionId(current));
+            var sessionId = ChatStore.GetSessionId(current);
+            _attachmentStore.DeleteSession(sessionId);
+            RemovePendingAgentToolsForSession(sessionId);
+            var next = _chatSessions.DeleteAndSelectNext(sessionId);
             return ChatState(next);
         }
 
@@ -208,6 +229,7 @@ namespace RNAssistant.Office
             foreach (var session in sessions)
             {
                 _attachmentStore.DeleteSession(ChatStore.GetSessionId(session));
+                RemovePendingAgentToolsForSession(ChatStore.GetSessionId(session));
             }
 
             _chatStore.DeleteDocument(host, documentKey);
@@ -232,6 +254,7 @@ namespace RNAssistant.Office
             {
                 ActiveChatId = activeId,
                 ActiveChatModel = session == null ? string.Empty : session.Model,
+                ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
                 ActiveChatHtmlMode = session != null && session.HtmlModeEnabled,
                 Chats = _chatSessions.GetChatSummaries(activeId),
                 Documents = ListOpenDocuments(),

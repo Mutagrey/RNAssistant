@@ -331,7 +331,17 @@ namespace RNAssistant.Office.Services
                 slice.Tools.Add(recipe);
             }
 
-            return new ToolCatalogSlice { Tools = slice.Tools.OrderBy(t => ToolPriority(t, route)).ThenBy(t => t.RiskLevel).ThenBy(t => t.Id).Take(12).ToList() };
+            return new ToolCatalogSlice
+            {
+                Tools = slice.Tools
+                    .GroupBy(t => t.Id, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => group.First())
+                    .OrderBy(t => ToolPriority(t, route))
+                    .ThenBy(t => t.RiskLevel)
+                    .ThenBy(t => t.Id)
+                    .Take(24)
+                    .ToList()
+            };
         }
 
         private static bool IsCandidate(ToolDefinition tool, string host)
@@ -374,6 +384,10 @@ namespace RNAssistant.Office.Services
             }
 
             var id = tool.Id ?? string.Empty;
+            if (route.TaskType == "content")
+            {
+                return true;
+            }
             if (id.StartsWith("common.", StringComparison.OrdinalIgnoreCase) && route.TaskType != "html" && route.TaskType != "tool_authoring")
             {
                 return false;
@@ -405,10 +419,6 @@ namespace RNAssistant.Office.Services
             if (route.TaskType == "destructive")
             {
                 return !tool.MutatesDocument || ContainsAny(id, "search", "read", "list", "context");
-            }
-            if (route.TaskType == "content")
-            {
-                return true;
             }
             return !tool.MutatesDocument || ContainsAny(id, "read", "list", "search", "context", "summary");
         }
@@ -527,8 +537,16 @@ namespace RNAssistant.Office.Services
             for (var index = history.Count - 1; index >= 0; index--)
             {
                 var source = history[index];
-                var candidate = new ChatMessage { Role = source.Role, Content = source.Content ?? string.Empty };
-                var estimate = ModelContextBudget.EstimateMessagesTokens(new[] { candidate });
+                var candidate = new ChatMessage
+                {
+                    Role = source.Role,
+                    Content = source.Content ?? string.Empty,
+                    Attachments = source.Attachments == null
+                        ? new List<ChatAttachment>()
+                        : new List<ChatAttachment>(source.Attachments)
+                };
+                var estimate = ModelContextBudget.EstimateMessagesTokens(new[] { candidate }) +
+                    EstimateAttachmentTokens(candidate.Attachments);
                 if (used + estimate > budget)
                 {
                     break;
@@ -541,33 +559,7 @@ namespace RNAssistant.Office.Services
 
         private static List<ChatMessage> ConversationHistory(ChatSession session)
         {
-            if (session == null || session.Messages == null)
-            {
-                return new List<ChatMessage>();
-            }
-
-            var activeUserIndex = -1;
-            for (var index = session.Messages.Count - 1; index >= 0; index--)
-            {
-                var message = session.Messages[index];
-                if (message != null &&
-                    message.Activity == null &&
-                    string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase))
-                {
-                    activeUserIndex = index;
-                    break;
-                }
-            }
-
-            return session.Messages
-                .Where((message, index) =>
-                    index != activeUserIndex &&
-                    message != null &&
-                    message.Activity == null &&
-                    !string.IsNullOrWhiteSpace(message.Content) &&
-                    (string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase)))
-                .ToList();
+            return ChatContextWindowBuilder.ConversationHistory(session);
         }
 
         private static int EstimateAttachmentTokens(IEnumerable<ChatAttachment> attachments)
@@ -582,10 +574,6 @@ namespace RNAssistant.Office.Services
                 total += Math.Max(
                     Math.Max(0, attachment.ExtractedCharCount),
                     (attachment.ExtractedText ?? string.Empty).Length) / 2;
-                if (attachment.Kind == "image")
-                {
-                    total += ModelContextBudget.EstimatedImageTokens;
-                }
             }
             return total;
         }

@@ -16,7 +16,7 @@ function renderChatSessions() {
     var option = document.createElement("option");
     option.value = chatId(chat);
     var model = chatModel(chat);
-    option.textContent = (chatHasHtml(chat) ? "[HTML] " : "") + chatTitle(chat) + " (" + chatMessageCount(chat) + ")" + (model ? " - " + model : "");
+    option.textContent = (chatHasHtml(chat) ? "[HTML] " : "") + chatTitle(chat) + " (" + chatMessageCount(chat) + ", " + chatMode(chat) + ")" + (model ? " - " + model : "");
     select.appendChild(option);
   });
   select.value = state.activeChatId || "";
@@ -37,6 +37,9 @@ function renderChatSessions() {
   $("newChatButton").disabled = !!state.bridgeUnavailable;
   $("clearChatButton").disabled = !hasActive || !hasMessages;
   $("clearChatButton").hidden = !hasActive || !hasMessages;
+  if ($("chatModeSelect")) {
+    $("chatModeSelect").value = state.activeChatMode || "chat";
+  }
   renderHtmlModeToggle();
   renderSendControls();
 }
@@ -57,6 +60,9 @@ function applyChatState(response) {
   state.activeChatId = response.activeChatId || response.ActiveChatId || state.activeChatId || "";
   if (response.activeChatModel !== undefined || response.ActiveChatModel !== undefined) {
     state.activeChatModel = response.activeChatModel || response.ActiveChatModel || "";
+  }
+  if (response.activeChatMode !== undefined || response.ActiveChatMode !== undefined) {
+    state.activeChatMode = response.activeChatMode || response.ActiveChatMode || "chat";
   }
   if (response.activeChatHtmlMode !== undefined || response.ActiveChatHtmlMode !== undefined) {
     state.activeChatHtmlMode = !!(response.activeChatHtmlMode || response.ActiveChatHtmlMode);
@@ -86,6 +92,9 @@ function applyChatState(response) {
   renderContext(true);
   renderContextMeter();
   renderModelControls();
+  if ($("chatModeSelect")) {
+    $("chatModeSelect").value = state.activeChatMode || "chat";
+  }
   if (typeof renderHtmlWorkspace === "function") {
     renderHtmlWorkspace();
   }
@@ -302,7 +311,7 @@ function renderChatTreeRow(chat) {
   button.appendChild(title);
   var meta = document.createElement("span");
   meta.className = "chat-session-meta";
-  meta.textContent = chatMessageCount(chat) + " сообщ.";
+  meta.textContent = chatMessageCount(chat) + " сообщ. · " + chatMode(chat);
   button.appendChild(meta);
   row.appendChild(button);
   var actions = document.createElement("span");

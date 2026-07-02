@@ -28,6 +28,8 @@ namespace RNAssistant.Office
         private readonly SkillCatalogService _skillCatalog;
         private readonly ChatSessionService _chatSessions;
         private readonly ChatCompletionService _chatCompletionService;
+        private readonly PlainChatService _plainChatService;
+        private readonly ChatExecutionModeSelector _chatModeSelector;
         private readonly OfflineChatService _offlineChatService;
         private readonly ContextService _contextService;
         private readonly LlmClient _llmClient;
@@ -50,11 +52,6 @@ namespace RNAssistant.Office
             _settingsService = new SettingsService(_paths);
             _chatStore = new ChatStore(_paths);
             _attachmentStore = new AttachmentStore(_paths);
-            foreach (var incomplete in _chatStore.List().Where(session => !HasCompletedExchange(session)).ToList())
-            {
-                _attachmentStore.DeleteSession(ChatStore.GetSessionId(incomplete));
-                _chatStore.Delete(incomplete.Host, incomplete.DocumentKey, ChatStore.GetSessionId(incomplete));
-            }
             _toolStore = new ToolStore(_paths);
             _skillStore = new SkillStore(_paths);
             _vbaBackupStore = new VbaBackupStore(_paths);
@@ -80,13 +77,19 @@ namespace RNAssistant.Office
                         _llmClient.CompleteAsync(settings, messages, streamProgress, cancellationToken);
                 _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, streamingCompletion);
                 _offlineChatService = new OfflineChatService(_toolExecutor, streamingCompletion);
+                _plainChatService = new PlainChatService(streamingCompletion);
             }
             else
             {
+                ChatCompletionService.CompletionDelegate completion =
+                    (settings, messages, streamProgress, cancellationToken) =>
+                        completeAsync(settings, messages, cancellationToken);
                 _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, completeAsync);
                 _offlineChatService = new OfflineChatService(_toolExecutor, completeAsync);
+                _plainChatService = new PlainChatService(completion);
             }
             _contextService = new ContextService(_adapter);
+            _chatModeSelector = new ChatExecutionModeSelector();
             _syncRoot = new object();
             _pendingAgentTools = new Dictionary<string, PendingAgentTool>(StringComparer.OrdinalIgnoreCase);
         }
@@ -107,6 +110,7 @@ namespace RNAssistant.Office
                 OfficeContext = CaptureOfficeContext(),
                 ActiveChatId = activeId,
                 ActiveChatModel = session == null ? string.Empty : session.Model,
+                ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
                 ActiveChatHtmlMode = session != null && session.HtmlModeEnabled,
                 Chats = _chatSessions.GetChatSummaries(activeId),
                 Documents = ListOpenDocuments(),
@@ -183,7 +187,7 @@ namespace RNAssistant.Office
             {
                 var emptySession = LoadSession(chatId, true);
                 var emptyId = ChatStore.GetSessionId(emptySession);
-                return new SendChatResponse { Message = string.Empty, ToolResults = new object[0], ActiveChatId = emptyId, ActiveChatModel = emptySession.Model, ActiveChatHtmlMode = emptySession.HtmlModeEnabled, Chats = _chatSessions.GetChatSummaries(emptyId), Context = LoadContext(emptySession), Messages = emptySession.Messages, ContextUsage = ContextUsageEstimator.FromSession(emptySession, _settingsService.Load()), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(emptySession.HtmlWorkspace) };
+                return new SendChatResponse { Message = string.Empty, ToolResults = new object[0], ActiveChatId = emptyId, ActiveChatModel = emptySession.Model, ActiveChatMode = ChatModes.Normalize(emptySession.Mode), ActiveChatHtmlMode = emptySession.HtmlModeEnabled, Chats = _chatSessions.GetChatSummaries(emptyId), Context = LoadContext(emptySession), Messages = emptySession.Messages, ContextUsage = ContextUsageEstimator.FromSession(emptySession, _settingsService.Load()), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(emptySession.HtmlWorkspace) };
             }
 
             var settings = _settingsService.Load();
@@ -198,19 +202,42 @@ namespace RNAssistant.Office
             var skills = _skillCatalog.SelectRelevantSkills(text, documentContext, 5);
             var shouldGenerateLlmTitle = settings.SmartChatTitles != false && ChatTitleBuilder.ShouldAssign(session);
             ChatCompletionResult completion;
-            if (_chatSessions.IsCurrentDocument(session))
+            try
             {
-                var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-                completion = await _chatCompletionService.ExecuteAsync(text ?? string.Empty, session, documentContext, settings, tools, attachments, progress, RegisterPendingAgentTool, skills, cancellationToken);
+                var executionMode = _chatModeSelector.Select(text, session, _adapter.HostName);
+                if (executionMode == ChatModes.Chat)
+                {
+                    completion = await _plainChatService.ExecuteAsync(
+                        text ?? string.Empty,
+                        session,
+                        documentContext,
+                        settings,
+                        attachments,
+                        progress,
+                        cancellationToken).ConfigureAwait(false);
+                }
+                else if (_chatSessions.IsCurrentDocument(session))
+                {
+                    var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
+                    completion = await _chatCompletionService.ExecuteAsync(text ?? string.Empty, session, documentContext, settings, tools, attachments, progress, RegisterPendingAgentTool, skills, cancellationToken);
+                }
+                else
+                {
+                    var offlineTools = _toolCatalog.GetVisibleTools()
+                        .Where(s => s.Enabled &&
+                            string.Equals(s.Host, "Common", StringComparison.OrdinalIgnoreCase) &&
+                            !string.Equals(s.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                    completion = await _offlineChatService.ExecuteAsync(text ?? string.Empty, session, documentContext, settings, offlineTools, attachments, progress, RegisterPendingAgentTool, skills, cancellationToken);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                var offlineTools = _toolCatalog.GetVisibleTools()
-                    .Where(s => s.Enabled &&
-                        string.Equals(s.Host, "Common", StringComparison.OrdinalIgnoreCase) &&
-                        !string.Equals(s.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-                completion = await _offlineChatService.ExecuteAsync(text ?? string.Empty, session, documentContext, settings, offlineTools, attachments, progress, RegisterPendingAgentTool, skills, cancellationToken);
+                RecordFailedTurn(session, ex);
+                var failedUserMessage = session.Messages.LastOrDefault(m => m != null && string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase));
+                _attachmentStore.Commit(ChatStore.GetSessionId(session), failedUserMessage);
+                SaveSessionChanges(session);
+                throw;
             }
             if (settings.SmartChatTitles == false)
             {
@@ -218,7 +245,6 @@ namespace RNAssistant.Office
             }
 
             ReportProgress(progress, "saving", "Сохраняю историю...");
-            cancellationToken.ThrowIfCancellationRequested();
             var userMessage = session.Messages.LastOrDefault(m => m != null && string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase));
             _attachmentStore.Commit(ChatStore.GetSessionId(session), userMessage);
             SaveSessionChanges(session);
@@ -228,7 +254,7 @@ namespace RNAssistant.Office
                 StartChatTitleGeneration(session, text, completion.AssistantText, settings, chatStateChanged);
             }
 
-            return new SendChatResponse { Message = completion.AssistantText, ToolResults = completion.ToolResults, ActiveChatId = activeId, ActiveChatModel = session.Model, ActiveChatHtmlMode = session.HtmlModeEnabled, Chats = _chatSessions.GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace) };
+            return new SendChatResponse { Message = completion.AssistantText, ToolResults = completion.ToolResults, ActiveChatId = activeId, ActiveChatModel = session.Model, ActiveChatMode = ChatModes.Normalize(session.Mode), ActiveChatHtmlMode = session.HtmlModeEnabled, Chats = _chatSessions.GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace) };
         }
 
         public AttachmentResponse ImportAttachment(string fileName, string contentType, string base64)
@@ -293,6 +319,28 @@ namespace RNAssistant.Office
             });
         }
 
+        private static void RecordFailedTurn(ChatSession session, Exception error)
+        {
+            if (session == null)
+            {
+                return;
+            }
+            var cancelled = error is OperationCanceledException;
+            session.Messages.Add(new ChatMessage
+            {
+                Role = "assistant",
+                Content = cancelled ? "Запрос отменён." : "Запрос завершился технической ошибкой.",
+                Activity = new ChatActivity
+                {
+                    Kind = "diagnostic",
+                    Title = cancelled ? "Request cancelled" : "Request failed",
+                    Status = cancelled ? "cancelled" : "failed",
+                    ExecutionStatus = cancelled ? "cancelled" : "runtime_error",
+                    ResultMessage = error == null ? string.Empty : error.Message
+                }
+            });
+        }
+
         private ChatStateResponse CreateStoredChatState(string host, string documentKey, string documentTitle)
         {
             var activeId = _chatStore.LoadActiveSessionId(host, documentKey);
@@ -304,6 +352,7 @@ namespace RNAssistant.Office
             {
                 ActiveChatId = activeId,
                 ActiveChatModel = active == null ? string.Empty : active.Model,
+                ActiveChatMode = ChatModes.Normalize(active == null ? null : active.Mode),
                 ActiveChatHtmlMode = active != null && active.HtmlModeEnabled,
                 Chats = chats,
                 Documents = ListOpenDocuments()

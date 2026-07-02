@@ -65,6 +65,22 @@ namespace RNAssistant.Core.Llm
 
                     usedChars += (message.Content ?? string.Empty).Length;
                     usedTokens += 4 + ModelContextBudget.EstimateTextTokens(message.Content);
+                    foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
+                    {
+                        if (attachment == null)
+                        {
+                            continue;
+                        }
+                        var extractedChars = Math.Max(
+                            attachment.ExtractedCharCount,
+                            (attachment.ExtractedText ?? string.Empty).Length);
+                        usedChars += extractedChars;
+                        usedTokens += extractedChars / 2;
+                        if (attachment.Kind == "image")
+                        {
+                            usedTokens += ModelContextBudget.EstimatedImageTokens;
+                        }
+                    }
                     count += 1;
                 }
             }

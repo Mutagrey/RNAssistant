@@ -16,6 +16,7 @@ namespace RNAssistant.Office
         public bool LastDryRun { get; private set; }
         public string LastChatText { get; private set; }
         public string LastChatId { get; private set; }
+        public string LastChatMode { get; private set; }
         public AppSettings LastSettings { get; private set; }
         public string LastApiKey { get; private set; }
         public string LastModuleName { get; private set; }
@@ -41,6 +42,14 @@ namespace RNAssistant.Office
         }
         public ChatStateResponse RenameChat(string chatId, string title) { return ChatState(title, chatId); }
         public ChatStateResponse SetChatModel(string chatId, string model) { return ChatState(model, chatId); }
+        public ChatStateResponse SetChatMode(string chatId, string mode)
+        {
+            LastChatId = chatId;
+            LastChatMode = mode;
+            var state = ChatState(null, chatId);
+            state.ActiveChatMode = mode;
+            return state;
+        }
         public ChatStateResponse SetChatHtmlMode(string chatId, bool enabled) { return ChatState(enabled ? "html" : string.Empty, chatId); }
         public ChatStateResponse ClearChat(string chatId) { return ChatState(null, chatId); }
         public ChatStateResponse DeleteChat(string chatId) { return ChatState(null, chatId); }
@@ -172,6 +181,7 @@ namespace RNAssistant.Office
             {
                 ActiveChatId = chatId ?? string.Empty,
                 ActiveChatModel = title ?? string.Empty,
+                ActiveChatMode = "chat",
                 Chats = new ChatSessionSummary[0],
                 Context = new DocumentContext(),
                 Messages = new ChatMessage[0]
