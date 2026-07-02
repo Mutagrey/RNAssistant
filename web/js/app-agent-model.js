@@ -132,6 +132,18 @@ function recordLiveAgentActivity(activity) {
   var key = activityTimelineKey(activity);
   var copy = cloneActivity(activity);
   copy.__timelineKey = key;
+
+  state.liveAgentRun.forEach(function (item) {
+    if (!item || item.__timelineKey === key || activityStatus(item) !== "running") {
+      return;
+    }
+    if (item.Status !== undefined) {
+      item.Status = "completed";
+    } else {
+      item.status = "completed";
+    }
+  });
+
   for (var i = state.liveAgentRun.length - 1; i >= 0; i -= 1) {
     if (state.liveAgentRun[i] && state.liveAgentRun[i].__timelineKey === key) {
       state.liveAgentRun[i] = copy;
@@ -180,7 +192,7 @@ function collectRunActivities(items) {
 function currentRunActivity(activities) {
   var preferred = ["running", "waiting", "failed", "cancelled"];
   for (var i = 0; i < preferred.length; i += 1) {
-    for (var j = 0; j < activities.length; j += 1) {
+    for (var j = activities.length - 1; j >= 0; j -= 1) {
       if (activityStatus(activities[j]) === preferred[i]) {
         return activities[j];
       }

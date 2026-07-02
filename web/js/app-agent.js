@@ -63,15 +63,28 @@ function renderActivityRow(activity, current, expandable, context) {
 }
 
 function activityPrimaryText(activity) {
-  return activityToolId(activity) || activityTitle(activity);
+  var title = activityTitle(activity);
+  var toolId = activityToolId(activity);
+  if (title && title !== toolId && title !== "Tool step" && title !== "Agent step") {
+    return title;
+  }
+
+  var labels = {
+    reasoning: "Анализирую задачу",
+    verification: "Проверяю результат",
+    retry: "Повторяю шаг",
+    tool: "Выполняю действие",
+    plan: "Формирую план"
+  };
+  return labels[activityKind(activity)] || toolId || title || "Выполняю шаг";
 }
 
 function activityCommentText(activity) {
   var toolId = activityToolId(activity);
   var title = activityTitle(activity);
   var subtitle = activityValue(activity, "Subtitle", "subtitle", "");
-  if (toolId && title && title !== toolId && title !== "Tool step" && title !== "Agent step") {
-    return title;
+  if (toolId && toolId !== title) {
+    return toolId;
   }
   return subtitle && subtitle !== toolId ? subtitle : "";
 }
@@ -222,11 +235,11 @@ function appendActivityArtifacts(node, activity, context) {
 function agentStatusLabel(status) {
   var labels = {
     completed: "Готово",
-    running: "Выполняется",
-    waiting: "Ждет подтверждения",
+    running: "Выполняю",
+    waiting: "Нужно подтверждение",
     failed: "Ошибка",
     cancelled: "Отменено",
-    planned: "Запланировано"
+    planned: "В плане"
   };
   return labels[status] || status || "Статус";
 }
@@ -263,7 +276,7 @@ function appendAgentRunProcess(parent, timeline, stats, finalMessage) {
   var label = document.createElement("span");
   label.className = "agent-run-process-label";
   label.textContent = stats.status === "running" && stats.current
-    ? activityTitle(stats.current)
+    ? activityPrimaryText(stats.current)
     : "Ход работы · " + ((timeline && timeline.length) || 0);
   summary.appendChild(label);
 
