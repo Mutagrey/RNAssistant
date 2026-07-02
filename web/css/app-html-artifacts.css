@@ -32,35 +32,8 @@
   overflow: hidden;
   border: 0;
   border-radius: 999px;
-  background: #c24135;
-  box-shadow: 0 0 0 3px rgba(180, 35, 24, 0.12);
-}
-
-.html-artifact.is-enabled .html-artifact-badge {
   background: #16a36d;
   box-shadow: 0 0 0 3px rgba(22, 131, 93, 0.13);
-}
-
-.html-artifact-blocked {
-  display: grid;
-  gap: 3px;
-  margin: 10px;
-  padding: 10px;
-  border: 1px solid #f2b8b5;
-  border-radius: 7px;
-  background: #fff7f6;
-  color: #7a271a;
-  font-size: 12px;
-}
-
-.html-artifact-blocked-title {
-  font-weight: var(--title-font-weight);
-}
-
-.html-artifact-blocked-text {
-  color: #8a3a32;
-  font-size: 12px;
-  line-height: 1.4;
 }
 
 .html-artifact-frame {

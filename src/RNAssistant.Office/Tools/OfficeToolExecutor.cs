@@ -174,7 +174,7 @@ namespace RNAssistant.Office.Tools
             if (_htmlArtifactExecutor.IsControllerTool(command.ToolId))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                return _htmlArtifactExecutor.ExecuteControllerTool(command, settings, session, dryRun);
+                return _htmlArtifactExecutor.ExecuteControllerTool(command, session, dryRun);
             }
 
             if (dryRun)

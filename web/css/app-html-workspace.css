@@ -133,17 +133,6 @@
   background: #fff;
 }
 
-.html-workspace-blocked {
-  align-self: start;
-  padding: 12px;
-  border: 1px solid #f2b8b5;
-  border-radius: 7px;
-  background: #fff7f6;
-  color: #7a271a;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
 .html-workspace-edit {
   height: 100%;
   min-height: 0;

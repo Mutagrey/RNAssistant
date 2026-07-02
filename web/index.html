@@ -21,8 +21,8 @@
   <link rel="stylesheet" href="css/app-vba.css?v=chatui-20260622-7">
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
-  <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260622-3">
-  <link rel="stylesheet" href="css/app-html-workspace.css?v=chatui-20260622-6">
+  <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260702-2">
+  <link rel="stylesheet" href="css/app-html-workspace.css?v=chatui-20260702-2">
   <link rel="stylesheet" href="css/app-dialogs.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-responsive.css?v=chatui-20260622-12">
   <link rel="stylesheet" href="css/app-agent.css?v=chatui-20260622-2">
@@ -406,7 +406,6 @@
               <div class="resource-editor-empty-text">Создайте HTML через чат или добавьте файл слева.</div>
             </div>
             <div class="html-workspace-preview html-workspace-view" id="htmlWorkspacePreview" data-html-view="preview">
-              <div class="html-workspace-blocked hidden" id="htmlWorkspacePreviewBlocked">HTML preview отключен в настройках интерфейса.</div>
               <iframe class="html-workspace-frame" id="htmlWorkspacePreviewFrame" title="HTML preview" sandbox="allow-scripts allow-forms allow-modals allow-popups" referrerpolicy="no-referrer"></iframe>
             </div>
             <div class="html-workspace-edit html-workspace-view hidden" id="htmlWorkspaceEdit" data-html-view="edit">
@@ -498,7 +497,7 @@
                 <label><span>Размер шрифта, %</span><input id="uiFontScaleInput" type="number" min="85" max="130" step="5"></label>
                 <label class="checkline"><input id="smartChatTitlesInput" type="checkbox"><span>Умные названия чатов</span></label>
               </div>
-              <div class="setting-note">HTML preview всегда доступен и выполняется в sandboxed iframe.</div>
+              <div class="setting-note">HTML preview и его скрипты всегда доступны в sandboxed iframe.</div>
             </section>
 
             <section class="settings-page" data-settings-page="prompts">
@@ -665,12 +664,12 @@
   <script src="js/app-tools.js?v=chatui-20260622-4"></script>
   <script src="js/app-skills.js?v=chatui-20260622-4"></script>
   <script src="js/app-vba.js?v=chatui-20260622-7"></script>
-  <script src="js/app-html-workspace.js?v=chatui-20260622-9"></script>
+  <script src="js/app-html-workspace.js?v=chatui-20260702-2"></script>
   <script src="js/app-context.js?v=chatui-20260622-1"></script>
   <script src="js/app-agent-data.js?v=chatui-20260622-1"></script>
   <script src="js/app-agent-model.js?v=chatui-20260622-1"></script>
   <script src="js/app-chart-artifacts.js?v=chatui-20260622-2"></script>
-  <script src="js/app-html-artifacts.js?v=chatui-20260622-3"></script>
+  <script src="js/app-html-artifacts.js?v=chatui-20260702-2"></script>
   <script src="js/app-agent.js?v=chatui-20260622-3"></script>
   <script src="js/app-messages.js?v=chatui-20260622-3"></script>
   <script src="js/app-reasoning.js?v=reasoning-20260630-1"></script>

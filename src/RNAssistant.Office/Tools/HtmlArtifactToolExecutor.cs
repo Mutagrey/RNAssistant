@@ -92,7 +92,7 @@ namespace RNAssistant.Office.Tools
                 string.Equals(toolId, SetActiveToolId, StringComparison.OrdinalIgnoreCase);
         }
 
-        public ToolResult ExecuteControllerTool(ToolCommand command, AppSettings settings, ChatSession session, bool dryRun)
+        public ToolResult ExecuteControllerTool(ToolCommand command, ChatSession session, bool dryRun)
         {
             if (command == null)
             {
@@ -101,7 +101,7 @@ namespace RNAssistant.Office.Tools
 
             if (string.Equals(command.ToolId, RenderHtmlToolId, StringComparison.OrdinalIgnoreCase))
             {
-                return RenderHtmlArtifact(command, settings);
+                return RenderHtmlArtifact(command);
             }
 
             try
@@ -392,7 +392,7 @@ namespace RNAssistant.Office.Tools
             return snapshot;
         }
 
-        private static ToolResult RenderHtmlArtifact(ToolCommand command, AppSettings settings)
+        private static ToolResult RenderHtmlArtifact(ToolCommand command)
         {
             var html = ToolArgumentReader.String(command.Arguments, "html", string.Empty);
             if (string.IsNullOrWhiteSpace(html))

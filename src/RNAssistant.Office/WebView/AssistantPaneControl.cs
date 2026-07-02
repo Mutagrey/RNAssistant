@@ -127,6 +127,7 @@ namespace RNAssistant.Office.WebView
         private void ConfigureInitializedWebView()
         {
             _webView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
+            _webView.CoreWebView2.Settings.IsScriptEnabled = true;
             _webView.CoreWebView2.Settings.AreDevToolsEnabled = true;
             _webView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = false;
             TryAttachAcceleratorFilter();

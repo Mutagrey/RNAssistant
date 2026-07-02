@@ -212,7 +212,7 @@ The HTML tab is tied to the active chat session. Agent-created HTML pages are st
 - Use `common.html_workspace_read` to inspect the current workspace and `common.html_workspace_set_active` to choose the displayed HTML file.
 - `common.render_html` remains available only for legacy one-off chat artifacts.
 
-HTML preview runs in a sandboxed iframe and is controlled by the Interface setting for HTML preview/artifacts.
+HTML preview and its scripts are always enabled inside a sandboxed iframe.
 
 ## Tool Library
 

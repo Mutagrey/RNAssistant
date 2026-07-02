@@ -1,8 +1,4 @@
 (function () {
-  function htmlArtifactsEnabled() {
-    return true;
-  }
-
   function artifactValue(source, pascal, camel, fallback) {
     source = source || {};
     return source[pascal] !== undefined ? source[pascal] : (source[camel] !== undefined ? source[camel] : fallback);
@@ -23,9 +19,8 @@
       return null;
     }
 
-    var enabled = htmlArtifactsEnabled();
     var node = document.createElement("section");
-    node.className = "html-artifact " + (enabled ? "is-enabled" : "is-blocked");
+    node.className = "html-artifact";
 
     var header = document.createElement("div");
     header.className = "html-artifact-header";
@@ -34,26 +29,11 @@
     title.textContent = artifactValue(artifact, "Title", "title", "HTML-компонент");
     var badge = document.createElement("span");
     badge.className = "html-artifact-badge";
-    badge.title = enabled ? "HTML sandbox iframe включен" : "HTML отключен";
+    badge.title = "HTML sandbox iframe включен";
     badge.setAttribute("aria-label", badge.title);
     header.appendChild(title);
     header.appendChild(badge);
     node.appendChild(header);
-
-    if (!enabled) {
-      var blocked = document.createElement("div");
-      blocked.className = "html-artifact-blocked";
-      var blockedTitle = document.createElement("div");
-      blockedTitle.className = "html-artifact-blocked-title";
-      blockedTitle.textContent = "HTML не отображается";
-      var blockedText = document.createElement("div");
-      blockedText.className = "html-artifact-blocked-text";
-      blockedText.textContent = "Включите экспериментальный HTML в разделе «Настройки» > «Интерфейс» только для доверенного содержимого.";
-      blocked.appendChild(blockedTitle);
-      blocked.appendChild(blockedText);
-      node.appendChild(blocked);
-      return node;
-    }
 
     var iframe = document.createElement("iframe");
     iframe.className = "html-artifact-frame";
@@ -76,9 +56,7 @@
   }
 
   function htmlBlobUrl(html) {
-    var blob = new Blob([html || ""], { type: "text/html" });
-    var url = URL.createObjectURL(blob);
-    return url;
+    return URL.createObjectURL(new Blob([html || ""], { type: "text/html" }));
   }
 
   window.tryRenderHtmlArtifact = renderHtmlArtifact;

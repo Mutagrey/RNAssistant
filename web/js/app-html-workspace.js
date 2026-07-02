@@ -157,10 +157,6 @@
     state.htmlWorkspaceSelection = { type: "file", id: "" };
   }
 
-  function htmlPreviewEnabled() {
-    return true;
-  }
-
   function syncHtmlEditorToState() {
     var selected = selectedItem();
     if (!selected) {
@@ -534,15 +530,7 @@
 
   function renderHtmlWorkspacePreview() {
     var frame = $("htmlWorkspacePreviewFrame");
-    var blocked = $("htmlWorkspacePreviewBlocked");
-    if (!frame || !blocked) {
-      return;
-    }
-    var enabled = htmlPreviewEnabled();
-    blocked.classList.toggle("hidden", enabled);
-    frame.classList.toggle("hidden", !enabled);
-    if (!enabled) {
-      frame.removeAttribute("src");
+    if (!frame) {
       return;
     }
     frame.src = "data:text/html;charset=utf-8," + encodeURIComponent(buildPreviewHtml());
