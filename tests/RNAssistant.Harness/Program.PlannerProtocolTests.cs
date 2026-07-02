@@ -5,6 +5,22 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void PlannerBoundaryCorpusStaysStrict()
+        {
+            var parser = new AgentPlannerResponseParser();
+            for (var index = 0; index < 50; index++)
+            {
+                var message = "answer-" + index;
+                var valid = "{\"kind\":\"final\",\"intent\":\"answer\",\"message\":\"" + message + "\",\"steps\":[],\"expectedOutcome\":null}";
+                AssertTrue(parser.ParseStrict(valid).Success, "valid planner corpus " + index);
+
+                var extra = valid.Substring(0, valid.Length - 1) + ",\"extra" + index + "\":true}";
+                AssertTrue(!parser.ParseStrict(extra).Success, "extra key rejected " + index);
+                AssertTrue(!parser.ParseStrict("```json\n" + valid + "\n```").Success, "fence rejected " + index);
+                AssertTrue(!parser.ParseStrict("[" + valid + "]").Success, "array rejected " + index);
+            }
+        }
+
         private static void PlannerStrictParsesJsonEnvelope()
         {
             var parsed = new AgentPlannerResponseParser().ParseStrict("{\"kind\":\"tool_plan\",\"intent\":\"read\",\"message\":null,\"steps\":[{\"toolId\":\"excel.get_context\",\"arguments\":{},\"reason\":\"Need context.\"}],\"expectedOutcome\":\"Read context.\"}");

@@ -25,6 +25,7 @@ namespace RNAssistant.Harness
             session.Mode = ChatModes.Auto;
             AssertEqual(ChatModes.Chat, selector.Select("explain pivot tables", session, "Excel"), "auto plain question");
             AssertEqual(ChatModes.Agent, selector.Select("write values into A1", session, "Excel"), "auto office action");
+            AssertEqual(ChatModes.Agent, selector.Select("объясни содержимое текущего документа", session, "Word"), "auto current document explanation");
 
             session.Mode = ChatModes.Chat;
             session.HtmlModeEnabled = true;
@@ -125,7 +126,92 @@ namespace RNAssistant.Harness
                 AssertTrue(session.Messages.Any(message =>
                     message.Activity != null &&
                     message.Activity.ExecutionStatus == "no_available_tools"), "diagnostic activity");
+                var diagnostic = session.Messages.Last(message => message.Activity != null).Activity;
+                AssertContains(diagnostic.DataJson, "excludedCounts", "tool diagnostics");
             });
+        }
+
+        private static void ToolSliceBalancesMutationAndInspection()
+        {
+            var tools = new List<ToolDefinition>();
+            for (var index = 0; index < 40; index++)
+            {
+                tools.Add(new ToolDefinition
+                {
+                    Id = "excel.write_" + index,
+                    Host = "Excel",
+                    MutatesDocument = true,
+                    RiskLevel = 2
+                });
+            }
+            tools.Add(new ToolDefinition { Id = "excel.read_range", Host = "Excel", MutatesDocument = false });
+            tools.Add(new ToolDefinition { Id = "excel.get_context", Host = "Excel", MutatesDocument = false });
+            tools.Add(new ToolDefinition { Id = "word.read_document", Host = "Word", MutatesDocument = false });
+            tools.Add(new ToolDefinition { Id = "excel.confirm_mutation", Host = "Excel", MutatesDocument = true, RiskLevel = 2, AgentCanRun = false });
+            tools.Add(new ToolDefinition { Id = "excel.unavailable", Host = "Excel", CapabilityStatus = "unavailable" });
+
+            var slice = new ToolCatalogSlicer().Slice(
+                new RoutedTask
+                {
+                    App = "Excel",
+                    TaskType = "content",
+                    Phase = AgentPhases.Mutation,
+                    RiskAllowed = 2,
+                    RequiresTool = true
+                },
+                tools,
+                new List<AgentObservation>());
+
+            AssertEqual(24, slice.Tools.Count, "balanced slice size");
+            AssertTrue(slice.Tools.Any(tool => tool.Id == "excel.read_range"), "read tool retained");
+            AssertTrue(slice.Tools.Any(tool => tool.Id == "excel.get_context"), "context tool retained");
+            AssertTrue(slice.Tools.Any(tool => tool.Id == "excel.confirm_mutation"), "confirmation-only mutation retained");
+            AssertTrue(slice.Excluded.Any(item => item.ToolId == "word.read_document" && item.Reason == "wrong_host"), "wrong host reason");
+            AssertTrue(slice.Excluded.Any(item => item.ToolId == "excel.unavailable" && item.Reason == "capability_unavailable"), "capability reason");
+            AssertTrue(slice.Excluded.Any(item => item.Reason == "selection_limit"), "selection limit reason");
+
+            var compact = new ToolCatalogSlicer().Slice(
+                new RoutedTask
+                {
+                    App = "Excel",
+                    TaskType = "content",
+                    Phase = AgentPhases.Mutation,
+                    RiskAllowed = 2,
+                    RequiresTool = true
+                },
+                tools,
+                new List<AgentObservation>(),
+                8);
+            AssertEqual(8, compact.Tools.Count, "compact slice size");
+            AssertTrue(compact.Tools.Any(tool => !tool.MutatesDocument), "compact slice keeps inspection");
+            AssertTrue(compact.Tools.Any(tool => tool.MutatesDocument), "compact slice keeps mutation");
+        }
+
+        private static void PromptBudgetKeepsContiguousRecentHistory()
+        {
+            var builder = new ChatContextWindowBuilder();
+            var session = new ChatSession();
+            session.Messages.Add(new ChatMessage { Role = "user", Content = "OLD_SMALL_SENTINEL" });
+            session.Messages.Add(new ChatMessage { Role = "assistant", Content = "old answer" });
+            session.Messages.Add(new ChatMessage { Role = "user", Content = new string('x', 12000) });
+            session.Messages.Add(new ChatMessage { Role = "assistant", Content = "RECENT_AFTER_LARGE" });
+            session.Messages.Add(new ChatMessage { Role = "user", Content = "current" });
+
+            var prompt = builder.BuildPlainMessages(
+                "current",
+                session,
+                new DocumentContext(),
+                new AppSettings
+                {
+                    SystemPromptRole = "system",
+                    ContextWindowOverrideTokens = 4096,
+                    MaxTokens = 2048
+                },
+                null);
+            var text = FlattenMessages(prompt);
+            AssertContains(text, "current", "current request retained");
+            AssertContains(text, "RECENT_AFTER_LARGE", "newest fitting history retained");
+            AssertTrue(text.IndexOf("OLD_SMALL_SENTINEL", StringComparison.Ordinal) < 0, "history remains contiguous after overflow");
         }
 
     }

@@ -41,63 +41,12 @@ namespace RNAssistant.Office.Services
             };
             messages.Add(current);
 
-            var used = ModelContextBudget.EstimateMessagesTokens(messages) + EstimateExtractedAttachmentTokens(attachments);
-            var history = ConversationHistory(session);
-            var insertAt = messages.Count - 1;
-            for (var index = history.Count - 1; index >= 0; index--)
-            {
-                var source = history[index];
-                var candidate = new ChatMessage
-                {
-                    Role = source.Role,
-                    Content = source.Content ?? string.Empty,
-                    Attachments = source.Attachments == null
-                        ? new List<ChatAttachment>()
-                        : new List<ChatAttachment>(source.Attachments)
-                };
-                var estimate = ModelContextBudget.EstimateMessagesTokens(new[] { candidate }) +
-                    EstimateExtractedAttachmentTokens(candidate.Attachments);
-                if (used + estimate > budget)
-                {
-                    break;
-                }
-                messages.Insert(insertAt, candidate);
-                used += estimate;
-            }
+            new PromptBudgetComposer().AddConversationHistory(
+                messages,
+                messages.Count - 1,
+                session,
+                settings);
             return messages;
-        }
-
-        internal static List<ChatMessage> ConversationHistory(ChatSession session)
-        {
-            if (session == null || session.Messages == null)
-            {
-                return new List<ChatMessage>();
-            }
-
-            var activeUserIndex = -1;
-            for (var index = session.Messages.Count - 1; index >= 0; index--)
-            {
-                var message = session.Messages[index];
-                if (IsConversationMessage(message) &&
-                    string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase))
-                {
-                    activeUserIndex = index;
-                    break;
-                }
-            }
-
-            return session.Messages
-                .Where((message, index) => index != activeUserIndex && IsConversationMessage(message))
-                .ToList();
-        }
-
-        private static bool IsConversationMessage(ChatMessage message)
-        {
-            return message != null &&
-                message.Activity == null &&
-                !string.IsNullOrWhiteSpace(message.Content) &&
-                (string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase));
         }
 
         private static string BuildCurrentText(string userText, DocumentContext context, int contextBudgetTokens)
@@ -152,18 +101,5 @@ namespace RNAssistant.Office.Services
             return builder.ToString();
         }
 
-        private static int EstimateExtractedAttachmentTokens(IEnumerable<ChatAttachment> attachments)
-        {
-            var total = 0;
-            foreach (var attachment in attachments ?? new ChatAttachment[0])
-            {
-                if (attachment == null)
-                {
-                    continue;
-                }
-                total += Math.Max(attachment.ExtractedCharCount, (attachment.ExtractedText ?? string.Empty).Length) / 2;
-            }
-            return total;
-        }
     }
 }

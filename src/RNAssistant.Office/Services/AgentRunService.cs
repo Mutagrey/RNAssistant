@@ -182,14 +182,20 @@ namespace RNAssistant.Office.Services
             var formatRepairUsed = false;
             var toolCorrectionUsed = false;
             var allTools = AllKnownTools(tools);
+            var routingDiagnosticsJson = string.Empty;
 
             for (var iteration = 0; iteration < maxIterations; iteration++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var slice = _toolCatalogSlicer.Slice(route, allTools, observations);
+                var slice = _toolCatalogSlicer.Slice(route, allTools, observations, settings.MaxAgentToolsPerRequest);
+                routingDiagnosticsJson = BuildRoutingDiagnosticsJson(route, slice);
+                if (iteration == 0)
+                {
+                    ReportProgress(progress, "routing", "Маршрут и локальные инструменты выбраны.", BuildRoutingActivity(route, slice));
+                }
                 if (route.RequiresTool && slice.Tools.Count == 0)
                 {
-                    assistantText = RecordMissingTools(session, route, allTools);
+                    assistantText = RecordMissingTools(session, route, slice);
                     resultLog.Add(new
                     {
                         success = false,
@@ -342,6 +348,7 @@ namespace RNAssistant.Office.Services
 
                 var planActivity = AgentTranscript.CreateAgentPlanActivity(commands);
                 planActivity.Title = "Planner tool plan";
+                planActivity.DataJson = routingDiagnosticsJson;
                 session.Messages.Add(AgentTranscript.CreateAssistantMessage(AgentTranscript.CreateAgentPlanMessage(commands), completion, planActivity));
                 ReportProgress(progress, "plan", "Planner выбрал " + commands.Count + " step(s).", planActivity);
 
@@ -884,14 +891,9 @@ namespace RNAssistant.Office.Services
         private static string RecordMissingTools(
             ChatSession session,
             RoutedTask route,
-            IEnumerable<ToolDefinition> knownTools)
+            ToolCatalogSlice slice)
         {
             var host = route == null ? string.Empty : route.App;
-            var enabledForHost = (knownTools ?? new ToolDefinition[0]).Count(tool =>
-                tool != null &&
-                tool.Enabled &&
-                (string.Equals(tool.Host, host, StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(tool.Host, "Common", StringComparison.OrdinalIgnoreCase)));
             var assistantText = "Нет доступного локального инструмента для этого этапа задачи.";
             if (session != null)
             {
@@ -906,11 +908,71 @@ namespace RNAssistant.Office.Services
                         Subtitle = route == null ? string.Empty : route.TaskType + " / " + route.Phase,
                         Status = "failed",
                         ExecutionStatus = "no_available_tools",
-                        ResultMessage = "host=" + host + "; enabledForHost=" + enabledForHost
+                        ResultMessage = "host=" + host + "; reason=" + (route == null ? string.Empty : route.DecisionReason),
+                        DataJson = BuildRoutingDiagnosticsJson(route, slice)
                     }
                 });
             }
             return assistantText;
+        }
+
+        private static ChatActivity BuildRoutingActivity(RoutedTask route, ToolCatalogSlice slice)
+        {
+            return new ChatActivity
+            {
+                Kind = "diagnostic",
+                Title = "Маршрутизация",
+                Subtitle = route == null ? string.Empty : route.Mode + " · " + route.TaskType,
+                Status = "completed",
+                ExecutionStatus = "routed",
+                ResultMessage = route == null
+                    ? string.Empty
+                    : "phase=" + route.Phase + "; reason=" + route.DecisionReason + "; tools=" + (slice == null ? 0 : slice.Tools.Count),
+                DataJson = BuildRoutingDiagnosticsJson(route, slice)
+            };
+        }
+
+        private static string BuildRoutingDiagnosticsJson(RoutedTask route, ToolCatalogSlice slice)
+        {
+            var exclusions = slice == null || slice.Excluded == null
+                ? new List<ToolExclusion>()
+                : slice.Excluded;
+            return JsonConvert.SerializeObject(new
+            {
+                route = route == null ? null : new
+                {
+                    app = route.App,
+                    mode = route.Mode,
+                    taskType = route.TaskType,
+                    phase = route.Phase,
+                    riskAllowed = route.RiskAllowed,
+                    requiresTool = route.RequiresTool,
+                    requiresInspection = route.RequiresInspection,
+                    reason = route.DecisionReason
+                },
+                selectedTools = slice == null
+                    ? new string[0]
+                    : slice.Tools.Select(tool => tool.Id).ToArray(),
+                selectedToolDetails = slice == null
+                    ? new object[0]
+                    : slice.Tools.Select(tool => new
+                    {
+                        toolId = tool.Id,
+                        mutatesDocument = tool.MutatesDocument,
+                        agentCanRun = tool.AgentCanRun,
+                        requiresConfirmation = tool.RequiresConfirmation,
+                        riskLevel = tool.RiskLevel
+                    }).ToArray(),
+                excludedCounts = exclusions
+                    .GroupBy(item => item.Reason ?? "unknown", StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase),
+                excludedTools = exclusions.Take(40).Select(item => new
+                {
+                    toolId = item.ToolId,
+                    reason = item.Reason,
+                    detail = item.Detail
+                }).ToArray()
+            });
         }
 
         private static string TrimDiagnosticText(string value, int maxChars)

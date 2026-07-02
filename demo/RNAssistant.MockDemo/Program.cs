@@ -5,6 +5,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Llm;
+using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Harness;
 using RNAssistant.Office;
@@ -89,9 +91,71 @@ namespace RNAssistant.MockDemo
                     }
                 }
             }
+            try
+            {
+                await ExerciseFailedTurnPersistenceAsync().ConfigureAwait(false);
+                Console.WriteLine("PASS failed-turn-persistence");
+            }
+            catch (Exception ex)
+            {
+                failed += 1;
+                Console.WriteLine("FAIL failed-turn-persistence: " + ex.Message);
+            }
 
             Console.WriteLine(failed == 0 ? "OK" : "FAILED " + failed);
             return failed == 0 ? 0 : 1;
+        }
+
+        private static async Task ExerciseFailedTurnPersistenceAsync()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "RNAssistant.MockDemo.Failure." + Guid.NewGuid().ToString("N"));
+            try
+            {
+                var controller = new AssistantController(
+                    FakeOfficeAdapter.ForHost("Excel"),
+                    AppDataPaths.CreateForRoot(root),
+                    delegate(AppSettings settings, System.Collections.Generic.IEnumerable<ChatMessage> requestMessages, CancellationToken cancellationToken)
+                    {
+                        return Task.FromException<LlmCompletionResult>(new InvalidOperationException("scripted transport failure"));
+                    });
+                var bridge = new MockBridgeHost(controller);
+                var init = await SendAsync(bridge, "failure-init", "init", null, null).ConfigureAwait(false);
+                var token = Payload(init)["bridgeToken"].ToString();
+                var chatId = Payload(init)["activeChatId"].ToString();
+                var request = JsonConvert.SerializeObject(new
+                {
+                    id = "failure-send",
+                    type = "sendChat",
+                    bridgeToken = token,
+                    payload = new { chatId = chatId, text = "persist failed turn" }
+                });
+                var failedPacket = await bridge.HandleAsync(request).ConfigureAwait(false);
+                if ((bool)JObject.Parse(failedPacket.Response)["ok"])
+                {
+                    throw new InvalidOperationException("transport failure unexpectedly succeeded");
+                }
+
+                var selected = await SendAsync(
+                    bridge,
+                    "failure-select",
+                    "selectChat",
+                    new { chatId = chatId },
+                    token).ConfigureAwait(false);
+                var storedMessages = Payload(selected)["messages"] as JArray;
+                var json = storedMessages == null ? string.Empty : storedMessages.ToString(Formatting.None);
+                if (json.IndexOf("persist failed turn", StringComparison.Ordinal) < 0 ||
+                    json.IndexOf("runtime_error", StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    throw new InvalidOperationException("failed user turn and diagnostic were not persisted");
+                }
+            }
+            finally
+            {
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, true);
+                }
+            }
         }
 
         private static async Task ExerciseModelAsync(MockBridgeHost bridge, string model)
@@ -99,8 +163,16 @@ namespace RNAssistant.MockDemo
             var init = await SendAsync(bridge, "1", "init", null, null).ConfigureAwait(false);
             var token = Payload(init)["bridgeToken"].ToString();
             var chatId = Payload(init)["activeChatId"].ToString();
+            if (!string.Equals((string)Payload(init)["activeChatMode"], "chat", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("new chat did not default to Chat mode");
+            }
             await SendAsync(bridge, "2", "setChatModel", new { chatId = chatId, model = model }, token).ConfigureAwait(false);
-            await SendAsync(bridge, "2-mode", "setChatMode", new { chatId = chatId, mode = "auto" }, token).ConfigureAwait(false);
+            var mode = await SendAsync(bridge, "2-mode", "setChatMode", new { chatId = chatId, mode = "auto" }, token).ConfigureAwait(false);
+            if (!string.Equals((string)Payload(mode)["activeChatMode"], "auto", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Auto mode was not persisted by the bridge");
+            }
             var send = await SendAsync(
                 bridge,
                 "3",
@@ -120,6 +192,10 @@ namespace RNAssistant.MockDemo
             if (messages == null || messages.Count < 2)
             {
                 throw new InvalidOperationException("chat messages were not returned");
+            }
+            if (messages.ToString(Formatting.None).IndexOf("selectedTools", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                throw new InvalidOperationException("agent transcript did not retain routing diagnostics");
             }
 
             var plain = await SendAsync(

@@ -73,12 +73,14 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - Model reasoning is transport metadata (`reasoning_content` or `reasoning`), stored and rendered separately; it is never mixed into planner JSON or replayed as chat history.
 - Context limits are token budgets resolved from the active model capability catalog. The legacy character limit is read only for settings compatibility.
 - Chat and planner context are rebuilt from the active session for every request. They use reference-deduplicated notes plus recent user/assistant messages and their attachments; agent activity, diagnostics, and reasoning metadata are never replayed.
+- Chat and Agent share `PromptBudgetComposer` for chronological history selection and attachment accounting. Once a recent message exceeds the remaining budget, older history is not reintroduced.
 - Text/PDF attachments are normalized locally. PDF text uses PdfPig; vision-capable models may also receive selected PDF pages rendered by the host-neutral Office service. Raw PDF files are not sent through the OpenAI-compatible chat payload.
 - Routing precedes Office context capture. General-answer routes expose no tools and do not read document content; document-dependent state is obtained through explicit read tools.
 - Tools are executable actions described by `ToolDefinition`; skills are markdown guidance described by `SkillDefinition`.
 - Tool safety belongs to `ToolDefinition` metadata: `MutatesDocument`, `AgentCanRun`, `RequiresConfirmation`, risk/capability fields, and verification metadata.
 - Agent runs are bounded by settings for max iterations and max tool steps; confirmed pending tools may resume the same run, and mutation runs use deterministic verification tools before final prose.
 - A required-tool route accepts `final` only after its route phase reaches `final_phase`; inspection alone cannot complete a pending mutation. Format repair and required-tool correction have separate one-shot guards.
+- Tool slices record explicit exclusion reasons and reserve prompt capacity for both mutation and inspection tools. The per-request tool limit is configurable from 8 to 64.
 - Controller coordinates request flow; it should not contain pipeline execution, VBA patch logic, or JS rendering logic.
 - Office host adapters expose executable capabilities through `ToolDefinition` and `ExecuteTool`; they should not know chat/session/storage details.
 - Desktop target descriptors must be validated before tool execution; a closed or mismatched target should fail instead of falling back to an unrelated active document.
@@ -125,6 +127,7 @@ Current coverage:
 - tool catalog service merge/filter behavior;
 - prompt message trimming, context usage estimates, and basic no-network chat completion flow;
 - explicit Chat/Auto/Agent routing, plain-chat prompt isolation, rebuilt history after deletion, and empty-tool preflight diagnostics;
+- balanced tool slicing with exclusion diagnostics, prompt-budget boundaries, and strict parser boundary corpus;
 - Core context normalization/upsert/trim behavior;
 - typed bridge settings/context/VBA/tool/chat payload parsing, agent pending-tool status, and progress envelope;
 - no Office COM dependency.

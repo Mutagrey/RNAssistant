@@ -108,6 +108,7 @@ namespace RNAssistant.Office.Services
                 VbaContextCharLimit = source.VbaContextCharLimit,
                 MaxAgentIterations = source.MaxAgentIterations,
                 MaxAgentToolSteps = source.MaxAgentToolSteps,
+                MaxAgentToolsPerRequest = source.MaxAgentToolsPerRequest,
                 RequireVerificationForMutations = source.RequireVerificationForMutations,
                 AutoContinueAfterConfirmation = source.AutoContinueAfterConfirmation,
                 AgentPrompts = source.AgentPrompts,

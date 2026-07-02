@@ -36,6 +36,7 @@ function renderSettings() {
   $("includeVbaContextInput").checked = !!(s.IncludeVbaContext || s.includeVbaContext);
   $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || 8;
   $("maxAgentToolStepsInput").value = s.MaxAgentToolSteps || s.maxAgentToolSteps || 40;
+  $("maxAgentToolsPerRequestInput").value = s.MaxAgentToolsPerRequest || s.maxAgentToolsPerRequest || 24;
   $("vbaContextLimitInput").value = s.VbaContextCharLimit || s.vbaContextCharLimit || 30000;
   if (typeof renderPromptSettings === "function") {
     renderPromptSettings(s);
@@ -72,6 +73,7 @@ function readSettings() {
     IncludeVbaContext: $("includeVbaContextInput").checked,
     MaxAgentIterations: Number($("maxAgentIterationsInput").value || 8),
     MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || 40),
+    MaxAgentToolsPerRequest: Number($("maxAgentToolsPerRequestInput").value || 24),
     VbaContextCharLimit: Number($("vbaContextLimitInput").value || 30000),
     SystemPrompt: promptSettings.SystemPrompt,
     SystemPromptRole: $("systemPromptRoleInput").value === "system" ? "system" : "user",

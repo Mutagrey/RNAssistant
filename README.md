@@ -209,6 +209,7 @@ Routing happens before Office context capture. General questions receive an empt
 
 In Agent mode, tools are available only when selected by the deterministic router and current phase. Level 2/3 or confirmation-required actions pause for user confirmation unless `Auto-confirm tool actions` is enabled. Confirmed tools can continue the same run.
 If a route requires a tool but filtering leaves no available tool, the runtime records a local diagnostic before calling the model.
+Agent plan activity stores routing diagnostics: route reason, selected tool ids, exclusion counts, and bounded per-tool exclusion details. Tool selection keeps mutation and inspection capabilities balanced; `Tools in one planner prompt` controls the bounded catalog size.
 
 ## HTML Workspace
 

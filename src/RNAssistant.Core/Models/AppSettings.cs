@@ -69,6 +69,7 @@ namespace RNAssistant.Core.Models
         public int VbaContextCharLimit { get; set; }
         public int MaxAgentIterations { get; set; }
         public int MaxAgentToolSteps { get; set; }
+        public int MaxAgentToolsPerRequest { get; set; }
         public bool? RequireVerificationForMutations { get; set; }
         public bool? AutoContinueAfterConfirmation { get; set; }
         public AgentPromptSettings AgentPrompts { get; set; }
@@ -98,6 +99,7 @@ namespace RNAssistant.Core.Models
             VbaContextCharLimit = 30000;
             MaxAgentIterations = 8;
             MaxAgentToolSteps = 40;
+            MaxAgentToolsPerRequest = 24;
             RequireVerificationForMutations = true;
             AutoContinueAfterConfirmation = true;
             AgentPrompts = new AgentPromptSettings();

@@ -31,6 +31,7 @@ RNAssistant talks to an OpenAI-compatible Chat Completions endpoint. Chat mode u
 | Returns a fence, legacy envelope, prose around JSON, or a JSON array | Rejected; Agent mode asks once for corrected JSON. |
 | Returns native `tool_calls`, `function_call`, or content-part arrays | Not converted to local tools; missing/invalid assistant text is rejected. |
 | Returns malformed planner JSON | Records format/error and a bounded local response preview; Agent mode asks once for a corrected JSON object while preserving the task and available tools. |
+| A required local tool is unavailable | The endpoint is not called for that iteration; RNAssistant records local route and tool-exclusion diagnostics. |
 | Omits token usage | Chat still works; token counters show estimated/context-side data only. |
 | Lacks `/config/models.json` | Model catalog load fails, but manually entered model IDs can still be saved. |
 

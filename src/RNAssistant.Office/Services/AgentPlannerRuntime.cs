@@ -28,6 +28,7 @@ namespace RNAssistant.Office.Services
         public int RiskAllowed { get; set; }
         public bool RequiresTool { get; set; }
         public bool RequiresInspection { get; set; }
+        public string DecisionReason { get; set; }
     }
 
     internal sealed class AgentObservation
@@ -44,16 +45,25 @@ namespace RNAssistant.Office.Services
     internal sealed class ToolCatalogSlice
     {
         public List<ToolDefinition> Tools { get; set; }
+        public List<ToolExclusion> Excluded { get; set; }
 
         public ToolCatalogSlice()
         {
             Tools = new List<ToolDefinition>();
+            Excluded = new List<ToolExclusion>();
         }
 
         public ToolDefinition Find(string id)
         {
             return Tools.FirstOrDefault(t => t != null && string.Equals(t.Id, id, StringComparison.OrdinalIgnoreCase));
         }
+    }
+
+    internal sealed class ToolExclusion
+    {
+        public string ToolId { get; set; }
+        public string Reason { get; set; }
+        public string Detail { get; set; }
     }
 
     internal sealed class PlannerValidationResult
@@ -88,11 +98,15 @@ namespace RNAssistant.Office.Services
                 Phase = AgentPhases.Final,
                 RiskAllowed = 0,
                 RequiresTool = false,
-                RequiresInspection = false
+                RequiresInspection = false,
+                DecisionReason = "default_answer"
             };
 
-            if (LooksLikeGeneralQuestion(value) && !LooksLikeCurrentOfficeQuestion(value))
+            if (LooksLikeGeneralQuestion(value) &&
+                !LooksLikeCurrentOfficeQuestion(value) &&
+                !MentionsCurrentOfficeContext(value))
             {
+                route.DecisionReason = "general_question";
                 return route;
             }
 
@@ -105,6 +119,7 @@ namespace RNAssistant.Office.Services
                 route.RiskAllowed = 0;
                 route.RequiresTool = true;
                 route.RequiresInspection = true;
+                route.DecisionReason = "destructive_request";
                 return route;
             }
 
@@ -116,6 +131,7 @@ namespace RNAssistant.Office.Services
                 route.RiskAllowed = 0;
                 route.RequiresTool = true;
                 route.RequiresInspection = true;
+                route.DecisionReason = "macro_execution";
                 return route;
             }
 
@@ -129,6 +145,7 @@ namespace RNAssistant.Office.Services
                 route.RiskAllowed = string.Equals(route.Phase, AgentPhases.Mutation, StringComparison.OrdinalIgnoreCase) ? 3 : 0;
                 route.RequiresTool = true;
                 route.RequiresInspection = string.Equals(route.Phase, AgentPhases.ReadOnly, StringComparison.OrdinalIgnoreCase);
+                route.DecisionReason = "vba_request";
                 return route;
             }
 
@@ -141,6 +158,7 @@ namespace RNAssistant.Office.Services
                 route.RiskAllowed = 1;
                 route.RequiresTool = true;
                 route.RequiresInspection = false;
+                route.DecisionReason = "html_request";
                 return route;
             }
 
@@ -155,6 +173,7 @@ namespace RNAssistant.Office.Services
                 route.RiskAllowed = 1;
                 route.RequiresTool = true;
                 route.RequiresInspection = false;
+                route.DecisionReason = mutatesCatalog ? "tool_catalog_mutation" : "tool_catalog_read";
                 return route;
             }
 
@@ -166,6 +185,7 @@ namespace RNAssistant.Office.Services
                 route.Phase = AgentPhases.Mutation;
                 route.Mode = "mutate";
                 route.TaskType = "content";
+                route.DecisionReason = "content_mutation";
             }
 
             if (ContainsAny(value, "красив", "оформи", "автоподбор") ||
@@ -177,6 +197,7 @@ namespace RNAssistant.Office.Services
                 route.Phase = AgentPhases.ReadOnly;
                 route.RiskAllowed = 1;
                 route.RequiresInspection = true;
+                route.DecisionReason = "formatting_request";
             }
             else if ((ContainsAny(value, "график", "диаграм") || ContainsAnyToken(value, "chart", "plot")) &&
                 !ContainsAny(value, "создай", "создать", "сгенерируй", "отчет") &&
@@ -188,11 +209,13 @@ namespace RNAssistant.Office.Services
                 route.Phase = AgentPhases.ReadOnly;
                 route.RiskAllowed = 2;
                 route.RequiresInspection = true;
+                route.DecisionReason = "chart_request";
             }
             else if (!route.RequiresTool &&
                 (ContainsAny(value, "прочитай", "покажи", "найди", "поиск", "перечисли", "перескажи", "проанализ", "проверь", "сводк", "резюм") ||
                  ContainsAnyToken(value, "summarize", "summarise", "summary", "analyze", "review", "inspect", "check", "read", "search", "find", "list") ||
-                 LooksLikeCurrentOfficeQuestion(value)))
+                 LooksLikeCurrentOfficeQuestion(value) ||
+                 MentionsCurrentOfficeContext(value)))
             {
                 route.RequiresTool = true;
                 route.Mode = ContainsAny(value, "перескажи", "проанализ", "сводк", "резюм") ||
@@ -203,6 +226,7 @@ namespace RNAssistant.Office.Services
                 route.Phase = AgentPhases.ReadOnly;
                 route.RiskAllowed = 0;
                 route.RequiresInspection = false;
+                route.DecisionReason = "document_read";
             }
 
             return route;
@@ -241,6 +265,23 @@ namespace RNAssistant.Office.Services
                 (ContainsAny(value, "что", "какие", "где", "сколько") ||
                  ContainsAnyToken(value, "what", "which", "where") ||
                  value.IndexOf("how many", StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private static bool MentionsCurrentOfficeContext(string value)
+        {
+            return ContainsAny(
+                value,
+                "текущ",
+                "этой таблиц",
+                "этом документ",
+                "активн",
+                "выделен",
+                "this workbook",
+                "this spreadsheet",
+                "this document",
+                "active sheet",
+                "active slide",
+                "current selection");
         }
 
         private static bool ContainsAnyToken(string value, params string[] terms)
@@ -301,7 +342,11 @@ namespace RNAssistant.Office.Services
 
     internal sealed class ToolCatalogSlicer
     {
-        public ToolCatalogSlice Slice(RoutedTask route, IEnumerable<ToolDefinition> tools, IReadOnlyList<AgentObservation> observations)
+        public ToolCatalogSlice Slice(
+            RoutedTask route,
+            IEnumerable<ToolDefinition> tools,
+            IReadOnlyList<AgentObservation> observations,
+            int maxTools = 24)
         {
             var slice = new ToolCatalogSlice();
             if (route != null && !route.RequiresTool)
@@ -311,16 +356,20 @@ namespace RNAssistant.Office.Services
             var host = route == null ? string.Empty : route.App ?? string.Empty;
             foreach (var tool in tools ?? new ToolDefinition[0])
             {
-                if (!IsCandidate(tool, host))
+                var exclusion = CandidateExclusion(tool, host);
+                if (exclusion != null)
                 {
+                    slice.Excluded.Add(exclusion);
                     continue;
                 }
                 if (!AllowedForPhase(tool, route))
                 {
+                    slice.Excluded.Add(Exclude(tool, "wrong_phase", "Tool risk or mutation mode is not allowed in phase " + (route == null ? string.Empty : route.Phase) + "."));
                     continue;
                 }
                 if (!Relevant(tool, route))
                 {
+                    slice.Excluded.Add(Exclude(tool, "not_relevant", "Tool does not match task type " + (route == null ? string.Empty : route.TaskType) + "."));
                     continue;
                 }
                 slice.Tools.Add(tool);
@@ -331,32 +380,102 @@ namespace RNAssistant.Office.Services
                 slice.Tools.Add(recipe);
             }
 
-            return new ToolCatalogSlice
+            var ordered = slice.Tools
+                .GroupBy(t => t.Id, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .OrderBy(t => ToolPriority(t, route))
+                .ThenBy(t => t.RiskLevel)
+                .ThenBy(t => t.Id)
+                .ToList();
+            slice.Tools = SelectBalancedTools(ordered, route, Math.Max(8, Math.Min(64, maxTools)));
+            var selectedIds = new HashSet<string>(slice.Tools.Select(tool => tool.Id), StringComparer.OrdinalIgnoreCase);
+            foreach (var omitted in ordered.Where(tool => !selectedIds.Contains(tool.Id)))
             {
-                Tools = slice.Tools
-                    .GroupBy(t => t.Id, StringComparer.OrdinalIgnoreCase)
-                    .Select(group => group.First())
-                    .OrderBy(t => ToolPriority(t, route))
-                    .ThenBy(t => t.RiskLevel)
-                    .ThenBy(t => t.Id)
-                    .Take(24)
-                    .ToList()
-            };
+                slice.Excluded.Add(Exclude(omitted, "selection_limit", "A higher-priority balanced set filled the prompt tool budget."));
+            }
+            return slice;
         }
 
-        private static bool IsCandidate(ToolDefinition tool, string host)
+        private static ToolExclusion CandidateExclusion(ToolDefinition tool, string host)
         {
-            if (tool == null || !tool.Enabled || string.IsNullOrWhiteSpace(tool.Id))
+            if (tool == null)
             {
-                return false;
+                return new ToolExclusion { ToolId = string.Empty, Reason = "invalid_definition", Detail = "Tool definition is null." };
+            }
+            if (string.IsNullOrWhiteSpace(tool.Id))
+            {
+                return Exclude(tool, "missing_id", "Tool id is empty.");
+            }
+            if (!tool.Enabled)
+            {
+                return Exclude(tool, "disabled", "Tool is disabled.");
             }
             if (!string.Equals(tool.CapabilityStatus ?? "available", "available", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(tool.CapabilityStatus ?? "available", "partial", StringComparison.OrdinalIgnoreCase))
             {
-                return false;
+                return Exclude(tool, "capability_unavailable", "Capability status is " + tool.CapabilityStatus + ".");
             }
-            return string.Equals(tool.Host, host, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(tool.Host, "Common", StringComparison.OrdinalIgnoreCase);
+            if (!string.Equals(tool.Host, host, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(tool.Host, "Common", StringComparison.OrdinalIgnoreCase))
+            {
+                return Exclude(tool, "wrong_host", "Tool host " + tool.Host + " does not match " + host + ".");
+            }
+            return null;
+        }
+
+        private static List<ToolDefinition> SelectBalancedTools(
+            IReadOnlyList<ToolDefinition> ordered,
+            RoutedTask route,
+            int limit)
+        {
+            var selected = new List<ToolDefinition>();
+            Action<IEnumerable<ToolDefinition>, int> add = (source, count) =>
+            {
+                foreach (var tool in source)
+                {
+                    if (selected.Count >= limit || count <= 0)
+                    {
+                        break;
+                    }
+                    if (selected.Any(existing => string.Equals(existing.Id, tool.Id, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        continue;
+                    }
+                    selected.Add(tool);
+                    count -= 1;
+                }
+            };
+
+            var mutationPhase = route != null &&
+                string.Equals(route.Phase, AgentPhases.Mutation, StringComparison.OrdinalIgnoreCase);
+            if (mutationPhase)
+            {
+                add(ordered.Where(tool => tool.MutatesDocument), Math.Max(1, (int)Math.Ceiling(limit * 0.6)));
+                add(ordered.Where(tool => !tool.MutatesDocument && LooksLikeInspectionTool(tool)), Math.Max(2, limit / 4));
+            }
+            else
+            {
+                add(ordered.Where(tool => !tool.MutatesDocument && LooksLikeInspectionTool(tool)), Math.Max(4, limit / 3));
+            }
+            add(ordered, limit - selected.Count);
+            return selected;
+        }
+
+        private static bool LooksLikeInspectionTool(ToolDefinition tool)
+        {
+            return tool != null && ContainsAny(
+                (tool.Id ?? string.Empty) + " " + (tool.UseWhen ?? string.Empty),
+                "context", "selection", "summary", "read", "profile", "list", "search", "inspect", "get_");
+        }
+
+        private static ToolExclusion Exclude(ToolDefinition tool, string reason, string detail)
+        {
+            return new ToolExclusion
+            {
+                ToolId = tool == null ? string.Empty : tool.Id,
+                Reason = reason,
+                Detail = detail
+            };
         }
 
         private static bool AllowedForPhase(ToolDefinition tool, RoutedTask route)
@@ -527,55 +646,15 @@ namespace RNAssistant.Office.Services
             };
             messages.Add(current);
 
-            var budget = ModelContextBudget.InputBudgetTokens(settings);
-            var used = ModelContextBudget.EstimateMessagesTokens(messages) + EstimateAttachmentTokens(currentAttachments);
             current.Attachments = currentAttachments == null
                 ? new List<ChatAttachment>()
                 : new List<ChatAttachment>(currentAttachments);
-            var history = ConversationHistory(session);
-            var historyInsertIndex = messages.Count - 1;
-            for (var index = history.Count - 1; index >= 0; index--)
-            {
-                var source = history[index];
-                var candidate = new ChatMessage
-                {
-                    Role = source.Role,
-                    Content = source.Content ?? string.Empty,
-                    Attachments = source.Attachments == null
-                        ? new List<ChatAttachment>()
-                        : new List<ChatAttachment>(source.Attachments)
-                };
-                var estimate = ModelContextBudget.EstimateMessagesTokens(new[] { candidate }) +
-                    EstimateAttachmentTokens(candidate.Attachments);
-                if (used + estimate > budget)
-                {
-                    break;
-                }
-                messages.Insert(historyInsertIndex, candidate);
-                used += estimate;
-            }
+            new PromptBudgetComposer().AddConversationHistory(
+                messages,
+                messages.Count - 1,
+                session,
+                settings);
             return messages;
-        }
-
-        private static List<ChatMessage> ConversationHistory(ChatSession session)
-        {
-            return ChatContextWindowBuilder.ConversationHistory(session);
-        }
-
-        private static int EstimateAttachmentTokens(IEnumerable<ChatAttachment> attachments)
-        {
-            var total = 0;
-            foreach (var attachment in attachments ?? new ChatAttachment[0])
-            {
-                if (attachment == null)
-                {
-                    continue;
-                }
-                total += Math.Max(
-                    Math.Max(0, attachment.ExtractedCharCount),
-                    (attachment.ExtractedText ?? string.Empty).Length) / 2;
-            }
-            return total;
         }
 
         private static string BuildInstructionPrompt(AppSettings settings)

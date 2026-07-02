@@ -73,6 +73,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatContextWindowBuilder.cs" Link="Office\Services\ChatContextWindowBuilder.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatExecutionModeSelector.cs" Link="Office\Services\ChatExecutionModeSelector.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\PlainChatService.cs" Link="Office\Services\PlainChatService.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Services\PromptBudgetComposer.cs" Link="Office\Services\PromptBudgetComposer.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\OfflineChatService.cs" Link="Office\Services\OfflineChatService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatTitleBuilder.cs" Link="Office\Services\ChatTitleBuilder.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatSessionService.cs" Link="Office\Services\ChatSessionService.cs" />

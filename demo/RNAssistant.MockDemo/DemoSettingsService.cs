@@ -134,6 +134,10 @@ namespace RNAssistant.Core.Storage
             {
                 settings.MaxAgentToolSteps = defaults.MaxAgentToolSteps;
             }
+            if (settings.MaxAgentToolsPerRequest <= 0)
+            {
+                settings.MaxAgentToolsPerRequest = defaults.MaxAgentToolsPerRequest;
+            }
 
             return settings;
         }
