@@ -178,5 +178,129 @@ namespace RNAssistant.Harness
                 AssertEqual("excel.workbook_summary", adapter.Executed[1].ToolId, "verification tool");
             });
         }
+
+        private static void ChatUnavailableVerificationFailsClosed()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var mutation = new ToolDefinition
+                {
+                    Id = "excel.custom_mutation",
+                    Host = "Excel",
+                    BuiltIn = true,
+                    Enabled = true,
+                    MutatesDocument = true,
+                    AgentCanRun = true,
+                    RiskLevel = 1
+                };
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    null,
+                    AgentBlock(Command(mutation.Id)),
+                    FinalBlock("Done without verification."));
+
+                var result = service.ExecuteAsync(
+                    "Create custom content.",
+                    NewSession(adapter),
+                    NewContext(adapter),
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = true },
+                    new List<ToolDefinition> { mutation },
+                    null).GetAwaiter().GetResult();
+
+                AssertTrue(result.AssistantText.IndexOf("Done without verification", StringComparison.OrdinalIgnoreCase) < 0, "unverified final rejected");
+                AssertContains(JsonConvert.SerializeObject(result.ToolResults), "No deterministic verification tool", "verification unavailable diagnostic");
+            });
+        }
+
+        private static void ChatFailedVerificationRecovers()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var mutation = new ToolDefinition
+                {
+                    Id = "excel.custom_mutation",
+                    Host = "Excel",
+                    BuiltIn = true,
+                    Enabled = true,
+                    MutatesDocument = true,
+                    AgentCanRun = true,
+                    RiskLevel = 1,
+                    VerifyJson = "{\"toolId\":\"excel.custom_verify\"}"
+                };
+                var verify = new ToolDefinition
+                {
+                    Id = "excel.custom_verify",
+                    Host = "Excel",
+                    BuiltIn = true,
+                    Enabled = true
+                };
+                adapter.QueueResult(verify.Id, ToolResult.Fail("Verification failed."));
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    null,
+                    AgentBlock(Command(mutation.Id)),
+                    AgentBlock(Command(verify.Id)),
+                    FinalBlock("Verified after retry."));
+
+                var result = service.ExecuteAsync(
+                    "Create custom content.",
+                    NewSession(adapter),
+                    NewContext(adapter),
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = true },
+                    new List<ToolDefinition> { mutation, verify },
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Verified after retry.", result.AssistantText, "verification recovery final");
+                AssertEqual(3, adapter.Executed.Count, "mutation and two verification executions");
+                AssertEqual(verify.Id, adapter.Executed[2].ToolId, "planner verification retry");
+            });
+        }
+
+        private static void ChatPriorInspectionDoesNotVerifyMutation()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var mutation = new ToolDefinition
+                {
+                    Id = "excel.custom_format",
+                    Host = "Excel",
+                    BuiltIn = true,
+                    Enabled = true,
+                    MutatesDocument = true,
+                    AgentCanRun = true,
+                    RiskLevel = 1
+                };
+                var read = new ToolDefinition
+                {
+                    Id = "excel.get_context",
+                    Host = "Excel",
+                    BuiltIn = true,
+                    Enabled = true
+                };
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    null,
+                    AgentBlock(Command(read.Id)),
+                    AgentBlock(Command(mutation.Id)),
+                    FinalBlock("Premature final."),
+                    AgentBlock(Command(read.Id)),
+                    FinalBlock("Verified with a new read."));
+
+                var result = service.ExecuteAsync(
+                    "Оформи текущую таблицу красиво.",
+                    NewSession(adapter),
+                    NewContext(adapter),
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = true },
+                    new List<ToolDefinition> { read, mutation },
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Verified with a new read.", result.AssistantText, "fresh verification final");
+                AssertEqual(3, adapter.Executed.Count, "inspection mutation verification count");
+                AssertEqual(read.Id, adapter.Executed[2].ToolId, "fresh read verifies mutation");
+            });
+        }
     }
 }

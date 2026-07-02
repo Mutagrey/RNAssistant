@@ -240,6 +240,33 @@ namespace RNAssistant.Harness
                 AssertEqual(1, loaded.Count, "loaded tool count");
                 AssertEqual("excel.valid", loaded[0].Id, "loaded tool id");
                 AssertContains(loaded[0].PipelineJson, "steps", "sidecar loaded");
+                new ToolStore(paths).SaveOne(CustomTool("Excel", "excel.new"));
+                AssertTrue(File.Exists(Path.Combine(brokenDirectory, "tool.json")), "broken tool preserved during save");
+            });
+        }
+
+        private static void ToolStorePreservesExtraFilesAndOtherTools()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var store = new ToolStore(paths);
+                var first = CustomTool("Excel", "excel.first");
+                first.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.list_sheets\"}]}";
+                var second = CustomTool("Word", "word.second");
+                second.PipelineJson = "{\"steps\":[{\"toolId\":\"word.read_document\"}]}";
+                store.Save(new[] { first, second });
+
+                var firstStored = FindTool(store.Load(), first.Id);
+                var extraPath = Path.Combine(firstStored.StoragePath, "notes.txt");
+                File.WriteAllText(extraPath, "keep");
+                first.Name = "Updated";
+                store.SaveOne(first);
+
+                AssertTrue(File.Exists(extraPath), "tool extra file preserved");
+                AssertTrue(HasTool(store.Load(), second.Id), "other tool preserved");
+                AssertTrue(store.Delete(first.Id), "first tool deleted");
+                AssertTrue(HasTool(store.Load(), second.Id), "other tool survives delete");
+                AssertEqual(0, Directory.GetFiles(paths.ToolsDirectory, "*.tmp", SearchOption.AllDirectories).Length, "no tool temp files");
             });
         }
 

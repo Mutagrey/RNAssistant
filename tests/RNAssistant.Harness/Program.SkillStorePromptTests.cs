@@ -73,6 +73,31 @@ namespace RNAssistant.Harness
 
                 AssertEqual(1, loaded.Count, "loaded skill count");
                 AssertEqual("common.valid", loaded[0].Id, "loaded skill id");
+                new SkillStore(paths).SaveOne(new SkillDefinition { Id = "common.new", Host = "Common", BodyMarkdown = "new", Enabled = true });
+                AssertTrue(File.Exists(Path.Combine(brokenDirectory, "SKILL.md")), "broken skill preserved during save");
+            });
+        }
+
+        private static void SkillStorePreservesExtraFilesAndOtherSkills()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var store = new SkillStore(paths);
+                var first = new SkillDefinition { Id = "common.first", Host = "Common", BodyMarkdown = "first", Enabled = true };
+                var second = new SkillDefinition { Id = "word.second", Host = "Word", BodyMarkdown = "second", Enabled = true };
+                store.Save(new[] { first, second });
+
+                var firstStored = store.Load().First(s => s.Id == first.Id);
+                var extraPath = Path.Combine(firstStored.StoragePath, "notes.txt");
+                File.WriteAllText(extraPath, "keep");
+                first.BodyMarkdown = "updated";
+                store.SaveOne(first);
+
+                AssertTrue(File.Exists(extraPath), "skill extra file preserved");
+                AssertTrue(HasSkill(store.Load(), second.Id), "other skill preserved");
+                AssertTrue(store.Delete(first.Id), "first skill deleted");
+                AssertTrue(HasSkill(store.Load(), second.Id), "other skill survives delete");
+                AssertEqual(0, Directory.GetFiles(paths.SkillsDirectory, "*.tmp", SearchOption.AllDirectories).Length, "no skill temp files");
             });
         }
 

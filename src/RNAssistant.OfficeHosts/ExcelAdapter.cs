@@ -58,20 +58,6 @@ namespace RNAssistant.OfficeHosts
             }
         }
 
-        public string LegacyDocumentKey
-        {
-            get
-            {
-                var workbook = ActiveWorkbook();
-                if (workbook == null)
-                {
-                    return "Excel:NoWorkbook";
-                }
-
-                return string.IsNullOrWhiteSpace(workbook.FullName) ? RuntimeDocumentKey : workbook.FullName;
-            }
-        }
-
         public string DocumentTitle
         {
             get
@@ -192,23 +178,23 @@ namespace RNAssistant.OfficeHosts
                 Skill("excel.list_tables", "Read-only: List Excel tables in the workbook or one sheet.", "{\"sheet\":\"\"}"),
                 Skill("excel.list_names", "Read-only: List workbook defined names.", "{}"),
                 Skill("excel.list_shapes", "Read-only: List shapes in the workbook or one sheet.", "{\"sheet\":\"\"}"),
-                Skill("excel.write_range", "Mutates document: Write one scalar value to a worksheet range.", "{\"sheet\":\"\",\"address\":\"A1\",\"value\":\"text\"}", true, true),
-                Skill("excel.write_table", "Mutates document: Write a 2D JSON array to a worksheet starting at a cell.", "{\"sheet\":\"\",\"startAddress\":\"A1\",\"values\":[[\"Header\",\"Value\"],[\"A\",1]]}", true, true),
-                Skill("excel.set_formula", "Mutates document: Write one formula to a worksheet range.", "{\"sheet\":\"\",\"address\":\"B2\",\"formula\":\"=SUM(A1:A10)\"}", true, true),
-                Skill("excel.add_table", "Mutates document: Convert a source range into an Excel table.", "{\"sheet\":\"\",\"sourceRange\":\"A1:B6\",\"name\":\"Table1\",\"hasHeaders\":true,\"style\":\"TableStyleMedium2\"}", true, true),
-                Skill("excel.add_chart", "Mutates document: Create a chart from a worksheet source range.", "{\"sheet\":\"\",\"sourceRange\":\"A1:B6\",\"chartType\":\"line\",\"title\":\"Chart title\",\"left\":300,\"top\":20,\"width\":480,\"height\":300}", true, true),
-                Skill("excel.format_range", "Mutates document: Apply basic number, font, fill, and alignment formatting to a range.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"numberFormat\":\"\",\"bold\":true,\"italic\":false,\"fillColor\":\"#FFFF00\",\"fontColor\":\"#000000\",\"horizontalAlignment\":\"center\"}", true, true),
-                Skill("excel.autofit", "Mutates document: Autofit rows and columns for a range or used range.", "{\"sheet\":\"\",\"address\":\"\"}", true, true),
-                Skill("excel.add_sheet", "Mutates document: Add a new worksheet.", "{\"name\":\"Sheet name\"}", true, true),
-                Skill("excel.rename_sheet", "Mutates document: Rename a worksheet.", "{\"sheet\":\"Old name\",\"newName\":\"New name\"}", true, false),
-                Skill("excel.clear_range", "Mutates document: Clear cell values, formats, or both in a range.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"clearWhat\":\"values\"}", true, false),
-                Skill("excel.sort_range", "Mutates document: Sort rows in a range by one key column.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"keyColumn\":1,\"descending\":false,\"hasHeaders\":true}", true, false),
-                Skill("excel.filter_range", "Mutates document: Apply AutoFilter criteria to a range.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"field\":1,\"criteria\":\"North\"}", true, false),
+                Skill("excel.write_range", "Mutates document: Write one scalar value to a worksheet range.", "{\"sheet\":\"\",\"address\":\"A1\",\"value\":\"text\"}", true, true, 2),
+                Skill("excel.write_table", "Mutates document: Write a 2D JSON array to a worksheet starting at a cell.", "{\"sheet\":\"\",\"startAddress\":\"A1\",\"values\":[[\"Header\",\"Value\"],[\"A\",1]]}", true, true, 2),
+                Skill("excel.set_formula", "Mutates document: Write one formula to a worksheet range.", "{\"sheet\":\"\",\"address\":\"B2\",\"formula\":\"=SUM(A1:A10)\"}", true, true, 2),
+                Skill("excel.add_table", "Mutates document: Convert a source range into an Excel table.", "{\"sheet\":\"\",\"sourceRange\":\"A1:B6\",\"name\":\"Table1\",\"hasHeaders\":true,\"style\":\"TableStyleMedium2\"}", true, true, 2),
+                Skill("excel.add_chart", "Mutates document: Create a chart from a worksheet source range.", "{\"sheet\":\"\",\"sourceRange\":\"A1:B6\",\"chartType\":\"line\",\"title\":\"Chart title\",\"left\":300,\"top\":20,\"width\":480,\"height\":300}", true, true, 2),
+                Skill("excel.format_range", "Mutates document: Apply basic number, font, fill, and alignment formatting to a range.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"numberFormat\":\"\",\"bold\":true,\"italic\":false,\"fillColor\":\"#FFFF00\",\"fontColor\":\"#000000\",\"horizontalAlignment\":\"center\"}", true, true, 1),
+                Skill("excel.autofit", "Mutates document: Autofit rows and columns for a range or used range.", "{\"sheet\":\"\",\"address\":\"\"}", true, true, 1),
+                Skill("excel.add_sheet", "Mutates document: Add a new worksheet.", "{\"name\":\"Sheet name\"}", true, true, 1),
+                Skill("excel.rename_sheet", "Mutates document: Rename a worksheet.", "{\"sheet\":\"Old name\",\"newName\":\"New name\"}", true, false, 2),
+                Skill("excel.clear_range", "Mutates document: Clear cell values, formats, or both in a range.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"clearWhat\":\"values\"}", true, false, 3),
+                Skill("excel.sort_range", "Mutates document: Sort rows in a range by one key column.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"keyColumn\":1,\"descending\":false,\"hasHeaders\":true}", true, false, 2),
+                Skill("excel.filter_range", "Mutates document: Apply AutoFilter criteria to a range.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"field\":1,\"criteria\":\"North\"}", true, false, 2),
                 Skill("excel.vba_read_project", "Read-only: Read VBA project modules and source code when Trust Access to VBA project is enabled.", "{\"maxChars\":30000}"),
                 Skill("excel.vba_read_module", "Read-only: Read one VBA module by name.", "{\"moduleName\":\"Module1\",\"maxChars\":30000}"),
-                Skill("excel.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}", true, false),
-                Skill("excel.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}", true, false),
-                Skill("excel.run_macro", "Mutates document: Run an Excel VBA macro by name.", "{\"macroName\":\"Module1.Test\"}", true, false)
+                Skill("excel.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}", true, false, 3),
+                Skill("excel.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}", true, false, 3),
+                Skill("excel.run_macro", "Mutates document: Run an Excel VBA macro by name.", "{\"macroName\":\"Module1.Test\"}", true, false, 3)
             };
         }
 
@@ -1316,9 +1302,9 @@ namespace RNAssistant.OfficeHosts
                 && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
-        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)
+        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0)
         {
-            return new ToolDefinition { Id = id, Host = "Excel", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun };
+            return new ToolDefinition { Id = id, Host = "Excel", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel };
         }
 
         private static List<List<object>> RangeToRows(Excel.Range range)

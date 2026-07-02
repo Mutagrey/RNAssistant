@@ -9,15 +9,6 @@ namespace RNAssistant.Core.Tools
     {
         public AgentPlannerParseResult Parse(string text)
         {
-            var normalized = (text ?? string.Empty).Trim().TrimStart('\uFEFF');
-            var result = ParseStrict(normalized);
-            result.SourceFormat = "strict_json";
-            result.NormalizedText = normalized;
-            return result;
-        }
-
-        public AgentPlannerParseResult ParseStrict(string text)
-        {
             if (string.IsNullOrWhiteSpace(text))
             {
                 return AgentPlannerParseResult.Fail("empty_response", "Planner response is empty.");
@@ -162,7 +153,7 @@ namespace RNAssistant.Core.Tools
                 return AgentPlannerParseResult.Fail("missing_message", response.Kind + " response requires message.");
             }
 
-            return AgentPlannerParseResult.Ok(response, "strict_json", trimmed);
+            return AgentPlannerParseResult.Ok(response);
         }
 
         private static bool IsAllowedRootProperty(string name)

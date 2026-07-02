@@ -41,7 +41,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void PipelineEnforcesNestingLimit()
+        private static void PipelineRejectsCycles()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -56,9 +56,54 @@ namespace RNAssistant.Harness
                     false);
 
                 AssertTrue(!result.Success, "recursive pipeline should fail");
-                AssertContains(result.Message, "Pipeline nesting limit exceeded", "nesting limit message");
+                AssertContains(result.Message, "Pipeline cycle detected", "cycle message");
                 AssertEqual(0, adapter.Executed.Count, "recursive pipeline adapter count");
             });
+        }
+
+        private static void PipelineResolvesNestedConfirmationBeforeExecution()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var pipeline = CustomTool("Excel", "excel.read_then_save_skill");
+                pipeline.PipelineJson = "{\"steps\":[" +
+                    "{\"toolId\":\"excel.read_range\",\"arguments\":{\"address\":\"A1\"}}," +
+                    "{\"toolId\":\"common.skills_save\",\"arguments\":{\"id\":\"common.saved\",\"bodyMarkdown\":\"test\"}}" +
+                    "]}";
+
+                var result = executor.Execute(
+                    new ToolCommand { ToolId = pipeline.Id },
+                    new List<ToolDefinition> { pipeline },
+                    new AppSettings { AutoConfirmToolActions = false },
+                    false,
+                    false);
+
+                AssertEqual("waiting_confirmation", result.Status, "nested confirmation status");
+                AssertEqual(0, adapter.Executed.Count, "pipeline does not partially execute");
+            });
+        }
+
+        private static void PipelineEffectiveSafetyPropagatesNestedRisk()
+        {
+            var write = new ToolDefinition
+            {
+                Id = "excel.write_range",
+                Host = "Excel",
+                BuiltIn = true,
+                Enabled = true,
+                MutatesDocument = true,
+                RiskLevel = 3
+            };
+            var pipeline = CustomTool("Excel", "excel.hidden_mutation");
+            pipeline.MutatesDocument = false;
+            pipeline.RiskLevel = 0;
+            pipeline.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.write_range\",\"arguments\":{}}]}";
+
+            var profile = ToolSafetyPolicy.Resolve(pipeline, new[] { pipeline, write });
+
+            AssertTrue(profile.Valid, "nested safety profile");
+            AssertTrue(profile.MutatesDocument, "nested mutation propagated");
+            AssertEqual(3, profile.RiskLevel, "nested risk propagated");
         }
 
         private static void UnknownAndDisabledToolsFail()
@@ -100,24 +145,31 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void HtmlArtifactToolIsAlwaysAvailable()
+        private static void RemovedLegacyToolIdsAreUnknown()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var command = new ToolCommand { ToolId = "common.render_html" };
-                command.Arguments["title"] = "Demo";
-                command.Arguments["html"] = "<div><script>window.demo=1</script>Demo</div>";
-                command.Arguments["height"] = 240;
-
-                var allowed = executor.Execute(
+                var result = executor.Execute(
                     command,
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     new AppSettings(),
                     false,
                     false);
-                AssertTrue(allowed.Success, "html artifact enabled");
-                AssertContains(allowed.DataJson, "rnassistant.html", "html artifact type");
-                AssertContains(allowed.DataJson, "<script>", "raw script preserved");
+                AssertTrue(!result.Success, "removed html artifact fails");
+                AssertContains(result.Message, "Unknown tool id", "removed html artifact diagnostic");
+            });
+
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Outlook"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var result = executor.Execute(
+                    new ToolCommand { ToolId = "outlook.draft_reply" },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    new AppSettings(),
+                    false,
+                    false);
+                AssertTrue(!result.Success, "removed Outlook alias fails");
+                AssertContains(result.Message, "Unknown tool id", "removed Outlook alias diagnostic");
             });
         }
 
@@ -276,7 +328,7 @@ namespace RNAssistant.Harness
                 AssertContains(prompt, "HTML MODE IS ENABLED", "html mode prompt marker");
                 AssertContains(prompt, "common.html_workspace_upsert_file", "html mode exposes workspace file tool");
                 AssertContains(prompt, "common.html_workspace_upsert_data", "html mode exposes data tool");
-                AssertTrue(prompt.IndexOf("common.render_html", StringComparison.OrdinalIgnoreCase) < 0, "html mode prompt omits legacy inline render tool");
+                AssertTrue(prompt.IndexOf("common.render_html", StringComparison.OrdinalIgnoreCase) < 0, "html mode prompt omits removed inline render tool");
             });
         }
 

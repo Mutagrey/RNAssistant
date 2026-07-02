@@ -35,7 +35,6 @@ namespace RNAssistant.Harness
 
             public string HostName { get { _record(); return _inner.HostName; } }
             public string DocumentKey { get { _record(); return _inner.DocumentKey; } }
-            public string LegacyDocumentKey { get { _record(); return _inner.LegacyDocumentKey; } }
             public string RuntimeDocumentKey { get { _record(); return _inner.RuntimeDocumentKey; } }
             public string DocumentTitle { get { _record(); return _inner.DocumentTitle; } }
 

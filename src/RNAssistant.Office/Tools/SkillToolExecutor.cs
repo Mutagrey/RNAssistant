@@ -236,7 +236,9 @@ namespace RNAssistant.Office.Tools
                 Enabled = true,
                 RequiresConfirmation = requiresConfirmation,
                 MutatesDocument = false,
-                AgentCanRun = true
+                MutatesLocalState = requiresConfirmation,
+                AgentCanRun = true,
+                RiskLevel = requiresConfirmation ? 1 : 0
             };
         }
     }

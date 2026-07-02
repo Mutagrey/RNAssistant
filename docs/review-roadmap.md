@@ -10,6 +10,9 @@
 6. A local non-VSTO harness covers strict parsing/rejection, prompt/settings application, chat storage, storage recovery, fake-adapter pipelines, tool safety, VBA backup, context usage, typed bridge payloads, and no-network chat completion.
 7. VSTO adapter code should be treated as Windows-only. Changes there need explicit Office x64 validation.
 8. Model endpoint compatibility expectations are documented in `docs/model-endpoint-compatibility.md`.
+9. Pipeline safety is resolved recursively before execution; nested mutation, risk and confirmation metadata cannot be hidden.
+10. Document mutation completion is tied to a fresh successful verification observation.
+11. Tool/skill storage uses atomic per-item writes and no longer recreates entire user directories.
 
 ## Short-Term Plan
 

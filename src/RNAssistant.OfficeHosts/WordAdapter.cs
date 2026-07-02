@@ -56,20 +56,6 @@ namespace RNAssistant.OfficeHosts
             }
         }
 
-        public string LegacyDocumentKey
-        {
-            get
-            {
-                var doc = ActiveDocument();
-                if (doc == null)
-                {
-                    return "Word:NoDocument";
-                }
-
-                return string.IsNullOrWhiteSpace(doc.FullName) ? RuntimeDocumentKey : doc.FullName;
-            }
-        }
-
         public string DocumentTitle
         {
             get
@@ -183,20 +169,20 @@ namespace RNAssistant.OfficeHosts
                 Skill("word.read_tables", "Read-only: Read text from document tables.", "{\"maxTables\":20,\"maxRows\":50}"),
                 Skill("word.list_comments", "Read-only: List document comments.", "{}"),
                 Skill("word.document_stats", "Read-only: Return basic document counts.", "{}"),
-                Skill("word.insert_text", "Mutates document: Insert text at the current cursor position.", "{\"text\":\"Text to insert\"}", true, true),
-                Skill("word.insert_paragraph", "Mutates document: Insert a paragraph at selection, start, or end.", "{\"text\":\"Paragraph text\",\"location\":\"selection\"}", true, true),
-                Skill("word.replace_selection", "Mutates document: Replace selected text.", "{\"text\":\"Replacement text\"}", true, true),
-                Skill("word.replace_text", "Mutates document: Replace document text using Word find/replace.", "{\"find\":\"old text\",\"replace\":\"new text\",\"replaceAll\":true,\"matchCase\":false}", true, true),
-                Skill("word.apply_style", "Mutates document: Apply a named Word style to selection or document.", "{\"style\":\"Heading 1\",\"target\":\"selection\"}", true, true),
-                Skill("word.format_selection", "Mutates document: Apply basic font formatting to the current selection.", "{\"bold\":true,\"italic\":false,\"underline\":false,\"fontSize\":12,\"fontName\":\"\"}", true, true),
-                Skill("word.add_table", "Mutates document: Insert a table at selection, start, or end.", "{\"rows\":2,\"columns\":2,\"values\":[[\"Header\",\"Value\"],[\"A\",\"1\"]],\"location\":\"selection\"}", true, true),
-                Skill("word.insert_page_break", "Mutates document: Insert a page break at the current cursor position.", "{}", true, true),
-                Skill("word.add_comment", "Mutates document: Add a comment to the current selection.", "{\"text\":\"Comment text\"}", true, true),
+                Skill("word.insert_text", "Mutates document: Insert text at the current cursor position.", "{\"text\":\"Text to insert\"}", true, true, 2),
+                Skill("word.insert_paragraph", "Mutates document: Insert a paragraph at selection, start, or end.", "{\"text\":\"Paragraph text\",\"location\":\"selection\"}", true, true, 2),
+                Skill("word.replace_selection", "Mutates document: Replace selected text.", "{\"text\":\"Replacement text\"}", true, true, 2),
+                Skill("word.replace_text", "Mutates document: Replace document text using Word find/replace.", "{\"find\":\"old text\",\"replace\":\"new text\",\"replaceAll\":true,\"matchCase\":false}", true, true, 2),
+                Skill("word.apply_style", "Mutates document: Apply a named Word style to selection or document.", "{\"style\":\"Heading 1\",\"target\":\"selection\"}", true, true, 1),
+                Skill("word.format_selection", "Mutates document: Apply basic font formatting to the current selection.", "{\"bold\":true,\"italic\":false,\"underline\":false,\"fontSize\":12,\"fontName\":\"\"}", true, true, 1),
+                Skill("word.add_table", "Mutates document: Insert a table at selection, start, or end.", "{\"rows\":2,\"columns\":2,\"values\":[[\"Header\",\"Value\"],[\"A\",\"1\"]],\"location\":\"selection\"}", true, true, 2),
+                Skill("word.insert_page_break", "Mutates document: Insert a page break at the current cursor position.", "{}", true, true, 1),
+                Skill("word.add_comment", "Mutates document: Add a comment to the current selection.", "{\"text\":\"Comment text\"}", true, true, 1),
                 Skill("word.vba_read_project", "Read-only: Read VBA project modules and source code when Trust Access to VBA project is enabled.", "{\"maxChars\":30000}"),
                 Skill("word.vba_read_module", "Read-only: Read one VBA module by name.", "{\"moduleName\":\"Module1\",\"maxChars\":30000}"),
-                Skill("word.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}", true, false),
-                Skill("word.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}", true, false),
-                Skill("word.run_macro", "Mutates document: Run a Word VBA macro by name.", "{\"macroName\":\"Module1.Test\"}", true, false)
+                Skill("word.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}", true, false, 3),
+                Skill("word.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}", true, false, 3),
+                Skill("word.run_macro", "Mutates document: Run a Word VBA macro by name.", "{\"macroName\":\"Module1.Test\"}", true, false, 3)
             };
         }
 
@@ -924,9 +910,9 @@ namespace RNAssistant.OfficeHosts
                 && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
-        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)
+        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0)
         {
-            return new ToolDefinition { Id = id, Host = "Word", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun };
+            return new ToolDefinition { Id = id, Host = "Word", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel };
         }
 
         private static string Trim(string text, int maxChars)

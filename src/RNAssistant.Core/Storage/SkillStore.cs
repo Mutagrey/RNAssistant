@@ -42,18 +42,14 @@ namespace RNAssistant.Core.Storage
 
         public void Save(IEnumerable<SkillDefinition> skills)
         {
-            SaveAll(skills);
+            Reconcile(skills, null);
         }
 
         public void Save(IEnumerable<SkillDefinition> skills, string host)
         {
             var incoming = new List<SkillDefinition>((skills ?? new SkillDefinition[0])
                 .Where(s => s != null && !s.BuiltIn && !string.IsNullOrWhiteSpace(s.Id)));
-            var keep = Load().Where(s =>
-                !string.Equals(s.Host, "Common", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(s.Host, host, StringComparison.OrdinalIgnoreCase));
-
-            SaveAll(keep.Concat(incoming));
+            Reconcile(incoming, host);
         }
 
         public SkillDefinition SaveOne(SkillDefinition skill)
@@ -63,10 +59,18 @@ namespace RNAssistant.Core.Storage
                 throw new ArgumentException("Skill id is required.", "skill");
             }
 
-            var all = Load().Where(s => !string.Equals(s.Id, skill.Id, StringComparison.OrdinalIgnoreCase)).ToList();
             skill.BuiltIn = false;
-            all.Add(skill);
-            SaveAll(all);
+            var targetDirectory = SkillDirectory(skill);
+            var oldDirectories = Load()
+                .Where(s => string.Equals(s.Id, skill.Id, StringComparison.OrdinalIgnoreCase))
+                .Select(s => s.StoragePath)
+                .Where(path => !string.Equals(path, targetDirectory, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            SaveSkill(skill);
+            foreach (var oldDirectory in oldDirectories)
+            {
+                TryDeleteDirectory(oldDirectory);
+            }
             return Load().FirstOrDefault(s => string.Equals(s.Id, skill.Id, StringComparison.OrdinalIgnoreCase));
         }
 
@@ -92,30 +96,67 @@ namespace RNAssistant.Core.Storage
             return found;
         }
 
-        private void SaveAll(IEnumerable<SkillDefinition> skills)
+        private void Reconcile(IEnumerable<SkillDefinition> skills, string host)
         {
-            if (Directory.Exists(_paths.SkillsDirectory))
+            var incoming = (skills ?? new SkillDefinition[0])
+                .Where(s => s != null && !s.BuiltIn && !string.IsNullOrWhiteSpace(s.Id))
+                .ToList();
+            var incomingDirectories = new HashSet<string>(incoming.Select(SkillDirectory), StringComparer.OrdinalIgnoreCase);
+            var existingSkills = Load();
+            foreach (var skill in incoming)
             {
-                Directory.Delete(_paths.SkillsDirectory, true);
+                SaveSkill(skill);
             }
 
-            Directory.CreateDirectory(_paths.SkillsDirectory);
-            foreach (var skill in skills ?? new SkillDefinition[0])
+            foreach (var existing in existingSkills)
             {
-                if (skill == null || skill.BuiltIn || string.IsNullOrWhiteSpace(skill.Id))
+                var inScope = string.IsNullOrWhiteSpace(host) ||
+                    string.Equals(existing.Host, host, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(existing.Host, "Common", StringComparison.OrdinalIgnoreCase);
+                if (inScope && !incomingDirectories.Contains(existing.StoragePath ?? string.Empty))
                 {
-                    continue;
+                    TryDeleteDirectory(existing.StoragePath);
                 }
-
-                SaveSkill(skill);
             }
         }
 
         private void SaveSkill(SkillDefinition skill)
         {
-            var directory = Path.Combine(_paths.SkillsDirectory, HostFolder(skill.Host), SafeSegment(skill.Id.ToLowerInvariant()));
+            var directory = SkillDirectory(skill);
             Directory.CreateDirectory(directory);
-            File.WriteAllText(Path.Combine(directory, "SKILL.md"), Serialize(skill), Encoding.UTF8);
+            WriteAtomic(Path.Combine(directory, "SKILL.md"), Serialize(skill));
+        }
+
+        private string SkillDirectory(SkillDefinition skill)
+        {
+            return Path.Combine(
+                _paths.SkillsDirectory,
+                HostFolder(skill == null ? null : skill.Host),
+                SafeSegment(skill == null || skill.Id == null ? "skill" : skill.Id.ToLowerInvariant()));
+        }
+
+        private static void WriteAtomic(string path, string content)
+        {
+            var tempPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(tempPath, content ?? string.Empty, Encoding.UTF8);
+                if (File.Exists(path))
+                {
+                    File.Replace(tempPath, path, null);
+                }
+                else
+                {
+                    File.Move(tempPath, path);
+                }
+            }
+            finally
+            {
+                if (File.Exists(tempPath))
+                {
+                    File.Delete(tempPath);
+                }
+            }
         }
 
         private static SkillDefinition LoadSkill(string path)

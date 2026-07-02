@@ -28,8 +28,8 @@ namespace RNAssistant.Office.Tools
 
             yield return ControllerTool("common.tools_list", "Read-only: List custom executable RNAssistant tools visible to the current Office host.", "{}", false);
             yield return ControllerTool("common.tools_read", "Read-only: Read one custom RNAssistant tool by id, including metadata, README, pipeline, and VBA code.", "{\"id\":\"excel.my_tool\"}", false);
-            yield return ControllerTool("common.tools_validate", "Read-only: Validate a custom RNAssistant pipeline or VBA tool payload without saving it.", "{\"id\":\"excel.my_tool\",\"host\":\"Excel\",\"name\":\"My tool\",\"description\":\"What it does\",\"argumentSchemaJson\":\"{}\",\"executor\":\"pipeline\",\"pipelineJson\":\"{\\\"steps\\\":[{\\\"toolId\\\":\\\"excel.list_sheets\\\",\\\"arguments\\\":{}}]}\",\"code\":\"\",\"readme\":\"markdown\",\"enabled\":true,\"requiresConfirmation\":true,\"mutatesDocument\":true,\"agentCanRun\":false}", false);
-            yield return ControllerTool("common.tools_save", "Mutates settings: Create or update a custom RNAssistant pipeline or VBA tool.", "{\"id\":\"excel.my_tool\",\"host\":\"Excel\",\"name\":\"My tool\",\"description\":\"What it does\",\"argumentSchemaJson\":\"{}\",\"executor\":\"pipeline\",\"pipelineJson\":\"{\\\"steps\\\":[{\\\"toolId\\\":\\\"excel.list_sheets\\\",\\\"arguments\\\":{}}]}\",\"code\":\"\",\"readme\":\"markdown\",\"enabled\":true,\"requiresConfirmation\":true,\"mutatesDocument\":true,\"agentCanRun\":false}", true);
+            yield return ControllerTool("common.tools_validate", "Read-only: Validate a custom RNAssistant pipeline or VBA tool payload without saving it.", "{\"id\":\"excel.my_tool\",\"host\":\"Excel\",\"name\":\"My tool\",\"description\":\"What it does\",\"argumentSchemaJson\":\"{}\",\"executor\":\"pipeline\",\"pipelineJson\":\"{\\\"steps\\\":[{\\\"toolId\\\":\\\"excel.list_sheets\\\",\\\"arguments\\\":{}}]}\",\"code\":\"\",\"readme\":\"markdown\",\"enabled\":true,\"requiresConfirmation\":true,\"mutatesDocument\":true,\"mutatesLocalState\":false,\"agentCanRun\":false,\"riskLevel\":2}", false);
+            yield return ControllerTool("common.tools_save", "Mutates settings: Create or update a custom RNAssistant pipeline or VBA tool.", "{\"id\":\"excel.my_tool\",\"host\":\"Excel\",\"name\":\"My tool\",\"description\":\"What it does\",\"argumentSchemaJson\":\"{}\",\"executor\":\"pipeline\",\"pipelineJson\":\"{\\\"steps\\\":[{\\\"toolId\\\":\\\"excel.list_sheets\\\",\\\"arguments\\\":{}}]}\",\"code\":\"\",\"readme\":\"markdown\",\"enabled\":true,\"requiresConfirmation\":true,\"mutatesDocument\":true,\"mutatesLocalState\":false,\"agentCanRun\":false,\"riskLevel\":2}", true);
             yield return ControllerTool("common.tools_delete", "Mutates settings: Delete a custom RNAssistant tool by id.", "{\"id\":\"excel.my_tool\"}", true);
         }
 
@@ -177,6 +177,7 @@ namespace RNAssistant.Office.Tools
         private ToolDefinition ReadToolDefinition(ToolCommand command)
         {
             var id = ToolArgumentReader.String(command.Arguments, "id", string.Empty);
+            var mutatesDocument = ReadBool(command, "mutatesDocument", true);
             return new ToolDefinition
             {
                 Id = id,
@@ -190,10 +191,11 @@ namespace RNAssistant.Office.Tools
                 Readme = ToolArgumentReader.String(command.Arguments, "readme", ToolArgumentReader.String(command.Arguments, "README", string.Empty)),
                 Enabled = ReadBool(command, "enabled", true),
                 RequiresConfirmation = ReadBool(command, "requiresConfirmation", true),
-                MutatesDocument = ReadBool(command, "mutatesDocument", true),
+                MutatesDocument = mutatesDocument,
+                MutatesLocalState = ReadBool(command, "mutatesLocalState", false),
                 AgentCanRun = ReadBool(command, "agentCanRun", false),
                 BuiltIn = false,
-                RiskLevel = ReadInt(command, "riskLevel", 0),
+                RiskLevel = ReadInt(command, "riskLevel", mutatesDocument ? 2 : 0),
                 UseWhen = ToolArgumentReader.String(command.Arguments, "useWhen", string.Empty),
                 DoNotUseWhen = ToolArgumentReader.String(command.Arguments, "doNotUseWhen", string.Empty),
                 ExamplesJson = ToolArgumentReader.String(command.Arguments, "examplesJson", string.Empty),
@@ -228,6 +230,14 @@ namespace RNAssistant.Office.Tools
             if (string.IsNullOrWhiteSpace(tool.Host))
             {
                 return ToolResult.Fail("Tool host is required.");
+            }
+            if (tool.RiskLevel < 0 || tool.RiskLevel > 3)
+            {
+                return ToolResult.Fail("Tool riskLevel must be between 0 and 3.");
+            }
+            if (tool.MutatesDocument && tool.RiskLevel == 0)
+            {
+                return ToolResult.Fail("Document mutation tools require riskLevel between 1 and 3.");
             }
 
             var executor = (tool.Executor ?? string.Empty).Trim().ToLowerInvariant();
@@ -340,7 +350,9 @@ namespace RNAssistant.Office.Tools
                 Enabled = true,
                 RequiresConfirmation = requiresConfirmation,
                 MutatesDocument = false,
-                AgentCanRun = true
+                MutatesLocalState = requiresConfirmation,
+                AgentCanRun = true,
+                RiskLevel = requiresConfirmation ? 1 : 0
             };
         }
     }

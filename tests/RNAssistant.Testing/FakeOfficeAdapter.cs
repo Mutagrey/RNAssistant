@@ -84,7 +84,6 @@ namespace RNAssistant.Harness
 
         public string HostName { get { return _hostName; } }
         public string DocumentKey { get { return DocumentKeyValue; } }
-        public string LegacyDocumentKey { get { return "legacy-doc"; } }
         public string RuntimeDocumentKey { get { return RuntimeDocumentKeyValue; } }
         public string DocumentTitle { get { return _documentTitle; } }
         public string WordText { get { return _wordText; } }
@@ -668,8 +667,7 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("read Outlook metadata", JsonConvert.SerializeObject(new { selection = _outlookSelection }));
             }
 
-            if (string.Equals(command.ToolId, "outlook.draft_reply", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "outlook.create_reply_draft", StringComparison.OrdinalIgnoreCase) ||
+            if (string.Equals(command.ToolId, "outlook.create_reply_draft", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(command.ToolId, "outlook.create_reply_all_draft", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(command.ToolId, "outlook.create_forward_draft", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(command.ToolId, "outlook.create_mail_draft", StringComparison.OrdinalIgnoreCase))
@@ -934,18 +932,18 @@ namespace RNAssistant.Harness
                 BuiltIn("Excel", "excel.set_formula", false, true, true),
                 BuiltIn("Excel", "excel.add_table", false, true, true),
                 BuiltIn("Excel", "excel.add_chart", false, true, true),
-                BuiltIn("Excel", "excel.format_range", false, true, true),
-                BuiltIn("Excel", "excel.autofit", false, true, true),
-                BuiltIn("Excel", "excel.add_sheet", false, true, true),
+                BuiltIn("Excel", "excel.format_range", false, true, true, 1),
+                BuiltIn("Excel", "excel.autofit", false, true, true, 1),
+                BuiltIn("Excel", "excel.add_sheet", false, true, true, 1),
                 BuiltIn("Excel", "excel.rename_sheet", false, true, false),
-                BuiltIn("Excel", "excel.clear_range", false, true, false),
+                BuiltIn("Excel", "excel.clear_range", false, true, false, 3),
                 BuiltIn("Excel", "excel.sort_range", false, true, false),
                 BuiltIn("Excel", "excel.filter_range", false, true, false),
                 BuiltIn("Excel", "excel.vba_read_project", false, false, true),
                 BuiltIn("Excel", "excel.vba_read_module", false, false, true),
-                BuiltIn("Excel", "excel.vba_replace_module", false, true, false),
-                BuiltIn("Excel", "excel.insert_vba_module", false, true, false),
-                BuiltIn("Excel", "excel.run_macro", false, true, false)
+                BuiltIn("Excel", "excel.vba_replace_module", false, true, false, 3),
+                BuiltIn("Excel", "excel.insert_vba_module", false, true, false, 3),
+                BuiltIn("Excel", "excel.run_macro", false, true, false, 3)
             };
         }
 
@@ -967,16 +965,16 @@ namespace RNAssistant.Harness
                 BuiltIn("Word", "word.insert_paragraph", false, true, true),
                 BuiltIn("Word", "word.replace_selection", false, true, true),
                 BuiltIn("Word", "word.replace_text", false, true, true),
-                BuiltIn("Word", "word.apply_style", false, true, true),
-                BuiltIn("Word", "word.format_selection", false, true, true),
+                BuiltIn("Word", "word.apply_style", false, true, true, 1),
+                BuiltIn("Word", "word.format_selection", false, true, true, 1),
                 BuiltIn("Word", "word.add_table", false, true, true),
-                BuiltIn("Word", "word.insert_page_break", false, true, true),
-                BuiltIn("Word", "word.add_comment", false, true, true),
+                BuiltIn("Word", "word.insert_page_break", false, true, true, 1),
+                BuiltIn("Word", "word.add_comment", false, true, true, 1),
                 BuiltIn("Word", "word.vba_read_project", false, false, true),
                 BuiltIn("Word", "word.vba_read_module", false, false, true),
-                BuiltIn("Word", "word.vba_replace_module", false, true, false),
-                BuiltIn("Word", "word.insert_vba_module", false, true, false),
-                BuiltIn("Word", "word.run_macro", false, true, false)
+                BuiltIn("Word", "word.vba_replace_module", false, true, false, 3),
+                BuiltIn("Word", "word.insert_vba_module", false, true, false, 3),
+                BuiltIn("Word", "word.run_macro", false, true, false, 3)
             };
         }
 
@@ -991,20 +989,20 @@ namespace RNAssistant.Harness
                 BuiltIn("PowerPoint", "powerpoint.list_slides", false, false, true),
                 BuiltIn("PowerPoint", "powerpoint.list_shapes", false, false, true),
                 BuiltIn("PowerPoint", "powerpoint.read_speaker_notes", false, false, true),
-                BuiltIn("PowerPoint", "powerpoint.add_slide", false, true, true),
+                BuiltIn("PowerPoint", "powerpoint.add_slide", false, true, true, 1),
                 BuiltIn("PowerPoint", "powerpoint.replace_selection_text", false, true, true),
-                BuiltIn("PowerPoint", "powerpoint.set_speaker_notes", false, true, true),
-                BuiltIn("PowerPoint", "powerpoint.add_text_box", false, true, true),
+                BuiltIn("PowerPoint", "powerpoint.set_speaker_notes", false, true, true, 1),
+                BuiltIn("PowerPoint", "powerpoint.add_text_box", false, true, true, 1),
                 BuiltIn("PowerPoint", "powerpoint.set_shape_text", false, true, true),
-                BuiltIn("PowerPoint", "powerpoint.add_picture", false, true, true),
-                BuiltIn("PowerPoint", "powerpoint.add_table", false, true, true),
-                BuiltIn("PowerPoint", "powerpoint.duplicate_slide", false, true, true),
+                BuiltIn("PowerPoint", "powerpoint.add_picture", false, true, true, 1),
+                BuiltIn("PowerPoint", "powerpoint.add_table", false, true, true, 1),
+                BuiltIn("PowerPoint", "powerpoint.duplicate_slide", false, true, true, 1),
                 BuiltIn("PowerPoint", "powerpoint.move_slide", false, true, false),
                 BuiltIn("PowerPoint", "powerpoint.vba_read_project", false, false, true),
                 BuiltIn("PowerPoint", "powerpoint.vba_read_module", false, false, true),
-                BuiltIn("PowerPoint", "powerpoint.vba_replace_module", false, true, false),
-                BuiltIn("PowerPoint", "powerpoint.insert_vba_module", false, true, false),
-                BuiltIn("PowerPoint", "powerpoint.run_macro", false, true, false)
+                BuiltIn("PowerPoint", "powerpoint.vba_replace_module", false, true, false, 3),
+                BuiltIn("PowerPoint", "powerpoint.insert_vba_module", false, true, false, 3),
+                BuiltIn("PowerPoint", "powerpoint.run_macro", false, true, false, 3)
             };
         }
 
@@ -1018,19 +1016,18 @@ namespace RNAssistant.Harness
                 BuiltIn("Outlook", "outlook.read_mail_by_entry_id", false, false, true),
                 BuiltIn("Outlook", "outlook.search_mail", false, false, true),
                 BuiltIn("Outlook", "outlook.list_attachments", false, false, true),
-                BuiltIn("Outlook", "outlook.create_mail_draft", false, true, true),
-                BuiltIn("Outlook", "outlook.create_reply_draft", false, true, true),
-                BuiltIn("Outlook", "outlook.draft_reply", false, true, true),
-                BuiltIn("Outlook", "outlook.create_reply_all_draft", false, true, true),
-                BuiltIn("Outlook", "outlook.create_forward_draft", false, true, true),
-                BuiltIn("Outlook", "outlook.set_categories", false, true, false),
-                BuiltIn("Outlook", "outlook.mark_as_read", false, true, false),
+                BuiltIn("Outlook", "outlook.create_mail_draft", false, true, true, 1),
+                BuiltIn("Outlook", "outlook.create_reply_draft", false, true, true, 1),
+                BuiltIn("Outlook", "outlook.create_reply_all_draft", false, true, true, 1),
+                BuiltIn("Outlook", "outlook.create_forward_draft", false, true, true, 1),
+                BuiltIn("Outlook", "outlook.set_categories", false, true, false, 1),
+                BuiltIn("Outlook", "outlook.mark_as_read", false, true, false, 1),
                 BuiltIn("Outlook", "outlook.collect_folder_mail", false, false, true),
                 BuiltIn("Outlook", "outlook.collect_monthly_summary_data", false, false, true)
             };
         }
 
-        private static ToolDefinition BuiltIn(string host, string id, bool requiresConfirmation, bool mutatesDocument, bool agentCanRun)
+        private static ToolDefinition BuiltIn(string host, string id, bool requiresConfirmation, bool mutatesDocument, bool agentCanRun, int riskLevel = 0)
         {
             return new ToolDefinition
             {
@@ -1043,7 +1040,8 @@ namespace RNAssistant.Harness
                 BuiltIn = true,
                 RequiresConfirmation = requiresConfirmation,
                 MutatesDocument = mutatesDocument,
-                AgentCanRun = agentCanRun
+                AgentCanRun = agentCanRun,
+                RiskLevel = mutatesDocument && riskLevel <= 0 ? 2 : riskLevel
             };
         }
 
@@ -1059,6 +1057,7 @@ namespace RNAssistant.Harness
                 Executor = tool.Executor,
                 RequiresConfirmation = tool.RequiresConfirmation,
                 MutatesDocument = tool.MutatesDocument,
+                MutatesLocalState = tool.MutatesLocalState,
                 AgentCanRun = tool.AgentCanRun,
                 PipelineJson = tool.PipelineJson,
                 Code = tool.Code,

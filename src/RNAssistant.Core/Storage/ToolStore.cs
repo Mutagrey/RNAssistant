@@ -50,18 +50,14 @@ namespace RNAssistant.Core.Storage
 
         public void Save(IEnumerable<ToolDefinition> tools)
         {
-            SaveAll(tools);
+            Reconcile(tools, null);
         }
 
         public void Save(IEnumerable<ToolDefinition> tools, string host)
         {
             var incoming = new List<ToolDefinition>((tools ?? new ToolDefinition[0])
                 .Where(t => t != null && !t.BuiltIn && !string.IsNullOrWhiteSpace(t.Id)));
-            var keep = Load().Where(t =>
-                !string.Equals(t.Host, "Common", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(t.Host, host, StringComparison.OrdinalIgnoreCase));
-
-            SaveAll(keep.Concat(incoming));
+            Reconcile(incoming, host);
         }
 
         public ToolDefinition SaveOne(ToolDefinition tool)
@@ -71,11 +67,17 @@ namespace RNAssistant.Core.Storage
                 return null;
             }
 
-            var tools = Load()
-                .Where(t => !string.Equals(t.Id, tool.Id, StringComparison.OrdinalIgnoreCase))
+            var targetDirectory = ToolDirectory(tool);
+            var oldDirectories = Load()
+                .Where(t => string.Equals(t.Id, tool.Id, StringComparison.OrdinalIgnoreCase))
+                .Select(t => t.StoragePath)
+                .Where(path => !string.Equals(path, targetDirectory, StringComparison.OrdinalIgnoreCase))
                 .ToList();
-            tools.Add(tool);
-            SaveAll(tools);
+            SaveTool(tool);
+            foreach (var oldDirectory in oldDirectories)
+            {
+                TryDeleteDirectory(oldDirectory);
+            }
             return Load().FirstOrDefault(t => string.Equals(t.Id, tool.Id, StringComparison.OrdinalIgnoreCase));
         }
 
@@ -86,39 +88,48 @@ namespace RNAssistant.Core.Storage
                 return false;
             }
 
-            var tools = Load();
-            var kept = tools.Where(t => !string.Equals(t.Id, id, StringComparison.OrdinalIgnoreCase)).ToList();
-            if (kept.Count == tools.Count)
+            var matches = Load()
+                .Where(t => string.Equals(t.Id, id, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (matches.Count == 0)
             {
                 return false;
             }
 
-            SaveAll(kept);
+            foreach (var tool in matches)
+            {
+                TryDeleteDirectory(tool.StoragePath);
+            }
             return true;
         }
 
-        private void SaveAll(IEnumerable<ToolDefinition> tools)
+        private void Reconcile(IEnumerable<ToolDefinition> tools, string host)
         {
-            if (Directory.Exists(_paths.ToolsDirectory))
+            var incoming = (tools ?? new ToolDefinition[0])
+                .Where(t => t != null && !t.BuiltIn && !string.IsNullOrWhiteSpace(t.Id))
+                .ToList();
+            var incomingDirectories = new HashSet<string>(incoming.Select(ToolDirectory), StringComparer.OrdinalIgnoreCase);
+            var existingTools = Load();
+            foreach (var tool in incoming)
             {
-                Directory.Delete(_paths.ToolsDirectory, true);
+                SaveTool(tool);
             }
 
-            Directory.CreateDirectory(_paths.ToolsDirectory);
-            foreach (var tool in tools ?? new ToolDefinition[0])
+            foreach (var existing in existingTools)
             {
-                if (tool == null || tool.BuiltIn || string.IsNullOrWhiteSpace(tool.Id))
+                var inScope = string.IsNullOrWhiteSpace(host) ||
+                    string.Equals(existing.Host, host, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(existing.Host, "Common", StringComparison.OrdinalIgnoreCase);
+                if (inScope && !incomingDirectories.Contains(existing.StoragePath ?? string.Empty))
                 {
-                    continue;
+                    TryDeleteDirectory(existing.StoragePath);
                 }
-
-                SaveTool(tool);
             }
         }
 
         private void SaveTool(ToolDefinition tool)
         {
-            var directory = Path.Combine(_paths.ToolsDirectory, HostFolder(tool.Host), ToolFolder(tool.Id));
+            var directory = ToolDirectory(tool);
             Directory.CreateDirectory(directory);
 
             var metadata = new ToolDefinition
@@ -131,6 +142,7 @@ namespace RNAssistant.Core.Storage
                 Executor = string.IsNullOrWhiteSpace(tool.Executor) ? "pipeline" : tool.Executor,
                 RequiresConfirmation = tool.RequiresConfirmation,
                 MutatesDocument = tool.MutatesDocument,
+                MutatesLocalState = tool.MutatesLocalState,
                 AgentCanRun = tool.AgentCanRun,
                 Enabled = tool.Enabled,
                 BuiltIn = false,
@@ -149,6 +161,11 @@ namespace RNAssistant.Core.Storage
             WriteOptional(Path.Combine(directory, "pipeline.json"), tool.PipelineJson);
             WriteOptional(Path.Combine(directory, "code.vba"), tool.Code);
             WriteOptional(Path.Combine(directory, "README.md"), tool.Readme);
+        }
+
+        private string ToolDirectory(ToolDefinition tool)
+        {
+            return Path.Combine(_paths.ToolsDirectory, HostFolder(tool == null ? null : tool.Host), ToolFolder(tool == null ? null : tool.Id));
         }
 
         private static string ReadOptional(string path, string fallback)
@@ -171,10 +188,42 @@ namespace RNAssistant.Core.Storage
         {
             if (string.IsNullOrWhiteSpace(value))
             {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
                 return;
             }
 
-            File.WriteAllText(path, value);
+            var tempPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(tempPath, value);
+                if (File.Exists(path))
+                {
+                    File.Replace(tempPath, path, null);
+                }
+                else
+                {
+                    File.Move(tempPath, path);
+                }
+            }
+            finally
+            {
+                if (File.Exists(tempPath))
+                {
+                    File.Delete(tempPath);
+                }
+            }
+        }
+
+        private static void TryDeleteDirectory(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+            {
+                return;
+            }
+            Directory.Delete(path, true);
         }
 
         private static string HostFolder(string host)

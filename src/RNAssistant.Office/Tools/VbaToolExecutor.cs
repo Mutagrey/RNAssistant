@@ -442,7 +442,8 @@ namespace RNAssistant.Office.Tools
                 BuiltIn = true,
                 Enabled = true,
                 MutatesDocument = mutatesDocument,
-                AgentCanRun = !mutatesDocument
+                AgentCanRun = !mutatesDocument,
+                RiskLevel = mutatesDocument ? 3 : 0
             };
         }
 

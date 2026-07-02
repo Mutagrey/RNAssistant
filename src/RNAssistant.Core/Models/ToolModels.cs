@@ -13,6 +13,7 @@ namespace RNAssistant.Core.Models
         public string Executor { get; set; }
         public bool RequiresConfirmation { get; set; }
         public bool MutatesDocument { get; set; }
+        public bool MutatesLocalState { get; set; }
         public bool AgentCanRun { get; set; }
         public string PipelineJson { get; set; }
         public string Code { get; set; }

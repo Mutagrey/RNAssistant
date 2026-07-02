@@ -111,27 +111,6 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void ChatSessionServiceMigratesLegacyDocumentKey()
-        {
-            WithTempPaths(delegate(AppDataPaths paths)
-            {
-                var adapter = new FakeOfficeAdapter();
-                var store = new ChatStore(paths);
-                var legacy = store.Create(adapter.HostName, adapter.LegacyDocumentKey, adapter.DocumentTitle, "Legacy");
-                legacy.Messages.Add(new ChatMessage { Role = "user", Content = "legacy chat" });
-                store.Save(legacy);
-
-                var service = new ChatSessionService(adapter, store);
-                var loaded = service.LoadSession(null);
-
-                AssertEqual(ChatStore.GetSessionId(legacy), ChatStore.GetSessionId(loaded), "legacy session id");
-                AssertEqual(adapter.DocumentKey, loaded.DocumentKey, "legacy migrated document key");
-                AssertEqual(1, loaded.Messages.Count, "legacy message count");
-                AssertEqual(0, store.List(adapter.HostName, adapter.LegacyDocumentKey, adapter.DocumentTitle).Count, "legacy sessions moved");
-                AssertEqual(1, store.List(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle).Count, "current sessions");
-            });
-        }
-
         private static void ChatSessionServiceFallsBackForStaleRequestedId()
         {
             WithTempPaths(delegate(AppDataPaths paths)

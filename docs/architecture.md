@@ -42,7 +42,7 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 ## Current Code Zones
 
 - `src/RNAssistant.Core/Llm`: API client, SSE/reasoning parsing, model capability budgeting, prompt composition and context usage estimates.
-- `src/RNAssistant.Core/Tools`: strict planner JSON parsing plus legacy command parsing compatibility.
+- `src/RNAssistant.Core/Tools`: strict planner JSON parsing and tool argument normalization.
 - `src/RNAssistant.Core/Skills`: built-in markdown skill provider.
 - `src/RNAssistant.Core/Services`: Office-agnostic model services such as context normalization.
 - `src/RNAssistant.Core/Storage`: JSON file storage under `%AppData%/RNAssistant`.
@@ -56,7 +56,10 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - `src/RNAssistant.Office/Agent`: agent transcript/plan formatting and retry policy.
 - `src/RNAssistant.Office/Services`: host-neutral application services used by controller orchestration, such as chat/session lifecycle, tool/skill catalog composition, context normalization, and chat completion flow.
 - `src/RNAssistant.Office/Services/AgentRunService.cs`: controlled planner loop, route/slice/validate/execute flow, normalized observations, deterministic mutation verification, VBA context capture, and confirmation resume continuation.
-- `src/RNAssistant.Office/Services/AgentPlannerRuntime.cs`: deterministic router, tool catalog slicer, planner prompt context, action validator, observation normalizer, recipe expansion, and verification command selection.
+- `src/RNAssistant.Office/Services/AgentPlannerRuntime.cs`: deterministic router, tool catalog slicer, planner prompt context, action validation, and observation normalization.
+- `src/RNAssistant.Office/Services/AgentRuntimeModels.cs`: route, observation, catalog slice, and run-state models.
+- `src/RNAssistant.Office/Services/AgentExecutionRuntime.cs`: effective tool catalog resolution and phase transitions.
+- `src/RNAssistant.Office/Services/AgentVerificationRuntime.cs`: deterministic verification selection and recipe expansion.
 - `src/RNAssistant.Office/Tools`: tool execution, pipelines, tool/skill CRUD tools, VBA patch/backup workflow.
 - `src/RNAssistant.OfficeHosts`: shared Excel/Word/PowerPoint/Outlook COM adapters and desktop target descriptors.
 - `src/RNAssistant.Desktop`: standalone WinForms shell, explicit Office target picker, manual foreground attach, single-instance JSON pipe activation, and ROT-based adapter creation with hwnd validation.
@@ -77,8 +80,8 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - Text/PDF attachments are normalized locally. PDF text uses PdfPig; vision-capable models may also receive selected PDF pages rendered by the host-neutral Office service. Raw PDF files are not sent through the OpenAI-compatible chat payload.
 - Routing precedes Office context capture. General-answer routes expose no tools and do not read document content; document-dependent state is obtained through explicit read tools.
 - Tools are executable actions described by `ToolDefinition`; skills are markdown guidance described by `SkillDefinition`.
-- Tool safety belongs to `ToolDefinition` metadata: `MutatesDocument`, `AgentCanRun`, `RequiresConfirmation`, risk/capability fields, and verification metadata.
-- Agent runs are bounded by settings for max iterations and max tool steps; confirmed pending tools may resume the same run, and mutation runs use deterministic verification tools before final prose.
+- Tool safety belongs to `ToolDefinition` metadata: `MutatesDocument`, `MutatesLocalState`, `AgentCanRun`, `RequiresConfirmation`, risk/capability fields, and verification metadata. Pipeline effective safety recursively includes nested steps and fails closed for missing tools, malformed definitions, and cycles.
+- Agent runs are bounded by settings for max iterations and max tool steps; confirmed pending tools may resume the same run. Document mutation remains pending until a new verification observation succeeds.
 - A required-tool route accepts `final` only after its route phase reaches `final_phase`; inspection alone cannot complete a pending mutation. Format repair and required-tool correction have separate one-shot guards.
 - Tool slices record explicit exclusion reasons and reserve prompt capacity for both mutation and inspection tools. The per-request tool limit is configurable from 8 to 64.
 - Controller coordinates request flow; it should not contain pipeline execution, VBA patch logic, or JS rendering logic.
@@ -88,6 +91,7 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - Host adapters may implement `IOfficeDocumentCatalog`; typed bridge responses merge its open-document list with persisted chat summaries, and document activation is dispatched by stable document key.
 - Unsaved Office documents use the same custom document identity as saved files when custom properties are available; display names such as `Book1` are never storage keys.
 - New chat sessions remain transient until they contain a completed user/assistant exchange. Empty drafts are not written to the chat store, and document-history deletion removes every stored chat for that document without deleting the Office file.
+- JSON metadata writes use same-directory atomic replacement. Tool/skill saves reconcile only managed entries in scope and preserve broken or unrecognized entries and extra user files.
 - Desktop COM automation must enter host adapters through `DispatchedOfficeApplicationAdapter`/`OfficeStaDispatcher`; VSTO task panes already run inside their Office host process and remain Windows-validation-only.
 - Desktop target selection uses `Auto follow` by default. `Manual` mode pins the selected working target; Excel task panes refresh on workbook activate/open/close events.
 - The Desktop target registry stores only lightweight descriptors, not long-lived Office COM objects.
@@ -109,7 +113,7 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj
 ```
 
-Pass a category or name fragment for a focused run, for example `-- modes`, `-- routing`, or `-- context`.
+Pass a category or name fragment for a focused run, for example `-- modes`, `-- routing`, or `-- context`. Pass `--list` to print the categorized catalog.
 
 Current coverage:
 
@@ -117,8 +121,8 @@ Current coverage:
 - chat/tool/skill/VBA store fixtures using temp directories, including broken files being skipped;
 - chat session lifecycle fixtures, including document-key migration;
 - pipeline dry-run and execution fixtures with fake `IOfficeApplicationAdapter`;
-- pipeline failure diagnostics and confirmation gates for custom tools and Agent Mode built-in mutations;
-- agent runtime guards for strict planner repair, sliced tools, waiting confirmations, stopped batches, max iterations, max tool steps, deterministic mutation verification, and VBA context prompt inclusion;
+- pipeline failure diagnostics, cycle/missing-reference rejection, recursive risk/confirmation gates, and protection from partial execution;
+- agent runtime guards for strict planner repair, sliced tools, waiting confirmations, stopped batches, max iterations, max tool steps, fail-closed mutation verification/recovery, and VBA context prompt inclusion;
 - model-quality fixtures that catch final answers when Office tool use is required;
 - markdown skill store/catalog/prompt separation, prompt body limiting, and agent skill-save confirmation;
 - agent custom tool save/read confirmation and validation;

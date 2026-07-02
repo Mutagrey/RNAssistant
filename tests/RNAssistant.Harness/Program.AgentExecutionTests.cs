@@ -22,7 +22,7 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static void ChatLegacyGreetingRequiresStrictRepair()
+        private static void ChatProseGreetingRequiresStrictRepair()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -48,8 +48,8 @@ namespace RNAssistant.Harness
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("Здравствуйте! Чем могу помочь?", result.AssistantText, "repaired greeting answer");
-                AssertEqual(2, calls.Count, "legacy greeting invokes strict repair");
-                AssertEqual(0, adapter.Executed.Count, "legacy greeting executes no tools");
+                AssertEqual(2, calls.Count, "prose greeting invokes strict repair");
+                AssertEqual(0, adapter.Executed.Count, "prose greeting executes no tools");
             });
         }
 
@@ -183,8 +183,8 @@ namespace RNAssistant.Harness
                     UserText = "Read the selected email and draft a reply.",
                     Response = AgentBlock(
                         Command("outlook.read_selection", "maxChars", "12000"),
-                        Command("outlook.draft_reply", "body", "Thanks, I will follow up.")),
-                    ExpectedTools = new[] { "outlook.read_selection", "outlook.draft_reply" }
+                        Command("outlook.create_reply_draft", "body", "Thanks, I will follow up.")),
+                    ExpectedTools = new[] { "outlook.read_selection", "outlook.create_reply_draft" }
                 }
             };
 

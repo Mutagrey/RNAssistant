@@ -32,11 +32,11 @@ namespace RNAssistant.Harness
             AssertEqual(ChatModes.Agent, selector.Select("hello", session, "Excel"), "html forces agent");
         }
 
-        private static void LegacySessionDefaultsToChatMode()
+        private static void MissingSessionModeDefaultsToChat()
         {
             var session = JsonConvert.DeserializeObject<ChatSession>(
                 "{\"Id\":\"legacy\",\"Messages\":[]}");
-            AssertEqual(ChatModes.Chat, ChatModes.Normalize(session.Mode), "legacy mode");
+            AssertEqual(ChatModes.Chat, ChatModes.Normalize(session.Mode), "missing mode");
         }
 
         private static void PlainChatOmitsPlannerAndActivities()

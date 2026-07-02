@@ -9,7 +9,6 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed class HtmlArtifactToolExecutor
     {
-        public const string RenderHtmlToolId = "common.render_html";
         public const string ReadWorkspaceToolId = "common.html_workspace_read";
         public const string UpsertFileToolId = "common.html_workspace_upsert_file";
         public const string UpsertDataToolId = "common.html_workspace_upsert_data";
@@ -21,18 +20,6 @@ namespace RNAssistant.Office.Tools
 
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
-            yield return new ToolDefinition
-            {
-                Id = RenderHtmlToolId,
-                Host = "Common",
-                Name = "render_html",
-                Description = "Legacy one-off inline chat artifact. Prefer common.html_workspace_upsert_file/data for HTML pages, reports, dashboards, or editable UI.",
-                ArgumentSchemaJson = "{\"title\":\"Component title\",\"html\":\"<html or fragment>\",\"height\":360}",
-                BuiltIn = true,
-                Enabled = true,
-                MutatesDocument = false,
-                AgentCanRun = false
-            };
             yield return new ToolDefinition
             {
                 Id = ReadWorkspaceToolId,
@@ -55,6 +42,7 @@ namespace RNAssistant.Office.Tools
                 BuiltIn = true,
                 Enabled = true,
                 MutatesDocument = false,
+                MutatesLocalState = true,
                 AgentCanRun = true
             };
             yield return new ToolDefinition
@@ -67,6 +55,7 @@ namespace RNAssistant.Office.Tools
                 BuiltIn = true,
                 Enabled = true,
                 MutatesDocument = false,
+                MutatesLocalState = true,
                 AgentCanRun = true
             };
             yield return new ToolDefinition
@@ -79,14 +68,14 @@ namespace RNAssistant.Office.Tools
                 BuiltIn = true,
                 Enabled = true,
                 MutatesDocument = false,
+                MutatesLocalState = true,
                 AgentCanRun = true
             };
         }
 
         public bool IsControllerTool(string toolId)
         {
-            return string.Equals(toolId, RenderHtmlToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, ReadWorkspaceToolId, StringComparison.OrdinalIgnoreCase) ||
+            return string.Equals(toolId, ReadWorkspaceToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, UpsertFileToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, UpsertDataToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, SetActiveToolId, StringComparison.OrdinalIgnoreCase);
@@ -97,11 +86,6 @@ namespace RNAssistant.Office.Tools
             if (command == null)
             {
                 return ToolResult.Fail("Tool command is empty.");
-            }
-
-            if (string.Equals(command.ToolId, RenderHtmlToolId, StringComparison.OrdinalIgnoreCase))
-            {
-                return RenderHtmlArtifact(command);
             }
 
             try
@@ -390,30 +374,6 @@ namespace RNAssistant.Office.Tools
             session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
             NormalizeWorkspace(session.HtmlWorkspace);
             return snapshot;
-        }
-
-        private static ToolResult RenderHtmlArtifact(ToolCommand command)
-        {
-            var html = ToolArgumentReader.String(command.Arguments, "html", string.Empty);
-            if (string.IsNullOrWhiteSpace(html))
-            {
-                return ToolResult.Fail("html is required.");
-            }
-            if (html.Length > MaxHtmlChars)
-            {
-                return ToolResult.Fail("HTML artifact is too large. Limit is " + MaxHtmlChars + " characters.");
-            }
-
-            var height = Math.Max(180, Math.Min(900, ToolArgumentReader.Int32(command.Arguments, "height", 360)));
-            var title = ToolArgumentReader.String(command.Arguments, "title", "HTML component");
-            return ToolResult.Ok("HTML artifact created: " + title, JsonConvert.SerializeObject(new
-            {
-                type = "rnassistant.html",
-                version = 1,
-                title = title,
-                html = html,
-                height = height
-            }));
         }
 
         private static string WorkspaceDataJson(HtmlWorkspace workspace)

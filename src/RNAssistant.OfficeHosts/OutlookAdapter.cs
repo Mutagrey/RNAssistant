@@ -46,11 +46,6 @@ namespace RNAssistant.OfficeHosts
             get { return DocumentKey; }
         }
 
-        public string LegacyDocumentKey
-        {
-            get { return DocumentKey; }
-        }
-
         public string DocumentTitle
         {
             get
@@ -119,13 +114,12 @@ namespace RNAssistant.OfficeHosts
                 Skill("outlook.read_mail_by_entry_id", "Read-only: Read one mail item by EntryID.", "{\"entryId\":\"\",\"maxChars\":12000}"),
                 Skill("outlook.search_mail", "Read-only: Search recent mail in the current folder by text.", "{\"query\":\"text\",\"maxItems\":100,\"maxBodyChars\":1000}"),
                 Skill("outlook.list_attachments", "Read-only: List attachments for selected mail or EntryID.", "{\"entryId\":\"\"}"),
-                Skill("outlook.create_mail_draft", "Mutates document: Create and display a new mail draft without sending it.", "{\"to\":\"person@example.com\",\"cc\":\"\",\"bcc\":\"\",\"subject\":\"Subject\",\"body\":\"Body\"}", true, true),
-                Skill("outlook.create_reply_draft", "Mutates document: Create and display a reply draft for selected mail.", "{\"body\":\"Reply body\"}", true, true),
-                Skill("outlook.draft_reply", "Mutates document: Compatibility alias for outlook.create_reply_draft; prefer outlook.create_reply_draft.", "{\"body\":\"Reply body\"}", true, true),
-                Skill("outlook.create_reply_all_draft", "Mutates document: Create and display a reply-all draft for selected mail.", "{\"body\":\"Reply body\"}", true, true),
-                Skill("outlook.create_forward_draft", "Mutates document: Create and display a forward draft for selected mail.", "{\"to\":\"person@example.com\",\"body\":\"Forward body\"}", true, true),
-                Skill("outlook.set_categories", "Mutates document: Set categories on selected mail.", "{\"categories\":\"Category A, Category B\"}", true, false),
-                Skill("outlook.mark_as_read", "Mutates document: Mark selected mail as read.", "{}", true, false),
+                Skill("outlook.create_mail_draft", "Mutates document: Create and display a new mail draft without sending it.", "{\"to\":\"person@example.com\",\"cc\":\"\",\"bcc\":\"\",\"subject\":\"Subject\",\"body\":\"Body\"}", true, true, 1),
+                Skill("outlook.create_reply_draft", "Mutates document: Create and display a reply draft for selected mail.", "{\"body\":\"Reply body\"}", true, true, 1),
+                Skill("outlook.create_reply_all_draft", "Mutates document: Create and display a reply-all draft for selected mail.", "{\"body\":\"Reply body\"}", true, true, 1),
+                Skill("outlook.create_forward_draft", "Mutates document: Create and display a forward draft for selected mail.", "{\"to\":\"person@example.com\",\"body\":\"Forward body\"}", true, true, 1),
+                Skill("outlook.set_categories", "Mutates document: Set categories on selected mail.", "{\"categories\":\"Category A, Category B\"}", true, false, 1),
+                Skill("outlook.mark_as_read", "Mutates document: Mark selected mail as read.", "{}", true, false, 1),
                 Skill("outlook.collect_folder_mail", "Read-only: Collect recent mail metadata from current folder for analysis.", "{\"maxItems\":100,\"maxBodyChars\":1000}"),
                 Skill("outlook.collect_monthly_summary_data", "Read-only: Collect current folder mail grouped by month for archive summary.", "{\"maxItems\":500,\"maxBodyChars\":500}")
             };
@@ -220,7 +214,6 @@ namespace RNAssistant.OfficeHosts
                     case "outlook.create_mail_draft":
                         return CreateMailDraft(command);
                     case "outlook.create_reply_draft":
-                    case "outlook.draft_reply":
                         return DraftReply(command);
                     case "outlook.create_reply_all_draft":
                         return DraftReplyAll(command);
@@ -674,9 +667,9 @@ namespace RNAssistant.OfficeHosts
             catch { return string.Empty; }
         }
 
-        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)
+        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0)
         {
-            return new ToolDefinition { Id = id, Host = "Outlook", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun };
+            return new ToolDefinition { Id = id, Host = "Outlook", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel };
         }
 
         private static string Trim(string text, int maxChars)

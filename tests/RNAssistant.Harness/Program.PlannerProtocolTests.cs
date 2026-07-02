@@ -12,18 +12,18 @@ namespace RNAssistant.Harness
             {
                 var message = "answer-" + index;
                 var valid = "{\"kind\":\"final\",\"intent\":\"answer\",\"message\":\"" + message + "\",\"steps\":[],\"expectedOutcome\":null}";
-                AssertTrue(parser.ParseStrict(valid).Success, "valid planner corpus " + index);
+                AssertTrue(parser.Parse(valid).Success, "valid planner corpus " + index);
 
                 var extra = valid.Substring(0, valid.Length - 1) + ",\"extra" + index + "\":true}";
-                AssertTrue(!parser.ParseStrict(extra).Success, "extra key rejected " + index);
-                AssertTrue(!parser.ParseStrict("```json\n" + valid + "\n```").Success, "fence rejected " + index);
-                AssertTrue(!parser.ParseStrict("[" + valid + "]").Success, "array rejected " + index);
+                AssertTrue(!parser.Parse(extra).Success, "extra key rejected " + index);
+                AssertTrue(!parser.Parse("```json\n" + valid + "\n```").Success, "fence rejected " + index);
+                AssertTrue(!parser.Parse("[" + valid + "]").Success, "array rejected " + index);
             }
         }
 
         private static void PlannerStrictParsesJsonEnvelope()
         {
-            var parsed = new AgentPlannerResponseParser().ParseStrict("{\"kind\":\"tool_plan\",\"intent\":\"read\",\"message\":null,\"steps\":[{\"toolId\":\"excel.get_context\",\"arguments\":{},\"reason\":\"Need context.\"}],\"expectedOutcome\":\"Read context.\"}");
+            var parsed = new AgentPlannerResponseParser().Parse("{\"kind\":\"tool_plan\",\"intent\":\"read\",\"message\":null,\"steps\":[{\"toolId\":\"excel.get_context\",\"arguments\":{},\"reason\":\"Need context.\"}],\"expectedOutcome\":\"Read context.\"}");
 
             AssertTrue(parsed.Success, "strict planner parse succeeds");
             AssertEqual(AgentResponseKinds.ToolPlan, parsed.Response.Kind, "planner kind");
@@ -32,8 +32,8 @@ namespace RNAssistant.Harness
 
         private static void PlannerStrictRejectsMarkdownAndProse()
         {
-            var fenced = new AgentPlannerResponseParser().ParseStrict("```json\n{\"kind\":\"final\",\"message\":\"Done.\",\"steps\":[]}\n```");
-            var prose = new AgentPlannerResponseParser().ParseStrict("Done.");
+            var fenced = new AgentPlannerResponseParser().Parse("```json\n{\"kind\":\"final\",\"message\":\"Done.\",\"steps\":[]}\n```");
+            var prose = new AgentPlannerResponseParser().Parse("Done.");
 
             AssertTrue(!fenced.Success, "strict parser rejects fenced json");
             AssertEqual("not_json_object", fenced.ErrorCode, "fenced error code");
@@ -81,7 +81,7 @@ namespace RNAssistant.Harness
 
         private static void ModelQualityRequiresToolRejectsFinal()
         {
-            var parsed = new AgentPlannerResponseParser().ParseStrict("{\"kind\":\"final\",\"intent\":\"answer\",\"message\":\"I can explain how to do it.\",\"steps\":[]}");
+            var parsed = new AgentPlannerResponseParser().Parse("{\"kind\":\"final\",\"intent\":\"answer\",\"message\":\"I can explain how to do it.\",\"steps\":[]}");
             var requiresTool = true;
             var qualityGateWouldFail = parsed.Success && requiresTool && parsed.Response.Kind == AgentResponseKinds.Final;
 

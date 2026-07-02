@@ -34,11 +34,6 @@ namespace RNAssistant.Office
             get { return _dispatcher.Invoke(delegate { return Inner.DocumentKey; }); }
         }
 
-        public string LegacyDocumentKey
-        {
-            get { return _dispatcher.Invoke(delegate { return Inner.LegacyDocumentKey; }); }
-        }
-
         public string RuntimeDocumentKey
         {
             get { return _dispatcher.Invoke(delegate { return Inner.RuntimeDocumentKey; }); }

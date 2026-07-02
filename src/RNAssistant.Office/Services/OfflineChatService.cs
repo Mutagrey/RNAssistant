@@ -59,7 +59,6 @@ namespace RNAssistant.Office.Services
 
             public string HostName { get { return _session.Host ?? "Office"; } }
             public string DocumentKey { get { return _session.DocumentKey ?? string.Empty; } }
-            public string LegacyDocumentKey { get { return DocumentKey; } }
             public string RuntimeDocumentKey { get { return "closed:" + DocumentKey; } }
             public string DocumentTitle { get { return _session.DocumentTitle ?? _session.Title ?? "Closed document"; } }
             public string GetDocumentSnapshot(int maxChars) { return "Document is closed. Only saved chat context is available; Office actions require opening the file."; }

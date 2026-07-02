@@ -210,6 +210,8 @@ Routing happens before Office context capture. General questions receive an empt
 In Agent mode, tools are available only when selected by the deterministic router and current phase. Level 2/3 or confirmation-required actions pause for user confirmation unless `Auto-confirm tool actions` is enabled. Confirmed tools can continue the same run.
 If a route requires a tool but filtering leaves no available tool, the runtime records a local diagnostic before calling the model.
 Agent plan activity stores routing diagnostics: route reason, selected tool ids, exclusion counts, and bounded per-tool exclusion details. Tool selection keeps mutation and inspection capabilities balanced; `Tools in one planner prompt` controls the bounded catalog size.
+Pipeline safety is resolved recursively before execution. Nested document/local mutations, risk, confirmation requirements, invalid references, and cycles cannot be hidden by incorrect top-level metadata.
+After a document mutation, only a new verification observation can complete the route; an earlier inspection does not count as verification.
 
 ## HTML Workspace
 
@@ -218,8 +220,6 @@ The HTML tab is tied to the active chat session. Agent-created HTML pages are st
 - Use `common.html_workspace_upsert_file` for `index.html`, CSS, and script files (`kind`: `html`, `css`, or `script`).
 - Use `common.html_workspace_upsert_data` for JSON data sources. Preview exposes them as `window.RNAssistantData`.
 - Use `common.html_workspace_read` to inspect the current workspace and `common.html_workspace_set_active` to choose the displayed HTML file.
-- `common.render_html` remains available only for legacy one-off chat artifacts.
-
 HTML preview and its scripts are always enabled inside a sandboxed iframe.
 
 ## Tool Library
@@ -240,6 +240,7 @@ tools/<host>/<tool-name>/
 
 `tool.json` contains metadata shown to the LLM and the task pane. `pipeline.json` can call existing built-in tools in sequence. `code.vba` is kept as editable executor/source code for VBA-backed tools.
 Tools marked `requiresConfirmation` require manual Run or the `Auto-confirm tool actions` setting.
+Tool and skill updates are written per item and atomically; unrelated hosts, unrecognized entries, and additional user files are not removed.
 
 Pipeline tools use:
 

@@ -77,6 +77,9 @@
     <Compile Include="Services\ChatCloneService.cs" />
     <Compile Include="Services\AgentRunService.cs" />
     <Compile Include="Services\AgentPlannerRuntime.cs" />
+    <Compile Include="Services\AgentRuntimeModels.cs" />
+    <Compile Include="Services\AgentExecutionRuntime.cs" />
+    <Compile Include="Services\AgentVerificationRuntime.cs" />
     <Compile Include="Services\ChatCompletionService.cs" />
     <Compile Include="Services\ChatContextWindowBuilder.cs" />
     <Compile Include="Services\ChatExecutionModeSelector.cs" />

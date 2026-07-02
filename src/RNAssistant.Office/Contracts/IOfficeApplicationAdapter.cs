@@ -8,7 +8,6 @@ namespace RNAssistant.Office
     {
         string HostName { get; }
         string DocumentKey { get; }
-        string LegacyDocumentKey { get; }
         string RuntimeDocumentKey { get; }
         string DocumentTitle { get; }
         string GetDocumentSnapshot(int maxChars);

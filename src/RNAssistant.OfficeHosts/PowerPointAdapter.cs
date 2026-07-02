@@ -57,20 +57,6 @@ namespace RNAssistant.OfficeHosts
             }
         }
 
-        public string LegacyDocumentKey
-        {
-            get
-            {
-                var presentation = ActivePresentation();
-                if (presentation == null)
-                {
-                    return "PowerPoint:NoPresentation";
-                }
-
-                return string.IsNullOrWhiteSpace(presentation.FullName) ? RuntimeDocumentKey : presentation.FullName;
-            }
-        }
-
         public string DocumentTitle
         {
             get
@@ -193,20 +179,20 @@ namespace RNAssistant.OfficeHosts
                 Skill("powerpoint.list_slides", "Read-only: List slide titles and text previews.", "{}"),
                 Skill("powerpoint.list_shapes", "Read-only: List shapes on one slide.", "{\"slideIndex\":1}"),
                 Skill("powerpoint.read_speaker_notes", "Read-only: Read speaker notes from slides.", "{\"slideIndex\":0,\"maxSlides\":20}"),
-                Skill("powerpoint.add_slide", "Mutates document: Add a text slide.", "{\"title\":\"Slide title\",\"body\":\"Slide body\"}", true, true),
-                Skill("powerpoint.replace_selection_text", "Mutates document: Replace text in the selected shape.", "{\"text\":\"Replacement text\"}", true, true),
-                Skill("powerpoint.set_speaker_notes", "Mutates document: Set speaker notes for one slide.", "{\"slideIndex\":1,\"notes\":\"Speaker notes\"}", true, true),
-                Skill("powerpoint.add_text_box", "Mutates document: Add a text box to a slide.", "{\"slideIndex\":1,\"text\":\"Text\",\"left\":60,\"top\":120,\"width\":480,\"height\":120,\"fontSize\":18}", true, true),
-                Skill("powerpoint.set_shape_text", "Mutates document: Set text for a named shape or selected shape.", "{\"slideIndex\":1,\"shapeName\":\"Title 1\",\"text\":\"Replacement text\"}", true, true),
-                Skill("powerpoint.add_picture", "Mutates document: Add a local picture file to a slide.", "{\"slideIndex\":1,\"path\":\"C:\\\\Temp\\\\image.png\",\"left\":60,\"top\":120,\"width\":320,\"height\":180}", true, true),
-                Skill("powerpoint.add_table", "Mutates document: Add a table to a slide.", "{\"slideIndex\":1,\"rows\":2,\"columns\":2,\"values\":[[\"Header\",\"Value\"],[\"A\",\"1\"]],\"left\":60,\"top\":120,\"width\":520,\"height\":160}", true, true),
-                Skill("powerpoint.duplicate_slide", "Mutates document: Duplicate one slide.", "{\"slideIndex\":1}", true, true),
-                Skill("powerpoint.move_slide", "Mutates document: Move a slide to a new position.", "{\"slideIndex\":2,\"toIndex\":1}", true, false),
+                Skill("powerpoint.add_slide", "Mutates document: Add a text slide.", "{\"title\":\"Slide title\",\"body\":\"Slide body\"}", true, true, 1),
+                Skill("powerpoint.replace_selection_text", "Mutates document: Replace text in the selected shape.", "{\"text\":\"Replacement text\"}", true, true, 2),
+                Skill("powerpoint.set_speaker_notes", "Mutates document: Set speaker notes for one slide.", "{\"slideIndex\":1,\"notes\":\"Speaker notes\"}", true, true, 1),
+                Skill("powerpoint.add_text_box", "Mutates document: Add a text box to a slide.", "{\"slideIndex\":1,\"text\":\"Text\",\"left\":60,\"top\":120,\"width\":480,\"height\":120,\"fontSize\":18}", true, true, 1),
+                Skill("powerpoint.set_shape_text", "Mutates document: Set text for a named shape or selected shape.", "{\"slideIndex\":1,\"shapeName\":\"Title 1\",\"text\":\"Replacement text\"}", true, true, 2),
+                Skill("powerpoint.add_picture", "Mutates document: Add a local picture file to a slide.", "{\"slideIndex\":1,\"path\":\"C:\\\\Temp\\\\image.png\",\"left\":60,\"top\":120,\"width\":320,\"height\":180}", true, true, 1),
+                Skill("powerpoint.add_table", "Mutates document: Add a table to a slide.", "{\"slideIndex\":1,\"rows\":2,\"columns\":2,\"values\":[[\"Header\",\"Value\"],[\"A\",\"1\"]],\"left\":60,\"top\":120,\"width\":520,\"height\":160}", true, true, 1),
+                Skill("powerpoint.duplicate_slide", "Mutates document: Duplicate one slide.", "{\"slideIndex\":1}", true, true, 1),
+                Skill("powerpoint.move_slide", "Mutates document: Move a slide to a new position.", "{\"slideIndex\":2,\"toIndex\":1}", true, false, 2),
                 Skill("powerpoint.vba_read_project", "Read-only: Read VBA project modules and source code when Trust Access to VBA project is enabled.", "{\"maxChars\":30000}"),
                 Skill("powerpoint.vba_read_module", "Read-only: Read one VBA module by name.", "{\"moduleName\":\"Module1\",\"maxChars\":30000}"),
-                Skill("powerpoint.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}", true, false),
-                Skill("powerpoint.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}", true, false),
-                Skill("powerpoint.run_macro", "Mutates document: Run a PowerPoint VBA macro by name.", "{\"macroName\":\"Module1.Test\"}", true, false)
+                Skill("powerpoint.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}", true, false, 3),
+                Skill("powerpoint.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}", true, false, 3),
+                Skill("powerpoint.run_macro", "Mutates document: Run a PowerPoint VBA macro by name.", "{\"macroName\":\"Module1.Test\"}", true, false, 3)
             };
         }
 
@@ -1077,9 +1063,9 @@ namespace RNAssistant.OfficeHosts
                 && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
-        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true)
+        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0)
         {
-            return new ToolDefinition { Id = id, Host = "PowerPoint", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun };
+            return new ToolDefinition { Id = id, Host = "PowerPoint", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel };
         }
 
         private static string Trim(string text, int maxChars)

@@ -27,6 +27,17 @@ namespace RNAssistant.Harness
             public string Name { get; set; }
             public string Category { get; set; }
             public Action Run { get; set; }
+            public Func<Task> RunAsync { get; set; }
+
+            public Task ExecuteAsync()
+            {
+                if (RunAsync != null)
+                {
+                    return RunAsync();
+                }
+                Run();
+                return Task.CompletedTask;
+            }
         }
 
         private sealed class HostTaskScenario
@@ -41,6 +52,7 @@ namespace RNAssistant.Harness
         {
             var tests = new List<HarnessTest>
             {
+                new HarnessTest { Name = "harness: native async execution", RunAsync = HarnessRunsNativeAsync },
                 new HarnessTest { Name = "planner: strict json envelope", Run = PlannerStrictParsesJsonEnvelope },
                 new HarnessTest { Name = "planner: strict rejects markdown and prose", Run = PlannerStrictRejectsMarkdownAndProse },
                 new HarnessTest { Name = "planner: rejects alternate envelopes", Run = PlannerRejectsAlternateEnvelopes },
@@ -48,7 +60,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "planner: boundary corpus stays strict", Run = PlannerBoundaryCorpusStaysStrict },
                 new HarnessTest { Name = "planner quality: requires tool rejects final", Run = ModelQualityRequiresToolRejectsFinal },
                 new HarnessTest { Name = "modes: selects chat auto and agent", Run = ModesSelectChatAutoAndAgent },
-                new HarnessTest { Name = "modes: legacy session defaults to chat", Run = LegacySessionDefaultsToChatMode },
+                new HarnessTest { Name = "modes: missing session mode defaults to chat", Run = MissingSessionModeDefaultsToChat },
                 new HarnessTest { Name = "modes: plain chat omits planner and activities", Run = PlainChatOmitsPlannerAndActivities },
                 new HarnessTest { Name = "context: deleted message absent from rebuilt prompt", Run = DeletedMessageIsAbsentFromRebuiltContext },
                 new HarnessTest { Name = "routing: required empty tool slice stops before llm", Run = RequiredEmptyToolSliceStopsBeforeLlm },
@@ -79,7 +91,6 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "attachments: rejects unsupported file", Run = AttachmentRejectsUnsupportedFile },
                 new HarnessTest { Name = "attachments: cleans stale drafts", Run = AttachmentCleansStaleDrafts },
                 new HarnessTest { Name = "chat sessions: document key migration", Run = ChatSessionServiceMigratesDocumentKey },
-                new HarnessTest { Name = "chat sessions: legacy document key migration", Run = ChatSessionServiceMigratesLegacyDocumentKey },
                 new HarnessTest { Name = "chat sessions: stale requested id fallback", Run = ChatSessionServiceFallsBackForStaleRequestedId },
                 new HarnessTest { Name = "chat sessions: empty drafts are transient", Run = EmptyChatDraftsAreNotPersisted },
                 new HarnessTest { Name = "pipeline: dry-run resolves placeholders", Run = PipelineDryRunResolvesPlaceholders },
@@ -88,15 +99,18 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "pipeline: stops after failed step", Run = PipelineStopsAfterFailedStep },
                 new HarnessTest { Name = "pipeline: rejects missing step tool id", Run = PipelineRejectsMissingStepToolId },
                 new HarnessTest { Name = "pipeline: rejects invalid definitions", Run = PipelineRejectsInvalidDefinitions },
-                new HarnessTest { Name = "pipeline: enforces nesting limit", Run = PipelineEnforcesNestingLimit },
+                new HarnessTest { Name = "pipeline: rejects cycles", Run = PipelineRejectsCycles },
+                new HarnessTest { Name = "pipeline: resolves nested confirmation before execution", Run = PipelineResolvesNestedConfirmationBeforeExecution },
+                new HarnessTest { Name = "pipeline: effective safety propagates nested risk", Run = PipelineEffectiveSafetyPropagatesNestedRisk },
                 new HarnessTest { Name = "pipeline: custom tool needs confirmation", Run = CustomPipelineNeedsConfirmation },
                 new HarnessTest { Name = "pipeline: agent mode gates built-in mutation", Run = AgentModeGatesBuiltInMutation },
                 new HarnessTest { Name = "tools: catalog merges visible tools", Run = ToolCatalogMergesVisibleTools },
                 new HarnessTest { Name = "tools: store saves and updates custom tools", Run = ToolStoreSavesAndUpdatesCustomTools },
+                new HarnessTest { Name = "tools: addressed store preserves extra files", Run = ToolStorePreservesExtraFilesAndOtherTools },
                 new HarnessTest { Name = "tools: store skips broken custom tool files", Run = ToolStoreSkipsBrokenCustomToolFiles },
                 new HarnessTest { Name = "tools: validates save and preserves metadata", Run = ValidatesToolSaveAndPreservesMetadata },
                 new HarnessTest { Name = "tools: unknown and disabled tools fail", Run = UnknownAndDisabledToolsFail },
-                new HarnessTest { Name = "tools: html artifact always available", Run = HtmlArtifactToolIsAlwaysAvailable },
+                new HarnessTest { Name = "tools: removed legacy ids are unknown", Run = RemovedLegacyToolIdsAreUnknown },
                 new HarnessTest { Name = "tools: html workspace updates chat session", Run = HtmlWorkspaceToolsUpdateChatSession },
                 new HarnessTest { Name = "tools: html workspace undo restores version", Run = HtmlWorkspaceUndoRestoresPreviousVersion },
                 new HarnessTest { Name = "storage: html workspace persists with chat", Run = HtmlWorkspacePersistsWithChatSession },
@@ -113,6 +127,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "tools: agent can save custom tools with confirmation", Run = AgentCanSaveCustomToolsWithConfirmation },
                 new HarnessTest { Name = "tools: agent validates and creates custom tool", Run = AgentValidatesAndCreatesCustomTool },
                 new HarnessTest { Name = "skills: store saves markdown skills", Run = SkillStoreSavesMarkdownSkills },
+                new HarnessTest { Name = "skills: addressed store preserves extra files", Run = SkillStorePreservesExtraFilesAndOtherSkills },
                 new HarnessTest { Name = "skills: store skips broken markdown skills", Run = SkillStoreSkipsBrokenMarkdownSkills },
                 new HarnessTest { Name = "skills: catalog selects relevant skills", Run = SkillCatalogSelectsRelevantSkills },
                 new HarnessTest { Name = "skills: prompt separates skills from tools", Run = PromptSeparatesSkillsFromTools },
@@ -133,7 +148,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "chat: general answer skips Office reads and tools", Run = ChatGeneralAnswerSkipsOfficeReadsAndTools },
                 new HarnessTest { Name = "chat: routing avoids substring false positives", Run = ChatRoutingAvoidsSubstringFalsePositives },
                 new HarnessTest { Name = "chat: current document question uses read tool", Run = ChatCurrentDocumentQuestionUsesReadTool },
-                new HarnessTest { Name = "chat: legacy greeting requires strict repair", Run = ChatLegacyGreetingRequiresStrictRepair },
+                new HarnessTest { Name = "chat: prose greeting requires strict repair", Run = ChatProseGreetingRequiresStrictRepair },
                 new HarnessTest { Name = "chat: stateful Excel scenario verifies result", Run = ChatExcelStatefulScenarioVerifiesResult },
                 new HarnessTest { Name = "chat: scenario llm checks prompt contracts", Run = ChatScenarioLlmChecksPromptContracts },
                 new HarnessTest { Name = "chat: agent activity transcript", Run = AgentTranscriptCreatesActivityTree },
@@ -149,6 +164,9 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "chat: adapter exception requires successful retry", Run = ChatAdapterExceptionRequiresSuccessfulRetry },
                 new HarnessTest { Name = "chat: inspection does not satisfy mutation", Run = ChatInspectionDoesNotSatisfyMutationRoute },
                 new HarnessTest { Name = "chat: mutation asks for verification", Run = ChatMutationRequestsVerificationFollowUp },
+                new HarnessTest { Name = "chat: unavailable verification fails closed", Run = ChatUnavailableVerificationFailsClosed },
+                new HarnessTest { Name = "chat: failed verification recovers", Run = ChatFailedVerificationRecovers },
+                new HarnessTest { Name = "chat: prior inspection does not verify mutation", Run = ChatPriorInspectionDoesNotVerifyMutation },
                 new HarnessTest { Name = "chat: waiting tool gets pending id", Run = ChatWaitingToolGetsPendingId },
                 new HarnessTest { Name = "chat: waiting tool stops batch", Run = ChatWaitingToolStopsBatch },
                 new HarnessTest { Name = "chat: confirmed pending tool continues", Run = ChatConfirmedPendingToolContinuesAfterManualRun },
@@ -180,7 +198,31 @@ namespace RNAssistant.Harness
             {
                 test.Category = CategoryFromName(test.Name);
             }
-            var filter = args == null || args.Length == 0 ? string.Empty : string.Join(" ", args).Trim();
+            var duplicates = tests
+                .GroupBy(test => test.Name, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() > 1)
+                .Select(group => group.Key)
+                .ToArray();
+            if (duplicates.Length > 0)
+            {
+                Console.WriteLine("Duplicate test names: " + string.Join(", ", duplicates));
+                return 2;
+            }
+
+            var arguments = (args ?? new string[0])
+                .Where(value => !string.IsNullOrWhiteSpace(value) && value != "--")
+                .ToArray();
+            if (arguments.Any(value => string.Equals(value, "--list", StringComparison.OrdinalIgnoreCase) ||
+                                       string.Equals(value, "list", StringComparison.OrdinalIgnoreCase)))
+            {
+                foreach (var test in tests.OrderBy(test => test.Category).ThenBy(test => test.Name))
+                {
+                    Console.WriteLine(test.Category + "\t" + test.Name);
+                }
+                return 0;
+            }
+
+            var filter = arguments.Length == 0 ? string.Empty : string.Join(" ", arguments).Trim();
             var selected = string.IsNullOrWhiteSpace(filter)
                 ? tests
                 : tests.Where(test =>
@@ -197,7 +239,7 @@ namespace RNAssistant.Harness
             {
                 try
                 {
-                    test.Run();
+                    test.ExecuteAsync().GetAwaiter().GetResult();
                     Console.WriteLine("PASS " + test.Name);
                 }
                 catch (Exception ex)
@@ -215,7 +257,11 @@ namespace RNAssistant.Harness
         {
             var separator = (name ?? string.Empty).IndexOf(':');
             var prefix = separator <= 0 ? "other" : name.Substring(0, separator).Trim().ToLowerInvariant();
-            if (prefix == "chat" || prefix == "planner" || prefix == "prompt")
+            if (prefix == "chat sessions")
+            {
+                return "storage";
+            }
+            if (prefix == "chat" || prefix.StartsWith("planner", StringComparison.Ordinal) || prefix == "prompt")
             {
                 return "agent-loop";
             }
@@ -223,11 +269,17 @@ namespace RNAssistant.Harness
             {
                 return "tools-safety";
             }
-            if (prefix == "storage" || prefix == "attachments" || prefix == "chat sessions")
+            if (prefix == "storage" || prefix == "attachments")
             {
                 return "storage";
             }
             return prefix;
+        }
+
+        private static async Task HarnessRunsNativeAsync()
+        {
+            await Task.Yield();
+            AssertTrue(true, "native async harness execution");
         }
 
     }

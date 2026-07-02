@@ -44,7 +44,6 @@ namespace RNAssistant.Office.Services
             var host = _adapter.HostName;
             var documentKey = _adapter.DocumentKey;
             var runtimeKey = _adapter.RuntimeDocumentKey;
-            var legacyDocumentKey = _adapter.LegacyDocumentKey;
             var title = _adapter.DocumentTitle;
 
             if (!string.IsNullOrWhiteSpace(_activeSessionId) &&
@@ -74,8 +73,6 @@ namespace RNAssistant.Office.Services
                 _activeDocumentKey = documentKey;
                 _activeRuntimeDocumentKey = runtimeKey;
             }
-
-            MigrateLegacyDocument(host, legacyDocumentKey, documentKey, title);
 
             ChatSession session = null;
             if (!string.IsNullOrWhiteSpace(requestedSessionId))
@@ -119,22 +116,6 @@ namespace RNAssistant.Office.Services
             SetActiveSession(session);
             UpdateCurrentDocumentMetadata(session);
             return session;
-        }
-
-        private void MigrateLegacyDocument(string host, string legacyDocumentKey, string documentKey, string title)
-        {
-            if (string.IsNullOrWhiteSpace(legacyDocumentKey) ||
-                string.Equals(legacyDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            if (_chatStore.List(host, legacyDocumentKey, title).Count == 0)
-            {
-                return;
-            }
-
-            _chatStore.MoveDocument(host, legacyDocumentKey, host, documentKey, title);
         }
 
         public ChatSession CreateChat(string title)
