@@ -19,7 +19,8 @@ namespace RNAssistant.Office.Services
 
             var route = new OfficeIntentRouter().Route(
                 text,
-                new OfficeSnapshot { Host = string.IsNullOrWhiteSpace(host) ? "Office" : host });
+                new OfficeSnapshot { Host = string.IsNullOrWhiteSpace(host) ? "Office" : host },
+                session);
             return route.RequiresTool ? ChatModes.Agent : ChatModes.Chat;
         }
     }

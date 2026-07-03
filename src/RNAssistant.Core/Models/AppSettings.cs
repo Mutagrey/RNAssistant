@@ -30,12 +30,13 @@ namespace RNAssistant.Core.Models
             ToolRoutingPrompt =
                 "Use only exact tool ids from AVAILABLE_TOOLS. Never invent workbook, sheet, range, slide, email, or document content.\n" +
                 "Call a read tool only when the request depends on current Office content or ROUTE requires inspection. Do not inspect Office for general questions.\n" +
+                "Return exactly one action for document mutation or VBA. You may batch only independent read-only actions within the limits stated in ROUTE.\n" +
                 "A mutation with an explicit target and complete arguments does not need a preliminary read unless ROUTE requires inspection.\n" +
                 "Inspect unknown targets before mutation. Use read-only tools first when sheet, range, slide, selection, mail, or document location is unclear.\n" +
                 "After tool results, return kind=final if complete; otherwise return the next tool_plan.\n" +
                 "If no available tool can satisfy the request, say exactly what is missing.\n" +
                 "For Excel chart-in-chat requests, prefer excel.create_chat_chart. Use excel.add_chart only to insert a chart into the workbook.\n" +
-                "For HTML UI/report/page requests, use common.html_workspace_upsert_file with kind html, css, or script, and common.html_workspace_upsert_data so the HTML tab can edit and preview the result. Build default HTML workspace pages as full-page layouts that use the available preview viewport: body margin 0, no narrow centered card wrapper unless the user asks for a card, and responsive sections that fill the page width. For changes to an existing HTML page, read common.html_workspace_read first, then update only the needed file or data source. Do not create inline chat HTML artifacts for pages that should stay editable.\n" +
+                "For HTML UI/report/page requests, use common.html_workspace_upsert_file with kind html, css, or script, and common.html_workspace_upsert_data so the HTML tab can edit and preview the result. Use common.html_workspace_delete_file or common.html_workspace_delete_data when the user asks to remove workspace items. Build default HTML workspace pages as full-page layouts that use the available preview viewport: body margin 0, no narrow centered card wrapper unless the user asks for a card, and responsive sections that fill the page width. For changes to an existing HTML page, read common.html_workspace_read first, then update only the needed file or data source. Do not create inline chat HTML artifacts for pages that should stay editable.\n" +
                 "After any document or VBA mutation, the runtime runs deterministic read-only verification before the final answer.\n" +
                 "For VBA edits, prefer the host vba_apply_patch tool for small patches; use vba_replace_module only for whole-module replacement.\n" +
                 "Use VBA only when built-in tools cannot solve the task cleanly or when the user specifically asks for macros/VBA.\n" +
@@ -71,6 +72,8 @@ namespace RNAssistant.Core.Models
         public int MaxAgentIterations { get; set; }
         public int MaxAgentToolSteps { get; set; }
         public int MaxAgentToolsPerRequest { get; set; }
+        public int MaxAgentPlanSteps { get; set; }
+        public int MaxAgentReadOnlyPlanSteps { get; set; }
         public bool? RequireVerificationForMutations { get; set; }
         public bool? AutoContinueAfterConfirmation { get; set; }
         public AgentPromptSettings AgentPrompts { get; set; }
@@ -102,6 +105,8 @@ namespace RNAssistant.Core.Models
             MaxAgentIterations = 8;
             MaxAgentToolSteps = 40;
             MaxAgentToolsPerRequest = 24;
+            MaxAgentPlanSteps = 1;
+            MaxAgentReadOnlyPlanSteps = 4;
             RequireVerificationForMutations = true;
             AutoContinueAfterConfirmation = true;
             AgentPrompts = new AgentPromptSettings();

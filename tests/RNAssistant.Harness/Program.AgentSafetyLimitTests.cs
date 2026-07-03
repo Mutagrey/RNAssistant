@@ -54,7 +54,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void ChatWaitingToolStopsBatch()
+        private static void ChatWaitingToolStopsRun()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -63,9 +63,7 @@ namespace RNAssistant.Harness
                     adapter,
                     executor,
                     null,
-                    AgentBlock(
-                        Command("word.vba_replace_module", "moduleName", "Module1", "code", "Sub Test()\nEnd Sub"),
-                        Command("word.vba_read_module", "moduleName", "Module1")));
+                    AgentBlock(Command("word.vba_replace_module", "moduleName", "Module1", "code", "Sub Test()\nEnd Sub")));
                 var session = NewSession(adapter);
 
                 var result = service.ExecuteAsync(
@@ -85,7 +83,10 @@ namespace RNAssistant.Harness
                 AssertEqual(1, pendingIds.Count, "pending count");
                 AssertEqual(1, result.ToolResults.Count, "tool result count");
                 AssertContains(JsonConvert.SerializeObject(result.ToolResults), "word.vba_replace_module", "first tool logged");
-                AssertTrue(JsonConvert.SerializeObject(result.ToolResults).IndexOf("word.insert_text", StringComparison.OrdinalIgnoreCase) < 0, "second tool skipped");
+                AssertEqual(1, session.Messages.Count(message =>
+                    message != null &&
+                    message.Activity != null &&
+                    string.Equals(message.Activity.PendingId, "pending-1", StringComparison.OrdinalIgnoreCase)), "one pending activity");
             });
         }
 
@@ -140,6 +141,126 @@ namespace RNAssistant.Harness
                 AssertEqual(1, adapter.Executed.Count, "adapter execution count");
                 AssertContains(result.AssistantText, "tool error", "step limit summary");
                 AssertTrue(ContainsMessage(session.Messages, "Agent tool step limit exceeded"), "step limit transcript");
+            });
+        }
+
+        private static void PlannerBatchAllowsBoundedReadOnlyActions()
+        {
+            var commands = new List<ToolCommand>
+            {
+                Command("excel.get_context"),
+                Command("excel.get_selection")
+            };
+            var tools = new List<ToolDefinition>
+            {
+                new ToolDefinition { Id = "excel.get_context", BuiltIn = true, AgentCanRun = true },
+                new ToolDefinition { Id = "excel.get_selection", BuiltIn = true, AgentCanRun = true }
+            };
+            var error = PlannerBatchPolicy.Validate(
+                commands,
+                tools,
+                new RoutedTask { TaskType = "read" },
+                new AppSettings { MaxAgentPlanSteps = 1, MaxAgentReadOnlyPlanSteps = 2 });
+
+            AssertEqual(null, error, "bounded read-only batch");
+        }
+
+        private static void PlannerBatchRejectsExcessReadOnlyActions()
+        {
+            var commands = new List<ToolCommand>
+            {
+                Command("excel.get_context"),
+                Command("excel.get_selection"),
+                Command("excel.list_sheets")
+            };
+            var tools = commands.Select(command => new ToolDefinition
+            {
+                Id = command.ToolId,
+                BuiltIn = true,
+                AgentCanRun = true
+            }).ToList();
+            var error = PlannerBatchPolicy.Validate(
+                commands,
+                tools,
+                new RoutedTask { TaskType = "read" },
+                new AppSettings { MaxAgentReadOnlyPlanSteps = 2 });
+
+            AssertContains(error, "limit of 2", "read-only batch limit");
+        }
+
+        private static void PlannerBatchRejectsMultipleMutationsAndVbaActions()
+        {
+            var mutationCommands = new List<ToolCommand>
+            {
+                Command("excel.write_range"),
+                Command("excel.add_sheet")
+            };
+            var mutationTools = mutationCommands.Select(command => new ToolDefinition
+            {
+                Id = command.ToolId,
+                BuiltIn = true,
+                AgentCanRun = true,
+                MutatesDocument = true
+            }).ToList();
+            var mutationError = PlannerBatchPolicy.Validate(
+                mutationCommands,
+                mutationTools,
+                new RoutedTask { TaskType = "content" },
+                new AppSettings { MaxAgentPlanSteps = 8, MaxAgentReadOnlyPlanSteps = 16 });
+
+            var vbaCommands = new List<ToolCommand>
+            {
+                Command("excel.vba_read_project"),
+                Command("excel.vba_read_module")
+            };
+            var vbaTools = vbaCommands.Select(command => new ToolDefinition
+            {
+                Id = command.ToolId,
+                BuiltIn = true,
+                AgentCanRun = true
+            }).ToList();
+            var vbaError = PlannerBatchPolicy.Validate(
+                vbaCommands,
+                vbaTools,
+                new RoutedTask { TaskType = "vba" },
+                new AppSettings { MaxAgentPlanSteps = 8, MaxAgentReadOnlyPlanSteps = 16 });
+
+            AssertContains(mutationError, "exactly one action", "mutation batch rejected");
+            AssertContains(vbaError, "exactly one action", "vba batch rejected");
+        }
+
+        private static void RejectedMutationBatchIsReplanned()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    AgentBlock(
+                        Command("excel.add_sheet", "name", "Report"),
+                        Command("excel.add_chart", "sheet", "Report", "sourceRange", "A1:B2")),
+                    AgentBlock(Command("excel.add_sheet", "name", "Report")),
+                    FinalBlock("Done."));
+
+                var result = service.ExecuteAsync(
+                    "Create a report sheet.",
+                    NewSession(adapter),
+                    NewContext(adapter),
+                    new AppSettings
+                    {
+                        AutoConfirmToolActions = true,
+                        ContextCharLimit = 8000,
+                        RequireVerificationForMutations = false
+                    },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Done.", result.AssistantText, "replanned final answer");
+                AssertEqual(1, adapter.Executed.Count, "only corrected action executed");
+                AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "corrected action");
+                AssertContains(FlattenMessages(calls[1]), "Document mutation plans may contain exactly one action", "batch rejection observation");
             });
         }
 

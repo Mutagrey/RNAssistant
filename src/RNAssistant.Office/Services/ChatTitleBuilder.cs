@@ -110,6 +110,8 @@ namespace RNAssistant.Office.Services
                 MaxAgentIterations = source.MaxAgentIterations,
                 MaxAgentToolSteps = source.MaxAgentToolSteps,
                 MaxAgentToolsPerRequest = source.MaxAgentToolsPerRequest,
+                MaxAgentPlanSteps = source.MaxAgentPlanSteps,
+                MaxAgentReadOnlyPlanSteps = source.MaxAgentReadOnlyPlanSteps,
                 RequireVerificationForMutations = source.RequireVerificationForMutations,
                 AutoContinueAfterConfirmation = source.AutoContinueAfterConfirmation,
                 AgentPrompts = source.AgentPrompts,

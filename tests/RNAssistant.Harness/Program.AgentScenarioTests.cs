@@ -26,15 +26,20 @@ namespace RNAssistant.Harness
                 };
                 var llm = new ScenarioLlm()
                     .Add(
-                        AgentBlock(
-                            Command("excel.add_sheet", "name", "Report"),
-                            Command("excel.write_table", "sheet", "Report", "startAddress", "A1", "values", "[[\"Month\",\"Sales\"],[\"Jan\",10]]"),
-                            Command("excel.add_chart", "sheet", "Report", "sourceRange", "A1:B2", "chartType", "column", "title", "Sales Chart")),
+                        AgentBlock(Command("excel.add_sheet", "name", "Report")),
                         "RNAssistant Office Action Planner",
                         "ROUTE:",
                         "excel.add_sheet",
                         "Reporting Guard",
                         "User-added context")
+                    .Add(
+                        AgentBlock(Command("excel.write_table", "sheet", "Report", "startAddress", "A1", "values", "[[\"Month\",\"Sales\"],[\"Jan\",10]]")),
+                        "OBSERVATIONS",
+                        "excel.add_sheet succeeded")
+                    .Add(
+                        AgentBlock(Command("excel.add_chart", "sheet", "Report", "sourceRange", "A1:B2", "chartType", "column", "title", "Sales Chart")),
+                        "OBSERVATIONS",
+                        "excel.write_table succeeded")
                     .Add(
                         AgentBlock(
                             Command("excel.list_sheets"),

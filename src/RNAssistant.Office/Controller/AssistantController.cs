@@ -578,6 +578,8 @@ namespace RNAssistant.Office
         {
             return string.Equals(toolId, HtmlArtifactToolExecutor.UpsertFileToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlArtifactToolExecutor.UpsertDataToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, HtmlArtifactToolExecutor.DeleteFileToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, HtmlArtifactToolExecutor.DeleteDataToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlArtifactToolExecutor.SetActiveToolId, StringComparison.OrdinalIgnoreCase);
         }
     }

@@ -221,6 +221,18 @@ namespace RNAssistant.Office.WebView
                             htmlData.Name,
                             htmlData.Json);
                         break;
+                    case "deleteHtmlWorkspaceFile":
+                        var deleteHtmlFile = Payload<HtmlWorkspaceDeleteFilePayload>(payload);
+                        responsePayload = _controller.DeleteHtmlWorkspaceFile(
+                            deleteHtmlFile.ChatId,
+                            deleteHtmlFile.Path);
+                        break;
+                    case "deleteHtmlWorkspaceData":
+                        var deleteHtmlData = Payload<HtmlWorkspaceDeleteDataPayload>(payload);
+                        responsePayload = _controller.DeleteHtmlWorkspaceData(
+                            deleteHtmlData.ChatId,
+                            deleteHtmlData.Name);
+                        break;
                     case "setActiveHtmlWorkspaceFile":
                         var htmlActive = Payload<HtmlWorkspaceActiveFilePayload>(payload);
                         responsePayload = _controller.SetActiveHtmlWorkspaceFile(

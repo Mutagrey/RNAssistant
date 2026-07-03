@@ -369,6 +369,27 @@ namespace RNAssistant.Harness
             AssertContains(controller.LastModuleCode, "Sub Main", "module code");
         }
 
+        private static void BridgeUsesTypedHtmlWorkspaceDeletePayloads()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
+            var fileResponse = bridge.HandleMessageAsync(
+                "{\"id\":\"html1\",\"type\":\"deleteHtmlWorkspaceFile\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-html\",\"path\":\"scripts/app.js\"}}")
+                .GetAwaiter()
+                .GetResult();
+            var dataResponse = bridge.HandleMessageAsync(
+                "{\"id\":\"html2\",\"type\":\"deleteHtmlWorkspaceData\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-html\",\"name\":\"sales\"}}")
+                .GetAwaiter()
+                .GetResult();
+
+            AssertTrue(JObject.Parse(fileResponse)["ok"].Value<bool>(), "html file delete bridge response ok");
+            AssertTrue(JObject.Parse(dataResponse)["ok"].Value<bool>(), "html data delete bridge response ok");
+            AssertEqual("chat-html", controller.LastChatId, "html delete chat id");
+            AssertEqual("scripts/app.js", controller.LastHtmlPath, "html delete file path");
+            AssertEqual("sales", controller.LastHtmlDataName, "html delete data name");
+        }
+
         private static string BridgeToken(AssistantWebBridge bridge)
         {
             var initJson = bridge.HandleMessageAsync("{\"id\":\"init\",\"type\":\"init\",\"payload\":{}}")

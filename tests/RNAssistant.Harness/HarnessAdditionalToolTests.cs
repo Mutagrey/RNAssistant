@@ -219,6 +219,20 @@ namespace RNAssistant.Harness
                 AssertContains(readResult.DataJson, "rnassistant.htmlWorkspace", "workspace result type");
                 AssertContains(readResult.DataJson, "items", "workspace data included");
 
+                var deleteScript = new ToolCommand { ToolId = "common.html_workspace_delete_file" };
+                deleteScript.Arguments["path"] = "app.js";
+                var deleteScriptResult = executor.Execute(deleteScript, tools, new AppSettings(), false, false, session);
+                AssertTrue(deleteScriptResult.Success, "html workspace file delete succeeds");
+                AssertEqual(1, session.HtmlWorkspace.Files.Count, "html script deleted");
+
+                var deleteData = new ToolCommand { ToolId = "common.html_workspace_delete_data" };
+                deleteData.Arguments["name"] = "rows";
+                var deleteDataResult = executor.Execute(deleteData, tools, new AppSettings(), false, false, session);
+                AssertTrue(deleteDataResult.Success, "html workspace data delete succeeds");
+                AssertEqual(0, session.HtmlWorkspace.DataSources.Count, "html data deleted");
+                HtmlArtifactToolExecutor.RestoreSnapshot(session, session.HtmlWorkspace.History[0].Id);
+                AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "html data delete can be undone");
+
                 var invalidData = new ToolCommand { ToolId = "common.html_workspace_upsert_data" };
                 invalidData.Arguments["name"] = "bad";
                 invalidData.Arguments["json"] = "{ bad";
@@ -281,10 +295,9 @@ namespace RNAssistant.Harness
                     adapter,
                     executor,
                     calls,
-                    AgentBlock(
-                        Command("common.html_workspace_upsert_data", "name", "sales", "json", "{\"rows\":[{\"month\":\"Jan\",\"sales\":120}]}"),
-                        Command("common.html_workspace_upsert_file", "path", "app.js", "kind", "script", "content", "window.rows=window.RNAssistantData.sales.rows;", "setActive", false),
-                        Command("common.html_workspace_upsert_file", "path", "index.html", "kind", "html", "content", "<!doctype html><html><head><script>window.rows=window.RNAssistantData.sales.rows;</script></head><body><h1>Sales</h1></body></html>", "setActive", true)),
+                    AgentBlock(Command("common.html_workspace_upsert_data", "name", "sales", "json", "{\"rows\":[{\"month\":\"Jan\",\"sales\":120}]}")),
+                    AgentBlock(Command("common.html_workspace_upsert_file", "path", "app.js", "kind", "script", "content", "window.rows=window.RNAssistantData.sales.rows;", "setActive", false)),
+                    AgentBlock(Command("common.html_workspace_upsert_file", "path", "index.html", "kind", "html", "content", "<!doctype html><html><head><script>window.rows=window.RNAssistantData.sales.rows;</script></head><body><h1>Sales</h1></body></html>", "setActive", true)),
                     "Готово.");
                 var session = NewSession(adapter);
 
@@ -329,6 +342,129 @@ namespace RNAssistant.Harness
                 AssertContains(prompt, "common.html_workspace_upsert_file", "html mode exposes workspace file tool");
                 AssertContains(prompt, "common.html_workspace_upsert_data", "html mode exposes data tool");
                 AssertTrue(prompt.IndexOf("common.render_html", StringComparison.OrdinalIgnoreCase) < 0, "html mode prompt omits removed inline render tool");
+            });
+        }
+
+        private static void ChatHtmlWorkspaceKeepsGenericFollowUpRoute()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    AgentBlock(Command("common.html_workspace_read")),
+                    AgentBlock(Command(
+                        "common.html_workspace_upsert_file",
+                        "path", "app.js",
+                        "kind", "script",
+                        "content", "window.chartReady=true;",
+                        "setActive", false)),
+                    "Готово.");
+                var session = NewSession(adapter);
+                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "<main>Chart</main>", true);
+                var officeRoute = new OfficeIntentRouter().Route(
+                    "Добавь новый лист Excel.",
+                    new OfficeSnapshot { Host = "Excel" },
+                    session);
+                AssertTrue(officeRoute.TaskType != "html", "explicit Office target does not inherit html route");
+
+                var result = service.ExecuteAsync(
+                    "Никаких внешних зависимостей. Сделай, чтобы локально работало.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings
+                    {
+                        ContextCharLimit = 8000,
+                        MaxAgentToolsPerRequest = 8,
+                        RequireVerificationForMutations = false
+                    },
+                    new List<ToolDefinition>(executor.GetControllerTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Готово.", result.AssistantText, "html follow-up final answer");
+                AssertContains(FlattenMessages(calls[0]), "taskType: html", "existing workspace keeps html route");
+                AssertContains(FlattenMessages(calls[0]), "requiresInspection: true", "existing workspace requires inspection");
+                AssertContains(FlattenMessages(calls[0]), "common.html_workspace_upsert_file", "html file tool retained");
+                AssertEqual(3, calls.Count, "html follow-up reads before mutation");
+                AssertTrue(session.HtmlWorkspace.Files.Exists(file => file.Path == "app.js"), "html follow-up updates workspace");
+            });
+        }
+
+        private static void ChatLargeMalformedHtmlPlannerResponseIsRebuilt()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var longContent = new string('x', 2500);
+                var malformed =
+                    "{\"kind\":\"tool_plan\",\"intent\":\"mutate\",\"message\":null,\"steps\":[{" +
+                    "\"toolId\":\"common.html_workspace_upsert_file\",\"arguments\":{\"path\":\"index.html\",\"kind\":\"html\",\"content\":\"" +
+                    longContent +
+                    "\"}],\"expectedOutcome\":\"Ready\"}";
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    RawResponse(malformed),
+                    AgentBlock(Command(
+                        "common.html_workspace_upsert_file",
+                        "path", "index.html",
+                        "kind", "html",
+                        "content", "<main>Local chart</main>",
+                        "setActive", true)),
+                    "Готово.");
+                var session = NewSession(adapter);
+                session.HtmlModeEnabled = true;
+
+                var result = service.ExecuteAsync(
+                    "Сделай локальный HTML-график.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000, RequireVerificationForMutations = false },
+                    new List<ToolDefinition>(executor.GetControllerTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Готово.", result.AssistantText, "malformed html response repaired");
+                AssertEqual(3, calls.Count, "repair and final call count");
+                AssertTrue(
+                    FlattenMessages(calls[1]).IndexOf(new string('x', 64), StringComparison.Ordinal) < 0,
+                    "large malformed body omitted from repair prompt");
+                AssertContains(FlattenMessages(calls[1]), "one content-bearing workspace upsert step", "repair asks for bounded html step");
+            });
+        }
+
+        private static void ChatHtmlDeleteRequiresReadBeforeMutation()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    AgentBlock(Command("common.html_workspace_delete_file", "path", "app.js")),
+                    AgentBlock(Command("common.html_workspace_read")),
+                    AgentBlock(Command("common.html_workspace_delete_file", "path", "app.js")),
+                    "Готово.");
+                var session = NewSession(adapter);
+                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "<main>Chart</main>", true);
+                HtmlArtifactToolExecutor.UpsertFile(session, "app.js", "script", "window.ready=true;", false);
+
+                var result = service.ExecuteAsync(
+                    "Удалить app.js из HTML workspace.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { ContextCharLimit = 8000, RequireVerificationForMutations = false },
+                    new List<ToolDefinition>(executor.GetControllerTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Готово.", result.AssistantText, "html delete final answer");
+                AssertEqual(4, calls.Count, "html delete retries after required read");
+                AssertContains(FlattenMessages(calls[1]), "Target must be inspected before mutation", "delete before read is rejected");
+                AssertTrue(!session.HtmlWorkspace.Files.Exists(file => file.Path == "app.js"), "agent deletes html file after read");
+                AssertTrue(session.HtmlWorkspace.History.Count > 0, "agent delete remains undoable");
             });
         }
 

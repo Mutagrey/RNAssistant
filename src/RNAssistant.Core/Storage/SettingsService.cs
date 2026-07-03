@@ -156,6 +156,16 @@ namespace RNAssistant.Core.Storage
                 settings.MaxAgentToolsPerRequest = defaults.MaxAgentToolsPerRequest;
             }
             settings.MaxAgentToolsPerRequest = Math.Max(8, Math.Min(64, settings.MaxAgentToolsPerRequest));
+            if (settings.MaxAgentPlanSteps <= 0)
+            {
+                settings.MaxAgentPlanSteps = defaults.MaxAgentPlanSteps;
+            }
+            settings.MaxAgentPlanSteps = Math.Max(1, Math.Min(8, settings.MaxAgentPlanSteps));
+            if (settings.MaxAgentReadOnlyPlanSteps <= 0)
+            {
+                settings.MaxAgentReadOnlyPlanSteps = defaults.MaxAgentReadOnlyPlanSteps;
+            }
+            settings.MaxAgentReadOnlyPlanSteps = Math.Max(1, Math.Min(16, settings.MaxAgentReadOnlyPlanSteps));
             return settings;
         }
 

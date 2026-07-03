@@ -37,6 +37,8 @@ function renderSettings() {
   $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || 8;
   $("maxAgentToolStepsInput").value = s.MaxAgentToolSteps || s.maxAgentToolSteps || 40;
   $("maxAgentToolsPerRequestInput").value = s.MaxAgentToolsPerRequest || s.maxAgentToolsPerRequest || 24;
+  $("maxAgentPlanStepsInput").value = s.MaxAgentPlanSteps || s.maxAgentPlanSteps || 1;
+  $("maxAgentReadOnlyPlanStepsInput").value = s.MaxAgentReadOnlyPlanSteps || s.maxAgentReadOnlyPlanSteps || 4;
   $("vbaContextLimitInput").value = s.VbaContextCharLimit || s.vbaContextCharLimit || 30000;
   if (typeof renderPromptSettings === "function") {
     renderPromptSettings(s);
@@ -74,6 +76,8 @@ function readSettings() {
     MaxAgentIterations: Number($("maxAgentIterationsInput").value || 8),
     MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || 40),
     MaxAgentToolsPerRequest: Number($("maxAgentToolsPerRequestInput").value || 24),
+    MaxAgentPlanSteps: Number($("maxAgentPlanStepsInput").value || 1),
+    MaxAgentReadOnlyPlanSteps: Number($("maxAgentReadOnlyPlanStepsInput").value || 4),
     VbaContextCharLimit: Number($("vbaContextLimitInput").value || 30000),
     SystemPrompt: promptSettings.SystemPrompt,
     ChatSystemPrompt: promptSettings.ChatSystemPrompt,

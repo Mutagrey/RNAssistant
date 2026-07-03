@@ -29,6 +29,22 @@ namespace RNAssistant.Office
             return HtmlWorkspaceState(session);
         }
 
+        public HtmlWorkspaceResponse DeleteHtmlWorkspaceFile(string chatId, string path)
+        {
+            var session = LoadSession(chatId);
+            HtmlArtifactToolExecutor.DeleteFile(session, path);
+            SaveSessionChanges(session);
+            return HtmlWorkspaceState(session);
+        }
+
+        public HtmlWorkspaceResponse DeleteHtmlWorkspaceData(string chatId, string name)
+        {
+            var session = LoadSession(chatId);
+            HtmlArtifactToolExecutor.DeleteDataSource(session, name);
+            SaveSessionChanges(session);
+            return HtmlWorkspaceState(session);
+        }
+
         public HtmlWorkspaceResponse SetActiveHtmlWorkspaceFile(string chatId, string path)
         {
             var session = LoadSession(chatId);

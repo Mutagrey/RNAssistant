@@ -11,6 +11,25 @@ namespace RNAssistant.Office.Services
 {
     internal sealed class OfficeIntentRouter
     {
+        public RoutedTask Route(string userText, OfficeSnapshot snapshot, ChatSession session)
+        {
+            var route = Route(userText, snapshot);
+            if (ShouldContinueHtmlWorkspace(userText, route, session))
+            {
+                var existingWorkspace = HasHtmlWorkspaceContent(session);
+                route.Mode = "mutate_html";
+                route.TaskType = "html";
+                route.Phase = AgentPhases.Mutation;
+                route.RiskAllowed = 1;
+                route.RequiresTool = true;
+                route.RequiresInspection = existingWorkspace;
+                route.DecisionReason = session != null && session.HtmlModeEnabled
+                    ? "html_mode"
+                    : "html_workspace_follow_up";
+            }
+            return route;
+        }
+
         public RoutedTask Route(string userText, OfficeSnapshot snapshot)
         {
             var host = FirstNonEmpty(snapshot == null ? null : snapshot.Host, "Office");
@@ -155,6 +174,58 @@ namespace RNAssistant.Office.Services
             }
 
             return route;
+        }
+
+        private static bool HasHtmlWorkspaceContent(ChatSession session)
+        {
+            return session != null &&
+                session.HtmlWorkspace != null &&
+                ((session.HtmlWorkspace.Files != null && session.HtmlWorkspace.Files.Count > 0) ||
+                 (session.HtmlWorkspace.DataSources != null && session.HtmlWorkspace.DataSources.Count > 0));
+        }
+
+        private static bool ShouldContinueHtmlWorkspace(string userText, RoutedTask route, ChatSession session)
+        {
+            if (session == null)
+            {
+                return false;
+            }
+            if (session.HtmlModeEnabled)
+            {
+                return true;
+            }
+            if (!HasHtmlWorkspaceContent(session))
+            {
+                return false;
+            }
+            if (route != null && string.Equals(route.TaskType, "html", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var value = (userText ?? string.Empty).ToLowerInvariant();
+            if (ContainsAny(value, "лист", "ячейк", "диапазон", "книг", "документ", "слайд", "письм") ||
+                ContainsAnyToken(
+                    value,
+                    "excel", "word", "powerpoint", "outlook", "vba",
+                    "workbook", "worksheet", "sheet", "range", "document", "slide", "email"))
+            {
+                return false;
+            }
+
+            var routedWorkspaceChange =
+                route != null &&
+                route.RequiresTool &&
+                (string.Equals(route.TaskType, "content", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(route.TaskType, "formatting", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(route.TaskType, "chart", StringComparison.OrdinalIgnoreCase));
+            var explicitWorkspaceEdit = ContainsAny(
+                    value,
+                    "html", "workspace", "файл", "источник данных", "data source",
+                    "зависим", "локальн", "цвет", "легенд", "анимац", "подсказ", "ползунк", "кноп",
+                    "стил", "макет", "адаптив", "dependency", "local", "color", "legend", "animation",
+                    "tooltip", "slider", "button", "layout", "responsive");
+            return routedWorkspaceChange || explicitWorkspaceEdit;
         }
 
         private static bool ContainsAny(string value, params string[] terms)
@@ -618,10 +689,18 @@ namespace RNAssistant.Office.Services
             builder.AppendLine("phase: " + (route == null ? string.Empty : route.Phase));
             builder.AppendLine("requiresTool: " + (route != null && route.RequiresTool ? "true" : "false"));
             builder.AppendLine("requiresInspection: " + (route != null && route.RequiresInspection ? "true" : "false"));
+            builder.AppendLine("maxPlanActions: " + Math.Max(1, settings == null ? 1 : settings.MaxAgentPlanSteps));
+            builder.AppendLine("maxReadOnlyPlanActions: " + Math.Max(1, settings == null ? 4 : settings.MaxAgentReadOnlyPlanSteps));
+            builder.AppendLine("Document mutation and VBA plans must contain exactly one action. A multi-action batch is allowed only for independent read-only tools that do not require confirmation.");
             if (route != null && string.Equals(route.TaskType, "html", StringComparison.OrdinalIgnoreCase))
             {
                 builder.AppendLine("HTML MODE IS ENABLED FOR THIS CHAT.");
-                builder.AppendLine("Use common.html_workspace_read before editing existing files. Use common.html_workspace_upsert_file/data for editable HTML workspace output.");
+                builder.AppendLine("Use common.html_workspace_read before editing or deleting existing files. Use common.html_workspace_upsert_file/data for editable HTML workspace output and common.html_workspace_delete_file/data to remove items.");
+                if (route.RequiresInspection)
+                {
+                    builder.AppendLine("This workspace already has content. Read it before any upsert, delete, or active-file change.");
+                }
+                builder.AppendLine("Keep HTML workspace output local. Put CSS and JavaScript in separate workspace files when content is large, and return at most one content-bearing upsert step per planner response. Continue with the next file after the tool observation.");
             }
             builder.AppendLine();
             builder.AppendLine("CURRENT_OFFICE_CONTEXT:");
@@ -851,7 +930,10 @@ namespace RNAssistant.Office.Services
             {
                 return PlannerValidationResult.Fail("Tool risk level is above current route allowance: " + step.ToolId);
             }
-            if (route != null && route.RequiresInspection && tool.MutatesDocument && !HasInspectionObservation(observations))
+            if (route != null &&
+                route.RequiresInspection &&
+                (tool.MutatesDocument || tool.MutatesLocalState) &&
+                !HasInspectionObservation(observations))
             {
                 return PlannerValidationResult.Fail("Target must be inspected before mutation. Use a read/context tool first.");
             }

@@ -221,7 +221,9 @@ The HTML tab is tied to the active chat session. Agent-created HTML pages are st
 
 - Use `common.html_workspace_upsert_file` for `index.html`, CSS, and script files (`kind`: `html`, `css`, or `script`).
 - Use `common.html_workspace_upsert_data` for JSON data sources. Preview exposes them as `window.RNAssistantData`.
+- Use `common.html_workspace_delete_file` and `common.html_workspace_delete_data` to remove workspace items. Deletions are recorded in workspace history and can be undone.
 - Use `common.html_workspace_read` to inspect the current workspace and `common.html_workspace_set_active` to choose the displayed HTML file.
+Edits and deletions of an existing workspace require a successful workspace read in the current agent run.
 HTML preview and its scripts are always enabled inside a sandboxed iframe.
 
 ## Tool Library

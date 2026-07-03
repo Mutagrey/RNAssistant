@@ -44,7 +44,7 @@ namespace RNAssistant.Harness
         {
             public string Host { get; set; }
             public string UserText { get; set; }
-            public string Response { get; set; }
+            public string[] Responses { get; set; }
             public string[] ExpectedTools { get; set; }
         }
 
@@ -120,6 +120,9 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "storage: html workspace persists with chat", Run = HtmlWorkspacePersistsWithChatSession },
                 new HarnessTest { Name = "chat: agent creates html workspace", Run = ChatAgentCreatesHtmlWorkspace },
                 new HarnessTest { Name = "chat: html mode forces workspace prompt", Run = ChatHtmlModeForcesWorkspacePrompt },
+                new HarnessTest { Name = "chat: html workspace keeps generic follow-up route", Run = ChatHtmlWorkspaceKeepsGenericFollowUpRoute },
+                new HarnessTest { Name = "chat: large malformed html planner response is rebuilt", Run = ChatLargeMalformedHtmlPlannerResponseIsRebuilt },
+                new HarnessTest { Name = "chat: html delete requires read before mutation", Run = ChatHtmlDeleteRequiresReadBeforeMutation },
                 new HarnessTest { Name = "tools: prompt templates save", Run = PromptToolSavesAgentPromptTemplates },
                 new HarnessTest { Name = "tools: prompt defaults read", Run = PromptToolReadsDefaults },
                 new HarnessTest { Name = "tools: validate custom tool payload", Run = ToolValidateChecksPayloadWithoutSaving },
@@ -175,10 +178,14 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "chat: failed verification recovers", Run = ChatFailedVerificationRecovers },
                 new HarnessTest { Name = "chat: prior inspection does not verify mutation", Run = ChatPriorInspectionDoesNotVerifyMutation },
                 new HarnessTest { Name = "chat: waiting tool gets pending id", Run = ChatWaitingToolGetsPendingId },
-                new HarnessTest { Name = "chat: waiting tool stops batch", Run = ChatWaitingToolStopsBatch },
+                new HarnessTest { Name = "chat: waiting tool stops run", Run = ChatWaitingToolStopsRun },
                 new HarnessTest { Name = "chat: confirmed pending tool continues", Run = ChatConfirmedPendingToolContinuesAfterManualRun },
                 new HarnessTest { Name = "chat: max iterations returns summary", Run = ChatMaxIterationsReturnsRuntimeSummary },
                 new HarnessTest { Name = "chat: tool step limit stops run", Run = ChatToolStepLimitStopsRun },
+                new HarnessTest { Name = "chat: planner batch allows bounded read-only actions", Run = PlannerBatchAllowsBoundedReadOnlyActions },
+                new HarnessTest { Name = "chat: planner batch rejects excess read-only actions", Run = PlannerBatchRejectsExcessReadOnlyActions },
+                new HarnessTest { Name = "chat: planner batch rejects multiple mutations and vba actions", Run = PlannerBatchRejectsMultipleMutationsAndVbaActions },
+                new HarnessTest { Name = "chat: rejected mutation batch is replanned", Run = RejectedMutationBatchIsReplanned },
                 new HarnessTest { Name = "chat: auto-run disabled records failure", Run = ChatAutoRunDisabledRecordsLocalFailure },
                 new HarnessTest { Name = "chat: malformed planner response is repaired", Run = ChatMalformedPlannerResponseIsRepaired },
                 new HarnessTest { Name = "chat: invalid planner records response diagnostics", Run = ChatInvalidPlannerRecordsResponseDiagnostics },
@@ -198,7 +205,8 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "bridge: typed document activation", Run = BridgeUsesTypedDocumentPayload },
                 new HarnessTest { Name = "bridge: typed tool and skill payloads", Run = BridgeUsesTypedToolAndSkillPayloads },
                 new HarnessTest { Name = "bridge: typed context payload", Run = BridgeUsesTypedContextPayload },
-                new HarnessTest { Name = "bridge: typed vba payload", Run = BridgeUsesTypedVbaPayload }
+                new HarnessTest { Name = "bridge: typed vba payload", Run = BridgeUsesTypedVbaPayload },
+                new HarnessTest { Name = "bridge: typed html workspace delete payloads", Run = BridgeUsesTypedHtmlWorkspaceDeletePayloads }
             };
 
             foreach (var test in tests)

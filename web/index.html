@@ -405,6 +405,7 @@
               <div class="resource-editor-actions">
                 <button class="secondary" id="undoHtmlWorkspaceButton" type="button">Undo</button>
                 <button class="secondary" id="redoHtmlWorkspaceButton" type="button">Redo</button>
+                <button class="secondary danger-soft" id="deleteHtmlWorkspaceButton" type="button">Удалить</button>
                 <button class="accent-soft" id="saveHtmlWorkspaceButton" type="button">Сохранить</button>
               </div>
             </div>
@@ -492,6 +493,8 @@
                 <label><span>Макс. итераций агента</span><input id="maxAgentIterationsInput" type="number" min="1" max="50"></label>
                 <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1" max="200"></label>
                 <label><span>Tools в одном planner prompt</span><input id="maxAgentToolsPerRequestInput" type="number" min="8" max="64"></label>
+                <label><span>Действий в planner batch</span><input id="maxAgentPlanStepsInput" type="number" min="1" max="8"></label>
+                <label><span>Read-only действий в batch</span><input id="maxAgentReadOnlyPlanStepsInput" type="number" min="1" max="16"></label>
                 <label><span>VBA-контекст, символы</span><input id="vbaContextLimitInput" type="number" min="1000" max="200000"></label>
               </div>
             </section>
@@ -662,7 +665,7 @@
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
   <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js?v=chatui-20260703-1"></script>
+  <script src="js/app-settings.js?v=chatui-20260703-2"></script>
   <script src="js/app-prompts.js?v=chatui-20260703-1"></script>
   <script src="js/app-model-data.js?v=chatui-20260703-2"></script>
   <script src="js/app-model-render.js?v=chatui-20260630-3"></script>
@@ -673,7 +676,7 @@
   <script src="js/app-tools.js?v=chatui-20260622-4"></script>
   <script src="js/app-skills.js?v=chatui-20260622-4"></script>
   <script src="js/app-vba.js?v=chatui-20260622-7"></script>
-  <script src="js/app-html-workspace.js?v=chatui-20260703-1"></script>
+  <script src="js/app-html-workspace.js?v=chatui-20260703-2"></script>
   <script src="js/app-context.js?v=chatui-20260622-1"></script>
   <script src="js/app-agent-data.js?v=chatui-20260622-1"></script>
   <script src="js/app-agent-model.js?v=chatui-20260702-1"></script>
@@ -683,7 +686,7 @@
   <script src="js/app-messages.js?v=chatui-20260622-3"></script>
   <script src="js/app-reasoning.js?v=reasoning-20260630-1"></script>
   <script src="js/app-attachments.js?v=attachments-20260703-2"></script>
-  <script src="js/app-chat.js?v=chatui-20260703-2"></script>
+  <script src="js/app-chat.js?v=chatui-20260703-3"></script>
   <script src="js/app.js?v=chatui-20260630-3"></script>
 </body>
 </html>

@@ -28,6 +28,8 @@ namespace RNAssistant.Office
         public string LastToolsJson { get; private set; }
         public string LastSkillsJson { get; private set; }
         public string LastDocumentHost { get; private set; }
+        public string LastHtmlPath { get; private set; }
+        public string LastHtmlDataName { get; private set; }
 
         public InitResponse Initialize() { return new InitResponse { Host = "Excel", Title = "Harness.xlsx" }; }
         public ChatStateResponse ListChats() { return ChatState(); }
@@ -109,6 +111,18 @@ namespace RNAssistant.Office
         public HtmlWorkspaceResponse GetHtmlWorkspace(string chatId = null) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace() }; }
         public HtmlWorkspaceResponse SaveHtmlWorkspaceFile(string chatId, string path, string kind, string content, bool setActive) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace { ActiveFileId = path ?? string.Empty } }; }
         public HtmlWorkspaceResponse SaveHtmlWorkspaceData(string chatId, string name, string json) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace() }; }
+        public HtmlWorkspaceResponse DeleteHtmlWorkspaceFile(string chatId, string path)
+        {
+            LastChatId = chatId;
+            LastHtmlPath = path;
+            return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace() };
+        }
+        public HtmlWorkspaceResponse DeleteHtmlWorkspaceData(string chatId, string name)
+        {
+            LastChatId = chatId;
+            LastHtmlDataName = name;
+            return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace() };
+        }
         public HtmlWorkspaceResponse SetActiveHtmlWorkspaceFile(string chatId, string path) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace { ActiveFileId = path ?? string.Empty } }; }
         public HtmlWorkspaceResponse RestoreHtmlWorkspaceSnapshot(string chatId, string snapshotId) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace() }; }
         public HtmlWorkspaceResponse RedoHtmlWorkspaceSnapshot(string chatId, string snapshotId) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace() }; }

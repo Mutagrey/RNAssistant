@@ -154,47 +154,56 @@ namespace RNAssistant.Harness
                 {
                     Host = "Excel",
                     UserText = "Create a sales report sheet and chart.",
-                    Response = AgentBlock(
-                        Command("excel.add_sheet", "name", "Report"),
-                        Command("excel.write_table", "sheet", "Report", "startAddress", "A1", "values", "[[\"Month\",\"Sales\"],[\"Jan\",10]]"),
-                        Command("excel.add_chart", "sheet", "Report", "sourceRange", "A1:B2", "chartType", "column", "title", "Sales")),
+                    Responses = new[]
+                    {
+                        AgentBlock(Command("excel.add_sheet", "name", "Report")),
+                        AgentBlock(Command("excel.write_table", "sheet", "Report", "startAddress", "A1", "values", "[[\"Month\",\"Sales\"],[\"Jan\",10]]")),
+                        AgentBlock(Command("excel.add_chart", "sheet", "Report", "sourceRange", "A1:B2", "chartType", "column", "title", "Sales"))
+                    },
                     ExpectedTools = new[] { "excel.add_sheet", "excel.write_table", "excel.add_chart" }
                 },
                 new HostTaskScenario
                 {
                     Host = "Word",
                     UserText = "Insert an executive summary and add a review comment.",
-                    Response = AgentBlock(
-                        Command("word.insert_text", "text", "Executive summary"),
-                        Command("word.add_comment", "text", "Review this paragraph.")),
+                    Responses = new[]
+                    {
+                        AgentBlock(Command("word.insert_text", "text", "Executive summary")),
+                        AgentBlock(Command("word.add_comment", "text", "Review this paragraph."))
+                    },
                     ExpectedTools = new[] { "word.insert_text", "word.add_comment" }
                 },
                 new HostTaskScenario
                 {
                     Host = "PowerPoint",
                     UserText = "Add a quarterly summary slide.",
-                    Response = AgentBlock(
-                        Command("powerpoint.add_slide", "title", "Q1 Summary", "body", "Revenue grew.")),
+                    Responses = new[]
+                    {
+                        AgentBlock(Command("powerpoint.add_slide", "title", "Q1 Summary", "body", "Revenue grew."))
+                    },
                     ExpectedTools = new[] { "powerpoint.add_slide" }
                 },
                 new HostTaskScenario
                 {
                     Host = "Outlook",
                     UserText = "Read the selected email and draft a reply.",
-                    Response = AgentBlock(
-                        Command("outlook.read_selection", "maxChars", "12000"),
-                        Command("outlook.create_reply_draft", "body", "Thanks, I will follow up.")),
+                    Responses = new[]
+                    {
+                        AgentBlock(Command("outlook.read_selection", "maxChars", "12000")),
+                        AgentBlock(Command("outlook.create_reply_draft", "body", "Thanks, I will follow up."))
+                    },
                     ExpectedTools = new[] { "outlook.read_selection", "outlook.create_reply_draft" }
                 }
             };
 
             for (var i = 0; i < scenarios.Length; i++)
             {
-                var scenario = scenarios[i];
+                    var scenario = scenarios[i];
                 WithTempExecutor(FakeOfficeAdapter.ForHost(scenario.Host), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
                 {
                     var calls = new List<IReadOnlyList<ChatMessage>>();
-                    var service = ChatServiceWithResponses(adapter, executor, calls, scenario.Response, "Done.");
+                    var responses = new List<string>(scenario.Responses ?? new string[0]) { "Done." };
+                    var service = ChatServiceWithResponses(adapter, executor, calls, responses.ToArray());
                     var session = NewSession(adapter);
                     var context = NewContext(adapter);
                     context.Notes.Add(new ContextNote { Host = adapter.HostName, Kind = "selection", Title = "Pinned", Reference = "ref", Text = "Pinned context" });

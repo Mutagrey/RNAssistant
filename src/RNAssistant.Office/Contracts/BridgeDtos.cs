@@ -330,6 +330,18 @@ namespace RNAssistant.Office.Contracts
         public string Json { get; set; }
     }
 
+    public sealed class HtmlWorkspaceDeleteFilePayload : ChatPayload
+    {
+        [JsonProperty("path")]
+        public string Path { get; set; }
+    }
+
+    public sealed class HtmlWorkspaceDeleteDataPayload : ChatPayload
+    {
+        [JsonProperty("name")]
+        public string Name { get; set; }
+    }
+
     public sealed class HtmlWorkspaceActiveFilePayload : ChatPayload
     {
         [JsonProperty("path")]

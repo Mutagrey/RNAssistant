@@ -1,4 +1,8 @@
 async function createChat() {
+  if (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
+      !confirmDiscardHtmlWorkspaceChanges("Создать новый чат")) {
+    return;
+  }
   setActivity("loading", "Создаю чат...");
   try {
     applyChatState(await send("createChat", { title: "Новый чат" }));
@@ -13,6 +17,11 @@ async function createChat() {
 
 async function selectChat(id) {
   if (!id || id === state.activeChatId) {
+    return;
+  }
+  if (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
+      !confirmDiscardHtmlWorkspaceChanges("Открыть другой чат")) {
+    renderChatSessions();
     return;
   }
 
@@ -45,6 +54,10 @@ async function openActiveDocument(chatIdValue) {
 
 async function activateDocument(documentKey) {
   if (!documentKey) return;
+  if (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
+      !confirmDiscardHtmlWorkspaceChanges("Переключить документ")) {
+    return;
+  }
   setActivity("loading", "Активирую документ...");
   try {
     applyChatState(await send("activateDocument", { documentKey: documentKey }));
@@ -59,6 +72,8 @@ async function activateDocument(documentKey) {
 
 async function deleteDocument(host, documentKey, title) {
   if (!host || !documentKey ||
+      (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
+       !confirmDiscardHtmlWorkspaceChanges("Удалить историю документа")) ||
       !window.confirm("Удалить документ «" + (title || "Документ") + "» из истории вместе со всеми чатами? Сам Office-файл удалён не будет.")) {
     return;
   }
@@ -103,7 +118,10 @@ async function renameChat(chatIdValue) {
 }
 
 async function clearChat() {
-  if (!state.activeChatId || !window.confirm("Очистить этот чат?")) {
+  if (!state.activeChatId ||
+      (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
+       !confirmDiscardHtmlWorkspaceChanges("Очистить чат")) ||
+      !window.confirm("Очистить этот чат?")) {
     return;
   }
 
@@ -121,7 +139,11 @@ async function clearChat() {
 
 async function deleteChat(chatIdValue) {
   var targetChatId = typeof chatIdValue === "string" ? chatIdValue : state.activeChatId;
-  if (!targetChatId || !window.confirm("Удалить этот чат?")) {
+  if (!targetChatId ||
+      (targetChatId === state.activeChatId &&
+       typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
+       !confirmDiscardHtmlWorkspaceChanges("Удалить чат")) ||
+      !window.confirm("Удалить этот чат?")) {
     return;
   }
 
@@ -317,6 +339,10 @@ function formatOfficeContextLine(context, host, title) {
 }
 
 async function initialize() {
+  if (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
+      !confirmDiscardHtmlWorkspaceChanges("Обновить состояние")) {
+    return;
+  }
   setActivity("loading", "Загружаю состояние...");
   try {
     var init = await send("init");

@@ -152,16 +152,7 @@ namespace RNAssistant.Office.Services
             skills = skills ?? new SkillDefinition[0];
 
             var snapshot = new OfficeSnapshot { Host = _adapter.HostName };
-            var route = _intentRouter.Route(taskText, snapshot);
-            if (session != null && session.HtmlModeEnabled)
-            {
-                route.Mode = "mutate_html";
-                route.TaskType = "html";
-                route.Phase = AgentPhases.Mutation;
-                route.RiskAllowed = 1;
-                route.RequiresTool = true;
-                route.RequiresInspection = false;
-            }
+            var route = _intentRouter.Route(taskText, snapshot, session);
             if (initialVerificationRequired)
             {
                 route.Phase = AgentPhases.Verification;
@@ -336,6 +327,38 @@ namespace RNAssistant.Office.Services
 
                 if (validationFailed)
                 {
+                    continue;
+                }
+
+                var batchValidationError = PlannerBatchPolicy.Validate(commands, allTools, route, settings);
+                if (!string.IsNullOrWhiteSpace(batchValidationError))
+                {
+                    var observation = new AgentObservation
+                    {
+                        Id = "obs_batch_validation_" + (observations.Count + 1),
+                        ToolId = "agent.plan_batch",
+                        Status = "error",
+                        Summary = batchValidationError,
+                        Mutation = false,
+                        RequiresVerification = false
+                    };
+                    observations.Add(observation);
+                    resultLog.Add(new
+                    {
+                        toolId = observation.ToolId,
+                        success = false,
+                        status = "validation_failed",
+                        message = batchValidationError
+                    });
+                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(batchValidationError, completion, new ChatActivity
+                    {
+                        Kind = "diagnostic",
+                        Title = "Planner batch validation",
+                        Subtitle = commands.Count + " actions",
+                        Status = "failed",
+                        ExecutionStatus = "validation_failed",
+                        ResultMessage = batchValidationError
+                    }));
                     continue;
                 }
 
@@ -655,18 +678,31 @@ namespace RNAssistant.Office.Services
             AppSettings settings)
         {
             var messages = new List<ChatMessage>(originalMessages ?? new ChatMessage[0]);
-            messages.Add(new ChatMessage
+            if (!string.IsNullOrWhiteSpace(badText) && badText.Length <= 2000)
             {
-                Role = "assistant",
-                Content = TrimDiagnosticText(badText, 4000)
-            });
+                messages.Add(new ChatMessage
+                {
+                    Role = "assistant",
+                    Content = badText
+                });
+            }
+            else if (!string.IsNullOrWhiteSpace(badText))
+            {
+                messages.Add(new ChatMessage
+                {
+                    Role = "assistant",
+                    Content = "Malformed planner response omitted because it is too large for a safe repair prompt."
+                });
+            }
             messages.Add(new ChatMessage
             {
                 Role = "user",
                 Content = PromptText(settings, p => p.RepairMalformedToolBlockPrompt) +
                     "\nValidation error: " +
                     (parseResult == null ? string.Empty : parseResult.ErrorCode + " " + parseResult.ErrorMessage) +
-                    "\nUse the original request, route and available tools only as input. Do not copy them into the response. Return only kind, intent, message, steps and expectedOutcome."
+                    "\nRebuild the response from the original request; do not continue or copy the malformed response." +
+                    "\nUse the original request, route and available tools only as input. Do not copy them into the response. Return only kind, intent, message, steps and expectedOutcome." +
+                    "\nFor large HTML/CSS/JavaScript output, return one content-bearing workspace upsert step now and continue with other local files after its tool observation."
             });
             return messages;
         }

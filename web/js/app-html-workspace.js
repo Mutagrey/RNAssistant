@@ -179,6 +179,17 @@
     scheduleHtmlWorkspacePreviewRefresh();
   }
 
+  function confirmDiscardHtmlWorkspaceChanges(action) {
+    if (!state.htmlWorkspaceDirty) {
+      return true;
+    }
+    return window.confirm(
+      "В HTML workspace есть несохраненные изменения. " +
+      (action || "Продолжить") +
+      " и потерять их?"
+    );
+  }
+
   function scheduleHtmlWorkspacePreviewRefresh() {
     if (htmlPreviewRefreshTimer) {
       window.clearTimeout(htmlPreviewRefreshTimer);
@@ -203,7 +214,14 @@
       }
     }
     if (save) {
-      save.disabled = state.bridgeUnavailable || !selected;
+      save.disabled = state.bridgeUnavailable || !selected || !state.htmlWorkspaceDirty;
+      save.title = "Сохранить изменения (Ctrl+S)";
+    }
+    if ($("deleteHtmlWorkspaceButton")) {
+      $("deleteHtmlWorkspaceButton").disabled = state.bridgeUnavailable || !selected;
+      $("deleteHtmlWorkspaceButton").title = selected
+        ? "Удалить выбранный файл или источник данных"
+        : "Выберите файл или источник данных";
     }
     if ($("undoHtmlWorkspaceButton")) {
       $("undoHtmlWorkspaceButton").disabled = state.bridgeUnavailable || !historyItems().length;
@@ -576,6 +594,43 @@
     }
   }
 
+  async function deleteHtmlWorkspaceSelection() {
+    var selected = selectedItem();
+    if (!selected || state.bridgeUnavailable) {
+      return;
+    }
+
+    var label = selected.type === "data" ? dataName(selected.item) : filePath(selected.item);
+    var warning = "Удалить «" + label + "» из HTML workspace? Удаление можно отменить через Undo.";
+    if (state.htmlWorkspaceDirty) {
+      warning = "Есть несохраненные изменения. " + warning;
+    }
+    if (!window.confirm(warning)) {
+      return;
+    }
+
+    setActivity("deleting", "Удаляю из HTML workspace...");
+    try {
+      var response = selected.type === "data"
+        ? await send("deleteHtmlWorkspaceData", {
+          chatId: state.activeChatId,
+          name: dataName(selected.item)
+        })
+        : await send("deleteHtmlWorkspaceFile", {
+          chatId: state.activeChatId,
+          path: filePath(selected.item)
+        });
+      state.htmlWorkspaceSelection = { type: "file", id: "" };
+      applyHtmlWorkspaceResponse(response);
+      log("Удалено из HTML workspace: " + label);
+    } catch (error) {
+      log(error.detail || error.message);
+      window.alert(error.message || "Элемент HTML workspace не удален.");
+    } finally {
+      clearActivity();
+    }
+  }
+
   async function undoHtmlWorkspace() {
     if (state.bridgeUnavailable || !historyItems().length) {
       return;
@@ -754,6 +809,7 @@
   function bindHtmlWorkspaceActions() {
     $("htmlWorkspaceSearchInput").addEventListener("input", renderHtmlWorkspaceList);
     $("saveHtmlWorkspaceButton").addEventListener("click", saveHtmlWorkspaceSelection);
+    $("deleteHtmlWorkspaceButton").addEventListener("click", deleteHtmlWorkspaceSelection);
     $("undoHtmlWorkspaceButton").addEventListener("click", undoHtmlWorkspace);
     $("redoHtmlWorkspaceButton").addEventListener("click", redoHtmlWorkspace);
     $("toggleHtmlSidebarButton").addEventListener("click", toggleHtmlWorkspaceSidebar);
@@ -783,4 +839,5 @@
   window.bindHtmlWorkspaceActions = bindHtmlWorkspaceActions;
   window.saveHtmlWorkspaceSelection = saveHtmlWorkspaceSelection;
   window.markHtmlWorkspaceDirty = markHtmlWorkspaceDirty;
+  window.confirmDiscardHtmlWorkspaceChanges = confirmDiscardHtmlWorkspaceChanges;
 }());
