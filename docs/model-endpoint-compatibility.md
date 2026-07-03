@@ -28,7 +28,8 @@ RNAssistant talks to an OpenAI-compatible Chat Completions endpoint. Chat mode u
 | Returns ordinary text in Chat mode | Stored as the assistant response; no planner parsing or local tool execution occurs. |
 | Returns strict planner JSON | Router/validator/gates decide whether local tools can execute. |
 | Returns plain assistant text in Agent mode | Rejected by strict parser; Agent mode asks once for corrected JSON. |
-| Returns a fence, legacy envelope, prose around JSON, or a JSON array | Rejected; Agent mode asks once for corrected JSON. |
+| Returns one clean `json` fence | Fence is unwrapped and the strict planner object is validated. |
+| Returns another fence type, legacy envelope, prose around JSON, or a JSON array | Rejected; Agent mode asks once for corrected JSON. |
 | Returns native `tool_calls`, `function_call`, or content-part arrays | Not converted to local tools; missing/invalid assistant text is rejected. |
 | Returns malformed planner JSON | Records format/error and a bounded local response preview; Agent mode asks once for a corrected JSON object while preserving the task and available tools. |
 | A required local tool is unavailable | The endpoint is not called for that iteration; RNAssistant records local route and tool-exclusion diagnostics. |
@@ -40,4 +41,4 @@ RNAssistant talks to an OpenAI-compatible Chat Completions endpoint. Chat mode u
 - Non-streaming Chat Completions compatible response.
 - Strong instruction following for exact JSON object responses.
 - Long enough context window for document context.
-- Stable support for ordinary `user`/`assistant` history. RNAssistant sends planner instructions as `user` by default; Settings can switch them to `system`.
+- Stable support for ordinary `user`/`assistant` history. RNAssistant intentionally sends Chat/Agent instructions as `user` by default because some compatible endpoints limit the length or handling of `system` messages; Settings can explicitly switch them to `system`.

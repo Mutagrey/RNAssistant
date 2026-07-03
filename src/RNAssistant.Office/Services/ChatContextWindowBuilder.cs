@@ -18,8 +18,9 @@ namespace RNAssistant.Office.Services
         {
             settings = settings ?? new AppSettings();
             var messages = new List<ChatMessage>();
-            var instruction = (settings.SystemPrompt ?? string.Empty).Trim();
-            instruction += "\nAnswer the user normally. Do not emit planner JSON and do not claim to call local tools.";
+            var instruction = string.IsNullOrWhiteSpace(settings.ChatSystemPrompt)
+                ? new AppSettings().ChatSystemPrompt
+                : settings.ChatSystemPrompt.Trim();
             if (string.Equals(settings.SystemPromptRole, "system", StringComparison.OrdinalIgnoreCase))
             {
                 messages.Add(new ChatMessage { Role = "system", Content = instruction });

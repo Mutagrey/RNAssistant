@@ -43,7 +43,7 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 
 - `src/RNAssistant.Core/Llm`: API client, SSE/reasoning parsing, model capability budgeting, prompt composition and context usage estimates.
 - `src/RNAssistant.Core/Tools`: strict planner JSON parsing and tool argument normalization.
-- `src/RNAssistant.Core/Skills`: built-in markdown skill provider.
+- `src/RNAssistant.Office/Services/BuiltInSkillProvider.cs`: common built-in markdown skills; host adapters provide application-specific skills through `IOfficeBuiltInSkillProvider`.
 - `src/RNAssistant.Core/Services`: Office-agnostic model services such as context normalization.
 - `src/RNAssistant.Core/Storage`: JSON file storage under `%AppData%/RNAssistant`.
 - `src/RNAssistant.Office/Controller/AssistantController.cs`: high-level orchestration and bridge-facing API.
@@ -71,8 +71,9 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 
 ## Non-Negotiable Boundaries
 
-- Agent mode accepts one strict planner JSON object in assistant text. Fences, legacy envelopes, content-part arrays, native `tool_calls`, and `function_call` are not supported.
-- Chat mode is a plain completion path without planner/tool prompts. Auto mode chooses Chat or Agent before the model request; the selected mode is persisted per chat.
+- Agent mode accepts one strict planner JSON object in assistant text. The parser may unwrap one clean `json` code fence, but rejects surrounding prose, other fence types, legacy envelopes, arrays, native `tool_calls`, and `function_call`.
+- Editable Chat/Agent instructions use the `user` role by default. This is intentional compatibility behavior for OpenAI-compatible endpoints that impose tighter length or handling limits on `system` messages; Settings may explicitly switch the role to `system`.
+- Chat mode is a plain completion path with its own `ChatSystemPrompt`, without planner/tool prompts. Thought/reasoning JSON in content is never persisted: a user-facing field is extracted or one bounded repair is requested. Auto mode chooses Chat or Agent before the model request; the selected mode is persisted per chat.
 - Model reasoning is transport metadata (`reasoning_content` or `reasoning`), stored and rendered separately; it is never mixed into planner JSON or replayed as chat history.
 - Context limits are token budgets resolved from the active model capability catalog. The legacy character limit is read only for settings compatibility.
 - Chat and planner context are rebuilt from the active session for every request. They use reference-deduplicated notes plus recent user/assistant messages and their attachments; agent activity, diagnostics, and reasoning metadata are never replayed.
@@ -117,7 +118,7 @@ Pass a category or name fragment for a focused run, for example `-- modes`, `-- 
 
 Current coverage:
 
-- parser fixtures: strict planner JSON object plus rejection of fences, legacy envelopes, arrays, native `tool_calls`, and malformed JSON;
+- parser fixtures: strict planner JSON object, one clean `json` fence, and rejection of noisy/alternate fences, legacy envelopes, arrays, native `tool_calls`, and malformed JSON;
 - chat/tool/skill/VBA store fixtures using temp directories, including broken files being skipped;
 - chat session lifecycle fixtures, including document-key migration;
 - pipeline dry-run and execution fixtures with fake `IOfficeApplicationAdapter`;

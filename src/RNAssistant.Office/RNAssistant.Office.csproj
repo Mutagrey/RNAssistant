@@ -83,6 +83,7 @@
     <Compile Include="Services\ChatCompletionService.cs" />
     <Compile Include="Services\ChatContextWindowBuilder.cs" />
     <Compile Include="Services\ChatExecutionModeSelector.cs" />
+    <Compile Include="Services\PlainChatResponseNormalizer.cs" />
     <Compile Include="Services\PlainChatService.cs" />
     <Compile Include="Services\PromptBudgetComposer.cs" />
     <Compile Include="Services\OfflineChatService.cs" />

@@ -14,10 +14,10 @@ namespace RNAssistant.Core.Tools
                 return AgentPlannerParseResult.Fail("empty_response", "Planner response is empty.");
             }
 
-            var trimmed = text.Trim().TrimStart('\uFEFF');
+            var trimmed = UnwrapJsonFence(text);
             if (!trimmed.StartsWith("{", StringComparison.Ordinal) || !trimmed.EndsWith("}", StringComparison.Ordinal))
             {
-                return AgentPlannerParseResult.Fail("not_json_object", "Planner response must be exactly one JSON object.");
+                return AgentPlannerParseResult.Fail("not_json_object", "Planner response must be exactly one JSON object, optionally wrapped in one JSON code fence.");
             }
 
             JObject obj;
@@ -180,6 +180,30 @@ namespace RNAssistant.Core.Tools
                 return allowNullOrMissing;
             }
             return token.Type == JTokenType.String;
+        }
+
+        private static string UnwrapJsonFence(string text)
+        {
+            var value = (text ?? string.Empty).TrimStart('\uFEFF').Trim();
+            if (!value.StartsWith("```", StringComparison.Ordinal) ||
+                !value.EndsWith("```", StringComparison.Ordinal))
+            {
+                return value;
+            }
+
+            var newline = value.IndexOf('\n');
+            if (newline < 0)
+            {
+                return value;
+            }
+
+            var language = value.Substring(3, newline - 3).Trim();
+            if (language.Length > 0 && !string.Equals(language, "json", StringComparison.OrdinalIgnoreCase))
+            {
+                return value;
+            }
+
+            return value.Substring(newline + 1, value.Length - newline - 4).Trim();
         }
 
         private static string ReadString(JObject obj, string name)

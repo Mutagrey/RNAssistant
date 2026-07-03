@@ -16,7 +16,7 @@ namespace RNAssistant.Harness
 
                 var extra = valid.Substring(0, valid.Length - 1) + ",\"extra" + index + "\":true}";
                 AssertTrue(!parser.Parse(extra).Success, "extra key rejected " + index);
-                AssertTrue(!parser.Parse("```json\n" + valid + "\n```").Success, "fence rejected " + index);
+                AssertTrue(parser.Parse("```json\n" + valid + "\n```").Success, "clean json fence accepted " + index);
                 AssertTrue(!parser.Parse("[" + valid + "]").Success, "array rejected " + index);
             }
         }
@@ -30,13 +30,12 @@ namespace RNAssistant.Harness
             AssertEqual("excel.get_context", parsed.Response.Steps[0].ToolId, "planner tool id");
         }
 
-        private static void PlannerStrictRejectsMarkdownAndProse()
+        private static void PlannerAcceptsCleanJsonFenceAndRejectsProse()
         {
             var fenced = new AgentPlannerResponseParser().Parse("```json\n{\"kind\":\"final\",\"message\":\"Done.\",\"steps\":[]}\n```");
             var prose = new AgentPlannerResponseParser().Parse("Done.");
 
-            AssertTrue(!fenced.Success, "strict parser rejects fenced json");
-            AssertEqual("not_json_object", fenced.ErrorCode, "fenced error code");
+            AssertTrue(fenced.Success, "parser accepts one clean json fence");
             AssertTrue(!prose.Success, "strict parser rejects prose");
             AssertEqual("not_json_object", prose.ErrorCode, "prose error code");
         }
@@ -53,7 +52,7 @@ namespace RNAssistant.Harness
                 "\"AVAILABLE_TOOLS\":[],\"plan\":{\"steps\":[],\"response\":\"Здравствуйте! Чем могу помочь?\"}}\n" +
                 "```";
 
-            AssertEqual("not_json_object", jsonFence.ErrorCode, "json fence rejected");
+            AssertTrue(jsonFence.Success, "json fence accepted");
             AssertEqual("not_json_object", agentFence.ErrorCode, "agent fence rejected");
             AssertEqual("not_json_object", noisy.ErrorCode, "prose around fence rejected");
             AssertEqual("not_json_object", parser.Parse(photographedResponse).ErrorCode, "legacy plan rejected");

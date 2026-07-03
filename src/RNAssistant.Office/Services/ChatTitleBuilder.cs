@@ -93,6 +93,7 @@ namespace RNAssistant.Office.Services
                 BaseUrl = source.BaseUrl,
                 Model = source.Model,
                 SystemPrompt = source.SystemPrompt,
+                ChatSystemPrompt = source.ChatSystemPrompt,
                 SystemPromptRole = source.SystemPromptRole,
                 MaxTokens = 32,
                 RequestTimeoutSeconds = Math.Max(30, Math.Min(source.RequestTimeoutSeconds <= 0 ? 300 : source.RequestTimeoutSeconds, 60)),

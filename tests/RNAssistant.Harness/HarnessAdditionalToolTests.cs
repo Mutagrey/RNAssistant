@@ -347,6 +347,7 @@ namespace RNAssistant.Harness
                     value => settingsStore = value);
                 var command = new ToolCommand { ToolId = "common.prompts_save" };
                 command.Arguments["toolRoutingPrompt"] = "CUSTOM ROUTING";
+                command.Arguments["chatSystemPrompt"] = "CUSTOM CHAT";
                 command.Arguments["systemPromptRole"] = "system";
 
                 var blocked = executor.Execute(
@@ -367,6 +368,7 @@ namespace RNAssistant.Harness
                 AssertTrue(saved.Success, "prompt save succeeds");
 
                 AssertEqual("CUSTOM ROUTING", settingsStore.AgentPrompts.ToolRoutingPrompt, "routing prompt saved");
+                AssertEqual("CUSTOM CHAT", settingsStore.ChatSystemPrompt, "chat prompt saved");
                 AssertEqual("system", settingsStore.SystemPromptRole, "prompt role saved");
                 AssertEqual("CUSTOM ROUTING", runtimeSettings.AgentPrompts.ToolRoutingPrompt, "runtime routing prompt updated");
                 AssertEqual("system", runtimeSettings.SystemPromptRole, "runtime prompt role updated");
@@ -407,6 +409,7 @@ namespace RNAssistant.Harness
                 AssertTrue(read.Success, "prompt defaults read succeeds");
                 AssertContains(read.DataJson, "CUSTOM ROUTING", "current prompt returned");
                 AssertContains(read.DataJson, "built-in tools cannot solve", "default prompt returned");
+                AssertContains(read.DataJson, "Answer the user directly", "default chat prompt returned");
             });
         }
 

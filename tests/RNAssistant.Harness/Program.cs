@@ -54,7 +54,7 @@ namespace RNAssistant.Harness
             {
                 new HarnessTest { Name = "harness: native async execution", RunAsync = HarnessRunsNativeAsync },
                 new HarnessTest { Name = "planner: strict json envelope", Run = PlannerStrictParsesJsonEnvelope },
-                new HarnessTest { Name = "planner: strict rejects markdown and prose", Run = PlannerStrictRejectsMarkdownAndProse },
+                new HarnessTest { Name = "planner: accepts clean json fence and rejects prose", Run = PlannerAcceptsCleanJsonFenceAndRejectsProse },
                 new HarnessTest { Name = "planner: rejects alternate envelopes", Run = PlannerRejectsAlternateEnvelopes },
                 new HarnessTest { Name = "planner: rejects invalid intent and steps", Run = PlannerRejectsInvalidIntentAndSteps },
                 new HarnessTest { Name = "planner: boundary corpus stays strict", Run = PlannerBoundaryCorpusStaysStrict },
@@ -62,6 +62,8 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "modes: selects chat auto and agent", Run = ModesSelectChatAutoAndAgent },
                 new HarnessTest { Name = "modes: missing session mode defaults to chat", Run = MissingSessionModeDefaultsToChat },
                 new HarnessTest { Name = "modes: plain chat omits planner and activities", Run = PlainChatOmitsPlannerAndActivities },
+                new HarnessTest { Name = "modes: plain chat repairs thought-only json", Run = PlainChatRepairsThoughtOnlyJson },
+                new HarnessTest { Name = "modes: plain chat extracts answer without thought", Run = PlainChatExtractsAnswerWithoutThought },
                 new HarnessTest { Name = "context: deleted message absent from rebuilt prompt", Run = DeletedMessageIsAbsentFromRebuiltContext },
                 new HarnessTest { Name = "routing: required empty tool slice stops before llm", Run = RequiredEmptyToolSliceStopsBeforeLlm },
                 new HarnessTest { Name = "routing: tool slice balances mutation and inspection", Run = ToolSliceBalancesMutationAndInspection },

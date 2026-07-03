@@ -183,6 +183,8 @@ Each chat stores an explicit execution mode:
 - `Auto` deterministically chooses Chat or Agent before the model request.
 - `Agent` uses the local planner/tool loop. HTML workspace mode always uses Agent.
 
+Editable Chat/Agent instructions use the `user` role by default for compatibility with endpoints that constrain long `system` messages. The Prompts settings page can switch the role to `system`.
+
 Native tool calling is not required. In Agent mode, the model is a controlled planner and must return exactly one JSON object, without markdown or prose:
 
 ```json
@@ -203,7 +205,7 @@ Native tool calling is not required. In Agent mode, the model is a controlled pl
 
 Final/clarifying answers use the same envelope with `kind` set to `final`, `clarify`, or `cannot_do` and an empty `steps` array. The runtime routes the user request, slices the tool catalog, validates the planner response, gates risk/confirmation, executes tools, normalizes observations, and runs deterministic verification for mutations.
 
-The controlled agent loop accepts only the strict planner JSON object in assistant text. Markdown fences, legacy envelopes, content-part arrays, native `tool_calls`, and `function_call` are rejected. One bounded repair request is made for malformed output.
+The controlled agent loop accepts a strict planner JSON object in assistant text. A single clean `json` code fence is unwrapped for weak-model compatibility; prose around JSON, other fence types, legacy envelopes, content-part arrays, native `tool_calls`, and `function_call` are rejected. One bounded repair request is made for malformed output.
 
 Routing happens before Office context capture. General questions receive an empty tool catalog and do not read the active document. Document-dependent requests use explicit read tools; mutations inspect first only when the route marks the target as unknown or risky.
 

@@ -1,6 +1,7 @@
 (function () {
   var promptDefinitions = [
-    { key: "systemPrompt", label: "Базовый промпт", group: "Base", source: "root", field: "SystemPrompt", description: "Роль и общий контекст planner." },
+    { key: "systemPrompt", label: "Базовый промпт агента", group: "Base", source: "root", field: "SystemPrompt", description: "Роль и общий контекст planner." },
+    { key: "chatSystemPrompt", label: "Базовый промпт чата", group: "Base", source: "root", field: "ChatSystemPrompt", description: "Прямой текстовый ответ без planner JSON и внутреннего reasoning." },
     { key: "toolProtocolPrompt", label: "Протокол planner JSON", group: "Runtime", source: "agent", field: "ToolProtocolPrompt", description: "Формат strict JSON envelope и аргументов." },
     { key: "toolRoutingPrompt", label: "Routing tools", group: "Runtime", source: "agent", field: "ToolRoutingPrompt", description: "Правила выбора tool, VBA, chart/html artifacts и проверок." },
     { key: "forceToolUsePrompt", label: "Force tool use", group: "Recovery", source: "agent", field: "ForceToolUsePrompt", description: "Follow-up, когда модель ответила текстом на явное действие." },
@@ -186,6 +187,7 @@
     syncSelectedPromptFromEditor();
     var result = {
       SystemPrompt: state.promptDrafts.systemPrompt || "",
+      ChatSystemPrompt: state.promptDrafts.chatSystemPrompt || "",
       AgentPrompts: {}
     };
     promptDefinitions.forEach(function (def) {
@@ -216,6 +218,17 @@
       addSelectedPromptToChat().catch(function (error) {
         log(error.detail || error.message);
       });
+    });
+    $("resetAllPromptsButton").addEventListener("click", function () {
+      promptDefinitions.forEach(function (def) {
+        state.promptDrafts[def.key] = "";
+      });
+      $("promptEditInput").value = "";
+      $("systemPromptRoleInput").value = "user";
+      settingsDirty = true;
+      renderPromptList();
+      updateSettingsSaveButton();
+      log("Все промпты будут сброшены после сохранения настроек.");
     });
   }
 

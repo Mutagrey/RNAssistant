@@ -53,7 +53,7 @@ function readSettings() {
   }
   var promptSettings = typeof readPromptSettings === "function"
     ? readPromptSettings()
-    : { SystemPrompt: "", AgentPrompts: {} };
+    : { SystemPrompt: "", ChatSystemPrompt: "", AgentPrompts: {} };
   return {
     BaseUrl: $("baseUrlInput").value.trim(),
     Model: $("modelInput").value.trim(),
@@ -76,6 +76,7 @@ function readSettings() {
     MaxAgentToolsPerRequest: Number($("maxAgentToolsPerRequestInput").value || 24),
     VbaContextCharLimit: Number($("vbaContextLimitInput").value || 30000),
     SystemPrompt: promptSettings.SystemPrompt,
+    ChatSystemPrompt: promptSettings.ChatSystemPrompt,
     SystemPromptRole: $("systemPromptRoleInput").value === "system" ? "system" : "user",
     AgentPrompts: promptSettings.AgentPrompts,
     ModelImageSupportOverrides: modelImageSupportOverrides(),

@@ -511,7 +511,7 @@
             <section class="settings-page" data-settings-page="prompts">
               <div class="settings-heading">
                 <h2>Промпты</h2>
-                <p>Редактируемые prompt-блоки агента. Текст можно писать как Markdown.</p>
+                <p>Редактируемые prompt-блоки чата и агента. Текст можно писать как Markdown.</p>
               </div>
               <div class="form-grid two-columns">
                 <label>
@@ -521,8 +521,9 @@
                     <option value="system">system</option>
                   </select>
                 </label>
-                <div class="setting-note">Роль сообщения с базовым, protocol и routing prompts.</div>
+                <button class="secondary" id="resetAllPromptsButton" type="button" title="Вернуть встроенные значения всех промптов">Сбросить все промпты</button>
               </div>
+              <div class="setting-note">Роль сообщения с Chat, базовым Agent, protocol и routing prompts. Сброс применяется после сохранения настроек.</div>
               <div class="prompt-layout split-layout" id="promptsLayout" data-split-key="prompts" data-default-ratio="0.3" data-min-left="180" data-min-ratio="0.2" data-max-ratio="0.48">
                 <div class="tool-list-panel surface-panel">
                   <input class="tool-search" id="promptSearchInput" placeholder="Поиск промптов..." autocomplete="off">
@@ -661,8 +662,8 @@
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
   <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js?v=chatui-20260701-1"></script>
-  <script src="js/app-prompts.js?v=chatui-20260701-1"></script>
+  <script src="js/app-settings.js?v=chatui-20260703-1"></script>
+  <script src="js/app-prompts.js?v=chatui-20260703-1"></script>
   <script src="js/app-model-data.js?v=chatui-20260630-1"></script>
   <script src="js/app-model-render.js?v=chatui-20260630-3"></script>
   <script src="js/app-models.js?v=chatui-20260630-2"></script>

@@ -29,7 +29,7 @@ RNAssistant - локальный VSTO/WebView2 ассистент для Office,
 
 ## Tool/Agent Protocol
 
-- Runtime protocol остается text-first: в Agent mode модель возвращает ровно один planner JSON object (`tool_plan`, `final`, `clarify`, `cannot_do`) без markdown и внешнего текста.
+- Runtime protocol остается text-first: в Agent mode модель должна возвращать один raw planner JSON object (`tool_plan`, `final`, `clarify`, `cannot_do`) без markdown и внешнего текста. Parser совместимо принимает один чистый `json` code fence без текста вокруг.
 - Fences, legacy envelopes, native `tool_calls` и `function_call` не поддерживаются. Выполнение не должно зависеть от remote API tools.
 - Built-in Office mutation tools могут исполняться в Agent mode, кроме VBA mutation tools.
 - Custom tools с `requiresConfirmation` и VBA mutation tools требуют подтверждения, если `AutoConfirmToolActions` выключен.

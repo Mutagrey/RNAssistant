@@ -24,12 +24,12 @@ namespace RNAssistant.Office.Tools
                 yield break;
             }
 
-            yield return ControllerTool("common.prompts_read", "Read-only: Read RNAssistant editable agent prompt templates from Settings.", "{}", false);
+            yield return ControllerTool("common.prompts_read", "Read-only: Read RNAssistant editable chat and agent prompt templates from Settings.", "{}", false);
             yield return ControllerTool("common.prompts_read_defaults", "Read-only: Read current RNAssistant prompts and built-in default prompt templates.", "{}", false);
             yield return ControllerTool(
                 "common.prompts_save",
                 "Mutates settings: Update RNAssistant agent prompt templates after the user asks to edit or improve RNAssistant prompts.",
-                "{\"systemPrompt\":\"\",\"systemPromptRole\":\"user|system\",\"toolProtocolPrompt\":\"\",\"toolRoutingPrompt\":\"\",\"forceToolUsePrompt\":\"\",\"repairMalformedToolBlockPrompt\":\"\",\"afterToolResultsPrompt\":\"\",\"verifyMutationPrompt\":\"\",\"confirmedToolContinuationPrompt\":\"\"}",
+                "{\"systemPrompt\":\"\",\"chatSystemPrompt\":\"\",\"systemPromptRole\":\"user|system\",\"toolProtocolPrompt\":\"\",\"toolRoutingPrompt\":\"\",\"forceToolUsePrompt\":\"\",\"repairMalformedToolBlockPrompt\":\"\",\"afterToolResultsPrompt\":\"\",\"verifyMutationPrompt\":\"\",\"confirmedToolContinuationPrompt\":\"\"}",
                 true);
         }
 
@@ -83,6 +83,7 @@ namespace RNAssistant.Office.Tools
             settings.AgentPrompts = settings.AgentPrompts ?? new AgentPromptSettings();
 
             ApplyIfPresent(command, "systemPrompt", value => settings.SystemPrompt = value);
+            ApplyIfPresent(command, "chatSystemPrompt", value => settings.ChatSystemPrompt = value);
             ApplyIfPresent(command, "systemPromptRole", value => settings.SystemPromptRole = NormalizePromptRole(value));
             ApplyIfPresent(command, "toolProtocolPrompt", value => settings.AgentPrompts.ToolProtocolPrompt = value);
             ApplyIfPresent(command, "toolRoutingPrompt", value => settings.AgentPrompts.ToolRoutingPrompt = value);
@@ -118,6 +119,7 @@ namespace RNAssistant.Office.Tools
             return new
             {
                 systemPrompt = settings.SystemPrompt,
+                chatSystemPrompt = settings.ChatSystemPrompt,
                 systemPromptRole = settings.SystemPromptRole,
                 agentPrompts = settings.AgentPrompts ?? new AgentPromptSettings()
             };

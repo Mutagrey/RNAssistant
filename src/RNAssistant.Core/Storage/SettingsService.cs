@@ -65,7 +65,11 @@ namespace RNAssistant.Core.Storage
             {
                 settings.SystemPrompt = defaults.SystemPrompt;
             }
-            settings.SystemPromptRole = NormalizePromptRole(settings.SystemPromptRole);
+            if (string.IsNullOrWhiteSpace(settings.ChatSystemPrompt))
+            {
+                settings.ChatSystemPrompt = defaults.ChatSystemPrompt;
+            }
+            settings.SystemPromptRole = NormalizePromptRole(settings.SystemPromptRole, defaults.SystemPromptRole);
             NormalizeAgentPrompts(settings);
             if (settings.MaxTokens <= 0)
             {
@@ -172,8 +176,12 @@ namespace RNAssistant.Core.Storage
             settings.AgentPrompts.ConfirmedToolContinuationPrompt = DefaultIfBlank(settings.AgentPrompts.ConfirmedToolContinuationPrompt, defaults.ConfirmedToolContinuationPrompt);
         }
 
-        private static string NormalizePromptRole(string value)
+        private static string NormalizePromptRole(string value, string fallback)
         {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return fallback;
+            }
             return string.Equals(value, "system", StringComparison.OrdinalIgnoreCase)
                 ? "system"
                 : "user";

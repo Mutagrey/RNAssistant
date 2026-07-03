@@ -23,7 +23,7 @@ namespace RNAssistant.Core.Models
         public AgentPromptSettings()
         {
             ToolProtocolPrompt =
-                "Return exactly one JSON object. No markdown. No code fences. No prose outside JSON.\n" +
+                "Return exactly one raw JSON object. Start with { and end with }. No markdown, code fences, or prose outside JSON. Do not include internal reasoning, analysis, or a thought field.\n" +
                 "Allowed shape: {\"kind\":\"tool_plan|final|clarify|cannot_do\",\"intent\":\"read|analyze|mutate|verify|answer|clarify\",\"message\":\"string|null\",\"steps\":[{\"toolId\":\"exact tool id from AVAILABLE_TOOLS\",\"arguments\":{},\"reason\":\"short reason\"}],\"expectedOutcome\":\"string|null\"}.\n" +
                 "The object may contain only kind, intent, message, steps, and expectedOutcome. Each step may contain only toolId, arguments, and reason.\n" +
                 "Do not copy USER_REQUEST, ROUTE, CURRENT_OFFICE_CONTEXT, AVAILABLE_TOOLS, OBSERVATIONS, or RELEVANT_SKILLS into the response.";
@@ -41,7 +41,7 @@ namespace RNAssistant.Core.Models
                 "Use VBA only when built-in tools cannot solve the task cleanly or when the user specifically asks for macros/VBA.\n" +
                 "For reusable executable tools, use common.tools_validate before common.tools_save. Use common.skills_save only for markdown guidance. Use common.prompts_read_defaults before common.prompts_save.";
             ForceToolUsePrompt = "This task requires Office tool use before a final answer. Return kind=tool_plan with an available read/context tool, or kind=cannot_do if no available tool can satisfy it.";
-            RepairMalformedToolBlockPrompt = "Your previous RNAssistant planner output was invalid. Return exactly one JSON object. No markdown. No prose.";
+            RepairMalformedToolBlockPrompt = "Your previous RNAssistant planner output was invalid. Return exactly one raw JSON object starting with { and ending with }. No markdown, code fences, prose, internal reasoning, or thought field.";
             AfterToolResultsPrompt = "Local normalized observations are available. If the task is complete, return kind=final. If more Office actions are needed, return the next tool_plan.";
             VerifyMutationPrompt = "Local deterministic verification observations are available. If verification succeeded, return kind=final with what changed and what was verified. If verification failed, return a corrective tool_plan or cannot_do.";
             ConfirmedToolContinuationPrompt = "The user confirmed and RNAssistant executed the pending local tool. Continue the same task from normalized observations.";
@@ -53,6 +53,7 @@ namespace RNAssistant.Core.Models
         public string BaseUrl { get; set; }
         public string Model { get; set; }
         public string SystemPrompt { get; set; }
+        public string ChatSystemPrompt { get; set; }
         public string SystemPromptRole { get; set; }
         public int MaxTokens { get; set; }
         public int RequestTimeoutSeconds { get; set; }
@@ -82,7 +83,8 @@ namespace RNAssistant.Core.Models
         {
             BaseUrl = "https://api.openai.com";
             Model = "gpt-4o-mini";
-            SystemPrompt = "You are RNAssistant Office Action Planner.";
+            SystemPrompt = "You are RNAssistant Office Action Planner. Follow the planner protocol exactly and never expose internal reasoning.";
+            ChatSystemPrompt = "You are RNAssistant, a concise Office assistant. Answer the user directly in natural language. Do not return planner JSON, internal reasoning, analysis, or a thought field. Do not claim to inspect or modify Office unless the provided context explicitly supports it.";
             SystemPromptRole = "user";
             MaxTokens = 2048;
             RequestTimeoutSeconds = 300;

@@ -62,7 +62,12 @@ namespace RNAssistant.Harness
                 "new question",
                 session,
                 new DocumentContext(),
-                new AppSettings { SystemPrompt = "Helpful assistant", SystemPromptRole = "system" },
+                new AppSettings
+                {
+                    SystemPrompt = "PLANNER_ONLY",
+                    ChatSystemPrompt = "Helpful chat assistant",
+                    SystemPromptRole = "system"
+                },
                 null,
                 null,
                 CancellationToken.None).GetAwaiter().GetResult();
@@ -71,8 +76,88 @@ namespace RNAssistant.Harness
             AssertEqual("plain answer", result.AssistantText, "plain result");
             AssertContains(prompt, "new question", "current request");
             AssertContains(prompt, "old question", "history");
+            AssertContains(prompt, "Helpful chat assistant", "chat-specific prompt");
+            AssertTrue(prompt.IndexOf("PLANNER_ONLY", StringComparison.OrdinalIgnoreCase) < 0, "agent base prompt omitted");
             AssertTrue(prompt.IndexOf("tool_plan", StringComparison.OrdinalIgnoreCase) < 0, "planner protocol omitted");
             AssertTrue(prompt.IndexOf("tool diagnostic", StringComparison.OrdinalIgnoreCase) < 0, "activity omitted");
+        }
+
+        private static void PlainChatRepairsThoughtOnlyJson()
+        {
+            var calls = 0;
+            IReadOnlyList<ChatMessage> repairMessages = null;
+            var service = new PlainChatService(
+                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, Action<LlmStreamUpdate> progress, CancellationToken cancellationToken)
+                {
+                    calls += 1;
+                    if (calls == 1)
+                    {
+                        return Task.FromResult(new LlmCompletionResult
+                        {
+                            Content = "{\"thought\":\"Нужно поприветствовать пользователя.\"}"
+                        });
+                    }
+                    repairMessages = messages.ToList();
+                    return Task.FromResult(new LlmCompletionResult { Content = "Здравствуйте! Чем могу помочь?" });
+                });
+            var session = new ChatSession();
+
+            var result = service.ExecuteAsync(
+                "Привет",
+                session,
+                new DocumentContext(),
+                new AppSettings(),
+                null,
+                null,
+                CancellationToken.None).GetAwaiter().GetResult();
+
+            AssertEqual(2, calls, "thought-only response repaired once");
+            AssertEqual("Здравствуйте! Чем могу помочь?", result.AssistantText, "repaired plain answer");
+            AssertTrue(result.AssistantText.IndexOf("thought", StringComparison.OrdinalIgnoreCase) < 0, "thought hidden");
+            AssertContains(FlattenMessages(repairMessages), "Do not return JSON", "repair instruction");
+            AssertEqual(2, session.Messages.Count, "only user and final assistant persisted");
+
+            var failedRepairService = new PlainChatService(
+                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, Action<LlmStreamUpdate> progress, CancellationToken cancellationToken)
+                {
+                    return Task.FromResult(new LlmCompletionResult { Content = "{\"thought\":\"still internal\"}" });
+                });
+            var failedRepair = failedRepairService.ExecuteAsync(
+                "Привет",
+                new ChatSession(),
+                new DocumentContext(),
+                new AppSettings(),
+                null,
+                null,
+                CancellationToken.None).GetAwaiter().GetResult();
+            AssertContains(failedRepair.AssistantText, "не вернула пользовательский ответ", "failed repair returns safe message");
+            AssertTrue(failedRepair.AssistantText.IndexOf("still internal", StringComparison.OrdinalIgnoreCase) < 0, "failed repair thought hidden");
+        }
+
+        private static void PlainChatExtractsAnswerWithoutThought()
+        {
+            var calls = 0;
+            var service = new PlainChatService(
+                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, Action<LlmStreamUpdate> progress, CancellationToken cancellationToken)
+                {
+                    calls += 1;
+                    return Task.FromResult(new LlmCompletionResult
+                    {
+                        Content = "{\"thought\":\"internal\",\"answer\":\"Готовый ответ.\"}"
+                    });
+                });
+
+            var result = service.ExecuteAsync(
+                "Ответь",
+                new ChatSession(),
+                new DocumentContext(),
+                new AppSettings(),
+                null,
+                null,
+                CancellationToken.None).GetAwaiter().GetResult();
+
+            AssertEqual(1, calls, "embedded answer avoids repair request");
+            AssertEqual("Готовый ответ.", result.AssistantText, "user-facing answer extracted");
         }
 
         private static void DeletedMessageIsAbsentFromRebuiltContext()
