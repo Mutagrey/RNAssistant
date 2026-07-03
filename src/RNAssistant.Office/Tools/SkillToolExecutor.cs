@@ -4,8 +4,8 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Skills;
 using RNAssistant.Core.Storage;
+using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Tools
@@ -203,7 +203,7 @@ namespace RNAssistant.Office.Tools
         private IEnumerable<SkillDefinition> VisibleSkills()
         {
             var result = new Dictionary<string, SkillDefinition>(StringComparer.OrdinalIgnoreCase);
-            foreach (var skill in BuiltInSkillProvider.GetSkills().Where(IsVisible))
+            foreach (var skill in BuiltInSkillProvider.GetSkills(_adapter).Where(IsVisible))
             {
                 result[skill.Id] = skill;
             }

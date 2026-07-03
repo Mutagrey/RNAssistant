@@ -123,7 +123,7 @@ namespace RNAssistant.Harness
                 DetailsJson = "{\"range\":\"A1\"}"
             };
             service.NormalizeContextNote(note, "selection");
-            ContextService.UpsertContextNote(context, note);
+            ContextNormalizer.UpsertContextNote(context, note);
             AssertEqual(1, context.Notes.Count, "note count after insert");
             var originalCreatedUtc = context.Notes[0].CreatedUtc;
             AssertEqual("Excel", context.Notes[0].Host, "note host");
@@ -142,7 +142,7 @@ namespace RNAssistant.Harness
                 Preview = "second",
                 DetailsJson = "{\"range\":\"A1\",\"updated\":true}"
             };
-            ContextService.UpsertContextNote(context, replacement);
+            ContextNormalizer.UpsertContextNote(context, replacement);
             AssertEqual(1, context.Notes.Count, "note count after update");
             AssertEqual("Changed", context.Notes[0].Title, "updated note title");
             AssertEqual("second", context.Notes[0].Text, "updated note text");
@@ -178,9 +178,9 @@ namespace RNAssistant.Harness
 
         private static void ContextServiceTrimsText()
         {
-            AssertEqual("abc", ContextService.TrimForContext("abc", 10), "short trim");
-            AssertEqual("abc\n...[truncated]", ContextService.TrimForContext("abcdef", 3), "long trim");
-            AssertEqual(string.Empty, ContextService.TrimForContext(null, 3), "null trim");
+            AssertEqual("abc", ContextNormalizer.TrimForContext("abc", 10), "short trim");
+            AssertEqual("abc\n...[truncated]", ContextNormalizer.TrimForContext("abcdef", 3), "long trim");
+            AssertEqual(string.Empty, ContextNormalizer.TrimForContext(null, 3), "null trim");
         }
 
         private static void BridgeUsesTypedRunToolPayload()

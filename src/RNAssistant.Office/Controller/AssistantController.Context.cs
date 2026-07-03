@@ -33,8 +33,8 @@ namespace RNAssistant.Office
                 Title = string.IsNullOrWhiteSpace(title) ? "Context" : title.Trim(),
                 Reference = string.IsNullOrWhiteSpace(reference) ? title : reference.Trim(),
                 Source = string.IsNullOrWhiteSpace(reference) ? title : reference.Trim(),
-                Text = ContextService.TrimForContext(text ?? string.Empty, ModelContextBudget.InputBudgetTokens(settings) * 3),
-                Preview = ContextService.TrimForContext(text ?? string.Empty, 360),
+                Text = ContextNormalizer.TrimForContext(text ?? string.Empty, ModelContextBudget.InputBudgetTokens(settings) * 3),
+                Preview = ContextNormalizer.TrimForContext(text ?? string.Empty, 360),
                 DetailsJson = detailsJson
             }, kind);
             return context;
@@ -64,7 +64,7 @@ namespace RNAssistant.Office
                 Title = "VBA project",
                 Reference = "vba:project",
                 Source = _adapter.DocumentTitle,
-                Text = ContextService.TrimForContext(text, Math.Max(1000, limit)),
+                Text = ContextNormalizer.TrimForContext(text, Math.Max(1000, limit)),
                 Preview = "VBA project attached for this chat. Use VBA tools to patch modules.",
                 DetailsJson = JsonConvert.SerializeObject(new
                 {
@@ -96,7 +96,7 @@ namespace RNAssistant.Office
             }
 
             _contextService.NormalizeContextNote(note, mode);
-            ContextService.UpsertContextNote(context, note);
+            ContextNormalizer.UpsertContextNote(context, note);
             SaveSessionContext(session);
             return context;
         }
@@ -105,7 +105,7 @@ namespace RNAssistant.Office
         {
             var context = LoadContext(session);
             _contextService.NormalizeContextNote(note, mode);
-            ContextService.UpsertContextNote(context, note);
+            ContextNormalizer.UpsertContextNote(context, note);
             SaveSessionContext(session);
             return context;
         }

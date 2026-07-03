@@ -32,16 +32,6 @@ namespace RNAssistant.Office.Services
             CreateNormalizer().NormalizeContextNote(note, mode);
         }
 
-        public static void UpsertContextNote(DocumentContext context, ContextNote note)
-        {
-            ContextNormalizer.UpsertContextNote(context, note);
-        }
-
-        public static string TrimForContext(string text, int maxChars)
-        {
-            return ContextNormalizer.TrimForContext(text, maxChars);
-        }
-
         private ContextNormalizer CreateNormalizer()
         {
             return new ContextNormalizer(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle);

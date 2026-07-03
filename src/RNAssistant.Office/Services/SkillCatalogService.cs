@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Skills;
 using RNAssistant.Core.Storage;
 
 namespace RNAssistant.Office.Services
@@ -21,7 +20,7 @@ namespace RNAssistant.Office.Services
         public List<SkillDefinition> GetVisibleSkills()
         {
             var result = new Dictionary<string, SkillDefinition>(StringComparer.OrdinalIgnoreCase);
-            foreach (var skill in BuiltInSkillProvider.GetSkills().Where(IsVisible))
+            foreach (var skill in BuiltInSkillProvider.GetSkills(_adapter).Where(IsVisible))
             {
                 result[skill.Id] = skill;
             }

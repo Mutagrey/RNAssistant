@@ -23,6 +23,11 @@ namespace RNAssistant.Office
         OfficeContext GetOfficeContext();
     }
 
+    public interface IOfficeBuiltInSkillProvider
+    {
+        IEnumerable<SkillDefinition> GetBuiltInSkills();
+    }
+
     public interface IOfficeDocumentCatalog
     {
         IReadOnlyList<OpenOfficeDocumentDto> ListOpenDocuments();

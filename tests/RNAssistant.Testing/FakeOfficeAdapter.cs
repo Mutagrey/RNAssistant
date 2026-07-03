@@ -9,7 +9,7 @@ using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Harness
 {
-    internal sealed class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeDocumentCatalog
+    internal sealed class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog
     {
         public readonly List<ToolCommand> Executed = new List<ToolCommand>();
         public string VbaModuleType = "StdModule";
@@ -188,6 +188,23 @@ namespace RNAssistant.Harness
         public IEnumerable<ToolDefinition> GetBuiltInTools()
         {
             return _builtInTools.Select(CloneTool).ToArray();
+        }
+
+        public IEnumerable<SkillDefinition> GetBuiltInSkills()
+        {
+            if (string.Equals(_hostName, "Word", StringComparison.OrdinalIgnoreCase))
+            {
+                return new[] { BuiltInSkill("word.document_editing", "Word", "Word document editing", "Rewrite, insert, format, and review Word document content.", new[] { "word", "editing", "review", "formatting" }) };
+            }
+            if (string.Equals(_hostName, "PowerPoint", StringComparison.OrdinalIgnoreCase))
+            {
+                return new[] { BuiltInSkill("powerpoint.deck_building", "PowerPoint", "PowerPoint deck building", "Create and improve slide structure, content, and speaker notes.", new[] { "powerpoint", "slides", "deck", "notes" }) };
+            }
+            if (string.Equals(_hostName, "Outlook", StringComparison.OrdinalIgnoreCase))
+            {
+                return new[] { BuiltInSkill("outlook.email_assistant", "Outlook", "Outlook email assistant", "Draft, summarize, and reply to Outlook mail.", new[] { "outlook", "email", "draft", "reply" }) };
+            }
+            return new[] { BuiltInSkill("excel.analysis_reporting", "Excel", "Excel analysis reporting", "Analyze ranges, create summaries, tables, and charts in Excel.", new[] { "excel", "analysis", "reporting", "charts" }) };
         }
 
         public void QueueResult(string toolId, ToolResult result)
@@ -1042,6 +1059,21 @@ namespace RNAssistant.Harness
                 MutatesDocument = mutatesDocument,
                 AgentCanRun = agentCanRun,
                 RiskLevel = mutatesDocument && riskLevel <= 0 ? 2 : riskLevel
+            };
+        }
+
+        private static SkillDefinition BuiltInSkill(string id, string host, string name, string description, string[] tags)
+        {
+            return new SkillDefinition
+            {
+                Id = id,
+                Host = host,
+                Name = name,
+                Description = description,
+                Tags = new List<string>(tags ?? new string[0]),
+                BodyMarkdown = "# " + name,
+                Enabled = true,
+                BuiltIn = true
             };
         }
 

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Tools
 {
@@ -29,11 +28,6 @@ namespace RNAssistant.Office.Tools
             var raw = String(args, name, null);
             bool parsed;
             return bool.TryParse(raw, out parsed) ? parsed : fallback;
-        }
-
-        public static Dictionary<string, object> ParseObject(string argumentsJson)
-        {
-            return ToolArgumentNormalizer.ParseObject(argumentsJson);
         }
     }
 }

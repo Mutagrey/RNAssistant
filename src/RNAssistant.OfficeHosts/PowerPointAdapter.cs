@@ -12,7 +12,7 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.OfficeHosts
 {
-    public sealed class PowerPointAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeDocumentCatalog
+    public sealed class PowerPointAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog
     {
         private readonly PowerPoint.Application _application;
         private readonly OfficeTargetDescriptor _target;
@@ -193,6 +193,24 @@ namespace RNAssistant.OfficeHosts
                 Skill("powerpoint.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}", true, false, 3),
                 Skill("powerpoint.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}", true, false, 3),
                 Skill("powerpoint.run_macro", "Mutates document: Run a PowerPoint VBA macro by name.", "{\"macroName\":\"Module1.Test\"}", true, false, 3)
+            };
+        }
+
+        public IEnumerable<SkillDefinition> GetBuiltInSkills()
+        {
+            return new[]
+            {
+                new SkillDefinition
+                {
+                    Id = "powerpoint.deck_building",
+                    Host = "PowerPoint",
+                    Name = "PowerPoint deck building",
+                    Description = "Create and improve slide structure, content, and speaker notes.",
+                    Tags = new List<string> { "powerpoint", "slides", "deck", "notes" },
+                    BodyMarkdown = "# PowerPoint Deck Building\n\nUse this skill for slide creation and cleanup.\n\n- Create one clear idea per slide.\n- Use short titles and concise body bullets.\n- Keep slide order logical: context, evidence, recommendation, next steps.\n- Add speaker notes only when useful.\n- Do not overload slides with long paragraphs.",
+                    Enabled = true,
+                    BuiltIn = true
+                }
             };
         }
 

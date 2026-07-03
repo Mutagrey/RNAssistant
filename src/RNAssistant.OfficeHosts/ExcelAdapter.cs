@@ -13,7 +13,7 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.OfficeHosts
 {
-    public sealed class ExcelAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeDocumentCatalog
+    public sealed class ExcelAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog
     {
         private readonly Excel.Application _application;
         private readonly OfficeTargetDescriptor _target;
@@ -195,6 +195,24 @@ namespace RNAssistant.OfficeHosts
                 Skill("excel.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}", true, false, 3),
                 Skill("excel.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}", true, false, 3),
                 Skill("excel.run_macro", "Mutates document: Run an Excel VBA macro by name.", "{\"macroName\":\"Module1.Test\"}", true, false, 3)
+            };
+        }
+
+        public IEnumerable<SkillDefinition> GetBuiltInSkills()
+        {
+            return new[]
+            {
+                new SkillDefinition
+                {
+                    Id = "excel.analysis_reporting",
+                    Host = "Excel",
+                    Name = "Excel analysis reporting",
+                    Description = "Analyze ranges, create summaries, tables, and charts in Excel.",
+                    Tags = new List<string> { "excel", "analysis", "reporting", "charts" },
+                    BodyMarkdown = "# Excel Analysis Reporting\n\nUse this skill for Excel reporting tasks.\n\n- Inspect sheets/ranges before modifying unknown workbooks.\n- Write tables with stable headers and predictable start addresses.\n- Prefer chart source ranges that include headers.\n- Autofit after writing tables when available.\n- Keep generated sheets named clearly and avoid overwriting existing sheets unless asked.",
+                    Enabled = true,
+                    BuiltIn = true
+                }
             };
         }
 

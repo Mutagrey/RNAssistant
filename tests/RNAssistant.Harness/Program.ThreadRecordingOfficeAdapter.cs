@@ -22,7 +22,7 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private sealed class ThreadRecordingOfficeAdapter : IOfficeApplicationAdapter
+        private sealed class ThreadRecordingOfficeAdapter : IOfficeApplicationAdapter, IOfficeBuiltInSkillProvider
         {
             private readonly IOfficeApplicationAdapter _inner;
             private readonly Action _record;
@@ -66,6 +66,13 @@ namespace RNAssistant.Harness
             {
                 _record();
                 return _inner.GetBuiltInTools();
+            }
+
+            public IEnumerable<SkillDefinition> GetBuiltInSkills()
+            {
+                _record();
+                var provider = _inner as IOfficeBuiltInSkillProvider;
+                return provider == null ? new SkillDefinition[0] : provider.GetBuiltInSkills();
             }
 
             public ToolResult ExecuteTool(ToolCommand command)

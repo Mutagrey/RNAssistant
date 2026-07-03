@@ -6,7 +6,7 @@ using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office
 {
-    public sealed class DispatchedOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeDocumentCatalog, IDisposable
+    public sealed class DispatchedOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IDisposable
     {
         private readonly Func<IOfficeApplicationAdapter> _adapterFactory;
         private readonly OfficeStaDispatcher _dispatcher;
@@ -80,6 +80,16 @@ namespace RNAssistant.Office
         public IEnumerable<ToolDefinition> GetBuiltInTools()
         {
             return _dispatcher.Invoke(delegate { return Inner.GetBuiltInTools().ToArray(); });
+        }
+
+        public IEnumerable<SkillDefinition> GetBuiltInSkills()
+        {
+            return _dispatcher.Invoke(delegate
+            {
+                var provider = Inner as IOfficeBuiltInSkillProvider;
+                var skills = provider == null ? null : provider.GetBuiltInSkills();
+                return (skills ?? new SkillDefinition[0]).ToArray();
+            });
         }
 
         public ToolResult ExecuteTool(ToolCommand command)

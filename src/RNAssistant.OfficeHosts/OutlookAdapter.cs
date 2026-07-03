@@ -8,7 +8,7 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.OfficeHosts
 {
-    public sealed class OutlookAdapter : IOfficeApplicationAdapter, IOfficeContextProvider
+    public sealed class OutlookAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider
     {
         private readonly Outlook.Application _application;
         private readonly OfficeTargetDescriptor _target;
@@ -122,6 +122,24 @@ namespace RNAssistant.OfficeHosts
                 Skill("outlook.mark_as_read", "Mutates document: Mark selected mail as read.", "{}", true, false, 1),
                 Skill("outlook.collect_folder_mail", "Read-only: Collect recent mail metadata from current folder for analysis.", "{\"maxItems\":100,\"maxBodyChars\":1000}"),
                 Skill("outlook.collect_monthly_summary_data", "Read-only: Collect current folder mail grouped by month for archive summary.", "{\"maxItems\":500,\"maxBodyChars\":500}")
+            };
+        }
+
+        public IEnumerable<SkillDefinition> GetBuiltInSkills()
+        {
+            return new[]
+            {
+                new SkillDefinition
+                {
+                    Id = "outlook.email_assistant",
+                    Host = "Outlook",
+                    Name = "Outlook email assistant",
+                    Description = "Draft, summarize, and reply to Outlook mail.",
+                    Tags = new List<string> { "outlook", "email", "draft", "reply" },
+                    BodyMarkdown = "# Outlook Email Assistant\n\nUse this skill for email tasks.\n\n- Identify whether the user wants a draft, reply, summary, or extraction.\n- Match the requested tone and recipient context.\n- Keep replies concise unless asked otherwise.\n- Do not send mail unless the user explicitly requests sending and a tool supports it.\n- Preserve important dates, names, and commitments.",
+                    Enabled = true,
+                    BuiltIn = true
+                }
             };
         }
 

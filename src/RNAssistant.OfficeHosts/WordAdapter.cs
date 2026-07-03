@@ -11,7 +11,7 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.OfficeHosts
 {
-    public sealed class WordAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeDocumentCatalog
+    public sealed class WordAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog
     {
         private readonly Word.Application _application;
         private readonly OfficeTargetDescriptor _target;
@@ -183,6 +183,24 @@ namespace RNAssistant.OfficeHosts
                 Skill("word.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}", true, false, 3),
                 Skill("word.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}", true, false, 3),
                 Skill("word.run_macro", "Mutates document: Run a Word VBA macro by name.", "{\"macroName\":\"Module1.Test\"}", true, false, 3)
+            };
+        }
+
+        public IEnumerable<SkillDefinition> GetBuiltInSkills()
+        {
+            return new[]
+            {
+                new SkillDefinition
+                {
+                    Id = "word.document_editing",
+                    Host = "Word",
+                    Name = "Word document editing",
+                    Description = "Rewrite, insert, format, and review Word document content.",
+                    Tags = new List<string> { "word", "editing", "review", "formatting" },
+                    BodyMarkdown = "# Word Document Editing\n\nUse this skill for Word drafting and editing tasks.\n\n- Read selection or document context before targeted edits.\n- Preserve user tone unless the user asks to change it.\n- Use insert/replace tools for document mutations.\n- Keep formatting changes explicit.\n- For review tasks, separate findings from suggested edits.",
+                    Enabled = true,
+                    BuiltIn = true
+                }
             };
         }
 

@@ -92,7 +92,6 @@
     <Compile Include="Llm\ContextUsageEstimator.cs" />
     <Compile Include="Tools\ToolArgumentNormalizer.cs" />
     <Compile Include="Tools\AgentPlannerResponseParser.cs" />
-    <Compile Include="Skills\BuiltInSkillProvider.cs" />
     <Compile Include="Services\ContextNormalizer.cs" />
     <Compile Include="Services\ChartArtifactBuilder.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
