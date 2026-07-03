@@ -26,7 +26,7 @@ namespace RNAssistant.Core.Storage
                 return result;
             }
 
-            foreach (var file in SafeGetFiles(_paths.ToolsDirectory, "tool.json"))
+            foreach (var file in StorageFileSystem.GetFilesRecursive(_paths.ToolsDirectory, "tool.json"))
             {
                 var tool = _json.Load(file, (ToolDefinition)null);
                 if (tool == null || string.IsNullOrWhiteSpace(tool.Id))
@@ -76,7 +76,7 @@ namespace RNAssistant.Core.Storage
             SaveTool(tool);
             foreach (var oldDirectory in oldDirectories)
             {
-                TryDeleteDirectory(oldDirectory);
+                StorageFileSystem.TryDeleteDirectory(oldDirectory);
             }
             return Load().FirstOrDefault(t => string.Equals(t.Id, tool.Id, StringComparison.OrdinalIgnoreCase));
         }
@@ -98,7 +98,7 @@ namespace RNAssistant.Core.Storage
 
             foreach (var tool in matches)
             {
-                TryDeleteDirectory(tool.StoragePath);
+                StorageFileSystem.TryDeleteDirectory(tool.StoragePath);
             }
             return true;
         }
@@ -122,7 +122,7 @@ namespace RNAssistant.Core.Storage
                     string.Equals(existing.Host, "Common", StringComparison.OrdinalIgnoreCase);
                 if (inScope && !incomingDirectories.Contains(existing.StoragePath ?? string.Empty))
                 {
-                    TryDeleteDirectory(existing.StoragePath);
+                    StorageFileSystem.TryDeleteDirectory(existing.StoragePath);
                 }
             }
         }
@@ -195,85 +195,19 @@ namespace RNAssistant.Core.Storage
                 return;
             }
 
-            var tempPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            try
-            {
-                File.WriteAllText(tempPath, value);
-                if (File.Exists(path))
-                {
-                    File.Replace(tempPath, path, null);
-                }
-                else
-                {
-                    File.Move(tempPath, path);
-                }
-            }
-            finally
-            {
-                if (File.Exists(tempPath))
-                {
-                    File.Delete(tempPath);
-                }
-            }
-        }
-
-        private static void TryDeleteDirectory(string path)
-        {
-            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
-            {
-                return;
-            }
-            Directory.Delete(path, true);
+            StorageFileSystem.WriteAllTextAtomic(path, value);
         }
 
         private static string HostFolder(string host)
         {
-            return SafeSegment(string.IsNullOrWhiteSpace(host) ? "common" : host.ToLowerInvariant());
+            return StorageFileSystem.SafeSegment(
+                string.IsNullOrWhiteSpace(host) ? "common" : host.ToLowerInvariant(),
+                "common");
         }
 
         private static string ToolFolder(string id)
         {
-            return SafeSegment((id ?? "tool").ToLowerInvariant());
-        }
-
-        private static string SafeSegment(string value)
-        {
-            var chars = (value ?? "tool").Select(c =>
-                char.IsLetterOrDigit(c) || c == '-' || c == '_' ? c : '_').ToArray();
-            var result = new string(chars).Trim('_');
-            return string.IsNullOrWhiteSpace(result) ? "tool" : result;
-        }
-
-        private static IEnumerable<string> SafeGetFiles(string directory, string pattern)
-        {
-            var files = new List<string>();
-            AddFiles(directory, pattern, files);
-            return files;
-        }
-
-        private static void AddFiles(string directory, string pattern, List<string> files)
-        {
-            string[] localFiles;
-            string[] childDirectories;
-            try
-            {
-                localFiles = Directory.GetFiles(directory, pattern);
-                childDirectories = Directory.GetDirectories(directory);
-            }
-            catch (IOException)
-            {
-                return;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return;
-            }
-
-            files.AddRange(localFiles);
-            foreach (var childDirectory in childDirectories)
-            {
-                AddFiles(childDirectory, pattern, files);
-            }
+            return StorageFileSystem.SafeSegment((id ?? "tool").ToLowerInvariant(), "tool");
         }
     }
 }

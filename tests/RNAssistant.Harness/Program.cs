@@ -145,6 +145,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "chat: vba tasks auto include vba context", Run = ChatVbaTaskAutoIncludesVbaContext },
                 new HarnessTest { Name = "chat: deferred smart title setting", Run = ChatCompletionServiceUsesDeferredSmartTitleSetting },
                 new HarnessTest { Name = "chat: executes typical host tasks", Run = ChatExecutesTypicalHostTasks },
+                new HarnessTest { Name = "chat: built-in mutation follows safety metadata", Run = ChatBuiltInMutationFollowsSafetyMetadata },
                 new HarnessTest { Name = "chat: general answer skips Office reads and tools", Run = ChatGeneralAnswerSkipsOfficeReadsAndTools },
                 new HarnessTest { Name = "chat: routing avoids substring false positives", Run = ChatRoutingAvoidsSubstringFalsePositives },
                 new HarnessTest { Name = "chat: current document question uses read tool", Run = ChatCurrentDocumentQuestionUsesReadTool },

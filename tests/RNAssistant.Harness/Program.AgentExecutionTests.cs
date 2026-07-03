@@ -221,6 +221,36 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static void ChatBuiltInMutationFollowsSafetyMetadata()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    AgentBlock(Command("excel.write_range", "address", "A1", "value", "Ready")),
+                    FinalBlock("Done."));
+
+                var result = service.ExecuteAsync(
+                    "Write Ready to A1.",
+                    NewSession(adapter),
+                    NewContext(adapter),
+                    new AppSettings
+                    {
+                        AutoConfirmToolActions = false,
+                        RequireVerificationForMutations = false
+                    },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Done.", result.AssistantText, "built-in mutation final answer");
+                AssertEqual(1, adapter.Executed.Count, "built-in mutation execution count");
+                AssertEqual("excel.write_range", adapter.Executed[0].ToolId, "built-in mutation tool");
+            });
+        }
+
         private static void ChatProseActionForcesToolFollowUp()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

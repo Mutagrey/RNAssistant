@@ -24,7 +24,7 @@ namespace RNAssistant.Core.Storage
                 return result;
             }
 
-            foreach (var file in SafeGetFiles(_paths.SkillsDirectory, "SKILL.md"))
+            foreach (var file in StorageFileSystem.GetFilesRecursive(_paths.SkillsDirectory, "SKILL.md"))
             {
                 var skill = LoadSkill(file);
                 if (skill == null || string.IsNullOrWhiteSpace(skill.Id))
@@ -69,7 +69,7 @@ namespace RNAssistant.Core.Storage
             SaveSkill(skill);
             foreach (var oldDirectory in oldDirectories)
             {
-                TryDeleteDirectory(oldDirectory);
+                StorageFileSystem.TryDeleteDirectory(oldDirectory);
             }
             return Load().FirstOrDefault(s => string.Equals(s.Id, skill.Id, StringComparison.OrdinalIgnoreCase));
         }
@@ -90,7 +90,7 @@ namespace RNAssistant.Core.Storage
                 }
 
                 found = true;
-                TryDeleteDirectory(skill.StoragePath);
+                StorageFileSystem.TryDeleteDirectory(skill.StoragePath);
             }
 
             return found;
@@ -115,7 +115,7 @@ namespace RNAssistant.Core.Storage
                     string.Equals(existing.Host, "Common", StringComparison.OrdinalIgnoreCase);
                 if (inScope && !incomingDirectories.Contains(existing.StoragePath ?? string.Empty))
                 {
-                    TryDeleteDirectory(existing.StoragePath);
+                    StorageFileSystem.TryDeleteDirectory(existing.StoragePath);
                 }
             }
         }
@@ -124,7 +124,7 @@ namespace RNAssistant.Core.Storage
         {
             var directory = SkillDirectory(skill);
             Directory.CreateDirectory(directory);
-            WriteAtomic(Path.Combine(directory, "SKILL.md"), Serialize(skill));
+            StorageFileSystem.WriteAllTextAtomic(Path.Combine(directory, "SKILL.md"), Serialize(skill), Encoding.UTF8);
         }
 
         private string SkillDirectory(SkillDefinition skill)
@@ -132,31 +132,7 @@ namespace RNAssistant.Core.Storage
             return Path.Combine(
                 _paths.SkillsDirectory,
                 HostFolder(skill == null ? null : skill.Host),
-                SafeSegment(skill == null || skill.Id == null ? "skill" : skill.Id.ToLowerInvariant()));
-        }
-
-        private static void WriteAtomic(string path, string content)
-        {
-            var tempPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            try
-            {
-                File.WriteAllText(tempPath, content ?? string.Empty, Encoding.UTF8);
-                if (File.Exists(path))
-                {
-                    File.Replace(tempPath, path, null);
-                }
-                else
-                {
-                    File.Move(tempPath, path);
-                }
-            }
-            finally
-            {
-                if (File.Exists(tempPath))
-                {
-                    File.Delete(tempPath);
-                }
-            }
+                StorageFileSystem.SafeSegment(skill == null || skill.Id == null ? "skill" : skill.Id.ToLowerInvariant(), "skill"));
         }
 
         private static SkillDefinition LoadSkill(string path)
@@ -267,61 +243,9 @@ namespace RNAssistant.Core.Storage
 
         private static string HostFolder(string host)
         {
-            return SafeSegment(string.IsNullOrWhiteSpace(host) ? "common" : host.ToLowerInvariant());
-        }
-
-        private static string SafeSegment(string value)
-        {
-            var chars = (value ?? "skill").Select(c =>
-                char.IsLetterOrDigit(c) || c == '-' || c == '_' ? c : '_').ToArray();
-            var result = new string(chars).Trim('_');
-            return string.IsNullOrWhiteSpace(result) ? "skill" : result;
-        }
-
-        private static void TryDeleteDirectory(string path)
-        {
-            try
-            {
-                Directory.Delete(path, true);
-            }
-            catch (IOException)
-            {
-            }
-            catch (UnauthorizedAccessException)
-            {
-            }
-        }
-
-        private static IEnumerable<string> SafeGetFiles(string directory, string pattern)
-        {
-            var files = new List<string>();
-            AddFiles(directory, pattern, files);
-            return files;
-        }
-
-        private static void AddFiles(string directory, string pattern, List<string> files)
-        {
-            string[] localFiles;
-            string[] childDirectories;
-            try
-            {
-                localFiles = Directory.GetFiles(directory, pattern);
-                childDirectories = Directory.GetDirectories(directory);
-            }
-            catch (IOException)
-            {
-                return;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return;
-            }
-
-            files.AddRange(localFiles);
-            foreach (var childDirectory in childDirectories)
-            {
-                AddFiles(childDirectory, pattern, files);
-            }
+            return StorageFileSystem.SafeSegment(
+                string.IsNullOrWhiteSpace(host) ? "common" : host.ToLowerInvariant(),
+                "common");
         }
     }
 }

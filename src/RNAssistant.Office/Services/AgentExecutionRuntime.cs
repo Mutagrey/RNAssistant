@@ -105,12 +105,6 @@ namespace RNAssistant.Office.Services
                 (!pendingVerification && string.Equals(route.Phase, AgentPhases.Final, StringComparison.OrdinalIgnoreCase));
         }
 
-        public static bool RequiresRiskConfirmation(int riskLevel, AppSettings settings)
-        {
-            settings = settings ?? new AppSettings();
-            return riskLevel >= 2 && !settings.AutoConfirmToolActions;
-        }
-
         public static void Advance(RoutedTask route, IReadOnlyList<AgentObservation> observations, bool pendingVerification)
         {
             if (route == null)

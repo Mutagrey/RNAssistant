@@ -380,16 +380,6 @@ namespace RNAssistant.Office.Services
                             break;
                         }
 
-                        var risk = tool.RiskLevel;
-                        if (AgentPhaseController.RequiresRiskConfirmation(risk, settings))
-                        {
-                            var pending = ToolResult.WaitingConfirmation("Tool requires confirmation before execution: " + command.ToolId);
-                            AttachPendingId(session, command, pending, pendingToolRegistrar);
-                            AddToolObservation(command, tool, pending, observations, resultLog, session);
-                            stopped = true;
-                            break;
-                        }
-
                         ReportProgress(progress, settings.AutoRunToolCalls != false ? "executing" : "waiting", (settings.AutoRunToolCalls != false ? "Исполняю tool: " : "Auto-run отключен для tool: ") + command.ToolId, CreateRunningActivity(command, settings.AutoRunToolCalls != false ? "running" : "waiting", "tool"));
                         var result = settings.AutoRunToolCalls != false
                             ? _toolExecutor.Execute(command, allTools, settings, false, false, session, cancellationToken)
@@ -701,18 +691,6 @@ namespace RNAssistant.Office.Services
             {
                 return string.Empty;
             }
-        }
-
-        private static bool ContainsAny(string value, params string[] terms)
-        {
-            foreach (var term in terms ?? new string[0])
-            {
-                if (!string.IsNullOrWhiteSpace(term) && (value ?? string.Empty).IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return true;
-                }
-            }
-            return false;
         }
 
         private static string FirstNonEmpty(params string[] values)

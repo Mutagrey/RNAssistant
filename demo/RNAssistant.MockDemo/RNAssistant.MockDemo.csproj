@@ -62,13 +62,10 @@
     <Compile Include="..\..\src\RNAssistant.Core\Skills\BuiltInSkillProvider.cs" Link="Core\Skills\BuiltInSkillProvider.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Services\ContextNormalizer.cs" Link="Core\Services\ContextNormalizer.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Services\ChartArtifactBuilder.cs" Link="Core\Services\ChartArtifactBuilder.cs" />
-    <Compile Include="..\..\src\RNAssistant.Core\Storage\AppDataPaths.cs" Link="Core\Storage\AppDataPaths.cs" />
-    <Compile Include="..\..\src\RNAssistant.Core\Storage\AttachmentStore.cs" Link="Core\Storage\AttachmentStore.cs" />
-    <Compile Include="..\..\src\RNAssistant.Core\Storage\ChatStore.cs" Link="Core\Storage\ChatStore.cs" />
-    <Compile Include="..\..\src\RNAssistant.Core\Storage\JsonFileStore.cs" Link="Core\Storage\JsonFileStore.cs" />
-    <Compile Include="..\..\src\RNAssistant.Core\Storage\SkillStore.cs" Link="Core\Storage\SkillStore.cs" />
-    <Compile Include="..\..\src\RNAssistant.Core\Storage\ToolStore.cs" Link="Core\Storage\ToolStore.cs" />
-    <Compile Include="..\..\src\RNAssistant.Core\Storage\VbaBackupStore.cs" Link="Core\Storage\VbaBackupStore.cs" />
+    <Compile
+      Include="..\..\src\RNAssistant.Core\Storage\*.cs"
+      Exclude="..\..\src\RNAssistant.Core\Storage\ProtectedSecretStore.cs;..\..\src\RNAssistant.Core\Storage\SettingsService.cs"
+      Link="Core\Storage\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Contracts\IOfficeApplicationAdapter.cs" Link="Office\Contracts\IOfficeApplicationAdapter.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Contracts\BridgeDtos.cs" Link="Office\Contracts\BridgeDtos.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Agent\AgentTranscript.cs" Link="Office\Agent\AgentTranscript.cs" />
@@ -77,8 +74,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Controller\AssistantController.Chats.cs" Link="Office\Controller\AssistantController.Chats.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Controller\AssistantController.Context.cs" Link="Office\Controller\AssistantController.Context.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Controller\AssistantController.HtmlWorkspace.cs" Link="Office\Controller\AssistantController.HtmlWorkspace.cs" />
-    <Compile Include="..\..\src\RNAssistant.Office\Services\AgentRunService.cs" Link="Office\Services\AgentRunService.cs" />
-    <Compile Include="..\..\src\RNAssistant.Office\Services\AgentPlannerRuntime.cs" Link="Office\Services\AgentPlannerRuntime.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Services\Agent*.cs" Link="Office\Services\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatCloneService.cs" Link="Office\Services\ChatCloneService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatCompletionService.cs" Link="Office\Services\ChatCompletionService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Services\ChatContextWindowBuilder.cs" Link="Office\Services\ChatContextWindowBuilder.cs" />

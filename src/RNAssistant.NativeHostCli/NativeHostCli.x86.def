@@ -1,5 +1,3 @@
-LIBRARY RNAssistant.NativeHostCli
-
 EXPORTS
     Host_ShowPanel=_Host_ShowPanel@8
     Host_ShowPanelEx=_Host_ShowPanelEx@12

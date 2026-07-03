@@ -102,6 +102,7 @@
     <Compile Include="Storage\ProtectedSecretStore.cs" />
     <Compile Include="Storage\SettingsService.cs" />
     <Compile Include="Storage\SkillStore.cs" />
+    <Compile Include="Storage\StorageFileSystem.cs" />
     <Compile Include="Storage\ToolStore.cs" />
     <Compile Include="Storage\VbaBackupStore.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

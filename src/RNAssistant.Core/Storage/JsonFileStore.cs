@@ -42,26 +42,7 @@ namespace RNAssistant.Core.Storage
             }
 
             var json = JsonConvert.SerializeObject(value, Formatting.Indented);
-            var tempPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            try
-            {
-                File.WriteAllText(tempPath, json);
-                if (File.Exists(path))
-                {
-                    File.Replace(tempPath, path, null);
-                }
-                else
-                {
-                    File.Move(tempPath, path);
-                }
-            }
-            finally
-            {
-                if (File.Exists(tempPath))
-                {
-                    File.Delete(tempPath);
-                }
-            }
+            StorageFileSystem.WriteAllTextAtomic(path, json);
         }
     }
 }

@@ -195,7 +195,7 @@ private:
         }
     }
 
-    static Assembly^ ResolveAssembly(Object^ sender, ResolveEventArgs^ args)
+    static Assembly^ ResolveAssembly(Object^, ResolveEventArgs^ args)
     {
         try
         {
@@ -354,7 +354,7 @@ private:
         form->Bounds = System::Drawing::Rectangle(left, top, width, height);
     }
 
-    static void OnFormClosed(Object^ sender, FormClosedEventArgs^ e)
+    static void OnFormClosed(Object^, FormClosedEventArgs^)
     {
         DisposeSession();
         _form = nullptr;
