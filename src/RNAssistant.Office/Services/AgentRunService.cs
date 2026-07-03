@@ -24,6 +24,7 @@ namespace RNAssistant.Office.Services
         private readonly AgentActionValidator _actionValidator;
         private readonly ObservationNormalizer _observationNormalizer;
         private readonly VerificationRunner _verificationRunner;
+        private readonly VerificationExecutor _verificationExecutor;
         private readonly RecipeExpander _recipeExpander;
         private readonly AgentToolCatalogResolver _toolCatalogResolver;
 
@@ -56,6 +57,7 @@ namespace RNAssistant.Office.Services
             _actionValidator = new AgentActionValidator();
             _observationNormalizer = new ObservationNormalizer();
             _verificationRunner = new VerificationRunner();
+            _verificationExecutor = new VerificationExecutor(TimeSpan.FromSeconds(15));
             _recipeExpander = new RecipeExpander();
             _toolCatalogResolver = new AgentToolCatalogResolver(toolExecutor, includeControllerTools);
         }
@@ -450,11 +452,21 @@ namespace RNAssistant.Office.Services
                                     break;
                                 }
                                 ReportProgress(progress, "verifying", "Проверяю результат через " + verify.ToolId, CreateRunningActivity(verify, "running", "verification"));
-                                var verifyResult = _toolExecutor.Execute(verify, allTools, settings, false, false, session, cancellationToken);
+                                var verifyExecution = await _verificationExecutor.ExecuteAsync(
+                                    verify.ToolId,
+                                    () => _toolExecutor.Execute(verify, allTools, settings, false, false, session, CancellationToken.None),
+                                    cancellationToken).ConfigureAwait(false);
+                                var verifyResult = verifyExecution.Result;
                                 AddToolObservation(verify, verifyTool, verifyResult, observations, resultLog, session, AgentObservationPurposes.Verification);
                                 ReportProgress(progress, verifyResult.Success ? "completed" : "failed", verifyResult.Message, AgentTranscript.CreateToolActivity(verify, verifyResult, "verification"));
                                 if (!verifyResult.Success)
                                 {
+                                    if (verifyExecution.TimedOut)
+                                    {
+                                        continueAfterRecoverableError = false;
+                                        stopped = true;
+                                        break;
+                                    }
                                     continueAfterRecoverableError = settings.AutoRetryToolErrors != false;
                                     stopped = !continueAfterRecoverableError;
                                     break;

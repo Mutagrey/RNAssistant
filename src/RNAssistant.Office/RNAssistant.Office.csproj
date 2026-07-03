@@ -92,6 +92,7 @@
     <Compile Include="Services\ModelCapabilityService.cs" />
     <Compile Include="Services\ChatTitleBuilder.cs" />
     <Compile Include="Services\ChatSessionService.cs" />
+    <Compile Include="Services\DocumentOpenService.cs" />
     <Compile Include="Services\ContextService.cs" />
     <Compile Include="Services\BuiltInSkillProvider.cs" />
     <Compile Include="Services\SkillCatalogService.cs" />

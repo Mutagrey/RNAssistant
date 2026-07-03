@@ -172,11 +172,46 @@ namespace RNAssistant.Harness
 
                 AssertEqual("Verified.", result.AssistantText, "assistant text");
                 AssertTrue(calls.Count >= 2, "llm call count");
-                AssertContains(FlattenMessages(calls[1]), "excel.workbook_summary succeeded", "verification observation");
+                AssertContains(FlattenMessages(calls[1]), "excel.list_sheets succeeded", "verification observation");
                 AssertEqual(2, adapter.Executed.Count, "adapter execution count");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "mutation tool");
-                AssertEqual("excel.workbook_summary", adapter.Executed[1].ToolId, "verification tool");
+                AssertEqual("excel.list_sheets", adapter.Executed[1].ToolId, "verification tool");
             });
+        }
+
+        private static void VerificationUsesLightweightSheetRead()
+        {
+            var adapter = FakeOfficeAdapter.ForHost("Excel");
+            var tools = adapter.GetBuiltInTools().ToList();
+            var mutation = tools.First(tool => string.Equals(tool.Id, "excel.add_sheet", StringComparison.OrdinalIgnoreCase));
+            var command = new ToolCommand { ToolId = mutation.Id };
+            command.Arguments["name"] = "Report";
+
+            var verification = new VerificationRunner()
+                .BuildVerificationCommands(command, mutation, tools)
+                .Single();
+
+            AssertEqual("excel.list_sheets", verification.ToolId, "sheet verification tool");
+        }
+
+        private static void VerificationHungReadTimesOut()
+        {
+            var release = new TaskCompletionSource<bool>();
+            var executor = new VerificationExecutor(TimeSpan.FromMilliseconds(25));
+
+            var outcome = executor.ExecuteAsync(
+                "excel.list_sheets",
+                delegate
+                {
+                    release.Task.GetAwaiter().GetResult();
+                    return ToolResult.Ok("late result");
+                },
+                CancellationToken.None).GetAwaiter().GetResult();
+            release.TrySetResult(true);
+
+            AssertTrue(outcome.TimedOut, "verification timeout flag");
+            AssertTrue(!outcome.Result.Success, "verification timeout fails");
+            AssertContains(outcome.Result.Message, "timed out", "verification timeout diagnostic");
         }
 
         private static void ChatUnavailableVerificationFailsClosed()

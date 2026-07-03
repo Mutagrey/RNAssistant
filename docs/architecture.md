@@ -78,6 +78,7 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - Context limits are token budgets resolved from the active model capability catalog. The legacy character limit is read only for settings compatibility.
 - Chat and planner context are rebuilt from the active session for every request. They use reference-deduplicated notes plus recent user/assistant messages and their attachments; agent activity, diagnostics, and reasoning metadata are never replayed.
 - Chat and Agent share `PromptBudgetComposer` for chronological history selection and attachment accounting. Once a recent message exceeds the remaining budget, older history is not reintroduced.
+- Deterministic verification uses the narrowest available read tool and has a 15-second runtime timeout. A timeout ends the run with a diagnostic instead of starting another COM operation against a potentially blocked Office host.
 - Text/PDF attachments are normalized locally. PDF text uses PdfPig; vision-capable models may also receive selected PDF pages rendered by the host-neutral Office service. Raw PDF files are not sent through the OpenAI-compatible chat payload.
 - Routing precedes Office context capture. General-answer routes expose no tools and do not read document content; document-dependent state is obtained through explicit read tools.
 - Tools are executable actions described by `ToolDefinition`; skills are markdown guidance described by `SkillDefinition`.

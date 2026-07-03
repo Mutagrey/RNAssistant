@@ -239,7 +239,9 @@ function renderChatDocumentNode(documentItem, query) {
     state.chatTreeCollapsedAll = allChatDocumentsCollapsed();
     renderChatSessionList(state.chats || []);
   });
-  header.querySelector(".chat-document-open").addEventListener("click", function () {
+  var openButton = header.querySelector(".chat-document-open");
+  openButton.hidden = !documentItem.open && !documentItem.path;
+  openButton.addEventListener("click", function () {
     if (documentItem.open) {
       activateDocument(documentItem.documentKey);
     } else if (documentItem.chats.length) {

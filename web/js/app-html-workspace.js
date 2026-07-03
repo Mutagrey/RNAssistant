@@ -533,7 +533,8 @@
     if (!frame) {
       return;
     }
-    frame.src = "data:text/html;charset=utf-8," + encodeURIComponent(buildPreviewHtml());
+    frame.removeAttribute("src");
+    frame.srcdoc = buildPreviewHtml();
   }
 
   function applyHtmlWorkspaceResponse(response) {

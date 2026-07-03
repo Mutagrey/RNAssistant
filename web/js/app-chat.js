@@ -39,7 +39,7 @@ async function openActiveDocument(chatIdValue) {
     log(result && result.launched ? "Документ открыт." : "Документ уже активен.");
   } catch (error) {
     log(error.detail || error.message);
-    window.alert(error.detail || error.message);
+    window.alert(error.message || "Не удалось открыть документ.");
   }
 }
 

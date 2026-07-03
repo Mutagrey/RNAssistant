@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
@@ -27,6 +29,13 @@ namespace RNAssistant.Office.Services
             var host = tool.Host ?? string.Empty;
             if (string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase))
             {
+                if (HasReadOnlyTool(allTools, "excel.list_sheets") &&
+                    (string.Equals(command.ToolId, "excel.add_sheet", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(command.ToolId, "excel.rename_sheet", StringComparison.OrdinalIgnoreCase)))
+                {
+                    yield return new ToolCommand { ToolId = "excel.list_sheets", Description = "Deterministic verification" };
+                    yield break;
+                }
                 if (HasReadOnlyTool(allTools, "excel.list_charts") && Contains(command.ToolId, "chart"))
                 {
                     yield return CopyArgs(new ToolCommand { ToolId = "excel.list_charts", Description = "Deterministic verification" }, command, "sheet");
@@ -158,6 +167,62 @@ namespace RNAssistant.Office.Services
                 }
             }
             return null;
+        }
+    }
+
+    internal sealed class VerificationExecutionResult
+    {
+        public ToolResult Result { get; set; }
+        public bool TimedOut { get; set; }
+    }
+
+    internal sealed class VerificationExecutor
+    {
+        private readonly TimeSpan _timeout;
+
+        public VerificationExecutor(TimeSpan timeout)
+        {
+            _timeout = timeout <= TimeSpan.Zero ? TimeSpan.FromSeconds(15) : timeout;
+        }
+
+        public async Task<VerificationExecutionResult> ExecuteAsync(
+            string toolId,
+            Func<ToolResult> execute,
+            CancellationToken cancellationToken)
+        {
+            if (execute == null)
+            {
+                throw new ArgumentNullException("execute");
+            }
+
+            var execution = Task.Run(execute);
+            var timeout = Task.Delay(_timeout, cancellationToken);
+            var completed = await Task.WhenAny(execution, timeout).ConfigureAwait(false);
+            if (completed == execution)
+            {
+                return new VerificationExecutionResult
+                {
+                    Result = await execution.ConfigureAwait(false)
+                };
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            _ = execution.ContinueWith(
+                task =>
+                {
+                    var ignored = task.Exception;
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskScheduler.Default);
+            return new VerificationExecutionResult
+            {
+                TimedOut = true,
+                Result = ToolResult.Fail(
+                    "Deterministic verification timed out after " +
+                    Math.Max(1, Convert.ToInt32(Math.Ceiling(_timeout.TotalSeconds))) +
+                    " seconds while running " + (toolId ?? string.Empty) + ". The mutation completed, but verification did not.")
+            };
         }
     }
 

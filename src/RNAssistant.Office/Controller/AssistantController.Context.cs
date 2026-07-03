@@ -2,7 +2,7 @@ using System;
 using Newtonsoft.Json;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
-using RNAssistant.Office.Services;
+using RNAssistant.Core.Services;
 
 namespace RNAssistant.Office
 {

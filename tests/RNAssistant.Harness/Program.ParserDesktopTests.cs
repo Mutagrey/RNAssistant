@@ -136,6 +136,13 @@ namespace RNAssistant.Harness
             AssertTrue(catalog.ListOpenDocuments().Any(item => item.DocumentKey == "forecast-doc" && item.IsActive), "forecast marked active");
         }
 
+        private static void DocumentOpenServiceRecognizesWebPaths()
+        {
+            AssertTrue(DocumentOpenService.IsAvailable("https://example.sharepoint.com/Documents/Book.xlsx"), "https document path");
+            AssertTrue(DocumentOpenService.IsAvailable("http://example.test/Book.xlsx"), "http document path");
+            AssertTrue(!DocumentOpenService.IsAvailable(string.Empty), "empty document path");
+        }
+
         private static void UnsavedDocumentIdentityUsesStoredId()
         {
             var properties = new FakeDocumentProperties();
