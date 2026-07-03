@@ -42,13 +42,15 @@ namespace RNAssistant.Harness
         private static void PlainChatOmitsPlannerAndActivities()
         {
             IReadOnlyList<ChatMessage> captured = null;
+            string capturedModel = null;
             var service = new PlainChatService(
                 delegate(AppSettings settings, IEnumerable<ChatMessage> messages, Action<LlmStreamUpdate> progress, CancellationToken cancellationToken)
                 {
+                    capturedModel = settings.Model;
                     captured = messages.ToList();
                     return Task.FromResult(new LlmCompletionResult { Content = "plain answer", PromptTokens = 12 });
                 });
-            var session = new ChatSession();
+            var session = new ChatSession { Model = "vision-model" };
             session.Messages.Add(new ChatMessage { Role = "user", Content = "old question" });
             session.Messages.Add(new ChatMessage
             {
@@ -64,6 +66,7 @@ namespace RNAssistant.Harness
                 new DocumentContext(),
                 new AppSettings
                 {
+                    Model = "default-model",
                     SystemPrompt = "PLANNER_ONLY",
                     ChatSystemPrompt = "Helpful chat assistant",
                     SystemPromptRole = "system"
@@ -74,6 +77,7 @@ namespace RNAssistant.Harness
 
             var prompt = FlattenMessages(captured);
             AssertEqual("plain answer", result.AssistantText, "plain result");
+            AssertEqual("vision-model", capturedModel, "chat model applied");
             AssertContains(prompt, "new question", "current request");
             AssertContains(prompt, "old question", "history");
             AssertContains(prompt, "Helpful chat assistant", "chat-specific prompt");
@@ -132,6 +136,38 @@ namespace RNAssistant.Harness
                 CancellationToken.None).GetAwaiter().GetResult();
             AssertContains(failedRepair.AssistantText, "не вернула пользовательский ответ", "failed repair returns safe message");
             AssertTrue(failedRepair.AssistantText.IndexOf("still internal", StringComparison.OrdinalIgnoreCase) < 0, "failed repair thought hidden");
+        }
+
+        private static void ImageSwitchesToCompatibleModel()
+        {
+            var settings = new AppSettings { Model = "default-vision" };
+            settings.ModelCapabilities["default-vision"] = new ModelCapabilitySettings { SupportsImages = true };
+            settings.ModelCapabilities["text-only"] = new ModelCapabilitySettings { SupportsImages = false };
+            var session = new ChatSession { Model = "text-only" };
+            session.Messages.Add(new ChatMessage
+            {
+                Role = "user",
+                Attachments = new List<ChatAttachment>
+                {
+                    new ChatAttachment { Kind = "image", FileName = "clipboard.png" }
+                }
+            });
+
+            AssertTrue(
+                ChatCompletionService.EnsureImageCompatibleModel(settings, session, null),
+                "image model changed");
+            AssertEqual("default-vision", settings.Model, "request model");
+            AssertEqual("default-vision", session.Model, "session model");
+
+            var unknownSettings = new AppSettings { Model = "custom-model" };
+            var unknownSession = new ChatSession { Model = "custom-model" };
+            AssertTrue(
+                !ChatCompletionService.EnsureImageCompatibleModel(
+                    unknownSettings,
+                    unknownSession,
+                    new[] { new ChatAttachment { Kind = "image" } }),
+                "unknown image support left for endpoint");
+            AssertEqual("custom-model", unknownSettings.Model, "unknown model retained");
         }
 
         private static void PlainChatExtractsAnswerWithoutThought()

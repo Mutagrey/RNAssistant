@@ -198,6 +198,10 @@ namespace RNAssistant.Office
             {
                 throw new InvalidOperationException(invalidAttachment.FileName + ": " + invalidAttachment.Error);
             }
+            if (ChatCompletionService.EnsureImageCompatibleModel(settings, session, attachments))
+            {
+                SaveSessionChanges(session);
+            }
             var documentContext = LoadContext(session);
             var skills = _skillCatalog.SelectRelevantSkills(text, documentContext, 5);
             var shouldGenerateLlmTitle = settings.SmartChatTitles != false && ChatTitleBuilder.ShouldAssign(session);

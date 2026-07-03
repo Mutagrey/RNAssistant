@@ -20,7 +20,7 @@ async function loadModelCatalog(useFormSettings) {
 async function saveChatModelSelection(value) {
   value = String(value || "").trim();
   if (value === activeChatModel()) {
-    return;
+    return true;
   }
 
   state.modelSaving = true;
@@ -33,9 +33,11 @@ async function saveChatModelSelection(value) {
     updateEstimatedContextUsage();
     renderContextMeter();
     log(value ? ("Chat model selected: " + value) : "Chat model uses default.");
+    return activeChatModel() === value;
   } catch (error) {
     renderModelControls();
     log(error.detail || error.message);
+    return false;
   } finally {
     state.modelSaving = false;
     if ($("sendButton")) {

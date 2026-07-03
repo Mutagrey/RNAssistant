@@ -64,6 +64,7 @@ namespace RNAssistant.Harness
                 new HarnessTest { Name = "modes: plain chat omits planner and activities", Run = PlainChatOmitsPlannerAndActivities },
                 new HarnessTest { Name = "modes: plain chat repairs thought-only json", Run = PlainChatRepairsThoughtOnlyJson },
                 new HarnessTest { Name = "modes: plain chat extracts answer without thought", Run = PlainChatExtractsAnswerWithoutThought },
+                new HarnessTest { Name = "modes: image switches to compatible model", Run = ImageSwitchesToCompatibleModel },
                 new HarnessTest { Name = "context: deleted message absent from rebuilt prompt", Run = DeletedMessageIsAbsentFromRebuiltContext },
                 new HarnessTest { Name = "routing: required empty tool slice stops before llm", Run = RequiredEmptyToolSliceStopsBeforeLlm },
                 new HarnessTest { Name = "routing: tool slice balances mutation and inspection", Run = ToolSliceBalancesMutationAndInspection },

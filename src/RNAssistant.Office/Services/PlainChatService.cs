@@ -28,6 +28,7 @@ namespace RNAssistant.Office.Services
             Action<string, string, ChatActivity> progress,
             CancellationToken cancellationToken)
         {
+            ChatCompletionService.ApplyChatModel(settings, session);
             session.Messages.Add(new ChatMessage
             {
                 Role = "user",

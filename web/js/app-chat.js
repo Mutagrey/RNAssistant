@@ -491,7 +491,7 @@ async function sendChat(text, attachments) {
   }
 }
 
-function submitChatInput() {
+async function submitChatInput() {
   if (state.activeSend || state.modelSaving) {
     return;
   }
@@ -499,6 +499,13 @@ function submitChatInput() {
   var text = $("chatInput").value.trim();
   var attachments = (state.draftAttachments || []).slice();
   if (!text && !attachments.length) {
+    return;
+  }
+  if (attachments.some(function (attachment) { return attachmentKind(attachment) === "image"; }) &&
+      !(await ensureImageCapableModel())) {
+    return;
+  }
+  if (state.activeSend || state.modelSaving) {
     return;
   }
 

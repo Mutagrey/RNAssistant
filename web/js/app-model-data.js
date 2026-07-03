@@ -116,5 +116,21 @@ function effectiveModelSupportsImages(value) {
   if (Object.prototype.hasOwnProperty.call(overrides, value) && overrides[value] !== null) {
     return !!overrides[value];
   }
-  return catalogModelSupportsImages(findModel(value));
+  var catalogSupport = catalogModelSupportsImages(findModel(value));
+  if (catalogSupport !== null) return catalogSupport;
+
+  var settings = state.settings || {};
+  var capabilities = settings.ModelCapabilities || settings.modelCapabilities || {};
+  var keys = Object.keys(capabilities);
+  for (var index = 0; index < keys.length; index += 1) {
+    if (keys[index].toLowerCase() !== value.toLowerCase()) continue;
+    var capability = capabilities[keys[index]] || {};
+    var support = capability.SupportsImages;
+    if (support === undefined) support = capability.supportsImages;
+    if (support === undefined) support = capability.supports_images;
+    if (support !== undefined && support !== null) {
+      return typeof support === "string" ? support.toLowerCase() === "true" : !!support;
+    }
+  }
+  return null;
 }
