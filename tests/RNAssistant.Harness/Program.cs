@@ -121,6 +121,7 @@ namespace RNAssistant.Harness
                 Test("chat sessions: stale requested id fallback", ChatSessionServiceFallsBackForStaleRequestedId),
                 Test("chat sessions: empty drafts are transient", EmptyChatDraftsAreNotPersisted),
                 Test("chat sessions: background save keeps active chat", BackgroundSaveKeepsActiveChat),
+                Test("chat sessions: interrupted run is cancelled", InterruptedRunIsRecoveredAsCancelled),
                 Test("pipeline: dry-run resolves placeholders", PipelineDryRunResolvesPlaceholders),
                 Test("pipeline: executes fake adapter steps", PipelineExecutesFakeAdapterSteps),
                 Test("pipeline: resolves step output placeholders", PipelineResolvesStepOutputPlaceholders),
@@ -244,7 +245,8 @@ namespace RNAssistant.Harness
                 Test("bridge: typed context payload", BridgeUsesTypedContextPayload),
                 Test("bridge: typed vba payload", BridgeUsesTypedVbaPayload),
                 Test("bridge: typed html workspace delete payloads", BridgeUsesTypedHtmlWorkspaceDeletePayloads),
-                Test("bridge: typed html network payloads", BridgeUsesTypedHtmlNetworkPayloads)
+                Test("bridge: typed html network payloads", BridgeUsesTypedHtmlNetworkPayloads),
+                Test("bridge: cancels addressed chat run", BridgeCancelsAddressedChatRun)
             };
 
             var duplicates = tests

@@ -55,7 +55,7 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - `src/RNAssistant.Office/Vba`: shared VBA project support.
 - `src/RNAssistant.Office/Agent`: agent transcript/plan formatting and retry policy.
 - `src/RNAssistant.Office/Services`: host-neutral application services used by controller orchestration, such as chat/session lifecycle, tool/skill catalog composition, context normalization, and chat completion flow.
-- `src/RNAssistant.Office/Services/ChatRunRegistry.cs`: in-memory per-chat run ownership and live status; switching the selected chat never transfers or cancels a run.
+- `src/RNAssistant.Office/Services/ChatRunRegistry.cs`: in-memory per-chat run ownership, live status/current action, and cancellation addressed by chat/run id; switching the selected chat never transfers or cancels a run. A lightweight persisted marker converts abandoned runs to `cancelled` after an application restart.
 - `src/RNAssistant.Office/Services/HtmlNetworkService.cs`: permission-gated HTTP(S) transport for sandboxed HTML workspace previews.
 - `src/RNAssistant.Office/Services/AgentRunService.cs`: controlled planner loop, route/slice/validate/execute flow, normalized observations, deterministic mutation verification, VBA context capture, and confirmation resume continuation.
 - `src/RNAssistant.Office/Services/AgentPlannerCompletionRunner.cs`: planner completion streaming, strict JSON parsing, and the single bounded format-repair attempt.

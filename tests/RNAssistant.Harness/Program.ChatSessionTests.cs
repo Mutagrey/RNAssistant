@@ -189,5 +189,32 @@ namespace RNAssistant.Harness
                 AssertEqual(ChatStore.GetSessionId(second), store.LoadActiveSessionId(adapter.HostName, adapter.DocumentKey), "stored active chat remains selected");
             });
         }
+
+        private static void InterruptedRunIsRecoveredAsCancelled()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var session = store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "Interrupted");
+                session.LastRun = new ChatRunRecord
+                {
+                    RunId = "old-run",
+                    RuntimeId = "old-runtime",
+                    Status = "running",
+                    Phase = "executing",
+                    StartedUtc = DateTime.UtcNow
+                };
+                store.Save(session);
+
+                new ChatSessionService(adapter, store).ReconcileInterruptedRuns("new-runtime");
+
+                var recovered = store.Load(ChatStore.GetSessionId(session));
+                AssertEqual("cancelled", recovered.LastRun.Status, "interrupted run status");
+                AssertTrue(recovered.Messages.Any(message =>
+                    message.Activity != null && message.Activity.ExecutionStatus == "application_restarted"),
+                    "restart diagnostic stored");
+            });
+        }
     }
 }

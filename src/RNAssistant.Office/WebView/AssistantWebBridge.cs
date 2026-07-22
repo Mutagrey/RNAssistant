@@ -52,6 +52,17 @@ namespace RNAssistant.Office.WebView
                         Payload = ToPayloadToken(responsePayload)
                     });
                 }
+                if (string.Equals(type, "cancelChatRun", StringComparison.OrdinalIgnoreCase))
+                {
+                    var cancelRun = Payload<CancelChatRunPayload>(payload);
+                    responsePayload = new { cancelled = _controller.CancelChatRun(cancelRun.ChatId, cancelRun.RunId) };
+                    return JsonConvert.SerializeObject(new BridgeResponse
+                    {
+                        Id = id,
+                        Ok = true,
+                        Payload = ToPayloadToken(responsePayload)
+                    });
+                }
 
                 cancellationSource = CreateCancellationSource(id, type);
                 var cancellationToken = cancellationSource == null ? CancellationToken.None : cancellationSource.Token;

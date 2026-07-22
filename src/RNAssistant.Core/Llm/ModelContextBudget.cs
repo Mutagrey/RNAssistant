@@ -10,6 +10,8 @@ namespace RNAssistant.Core.Llm
     {
         public const int UnknownModelContextTokens = 32768;
         public const int EstimatedImageTokens = 4096;
+        public const int MinimumInputTokens = 1024;
+        public const int MaximumSafetyReserveTokens = 16384;
 
         public static ModelCapabilitySettings Capability(AppSettings settings, string model = null)
         {
@@ -41,33 +43,44 @@ namespace RNAssistant.Core.Llm
         public static int InputBudgetTokens(AppSettings settings, string model = null)
         {
             var window = Math.Max(4096, ContextWindowTokens(settings, model));
-            var output = Math.Max(1, settings == null ? 2048 : settings.MaxTokens);
-            var capability = Capability(settings, model);
-            if (capability != null && capability.MaxOutputTokens.GetValueOrDefault() > 0)
-            {
-                output = Math.Min(output, capability.MaxOutputTokens.Value);
-            }
-            output = Math.Min(output, Math.Max(2048, window / 2));
-            var safety = Math.Max(1024, (int)Math.Ceiling(window * 0.05));
-            return Math.Max(1024, window - output - safety);
+            var safety = SafetyReserveTokens(window);
+            var output = Math.Min(
+                RequestedOutputTokens(settings, model),
+                Math.Max(1, window - safety - MinimumInputTokens));
+            return Math.Max(MinimumInputTokens, window - output - safety);
         }
 
         public static int EffectiveOutputTokens(AppSettings settings, IEnumerable<ChatMessage> messages, string model = null)
         {
+            return EffectiveOutputTokens(settings, EstimateMessagesTokens(messages), model);
+        }
+
+        public static int EffectiveOutputTokens(AppSettings settings, int estimatedPromptTokens, string model = null)
+        {
             settings = settings ?? new AppSettings();
             var window = Math.Max(4096, ContextWindowTokens(settings, model));
-            var prompt = EstimateMessagesTokens(messages);
-            var safety = Math.Max(1024, (int)Math.Ceiling(window * 0.05));
+            var prompt = Math.Max(0, estimatedPromptTokens);
+            var safety = SafetyReserveTokens(window);
             var remaining = window - prompt - safety;
-            if (remaining < 128)
+            if (remaining < 1)
             {
                 throw new InvalidOperationException("Prompt exceeds the available model context window. Reduce chat context or attachments.");
             }
-            var requested = Math.Max(1, settings.MaxTokens);
+            return Math.Min(RequestedOutputTokens(settings, model), remaining);
+        }
+
+        public static int RequestedOutputTokens(AppSettings settings, string model = null)
+        {
+            var requested = Math.Max(1, settings == null ? 2048 : settings.MaxTokens);
             var capability = Capability(settings, model);
             var modelLimit = capability == null ? 0 : capability.MaxOutputTokens.GetValueOrDefault();
-            if (modelLimit > 0) requested = Math.Min(requested, modelLimit);
-            return Math.Max(128, Math.Min(requested, remaining));
+            return modelLimit > 0 ? Math.Min(requested, modelLimit) : requested;
+        }
+
+        public static int SafetyReserveTokens(int contextWindowTokens)
+        {
+            var window = Math.Max(4096, contextWindowTokens);
+            return Math.Max(1024, Math.Min(MaximumSafetyReserveTokens, (int)Math.Ceiling(window * 0.02)));
         }
 
         public static bool SupportsImages(AppSettings settings, string model = null)
@@ -100,6 +113,11 @@ namespace RNAssistant.Core.Llm
 
         public static int EstimateMessagesTokens(IEnumerable<ChatMessage> messages)
         {
+            return EstimateMessagesTokens(messages, true);
+        }
+
+        public static int EstimateMessagesTokens(IEnumerable<ChatMessage> messages, bool includeExtractedAttachments)
+        {
             var total = 0;
             foreach (var message in messages ?? new ChatMessage[0])
             {
@@ -111,9 +129,12 @@ namespace RNAssistant.Core.Llm
                 total += (message.Attachments ?? new List<ChatAttachment>())
                     .Where(attachment => attachment != null && attachment.Kind == "image")
                     .Count() * EstimatedImageTokens;
-                total += (message.Attachments ?? new List<ChatAttachment>())
-                    .Where(attachment => attachment != null)
-                    .Sum(attachment => Math.Max(attachment.ExtractedCharCount, (attachment.ExtractedText ?? string.Empty).Length) / 2);
+                if (includeExtractedAttachments)
+                {
+                    total += (message.Attachments ?? new List<ChatAttachment>())
+                        .Where(attachment => attachment != null)
+                        .Sum(attachment => Math.Max(attachment.ExtractedCharCount, (attachment.ExtractedText ?? string.Empty).Length) / 2);
+                }
             }
             return total;
         }

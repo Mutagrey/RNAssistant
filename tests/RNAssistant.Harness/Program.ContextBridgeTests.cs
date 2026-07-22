@@ -415,6 +415,21 @@ namespace RNAssistant.Harness
             AssertEqual(200, JObject.Parse(fetch)["payload"]["status"].Value<int>(), "html fetch status");
         }
 
+        private static void BridgeCancelsAddressedChatRun()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
+            var responseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"cancel1\",\"type\":\"cancelChatRun\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-a\",\"runId\":\"run-a\"}}")
+                .GetAwaiter().GetResult();
+
+            var response = JObject.Parse(responseJson);
+            AssertTrue(response["ok"].Value<bool>(), "cancel run bridge response ok");
+            AssertTrue(response["payload"]["cancelled"].Value<bool>(), "addressed run cancelled");
+            AssertEqual("chat-a", controller.LastChatId, "cancel run chat id");
+        }
+
         private static string BridgeToken(AssistantWebBridge bridge)
         {
             var initJson = bridge.HandleMessageAsync("{\"id\":\"init\",\"type\":\"init\",\"payload\":{}}")

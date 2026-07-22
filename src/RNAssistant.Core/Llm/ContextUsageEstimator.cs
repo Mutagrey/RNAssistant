@@ -41,7 +41,7 @@ namespace RNAssistant.Core.Llm
                 }
             }
 
-            return Usage(usedChars, actualPromptTokens ?? estimatedTokens, limit, count, actualPromptTokens.HasValue);
+            return Usage(usedChars, actualPromptTokens ?? estimatedTokens, limit, count, actualPromptTokens.HasValue, settings);
         }
 
         public static object FromSession(ChatSession session, AppSettings settings)
@@ -107,11 +107,15 @@ namespace RNAssistant.Core.Llm
                 }
             }
 
-            return Usage(usedChars, usedTokens, limit, count, false);
+            return Usage(usedChars, usedTokens, limit, count, false, settings);
         }
 
-        private static object Usage(int usedChars, int usedTokens, int limitTokens, int count, bool actual)
+        private static object Usage(int usedChars, int usedTokens, int limitTokens, int count, bool actual, AppSettings settings)
         {
+            var contextWindowTokens = Math.Max(4096, ModelContextBudget.ContextWindowTokens(settings));
+            var safetyTokens = ModelContextBudget.SafetyReserveTokens(contextWindowTokens);
+            var reservedOutputTokens = Math.Max(1, contextWindowTokens - safetyTokens - limitTokens);
+            var availableOutputTokens = Math.Max(0, contextWindowTokens - safetyTokens - usedTokens);
             return new
             {
                 usedChars = usedChars,
@@ -120,7 +124,12 @@ namespace RNAssistant.Core.Llm
                 limitTokens = limitTokens,
                 percent = limitTokens <= 0 ? 0 : Math.Min(100, (int)Math.Round(usedTokens * 100.0 / limitTokens)),
                 messageCount = count,
-                actual = actual
+                actual = actual,
+                contextWindowTokens = contextWindowTokens,
+                reservedOutputTokens = reservedOutputTokens,
+                maxOutputTokens = ModelContextBudget.RequestedOutputTokens(settings),
+                safetyTokens = safetyTokens,
+                availableOutputTokens = availableOutputTokens
             };
         }
     }

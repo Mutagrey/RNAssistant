@@ -218,6 +218,12 @@ namespace RNAssistant.Office.Contracts
         public string RequestId { get; set; }
     }
 
+    public sealed class CancelChatRunPayload : ChatPayload
+    {
+        [JsonProperty("runId")]
+        public string RunId { get; set; }
+    }
+
     public sealed class HtmlFetchRequest
     {
         [JsonProperty("url")]

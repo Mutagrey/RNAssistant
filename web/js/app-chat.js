@@ -611,7 +611,11 @@ function stopActiveSend() {
   activeSend.canceling = true;
   setActivity("canceling", "Отменяю ответ...");
   renderSendControls();
-  cancelBridgeRequest(activeSend.requestId).catch(function (error) {
+  var run = state.chatRuns[state.activeChatId] || {};
+  var cancellation = run.runId
+    ? cancelChatRun(state.activeChatId, run.runId)
+    : cancelBridgeRequest(activeSend.requestId);
+  cancellation.catch(function (error) {
     log(error.detail || error.message);
   });
 }

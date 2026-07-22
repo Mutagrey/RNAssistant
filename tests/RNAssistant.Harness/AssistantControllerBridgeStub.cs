@@ -60,6 +60,7 @@ namespace RNAssistant.Office
         public ChatStateResponse SetChatHtmlMode(string chatId, bool enabled) { return ChatState(enabled ? "html" : string.Empty, chatId); }
         public ChatStateResponse ClearChat(string chatId) { return ChatState(null, chatId); }
         public ChatStateResponse DeleteChat(string chatId) { return ChatState(null, chatId); }
+        public bool CancelChatRun(string chatId, string runId) { LastChatId = chatId; return !string.IsNullOrWhiteSpace(runId); }
         public ChatStateResponse DeleteMessage(string id, int index, string chatId = null) { return ChatState(id, chatId); }
         public ChatStateResponse ForkChat(string id, int index, string chatId = null) { return ChatState(id, chatId); }
         public ChatStateResponse UpdateMessageActivityData(string messageId, string dataJson, string chatId = null) { return ChatState(messageId, chatId); }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Services
@@ -11,8 +12,10 @@ namespace RNAssistant.Office.Services
         public string RunId { get; set; }
         public string Status { get; set; }
         public string Phase { get; set; }
+        public string CurrentAction { get; set; }
         public DateTime StartedUtc { get; set; }
         public ChatSession Session { get; set; }
+        internal CancellationTokenSource Cancellation { get; set; }
     }
 
     internal sealed class ChatRunRegistry
@@ -21,7 +24,7 @@ namespace RNAssistant.Office.Services
         private readonly Dictionary<string, ChatRunSnapshot> _runs =
             new Dictionary<string, ChatRunSnapshot>(StringComparer.OrdinalIgnoreCase);
 
-        public ChatRunSnapshot Start(string chatId, string runId, ChatSession session)
+        public ChatRunSnapshot Start(string chatId, string runId, ChatSession session, CancellationTokenSource cancellation = null)
         {
             if (string.IsNullOrWhiteSpace(chatId) || string.IsNullOrWhiteSpace(runId))
             {
@@ -41,14 +44,15 @@ namespace RNAssistant.Office.Services
                     Status = "running",
                     Phase = "starting",
                     StartedUtc = DateTime.UtcNow,
-                    Session = session
+                    Session = session,
+                    Cancellation = cancellation
                 };
                 _runs[chatId] = run;
                 return Clone(run);
             }
         }
 
-        public void Update(string chatId, string runId, string phase)
+        public void Update(string chatId, string runId, string phase, string currentAction = null)
         {
             lock (_sync)
             {
@@ -57,8 +61,38 @@ namespace RNAssistant.Office.Services
                     string.Equals(run.RunId, runId, StringComparison.OrdinalIgnoreCase))
                 {
                     run.Phase = string.IsNullOrWhiteSpace(phase) ? run.Phase : phase;
+                    run.CurrentAction = string.IsNullOrWhiteSpace(currentAction) ? run.CurrentAction : currentAction;
                 }
             }
+        }
+
+        public bool Cancel(string chatId, string runId)
+        {
+            CancellationTokenSource cancellation;
+            lock (_sync)
+            {
+                ChatRunSnapshot run;
+                if (!_runs.TryGetValue(chatId ?? string.Empty, out run) ||
+                    !string.Equals(run.RunId, runId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+                run.Status = "cancelling";
+                run.Phase = "cancelling";
+                cancellation = run.Cancellation;
+            }
+            try
+            {
+                if (cancellation != null && !cancellation.IsCancellationRequested)
+                {
+                    cancellation.Cancel();
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
+            return cancellation != null;
         }
 
         public ChatRunSnapshot Get(string chatId)
@@ -107,13 +141,23 @@ namespace RNAssistant.Office.Services
                     string.Equals(run.RunId, runId, StringComparison.OrdinalIgnoreCase))
                 {
                     _runs.Remove(chatId);
+                    if (run.Cancellation != null) run.Cancellation.Dispose();
                 }
             }
         }
 
         public void Clear()
         {
-            lock (_sync) _runs.Clear();
+            lock (_sync)
+            {
+                foreach (var run in _runs.Values)
+                {
+                    if (run.Cancellation == null) continue;
+                    if (!run.Cancellation.IsCancellationRequested) run.Cancellation.Cancel();
+                    run.Cancellation.Dispose();
+                }
+                _runs.Clear();
+            }
         }
 
         private static ChatRunSnapshot Clone(ChatRunSnapshot source)
@@ -124,6 +168,7 @@ namespace RNAssistant.Office.Services
                 RunId = source.RunId,
                 Status = source.Status,
                 Phase = source.Phase,
+                CurrentAction = source.CurrentAction,
                 StartedUtc = source.StartedUtc,
                 Session = source.Session
             };

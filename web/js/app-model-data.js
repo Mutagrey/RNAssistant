@@ -67,7 +67,12 @@ function normalizeModelCatalog(payload) {
       value: value,
       title: title || value,
       description: modelField(item, "Description", "description", "description", "") || "",
-      maxContextTokens: modelField(item, "MaxContextTokens", "max_context_tokens", "maxContextTokens", null),
+      maxContextTokens: modelField(item, "MaxContextTokens", "max_context_tokens", "maxContextTokens",
+        modelField(item, "ContextWindow", "context_window", "contextWindow",
+          modelField(item, "ContextLength", "context_length", "contextLength", null))),
+      maxOutputTokens: modelField(item, "MaxOutputTokens", "max_output_tokens", "maxOutputTokens",
+        modelField(item, "MaxCompletionTokens", "max_completion_tokens", "maxCompletionTokens",
+          modelField(item, "OutputTokenLimit", "output_token_limit", "outputTokenLimit", null))),
       maxTokens: modelFieldWithDefaults(item, "MaxTokens", "max_tokens", "maxTokens"),
       systemPrompt: modelField(item, "SystemPrompt", "system_prompt", "systemPrompt", "") || "",
       temperature: modelFieldWithDefaults(item, "Temperature", "temperature", "temperature"),
@@ -117,6 +122,7 @@ function modelCapabilitiesForSettings() {
   (state.modelCatalog.models || []).forEach(function (model) {
     result[model.value] = {
       MaxContextTokens: model.maxContextTokens || null,
+      MaxOutputTokens: model.maxOutputTokens || null,
       SupportsImages: catalogModelSupportsImages(model),
       SupportsReasoning: model.supportsReasoning,
       SupportsAudio: model.supportsAudio,

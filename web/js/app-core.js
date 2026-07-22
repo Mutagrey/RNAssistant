@@ -180,6 +180,11 @@ function cancelBridgeRequest(requestId) {
   return send("cancelRequest", { requestId: requestId });
 }
 
+function cancelChatRun(chatId, runId) {
+  if (!chatId || !runId) return Promise.resolve({ cancelled: false });
+  return send("cancelChatRun", { chatId: chatId, runId: runId });
+}
+
 function recordChatRunActivityState(chatId, activity) {
   if (!chatId || !activity) return;
   var run = state.chatRuns[chatId] = state.chatRuns[chatId] || { activities: [], stream: "" };

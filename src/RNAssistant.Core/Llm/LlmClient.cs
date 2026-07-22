@@ -144,7 +144,7 @@ namespace RNAssistant.Core.Llm
                 {
                     model = settings.Model,
                     messages = apiMessages,
-                    max_tokens = ModelContextBudget.EffectiveOutputTokens(settings, messageList, settings.Model),
+                    max_tokens = ModelContextBudget.EffectiveOutputTokens(settings, apiBuild.EstimatedPromptTokens, settings.Model),
                     temperature = settings.Temperature,
                     top_p = settings.TopP,
                     stream = settings.StreamResponses,
@@ -869,7 +869,7 @@ namespace RNAssistant.Core.Llm
             var remainingAttachmentTokens = Math.Max(
                 0,
                 ModelContextBudget.InputBudgetTokens(settings) -
-                ModelContextBudget.EstimateMessagesTokens(messageList) -
+                ModelContextBudget.EstimateMessagesTokens(messageList, false) -
                 EstimatePdfImageTokens(messageList, settings));
 
             foreach (var message in messageList)
@@ -910,6 +910,7 @@ namespace RNAssistant.Core.Llm
                             unreadablePdf.FileName + ": PDF contains no usable text and the selected model does not support visual PDF pages.");
                     }
                     build.Messages.Add(new { role = message.Role, content = text });
+                    build.EstimatedPromptTokens += 4 + ModelContextBudget.EstimateTextTokens(text);
                     continue;
                 }
 
@@ -928,6 +929,8 @@ namespace RNAssistant.Core.Llm
                     build.HasImages = true;
                 }
                 build.Messages.Add(new { role = message.Role, content = parts });
+                build.EstimatedPromptTokens += 4 + ModelContextBudget.EstimateTextTokens(text) +
+                    imageParts.Count * ModelContextBudget.EstimatedImageTokens;
             }
 
             return build;
@@ -1043,6 +1046,7 @@ namespace RNAssistant.Core.Llm
         {
             public List<object> Messages { get; private set; } = new List<object>();
             public bool HasImages { get; set; }
+            public int EstimatedPromptTokens { get; set; }
         }
     }
 }

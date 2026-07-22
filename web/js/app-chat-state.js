@@ -453,6 +453,8 @@ function renderContextMeter() {
   var usage = state.contextUsage || {};
   var used = Number(usage.usedTokens || usage.UsedTokens || 0);
   var limit = Number(usage.limitTokens || usage.LimitTokens || 0);
+  var windowTokens = Number(usage.contextWindowTokens || usage.ContextWindowTokens || 0);
+  var reservedOutput = Number(usage.reservedOutputTokens || usage.ReservedOutputTokens || 0);
   var percent = Number(usage.percent || usage.Percent || (limit ? Math.round(used * 100 / limit) : 0));
   var value = $("contextMeterValue");
   var detail = $("contextMeterDetail");
@@ -462,7 +464,10 @@ function renderContextMeter() {
   }
 
   percent = Math.max(0, Math.min(100, percent));
-  var detailText = formatNumber(used) + " / " + formatNumber(limit) + " токенов" + (usage.actual || usage.Actual ? " · API usage" : " · оценка") + lastTokenUsageText();
+  var detailText = formatNumber(used) + " / " + formatNumber(limit) + " вход";
+  if (windowTokens) detailText += " · окно " + formatNumber(windowTokens);
+  if (reservedOutput) detailText += " · ответ до " + formatNumber(reservedOutput);
+  detailText += (usage.actual || usage.Actual ? " · API usage" : " · оценка") + lastTokenUsageText();
   var level = percent >= 90 ? "danger" : (percent >= 70 ? "warn" : "ok");
   meter.dataset.level = level;
   meter.style.setProperty("--context-meter-percent", percent + "%");
@@ -510,13 +515,22 @@ function updateEstimatedContextUsage() {
   var capabilities = settings.ModelCapabilities || settings.modelCapabilities || {};
   var capability = capabilities[modelName] || {};
   var windowTokens = override || Number((model && model.maxContextTokens) || capability.MaxContextTokens || capability.maxContextTokens || 32768);
-  var maxOutput = Number(settings.MaxTokens || settings.maxTokens || 2048);
-  var limit = Math.max(1024, windowTokens - maxOutput - Math.max(1024, Math.ceil(windowTokens * 0.05)));
+  var requestedOutput = Number(settings.MaxTokens || settings.maxTokens || 2048);
+  var modelOutputLimit = Number((model && model.maxOutputTokens) || capability.MaxOutputTokens || capability.maxOutputTokens || 0);
+  var maxOutput = modelOutputLimit > 0 ? Math.min(requestedOutput, modelOutputLimit) : requestedOutput;
+  var safety = Math.max(1024, Math.min(16384, Math.ceil(windowTokens * 0.02)));
+  var reservedOutput = Math.min(Math.max(1, maxOutput), Math.max(1, windowTokens - safety - 1024));
+  var limit = Math.max(1024, windowTokens - reservedOutput - safety);
   state.contextUsage = {
     usedTokens: used,
     limitTokens: limit,
     percent: limit ? Math.min(100, Math.round(used * 100 / limit)) : 0,
-    actual: false
+    actual: false,
+    contextWindowTokens: windowTokens,
+    reservedOutputTokens: reservedOutput,
+    maxOutputTokens: maxOutput,
+    safetyTokens: safety,
+    availableOutputTokens: Math.max(0, windowTokens - safety - used)
   };
 }
 

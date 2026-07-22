@@ -33,8 +33,10 @@ function modelOptionTitle(model) {
   if (model.maxContextTokens) {
     parts.push("Контекст: " + model.maxContextTokens);
   }
-  if (model.maxTokens) {
-    parts.push("Ответ: " + model.maxTokens);
+  if (model.maxOutputTokens) {
+    parts.push("Лимит ответа: " + model.maxOutputTokens);
+  } else if (model.maxTokens) {
+    parts.push("Ответ по умолчанию: " + model.maxTokens);
   }
   if (model.temperature !== null && model.temperature !== undefined) {
     parts.push("Temperature: " + model.temperature);
@@ -194,7 +196,8 @@ function renderModelInfo(selectedValue) {
   var metrics = document.createElement("div");
   metrics.className = "model-info-metrics";
   appendModelMetric(metrics, "Контекст", model.maxContextTokens);
-  appendModelMetric(metrics, "Ответ", model.maxTokens);
+  appendModelMetric(metrics, "Лимит ответа", model.maxOutputTokens);
+  appendModelMetric(metrics, "Ответ по умолчанию", model.maxTokens);
   appendModelMetric(metrics, "Temp", model.temperature);
   appendModelMetric(metrics, "Top P", model.topP);
   appendModelMetric(metrics, "Top K", model.topK);

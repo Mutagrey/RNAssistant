@@ -335,15 +335,31 @@ namespace RNAssistant.Harness
             var output = ModelContextBudget.EffectiveOutputTokens(settings, messages);
             AssertTrue(output < 65536, "output is reduced below full context window");
             AssertTrue(output + ModelContextBudget.EstimateMessagesTokens(messages) < 65536, "prompt space remains reserved");
+
+            settings.ContextWindowOverrideTokens = 1048576;
+            settings.MaxTokens = 32768;
+            settings.Model = "large-context";
+            settings.ModelCapabilities["large-context"] = new ModelCapabilitySettings
+            {
+                MaxContextTokens = 1048576,
+                MaxOutputTokens = 8192
+            };
+            AssertEqual(8192, ModelContextBudget.RequestedOutputTokens(settings), "model output limit is separate from context window");
+            AssertEqual(16384, ModelContextBudget.SafetyReserveTokens(1048576), "large context safety reserve is bounded");
+            AssertEqual(1024000, ModelContextBudget.InputBudgetTokens(settings), "large context keeps almost the whole input window");
+
+            settings.MaxTokens = 32;
+            AssertEqual(32, ModelContextBudget.EffectiveOutputTokens(settings, messages), "small requested output is not raised implicitly");
         }
 
         private static void ChatRunRegistryIsolatesSessions()
         {
             var registry = new ChatRunRegistry();
+            var secondCancellation = new CancellationTokenSource();
             var first = new ChatSession { Id = "chat-a", SessionId = "chat-a" };
             var second = new ChatSession { Id = "chat-b", SessionId = "chat-b" };
             registry.Start("chat-a", "run-a", first);
-            registry.Start("chat-b", "run-b", second);
+            registry.Start("chat-b", "run-b", second, secondCancellation);
             AssertEqual(2, registry.Sessions().Count, "parallel chat sessions");
             AssertEqual("run-a", registry.Get("chat-a").RunId, "first run isolated");
             AssertEqual("run-b", registry.Get("chat-b").RunId, "second run isolated");
@@ -351,8 +367,12 @@ namespace RNAssistant.Harness
             try { registry.Start("chat-a", "run-c", first); }
             catch (InvalidOperationException) { duplicateRejected = true; }
             AssertTrue(duplicateRejected, "duplicate run rejected");
+            AssertTrue(registry.Cancel("chat-b", "run-b"), "run cancelled by chat and run ids");
+            AssertTrue(secondCancellation.IsCancellationRequested, "matching cancellation token signalled");
+            AssertTrue(!registry.Cancel("chat-b", "wrong-run"), "wrong run id is not cancelled");
             registry.Complete("chat-a", "run-a");
             AssertTrue(!registry.IsRunning("chat-a") && registry.IsRunning("chat-b"), "completion only removes matching chat");
+            registry.Complete("chat-b", "run-b");
         }
 
         private static void HtmlNetworkOriginRequiresPermission()
@@ -441,9 +461,10 @@ namespace RNAssistant.Harness
                 LlmClient.BuildModelsConfigUrl(new AppSettings { BaseUrl = "https://api.example.test/v1" }),
                 "derived model catalog url fallback");
 
-            var catalog = JArray.Parse("[{\"id\":\"model-a\",\"display_name\":\"Model A\",\"max_context_tokens\":64000,\"supports_reasoning\":true,\"supports_vision\":true,\"supports_audio\":false}]");
+            var catalog = JArray.Parse("[{\"id\":\"model-a\",\"display_name\":\"Model A\",\"context_window\":1048576,\"max_completion_tokens\":8192,\"supports_reasoning\":true,\"supports_vision\":true,\"supports_audio\":false}]");
             AssertTrue(ModelCapabilityService.Merge(settings, catalog), "standard data catalog merged");
-            AssertEqual(64000, settings.ModelCapabilities["model-a"].MaxContextTokens.Value, "model context parsed");
+            AssertEqual(1048576, settings.ModelCapabilities["model-a"].MaxContextTokens.Value, "model context parsed");
+            AssertEqual(8192, settings.ModelCapabilities["model-a"].MaxOutputTokens.Value, "model output parsed separately");
             AssertTrue(settings.ModelCapabilities["model-a"].SupportsImages == true, "model vision parsed");
             AssertTrue(settings.ModelCapabilities["model-a"].SupportsReasoning == true, "model reasoning parsed");
             AssertTrue(settings.ModelCapabilities["model-a"].SupportsAudio == false, "model audio parsed");

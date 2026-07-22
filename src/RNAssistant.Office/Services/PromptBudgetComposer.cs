@@ -88,9 +88,7 @@ namespace RNAssistant.Office.Services
 
         public int EstimateMessages(IEnumerable<ChatMessage> messages)
         {
-            return ModelContextBudget.EstimateMessagesTokens(messages) +
-                (messages ?? new ChatMessage[0]).Sum(message =>
-                    message == null ? 0 : EstimateExtractedAttachmentTokens(message.Attachments));
+            return ModelContextBudget.EstimateMessagesTokens(messages);
         }
 
         internal static List<ChatMessage> ConversationHistory(ChatSession session)
@@ -124,22 +122,6 @@ namespace RNAssistant.Office.Services
                 !string.IsNullOrWhiteSpace(message.Content) &&
                 (string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase));
-        }
-
-        private static int EstimateExtractedAttachmentTokens(IEnumerable<ChatAttachment> attachments)
-        {
-            var total = 0;
-            foreach (var attachment in attachments ?? new ChatAttachment[0])
-            {
-                if (attachment == null)
-                {
-                    continue;
-                }
-                total += Math.Max(
-                    Math.Max(0, attachment.ExtractedCharCount),
-                    (attachment.ExtractedText ?? string.Empty).Length) / 2;
-            }
-            return total;
         }
 
         private static ChatMessage CloneConversationMessage(ChatMessage source)

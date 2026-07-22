@@ -104,9 +104,9 @@ namespace RNAssistant.Core.Storage
             {
                 settings.ContextWindowOverrideTokens = 0;
             }
-            if (settings.ContextWindowOverrideTokens > 1000000)
+            if (settings.ContextWindowOverrideTokens > 4000000)
             {
-                settings.ContextWindowOverrideTokens = 1000000;
+                settings.ContextWindowOverrideTokens = 4000000;
             }
             if (!settings.AutoRunToolCalls.HasValue)
             {

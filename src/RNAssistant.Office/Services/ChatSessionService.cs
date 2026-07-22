@@ -26,6 +26,41 @@ namespace RNAssistant.Office.Services
             _chatStore = chatStore;
         }
 
+        public void ReconcileInterruptedRuns(string runtimeId)
+        {
+            foreach (var session in _chatStore.List())
+            {
+                var run = session == null ? null : session.LastRun;
+                var unfinished = run != null &&
+                    (string.Equals(run.Status, "running", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(run.Status, "cancelling", StringComparison.OrdinalIgnoreCase));
+                if (!unfinished || string.Equals(run.RuntimeId, runtimeId, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                run.Status = "cancelled";
+                run.Phase = "cancelled";
+                run.CurrentAction = "Приложение было перезапущено.";
+                session.Messages.Add(new ChatMessage
+                {
+                    Role = "assistant",
+                    RunId = run.RunId,
+                    Content = "Предыдущий запуск был прерван перезапуском приложения.",
+                    Activity = new ChatActivity
+                    {
+                        RunId = run.RunId,
+                        Kind = "diagnostic",
+                        Title = "Запуск прерван",
+                        Status = "cancelled",
+                        ExecutionStatus = "application_restarted",
+                        ResultMessage = "Приложение было перезапущено до завершения запроса."
+                    }
+                });
+                _chatStore.Save(session);
+            }
+        }
+
         public void Reset()
         {
             _activeSessionId = null;
@@ -281,10 +316,10 @@ namespace RNAssistant.Office.Services
                 UpdatedUtc = session.UpdatedUtc,
                 MessageCount = session.Messages == null ? 0 : session.Messages.Count,
                 IsCurrentDocument = IsCurrentDocument(session),
-                RunId = run == null ? null : run.RunId,
-                RunStatus = run == null ? null : run.Status,
-                RunPhase = run == null ? null : run.Phase,
-                RunStartedUtc = run == null ? (DateTime?)null : run.StartedUtc
+                RunId = run == null ? (session.LastRun == null ? null : session.LastRun.RunId) : run.RunId,
+                RunStatus = run == null ? (session.LastRun == null ? null : session.LastRun.Status) : run.Status,
+                RunPhase = run == null ? (session.LastRun == null ? null : session.LastRun.Phase) : run.Phase,
+                RunStartedUtc = run == null ? (session.LastRun == null ? (DateTime?)null : session.LastRun.StartedUtc) : run.StartedUtc
             };
         }
 

@@ -110,6 +110,7 @@ namespace RNAssistant.Core.Models
         public DateTime UpdatedUtc { get; set; }
         public DocumentContext Context { get; set; }
         public PendingAgentTask PendingAgentTask { get; set; }
+        public ChatRunRecord LastRun { get; set; }
         public HtmlWorkspace HtmlWorkspace { get; set; }
         public List<ChatMessage> Messages { get; set; }
 
@@ -124,6 +125,16 @@ namespace RNAssistant.Core.Models
             Messages = new List<ChatMessage>();
             Mode = ChatModes.Chat;
         }
+    }
+
+    public sealed class ChatRunRecord
+    {
+        public string RunId { get; set; }
+        public string RuntimeId { get; set; }
+        public string Status { get; set; }
+        public string Phase { get; set; }
+        public string CurrentAction { get; set; }
+        public DateTime StartedUtc { get; set; }
     }
 
     public sealed class PendingAgentTask
