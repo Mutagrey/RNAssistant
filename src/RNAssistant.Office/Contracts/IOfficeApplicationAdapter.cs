@@ -32,5 +32,6 @@ namespace RNAssistant.Office
     {
         IReadOnlyList<OpenOfficeDocumentDto> ListOpenDocuments();
         bool ActivateDocument(string documentKey);
+        bool OpenDocument(string path);
     }
 }

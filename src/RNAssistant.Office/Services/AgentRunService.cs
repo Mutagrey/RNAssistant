@@ -871,7 +871,7 @@ namespace RNAssistant.Office.Services
             return new ChatActivity
             {
                 Kind = "diagnostic",
-                Title = "Подготовка задачи",
+                Title = BuildTaskProgressMessage(route, false).TrimEnd('.'),
                 Subtitle = route == null ? string.Empty : route.Mode + " · " + route.TaskType,
                 Status = "completed",
                 ExecutionStatus = "routed",
@@ -1140,7 +1140,8 @@ namespace RNAssistant.Office.Services
                 ReportProgress(progress, "thinking", completed ? "Анализ завершен." : progressMessage, new ChatActivity
                 {
                     Kind = "reasoning",
-                    Title = "Ход рассуждения",
+                    Title = (completed ? "Анализ завершен" : progressMessage.TrimEnd('.')),
+                    Subtitle = "Ход рассуждения",
                     Status = completed ? "completed" : "running",
                     ResultMessage = pendingReasoning.ToString()
                 });

@@ -131,6 +131,25 @@ namespace RNAssistant.Office.Services
             return session;
         }
 
+        public ChatSession CreateChatForDocument(string title, string host, string documentKey, string documentTitle, string documentPath)
+        {
+            if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(documentKey) ||
+                string.Equals(host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(documentKey, _adapter.DocumentKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return CreateChat(title);
+            }
+
+            var session = _chatStore.CreateTransient(
+                host.Trim(),
+                documentKey.Trim(),
+                string.IsNullOrWhiteSpace(documentTitle) ? "Document" : documentTitle.Trim(),
+                string.IsNullOrWhiteSpace(title) ? "New chat" : title.Trim());
+            session.DocumentPath = string.IsNullOrWhiteSpace(documentPath) ? null : documentPath.Trim();
+            SetActiveSession(session);
+            return session;
+        }
+
         public ChatSession DeleteAndSelectNext(string sessionId)
         {
             var current = _chatStore.Load(sessionId);
@@ -191,27 +210,38 @@ namespace RNAssistant.Office.Services
 
         public IReadOnlyList<ChatSessionSummary> GetChatSummaries(string activeId)
         {
-            return _chatStore.List()
-                .Select(s => new ChatSessionSummary
-                {
-                    Id = ChatStore.GetSessionId(s),
-                    Host = s.Host,
-                    DocumentKey = s.DocumentKey,
-                    DocumentTitle = s.DocumentTitle,
-                    DocumentPath = ResolveDocumentPath(s),
-                    Title = s.Title,
-                    Model = s.Model,
-                    Mode = ChatModes.Normalize(s.Mode),
-                    HtmlModeEnabled = s.HtmlModeEnabled,
-                    HasHtmlWorkspace = HasHtmlWorkspace(s.HtmlWorkspace),
-                    HtmlFileCount = s.HtmlWorkspace == null || s.HtmlWorkspace.Files == null ? 0 : s.HtmlWorkspace.Files.Count,
-                    HtmlDataSourceCount = s.HtmlWorkspace == null || s.HtmlWorkspace.DataSources == null ? 0 : s.HtmlWorkspace.DataSources.Count,
-                    CreatedUtc = s.CreatedUtc,
-                    UpdatedUtc = s.UpdatedUtc,
-                    MessageCount = s.Messages == null ? 0 : s.Messages.Count,
-                    IsCurrentDocument = IsCurrentDocument(s)
-                })
-                .ToList();
+            var sessions = _chatStore.List().ToList();
+            if (_activeSession != null && !_activeSessionPersisted &&
+                string.Equals(ChatStore.GetSessionId(_activeSession), activeId, StringComparison.OrdinalIgnoreCase) &&
+                sessions.All(item => !string.Equals(ChatStore.GetSessionId(item), activeId, StringComparison.OrdinalIgnoreCase)))
+            {
+                sessions.Insert(0, _activeSession);
+            }
+
+            return sessions.Select(ToSummary).ToList();
+        }
+
+        private ChatSessionSummary ToSummary(ChatSession session)
+        {
+            return new ChatSessionSummary
+            {
+                Id = ChatStore.GetSessionId(session),
+                Host = session.Host,
+                DocumentKey = session.DocumentKey,
+                DocumentTitle = session.DocumentTitle,
+                DocumentPath = ResolveDocumentPath(session),
+                Title = session.Title,
+                Model = session.Model,
+                Mode = ChatModes.Normalize(session.Mode),
+                HtmlModeEnabled = session.HtmlModeEnabled,
+                HasHtmlWorkspace = HasHtmlWorkspace(session.HtmlWorkspace),
+                HtmlFileCount = session.HtmlWorkspace == null || session.HtmlWorkspace.Files == null ? 0 : session.HtmlWorkspace.Files.Count,
+                HtmlDataSourceCount = session.HtmlWorkspace == null || session.HtmlWorkspace.DataSources == null ? 0 : session.HtmlWorkspace.DataSources.Count,
+                CreatedUtc = session.CreatedUtc,
+                UpdatedUtc = session.UpdatedUtc,
+                MessageCount = session.Messages == null ? 0 : session.Messages.Count,
+                IsCurrentDocument = IsCurrentDocument(session)
+            };
         }
 
         public bool IsCurrentDocument(ChatSession session)

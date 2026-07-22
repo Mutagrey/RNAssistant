@@ -15,6 +15,32 @@ async function createChat() {
   }
 }
 
+async function createDocumentChat(documentItem) {
+  if (!documentItem || !documentItem.documentKey ||
+      (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
+       !confirmDiscardHtmlWorkspaceChanges("Создать новый чат"))) {
+    return;
+  }
+
+  delete state.collapsedChatDocuments[documentItem.key];
+  setActivity("loading", "Создаю чат для «" + documentItem.title + "»...");
+  try {
+    applyChatState(await send("createDocumentChat", {
+      title: "Новый чат",
+      host: documentItem.host,
+      documentKey: documentItem.documentKey,
+      documentTitle: documentItem.title,
+      documentPath: documentItem.path || ""
+    }));
+    clearSendError();
+    log("Чат для документа создан.");
+  } catch (error) {
+    log(error.detail || error.message);
+  } finally {
+    clearActivity();
+  }
+}
+
 async function selectChat(id) {
   if (!id || id === state.activeChatId) {
     return;

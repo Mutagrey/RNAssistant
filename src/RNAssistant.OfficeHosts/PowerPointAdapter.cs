@@ -153,6 +153,33 @@ namespace RNAssistant.OfficeHosts
             return false;
         }
 
+        public bool OpenDocument(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return false;
+            }
+
+            try
+            {
+                var presentation = _application.Presentations.Open(path);
+                if (presentation == null)
+                {
+                    return false;
+                }
+                if (presentation.Windows != null && presentation.Windows.Count > 0)
+                {
+                    presentation.Windows[1].Activate();
+                }
+                NativeWindowInfo.BringToForeground(NativeWindowInfo.ReadLongMemberPath(_application, "HWND"));
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private string KeyForPresentation(PowerPoint.Presentation presentation)
         {
             if (presentation == null)

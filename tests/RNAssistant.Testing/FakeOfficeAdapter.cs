@@ -135,6 +135,11 @@ namespace RNAssistant.Harness
             return true;
         }
 
+        public bool OpenDocument(string path)
+        {
+            return false;
+        }
+
         public string GetDocumentSnapshot(int maxChars)
         {
             DocumentSnapshotReadCount += 1;

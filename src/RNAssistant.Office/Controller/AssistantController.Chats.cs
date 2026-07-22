@@ -125,6 +125,12 @@ namespace RNAssistant.Office
             return ChatState(session);
         }
 
+        public ChatStateResponse CreateDocumentChat(string title, string host, string documentKey, string documentTitle, string documentPath)
+        {
+            var session = _chatSessions.CreateChatForDocument(title, host, documentKey, documentTitle, documentPath);
+            return ChatState(session);
+        }
+
         public ChatStateResponse SelectChat(string chatId)
         {
             var session = LoadSession(chatId);
@@ -135,7 +141,8 @@ namespace RNAssistant.Office
         {
             var session = LoadSession(chatId);
             var catalog = _adapter as IOfficeDocumentCatalog;
-            if (catalog != null && catalog.ActivateDocument(session.DocumentKey))
+            var sameHost = string.Equals(session.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase);
+            if (sameHost && catalog != null && catalog.ActivateDocument(session.DocumentKey))
             {
                 return new OpenDocumentResponse { Path = _chatSessions.GetDocumentPath(session), Launched = false };
             }
@@ -145,6 +152,10 @@ namespace RNAssistant.Office
             }
 
             var path = _chatSessions.GetDocumentPath(session);
+            if (sameHost && catalog != null && catalog.OpenDocument(path))
+            {
+                return new OpenDocumentResponse { Path = path, Launched = true };
+            }
             DocumentOpenService.Open(path);
             return new OpenDocumentResponse { Path = path, Launched = true };
         }

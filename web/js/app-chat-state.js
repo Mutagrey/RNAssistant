@@ -170,6 +170,31 @@ function renderChatSessionList(chats) {
     }
   });
 
+  var currentDocumentKey = "";
+  Object.keys(documents).some(function (key) {
+    if (!documents[key].current) {
+      return false;
+    }
+    currentDocumentKey = key;
+    return true;
+  });
+  if (currentDocumentKey && currentDocumentKey !== state.currentChatDocumentKey) {
+    if (state.currentChatDocumentKey) {
+      state.collapsedChatDocuments[state.currentChatDocumentKey] = true;
+    }
+    delete state.collapsedChatDocuments[currentDocumentKey];
+    state.currentChatDocumentKey = currentDocumentKey;
+  }
+  Object.keys(documents).forEach(function (key) {
+    if (state.initializedChatDocuments[key]) {
+      return;
+    }
+    state.initializedChatDocuments[key] = true;
+    if (!documents[key].current) {
+      state.collapsedChatDocuments[key] = true;
+    }
+  });
+
   Object.keys(documents).sort(function (left, right) {
     var a = documents[left];
     var b = documents[right];
@@ -218,7 +243,7 @@ function setAllChatDocumentsCollapsed(collapsed) {
 
 function renderChatDocumentNode(documentItem, query) {
   var group = document.createElement("section");
-  group.className = "chat-document" + (documentItem.current ? " is-current" : (documentItem.open ? " is-open" : " is-closed"));
+  group.className = "chat-document" + documentHostClass(documentItem.host) + (documentItem.current ? " is-current" : (documentItem.open ? " is-open" : " is-closed"));
   var collapsed = !query && !!state.collapsedChatDocuments[documentItem.key];
 
   var header = document.createElement("div");
@@ -227,10 +252,11 @@ function renderChatDocumentNode(documentItem, query) {
   header.innerHTML =
     "<button type=\"button\" class=\"chat-document-toggle\" aria-label=\"Свернуть или развернуть документ\">" +
     "<span class=\"chat-document-caret\">›</span>" +
-    "<span class=\"chat-document-icon\">" + documentHostInitial(documentItem.host) + "</span>" +
+    "<span class=\"chat-document-icon\">" + documentHostIcon(documentItem.host) + "</span>" +
     "<span class=\"chat-document-name\"></span>" +
     "<span class=\"chat-document-state\">" + (documentItem.current ? "Активен" : (documentItem.open ? "Открыт" : "Закрыт")) + "</span></button>" +
     "<span class=\"chat-document-actions\">" +
+    "<button type=\"button\" class=\"chat-row-action chat-document-new\" title=\"Новый чат для документа\" aria-label=\"Новый чат для документа\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 5v14\"/><path d=\"M5 12h14\"/></svg></button>" +
     "<button type=\"button\" class=\"chat-row-action chat-document-open\" title=\"" + (documentItem.open ? "Активировать документ" : "Открыть документ") + "\" aria-label=\"" + (documentItem.open ? "Активировать документ" : "Открыть документ") + "\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M14 5h5v5\"/><path d=\"m19 5-8 8\"/><path d=\"M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5\"/></svg></button>" +
     "<button type=\"button\" class=\"chat-row-action chat-document-delete\" title=\"Удалить документ и все чаты\" aria-label=\"Удалить документ и все чаты\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 6h18\"/><path d=\"M8 6V4h8v2\"/><path d=\"m19 6-1 14H6L5 6\"/><path d=\"M10 11v5\"/><path d=\"M14 11v5\"/></svg></button>" +
     "</span>";
@@ -239,6 +265,9 @@ function renderChatDocumentNode(documentItem, query) {
     state.collapsedChatDocuments[documentItem.key] = !children.hidden;
     state.chatTreeCollapsedAll = allChatDocumentsCollapsed();
     renderChatSessionList(state.chats || []);
+  });
+  header.querySelector(".chat-document-new").addEventListener("click", function () {
+    createDocumentChat(documentItem);
   });
   var openButton = header.querySelector(".chat-document-open");
   openButton.hidden = !documentItem.open && !documentItem.path;
@@ -295,6 +324,9 @@ function renderChatTreeControls() {
     sidebarButton.title = label;
     sidebarButton.setAttribute("aria-label", label);
     sidebarButton.setAttribute("aria-pressed", state.chatSidebarHidden ? "true" : "false");
+    sidebarButton.innerHTML = state.chatSidebarHidden
+      ? "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m10 6 6 6-6 6\"/></svg>"
+      : "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m14 6-6 6 6 6\"/></svg>";
   }
 }
 
@@ -326,9 +358,25 @@ function renderChatTreeRow(chat) {
   return row;
 }
 
-function documentHostInitial(host) {
-  var values = { Excel: "X", Word: "W", PowerPoint: "P", Outlook: "O" };
-  return values[host] || (host || "?").charAt(0).toUpperCase();
+function documentHostClass(host) {
+  var values = { Excel: " is-host-excel", Word: " is-host-word", PowerPoint: " is-host-powerpoint", Outlook: " is-host-outlook" };
+  return values[host] || " is-host-generic";
+}
+
+function documentHostIcon(host) {
+  if (host === "Excel") {
+    return "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"5\" y=\"4\" width=\"14\" height=\"16\" rx=\"1\"/><path d=\"M5 9h14M10 4v16M14.5 9v11\"/></svg>";
+  }
+  if (host === "Word") {
+    return "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 4h12v16H6zM9 9h6M9 12h6M9 15h4\"/></svg>";
+  }
+  if (host === "PowerPoint") {
+    return "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"5\" y=\"4\" width=\"14\" height=\"16\" rx=\"1\"/><path d=\"M9 15V9h3a2 2 0 0 1 0 4H9\"/></svg>";
+  }
+  if (host === "Outlook") {
+    return "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"4\" y=\"6\" width=\"16\" height=\"12\" rx=\"1\"/><path d=\"m5 8 7 5 7-5\"/></svg>";
+  }
+  return "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 3h9l3 3v15H6zM15 3v4h4\"/></svg>";
 }
 
 function createChatSessionBadge(text, kind) {

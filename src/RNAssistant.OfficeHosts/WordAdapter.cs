@@ -140,6 +140,30 @@ namespace RNAssistant.OfficeHosts
             return false;
         }
 
+        public bool OpenDocument(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return false;
+            }
+
+            try
+            {
+                var document = _application.Documents.Open(path);
+                if (document == null)
+                {
+                    return false;
+                }
+                document.Activate();
+                NativeWindowInfo.BringToForeground(NativeWindowInfo.ReadLongMemberPath(_application, "ActiveWindow", "Hwnd"));
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private string KeyForDocument(Word.Document document)
         {
             if (document == null)

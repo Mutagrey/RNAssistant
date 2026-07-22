@@ -11,6 +11,8 @@ var state = {
   documents: [],
   chatSearch: "",
   collapsedChatDocuments: {},
+  initializedChatDocuments: {},
+  currentChatDocumentKey: "",
   chatSidebarHidden: false,
   chatTreeCollapsedAll: false,
   activeChatId: "",

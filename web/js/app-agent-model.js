@@ -21,7 +21,17 @@ function normalizeProgressActivity(progress) {
   progress = progress || {};
   var activity = progress.activity || progress.Activity;
   if (activity) {
-    return activity;
+    var copy = cloneActivity(activity);
+    var phase = (progress.phase || progress.Phase || "").toLowerCase();
+    var message = progress.message || progress.Message || "";
+    if (message && (phase === "routing" || phase === "plan")) {
+      if (copy.Title !== undefined) {
+        copy.Title = message.replace(/[.]+$/, "");
+      } else {
+        copy.title = message.replace(/[.]+$/, "");
+      }
+    }
+    return copy;
   }
 
   return {

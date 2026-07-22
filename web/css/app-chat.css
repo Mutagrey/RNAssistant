@@ -54,6 +54,33 @@
   width: 28px;
   height: 28px;
   min-height: 28px;
+  border-color: #d7dee8;
+  background: #eef2f7;
+}
+
+.chat-tree-toolbar .icon-button:hover {
+  background: #e2e8f0;
+}
+
+.chat-search-wrap {
+  position: relative;
+  display: block;
+}
+
+.chat-search-wrap > svg {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  pointer-events: none;
 }
 
 .chat-search {
@@ -61,7 +88,7 @@
   height: 30px;
   border: 1px solid var(--control-border);
   border-radius: 5px;
-  padding: 0 8px;
+  padding: 0 8px 0 28px;
   background: #fff;
   color: var(--text);
   font-size: 12px;
@@ -160,7 +187,7 @@
   min-width: 0;
   min-height: 30px;
   border: 0;
-  padding: 4px 54px 4px 4px;
+  padding: 4px;
   background: transparent;
   text-align: left;
 }
@@ -177,8 +204,8 @@
   display: flex;
   gap: 2px;
   align-items: center;
-  padding-left: 12px;
-  background: linear-gradient(90deg, transparent, #eef3f9 12px);
+  padding-left: 8px;
+  background: linear-gradient(90deg, transparent, #eef3f9 8px);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s ease;
@@ -244,6 +271,12 @@
   text-align: left;
 }
 
+.chat-document-row:hover,
+.chat-document-row:focus-within {
+  border-radius: 4px;
+  background: #eef3f9;
+}
+
 .chat-document-toggle {
   display: grid;
   grid-template-columns: 12px 20px minmax(0, 1fr) auto;
@@ -251,7 +284,7 @@
   width: 100%;
   min-width: 0;
   border: 0;
-  padding: 2px 58px 2px 2px;
+  padding: 2px;
   background: transparent;
   text-align: left;
 }
@@ -267,8 +300,8 @@
   right: 5px;
   display: flex;
   gap: 2px;
-  padding-left: 13px;
-  background: linear-gradient(90deg, transparent, #f8fafc 13px);
+  padding-left: 8px;
+  background: linear-gradient(90deg, transparent, #eef3f9 8px);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s ease;
@@ -307,10 +340,36 @@
   height: 18px;
   place-items: center;
   border-radius: 3px;
-  background: #217346;
+  background: #667085;
   color: #fff;
   font-size: 10px;
   font-weight: 600;
+}
+
+.chat-document-icon svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.chat-document.is-host-excel .chat-document-icon {
+  background: #217346;
+}
+
+.chat-document.is-host-word .chat-document-icon {
+  background: #2b579a;
+}
+
+.chat-document.is-host-powerpoint .chat-document-icon {
+  background: #d24726;
+}
+
+.chat-document.is-host-outlook .chat-document-icon {
+  background: #0078d4;
 }
 
 .chat-document-name {
@@ -328,11 +387,11 @@
 }
 
 .chat-document.is-closed .chat-document-icon {
-  background: #98a2b3;
+  opacity: 0.58;
 }
 
 .chat-document.is-open:not(.is-current) .chat-document-icon {
-  background: #4f8f69;
+  opacity: 0.78;
 }
 
 .chat-document-empty {

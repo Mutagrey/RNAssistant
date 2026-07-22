@@ -126,6 +126,15 @@ namespace RNAssistant.Office
             });
         }
 
+        public bool OpenDocument(string path)
+        {
+            return _dispatcher.Invoke(delegate
+            {
+                var catalog = Inner as IOfficeDocumentCatalog;
+                return catalog != null && catalog.OpenDocument(path);
+            });
+        }
+
         public void Dispose()
         {
             if (_disposed)

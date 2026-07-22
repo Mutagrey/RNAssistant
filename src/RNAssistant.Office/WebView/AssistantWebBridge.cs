@@ -68,6 +68,15 @@ namespace RNAssistant.Office.WebView
                         var createChat = Payload<CreateChatPayload>(payload);
                         responsePayload = _controller.CreateChat(createChat.Title);
                         break;
+                    case "createDocumentChat":
+                        var createDocumentChat = Payload<CreateDocumentChatPayload>(payload);
+                        responsePayload = _controller.CreateDocumentChat(
+                            createDocumentChat.Title,
+                            createDocumentChat.Host,
+                            createDocumentChat.DocumentKey,
+                            createDocumentChat.DocumentTitle,
+                            createDocumentChat.DocumentPath);
+                        break;
                     case "selectChat":
                         responsePayload = _controller.SelectChat(Payload<ChatPayload>(payload).ChatId);
                         break;

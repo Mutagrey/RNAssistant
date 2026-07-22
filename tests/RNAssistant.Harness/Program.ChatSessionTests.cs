@@ -153,6 +153,20 @@ namespace RNAssistant.Harness
                 AssertEqual(0, store.List(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle).Count, "empty drafts not persisted");
                 AssertTrue(!store.IsPersisted(second), "active draft remains in memory");
                 AssertEqual(ChatStore.GetSessionId(second), ChatStore.GetSessionId(service.GetActiveSession()), "active draft survives list refresh");
+
+                var draftSummaries = service.GetChatSummaries(ChatStore.GetSessionId(second));
+                AssertEqual(1, draftSummaries.Count, "active transient draft is visible in chat tree");
+                AssertEqual(ChatModes.Auto, draftSummaries[0].Mode, "visible transient draft keeps auto mode");
+
+                var offline = service.CreateChatForDocument(
+                    "Offline draft",
+                    "Word",
+                    "archived-doc",
+                    "Archive.docx",
+                    "C:\\Docs\\Archive.docx");
+                AssertEqual(ChatModes.Auto, offline.Mode, "document group draft defaults to auto mode");
+                AssertEqual("archived-doc", offline.DocumentKey, "document group draft uses target document");
+                AssertEqual("C:\\Docs\\Archive.docx", offline.DocumentPath, "document group draft keeps document path");
             });
         }
     }

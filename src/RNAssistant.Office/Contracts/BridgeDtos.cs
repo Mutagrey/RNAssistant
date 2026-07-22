@@ -137,6 +137,24 @@ namespace RNAssistant.Office.Contracts
         public string Title { get; set; }
     }
 
+    public sealed class CreateDocumentChatPayload
+    {
+        [JsonProperty("title")]
+        public string Title { get; set; }
+
+        [JsonProperty("host")]
+        public string Host { get; set; }
+
+        [JsonProperty("documentKey")]
+        public string DocumentKey { get; set; }
+
+        [JsonProperty("documentTitle")]
+        public string DocumentTitle { get; set; }
+
+        [JsonProperty("documentPath")]
+        public string DocumentPath { get; set; }
+    }
+
     public sealed class RenameChatPayload : ChatPayload
     {
         [JsonProperty("title")]

@@ -34,6 +34,11 @@ namespace RNAssistant.Office
         public InitResponse Initialize() { return new InitResponse { Host = "Excel", Title = "Harness.xlsx" }; }
         public ChatStateResponse ListChats() { return ChatState(); }
         public ChatStateResponse CreateChat(string title) { return ChatState(title); }
+        public ChatStateResponse CreateDocumentChat(string title, string host, string documentKey, string documentTitle, string documentPath)
+        {
+            LastDocumentHost = host;
+            return ChatState(title, documentKey);
+        }
         public ChatStateResponse SelectChat(string chatId) { return ChatState(null, chatId); }
         public OpenDocumentResponse OpenDocument(string chatId) { return new OpenDocumentResponse { Path = string.Empty, Launched = false }; }
         public ChatStateResponse ActivateDocument(string documentKey) { return ChatState(null, documentKey); }

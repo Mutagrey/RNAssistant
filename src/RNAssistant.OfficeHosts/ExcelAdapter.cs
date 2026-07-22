@@ -147,6 +147,34 @@ namespace RNAssistant.OfficeHosts
             return false;
         }
 
+        public bool OpenDocument(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return false;
+            }
+
+            try
+            {
+                var workbook = _application.Workbooks.Open(path);
+                if (workbook == null)
+                {
+                    return false;
+                }
+                workbook.Activate();
+                if (workbook.Windows != null && workbook.Windows.Count > 0)
+                {
+                    workbook.Windows[1].Activate();
+                }
+                NativeWindowInfo.BringToForeground(NativeWindowInfo.ReadLongMemberPath(_application, "Hwnd"));
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private string KeyForWorkbook(Excel.Workbook workbook)
         {
             if (workbook == null)
