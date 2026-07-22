@@ -28,7 +28,12 @@ namespace RNAssistant.Office.Services
             Action<string, string, ChatActivity> progress,
             CancellationToken cancellationToken)
         {
-            ChatCompletionService.ApplyChatModel(settings, session);
+            var routing = AttachmentModelRoutingService.Select(settings, session, attachments);
+            settings = routing.Settings;
+            if (routing.IsRouted)
+            {
+                Report(progress, "routing", routing.ProgressMessage);
+            }
             session.Messages.Add(new ChatMessage
             {
                 Role = "user",

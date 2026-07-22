@@ -86,7 +86,9 @@ namespace RNAssistant.Core.Models
         public double UiFontScale { get; set; }
         public Dictionary<string, string> CustomHeaders { get; set; }
         public Dictionary<string, bool?> ModelImageSupportOverrides { get; set; }
+        public Dictionary<string, bool?> ModelAudioSupportOverrides { get; set; }
         public Dictionary<string, ModelCapabilitySettings> ModelCapabilities { get; set; }
+        public List<string> AttachmentModelPriority { get; set; }
         public List<string> HtmlNetworkAllowedOrigins { get; set; }
 
         public AppSettings()
@@ -123,7 +125,9 @@ namespace RNAssistant.Core.Models
             UiFontScale = 1.0;
             CustomHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             ModelImageSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
+            ModelAudioSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
             ModelCapabilities = new Dictionary<string, ModelCapabilitySettings>(StringComparer.OrdinalIgnoreCase);
+            AttachmentModelPriority = new List<string>();
             HtmlNetworkAllowedOrigins = new List<string>();
         }
     }

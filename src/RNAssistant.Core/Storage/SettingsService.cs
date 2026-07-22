@@ -1,6 +1,7 @@
 using RNAssistant.Core.Models;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace RNAssistant.Core.Storage
 {
@@ -48,10 +49,19 @@ namespace RNAssistant.Core.Storage
             {
                 settings.ModelImageSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
             }
+            if (settings.ModelAudioSupportOverrides == null)
+            {
+                settings.ModelAudioSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
+            }
             if (settings.ModelCapabilities == null)
             {
                 settings.ModelCapabilities = new Dictionary<string, ModelCapabilitySettings>(StringComparer.OrdinalIgnoreCase);
             }
+            settings.AttachmentModelPriority = (settings.AttachmentModelPriority ?? new List<string>())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
             if (settings.HtmlNetworkAllowedOrigins == null)
             {
                 settings.HtmlNetworkAllowedOrigins = new List<string>();

@@ -132,7 +132,35 @@ namespace RNAssistant.Office.Services
                 Content = source == null ? string.Empty : source.Content ?? string.Empty,
                 Attachments = source == null || source.Attachments == null
                     ? new List<ChatAttachment>()
-                    : new List<ChatAttachment>(source.Attachments)
+                    : source.Attachments
+                        .Where(attachment => attachment != null &&
+                            !string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) &&
+                            !string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase))
+                        .Select(CloneHistoryAttachment)
+                        .ToList()
+            };
+        }
+
+        private static ChatAttachment CloneHistoryAttachment(ChatAttachment source)
+        {
+            return new ChatAttachment
+            {
+                Id = source.Id,
+                FileName = source.FileName,
+                ContentType = source.ContentType,
+                Size = source.Size,
+                Kind = string.Equals(source.Kind, "pdf", StringComparison.OrdinalIgnoreCase) ? "text" : source.Kind,
+                RelativePath = source.RelativePath,
+                ExtractedText = source.ExtractedText,
+                ExtractedTextPath = source.ExtractedTextPath,
+                ExtractedCharCount = source.ExtractedCharCount,
+                TextTruncated = source.TextTruncated,
+                PageCount = source.PageCount,
+                PageTextLengths = source.PageTextLengths == null ? new List<int>() : new List<int>(source.PageTextLengths),
+                ExtractionWarning = source.ExtractionWarning,
+                Status = source.Status,
+                Error = source.Error,
+                CreatedUtc = source.CreatedUtc
             };
         }
 

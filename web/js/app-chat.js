@@ -567,10 +567,6 @@ async function submitChatInput() {
   if (!text && !attachments.length) {
     return;
   }
-  if (attachments.some(function (attachment) { return attachmentKind(attachment) === "image"; }) &&
-      !(await ensureImageCapableModel())) {
-    return;
-  }
   if (currentActiveSend() || state.modelSaving) {
     return;
   }

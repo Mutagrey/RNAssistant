@@ -93,12 +93,37 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<SkillDefinition> skills,
             CancellationToken cancellationToken)
         {
+            return await ContinueAfterToolAsync(
+                confirmedCommand,
+                session,
+                documentContext,
+                settings,
+                tools,
+                null,
+                progress,
+                pendingToolRegistrar,
+                skills,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        public async Task<ChatCompletionResult> ContinueAfterToolAsync(
+            ToolCommand confirmedCommand,
+            ChatSession session,
+            DocumentContext documentContext,
+            AppSettings settings,
+            IReadOnlyList<ToolDefinition> tools,
+            IReadOnlyList<ChatAttachment> attachments,
+            Action<string, string, ChatActivity> progress,
+            ChatCompletionService.PendingToolRegistrar pendingToolRegistrar,
+            IReadOnlyList<SkillDefinition> skills,
+            CancellationToken cancellationToken)
+        {
             var prompt = BuildConfirmedToolContinuation(
                 confirmedCommand,
                 session,
                 PromptText(settings, p => p.ConfirmedToolContinuationPrompt));
             var taskText = LatestUserRequest(session, prompt);
-            return await RunLoopAsync(taskText, prompt, CommandMutates(confirmedCommand, tools), session, documentContext, settings, tools, null, progress, pendingToolRegistrar, skills, cancellationToken).ConfigureAwait(false);
+            return await RunLoopAsync(taskText, prompt, CommandMutates(confirmedCommand, tools), session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, cancellationToken).ConfigureAwait(false);
         }
 
         public bool CommandMutates(ToolCommand command, IReadOnlyList<ToolDefinition> tools)

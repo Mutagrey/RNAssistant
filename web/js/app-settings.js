@@ -91,7 +91,9 @@ function readSettings() {
     SystemPromptRole: $("systemPromptRoleInput").value === "system" ? "system" : "user",
     AgentPrompts: promptSettings.AgentPrompts,
     ModelImageSupportOverrides: modelImageSupportOverrides(),
+    ModelAudioSupportOverrides: modelAudioSupportOverrides(),
     ModelCapabilities: modelCapabilitiesForSettings(),
+    AttachmentModelPriority: attachmentModelPriorityForSettings(),
     HtmlNetworkAllowedOrigins: $("htmlNetworkOriginsInput").value.split(/\r?\n/).map(function (value) { return value.trim(); }).filter(Boolean),
     CustomHeaders: textToHeaders($("headersInput").value)
   };

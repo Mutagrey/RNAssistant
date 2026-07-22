@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="css/app-composer.css?v=chatui-20260622-10">
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=chatui-20260622-1">
-  <link rel="stylesheet" href="css/app-models.css?v=modelcaps-20260722-1">
+  <link rel="stylesheet" href="css/app-models.css?v=mediarouting-20260722-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=chatui-20260630-1">
   <link rel="stylesheet" href="css/app-tools.css?v=chatui-20260622-5">
   <link rel="stylesheet" href="css/app-prompts.css?v=chatui-20260630-2">
@@ -465,10 +465,19 @@
                   <div class="model-capability-heading">
                     <div>
                       <h3 id="modelCapabilityTitle">Возможности моделей</h3>
-                      <p>Reasoning, Vision и Audio берутся из каталога. Vision можно переопределить вручную; «Авто» возвращает значение каталога.</p>
+                      <p>Reasoning берётся из каталога. Для Vision и Audio можно выбрать «Авто», «Да» или «Нет».</p>
                     </div>
                   </div>
                   <div class="model-capability-list" id="modelCapabilityList"></div>
+                </section>
+                <section class="model-capability-section wide" aria-labelledby="attachmentModelPriorityTitle">
+                  <div class="model-capability-heading">
+                    <div>
+                      <h3 id="attachmentModelPriorityTitle">Маршрутизация вложений</h3>
+                      <p>Для изображений, сканов и аудио выбирается первая совместимая модель сверху вниз. Модель чата при этом не меняется.</p>
+                    </div>
+                  </div>
+                  <div class="attachment-model-priority" id="attachmentModelPriorityList"></div>
                 </section>
                 <label><span>Макс. токены ответа</span><input id="maxTokensInput" type="number" min="1" max="200000"></label>
                 <label><span>Таймаут запроса, сек</span><input id="requestTimeoutInput" type="number" min="30" max="3600"></label>
@@ -672,10 +681,10 @@
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
   <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js?v=contextstream-20260722-1"></script>
+  <script src="js/app-settings.js?v=mediarouting-20260722-1"></script>
   <script src="js/app-prompts.js?v=chatui-20260703-1"></script>
-  <script src="js/app-model-data.js?v=modelcaps-20260722-1"></script>
-  <script src="js/app-model-render.js?v=modelcaps-20260722-1"></script>
+  <script src="js/app-model-data.js?v=mediarouting-20260722-1"></script>
+  <script src="js/app-model-render.js?v=mediarouting-20260722-1"></script>
   <script src="js/app-models.js?v=chatui-20260703-2"></script>
   <script src="js/app-context-data.js"></script>
   <script src="js/app-chat-state.js?v=chat-tree-20260722-1"></script>
@@ -692,7 +701,7 @@
   <script src="js/app-agent.js?v=chatui-20260702-1"></script>
   <script src="js/app-messages.js?v=reasoning-20260722-1"></script>
   <script src="js/app-reasoning.js?v=reasoning-20260722-1"></script>
-  <script src="js/app-attachments.js?v=attachments-20260703-2"></script>
+  <script src="js/app-attachments.js?v=mediarouting-20260722-1"></script>
   <script src="js/app-chat.js?v=chat-tree-20260722-1"></script>
   <script src="js/app.js?v=chatui-20260630-3"></script>
 </body>

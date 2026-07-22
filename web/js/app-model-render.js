@@ -205,7 +205,7 @@ function renderModelInfo(selectedValue) {
   appendModelMetric(metrics, "Frequency penalty", model.frequencyPenalty);
   appendModelMetric(metrics, "Reasoning", model.supportsReasoning === null ? "?" : (model.supportsReasoning ? "да" : "нет"));
   appendModelMetric(metrics, "Vision", catalogModelSupportsImages(model) === null ? "?" : (catalogModelSupportsImages(model) ? "да" : "нет"));
-  appendModelMetric(metrics, "Audio", model.supportsAudio === null ? "?" : (model.supportsAudio ? "да" : "нет"));
+  appendModelMetric(metrics, "Audio", catalogModelSupportsAudio(model) === null ? "?" : (catalogModelSupportsAudio(model) ? "да" : "нет"));
   box.appendChild(metrics);
 
   if (model.systemPrompt) {
@@ -245,6 +245,7 @@ function renderModelControls() {
   renderModelInfo(formModel());
   renderModelStatus();
   renderModelCapabilityList();
+  renderAttachmentModelPriority();
   renderActiveModelCapability();
 }
 
@@ -284,17 +285,43 @@ function appendModelCapabilityToggle(row, label, value, enabled, onChange) {
   row.appendChild(holder);
 }
 
-function setModelImageSupportOverride(value, enabled) {
+function modelOverrideState(overrides, value) {
+  var override = modelSupportOverride(overrides, value);
+  return override === null ? "auto" : (override ? "true" : "false");
+}
+
+function appendModelCapabilitySelect(row, label, mode, onChange) {
+  var holder = document.createElement("label");
+  holder.className = "model-capability-flag";
+  var select = document.createElement("select");
+  select.className = "model-capability-select";
+  select.setAttribute("aria-label", label);
+  [["auto", "Авто"], ["true", "Да"], ["false", "Нет"]].forEach(function (item) {
+    var option = document.createElement("option");
+    option.value = item[0];
+    option.textContent = item[1];
+    select.appendChild(option);
+  });
+  select.value = mode;
+  select.addEventListener("change", function () { onChange(select.value); });
+  holder.appendChild(select);
+  row.appendChild(holder);
+}
+
+function setModelCapabilityOverride(kind, value, mode) {
   value = String(value || "").trim();
   if (!value) return;
   var settings = state.settings || (state.settings = {});
-  var overrides = modelImageSupportOverrides();
-  settings.ModelImageSupportOverrides = overrides;
-  if (enabled === null) {
-    delete overrides[value];
-  } else {
-    overrides[value] = !!enabled;
+  var overrides = kind === "audio" ? modelAudioSupportOverrides() : modelImageSupportOverrides();
+  if (kind === "audio") settings.ModelAudioSupportOverrides = overrides;
+  else settings.ModelImageSupportOverrides = overrides;
+  Object.keys(overrides).forEach(function (key) {
+    if (key.toLowerCase() === value.toLowerCase()) delete overrides[key];
+  });
+  if (mode !== "auto") {
+    overrides[value] = mode === "true";
   }
+  settings.AttachmentModelPriority = attachmentModelPriorityForSettings();
   settingsDirty = true;
   updateSettingsSaveButton();
   renderModelControls();
@@ -304,11 +331,9 @@ function renderModelCapabilityList() {
   var list = $("modelCapabilityList");
   if (!list) return;
 
-  var models = (state.modelCatalog.models || []).slice();
-  var manualValue = formModel();
-  if (manualValue && !findModel(manualValue)) {
-    models.unshift({ value: manualValue, title: manualValue, supportsReasoning: null, supportsImages: null, supportsAudio: null, inputModalities: [] });
-  }
+  var models = allKnownModelValues().map(function (value) {
+    return findModel(value) || { value: value, title: value, supportsReasoning: null, supportsImages: null, supportsAudio: null, inputModalities: [] };
+  });
   list.innerHTML = "";
 
   if (!models.length) {
@@ -319,10 +344,11 @@ function renderModelCapabilityList() {
     return;
   }
 
-  var overrides = modelImageSupportOverrides();
+  var imageOverrides = modelImageSupportOverrides();
+  var audioOverrides = modelAudioSupportOverrides();
   var header = document.createElement("div");
   header.className = "model-capability-row model-capability-header";
-  ["Модель", "Reasoning", "Vision", "Audio", ""].forEach(function (label) {
+  ["Модель", "Reasoning", "Vision", "Audio"].forEach(function (label) {
     var cell = document.createElement("span");
     cell.textContent = label;
     header.appendChild(cell);
@@ -330,9 +356,9 @@ function renderModelCapabilityList() {
   list.appendChild(header);
   models.forEach(function (model) {
     var value = model.value;
-    var hasOverride = Object.prototype.hasOwnProperty.call(overrides, value) && overrides[value] !== null;
-    var catalogSupport = catalogModelSupportsImages(model);
-    var effective = hasOverride ? !!overrides[value] : catalogSupport;
+    var imageMode = modelOverrideState(imageOverrides, value);
+    var audioMode = modelOverrideState(audioOverrides, value);
+    var hasOverride = imageMode !== "auto" || audioMode !== "auto";
 
     var row = document.createElement("div");
     row.className = "model-capability-row";
@@ -346,27 +372,99 @@ function renderModelCapabilityList() {
     if ((model.title && model.title !== value) || hasOverride) {
       var id = document.createElement("div");
       id.className = "model-capability-id";
-      id.textContent = value + (hasOverride ? " · Vision вручную" : "");
+      id.textContent = value + (hasOverride ? " · возможности вручную" : "");
       text.appendChild(id);
     }
     row.appendChild(text);
 
-    appendModelCapabilityToggle(row, "Reasoning: " + value, nullableModelBoolean(model.supportsReasoning), false, null);
-    appendModelCapabilityToggle(row, "Vision: " + value, effective, true, function (checked) {
-      setModelImageSupportOverride(value, checked);
+    appendModelCapabilityToggle(row, "Reasoning: " + value, effectiveModelSupportsReasoning(value), false, null);
+    appendModelCapabilitySelect(row, "Vision: " + value, imageMode, function (mode) {
+      setModelCapabilityOverride("image", value, mode);
     });
-    appendModelCapabilityToggle(row, "Audio: " + value, nullableModelBoolean(model.supportsAudio), false, null);
+    appendModelCapabilitySelect(row, "Audio: " + value, audioMode, function (mode) {
+      setModelCapabilityOverride("audio", value, mode);
+    });
+    list.appendChild(row);
+  });
+}
 
-    var reset = document.createElement("button");
-    reset.type = "button";
-    reset.className = "model-capability-reset";
-    reset.textContent = "Авто";
-    reset.disabled = !hasOverride;
-    reset.title = hasOverride ? "Вернуть Vision из каталога" : "Vision уже взят из каталога";
-    reset.addEventListener("click", function () {
-      setModelImageSupportOverride(value, null);
+function setAttachmentModelPriority(values) {
+  var settings = state.settings || (state.settings = {});
+  settings.AttachmentModelPriority = values.slice();
+  settingsDirty = true;
+  updateSettingsSaveButton();
+  renderAttachmentModelPriority();
+}
+
+function renderAttachmentModelPriority() {
+  var list = $("attachmentModelPriorityList");
+  if (!list) return;
+  var values = attachmentModelPriorityForSettings();
+  list.innerHTML = "";
+  if (!values.length) {
+    var empty = document.createElement("div");
+    empty.className = "model-capability-empty";
+    empty.textContent = "Нет моделей с подтверждённой поддержкой Vision или Audio.";
+    list.appendChild(empty);
+    return;
+  }
+  values.forEach(function (value, index) {
+    var row = document.createElement("div");
+    row.className = "attachment-model-priority-row";
+    var rank = document.createElement("span");
+    rank.className = "attachment-model-priority-rank";
+    rank.textContent = String(index + 1);
+    row.appendChild(rank);
+
+    var copy = document.createElement("div");
+    copy.className = "model-capability-text";
+    var model = findModel(value);
+    var title = document.createElement("div");
+    title.className = "model-capability-title";
+    title.textContent = model ? model.title : value;
+    copy.appendChild(title);
+    if (model && model.title !== value) {
+      var id = document.createElement("div");
+      id.className = "model-capability-id";
+      id.textContent = value;
+      copy.appendChild(id);
+    }
+    row.appendChild(copy);
+
+    var badges = document.createElement("div");
+    badges.className = "attachment-model-priority-badges";
+    if (effectiveModelSupportsImages(value) === true) {
+      var vision = document.createElement("span");
+      vision.textContent = "Vision";
+      badges.appendChild(vision);
+    }
+    if (effectiveModelSupportsAudio(value) === true) {
+      var audio = document.createElement("span");
+      audio.textContent = "Audio";
+      badges.appendChild(audio);
+    }
+    row.appendChild(badges);
+
+    var actions = document.createElement("div");
+    actions.className = "attachment-model-priority-actions";
+    [["↑", -1, "Поднять приоритет"], ["↓", 1, "Понизить приоритет"]].forEach(function (action) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary";
+      button.textContent = action[0];
+      button.title = action[2];
+      button.disabled = index + action[1] < 0 || index + action[1] >= values.length;
+      button.addEventListener("click", function () {
+        var target = index + action[1];
+        var reordered = values.slice();
+        var moved = reordered[index];
+        reordered[index] = reordered[target];
+        reordered[target] = moved;
+        setAttachmentModelPriority(reordered);
+      });
+      actions.appendChild(button);
     });
-    row.appendChild(reset);
+    row.appendChild(actions);
     list.appendChild(row);
   });
 }

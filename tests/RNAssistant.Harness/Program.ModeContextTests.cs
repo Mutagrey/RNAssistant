@@ -140,36 +140,94 @@ namespace RNAssistant.Harness
             AssertTrue(failedRepair.AssistantText.IndexOf("still internal", StringComparison.OrdinalIgnoreCase) < 0, "failed repair thought hidden");
         }
 
-        private static void ImageSwitchesToCompatibleModel()
+        private static void AttachmentRoutingIsRequestScoped()
         {
-            var settings = new AppSettings { Model = "default-vision" };
-            settings.ModelCapabilities["default-vision"] = new ModelCapabilitySettings { SupportsImages = true };
-            settings.ModelCapabilities["text-only"] = new ModelCapabilitySettings { SupportsImages = false };
+            var settings = new AppSettings { Model = "global-text" };
+            settings.ModelCapabilities["text-only"] = new ModelCapabilitySettings { SupportsImages = false, SupportsAudio = false };
+            settings.ModelCapabilities["vision-first"] = new ModelCapabilitySettings { SupportsImages = true, SupportsAudio = false };
+            settings.AttachmentModelPriority.Add("vision-first");
             var session = new ChatSession { Model = "text-only" };
-            session.Messages.Add(new ChatMessage
+
+            var routed = AttachmentModelRoutingService.Select(
+                settings,
+                session,
+                new[] { new ChatAttachment { Kind = "image", FileName = "clipboard.png" } });
+            AssertEqual("vision-first", routed.SelectedModel, "priority vision model");
+            AssertEqual("vision-first", routed.Settings.Model, "request copy model");
+            AssertEqual("text-only", session.Model, "session model unchanged");
+            AssertEqual("global-text", settings.Model, "stored settings unchanged");
+
+            var text = AttachmentModelRoutingService.Select(settings, session, null);
+            AssertEqual("text-only", text.SelectedModel, "next text request uses chat model");
+        }
+
+        private static void AttachmentRoutingCoversPdfAndMixedMedia()
+        {
+            var settings = new AppSettings { Model = "text-only" };
+            settings.ModelCapabilities["text-only"] = new ModelCapabilitySettings { SupportsImages = false, SupportsAudio = false };
+            settings.ModelCapabilities["vision"] = new ModelCapabilitySettings { SupportsImages = true, SupportsAudio = false };
+            settings.ModelCapabilities["audio"] = new ModelCapabilitySettings { SupportsImages = false, SupportsAudio = true };
+            settings.ModelCapabilities["both"] = new ModelCapabilitySettings { SupportsImages = true, SupportsAudio = true };
+            settings.AttachmentModelPriority.AddRange(new[] { "vision", "audio", "both" });
+            var session = new ChatSession { Model = "text-only" };
+
+            var textPdf = AttachmentModelRoutingService.Select(settings, session, new[]
             {
-                Role = "user",
-                Attachments = new List<ChatAttachment>
-                {
-                    new ChatAttachment { Kind = "image", FileName = "clipboard.png" }
-                }
+                new ChatAttachment { Kind = "pdf", PageTextLengths = new List<int> { 100 } }
             });
+            AssertEqual("text-only", textPdf.SelectedModel, "text pdf stays on base model");
 
-            AssertTrue(
-                ChatCompletionService.EnsureImageCompatibleModel(settings, session, null),
-                "image model changed");
-            AssertEqual("default-vision", settings.Model, "request model");
-            AssertEqual("default-vision", session.Model, "session model");
+            var scanPdf = AttachmentModelRoutingService.Select(settings, session, new[]
+            {
+                new ChatAttachment { Kind = "pdf", PageTextLengths = new List<int> { 0 } }
+            });
+            AssertEqual("vision", scanPdf.SelectedModel, "scanned pdf uses vision priority");
 
-            var unknownSettings = new AppSettings { Model = "custom-model" };
-            var unknownSession = new ChatSession { Model = "custom-model" };
-            AssertTrue(
-                !ChatCompletionService.EnsureImageCompatibleModel(
-                    unknownSettings,
-                    unknownSession,
-                    new[] { new ChatAttachment { Kind = "image" } }),
-                "unknown image support left for endpoint");
-            AssertEqual("custom-model", unknownSettings.Model, "unknown model retained");
+            var audio = AttachmentModelRoutingService.Select(settings, session, new[]
+            {
+                new ChatAttachment { Kind = "audio" }
+            });
+            AssertEqual("audio", audio.SelectedModel, "audio uses audio priority");
+
+            var mixed = AttachmentModelRoutingService.Select(settings, session, new[]
+            {
+                new ChatAttachment { Kind = "image" },
+                new ChatAttachment { Kind = "audio" }
+            });
+            AssertEqual("both", mixed.SelectedModel, "mixed request requires both capabilities");
+
+            settings.AttachmentModelPriority.Remove("both");
+            var rejected = false;
+            try
+            {
+                AttachmentModelRoutingService.Select(settings, session, new[]
+                {
+                    new ChatAttachment { Kind = "image" },
+                    new ChatAttachment { Kind = "audio" }
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                rejected = ex.Message.IndexOf("Vision и Audio", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            AssertTrue(rejected, "mixed request rejected without combined model");
+
+            var ambiguous = new AppSettings { Model = "unknown-base" };
+            ambiguous.ModelCapabilities["vision-a"] = new ModelCapabilitySettings { SupportsImages = true };
+            ambiguous.ModelCapabilities["vision-b"] = new ModelCapabilitySettings { SupportsImages = true };
+            rejected = false;
+            try
+            {
+                AttachmentModelRoutingService.Select(
+                    ambiguous,
+                    new ChatSession { Model = "unknown-base" },
+                    new[] { new ChatAttachment { Kind = "image" } });
+            }
+            catch (InvalidOperationException ex)
+            {
+                rejected = ex.Message.IndexOf("приоритет", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            AssertTrue(rejected, "empty ambiguous priority requires explicit order");
         }
 
         private static void PlainChatExtractsAnswerWithoutThought()
@@ -468,6 +526,7 @@ namespace RNAssistant.Harness
             AssertTrue(settings.ModelCapabilities["model-a"].SupportsImages == true, "model vision parsed");
             AssertTrue(settings.ModelCapabilities["model-a"].SupportsReasoning == true, "model reasoning parsed");
             AssertTrue(settings.ModelCapabilities["model-a"].SupportsAudio == false, "model audio parsed");
+            AssertEqual("model-a", settings.AttachmentModelPriority[0], "multimodal model appended to priority");
         }
 
         private static void VbaCreationRouteAllowsMutation()

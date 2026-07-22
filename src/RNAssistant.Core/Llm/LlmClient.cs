@@ -135,6 +135,7 @@ namespace RNAssistant.Core.Llm
                 var apiBuild = BuildApiMessages(messageList, settings);
                 var apiMessages = apiBuild.Messages;
                 var hasImages = apiBuild.HasImages;
+                var hasAudio = apiBuild.HasAudio;
                 if (apiMessages.Count == 0)
                 {
                     throw new InvalidOperationException("LLM request has no messages.");
@@ -181,10 +182,13 @@ namespace RNAssistant.Core.Llm
                         : await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                     if (!response.IsSuccessStatusCode)
                     {
-                        if (hasImages && (int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
+                        if ((hasImages || hasAudio) && (int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
                         {
+                            var inputKind = hasImages && hasAudio
+                                ? "изображения и аудио"
+                                : (hasImages ? "изображения" : "аудио");
                             throw new InvalidOperationException(
-                                "Выбранная модель или endpoint не принял изображения. Выберите мультимодальную модель с supports_images/input_modalities=image. HTTP " +
+                                "Выбранная модель или endpoint не принял " + inputKind + ". Проверьте capabilities модели и формат мультимодального входа. HTTP " +
                                 (int)response.StatusCode + ". Response: " + responseJson);
                         }
                         throw new InvalidOperationException("LLM request failed: HTTP " + (int)response.StatusCode + " " + response.ReasonPhrase + ". " + diagnostics + ". Response: " + responseJson);
@@ -882,6 +886,9 @@ namespace RNAssistant.Core.Llm
                 var attachments = message.Attachments ?? new List<ChatAttachment>();
                 var text = AppendExtractedText(message.Content ?? string.Empty, attachments, ref remainingAttachmentTokens);
                 var imageParts = new List<ModelImagePart>();
+                var audioAttachments = attachments
+                    .Where(attachment => attachment != null && string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
                 var imageLimit = ModelContextBudget.MaxImagesPerPrompt(settings);
                 foreach (var attachment in attachments.Where(a => a != null && a.Kind == "image"))
                 {
@@ -899,7 +906,7 @@ namespace RNAssistant.Core.Llm
                 {
                     imageParts = imageParts.Take(imageLimit).ToList();
                 }
-                if (imageParts.Count == 0)
+                if (imageParts.Count == 0 && audioAttachments.Count == 0)
                 {
                     var unreadablePdf = attachments.FirstOrDefault(a =>
                         a != null && a.Kind == "pdf" &&
@@ -928,12 +935,48 @@ namespace RNAssistant.Core.Llm
                     });
                     build.HasImages = true;
                 }
+                foreach (var audioAttachment in audioAttachments)
+                {
+                    var bytes = _attachmentReader == null ? null : _attachmentReader(audioAttachment);
+                    if (bytes == null || bytes.Length == 0)
+                    {
+                        throw new InvalidOperationException("Attachment file is missing: " + (audioAttachment.FileName ?? audioAttachment.Id));
+                    }
+                    parts.Add(new
+                    {
+                        type = "input_audio",
+                        input_audio = new
+                        {
+                            data = Convert.ToBase64String(bytes),
+                            format = AudioFormat(audioAttachment)
+                        }
+                    });
+                    build.HasAudio = true;
+                }
                 build.Messages.Add(new { role = message.Role, content = parts });
                 build.EstimatedPromptTokens += 4 + ModelContextBudget.EstimateTextTokens(text) +
                     imageParts.Count * ModelContextBudget.EstimatedImageTokens;
             }
 
             return build;
+        }
+
+        private static string AudioFormat(ChatAttachment attachment)
+        {
+            var contentType = attachment == null ? string.Empty : attachment.ContentType ?? string.Empty;
+            var extension = attachment == null ? string.Empty : Path.GetExtension(attachment.FileName ?? string.Empty);
+            if (contentType.IndexOf("wav", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                string.Equals(extension, ".wav", StringComparison.OrdinalIgnoreCase))
+            {
+                return "wav";
+            }
+            if (contentType.IndexOf("mpeg", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                string.Equals(extension, ".mp3", StringComparison.OrdinalIgnoreCase))
+            {
+                return "mp3";
+            }
+            throw new InvalidOperationException(
+                (attachment == null ? "Audio attachment" : attachment.FileName) + ": supported audio formats are MP3 and WAV.");
         }
 
         private static int EstimatePdfImageTokens(IEnumerable<ChatMessage> messages, AppSettings settings)
@@ -1046,6 +1089,7 @@ namespace RNAssistant.Core.Llm
         {
             public List<object> Messages { get; private set; } = new List<object>();
             public bool HasImages { get; set; }
+            public bool HasAudio { get; set; }
             public int EstimatedPromptTokens { get; set; }
         }
     }

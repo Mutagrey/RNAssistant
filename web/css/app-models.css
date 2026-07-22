@@ -90,7 +90,7 @@
 
 .model-capability-row {
   display: grid;
-  grid-template-columns: minmax(130px, 1fr) repeat(3, minmax(58px, auto)) 46px;
+  grid-template-columns: minmax(130px, 1fr) minmax(58px, auto) repeat(2, minmax(76px, auto));
   gap: 8px;
   align-items: center;
   min-height: 42px;
@@ -132,6 +132,13 @@
 .model-capability-flag input {
   margin: 0;
   opacity: 1;
+}
+
+.model-capability-select {
+  min-width: 70px;
+  min-height: 28px;
+  padding: 3px 5px;
+  font-size: 11px;
 }
 
 .model-capability-text {
@@ -178,6 +185,60 @@
   color: var(--muted);
   font-size: 12px;
   text-align: center;
+}
+
+.attachment-model-priority {
+  margin-top: 9px;
+  overflow: hidden;
+  border: 1px solid var(--control-border);
+  border-radius: calc(var(--radius) - 2px);
+}
+
+.attachment-model-priority-row {
+  display: grid;
+  grid-template-columns: 28px minmax(120px, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 42px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--control-border);
+}
+
+.attachment-model-priority-row:last-child {
+  border-bottom: 0;
+}
+
+.attachment-model-priority-rank {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  background: #edf4ff;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: var(--label-font-weight);
+}
+
+.attachment-model-priority-badges,
+.attachment-model-priority-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.attachment-model-priority-badges span {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #eef8f1;
+  color: var(--success);
+  font-size: 10px;
+}
+
+.attachment-model-priority-actions button {
+  min-width: 28px;
+  min-height: 26px;
+  padding: 2px 6px;
 }
 
 .model-capability-indicator {

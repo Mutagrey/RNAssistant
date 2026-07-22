@@ -44,6 +44,7 @@ namespace RNAssistant.Office
                     context,
                     settings,
                     tools,
+                    pending.Attachments ?? LatestUserAttachments(session),
                     progress,
                     RegisterPendingAgentTool,
                     skills,
@@ -51,6 +52,17 @@ namespace RNAssistant.Office
             }
             SaveSessionChanges(session);
             return ChatState(session);
+        }
+
+        private static IReadOnlyList<ChatAttachment> LatestUserAttachments(ChatSession session)
+        {
+            var message = session == null || session.Messages == null
+                ? null
+                : session.Messages.LastOrDefault(item =>
+                    item != null && string.Equals(item.Role, "user", StringComparison.OrdinalIgnoreCase));
+            return message == null || message.Attachments == null
+                ? (IReadOnlyList<ChatAttachment>)new ChatAttachment[0]
+                : message.Attachments;
         }
 
         public ChatStateResponse CancelAgentTool(string pendingId, string chatId = null)
@@ -72,7 +84,8 @@ namespace RNAssistant.Office
             {
                 PendingId = pendingId,
                 SessionId = ChatStore.GetSessionId(session),
-                Command = CloneCommand(command)
+                Command = CloneCommand(command),
+                Attachments = new List<ChatAttachment>(LatestUserAttachments(session))
             };
 
             lock (_syncRoot)
@@ -225,11 +238,27 @@ namespace RNAssistant.Office
                 {
                     PendingId = pendingId,
                     SessionId = ChatStore.GetSessionId(session),
-                    Command = CommandFromActivity(activity)
+                    Command = CommandFromActivity(activity),
+                    Attachments = UserAttachmentsForRun(session, message.RunId)
                 };
             }
 
             return null;
+        }
+
+        private static IReadOnlyList<ChatAttachment> UserAttachmentsForRun(ChatSession session, string runId)
+        {
+            if (string.IsNullOrWhiteSpace(runId))
+            {
+                return LatestUserAttachments(session);
+            }
+            var user = session.Messages.LastOrDefault(message =>
+                message != null &&
+                string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(message.RunId, runId, StringComparison.OrdinalIgnoreCase));
+            return user == null || user.Attachments == null
+                ? (IReadOnlyList<ChatAttachment>)new ChatAttachment[0]
+                : user.Attachments;
         }
 
         private static ChatActivity FindPendingActivity(ChatActivity activity, string pendingId)
@@ -362,6 +391,7 @@ namespace RNAssistant.Office
             public string PendingId { get; set; }
             public string SessionId { get; set; }
             public ToolCommand Command { get; set; }
+            public IReadOnlyList<ChatAttachment> Attachments { get; set; }
         }
     }
 }

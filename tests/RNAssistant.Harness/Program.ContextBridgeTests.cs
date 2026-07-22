@@ -288,7 +288,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"systemPromptRole\":\"system\",\"modelImageSupportOverrides\":{\"gpt-test\":true}},\"apiKey\":\"secret\"}}")
+                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"systemPromptRole\":\"system\",\"modelImageSupportOverrides\":{\"gpt-test\":true},\"modelAudioSupportOverrides\":{\"gpt-audio\":true},\"attachmentModelPriority\":[\"gpt-test\",\"gpt-audio\"]},\"apiKey\":\"secret\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -297,6 +297,8 @@ namespace RNAssistant.Harness
             AssertEqual("gpt-test", controller.LastSettings.Model, "settings model");
             AssertEqual("system", controller.LastSettings.SystemPromptRole, "system prompt role");
             AssertEqual(true, controller.LastSettings.ModelImageSupportOverrides["gpt-test"].Value, "model image override");
+            AssertEqual(true, controller.LastSettings.ModelAudioSupportOverrides["gpt-audio"].Value, "model audio override");
+            AssertEqual("gpt-test", controller.LastSettings.AttachmentModelPriority[0], "attachment model priority");
             AssertEqual("secret", controller.LastApiKey, "api key");
         }
 

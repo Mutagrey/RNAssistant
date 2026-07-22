@@ -188,6 +188,9 @@ namespace RNAssistant.Harness
                 var service = llm.CreateService(adapter, executor);
                 var session = NewSession(adapter);
                 var settings = new AppSettings { AutoConfirmToolActions = false, ContextCharLimit = 12000, RequireVerificationForMutations = true };
+                settings.ModelCapabilities[settings.Model] = new ModelCapabilitySettings { SupportsImages = true };
+                settings.AttachmentModelPriority.Add(settings.Model);
+                var attachments = new[] { new ChatAttachment { Kind = "image", FileName = "evidence.png" } };
 
                 var first = service.ExecuteAsync(
                     "Replace the VBA module.",
@@ -195,6 +198,7 @@ namespace RNAssistant.Harness
                     NewContext(adapter),
                     settings,
                     tools,
+                    attachments,
                     null,
                     delegate(ChatSession pendingSession, ToolCommand command, ToolResult pendingResult)
                     {
@@ -215,11 +219,15 @@ namespace RNAssistant.Harness
                     NewContext(adapter),
                     settings,
                     tools,
+                    attachments,
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("Confirmed and verified.", continued.AssistantText, "continued assistant text");
                 AssertContains(adapter.GetVbaModuleCode("Module1"), "ChangedMacro", "module changed after confirmation");
                 AssertTrue(adapter.Executed.Any(c => string.Equals(c.ToolId, "word.vba_read_module", StringComparison.OrdinalIgnoreCase)), "verification read executed");
+                AssertTrue(
+                    llm.Calls.All(call => call.Sum(message => message.Attachments.Count(item => item.FileName == "evidence.png")) == 1),
+                    "original media retained for every iteration and confirmation continuation");
             });
         }
 

@@ -18,6 +18,15 @@ RNAssistant talks to an OpenAI-compatible Chat Completions endpoint. Chat mode u
 - Model catalog GET endpoint: defaults to `/config/models.json` derived from `BaseUrl`, but can be set independently in Settings. Catalogs may use `models` with `value`, OpenAI-style `data` with `id`, or a root array with `id`/`display_name`. Context aliases such as `max_context_tokens`, `context_window`, and `context_length` are recognized separately from output aliases such as `max_output_tokens` and `max_completion_tokens`. Manual model entry still works without it.
 - SSE streaming for Chat mode when `StreamResponses` is enabled. Text deltas are displayed incrementally in the chat.
 - Custom request headers: supported from Settings, except unsafe headers such as `Content-Length` and `Host`.
+- Image and scanned-PDF requests use `image_url` content parts. MP3/WAV requests use OpenAI-compatible [`input_audio`](https://developers.openai.com/api/docs/guides/audio) parts with base64 `data` and `format` set to `mp3` or `wav`; RNAssistant still expects a text response.
+
+## Attachment Model Routing
+
+- The chat model remains the base model for ordinary text requests. Adding an attachment never changes the stored chat or global model.
+- Only media attached to the current user turn is sent as binary input. Historical images and audio are omitted; historical PDFs are retained as extracted text only.
+- Image and scanned-PDF turns require Vision, audio turns require Audio, and mixed turns require one model that explicitly supports every required input modality.
+- `AttachmentModelPriority` is evaluated from top to bottom. Manual Vision/Audio overrides take precedence over catalog capabilities; unknown capability values are not treated as supported.
+- RNAssistant does not fail over to another model after an endpoint error. If no configured model satisfies the request, it fails before the API call with a settings-oriented error.
 
 ## Not Required
 
@@ -41,6 +50,8 @@ RNAssistant talks to an OpenAI-compatible Chat Completions endpoint. Chat mode u
 | Lacks `/config/models.json` | Model catalog load fails, but manually entered model IDs can still be saved. |
 | Returns a model list as `data[].id` | The picker imports model IDs and any recognized capability fields. |
 | Returns a root model array | The picker imports display names, default model, Reasoning/Vision/Audio flags, limits, and recognized default generation parameters. |
+| Receives MP3/WAV `input_audio` content | Audio-capable requests remain in the ordinary Chat Completions flow and return text. |
+| Requires another audio/video wire format | The attachment is rejected; provider-specific media contracts and video are not supported. |
 
 ## Recommended Endpoint Profile
 

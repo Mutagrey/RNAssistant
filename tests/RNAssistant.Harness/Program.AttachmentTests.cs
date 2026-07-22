@@ -56,6 +56,40 @@ namespace RNAssistant.Harness
             AssertTrue(json.IndexOf("RelativePath", StringComparison.Ordinal) < 0, "metadata not leaked");
         }
 
+        private static void AttachmentAudioImportAndApiPayload()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var store = new AttachmentStore(paths);
+                var wav = System.Text.Encoding.ASCII.GetBytes("RIFF0000WAVEdata");
+                var attachment = store.Import("recording.wav", "audio/wav", Convert.ToBase64String(wav));
+                AssertEqual("audio", attachment.Kind, "wav detected by signature");
+                AssertEqual("audio/wav", attachment.ContentType, "wav content type normalized");
+
+                var client = new LlmClient(delegate { return "key"; }, delegate { return wav; });
+                var method = typeof(LlmClient).GetMethod("ToApiMessages", BindingFlags.Instance | BindingFlags.NonPublic);
+                var payload = method.Invoke(client, new object[]
+                {
+                    new[] { new ChatMessage { Role = "user", Content = "Что в записи?", Attachments = new List<ChatAttachment> { attachment } } }
+                });
+                var json = JsonConvert.SerializeObject(payload);
+                AssertContains(json, "\"type\":\"input_audio\"", "audio content part");
+                AssertContains(json, "\"format\":\"wav\"", "audio format");
+
+                var mp3Bytes = new byte[427];
+                mp3Bytes[0] = 0x49;
+                mp3Bytes[1] = 0x44;
+                mp3Bytes[2] = 0x33;
+                mp3Bytes[3] = 4;
+                mp3Bytes[10] = 0xff;
+                mp3Bytes[11] = 0xfb;
+                mp3Bytes[12] = 0x90;
+                var mp3 = store.Import("recording.mp3", "audio/mpeg", Convert.ToBase64String(mp3Bytes));
+                AssertEqual("audio", mp3.Kind, "mp3 detected by signature");
+                AssertEqual("audio/mpeg", mp3.ContentType, "mp3 content type normalized");
+            });
+        }
+
         private static void AttachmentExtractsPdfText()
         {
             WithTempPaths(delegate(AppDataPaths paths)
@@ -175,6 +209,17 @@ namespace RNAssistant.Harness
                     rejected = true;
                 }
                 AssertTrue(rejected, "binary signature rejected");
+
+                rejected = false;
+                try
+                {
+                    store.Import("fake.mp3", "audio/mpeg", Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("not audio")));
+                }
+                catch (InvalidOperationException)
+                {
+                    rejected = true;
+                }
+                AssertTrue(rejected, "spoofed audio rejected");
             });
         }
 

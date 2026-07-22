@@ -17,6 +17,10 @@ namespace RNAssistant.Office.Services
             {
                 settings.ModelCapabilities = new Dictionary<string, ModelCapabilitySettings>(StringComparer.OrdinalIgnoreCase);
             }
+            if (settings.AttachmentModelPriority == null)
+            {
+                settings.AttachmentModelPriority = new List<string>();
+            }
             var changed = false;
             var root = catalog as JObject;
             var source = root == null
@@ -90,6 +94,11 @@ namespace RNAssistant.Office.Services
                     }
                 }
                 settings.ModelCapabilities[value] = capability;
+                if ((capability.SupportsImages == true || capability.SupportsAudio == true) &&
+                    !settings.AttachmentModelPriority.Exists(item => string.Equals(item, value, StringComparison.OrdinalIgnoreCase)))
+                {
+                    settings.AttachmentModelPriority.Add(value);
+                }
                 changed = true;
             }
             return changed;

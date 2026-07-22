@@ -18,55 +18,6 @@ function formatAttachmentSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " МБ";
 }
 
-function activeModelSupportsImages() {
-  return typeof effectiveModelSupportsImages === "function"
-    ? effectiveModelSupportsImages(activeChatModel() || settingsModel())
-    : null;
-}
-
-function imageCapableModelValue() {
-  var current = activeChatModel() || settingsModel();
-  var catalog = state.modelCatalog || {};
-  var settings = state.settings || {};
-  var capabilities = settings.ModelCapabilities || settings.modelCapabilities || {};
-  var candidates = [catalog.defaultModel, settingsModel()]
-    .concat((catalog.models || []).map(function (model) { return model.value; }))
-    .concat(Object.keys(capabilities));
-  var seen = {};
-  for (var index = 0; index < candidates.length; index += 1) {
-    var value = String(candidates[index] || "").trim();
-    var key = value.toLowerCase();
-    if (!value || seen[key] || key === String(current || "").toLowerCase()) continue;
-    seen[key] = true;
-    if (effectiveModelSupportsImages(value) === true) return value;
-  }
-  return "";
-}
-
-async function ensureImageCapableModel() {
-  var support = activeModelSupportsImages();
-  if (support !== false) {
-    if (support === null) {
-      log("Поддержка изображений моделью не объявлена; совместимость будет проверена endpoint.");
-    }
-    return true;
-  }
-
-  var model = imageCapableModelValue();
-  if (!model) {
-    log("Выбранная модель не поддерживает изображения, а vision-модель не найдена. Загрузите каталог моделей или настройте поддержку изображений.");
-    return false;
-  }
-
-  log("Выбранная модель не поддерживает изображения. Переключаю на " + model + ".");
-  var changed = await saveChatModelSelection(model);
-  if (!changed || activeModelSupportsImages() !== true) {
-    log("Не удалось переключить чат на модель с поддержкой изображений.");
-    return false;
-  }
-  return true;
-}
-
 function fileToBase64(file) {
   return new Promise(function (resolve, reject) {
     var reader = new FileReader();
@@ -94,11 +45,6 @@ async function addAttachmentFiles(files) {
     log("Лимит: 20 МБ на файл и 50 МБ на сообщение.");
     return;
   }
-  if (files.some(function (file) { return file.type.indexOf("image/") === 0; }) &&
-      !(await ensureImageCapableModel())) {
-    return;
-  }
-
   setActivity("uploading", "Добавляю вложения...");
   try {
     for (var index = 0; index < files.length; index += 1) {

@@ -295,7 +295,9 @@ namespace RNAssistant.Harness
                     Content = "Earlier question",
                     Attachments = new List<ChatAttachment>
                     {
-                        new ChatAttachment { FileName = "old.txt", Kind = "text", ExtractedText = "OLD_ATTACHMENT_SENTINEL" }
+                        new ChatAttachment { FileName = "old.txt", Kind = "text", ExtractedText = "OLD_ATTACHMENT_SENTINEL" },
+                        new ChatAttachment { FileName = "old.png", Kind = "image" },
+                        new ChatAttachment { FileName = "old.wav", Kind = "audio" }
                     }
                 });
                 session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Earlier answer" });
@@ -328,6 +330,8 @@ namespace RNAssistant.Harness
                     FlattenMessages(captured).Split(new[] { "Follow up" }, StringSplitOptions.None).Length - 1,
                     "active request is not duplicated");
                 AssertEqual(1, captured.Sum(message => message.Attachments.Count(item => item.FileName == "old.txt")), "old attachment retained in history");
+                AssertEqual(0, captured.Sum(message => message.Attachments.Count(item => item.FileName == "old.png")), "old image omitted from history");
+                AssertEqual(0, captured.Sum(message => message.Attachments.Count(item => item.FileName == "old.wav")), "old audio omitted from history");
                 AssertEqual(1, captured.Sum(message => message.Attachments.Count(item => item.FileName == "current.txt")), "current attachment included once");
             });
         }

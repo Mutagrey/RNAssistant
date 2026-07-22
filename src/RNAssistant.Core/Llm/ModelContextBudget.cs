@@ -85,6 +85,11 @@ namespace RNAssistant.Core.Llm
 
         public static bool SupportsImages(AppSettings settings, string model = null)
         {
+            return ImageSupport(settings, model) == true;
+        }
+
+        public static bool? ImageSupport(AppSettings settings, string model = null)
+        {
             var key = string.IsNullOrWhiteSpace(model) ? (settings == null ? null : settings.Model) : model;
             if (settings != null && settings.ModelImageSupportOverrides != null && !string.IsNullOrWhiteSpace(key))
             {
@@ -95,7 +100,27 @@ namespace RNAssistant.Core.Llm
                 }
             }
             var capability = Capability(settings, key);
-            return capability != null && capability.SupportsImages == true;
+            return capability == null ? null : capability.SupportsImages;
+        }
+
+        public static bool SupportsAudio(AppSettings settings, string model = null)
+        {
+            return AudioSupport(settings, model) == true;
+        }
+
+        public static bool? AudioSupport(AppSettings settings, string model = null)
+        {
+            var key = string.IsNullOrWhiteSpace(model) ? (settings == null ? null : settings.Model) : model;
+            if (settings != null && settings.ModelAudioSupportOverrides != null && !string.IsNullOrWhiteSpace(key))
+            {
+                bool? value;
+                if (settings.ModelAudioSupportOverrides.TryGetValue(key, out value) && value.HasValue)
+                {
+                    return value.Value;
+                }
+            }
+            var capability = Capability(settings, key);
+            return capability == null ? null : capability.SupportsAudio;
         }
 
         public static int MaxImagesPerPrompt(AppSettings settings, string model = null)

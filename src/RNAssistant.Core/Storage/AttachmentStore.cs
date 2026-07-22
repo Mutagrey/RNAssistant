@@ -61,7 +61,7 @@ namespace RNAssistant.Core.Storage
             var kind = DetectKind(fileName, contentType, bytes);
             if (kind == null)
             {
-                throw new InvalidOperationException("Unsupported or binary attachment type. Use images, PDF or a text-based file.");
+                throw new InvalidOperationException("Unsupported or binary attachment type. Use images, PDF, MP3, WAV or a text-based file.");
             }
 
             contentType = NormalizeContentType(kind, contentType, bytes);
@@ -370,6 +370,12 @@ namespace RNAssistant.Core.Storage
             var extension = Path.GetExtension(name).ToLowerInvariant();
             if (IsImageSignature(bytes)) return "image";
             if (bytes.Length >= 5 && Encoding.ASCII.GetString(bytes, 0, 5) == "%PDF-") return "pdf";
+            if (IsWavSignature(bytes) || IsMp3Signature(bytes)) return "audio";
+            if (extension == ".mp3" || extension == ".wav" ||
+                !string.IsNullOrWhiteSpace(contentType) && contentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
             if (IsKnownBinarySignature(bytes)) return null;
             var likelyText = TextExtensions.Contains(extension)
                 || string.IsNullOrWhiteSpace(extension)
@@ -468,10 +474,78 @@ namespace RNAssistant.Core.Storage
                 || b.Length >= 12 && Encoding.ASCII.GetString(b, 0, 4) == "RIFF" && Encoding.ASCII.GetString(b, 8, 4) == "WEBP";
         }
 
+        private static bool IsWavSignature(byte[] bytes)
+        {
+            return bytes != null && bytes.Length >= 12 &&
+                Encoding.ASCII.GetString(bytes, 0, 4) == "RIFF" &&
+                Encoding.ASCII.GetString(bytes, 8, 4) == "WAVE";
+        }
+
+        private static bool IsMp3Signature(byte[] bytes)
+        {
+            if (bytes == null || bytes.Length < 4)
+            {
+                return false;
+            }
+            var frameOffset = 0;
+            if (bytes.Length >= 10 && Encoding.ASCII.GetString(bytes, 0, 3) == "ID3")
+            {
+                if (bytes[3] == 0xff || bytes[4] == 0xff ||
+                    (bytes[6] & 0x80) != 0 || (bytes[7] & 0x80) != 0 ||
+                    (bytes[8] & 0x80) != 0 || (bytes[9] & 0x80) != 0)
+                {
+                    return false;
+                }
+                var tagSize = bytes[6] << 21 | bytes[7] << 14 | bytes[8] << 7 | bytes[9];
+                frameOffset = 10 + tagSize + ((bytes[3] == 4 && (bytes[5] & 0x10) != 0) ? 10 : 0);
+            }
+            return IsMp3Frame(bytes, frameOffset);
+        }
+
+        private static bool IsMp3Frame(byte[] bytes, int offset)
+        {
+            if (offset < 0 || bytes == null || bytes.Length - offset < 4 ||
+                bytes[offset] != 0xff || (bytes[offset + 1] & 0xe0) != 0xe0)
+            {
+                return false;
+            }
+            var version = bytes[offset + 1] >> 3 & 0x03;
+            var layer = bytes[offset + 1] >> 1 & 0x03;
+            var bitrateIndex = bytes[offset + 2] >> 4 & 0x0f;
+            var sampleRateIndex = bytes[offset + 2] >> 2 & 0x03;
+            if (version == 1 || layer == 0 || bitrateIndex == 0 || bitrateIndex == 15 || sampleRateIndex == 3)
+            {
+                return false;
+            }
+
+            var bitrate = Mp3BitrateKbps(version, layer, bitrateIndex) * 1000;
+            var sampleRates = new[] { 44100, 48000, 32000 };
+            var sampleRate = sampleRates[sampleRateIndex] / (version == 3 ? 1 : (version == 2 ? 2 : 4));
+            var padding = bytes[offset + 2] >> 1 & 0x01;
+            var frameLength = layer == 3
+                ? (12 * bitrate / sampleRate + padding) * 4
+                : (version == 3 || layer == 2 ? 144 : 72) * bitrate / sampleRate + padding;
+            return frameLength > 4 && bytes.Length - offset >= frameLength;
+        }
+
+        private static int Mp3BitrateKbps(int version, int layer, int index)
+        {
+            if (version == 3 && layer == 3)
+                return new[] { 0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 0 }[index];
+            if (version == 3 && layer == 2)
+                return new[] { 0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 0 }[index];
+            if (version == 3)
+                return new[] { 0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0 }[index];
+            if (layer == 3)
+                return new[] { 0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256, 0 }[index];
+            return new[] { 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0 }[index];
+        }
+
         private static string NormalizeContentType(string kind, string supplied, byte[] bytes)
         {
             if (kind == "pdf") return "application/pdf";
             if (kind == "text") return string.IsNullOrWhiteSpace(supplied) ? "text/plain" : supplied;
+            if (kind == "audio") return IsWavSignature(bytes) ? "audio/wav" : "audio/mpeg";
             if (bytes[0] == 0xff) return "image/jpeg";
             if (bytes[0] == 0x89) return "image/png";
             if (Encoding.ASCII.GetString(bytes, 0, 3) == "GIF") return "image/gif";
