@@ -136,6 +136,52 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void AddressedSessionLoadsExplicitChatAcrossDocuments()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var service = new ChatSessionService(adapter, store);
+                var archived = store.Create("Word", "archived-doc", "Archive.docx", "Archive chat");
+
+                var loaded = service.LoadAddressedSession(ChatStore.GetSessionId(archived));
+
+                AssertEqual(ChatStore.GetSessionId(archived), ChatStore.GetSessionId(loaded), "addressed session id");
+                AssertEqual("Word", loaded.Host, "addressed host");
+                AssertEqual("archived-doc", loaded.DocumentKey, "addressed document key");
+            });
+        }
+
+        private static void AddressedSessionDoesNotFallbackToDifferentChat()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var service = new ChatSessionService(adapter, store);
+                var first = store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "First");
+                var second = store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "Second");
+                var removedId = ChatStore.GetSessionId(first);
+                var activeId = ChatStore.GetSessionId(second);
+                service.SetActiveSession(second);
+
+                AssertTrue(store.Delete(adapter.HostName, adapter.DocumentKey, removedId), "deleted addressed chat");
+                var threw = false;
+                try
+                {
+                    service.LoadAddressedSession(removedId);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    threw = ex.Message.IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+
+                AssertTrue(threw, "missing addressed chat rejected");
+                AssertEqual(activeId, ChatStore.GetSessionId(service.GetActiveSession()), "active chat preserved");
+            });
+        }
+
         private static void EmptyChatDraftsAreNotPersisted()
         {
             WithTempPaths(delegate(AppDataPaths paths)

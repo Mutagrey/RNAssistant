@@ -76,6 +76,13 @@ namespace RNAssistant.Office.Services
             return LoadSession(requestedSessionId, false);
         }
 
+        public ChatSession LoadAddressedSession(string requestedSessionId)
+        {
+            return string.IsNullOrWhiteSpace(requestedSessionId)
+                ? LoadSession(null)
+                : LoadSession(requestedSessionId, false);
+        }
+
         public ChatSession LoadSession(string requestedSessionId, bool allowMissingRequestedFallback)
         {
             var host = _adapter.HostName;

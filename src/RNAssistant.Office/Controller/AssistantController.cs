@@ -194,13 +194,13 @@ namespace RNAssistant.Office
         {
             if (string.IsNullOrWhiteSpace(text) && (attachmentIds == null || attachmentIds.Count == 0))
             {
-                var emptySession = LoadSession(chatId, true);
+                var emptySession = LoadAddressedSession(chatId);
                 var emptyId = ChatStore.GetSessionId(emptySession);
                 return new SendChatResponse { Message = string.Empty, ToolResults = new object[0], ActiveChatId = emptyId, ActiveChatModel = emptySession.Model, ActiveChatMode = ChatModes.Normalize(emptySession.Mode), ActiveChatHtmlMode = emptySession.HtmlModeEnabled, Chats = _chatSessions.GetChatSummaries(emptyId), Context = LoadContext(emptySession), Messages = emptySession.Messages, ContextUsage = ContextUsageEstimator.FromSession(emptySession, _settingsService.Load()), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(emptySession.HtmlWorkspace) };
             }
 
             var settings = _settingsService.Load();
-            var session = LoadSession(chatId, true);
+            var session = LoadAddressedSession(chatId);
             var sessionId = ChatStore.GetSessionId(session);
             runId = string.IsNullOrWhiteSpace(runId) ? Guid.NewGuid().ToString("N") : runId;
             var attachments = _attachmentStore.LoadDrafts(attachmentIds);
@@ -211,7 +211,15 @@ namespace RNAssistant.Office
             }
             var documentContext = LoadContext(session);
             var skills = _skillCatalog.SelectRelevantSkills(text, documentContext, 5);
+            var titleUserSeed = ChatTitleBuilder.ResolveUserSeed(session, text);
             var shouldGenerateLlmTitle = settings.SmartChatTitles != false && ChatTitleBuilder.ShouldAssign(session);
+            var provisionalTitle = ChatTitleBuilder.ShouldAssign(session)
+                ? ChatTitleBuilder.BuildDraftTitle(titleUserSeed)
+                : string.Empty;
+            if (!string.IsNullOrWhiteSpace(provisionalTitle))
+            {
+                session.Title = provisionalTitle;
+            }
             var runCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             try
             {
@@ -234,6 +242,10 @@ namespace RNAssistant.Office
             // A started request is no longer an empty draft: persist its run marker so a crash can be recovered.
             _chatStore.Save(session);
             _chatSessions.NotifySaved(session);
+            if (!string.IsNullOrWhiteSpace(provisionalTitle) && chatStateChanged != null)
+            {
+                chatStateChanged(CreateStoredChatState(session.Host, session.DocumentKey, session.DocumentTitle));
+            }
             var firstRunMessageIndex = session.Messages == null ? 0 : session.Messages.Count;
             Action<string, string, ChatActivity> runProgress = (phase, message, activity) =>
             {
@@ -315,7 +327,13 @@ namespace RNAssistant.Office
                 var activeId = ChatStore.GetSessionId(session);
                 if (shouldGenerateLlmTitle)
                 {
-                    StartChatTitleGeneration(session, text, completion.AssistantText, settings, chatStateChanged);
+                    StartChatTitleGeneration(
+                        session,
+                        titleUserSeed,
+                        ChatTitleBuilder.ResolveAssistantSeed(session, completion.AssistantText),
+                        settings,
+                        provisionalTitle,
+                        chatStateChanged);
                 }
 
                 _chatRuns.Complete(sessionId, runId);
@@ -373,9 +391,15 @@ namespace RNAssistant.Office
             return new { deleted = true };
         }
 
-        private void StartChatTitleGeneration(ChatSession session, string userText, string assistantText, AppSettings settings, Action<ChatStateResponse> chatStateChanged)
+        private void StartChatTitleGeneration(
+            ChatSession session,
+            string userText,
+            string assistantText,
+            AppSettings settings,
+            string expectedCurrentTitle,
+            Action<ChatStateResponse> chatStateChanged)
         {
-            if (session == null || !ChatTitleBuilder.ShouldAssign(session))
+            if (session == null || !ChatTitleBuilder.CanReplaceAutoTitle(session, expectedCurrentTitle))
             {
                 return;
             }
@@ -405,7 +429,7 @@ namespace RNAssistant.Office
                 lock (_syncRoot)
                 {
                     var current = _chatStore.Load(host, documentKey, sessionId);
-                    if (!ChatTitleBuilder.ShouldAssign(current))
+                    if (!ChatTitleBuilder.CanReplaceAutoTitle(current, expectedCurrentTitle))
                     {
                         return;
                     }

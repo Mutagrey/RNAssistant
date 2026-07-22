@@ -11,6 +11,8 @@ namespace RNAssistant.Office.Services
 {
     internal static class ChatTitleBuilder
     {
+        private static readonly string[] PlaceholderTitles = { "New chat", "Новый чат" };
+
         public static void ApplyFallback(ChatSession session, string userText, string assistantText)
         {
             if (!ShouldAssign(session))
@@ -64,6 +66,17 @@ namespace RNAssistant.Office.Services
             return BuildFallback(assistantText, userText);
         }
 
+        public static string BuildDraftTitle(string userText)
+        {
+            var title = FirstCandidate(userText, true);
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                title = FirstCandidate(userText, false);
+            }
+
+            return Limit(title);
+        }
+
         public static bool ShouldAssign(ChatSession session)
         {
             if (session == null)
@@ -71,8 +84,29 @@ namespace RNAssistant.Office.Services
                 return false;
             }
 
-            return string.IsNullOrWhiteSpace(session.Title)
-                || string.Equals(session.Title.Trim(), "New chat", StringComparison.OrdinalIgnoreCase);
+            return IsPlaceholderTitle(session.Title);
+        }
+
+        public static bool CanReplaceAutoTitle(ChatSession session, string expectedCurrentTitle)
+        {
+            if (session == null)
+            {
+                return false;
+            }
+
+            return IsPlaceholderTitle(session.Title) || TitlesEqual(session.Title, expectedCurrentTitle);
+        }
+
+        public static string ResolveUserSeed(ChatSession session, string fallbackText)
+        {
+            var fromSession = FirstMessageContent(session, "user");
+            return string.IsNullOrWhiteSpace(fromSession) ? fallbackText : fromSession;
+        }
+
+        public static string ResolveAssistantSeed(ChatSession session, string fallbackText)
+        {
+            var fromSession = FirstMessageContent(session, "assistant");
+            return string.IsNullOrWhiteSpace(fromSession) ? fallbackText : fromSession;
         }
 
         private static string BuildFallback(string assistantText, string userText)
@@ -220,6 +254,60 @@ namespace RNAssistant.Office.Services
                 string.Empty,
                 RegexOptions.IgnoreCase);
             return Normalize(value);
+        }
+
+        private static bool IsPlaceholderTitle(string title)
+        {
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                return true;
+            }
+
+            for (var index = 0; index < PlaceholderTitles.Length; index++)
+            {
+                if (TitlesEqual(title, PlaceholderTitles[index]))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TitlesEqual(string left, string right)
+        {
+            var normalizedLeft = Normalize(left);
+            var normalizedRight = Normalize(right);
+            if (normalizedLeft.Length == 0 || normalizedRight.Length == 0)
+            {
+                return normalizedLeft.Length == normalizedRight.Length;
+            }
+
+            return string.Equals(normalizedLeft, normalizedRight, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string FirstMessageContent(ChatSession session, string role)
+        {
+            var messages = session == null
+                ? (IEnumerable<ChatMessage>)new ChatMessage[0]
+                : (IEnumerable<ChatMessage>)(session.Messages ?? new List<ChatMessage>());
+            foreach (var message in messages)
+            {
+                if (message == null ||
+                    !string.Equals(message.Role, role, StringComparison.OrdinalIgnoreCase) ||
+                    message.Activity != null)
+                {
+                    continue;
+                }
+
+                var content = Normalize(message.Content);
+                if (!string.IsNullOrWhiteSpace(content))
+                {
+                    return content;
+                }
+            }
+
+            return string.Empty;
         }
 
         private static string Normalize(string text)

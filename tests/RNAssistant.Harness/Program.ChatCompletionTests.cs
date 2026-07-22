@@ -487,5 +487,100 @@ namespace RNAssistant.Harness
                 "Отчет по продажам создан и сохранен.");
             AssertEqual("Отчет по продажам создан и сохранен", fallbackSession.Title, "fallback title");
         }
+
+        private static void ChatTitleBuilderTreatsLocalizedDraftTitlesAsAuto()
+        {
+            AssertTrue(ChatTitleBuilder.ShouldAssign(new ChatSession { Title = "New chat" }), "english draft title is auto");
+            AssertTrue(ChatTitleBuilder.ShouldAssign(new ChatSession { Title = "Новый чат" }), "localized draft title is auto");
+            AssertTrue(!ChatTitleBuilder.ShouldAssign(new ChatSession { Title = "Quarterly review" }), "custom title is preserved");
+            AssertEqual("Как работает умное название чатов", ChatTitleBuilder.BuildDraftTitle("Проверь, как работает умное название чатов."), "draft title strips request prefix");
+        }
+
+        private static void ControllerPublishesDraftTitleBeforeSmartRename()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var llmCall = 0;
+                var controller = new AssistantController(
+                    adapter,
+                    paths,
+                    delegate(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var call = Interlocked.Increment(ref llmCall);
+                        if (call == 1)
+                        {
+                            return Task.FromResult(new LlmCompletionResult
+                            {
+                                Content = FinalBlock("Отчет готов.")
+                            });
+                        }
+
+                        return Task.FromResult(new LlmCompletionResult
+                        {
+                            Content = "Продажи по кварталу"
+                        });
+                    });
+
+                var created = controller.CreateChat("Новый чат");
+                var states = new List<ChatStateResponse>();
+                var requestText = "Сделай отчет по продажам за квартал";
+                var draftTitle = ChatTitleBuilder.BuildDraftTitle(requestText);
+
+                controller.SendChatAsync(
+                    requestText,
+                    created.ActiveChatId,
+                    null,
+                    null,
+                    delegate(ChatStateResponse state)
+                    {
+                        lock (states)
+                        {
+                            states.Add(state);
+                        }
+                    },
+                    CancellationToken.None,
+                    "run-1").GetAwaiter().GetResult();
+
+                ChatStateResponse firstState;
+                lock (states)
+                {
+                    AssertTrue(states.Count >= 1, "draft title state published");
+                    firstState = states[0];
+                }
+
+                AssertEqual(draftTitle, ActiveChatTitle(firstState), "draft title published before smart rename");
+                AssertTrue(SpinWait.SpinUntil(delegate
+                {
+                    lock (states)
+                    {
+                        return states.Count >= 2;
+                    }
+                }, 2000), "smart rename state published");
+
+                ChatStateResponse finalState;
+                lock (states)
+                {
+                    finalState = states[states.Count - 1];
+                }
+
+                AssertEqual("Продажи по кварталу", ActiveChatTitle(finalState), "smart title replaces draft");
+            });
+        }
+
+        private static string ActiveChatTitle(ChatStateResponse state)
+        {
+            var activeId = state == null ? null : state.ActiveChatId;
+            foreach (var chat in state == null ? new ChatSessionSummary[0] : state.Chats ?? new List<ChatSessionSummary>())
+            {
+                if (chat != null && string.Equals(chat.Id, activeId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return chat.Title;
+                }
+            }
+
+            return string.Empty;
+        }
     }
 }

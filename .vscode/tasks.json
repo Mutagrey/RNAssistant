@@ -1,0 +1,71 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "RNAssistant: Check Excel is closed",
+      "type": "shell",
+      "command": "if (Get-Process EXCEL -ErrorAction SilentlyContinue) { throw 'Close Excel before building RNAssistant (save open workbooks first).' }",
+      "options": {
+        "shell": {
+          "executable": "powershell.exe",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command"
+          ]
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "RNAssistant: Build Excel Add-in",
+      "type": "shell",
+      "command": "$vswhere = Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Microsoft Visual Studio\\Installer\\vswhere.exe'; if (-not (Test-Path $vswhere)) { throw 'Visual Studio Installer (vswhere.exe) was not found.' }; $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find 'MSBuild\\**\\Bin\\MSBuild.exe' | Select-Object -First 1; if (-not $msbuild) { throw 'MSBuild.exe was not found.' }; & $msbuild '${workspaceFolder}\\RNAssistant.sln' /t:RNAssistant_ExcelAddIn /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:minimal; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "shell": {
+          "executable": "powershell.exe",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command"
+          ]
+        }
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "RNAssistant: Build and run Excel",
+      "type": "shell",
+      "command": "$excel = 'C:\\Program Files\\Microsoft Office\\root\\Office16\\EXCEL.EXE'; if (-not (Test-Path $excel)) { throw 'Excel x64 was not found at the expected Office 16 path.' }; Start-Process -FilePath $excel",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "RNAssistant: Check Excel is closed",
+        "RNAssistant: Build Excel Add-in"
+      ],
+      "options": {
+        "shell": {
+          "executable": "powershell.exe",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command"
+          ]
+        }
+      },
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    }
+  ]
+}

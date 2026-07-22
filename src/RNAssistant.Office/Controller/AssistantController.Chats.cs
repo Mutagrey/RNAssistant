@@ -264,6 +264,11 @@ namespace RNAssistant.Office
             return _chatSessions.LoadSession(requestedSessionId, allowMissingRequestedFallback);
         }
 
+        private ChatSession LoadAddressedSession(string requestedSessionId)
+        {
+            return _chatSessions.LoadAddressedSession(requestedSessionId);
+        }
+
         private ChatStateResponse ChatState(ChatSession session)
         {
             var activeId = ChatStore.GetSessionId(session);

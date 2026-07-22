@@ -10,7 +10,7 @@ namespace RNAssistant.Office
     {
         public DocumentContext GetContext(string chatId = null)
         {
-            return LoadContext(LoadSession(chatId, true));
+            return LoadContext(LoadAddressedSession(chatId));
         }
 
         public DocumentContext AddSelectionContextFromBridge(string mode, string chatId = null)
@@ -25,7 +25,7 @@ namespace RNAssistant.Office
                 throw new ArgumentException("Context text is empty.", "text");
             }
             var settings = _settingsService.Load();
-            var session = LoadSession(chatId, true);
+            var session = LoadAddressedSession(chatId);
             var context = AddContextNote(session, new ContextNote
             {
                 Host = _adapter.HostName,
@@ -43,7 +43,7 @@ namespace RNAssistant.Office
         public DocumentContext AddVbaContext(string chatId = null, int maxChars = 0)
         {
             var settings = _settingsService.Load();
-            var session = LoadSession(chatId, true);
+            var session = LoadAddressedSession(chatId);
             EnsureCurrentDocument(session);
             var limit = maxChars <= 0 ? settings.VbaContextCharLimit : maxChars;
             var snapshot = _adapter.GetVbaSnapshot(Math.Max(1000, limit));
@@ -79,7 +79,7 @@ namespace RNAssistant.Office
         public DocumentContext AddSelectionContext(string mode, string chatId = null)
         {
             var settings = _settingsService.Load();
-            var session = LoadSession(chatId, true);
+            var session = LoadAddressedSession(chatId);
             EnsureCurrentDocument(session);
             var context = LoadContext(session);
             try
@@ -112,7 +112,7 @@ namespace RNAssistant.Office
 
         public DocumentContext RemoveContextItem(string id, string chatId = null)
         {
-            var session = LoadSession(chatId, true);
+            var session = LoadAddressedSession(chatId);
             var context = LoadContext(session);
             if (context.Notes != null && !string.IsNullOrWhiteSpace(id))
             {
@@ -125,7 +125,7 @@ namespace RNAssistant.Office
 
         public DocumentContext ClearContext(string chatId = null)
         {
-            var session = LoadSession(chatId, true);
+            var session = LoadAddressedSession(chatId);
             session.Context = CreateEmptyContext();
             SaveSessionContext(session);
             return session.Context;
