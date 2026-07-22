@@ -223,12 +223,11 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void ChatRunLeaseSerializesAndCancels()
+        private static void ChatRunLeaseSerializesHistoryMutations()
         {
             var registry = new ChatRunRegistry();
             var session = new ChatSession();
-            var cancellation = new CancellationTokenSource();
-            var lease = registry.Start("chat-1", "run-1", session, cancellation);
+            var lease = registry.Start("chat-1", "run-1", session);
 
             AssertTrue(registry.IsRunning("chat-1"), "run registered");
             try
@@ -245,8 +244,6 @@ namespace RNAssistant.Harness
                 AssertContains(ex.Message, "уже выполняется", "history edit rejected while run is active");
             }
 
-            AssertTrue(registry.Cancel("chat-1", "run-1"), "active run cancellation accepted");
-            AssertTrue(cancellation.IsCancellationRequested, "run cancellation source signalled");
             lease.Dispose();
             lease.Dispose();
             AssertTrue(!registry.IsRunning("chat-1"), "idempotent lease release removes run");
@@ -256,6 +253,37 @@ namespace RNAssistant.Harness
                 AssertTrue(registry.IsRunning("chat-1"), "chat can be reserved after release");
             }
             AssertTrue(!registry.IsRunning("chat-1"), "history lease released");
+        }
+
+        private static void ConfirmedToolRunLeaseRejectsDuplicateAndSupportsCancellation()
+        {
+            var registry = new ChatRunRegistry();
+            var session = new ChatSession();
+            var cancellation = new CancellationTokenSource();
+            var executions = 0;
+            var lease = registry.Start("chat-confirm", "confirm-1", session, cancellation);
+            executions += 1;
+
+            try
+            {
+                registry.Start("chat-confirm", "confirm-2", session);
+                executions += 1;
+                throw new InvalidOperationException("duplicate confirm unexpectedly acquired a lease");
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf("unexpectedly", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    throw;
+                }
+                AssertContains(ex.Message, "уже выполняется", "duplicate confirm rejected");
+            }
+
+            AssertEqual(1, executions, "confirmed tool executes once");
+            AssertTrue(registry.Cancel("chat-confirm", "confirm-1"), "confirm cancellation accepted");
+            AssertTrue(cancellation.IsCancellationRequested, "confirm cancellation source signalled");
+            lease.Dispose();
+            AssertTrue(!registry.IsRunning("chat-confirm"), "confirm lease released");
         }
 
         private static string AbsoluteAttachmentPath(AppDataPaths paths, ChatAttachment attachment)
