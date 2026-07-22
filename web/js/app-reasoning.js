@@ -1,5 +1,6 @@
 (function () {
   state.liveReasoning = state.liveReasoning || "";
+  state.liveReasoningComplete = false;
 
   function reasoningValue(message, pascal, camel, fallback) {
     message = message || {};
@@ -7,7 +8,7 @@
   }
 
   function reasoningBlock(text, tokens, live, truncated) {
-    if (!text) return null;
+    if (!text && (tokens === null || tokens === undefined)) return null;
     var details = document.createElement("details");
     details.className = "reasoning-block" + (live ? " is-live" : "");
     details.open = !!live;
@@ -16,9 +17,11 @@
       (tokens !== null && tokens !== undefined ? " · " + tokens + " токенов" : "") +
       (truncated ? " · обрезано" : "");
     details.appendChild(summary);
-    var body = document.createElement("pre");
-    body.textContent = text;
-    details.appendChild(body);
+    if (text) {
+      var body = document.createElement("pre");
+      body.textContent = text;
+      details.appendChild(body);
+    }
     return details;
   }
 
@@ -46,7 +49,7 @@
       article = document.createElement("article");
       article.className = "message assistant pending agent-live";
     }
-    var block = reasoningBlock(state.liveReasoning, null, true, state.liveReasoning.length >= 100000);
+    var block = reasoningBlock(state.liveReasoning, null, !state.liveReasoningComplete, state.liveReasoning.length >= 100000);
     article.insertBefore(block, article.firstChild);
     return article;
   };
@@ -54,6 +57,7 @@
   var baseClearActivity = clearActivity;
   clearActivity = function () {
     state.liveReasoning = "";
+    state.liveReasoningComplete = false;
     return baseClearActivity();
   };
 
@@ -66,11 +70,15 @@
       if (!response || response.type !== "progress") return;
       var payload = response.payload || {};
       var delta = payload.reasoningDelta || payload.ReasoningDelta || "";
-      if (!delta) return;
-      state.liveReasoning += delta;
-      if (state.liveReasoning.length > 100000) {
-        state.liveReasoning = state.liveReasoning.substring(0, 100000);
+      var completed = !!(payload.reasoningComplete || payload.ReasoningComplete);
+      if (!delta && !completed) return;
+      if (delta) {
+        state.liveReasoning += delta;
+        if (state.liveReasoning.length > 100000) {
+          state.liveReasoning = state.liveReasoning.substring(0, 100000);
+        }
       }
+      state.liveReasoningComplete = completed;
       renderMessages();
     });
   }

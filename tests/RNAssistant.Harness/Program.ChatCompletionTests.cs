@@ -39,6 +39,47 @@ namespace RNAssistant.Harness
             AssertEqual(10, result.PromptTokens.Value, "stream prompt tokens");
             AssertEqual(5, result.CompletionTokens.Value, "stream completion tokens");
             AssertEqual(15, result.TotalTokens.Value, "stream total tokens");
+
+            var updates = new List<LlmStreamUpdate>();
+            var thinkStream =
+                "data: {\"choices\":[{\"delta\":{\"content\":\"  <thi\"}}]}\n\n" +
+                "data: {\"choices\":[{\"delta\":{\"content\":\"nk>Inspect\"}}]}\n\n" +
+                "data: {\"choices\":[{\"delta\":{\"content\":\" range.</thi\"}}]}\n\n" +
+                "data: {\"choices\":[{\"delta\":{\"content\":\"nk>{\\\"kind\\\":\\\"final\\\",\\\"intent\\\":\\\"answer\\\",\\\"message\\\":\\\"ok\\\",\\\"steps\\\":[]}\"}}],\"usage\":{\"output_tokens_details\":{\"reasoning_tokens\":7}}}\n\n" +
+                "data: [DONE]\n\n";
+            var thinkResult = LlmClient.ParseStreamingResponse(thinkStream, updates.Add);
+            AssertEqual("Inspect range.", thinkResult.ReasoningContent, "split think stream reasoning");
+            AssertTrue(new AgentPlannerResponseParser().Parse(thinkResult.Content).Success, "split think stream planner JSON");
+            AssertEqual("Inspect range.", string.Concat(updates.Select(item => item.ReasoningDelta)), "think reasoning progress");
+            AssertEqual(thinkResult.Content, string.Concat(updates.Select(item => item.ContentDelta)), "think content progress");
+            AssertEqual(7, thinkResult.ReasoningTokens.Value, "output reasoning token alias");
+
+            updates.Clear();
+            var duplicateResult = LlmClient.ParseStreamingResponse(
+                "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"same\",\"content\":\"<think>same</think>Done\"}}]}\n\ndata: [DONE]\n\n",
+                updates.Add);
+            AssertEqual("same", duplicateResult.ReasoningContent, "stream metadata reasoning priority");
+            AssertEqual("same", string.Concat(updates.Select(item => item.ReasoningDelta)), "stream duplicate reasoning suppressed");
+            AssertEqual("Done", duplicateResult.Content, "stream duplicate think removed");
+
+            var oversizedChunk = new JObject
+            {
+                ["choices"] = new JArray
+                {
+                    new JObject
+                    {
+                        ["delta"] = new JObject
+                        {
+                            ["content"] = "<think>" + new string('s', 100001) + "</think>ok"
+                        }
+                    }
+                }
+            };
+            var oversizedStream = LlmClient.ParseStreamingResponse(
+                "data: " + oversizedChunk.ToString(Formatting.None) + "\n\ndata: [DONE]\n\n");
+            AssertEqual(100000, oversizedStream.ReasoningContent.Length, "stream reasoning storage limit");
+            AssertTrue(oversizedStream.ReasoningTruncated, "stream reasoning truncation flag");
+            AssertEqual("ok", oversizedStream.Content, "stream content survives reasoning truncation");
         }
 
         private static void LlmReasoningMetadataIsSeparated()
@@ -51,7 +92,40 @@ namespace RNAssistant.Harness
             var embeddedThink = LlmClient.ParseCompletionResponse(
                 "{\"choices\":[{\"message\":{\"reasoning_content\":\"provider reasoning\",\"content\":\"\\n<think>duplicate</think>{\\\"kind\\\":\\\"final\\\",\\\"intent\\\":\\\"answer\\\",\\\"message\\\":\\\"ok\\\",\\\"steps\\\":[]}\"}}]}");
             AssertEqual("provider reasoning", embeddedThink.ReasoningContent, "provider reasoning preserved");
-            AssertEqual("not_json_object", new AgentPlannerResponseParser().Parse(embeddedThink.Content).ErrorCode, "embedded think tag rejected");
+            AssertTrue(new AgentPlannerResponseParser().Parse(embeddedThink.Content).Success, "duplicate think removed from planner content");
+
+            var thinkOnly = LlmClient.ParseCompletionResponse(
+                "{\"choices\":[{\"message\":{\"content\":\" <think>local reasoning</think>Answer\"}}],\"usage\":{\"reasoning_tokens\":4}}");
+            AssertEqual("local reasoning", thinkOnly.ReasoningContent, "leading think extracted");
+            AssertEqual("Answer", thinkOnly.Content, "answer remains after think");
+            AssertEqual(4, thinkOnly.ReasoningTokens.Value, "root reasoning token alias");
+
+            var literalThink = LlmClient.ParseCompletionResponse(
+                "{\"choices\":[{\"message\":{\"content\":\"Answer with <think>literal</think> markup\"}}]}");
+            AssertEqual("Answer with <think>literal</think> markup", literalThink.Content, "non-leading think preserved");
+
+            var unclosedThink = LlmClient.ParseCompletionResponse(
+                "{\"choices\":[{\"message\":{\"content\":\"<think>unfinished reasoning\"}}]}");
+            AssertEqual("unfinished reasoning", unclosedThink.ReasoningContent, "unclosed think treated as reasoning");
+            AssertEqual(string.Empty, unclosedThink.Content, "unclosed think has no final content");
+
+            var oversized = new JObject
+            {
+                ["choices"] = new JArray
+                {
+                    new JObject
+                    {
+                        ["message"] = new JObject
+                        {
+                            ["content"] = "<think>" + new string('x', 100001) + "</think>ok"
+                        }
+                    }
+                }
+            };
+            var truncated = LlmClient.ParseCompletionResponse(oversized.ToString(Formatting.None));
+            AssertEqual(100000, truncated.ReasoningContent.Length, "reasoning storage limit");
+            AssertTrue(truncated.ReasoningTruncated, "reasoning truncation flag");
+            AssertEqual("ok", truncated.Content, "content survives reasoning truncation");
         }
 
         private static void LlmAlternateCompletionFormatsAreRejected()
@@ -116,6 +190,52 @@ namespace RNAssistant.Harness
             };
             var nativeCall = LlmClient.ParseCompletionResponse(nativeCallResponse.ToString(Formatting.None));
             AssertEqual("empty_response", new AgentPlannerResponseParser().Parse(nativeCall.Content).ErrorCode, "native tool calls ignored");
+        }
+
+        private static void PlainChatForwardsReasoningProgress()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var activities = new List<ChatActivity>();
+                var reasoning = new string('r', 300);
+                var service = new ChatCompletionService(
+                    adapter,
+                    executor,
+                    delegate(
+                        AppSettings settings,
+                        IEnumerable<ChatMessage> messages,
+                        Action<LlmStreamUpdate> streamProgress,
+                        CancellationToken cancellationToken)
+                    {
+                        streamProgress(new LlmStreamUpdate { ReasoningDelta = reasoning });
+                        streamProgress(new LlmStreamUpdate { ContentDelta = "Done." });
+                        streamProgress(new LlmStreamUpdate { Completed = true });
+                        return Task.FromResult(new LlmCompletionResult
+                        {
+                            Content = "Done.",
+                            ReasoningContent = reasoning
+                        });
+                    });
+                var session = NewSession(adapter);
+                session.Mode = ChatModes.Chat;
+                service.ExecuteAsync(
+                    "Hello",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings(),
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    delegate(string phase, string message, ChatActivity activity)
+                    {
+                        if (activity != null && string.Equals(activity.Kind, "reasoning", StringComparison.OrdinalIgnoreCase))
+                        {
+                            activities.Add(activity);
+                        }
+                    }).GetAwaiter().GetResult();
+
+                AssertTrue(activities.Any(item => item.Status == "running" && item.ResultMessage == reasoning), "chat reasoning live progress");
+                AssertTrue(activities.Any(item => item.Status == "completed"), "chat reasoning completion progress");
+                AssertEqual(reasoning, session.Messages.Last().ReasoningContent, "chat reasoning stored");
+            });
         }
 
         private static void LlmInvalidResponseEnvelopeIsReported()

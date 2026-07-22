@@ -103,6 +103,7 @@ namespace RNAssistant.Harness
                 Test("attachments: multimodal api payload", AttachmentMultimodalApiPayload),
                 Test("llm: streaming SSE response", LlmStreamingResponseIsAggregated),
                 Test("llm: separates reasoning metadata", LlmReasoningMetadataIsSeparated),
+                Test("llm: chat mode forwards reasoning progress", PlainChatForwardsReasoningProgress),
                 Test("llm: rejects alternate completion formats", LlmAlternateCompletionFormatsAreRejected),
                 Test("llm: reports invalid response envelope", LlmInvalidResponseEnvelopeIsReported),
                 Test("attachments: extracts pdf text", AttachmentExtractsPdfText),

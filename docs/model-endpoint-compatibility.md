@@ -12,6 +12,7 @@ RNAssistant talks to an OpenAI-compatible Chat Completions endpoint. Chat mode u
 ## Optional
 
 - `usage.prompt_tokens`, `usage.completion_tokens`, `usage.total_tokens`: stored when present. `input_tokens` and `output_tokens` aliases are also accepted.
+- Reasoning may be returned in `message.reasoning_content` / `message.reasoning` and their SSE delta equivalents, or as one leading `<think>...</think>` block in assistant content. It is removed from final Chat/planner content, stored separately, and rendered as a collapsible block. Reasoning token counts are recognized in `completion_tokens_details`, `output_tokens_details`, or a root `reasoning_tokens` usage field.
 - Model catalog GET endpoint: defaults to `/config/models.json` derived from `BaseUrl`, but can be set independently in Settings. Catalogs may use `models` with `value`, OpenAI-style `data` with `id`, or a root array with `id`/`display_name`. The root-array format also recognizes `supports_reasoning`, `supports_vision`, `supports_audio`, `is_default`, limits, and `default_params`. Manual model entry still works without it.
 - SSE streaming for Chat mode when `StreamResponses` is enabled. Text deltas are displayed incrementally in the chat.
 - Custom request headers: supported from Settings, except unsafe headers such as `Content-Length` and `Host`.
@@ -32,6 +33,7 @@ RNAssistant talks to an OpenAI-compatible Chat Completions endpoint. Chat mode u
 | Returns another fence type, legacy envelope, prose around JSON, or a JSON array | Rejected; Agent mode asks once for corrected JSON. |
 | Returns native `tool_calls`, `function_call`, or content-part arrays | Not converted to local tools; missing/invalid assistant text is rejected. |
 | Returns malformed planner JSON | Records format/error and a bounded local response preview; Agent mode asks once for a corrected JSON object while preserving the task and available tools. |
+| Returns leading `<think>...</think>` before text or planner JSON | Thinking is separated from assistant content, streamed as reasoning progress, and does not invalidate the planner object. Non-leading tags remain ordinary content. |
 | A required local tool is unavailable | The endpoint is not called for that iteration; RNAssistant records local route and tool-exclusion diagnostics. |
 | Omits token usage | Chat still works; token counters show estimated/context-side data only. |
 | Lacks `/config/models.json` | Model catalog load fails, but manually entered model IDs can still be saved. |

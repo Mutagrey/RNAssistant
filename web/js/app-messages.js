@@ -313,14 +313,14 @@ function renderMessages(options) {
     index += 1;
   }
 
-  var stream = renderLiveStreamMessage();
-  if (stream) {
-    box.appendChild(stream);
-  }
-
   var live = renderLiveActivity();
   if (live) {
     box.appendChild(live);
+  }
+
+  var stream = renderLiveStreamMessage();
+  if (stream) {
+    box.appendChild(stream);
   }
 
   syncChatScroll(shouldScroll, false);

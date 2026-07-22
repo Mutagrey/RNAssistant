@@ -96,11 +96,52 @@ namespace RNAssistant.Office.Services
             CancellationToken cancellationToken)
         {
             var prefix = new StringBuilder();
+            var pendingReasoning = new StringBuilder();
             var streamDecisionMade = false;
             var suppressStream = false;
-            return await _completeAsync(settings, messages, update =>
+            var reasoningSeen = false;
+            var reasoningCompleted = false;
+            var lastReasoningReportUtc = DateTime.UtcNow;
+            Action<bool> flushReasoning = completed =>
             {
-                if (update == null || string.IsNullOrEmpty(update.ContentDelta))
+                if (completed && reasoningCompleted ||
+                    pendingReasoning.Length == 0 && (!completed || !reasoningSeen))
+                {
+                    return;
+                }
+                Report(progress, "thinking", completed ? "Анализ завершен." : "Модель анализирует запрос...", new ChatActivity
+                {
+                    Kind = "reasoning",
+                    Title = completed ? "Анализ завершен" : "Модель анализирует запрос",
+                    Subtitle = "Ход рассуждения",
+                    Status = completed ? "completed" : "running",
+                    ResultMessage = pendingReasoning.ToString()
+                });
+                pendingReasoning.Clear();
+                lastReasoningReportUtc = DateTime.UtcNow;
+                if (completed)
+                {
+                    reasoningCompleted = true;
+                }
+            };
+            var completion = await _completeAsync(settings, messages, update =>
+            {
+                if (update == null)
+                {
+                    return;
+                }
+
+                if (!string.IsNullOrEmpty(update.ReasoningDelta))
+                {
+                    reasoningSeen = true;
+                    pendingReasoning.Append(update.ReasoningDelta);
+                }
+                if (update.Completed || pendingReasoning.Length >= 256 ||
+                    pendingReasoning.Length > 0 && DateTime.UtcNow - lastReasoningReportUtc >= TimeSpan.FromMilliseconds(100))
+                {
+                    flushReasoning(update.Completed);
+                }
+                if (string.IsNullOrEmpty(update.ContentDelta))
                 {
                     return;
                 }
@@ -130,13 +171,20 @@ namespace RNAssistant.Office.Services
                     Report(progress, "streaming", prefix.ToString());
                 }
             }, cancellationToken).ConfigureAwait(false);
+            flushReasoning(true);
+            return completion;
         }
 
         private static void Report(Action<string, string, ChatActivity> progress, string phase, string message)
         {
+            Report(progress, phase, message, null);
+        }
+
+        private static void Report(Action<string, string, ChatActivity> progress, string phase, string message, ChatActivity activity)
+        {
             if (progress != null)
             {
-                progress(phase, message ?? string.Empty, null);
+                progress(phase, message ?? string.Empty, activity);
             }
         }
     }

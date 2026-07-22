@@ -228,7 +228,12 @@ namespace RNAssistant.Core.Llm
 
         internal static LlmCompletionResult ParseStreamingResponse(string sse)
         {
-            var state = new StreamingCompletionState();
+            return ParseStreamingResponse(sse, null);
+        }
+
+        internal static LlmCompletionResult ParseStreamingResponse(string sse, Action<LlmStreamUpdate> streamProgress)
+        {
+            var state = new StreamingCompletionState(streamProgress);
             using (var reader = new StringReader(sse ?? string.Empty))
             {
                 string line;
@@ -327,12 +332,18 @@ namespace RNAssistant.Core.Llm
         {
             private readonly StringBuilder _content = new StringBuilder();
             private readonly StringBuilder _reasoning = new StringBuilder();
+            private readonly StringBuilder _embeddedReasoning = new StringBuilder();
             private readonly Action<LlmStreamUpdate> _progress;
+            private readonly ThinkStreamSplitter _thinkSplitter;
             private JObject _usage;
+            private bool _reasoningTruncated;
+            private bool _embeddedReasoningTruncated;
+            private bool _embeddedProgressReported;
 
             public StreamingCompletionState(Action<LlmStreamUpdate> progress = null)
             {
                 _progress = progress;
+                _thinkSplitter = new ThinkStreamSplitter(AddContent, AddEmbeddedReasoning);
             }
 
             public void Add(JObject chunk)
@@ -357,11 +368,7 @@ namespace RNAssistant.Core.Llm
                 var content = ReadStringToken(delta["content"], "choices[0].delta.content");
                 if (!string.IsNullOrEmpty(content))
                 {
-                    _content.Append(content);
-                    if (_progress != null)
-                    {
-                        _progress(new LlmStreamUpdate { ContentDelta = content });
-                    }
+                    _thinkSplitter.Add(content);
                 }
 
                 var reasoning = ReadStringToken(
@@ -369,22 +376,173 @@ namespace RNAssistant.Core.Llm
                     "choices[0].delta.reasoning");
                 if (!string.IsNullOrEmpty(reasoning))
                 {
-                    _reasoning.Append(reasoning);
-                    if (_progress != null)
-                    {
-                        _progress(new LlmStreamUpdate { ReasoningDelta = reasoning });
-                    }
+                    AddReasoning(reasoning);
                 }
             }
 
             public LlmCompletionResult ToResult()
             {
+                _thinkSplitter.Complete();
+                var reasoning = _reasoning.Length > 0 ? _reasoning.ToString() : _embeddedReasoning.ToString();
                 var message = new JObject
                 {
                     ["content"] = _content.ToString(),
-                    ["reasoning_content"] = _reasoning.ToString()
+                    ["reasoning_content"] = reasoning
                 };
-                return BuildCompletionResult(message, _usage);
+                var result = BuildCompletionResult(message, _usage);
+                result.ReasoningTruncated = _reasoning.Length > 0
+                    ? _reasoningTruncated
+                    : _embeddedReasoningTruncated;
+                return result;
+            }
+
+            private void AddContent(string value)
+            {
+                if (string.IsNullOrEmpty(value))
+                {
+                    return;
+                }
+                _content.Append(value);
+                if (_progress != null)
+                {
+                    _progress(new LlmStreamUpdate { ContentDelta = value });
+                }
+            }
+
+            private void AddReasoning(string value)
+            {
+                var stored = AppendLimited(_reasoning, value, ref _reasoningTruncated);
+                if (!_embeddedProgressReported && _progress != null && stored.Length > 0)
+                {
+                    _progress(new LlmStreamUpdate { ReasoningDelta = stored });
+                }
+            }
+
+            private void AddEmbeddedReasoning(string value)
+            {
+                var stored = AppendLimited(_embeddedReasoning, value, ref _embeddedReasoningTruncated);
+                if (_reasoning.Length == 0 && _progress != null && stored.Length > 0)
+                {
+                    _embeddedProgressReported = true;
+                    _progress(new LlmStreamUpdate { ReasoningDelta = stored });
+                }
+            }
+
+            private static string AppendLimited(StringBuilder target, string value, ref bool truncated)
+            {
+                if (string.IsNullOrEmpty(value))
+                {
+                    return string.Empty;
+                }
+                var remaining = MaxStoredReasoningChars - target.Length;
+                if (remaining <= 0)
+                {
+                    truncated = true;
+                    return string.Empty;
+                }
+                var stored = value.Length <= remaining ? value : value.Substring(0, remaining);
+                target.Append(stored);
+                if (stored.Length < value.Length)
+                {
+                    truncated = true;
+                }
+                return stored;
+            }
+        }
+
+        private sealed class ThinkStreamSplitter
+        {
+            private const string OpenTag = "<think>";
+            private const string CloseTag = "</think>";
+            private readonly Action<string> _content;
+            private readonly Action<string> _reasoning;
+            private readonly StringBuilder _pending = new StringBuilder();
+            private int _state;
+
+            public ThinkStreamSplitter(Action<string> content, Action<string> reasoning)
+            {
+                _content = content;
+                _reasoning = reasoning;
+            }
+
+            public void Add(string value)
+            {
+                if (string.IsNullOrEmpty(value))
+                {
+                    return;
+                }
+                if (_state == 2)
+                {
+                    _content(value);
+                    return;
+                }
+                _pending.Append(value);
+                Process(false);
+            }
+
+            public void Complete()
+            {
+                Process(true);
+            }
+
+            private void Process(bool completed)
+            {
+                if (_state == 0)
+                {
+                    var value = _pending.ToString();
+                    var leading = 0;
+                    while (leading < value.Length && char.IsWhiteSpace(value[leading]))
+                    {
+                        leading++;
+                    }
+                    var candidate = value.Substring(leading);
+                    if (candidate.Length < OpenTag.Length &&
+                        OpenTag.StartsWith(candidate, StringComparison.OrdinalIgnoreCase) && !completed)
+                    {
+                        return;
+                    }
+                    if (candidate.StartsWith(OpenTag, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _pending.Remove(0, leading + OpenTag.Length);
+                        _state = 1;
+                    }
+                    else
+                    {
+                        _pending.Clear();
+                        _state = 2;
+                        _content(value);
+                        return;
+                    }
+                }
+
+                if (_state != 1)
+                {
+                    return;
+                }
+                var reasoning = _pending.ToString();
+                var closeIndex = reasoning.IndexOf(CloseTag, StringComparison.OrdinalIgnoreCase);
+                if (closeIndex >= 0)
+                {
+                    if (closeIndex > 0)
+                    {
+                        _reasoning(reasoning.Substring(0, closeIndex));
+                    }
+                    var remainder = reasoning.Substring(closeIndex + CloseTag.Length);
+                    _pending.Clear();
+                    _state = 2;
+                    if (remainder.Length > 0)
+                    {
+                        _content(remainder);
+                    }
+                    return;
+                }
+
+                var emitLength = completed ? reasoning.Length : Math.Max(0, reasoning.Length - (CloseTag.Length - 1));
+                if (emitLength > 0)
+                {
+                    _reasoning(reasoning.Substring(0, emitLength));
+                    _pending.Remove(0, emitLength);
+                }
             }
         }
 
@@ -576,11 +734,22 @@ namespace RNAssistant.Core.Llm
         private static int? ReadReasoningTokens(JObject usage)
         {
             var details = usage == null ? null : usage["completion_tokens_details"] as JObject;
-            return ReadInt(details, "reasoning_tokens");
+            var value = ReadInt(details, "reasoning_tokens");
+            if (value.HasValue)
+            {
+                return value;
+            }
+            details = usage == null ? null : usage["output_tokens_details"] as JObject;
+            return ReadInt(details, "reasoning_tokens") ?? ReadInt(usage, "reasoning_tokens");
         }
 
         private static LlmCompletionResult BuildCompletionResult(JObject message, JObject usage)
         {
+            var content = ReadAssistantContent(message);
+            string embeddedReasoning;
+            bool embeddedTruncated;
+            content = ExtractLeadingThink(content, out embeddedReasoning, out embeddedTruncated);
+            var providerReasoning = ReadReasoningContent(message);
             var promptTokens = ReadInt(usage, "prompt_tokens", "input_tokens");
             var completionTokens = ReadInt(usage, "completion_tokens", "output_tokens");
             var totalTokens = ReadInt(usage, "total_tokens");
@@ -590,15 +759,46 @@ namespace RNAssistant.Core.Llm
             }
             return new LlmCompletionResult
             {
-                Content = ReadAssistantContent(message),
-                ReasoningContent = ReadReasoningContent(message),
+                Content = content,
+                ReasoningContent = providerReasoning.Length > 0 ? providerReasoning : embeddedReasoning,
                 ReasoningTokens = ReadReasoningTokens(usage),
-                ReasoningTruncated = IsReasoningTruncated(message),
+                ReasoningTruncated = providerReasoning.Length > 0
+                    ? IsReasoningTruncated(message)
+                    : embeddedTruncated,
                 PromptTokens = promptTokens,
                 CompletionTokens = completionTokens,
                 TotalTokens = totalTokens,
                 UsageJson = usage == null ? null : usage.ToString(Formatting.None)
             };
+        }
+
+        private static string ExtractLeadingThink(string content, out string reasoning, out bool truncated)
+        {
+            reasoning = string.Empty;
+            truncated = false;
+            if (string.IsNullOrEmpty(content))
+            {
+                return content ?? string.Empty;
+            }
+            var leading = 0;
+            while (leading < content.Length && char.IsWhiteSpace(content[leading]))
+            {
+                leading++;
+            }
+            const string openTag = "<think>";
+            const string closeTag = "</think>";
+            if (content.IndexOf(openTag, leading, StringComparison.OrdinalIgnoreCase) != leading)
+            {
+                return content;
+            }
+            var reasoningStart = leading + openTag.Length;
+            var closeIndex = content.IndexOf(closeTag, reasoningStart, StringComparison.OrdinalIgnoreCase);
+            var rawReasoning = closeIndex < 0
+                ? content.Substring(reasoningStart)
+                : content.Substring(reasoningStart, closeIndex - reasoningStart);
+            truncated = rawReasoning.Length > MaxStoredReasoningChars;
+            reasoning = truncated ? rawReasoning.Substring(0, MaxStoredReasoningChars) : rawReasoning;
+            return closeIndex < 0 ? string.Empty : content.Substring(closeIndex + closeTag.Length);
         }
 
         private static string ReadStringToken(JToken token, string field)
