@@ -15,8 +15,7 @@ function renderChatSessions() {
   chats.forEach(function (chat) {
     var option = document.createElement("option");
     option.value = chatId(chat);
-    var model = chatModel(chat);
-    option.textContent = (chatHasHtml(chat) ? "[HTML] " : "") + chatTitle(chat) + " (" + chatMessageCount(chat) + ", " + chatMode(chat) + ")" + (model ? " - " + model : "");
+    option.textContent = chatTitle(chat);
     select.appendChild(option);
   });
   select.value = state.activeChatId || "";
@@ -26,9 +25,14 @@ function renderChatSessions() {
   var activeChat = activeChatSummary();
   var isCurrentDocument = !activeChat || chatIsCurrentDocument(activeChat);
   $("activeChatTitle").textContent = activeChat ? chatTitle(activeChat) : "Новый чат";
-  $("activeChatDocument").textContent = activeChat
-    ? [chatDocumentTitle(activeChat), chatHost(activeChat)].filter(Boolean).join(" · ")
-    : "";
+  var subtitle = [];
+  if (state.activeChatId) {
+    subtitle.push(formatChatMessageCount((state.messages || []).length));
+  }
+  if (activeChat) {
+    subtitle = subtitle.concat([chatDocumentTitle(activeChat), chatHost(activeChat)].filter(Boolean));
+  }
+  $("activeChatSubtitle").textContent = subtitle.join(" · ");
   $("offlineNotice").classList.toggle("hidden", isCurrentDocument);
   $("openDocumentButton").hidden = isCurrentDocument || !chatDocumentPath(activeChat);
 
@@ -48,6 +52,16 @@ function activeChatSummary() {
   return (state.chats || []).filter(function (chat) {
     return chatId(chat) === state.activeChatId;
   })[0] || null;
+}
+
+function formatChatMessageCount(count) {
+  count = Math.max(0, Number(count) || 0);
+  var mod100 = count % 100;
+  var mod10 = count % 10;
+  var noun = mod100 >= 11 && mod100 <= 14
+    ? "сообщений"
+    : (mod10 === 1 ? "сообщение" : (mod10 >= 2 && mod10 <= 4 ? "сообщения" : "сообщений"));
+  return count + " " + noun;
 }
 
 function activeChatUsesCurrentDocument() {
@@ -347,25 +361,30 @@ function renderChatTreeRow(chat) {
   title.className = "chat-session-title";
   title.textContent = chatTitle(chat);
   var run = state.chatRuns[id] || state.activeSends[id];
-  var persistedRunStatus = chat.RunStatus || chat.runStatus || "";
-  if (run || persistedRunStatus === "running") {
-    var spinner = document.createElement("span");
-    spinner.className = "chat-run-spinner";
-    spinner.title = "Запрос выполняется";
-    title.appendChild(spinner);
+  var persistedRunStatus = String(chat.RunStatus || chat.runStatus || "").toLowerCase();
+  var hasActiveRun = !!run || persistedRunStatus === "running" || persistedRunStatus === "cancelling";
+  if (hasActiveRun) {
+    row.classList.add("has-active-run");
   }
   button.appendChild(title);
-  var meta = document.createElement("span");
-  meta.className = "chat-session-meta";
-  meta.textContent = chatMessageCount(chat) + " сообщ. · " + chatMode(chat);
-  button.appendChild(meta);
   row.appendChild(button);
+  if (hasActiveRun) {
+    var status = document.createElement("span");
+    status.className = "chat-row-status";
+    status.title = persistedRunStatus === "cancelling" ? "Запрос останавливается" : "Запрос выполняется";
+    status.setAttribute("aria-label", status.title);
+    var spinner = document.createElement("span");
+    spinner.className = "chat-run-spinner";
+    spinner.setAttribute("aria-hidden", "true");
+    status.appendChild(spinner);
+    row.appendChild(status);
+  }
   var actions = document.createElement("span");
   actions.className = "chat-row-actions";
   actions.innerHTML = "<button type=\"button\" class=\"chat-row-action chat-edit\" title=\"Переименовать\" aria-label=\"Переименовать чат\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 20h9\"/><path d=\"M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z\"/></svg></button><button type=\"button\" class=\"chat-row-action chat-delete\" title=\"Удалить\" aria-label=\"Удалить чат\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 6h18\"/><path d=\"M8 6V4h8v2\"/><path d=\"m19 6-1 14H6L5 6\"/><path d=\"M10 11v5\"/><path d=\"M14 11v5\"/></svg></button>";
   actions.querySelector(".chat-edit").addEventListener("click", function () { renameChat(id); });
   actions.querySelector(".chat-delete").addEventListener("click", function () { deleteChat(id); });
-  if (run || persistedRunStatus === "running") {
+  if (hasActiveRun) {
     actions.querySelector(".chat-delete").disabled = true;
     actions.querySelector(".chat-delete").title = "Сначала остановите запрос";
   }
@@ -379,19 +398,14 @@ function documentHostClass(host) {
 }
 
 function documentHostIcon(host) {
-  if (host === "Excel") {
-    return "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"5\" y=\"4\" width=\"14\" height=\"16\" rx=\"1\"/><path d=\"M5 9h14M10 4v16M14.5 9v11\"/></svg>";
+  var letters = { Excel: "X", Word: "W", PowerPoint: "P", Outlook: "O" };
+  if (letters[host]) {
+    return "<span class=\"office-app-mark\" aria-hidden=\"true\">" +
+      "<span class=\"office-app-page\"></span>" +
+      "<span class=\"office-app-tile\">" + letters[host] + "</span>" +
+      "</span>";
   }
-  if (host === "Word") {
-    return "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 4h12v16H6zM9 9h6M9 12h6M9 15h4\"/></svg>";
-  }
-  if (host === "PowerPoint") {
-    return "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"5\" y=\"4\" width=\"14\" height=\"16\" rx=\"1\"/><path d=\"M9 15V9h3a2 2 0 0 1 0 4H9\"/></svg>";
-  }
-  if (host === "Outlook") {
-    return "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"4\" y=\"6\" width=\"16\" height=\"12\" rx=\"1\"/><path d=\"m5 8 7 5 7-5\"/></svg>";
-  }
-  return "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 3h9l3 3v15H6zM15 3v4h4\"/></svg>";
+  return "<svg class=\"office-generic-document\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 3h9l3 3v15H6zM15 3v4h4\"/></svg>";
 }
 
 function createChatSessionBadge(text, kind) {

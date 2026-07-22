@@ -350,8 +350,7 @@
     padding-left: 3px;
   }
 
-  .chat-document-state,
-  .chat-session-meta {
+  .chat-document-state {
     display: none;
   }
 

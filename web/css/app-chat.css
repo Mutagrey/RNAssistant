@@ -182,7 +182,7 @@
 
 .chat-session-select {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   width: 100%;
   min-width: 0;
   min-height: 30px;
@@ -197,8 +197,33 @@
   background: transparent;
 }
 
+.chat-session-row.has-active-run .chat-session-select {
+  padding-right: 28px;
+}
+
+.chat-row-status {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  right: 10px;
+  display: grid;
+  width: 14px;
+  height: 14px;
+  place-items: center;
+  color: var(--accent);
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 0.1s ease;
+}
+
+.chat-row-status .chat-run-spinner {
+  margin: 0;
+  vertical-align: 0;
+}
+
 .chat-row-actions {
   position: absolute;
+  z-index: 2;
   top: 3px;
   right: 4px;
   display: flex;
@@ -209,6 +234,11 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s ease;
+}
+
+.chat-session-row:hover .chat-row-status,
+.chat-session-row:focus-within .chat-row-status {
+  opacity: 0;
 }
 
 .chat-session-row:hover .chat-row-actions,
@@ -248,13 +278,6 @@
   white-space: nowrap;
   font-size: 12px;
   font-weight: var(--title-font-weight);
-}
-
-.chat-session-meta {
-  color: var(--muted);
-  white-space: nowrap;
-  font-size: 10px;
-  font-weight: var(--meta-font-weight);
 }
 
 .chat-document {
@@ -323,6 +346,14 @@
     opacity: 1;
     pointer-events: auto;
   }
+
+  .chat-row-status {
+    opacity: 0;
+  }
+
+  .chat-session-row.has-active-run .chat-session-select {
+    padding-right: 58px;
+  }
 }
 
 .chat-document-caret {
@@ -335,41 +366,85 @@
 }
 
 .chat-document-icon {
+  position: relative;
   display: inline-grid;
   width: 18px;
   height: 18px;
   place-items: center;
-  border-radius: 3px;
-  background: #667085;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 600;
 }
 
-.chat-document-icon svg {
+.office-app-mark {
+  position: relative;
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
+.office-app-page {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  width: 13px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--office-page);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.18);
+}
+
+.office-app-page::after {
+  position: absolute;
+  top: 5px;
+  right: 2px;
+  width: 6px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.66);
+  box-shadow: 0 3px 0 rgba(255, 255, 255, 0.52), 0 6px 0 rgba(255, 255, 255, 0.38);
+  content: "";
+}
+
+.office-app-tile {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  display: grid;
+  width: 11px;
+  height: 12px;
+  place-items: center;
+  border-radius: 2px;
+  background: var(--office-tile);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.25);
+  color: #fff;
+  font: 700 8px/1 "Segoe UI", sans-serif;
+}
+
+.chat-document-icon .office-generic-document {
   width: 14px;
   height: 14px;
   fill: none;
-  stroke: currentColor;
+  stroke: #667085;
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.7;
 }
 
 .chat-document.is-host-excel .chat-document-icon {
-  background: #217346;
+  --office-page: #217346;
+  --office-tile: #185c37;
 }
 
 .chat-document.is-host-word .chat-document-icon {
-  background: #2b579a;
+  --office-page: #2b579a;
+  --office-tile: #1b4f91;
 }
 
 .chat-document.is-host-powerpoint .chat-document-icon {
-  background: #d24726;
+  --office-page: #d24726;
+  --office-tile: #b7472a;
 }
 
 .chat-document.is-host-outlook .chat-document-icon {
-  background: #0078d4;
+  --office-page: #0078d4;
+  --office-tile: #0364b8;
 }
 
 .chat-document-name {
