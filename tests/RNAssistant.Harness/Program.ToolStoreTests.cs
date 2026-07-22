@@ -188,6 +188,63 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void BuiltInToolIdsCannotBeShadowed()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var shadow = CustomTool("Excel", "excel.add_sheet");
+                shadow.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.list_sheets\"}]}";
+                var store = new ToolStore(paths);
+                store.SaveOne(shadow);
+                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths), store);
+
+                var catalogTool = FindTool(new ToolCatalogService(adapter, executor, store).GetVisibleTools(), shadow.Id);
+                AssertTrue(catalogTool != null && catalogTool.BuiltIn, "catalog keeps built-in definition");
+                var plannerTool = FindTool(new AgentToolCatalogResolver(executor, true).Resolve(
+                    adapter.GetBuiltInTools().Concat(new[] { shadow }).ToList()), shadow.Id);
+                AssertTrue(plannerTool != null && plannerTool.BuiltIn, "agent catalog keeps built-in definition");
+
+                var command = new ToolCommand { ToolId = shadow.Id };
+                command.Arguments["name"] = "Protected";
+                var result = executor.Execute(command, new[] { shadow }, new AppSettings { AutoConfirmToolActions = true }, false, false);
+
+                AssertTrue(result.Success, "built-in executes despite custom collision");
+                AssertTrue(adapter.HasSheet("Protected"), "built-in add sheet was executed");
+                AssertEqual(1, adapter.Executed.Count, "shadow pipeline was not executed");
+
+                var save = new ToolCommand { ToolId = "common.tools_save" };
+                save.Arguments["id"] = shadow.Id;
+                save.Arguments["host"] = "Excel";
+                save.Arguments["executor"] = "pipeline";
+                save.Arguments["pipelineJson"] = shadow.PipelineJson;
+                var saveResult = executor.Execute(save, adapter.GetBuiltInTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
+                AssertTrue(!saveResult.Success, "controller rejects reserved id");
+                AssertEqual("reserved_tool_id", saveResult.ErrorCode, "reserved id error code");
+            });
+        }
+
+        private static void RefreshedCustomToolGetsEffectiveSafety()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var resolver = new AgentToolCatalogResolver(executor, true);
+                var tools = resolver.Resolve(adapter.GetBuiltInTools().ToList());
+                var pipeline = CustomTool("Excel", "excel.dynamic_mutation");
+                pipeline.AgentCanRun = false;
+                pipeline.MutatesDocument = false;
+                pipeline.RiskLevel = 0;
+                pipeline.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Dynamic\"}}]}";
+
+                resolver.Refresh(tools, pipeline);
+
+                var refreshed = FindTool(tools, pipeline.Id);
+                AssertTrue(refreshed != null && refreshed.MutatesDocument, "nested mutation propagated after refresh");
+                AssertTrue(!refreshed.AgentCanRun, "nested mutation agent safety propagated after refresh");
+                AssertTrue(refreshed.RiskLevel > 0, "nested mutation risk propagated after refresh");
+            });
+        }
+
         private static void ExpandedBuiltInToolsAreVisible()
         {
             var excel = new List<ToolDefinition>(FakeOfficeAdapter.ForHost("Excel").GetBuiltInTools());

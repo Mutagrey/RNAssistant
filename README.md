@@ -261,14 +261,14 @@ Pipeline tools use:
 }
 ```
 
-Each pipeline step must set `toolId`. `id` is only the step label used for placeholders. Supported placeholders are `{{args.name}}`, `{{steps.stepId.message}}`, `{{steps.stepId.dataJson}}`, and `{{steps.stepId.success}}`.
+Each pipeline step must set `toolId`; step `id` values must be unique. `id` is only the step label used for placeholders. Supported placeholders are `{{args.name}}`, `{{steps.stepId.message}}`, `{{steps.stepId.dataJson}}`, and `{{steps.stepId.success}}`.
 
 The Tools tab can run a selected tool with ad hoc JSON arguments. `Dry Run` resolves the planned calls without changing the Office document. `Run` is treated as explicit user confirmation.
 
 For Excel, Word, and PowerPoint, `executor: "vba"` inserts `code.vba` through the current host `insert_vba_module`; if the run arguments include `macroName`, it then calls the current host `run_macro`.
 Agent-generated executable code should be VBA for the current Office host.
 
-Agent mode can also use `common.tools_list`, `common.tools_read`, `common.tools_validate`, `common.tools_save`, and `common.tools_delete` to manage custom tools. Save/delete requires confirmation unless auto-confirm is enabled. Pipeline tools are validated before save; VBA tools must include code.
+Agent mode can also use `common.tools_list`, `common.tools_read`, `common.tools_validate`, `common.tools_save`, and `common.tools_delete` to manage custom tools. Save/delete requires confirmation unless auto-confirm is enabled. Pipeline tools are validated before save; VBA tools must include code. Built-in and controller tool ids are reserved and cannot be shadowed by custom tools.
 
 ## Skill Library
 

@@ -23,25 +23,10 @@ namespace RNAssistant.Office.Tools
 
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
-            yield return ControllerTool("common.skills_list", "Read-only: List markdown skills visible to the current Office host.", "{}", false);
-            yield return ControllerTool("common.skills_read", "Read-only: Read one markdown skill by id.", "{\"id\":\"common.skill_authoring\"}", false);
-            yield return ControllerTool("common.skills_save", "Mutates settings: Create or update a markdown skill SKILL.md file.", "{\"id\":\"common.my_skill\",\"host\":\"Common\",\"name\":\"My skill\",\"description\":\"When to use it\",\"tags\":\"tag1, tag2\",\"bodyMarkdown\":\"# My skill\\n...\",\"enabled\":true}", true);
-            yield return ControllerTool("common.skills_delete", "Mutates settings: Delete a custom markdown skill by id.", "{\"id\":\"common.my_skill\"}", true);
-        }
-
-        public bool IsControllerTool(string toolId)
-        {
-            return GetControllerTool(toolId) != null;
-        }
-
-        public ToolDefinition GetControllerTool(string toolId)
-        {
-            if (string.IsNullOrWhiteSpace(toolId))
-            {
-                return null;
-            }
-
-            return GetControllerTools().FirstOrDefault(tool => string.Equals(tool.Id, toolId, StringComparison.OrdinalIgnoreCase));
+            yield return ControllerToolDefinition.Create("common.skills_list", "Common", "Read-only: List markdown skills visible to the current Office host.", "{}");
+            yield return ControllerToolDefinition.Create("common.skills_read", "Common", "Read-only: Read one markdown skill by id.", "{\"id\":\"common.skill_authoring\"}");
+            yield return ControllerToolDefinition.Create("common.skills_save", "Common", "Mutates settings: Create or update a markdown skill SKILL.md file.", "{\"id\":\"common.my_skill\",\"host\":\"Common\",\"name\":\"My skill\",\"description\":\"When to use it\",\"tags\":\"tag1, tag2\",\"bodyMarkdown\":\"# My skill\\n...\",\"enabled\":true}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
+            yield return ControllerToolDefinition.Create("common.skills_delete", "Common", "Mutates settings: Delete a custom markdown skill by id.", "{\"id\":\"common.my_skill\"}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
         }
 
         public ToolResult ExecuteControllerTool(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)
@@ -223,23 +208,5 @@ namespace RNAssistant.Office.Tools
                  string.Equals(skill.Host, "Common", StringComparison.OrdinalIgnoreCase));
         }
 
-        private static ToolDefinition ControllerTool(string id, string description, string schema, bool requiresConfirmation)
-        {
-            return new ToolDefinition
-            {
-                Id = id,
-                Host = "Common",
-                Name = id,
-                Description = description,
-                ArgumentSchemaJson = schema,
-                BuiltIn = true,
-                Enabled = true,
-                RequiresConfirmation = requiresConfirmation,
-                MutatesDocument = false,
-                MutatesLocalState = requiresConfirmation,
-                AgentCanRun = true,
-                RiskLevel = requiresConfirmation ? 1 : 0
-            };
-        }
     }
 }

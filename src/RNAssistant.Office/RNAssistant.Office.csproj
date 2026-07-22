@@ -78,6 +78,7 @@
     <Compile Include="Services\AgentRunService.cs" />
     <Compile Include="Services\AgentPlannerRuntime.cs" />
     <Compile Include="Services\AgentRuntimeModels.cs" />
+    <Compile Include="Services\AgentPlannerCompletionRunner.cs" />
     <Compile Include="Services\AgentExecutionRuntime.cs" />
     <Compile Include="Services\AgentVerificationRuntime.cs" />
     <Compile Include="Services\ChatCompletionService.cs" />
@@ -98,8 +99,11 @@
     <Compile Include="Services\SkillCatalogService.cs" />
     <Compile Include="Services\ToolCatalogService.cs" />
     <Compile Include="Tools\ToolArgumentReader.cs" />
+    <Compile Include="Tools\ToolIdSuggester.cs" />
     <Compile Include="Tools\OfficeToolExecutor.cs" />
+    <Compile Include="Tools\ControllerToolDefinition.cs" />
     <Compile Include="Tools\PipelineToolExecutor.cs" />
+    <Compile Include="Tools\PipelineDefinition.cs" />
     <Compile Include="Tools\SkillToolExecutor.cs" />
     <Compile Include="Tools\ToolAuthoringExecutor.cs" />
     <Compile Include="Tools\PromptToolExecutor.cs" />

@@ -15,6 +15,8 @@
 11. Tool/skill storage uses atomic per-item writes and no longer recreates entire user directories.
 12. VBA replacement is fail-closed around rollback creation, restores original code after a failed write, and verifies controller mutations using the expected code hash.
 13. Tool failures carry optional error/retry metadata; partial VBA and pipeline mutations are not automatically repeated.
+14. Pipeline parsing and controller-tool metadata are centralized; one execution context caches catalog/safety state for nested steps, and custom definitions cannot shadow protected ids.
+15. Planner completion streaming and bounded JSON repair are isolated from the agent orchestration loop.
 
 ## Short-Term Plan
 

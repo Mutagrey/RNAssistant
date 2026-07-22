@@ -186,6 +186,16 @@ namespace RNAssistant.Harness
                 };
                 var tools = new List<ToolDefinition>(adapter.GetBuiltInTools());
 
+                var drySession = new ChatSession();
+                drySession.HtmlWorkspace.Files = null;
+                drySession.HtmlWorkspace.DataSources = null;
+                drySession.HtmlWorkspace.UpdatedUtc = default(DateTime);
+                var dryRead = executor.Execute(new ToolCommand { ToolId = "common.html_workspace_read" }, tools, new AppSettings(), true, false, drySession);
+                AssertTrue(dryRead.Success, "html workspace dry read succeeds");
+                AssertTrue(drySession.HtmlWorkspace.Files == null, "html dry run does not normalize files in place");
+                AssertTrue(drySession.HtmlWorkspace.DataSources == null, "html dry run does not normalize data in place");
+                AssertEqual(default(DateTime), drySession.HtmlWorkspace.UpdatedUtc, "html dry run keeps timestamp");
+
                 var fileCommand = new ToolCommand { ToolId = "common.html_workspace_upsert_file" };
                 fileCommand.Arguments["path"] = "index.html";
                 fileCommand.Arguments["kind"] = "html";

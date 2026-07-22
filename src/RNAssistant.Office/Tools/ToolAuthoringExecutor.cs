@@ -26,26 +26,11 @@ namespace RNAssistant.Office.Tools
                 yield break;
             }
 
-            yield return ControllerTool("common.tools_list", "Read-only: List custom executable RNAssistant tools visible to the current Office host.", "{}", false);
-            yield return ControllerTool("common.tools_read", "Read-only: Read one custom RNAssistant tool by id, including metadata, README, pipeline, and VBA code.", "{\"id\":\"excel.my_tool\"}", false);
-            yield return ControllerTool("common.tools_validate", "Read-only: Validate a custom RNAssistant pipeline or VBA tool payload without saving it.", "{\"id\":\"excel.my_tool\",\"host\":\"Excel\",\"name\":\"My tool\",\"description\":\"What it does\",\"argumentSchemaJson\":\"{}\",\"executor\":\"pipeline\",\"pipelineJson\":\"{\\\"steps\\\":[{\\\"toolId\\\":\\\"excel.list_sheets\\\",\\\"arguments\\\":{}}]}\",\"code\":\"\",\"readme\":\"markdown\",\"enabled\":true,\"requiresConfirmation\":true,\"mutatesDocument\":true,\"mutatesLocalState\":false,\"agentCanRun\":false,\"riskLevel\":2}", false);
-            yield return ControllerTool("common.tools_save", "Mutates settings: Create or update a custom RNAssistant pipeline or VBA tool.", "{\"id\":\"excel.my_tool\",\"host\":\"Excel\",\"name\":\"My tool\",\"description\":\"What it does\",\"argumentSchemaJson\":\"{}\",\"executor\":\"pipeline\",\"pipelineJson\":\"{\\\"steps\\\":[{\\\"toolId\\\":\\\"excel.list_sheets\\\",\\\"arguments\\\":{}}]}\",\"code\":\"\",\"readme\":\"markdown\",\"enabled\":true,\"requiresConfirmation\":true,\"mutatesDocument\":true,\"mutatesLocalState\":false,\"agentCanRun\":false,\"riskLevel\":2}", true);
-            yield return ControllerTool("common.tools_delete", "Mutates settings: Delete a custom RNAssistant tool by id.", "{\"id\":\"excel.my_tool\"}", true);
-        }
-
-        public bool IsControllerTool(string toolId)
-        {
-            return GetControllerTool(toolId) != null;
-        }
-
-        public ToolDefinition GetControllerTool(string toolId)
-        {
-            if (string.IsNullOrWhiteSpace(toolId))
-            {
-                return null;
-            }
-
-            return GetControllerTools().FirstOrDefault(tool => string.Equals(tool.Id, toolId, StringComparison.OrdinalIgnoreCase));
+            yield return ControllerToolDefinition.Create("common.tools_list", "Common", "Read-only: List custom executable RNAssistant tools visible to the current Office host.", "{}");
+            yield return ControllerToolDefinition.Create("common.tools_read", "Common", "Read-only: Read one custom RNAssistant tool by id, including metadata, README, pipeline, and VBA code.", "{\"id\":\"excel.my_tool\"}");
+            yield return ControllerToolDefinition.Create("common.tools_validate", "Common", "Read-only: Validate a custom RNAssistant pipeline or VBA tool payload without saving it.", "{\"id\":\"excel.my_tool\",\"host\":\"Excel\",\"name\":\"My tool\",\"description\":\"What it does\",\"argumentSchemaJson\":\"{}\",\"executor\":\"pipeline\",\"pipelineJson\":\"{\\\"steps\\\":[{\\\"toolId\\\":\\\"excel.list_sheets\\\",\\\"arguments\\\":{}}]}\",\"code\":\"\",\"readme\":\"markdown\",\"enabled\":true,\"requiresConfirmation\":true,\"mutatesDocument\":true,\"mutatesLocalState\":false,\"agentCanRun\":false,\"riskLevel\":2}");
+            yield return ControllerToolDefinition.Create("common.tools_save", "Common", "Mutates settings: Create or update a custom RNAssistant pipeline or VBA tool.", "{\"id\":\"excel.my_tool\",\"host\":\"Excel\",\"name\":\"My tool\",\"description\":\"What it does\",\"argumentSchemaJson\":\"{}\",\"executor\":\"pipeline\",\"pipelineJson\":\"{\\\"steps\\\":[{\\\"toolId\\\":\\\"excel.list_sheets\\\",\\\"arguments\\\":{}}]}\",\"code\":\"\",\"readme\":\"markdown\",\"enabled\":true,\"requiresConfirmation\":true,\"mutatesDocument\":true,\"mutatesLocalState\":false,\"agentCanRun\":false,\"riskLevel\":2}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
+            yield return ControllerToolDefinition.Create("common.tools_delete", "Common", "Mutates settings: Delete a custom RNAssistant tool by id.", "{\"id\":\"excel.my_tool\"}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
         }
 
         public ToolResult ExecuteControllerTool(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)
@@ -260,39 +245,11 @@ namespace RNAssistant.Office.Tools
 
             if (executor == "pipeline")
             {
-                if (string.IsNullOrWhiteSpace(tool.PipelineJson))
+                PipelineDefinition definition;
+                string error;
+                if (!PipelineDefinitionParser.TryParse(tool.Id, tool.PipelineJson, out definition, out error))
                 {
-                    return ToolResult.Fail("Pipeline tool requires pipelineJson.");
-                }
-
-                try
-                {
-                    var root = JObject.Parse(tool.PipelineJson);
-                    var steps = root["steps"] as JArray;
-                    if (steps == null || steps.Count == 0)
-                    {
-                        return ToolResult.Fail("Pipeline tool requires at least one step.");
-                    }
-                    foreach (var stepToken in steps)
-                    {
-                        var step = stepToken as JObject;
-                        if (step == null)
-                        {
-                            return ToolResult.Fail("Each pipeline step must be a JSON object.");
-                        }
-                        if (string.IsNullOrWhiteSpace((string)step["toolId"]))
-                        {
-                            return ToolResult.Fail("Each pipeline step requires toolId.");
-                        }
-                        if (step["arguments"] != null && step["arguments"].Type != JTokenType.Null && !(step["arguments"] is JObject))
-                        {
-                            return ToolResult.Fail("Pipeline step arguments must be a JSON object.");
-                        }
-                    }
-                }
-                catch (JsonException ex)
-                {
-                    return ToolResult.Fail("Invalid pipelineJson: " + ex.Message);
+                    return ToolResult.Fail(error);
                 }
             }
 
@@ -337,23 +294,5 @@ namespace RNAssistant.Office.Tools
             return bool.TryParse(raw, out value) ? value : fallback;
         }
 
-        private static ToolDefinition ControllerTool(string id, string description, string schema, bool requiresConfirmation)
-        {
-            return new ToolDefinition
-            {
-                Id = id,
-                Host = "Common",
-                Name = id,
-                Description = description,
-                ArgumentSchemaJson = schema,
-                BuiltIn = true,
-                Enabled = true,
-                RequiresConfirmation = requiresConfirmation,
-                MutatesDocument = false,
-                MutatesLocalState = requiresConfirmation,
-                AgentCanRun = true,
-                RiskLevel = requiresConfirmation ? 1 : 0
-            };
-        }
     }
 }

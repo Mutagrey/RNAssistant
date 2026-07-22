@@ -56,11 +56,12 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - `src/RNAssistant.Office/Agent`: agent transcript/plan formatting and retry policy.
 - `src/RNAssistant.Office/Services`: host-neutral application services used by controller orchestration, such as chat/session lifecycle, tool/skill catalog composition, context normalization, and chat completion flow.
 - `src/RNAssistant.Office/Services/AgentRunService.cs`: controlled planner loop, route/slice/validate/execute flow, normalized observations, deterministic mutation verification, VBA context capture, and confirmation resume continuation.
+- `src/RNAssistant.Office/Services/AgentPlannerCompletionRunner.cs`: planner completion streaming, strict JSON parsing, and the single bounded format-repair attempt.
 - `src/RNAssistant.Office/Services/AgentPlannerRuntime.cs`: deterministic router, tool catalog slicer, planner prompt context, action validation, and observation normalization.
 - `src/RNAssistant.Office/Services/AgentRuntimeModels.cs`: route, observation, catalog slice, and run-state models.
 - `src/RNAssistant.Office/Services/AgentExecutionRuntime.cs`: effective tool catalog resolution and phase transitions.
 - `src/RNAssistant.Office/Services/AgentVerificationRuntime.cs`: deterministic verification selection and recipe expansion.
-- `src/RNAssistant.Office/Tools`: tool execution, pipelines, tool/skill CRUD tools, VBA patch/backup workflow.
+- `src/RNAssistant.Office/Tools`: tool execution, one shared pipeline parser, controller-tool definitions/dispatch, tool/skill CRUD tools, and VBA patch/backup workflow.
 - `src/RNAssistant.OfficeHosts`: shared Excel/Word/PowerPoint/Outlook COM adapters and desktop target descriptors.
 - `src/RNAssistant.Desktop`: standalone WinForms shell, explicit Office target picker, manual foreground attach, single-instance JSON pipe activation, and ROT-based adapter creation with hwnd validation.
 - `src/RNAssistant.NativeHostCli`: thin C++/CLI exported-DLL host for VBA; owns
@@ -82,7 +83,7 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - Text/PDF attachments are normalized locally. PDF text uses PdfPig; vision-capable models may also receive selected PDF pages rendered by the host-neutral Office service. Raw PDF files are not sent through the OpenAI-compatible chat payload.
 - Routing precedes Office context capture. General-answer routes expose no tools and do not read document content; document-dependent state is obtained through explicit read tools.
 - Tools are executable actions described by `ToolDefinition`; skills are markdown guidance described by `SkillDefinition`.
-- Tool safety belongs to `ToolDefinition` metadata: `MutatesDocument`, `MutatesLocalState`, `AgentCanRun`, `RequiresConfirmation`, risk/capability fields, and verification metadata. Pipeline effective safety recursively includes nested steps and fails closed for missing tools, malformed definitions, and cycles.
+- Tool safety belongs to `ToolDefinition` metadata: `MutatesDocument`, `MutatesLocalState`, `AgentCanRun`, `RequiresConfirmation`, risk/capability fields, and verification metadata. Pipeline effective safety recursively includes nested steps and fails closed for missing tools, malformed definitions, duplicate step ids, and cycles. Built-in/controller ids take precedence over custom definitions.
 - Agent runs are bounded by settings for max iterations and max tool steps; confirmed pending tools may resume the same run. Document mutation remains pending until a new verification observation succeeds.
 - A required-tool route accepts `final` only after its route phase reaches `final_phase`; inspection alone cannot complete a pending mutation. Format repair and required-tool correction have separate one-shot guards.
 - Tool slices record explicit exclusion reasons and reserve prompt capacity for both mutation and inspection tools. The per-request tool limit is configurable from 8 to 64.

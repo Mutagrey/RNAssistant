@@ -16,8 +16,7 @@ namespace RNAssistant.Office.Services
     {
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly OfficeToolExecutor _toolExecutor;
-        private readonly ChatCompletionService.CompletionDelegate _completeAsync;
-        private readonly AgentPlannerResponseParser _plannerParser;
+        private readonly AgentPlannerCompletionRunner _plannerCompletion;
         private readonly OfficeIntentRouter _intentRouter;
         private readonly ToolCatalogSlicer _toolCatalogSlicer;
         private readonly PlannerPromptComposer _plannerPromptComposer;
@@ -49,8 +48,7 @@ namespace RNAssistant.Office.Services
         {
             _adapter = adapter;
             _toolExecutor = toolExecutor;
-            _completeAsync = completeAsync;
-            _plannerParser = new AgentPlannerResponseParser();
+            _plannerCompletion = new AgentPlannerCompletionRunner(completeAsync);
             _intentRouter = new OfficeIntentRouter();
             _toolCatalogSlicer = new ToolCatalogSlicer();
             _plannerPromptComposer = new PlannerPromptComposer();
@@ -214,22 +212,20 @@ namespace RNAssistant.Office.Services
                     attachments);
                 contextUsage = ContextUsageEstimator.FromPrompt(messages, settings);
                 ReportProgress(progress, "thinking", BuildTaskProgressMessage(route, true));
-                var completion = await CompleteWithProgressAsync(settings, messages, progress, BuildTaskProgressMessage(route, true), cancellationToken).ConfigureAwait(false);
-                contextUsage = ContextUsageEstimator.FromPrompt(messages, settings, completion.PromptTokens);
+                var plannerAttempt = await _plannerCompletion.CompleteAsync(
+                    settings,
+                    messages,
+                    state,
+                    progress,
+                    BuildTaskProgressMessage(route, true),
+                    "Исправляю формат следующего действия...",
+                    PromptText(settings, p => p.RepairMalformedToolBlockPrompt),
+                    cancellationToken).ConfigureAwait(false);
+                contextUsage = plannerAttempt.ContextUsage;
                 cancellationToken.ThrowIfCancellationRequested();
-                var plannerText = completion.Content ?? string.Empty;
-
-                var parsed = _plannerParser.Parse(plannerText);
-                if (!parsed.Success && !state.FormatRepairUsed)
-                {
-                    state.FormatRepairUsed = true;
-                    ReportProgress(progress, "repairing", "Исправляю формат следующего действия...");
-                    var repairMessages = BuildStrictRepairMessages(messages, plannerText, parsed, settings);
-                    completion = await CompleteWithProgressAsync(settings, repairMessages, progress, "Исправляю формат следующего действия...", cancellationToken).ConfigureAwait(false);
-                    contextUsage = ContextUsageEstimator.FromPrompt(repairMessages, settings, completion.PromptTokens);
-                    plannerText = completion.Content ?? string.Empty;
-                    parsed = _plannerParser.Parse(plannerText);
-                }
+                var completion = plannerAttempt.Completion;
+                var plannerText = plannerAttempt.Text;
+                var parsed = plannerAttempt.ParseResult;
 
                 if (!parsed.Success)
                 {
@@ -247,27 +243,23 @@ namespace RNAssistant.Office.Services
                     {
                         state.ToolCorrectionUsed = true;
                         var forced = BuildPlannerCorrectionMessages("This task requires Office tool use before a final answer.", snapshot, route, slice, observations, documentContext, skills, settings, requestText, session, attachments);
-                        var correctionCompletion = await CompleteWithProgressAsync(settings, forced, progress, "Подбираю доступное действие для задачи...", cancellationToken).ConfigureAwait(false);
-                        contextUsage = ContextUsageEstimator.FromPrompt(forced, settings, correctionCompletion.PromptTokens);
-                        var correctionText = correctionCompletion.Content ?? string.Empty;
-                        var retryParsed = _plannerParser.Parse(correctionText);
-                        if (!retryParsed.Success && !state.FormatRepairUsed)
+                        var correctionAttempt = await _plannerCompletion.CompleteAsync(
+                            settings,
+                            forced,
+                            state,
+                            progress,
+                            "Подбираю доступное действие для задачи...",
+                            "Повторно исправляю формат действия...",
+                            PromptText(settings, p => p.RepairMalformedToolBlockPrompt),
+                            cancellationToken).ConfigureAwait(false);
+                        contextUsage = correctionAttempt.ContextUsage;
+                        if (!correctionAttempt.ParseResult.Success)
                         {
-                            state.FormatRepairUsed = true;
-                            ReportProgress(progress, "repairing", "Повторно исправляю формат действия...");
-                            var repairMessages = BuildStrictRepairMessages(forced, correctionText, retryParsed, settings);
-                            correctionCompletion = await CompleteWithProgressAsync(settings, repairMessages, progress, "Повторно исправляю формат действия...", cancellationToken).ConfigureAwait(false);
-                            contextUsage = ContextUsageEstimator.FromPrompt(repairMessages, settings, correctionCompletion.PromptTokens);
-                            correctionText = correctionCompletion.Content ?? string.Empty;
-                            retryParsed = _plannerParser.Parse(correctionText);
-                        }
-                        if (!retryParsed.Success)
-                        {
-                            assistantText = RecordPlannerFailure(session, correctionCompletion, correctionText, retryParsed, "Planner correction invalid");
+                            assistantText = RecordPlannerFailure(session, correctionAttempt.Completion, correctionAttempt.Text, correctionAttempt.ParseResult, "Planner correction invalid");
                             break;
                         }
-                        response = retryParsed.Response;
-                        completion = correctionCompletion;
+                        response = correctionAttempt.ParseResult.Response;
+                        completion = correctionAttempt.Completion;
                     }
 
                     if (route.RequiresTool &&
@@ -726,42 +718,6 @@ namespace RNAssistant.Office.Services
             return null;
         }
 
-        private List<ChatMessage> BuildStrictRepairMessages(
-            IEnumerable<ChatMessage> originalMessages,
-            string badText,
-            AgentPlannerParseResult parseResult,
-            AppSettings settings)
-        {
-            var messages = new List<ChatMessage>(originalMessages ?? new ChatMessage[0]);
-            if (!string.IsNullOrWhiteSpace(badText) && badText.Length <= 2000)
-            {
-                messages.Add(new ChatMessage
-                {
-                    Role = "assistant",
-                    Content = badText
-                });
-            }
-            else if (!string.IsNullOrWhiteSpace(badText))
-            {
-                messages.Add(new ChatMessage
-                {
-                    Role = "assistant",
-                    Content = "Malformed planner response omitted because it is too large for a safe repair prompt."
-                });
-            }
-            messages.Add(new ChatMessage
-            {
-                Role = "user",
-                Content = PromptText(settings, p => p.RepairMalformedToolBlockPrompt) +
-                    "\nValidation error: " +
-                    (parseResult == null ? string.Empty : parseResult.ErrorCode + " " + parseResult.ErrorMessage) +
-                    "\nRebuild the response from the original request; do not continue or copy the malformed response." +
-                    "\nUse the original request, route and available tools only as input. Do not copy them into the response. Return only kind, intent, message, steps and expectedOutcome." +
-                    "\nFor large HTML/CSS/JavaScript output, return one content-bearing workspace upsert step now and continue with other local files after its tool observation."
-            });
-            return messages;
-        }
-
         private List<ChatMessage> BuildPlannerCorrectionMessages(
             string correction,
             OfficeSnapshot snapshot,
@@ -1077,7 +1033,7 @@ namespace RNAssistant.Office.Services
             result.PendingId = pendingToolRegistrar(session, command, result);
         }
 
-        private static void RefreshCreatedTool(ICollection<ToolDefinition> tools, ToolCommand command, ToolResult result)
+        private void RefreshCreatedTool(ICollection<ToolDefinition> tools, ToolCommand command, ToolResult result)
         {
             if (tools == null || command == null || result == null || !result.Success ||
                 !string.Equals(command.ToolId, "common.tools_save", StringComparison.OrdinalIgnoreCase) ||
@@ -1093,12 +1049,7 @@ namespace RNAssistant.Office.Services
                 {
                     return;
                 }
-                var existing = tools.FirstOrDefault(tool => tool != null && string.Equals(tool.Id, created.Id, StringComparison.OrdinalIgnoreCase));
-                if (existing != null)
-                {
-                    tools.Remove(existing);
-                }
-                tools.Add(created);
+                _toolCatalogResolver.Refresh(tools, created);
             }
             catch (JsonException)
             {
@@ -1117,65 +1068,6 @@ namespace RNAssistant.Office.Services
                 ToolId = command == null ? string.Empty : command.ToolId,
                 ArgumentsJson = command == null ? null : JsonConvert.SerializeObject(command.Arguments, Formatting.Indented)
             };
-        }
-
-        private async Task<LlmCompletionResult> CompleteWithProgressAsync(
-            AppSettings settings,
-            IEnumerable<ChatMessage> messages,
-            Action<string, string, ChatActivity> progress,
-            string progressMessage,
-            CancellationToken cancellationToken)
-        {
-            var pendingReasoning = new StringBuilder();
-            var lastReportUtc = DateTime.UtcNow;
-            var reasoningSeen = false;
-            var completionReported = false;
-            Action<bool> flush = completed =>
-            {
-                if (completed && completionReported ||
-                    pendingReasoning.Length == 0 && (!completed || !reasoningSeen))
-                {
-                    return;
-                }
-                ReportProgress(progress, "thinking", completed ? "Анализ завершен." : progressMessage, new ChatActivity
-                {
-                    Kind = "reasoning",
-                    Title = (completed ? "Анализ завершен" : progressMessage.TrimEnd('.')),
-                    Subtitle = "Ход рассуждения",
-                    Status = completed ? "completed" : "running",
-                    ResultMessage = pendingReasoning.ToString()
-                });
-                pendingReasoning.Clear();
-                lastReportUtc = DateTime.UtcNow;
-                if (completed)
-                {
-                    completionReported = true;
-                }
-            };
-            var completion = await _completeAsync(
-                settings,
-                messages,
-                update =>
-                {
-                    if (update == null)
-                    {
-                        return;
-                    }
-                    if (!string.IsNullOrEmpty(update.ReasoningDelta))
-                    {
-                        reasoningSeen = true;
-                        pendingReasoning.Append(update.ReasoningDelta);
-                    }
-                    if (update.Completed ||
-                        pendingReasoning.Length >= 256 ||
-                        pendingReasoning.Length > 0 && DateTime.UtcNow - lastReportUtc >= TimeSpan.FromMilliseconds(100))
-                    {
-                        flush(update.Completed);
-                    }
-                },
-                cancellationToken).ConfigureAwait(false);
-            flush(true);
-            return completion ?? new LlmCompletionResult();
         }
 
         private static void ReportProgress(Action<string, string, ChatActivity> progress, string phase, string message)

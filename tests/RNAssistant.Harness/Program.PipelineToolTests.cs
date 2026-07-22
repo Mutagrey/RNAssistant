@@ -121,6 +121,30 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void PipelineRejectsDuplicateStepIds()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var pipeline = CustomTool("Excel", "excel.duplicate_steps");
+                pipeline.PipelineJson = "{\"steps\":[" +
+                    "{\"id\":\"read\",\"toolId\":\"excel.list_sheets\"}," +
+                    "{\"id\":\"read\",\"toolId\":\"excel.list_sheets\"}]}";
+
+                var validation = executor.ValidateToolDefinition(pipeline);
+                var execution = executor.Execute(
+                    new ToolCommand { ToolId = pipeline.Id },
+                    new List<ToolDefinition> { pipeline },
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false);
+
+                AssertTrue(!validation.Success, "duplicate ids rejected during validation");
+                AssertTrue(!execution.Success, "duplicate ids rejected during execution");
+                AssertContains(execution.Message, "step id must be unique", "duplicate id message");
+                AssertEqual(0, adapter.Executed.Count, "duplicate pipeline adapter count");
+            });
+        }
+
         private static void CustomPipelineNeedsConfirmation()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

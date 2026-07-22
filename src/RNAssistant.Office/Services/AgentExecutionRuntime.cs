@@ -79,9 +79,41 @@ namespace RNAssistant.Office.Services
             }
 
             var all = result.Values.ToList();
+            ApplySafety(all);
+            return all;
+        }
+
+        public void Refresh(ICollection<ToolDefinition> tools, ToolDefinition tool)
+        {
+            if (tools == null || tool == null || string.IsNullOrWhiteSpace(tool.Id))
+            {
+                return;
+            }
+
+            var existing = Find(tools, tool.Id);
+            if (existing != null && existing.BuiltIn)
+            {
+                return;
+            }
+            if (existing != null)
+            {
+                tools.Remove(existing);
+            }
+            tools.Add(Clone(tool));
+            ApplySafety(tools);
+        }
+
+        private static void ApplySafety(IEnumerable<ToolDefinition> tools)
+        {
+            var all = (tools ?? new ToolDefinition[0]).Where(tool => tool != null).ToList();
+            var profiles = ToolSafetyPolicy.ResolveAll(all);
             foreach (var tool in all)
             {
-                var profile = ToolSafetyPolicy.Resolve(tool, all);
+                ToolSafetyProfile profile;
+                if (!profiles.TryGetValue(tool.Id ?? string.Empty, out profile))
+                {
+                    continue;
+                }
                 if (!profile.Valid)
                 {
                     tool.CapabilityStatus = "unavailable";
@@ -94,7 +126,6 @@ namespace RNAssistant.Office.Services
                 tool.RiskLevel = profile.RiskLevel;
                 tool.AgentCanRun = profile.AgentCanRun;
             }
-            return all;
         }
 
         public static ToolDefinition Find(IEnumerable<ToolDefinition> tools, string id)
@@ -106,6 +137,11 @@ namespace RNAssistant.Office.Services
         private static void Add(IDictionary<string, ToolDefinition> tools, ToolDefinition tool)
         {
             if (tool == null || string.IsNullOrWhiteSpace(tool.Id))
+            {
+                return;
+            }
+            ToolDefinition existing;
+            if (tools.TryGetValue(tool.Id, out existing) && existing.BuiltIn && !tool.BuiltIn)
             {
                 return;
             }

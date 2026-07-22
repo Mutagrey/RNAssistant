@@ -37,9 +37,9 @@ namespace RNAssistant.Office.Services
                 string.Equals(s.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(s.Host, "Common", StringComparison.OrdinalIgnoreCase)))
             {
-                if (!string.IsNullOrWhiteSpace(tool.Id))
+                if (!string.IsNullOrWhiteSpace(tool.Id) && !result.ContainsKey(tool.Id))
                 {
-                    result[tool.Id] = tool;
+                    result.Add(tool.Id, tool);
                 }
             }
 

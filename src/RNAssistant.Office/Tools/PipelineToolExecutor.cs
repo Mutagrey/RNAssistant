@@ -10,13 +10,11 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed class PipelineToolExecutor
     {
-        internal delegate ToolResult CommandRunner(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun, CancellationToken cancellationToken);
+        internal delegate ToolResult CommandRunner(ToolCommand command, int depth, bool dryRun, bool manualRun, CancellationToken cancellationToken);
 
         public ToolResult Execute(
             ToolDefinition tool,
             ToolCommand command,
-            IReadOnlyList<ToolDefinition> skills,
-            AppSettings settings,
             int depth,
             bool dryRun,
             bool manualRun,
@@ -24,67 +22,31 @@ namespace RNAssistant.Office.Tools
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (string.IsNullOrWhiteSpace(tool.PipelineJson))
+            PipelineDefinition pipeline;
+            string parseError;
+            if (!PipelineDefinitionParser.TryParse(tool.Id, tool.PipelineJson, out pipeline, out parseError))
             {
-                return ToolResult.Fail("Tool has no pipeline: " + tool.Id);
-            }
-
-            JObject pipeline;
-            try
-            {
-                pipeline = JObject.Parse(tool.PipelineJson);
-            }
-            catch (JsonException ex)
-            {
-                return ToolResult.Fail("Invalid pipeline JSON for " + tool.Id + ": " + ex.Message);
-            }
-
-            var steps = pipeline["steps"] as JArray;
-            if (steps == null || steps.Count == 0)
-            {
-                return ToolResult.Fail("Pipeline has no steps: " + tool.Id);
+                return ToolResult.Fail(parseError, null, "invalid_pipeline", false);
             }
 
             var stepResults = new Dictionary<string, ToolResult>(StringComparer.OrdinalIgnoreCase);
             var output = new List<object>();
-            foreach (var stepToken in steps)
+            foreach (var step in pipeline.Steps)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var step = stepToken as JObject;
-                if (step == null)
+                var nested = new ToolCommand { ToolId = step.ToolId };
+                foreach (var property in step.Arguments.Properties())
                 {
-                    continue;
+                    nested.Arguments[property.Name] = ResolvePipelineValue(property.Value, command.Arguments, stepResults);
                 }
 
-                var toolId = (string)step["toolId"];
-                if (string.IsNullOrWhiteSpace(toolId))
-                {
-                    return ToolResult.Fail("Pipeline step has no toolId.");
-                }
-
-                var stepId = (string)step["id"];
-                if (string.IsNullOrWhiteSpace(stepId))
-                {
-                    stepId = toolId;
-                }
-
-                var nested = new ToolCommand { ToolId = toolId };
-                var args = step["arguments"] as JObject;
-                if (args != null)
-                {
-                    foreach (var property in args.Properties())
-                    {
-                        nested.Arguments[property.Name] = ResolvePipelineValue(property.Value, command.Arguments, stepResults);
-                    }
-                }
-
-                var result = runCommand(nested, skills, settings, depth + 1, dryRun, manualRun, cancellationToken) ?? ToolResult.Fail("Pipeline step returned no result.");
-                stepResults[stepId] = result;
-                output.Add(new { id = stepId, toolId = toolId, success = result.Success, status = result.Status, errorCode = result.ErrorCode, retryable = result.Retryable, message = result.Message, dataJson = result.DataJson });
+                var result = runCommand(nested, depth + 1, dryRun, manualRun, cancellationToken) ?? ToolResult.Fail("Pipeline step returned no result.");
+                stepResults[step.Id] = result;
+                output.Add(new { id = step.Id, toolId = step.ToolId, success = result.Success, status = result.Status, errorCode = result.ErrorCode, retryable = result.Retryable, message = result.Message, dataJson = result.DataJson });
 
                 if (!result.Success)
                 {
-                    var message = "Pipeline step failed: " + stepId + ". " + result.Message;
+                    var message = "Pipeline step failed: " + step.Id + ". " + result.Message;
                     var dataJson = JsonConvert.SerializeObject(new { toolId = tool.Id, dryRun = dryRun, steps = output });
                     return output.Count > 1
                         ? ToolResult.PartialFailure(message, dataJson, "pipeline_partial_failure")

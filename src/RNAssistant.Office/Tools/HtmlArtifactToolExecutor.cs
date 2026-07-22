@@ -22,95 +22,12 @@ namespace RNAssistant.Office.Tools
 
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
-            yield return new ToolDefinition
-            {
-                Id = ReadWorkspaceToolId,
-                Host = "Common",
-                Name = "html_workspace_read",
-                Description = "Read-only: Read the active chat HTML workspace files and JSON data sources.",
-                ArgumentSchemaJson = "{}",
-                BuiltIn = true,
-                Enabled = true,
-                MutatesDocument = false,
-                AgentCanRun = true
-            };
-            yield return new ToolDefinition
-            {
-                Id = UpsertFileToolId,
-                Host = "Common",
-                Name = "html_workspace_upsert_file",
-                Description = "Workspace: Create or update a text file in the active chat HTML workspace. Use kind html, css, or script for index.html, styles.css, and app.js files.",
-                ArgumentSchemaJson = "{\"path\":\"index.html\",\"kind\":\"html|css|script\",\"content\":\"<html>...</html>\",\"setActive\":true}",
-                BuiltIn = true,
-                Enabled = true,
-                MutatesDocument = false,
-                MutatesLocalState = true,
-                AgentCanRun = true
-            };
-            yield return new ToolDefinition
-            {
-                Id = UpsertDataToolId,
-                Host = "Common",
-                Name = "html_workspace_upsert_data",
-                Description = "Workspace: Create or update a JSON data source for the active chat HTML workspace. Preview exposes it as window.RNAssistantData[name].",
-                ArgumentSchemaJson = "{\"name\":\"sales\",\"json\":\"{\\\"rows\\\":[]}\"}",
-                BuiltIn = true,
-                Enabled = true,
-                MutatesDocument = false,
-                MutatesLocalState = true,
-                AgentCanRun = true
-            };
-            yield return new ToolDefinition
-            {
-                Id = DeleteFileToolId,
-                Host = "Common",
-                Name = "html_workspace_delete_file",
-                Description = "Workspace: Delete one file from the active chat HTML workspace. The deletion can be reverted with workspace undo.",
-                ArgumentSchemaJson = "{\"path\":\"app.js\"}",
-                BuiltIn = true,
-                Enabled = true,
-                MutatesDocument = false,
-                MutatesLocalState = true,
-                AgentCanRun = true,
-                RiskLevel = 1
-            };
-            yield return new ToolDefinition
-            {
-                Id = DeleteDataToolId,
-                Host = "Common",
-                Name = "html_workspace_delete_data",
-                Description = "Workspace: Delete one JSON data source from the active chat HTML workspace. The deletion can be reverted with workspace undo.",
-                ArgumentSchemaJson = "{\"name\":\"sales\"}",
-                BuiltIn = true,
-                Enabled = true,
-                MutatesDocument = false,
-                MutatesLocalState = true,
-                AgentCanRun = true,
-                RiskLevel = 1
-            };
-            yield return new ToolDefinition
-            {
-                Id = SetActiveToolId,
-                Host = "Common",
-                Name = "html_workspace_set_active",
-                Description = "Workspace: Select the active HTML file displayed on the HTML tab for the active chat.",
-                ArgumentSchemaJson = "{\"path\":\"index.html\"}",
-                BuiltIn = true,
-                Enabled = true,
-                MutatesDocument = false,
-                MutatesLocalState = true,
-                AgentCanRun = true
-            };
-        }
-
-        public bool IsControllerTool(string toolId)
-        {
-            return string.Equals(toolId, ReadWorkspaceToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, UpsertFileToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, UpsertDataToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, DeleteFileToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, DeleteDataToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, SetActiveToolId, StringComparison.OrdinalIgnoreCase);
+            yield return ControllerToolDefinition.Create(ReadWorkspaceToolId, "Common", "Read-only: Read the active chat HTML workspace files and JSON data sources.", "{}", name: "html_workspace_read");
+            yield return ControllerToolDefinition.Create(UpsertFileToolId, "Common", "Workspace: Create or update a text file in the active chat HTML workspace. Use kind html, css, or script for index.html, styles.css, and app.js files.", "{\"path\":\"index.html\",\"kind\":\"html|css|script\",\"content\":\"<html>...</html>\",\"setActive\":true}", mutatesLocalState: true, name: "html_workspace_upsert_file");
+            yield return ControllerToolDefinition.Create(UpsertDataToolId, "Common", "Workspace: Create or update a JSON data source for the active chat HTML workspace. Preview exposes it as window.RNAssistantData[name].", "{\"name\":\"sales\",\"json\":\"{\\\"rows\\\":[]}\"}", mutatesLocalState: true, name: "html_workspace_upsert_data");
+            yield return ControllerToolDefinition.Create(DeleteFileToolId, "Common", "Workspace: Delete one file from the active chat HTML workspace. The deletion can be reverted with workspace undo.", "{\"path\":\"app.js\"}", mutatesLocalState: true, riskLevel: 1, name: "html_workspace_delete_file");
+            yield return ControllerToolDefinition.Create(DeleteDataToolId, "Common", "Workspace: Delete one JSON data source from the active chat HTML workspace. The deletion can be reverted with workspace undo.", "{\"name\":\"sales\"}", mutatesLocalState: true, riskLevel: 1, name: "html_workspace_delete_data");
+            yield return ControllerToolDefinition.Create(SetActiveToolId, "Common", "Workspace: Select the active HTML file displayed on the HTML tab for the active chat.", "{\"path\":\"index.html\"}", mutatesLocalState: true, name: "html_workspace_set_active");
         }
 
         public ToolResult ExecuteControllerTool(ToolCommand command, ChatSession session, bool dryRun)
@@ -129,7 +46,6 @@ namespace RNAssistant.Office.Tools
 
                 if (string.Equals(command.ToolId, ReadWorkspaceToolId, StringComparison.OrdinalIgnoreCase))
                 {
-                    NormalizeWorkspace(session.HtmlWorkspace);
                     return ToolResult.Ok("HTML workspace read.", WorkspaceDataJson(session.HtmlWorkspace));
                 }
 
@@ -458,11 +374,14 @@ namespace RNAssistant.Office.Tools
 
         private static string WorkspaceDataJson(HtmlWorkspace workspace)
         {
+            var copy = workspace == null
+                ? new HtmlWorkspace()
+                : JsonConvert.DeserializeObject<HtmlWorkspace>(JsonConvert.SerializeObject(workspace));
             return JsonConvert.SerializeObject(new
             {
                 type = "rnassistant.htmlWorkspace",
                 version = 1,
-                workspace = NormalizeWorkspace(workspace)
+                workspace = NormalizeWorkspace(copy)
             });
         }
 

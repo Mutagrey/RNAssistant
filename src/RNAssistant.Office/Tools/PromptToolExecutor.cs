@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 
@@ -24,18 +23,17 @@ namespace RNAssistant.Office.Tools
                 yield break;
             }
 
-            yield return ControllerTool("common.prompts_read", "Read-only: Read RNAssistant editable chat and agent prompt templates from Settings.", "{}", false);
-            yield return ControllerTool("common.prompts_read_defaults", "Read-only: Read current RNAssistant prompts and built-in default prompt templates.", "{}", false);
-            yield return ControllerTool(
+            yield return ControllerToolDefinition.Create("common.prompts_read", "Common", "Read-only: Read RNAssistant editable chat and agent prompt templates from Settings.", "{}", name: "prompts_read");
+            yield return ControllerToolDefinition.Create("common.prompts_read_defaults", "Common", "Read-only: Read current RNAssistant prompts and built-in default prompt templates.", "{}", name: "prompts_read_defaults");
+            yield return ControllerToolDefinition.Create(
                 "common.prompts_save",
+                "Common",
                 "Mutates settings: Update RNAssistant agent prompt templates after the user asks to edit or improve RNAssistant prompts.",
                 "{\"systemPrompt\":\"\",\"chatSystemPrompt\":\"\",\"systemPromptRole\":\"user|system\",\"toolProtocolPrompt\":\"\",\"toolRoutingPrompt\":\"\",\"forceToolUsePrompt\":\"\",\"repairMalformedToolBlockPrompt\":\"\",\"afterToolResultsPrompt\":\"\",\"verifyMutationPrompt\":\"\",\"confirmedToolContinuationPrompt\":\"\"}",
-                true);
-        }
-
-        public bool IsControllerTool(string toolId)
-        {
-            return GetControllerTools().Any(tool => string.Equals(tool.Id, toolId, StringComparison.OrdinalIgnoreCase));
+                mutatesLocalState: true,
+                requiresConfirmation: true,
+                riskLevel: 1,
+                name: "prompts_save");
         }
 
         public ToolResult ExecuteControllerTool(ToolCommand command, AppSettings runtimeSettings, bool dryRun)
@@ -132,23 +130,5 @@ namespace RNAssistant.Office.Tools
                 : "user";
         }
 
-        private static ToolDefinition ControllerTool(string id, string description, string schema, bool requiresConfirmation)
-        {
-            return new ToolDefinition
-            {
-                Id = id,
-                Host = "Common",
-                Name = id.Substring(id.IndexOf('.') + 1),
-                Description = description,
-                ArgumentSchemaJson = schema,
-                BuiltIn = true,
-                Enabled = true,
-                RequiresConfirmation = requiresConfirmation,
-                MutatesDocument = false,
-                MutatesLocalState = requiresConfirmation,
-                AgentCanRun = true,
-                RiskLevel = requiresConfirmation ? 1 : 0
-            };
-        }
     }
 }

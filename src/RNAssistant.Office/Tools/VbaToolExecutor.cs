@@ -31,30 +31,15 @@ namespace RNAssistant.Office.Tools
                 yield break;
             }
 
-            yield return ControllerTool(ToolId("vba_list_backups"), "Read-only: List RNAssistant VBA rollback backups for the current document.", "{}", false);
-            yield return ControllerTool(ToolId("vba_restore_backup"), "Mutates document: Restore a VBA module from a backupId or from the latest backup for moduleName.", "{\"backupId\":\"\",\"moduleName\":\"Module1\"}", true);
-            yield return ControllerTool(ToolId("vba_replace_text"), "Mutates document: Replace an exact text fragment inside one VBA module and create a rollback backup.", "{\"moduleName\":\"Module1\",\"find\":\"old code\",\"replace\":\"new code\"}", true);
-            yield return ControllerTool(ToolId("vba_apply_patch"), "Mutates document: Apply structured VBA code patches and create a rollback backup.", "{\"moduleName\":\"Module1\",\"patch\":[{\"op\":\"replace\",\"find\":\"old\",\"text\":\"new\"},{\"op\":\"replaceLines\",\"startLine\":10,\"deleteCount\":2,\"text\":\"new code\"}]}", true);
+            yield return ControllerToolDefinition.Create(ToolId("vba_list_backups"), _adapter.HostName, "Read-only: List RNAssistant VBA rollback backups for the current document.", "{}");
+            yield return ControllerToolDefinition.Create(ToolId("vba_restore_backup"), _adapter.HostName, "Mutates document: Restore a VBA module from a backupId or from the latest backup for moduleName.", "{\"backupId\":\"\",\"moduleName\":\"Module1\"}", mutatesDocument: true, agentCanRun: false, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_replace_text"), _adapter.HostName, "Mutates document: Replace an exact text fragment inside one VBA module and create a rollback backup.", "{\"moduleName\":\"Module1\",\"find\":\"old code\",\"replace\":\"new code\"}", mutatesDocument: true, agentCanRun: false, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), _adapter.HostName, "Mutates document: Apply structured VBA code patches and create a rollback backup.", "{\"moduleName\":\"Module1\",\"patch\":[{\"op\":\"replace\",\"find\":\"old\",\"text\":\"new\"},{\"op\":\"replaceLines\",\"startLine\":10,\"deleteCount\":2,\"text\":\"new code\"}]}", mutatesDocument: true, agentCanRun: false, riskLevel: 3);
         }
 
         public string ToolId(string suffix)
         {
             return HostToolPrefix() + "." + suffix;
-        }
-
-        public bool IsControllerTool(string toolId)
-        {
-            return GetControllerTool(toolId) != null;
-        }
-
-        public ToolDefinition GetControllerTool(string toolId)
-        {
-            if (string.IsNullOrWhiteSpace(toolId))
-            {
-                return null;
-            }
-
-            return GetControllerTools().FirstOrDefault(tool => string.Equals(tool.Id, toolId, StringComparison.OrdinalIgnoreCase));
         }
 
         public ToolResult ExecuteControllerTool(ToolCommand command, bool dryRun, CancellationToken cancellationToken)
@@ -572,23 +557,6 @@ namespace RNAssistant.Office.Tools
 
             updated = string.Join(newline, lines.ToArray());
             return ToolResult.Ok("Replaced lines at " + startLine + " deleting " + deleteCount + ".");
-        }
-
-        private ToolDefinition ControllerTool(string id, string description, string schema, bool mutatesDocument)
-        {
-            return new ToolDefinition
-            {
-                Id = id,
-                Host = _adapter.HostName,
-                Name = id,
-                Description = description,
-                ArgumentSchemaJson = schema,
-                BuiltIn = true,
-                Enabled = true,
-                MutatesDocument = mutatesDocument,
-                AgentCanRun = !mutatesDocument,
-                RiskLevel = mutatesDocument ? 3 : 0
-            };
         }
 
         private static string ToolModuleName(string toolId)

@@ -988,7 +988,7 @@ namespace RNAssistant.Office.Services
                 var known = AgentToolCatalogResolver.Find(allTools, step.ToolId);
                 if (known == null)
                 {
-                    var suggestions = OfficeToolExecutor.SuggestToolIds(step.ToolId, allTools, 3);
+                    var suggestions = ToolIdSuggester.Suggest(step.ToolId, allTools, 3);
                     return PlannerValidationResult.Fail(
                         "Unknown tool id: " + step.ToolId + ". Use only exact ids from AVAILABLE_TOOLS." +
                         (suggestions.Count == 0 ? string.Empty : " Did you mean: " + string.Join(", ", suggestions.ToArray()) + "?"));

@@ -1,8 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Tools
@@ -69,11 +66,23 @@ namespace RNAssistant.Office.Tools
 
         public static ToolSafetyProfile Resolve(ToolDefinition tool, IEnumerable<ToolDefinition> knownTools)
         {
-            return Resolve(
-                tool,
-                (knownTools ?? new ToolDefinition[0]).Where(t => t != null).ToList(),
-                new HashSet<string>(StringComparer.OrdinalIgnoreCase),
-                0);
+            var catalog = BuildCatalog(knownTools);
+            if (tool != null && !string.IsNullOrWhiteSpace(tool.Id))
+            {
+                catalog[tool.Id] = tool;
+            }
+            return Resolve(tool, catalog, new Dictionary<string, ToolSafetyProfile>(StringComparer.OrdinalIgnoreCase), new HashSet<string>(StringComparer.OrdinalIgnoreCase), 0);
+        }
+
+        public static IDictionary<string, ToolSafetyProfile> ResolveAll(IEnumerable<ToolDefinition> tools)
+        {
+            var catalog = BuildCatalog(tools);
+            var profiles = new Dictionary<string, ToolSafetyProfile>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in catalog)
+            {
+                Resolve(pair.Value, catalog, profiles, new HashSet<string>(StringComparer.OrdinalIgnoreCase), 0);
+            }
+            return profiles;
         }
 
         private static bool CanAgentRunMutation(ToolDefinition tool, ToolSafetyProfile profile)
@@ -86,7 +95,8 @@ namespace RNAssistant.Office.Tools
 
         private static ToolSafetyProfile Resolve(
             ToolDefinition tool,
-            IReadOnlyList<ToolDefinition> knownTools,
+            IDictionary<string, ToolDefinition> knownTools,
+            IDictionary<string, ToolSafetyProfile> cache,
             ISet<string> path,
             int depth)
         {
@@ -96,6 +106,11 @@ namespace RNAssistant.Office.Tools
             }
 
             var id = tool.Id ?? string.Empty;
+            ToolSafetyProfile cached;
+            if (cache.TryGetValue(id, out cached))
+            {
+                return cached;
+            }
             if (depth > 8)
             {
                 return Invalid("Pipeline nesting limit exceeded: " + id);
@@ -127,51 +142,28 @@ namespace RNAssistant.Office.Tools
 
             if (!string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
             {
-                path.Remove(id);
-                return profile;
+                return Complete(id, profile, cache, path);
             }
 
-            JObject pipeline;
-            try
+            PipelineDefinition pipeline;
+            string parseError;
+            if (!PipelineDefinitionParser.TryParse(id, tool.PipelineJson, out pipeline, out parseError))
             {
-                pipeline = JObject.Parse(tool.PipelineJson ?? string.Empty);
-            }
-            catch (JsonException ex)
-            {
-                path.Remove(id);
-                return Invalid("Invalid pipeline JSON for " + id + ": " + ex.Message);
+                return Complete(id, Invalid(parseError), cache, path);
             }
 
-            var steps = pipeline["steps"] as JArray;
-            if (steps == null || steps.Count == 0)
+            foreach (var step in pipeline.Steps)
             {
-                path.Remove(id);
-                return Invalid("Pipeline has no steps: " + id);
-            }
-
-            foreach (var step in steps)
-            {
-                var stepObject = step as JObject;
-                var nestedId = stepObject == null ? null : (string)stepObject["toolId"];
-                if (string.IsNullOrWhiteSpace(nestedId))
+                ToolDefinition nested;
+                if (!knownTools.TryGetValue(step.ToolId, out nested))
                 {
-                    path.Remove(id);
-                    return Invalid("Pipeline step has no toolId: " + id);
+                    return Complete(id, Invalid("Pipeline references unknown tool: " + step.ToolId), cache, path);
                 }
 
-                var nested = knownTools.FirstOrDefault(t =>
-                    string.Equals(t.Id, nestedId, StringComparison.OrdinalIgnoreCase));
-                if (nested == null)
-                {
-                    path.Remove(id);
-                    return Invalid("Pipeline references unknown tool: " + nestedId);
-                }
-
-                var nestedProfile = Resolve(nested, knownTools, path, depth + 1);
+                var nestedProfile = Resolve(nested, knownTools, cache, path, depth + 1);
                 if (!nestedProfile.Valid)
                 {
-                    path.Remove(id);
-                    return nestedProfile;
+                    return Complete(id, nestedProfile, cache, path);
                 }
 
                 profile.MutatesDocument |= nestedProfile.MutatesDocument;
@@ -181,7 +173,26 @@ namespace RNAssistant.Office.Tools
                 profile.RiskLevel = Math.Max(profile.RiskLevel, nestedProfile.RiskLevel);
             }
 
+            return Complete(id, profile, cache, path);
+        }
+
+        private static Dictionary<string, ToolDefinition> BuildCatalog(IEnumerable<ToolDefinition> tools)
+        {
+            var catalog = new Dictionary<string, ToolDefinition>(StringComparer.OrdinalIgnoreCase);
+            foreach (var tool in tools ?? new ToolDefinition[0])
+            {
+                if (tool != null && !string.IsNullOrWhiteSpace(tool.Id) && !catalog.ContainsKey(tool.Id))
+                {
+                    catalog.Add(tool.Id, tool);
+                }
+            }
+            return catalog;
+        }
+
+        private static ToolSafetyProfile Complete(string id, ToolSafetyProfile profile, IDictionary<string, ToolSafetyProfile> cache, ISet<string> path)
+        {
             path.Remove(id);
+            cache[id] = profile;
             return profile;
         }
 

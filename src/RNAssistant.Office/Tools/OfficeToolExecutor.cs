@@ -11,12 +11,15 @@ namespace RNAssistant.Office.Tools
     public sealed class OfficeToolExecutor
     {
         private readonly IOfficeApplicationAdapter _adapter;
+        private readonly IReadOnlyList<ToolDefinition> _adapterTools;
         private readonly PipelineToolExecutor _pipelineExecutor;
         private readonly VbaToolExecutor _vbaExecutor;
         private readonly SkillToolExecutor _skillExecutor;
         private readonly ToolAuthoringExecutor _toolAuthoringExecutor;
         private readonly PromptToolExecutor _promptToolExecutor;
         private readonly HtmlArtifactToolExecutor _htmlArtifactExecutor;
+        private readonly IReadOnlyList<ToolDefinition> _controllerTools;
+        private readonly IDictionary<string, ControllerExecutorKind> _controllerExecutors;
 
         public OfficeToolExecutor(
             IOfficeApplicationAdapter adapter,
@@ -27,21 +30,31 @@ namespace RNAssistant.Office.Tools
             Action<AppSettings> saveSettings = null)
         {
             _adapter = adapter;
+            _adapterTools = (_adapter.GetBuiltInTools() ?? new ToolDefinition[0]).ToArray();
             _pipelineExecutor = new PipelineToolExecutor();
             _vbaExecutor = new VbaToolExecutor(adapter, vbaBackupStore);
             _skillExecutor = new SkillToolExecutor(adapter, skillStore);
             _toolAuthoringExecutor = new ToolAuthoringExecutor(adapter, toolStore);
             _promptToolExecutor = new PromptToolExecutor(loadSettings, saveSettings);
             _htmlArtifactExecutor = new HtmlArtifactToolExecutor();
+            var controllerTools = new List<ToolDefinition>();
+            _controllerExecutors = new Dictionary<string, ControllerExecutorKind>(StringComparer.OrdinalIgnoreCase);
+            RegisterControllerTools(controllerTools, _vbaExecutor.GetControllerTools(), ControllerExecutorKind.Vba);
+            RegisterControllerTools(controllerTools, _skillExecutor.GetControllerTools(), ControllerExecutorKind.Skill);
+            RegisterControllerTools(controllerTools, _toolAuthoringExecutor.GetControllerTools(), ControllerExecutorKind.ToolAuthoring);
+            RegisterControllerTools(controllerTools, _promptToolExecutor.GetControllerTools(), ControllerExecutorKind.Prompt);
+            RegisterControllerTools(controllerTools, _htmlArtifactExecutor.GetControllerTools(), ControllerExecutorKind.HtmlArtifact);
+            _controllerTools = controllerTools.ToArray();
+            var duplicate = _adapterTools.FirstOrDefault(tool => tool != null && _controllerExecutors.ContainsKey(tool.Id ?? string.Empty));
+            if (duplicate != null)
+            {
+                throw new InvalidOperationException("Duplicate built-in tool id: " + duplicate.Id);
+            }
         }
 
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
-            return _vbaExecutor.GetControllerTools()
-                .Concat(_skillExecutor.GetControllerTools())
-                .Concat(_toolAuthoringExecutor.GetControllerTools())
-                .Concat(_promptToolExecutor.GetControllerTools())
-                .Concat(_htmlArtifactExecutor.GetControllerTools());
+            return _controllerTools;
         }
 
         public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, bool dryRun, bool manualRun, CancellationToken cancellationToken = default(CancellationToken))
@@ -51,7 +64,8 @@ namespace RNAssistant.Office.Tools
 
         public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, bool dryRun, bool manualRun, ChatSession session, CancellationToken cancellationToken = default(CancellationToken))
         {
-            return ExecuteCommandSafely(command, skills, settings, 0, dryRun, manualRun, session, cancellationToken);
+            var context = new ToolExecutionContext(KnownTools(skills), settings ?? new AppSettings(), session);
+            return ExecuteCommandSafely(command, context, 0, dryRun, manualRun, cancellationToken);
         }
 
         public string VbaToolId(string suffix)
@@ -61,14 +75,17 @@ namespace RNAssistant.Office.Tools
 
         public ToolResult ValidateToolDefinition(ToolDefinition tool)
         {
-            return ToolAuthoringExecutor.ValidateToolDefinition(tool);
+            var validation = ToolAuthoringExecutor.ValidateToolDefinition(tool);
+            return validation.Success && IsProtectedToolId(tool == null ? null : tool.Id)
+                ? ReservedToolId(tool.Id)
+                : validation;
         }
 
-        private ToolResult ExecuteCommandSafely(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun, ChatSession session, CancellationToken cancellationToken)
+        private ToolResult ExecuteCommandSafely(ToolCommand command, ToolExecutionContext context, int depth, bool dryRun, bool manualRun, CancellationToken cancellationToken)
         {
             try
             {
-                return ExecuteCommand(command, skills, settings, depth, dryRun, manualRun, session, cancellationToken);
+                return ExecuteCommand(command, context, depth, dryRun, manualRun, cancellationToken);
             }
             catch (OperationCanceledException)
             {
@@ -81,10 +98,9 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private ToolResult ExecuteCommand(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, int depth, bool dryRun, bool manualRun, ChatSession session, CancellationToken cancellationToken)
+        private ToolResult ExecuteCommand(ToolCommand command, ToolExecutionContext context, int depth, bool dryRun, bool manualRun, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            settings = settings ?? new AppSettings();
             if (command == null || string.IsNullOrWhiteSpace(command.ToolId))
             {
                 return ToolResult.Fail("Tool command is empty.");
@@ -95,25 +111,30 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Fail("Pipeline nesting limit exceeded.");
             }
 
-            var knownTools = KnownTools(skills).ToList();
-            var tool = FindTool(knownTools, command.ToolId);
+            var tool = context.Find(command.ToolId);
             if (tool == null)
             {
-                return UnknownTool(command.ToolId, knownTools);
+                return UnknownTool(command.ToolId, context.Tools);
             }
             if (!tool.Enabled)
             {
-                return DisabledTool(command.ToolId, knownTools);
+                return DisabledTool(command.ToolId, context.Tools);
             }
 
             var customTool = tool != null && !tool.BuiltIn ? tool : null;
-            var safety = ToolSafetyPolicy.Resolve(tool, knownTools);
+            var safety = context.Safety(tool);
             if (!safety.Valid)
             {
                 return ToolResult.Fail(safety.Error);
             }
 
-            if (ToolSafetyPolicy.RequiresConfirmation(tool, safety, settings, dryRun, manualRun))
+            var reservedIdResult = ValidateAuthoredToolId(command, context);
+            if (reservedIdResult != null)
+            {
+                return reservedIdResult;
+            }
+
+            if (ToolSafetyPolicy.RequiresConfirmation(tool, safety, context.Settings, dryRun, manualRun))
             {
                 return ToolResult.WaitingConfirmation("Tool requires confirmation before execution: " + command.ToolId);
             }
@@ -123,20 +144,18 @@ namespace RNAssistant.Office.Tools
                 return _pipelineExecutor.Execute(
                     customTool,
                     command,
-                    skills,
-                    settings,
                     depth + 1,
                     dryRun,
                     manualRun,
-                    (nested, nestedSkills, nestedSettings, nestedDepth, nestedDryRun, nestedManualRun, nestedCancellationToken) =>
-                        ExecuteCommandSafely(nested, nestedSkills, nestedSettings, nestedDepth, nestedDryRun, nestedManualRun, session, nestedCancellationToken),
+                    (nested, nestedDepth, nestedDryRun, nestedManualRun, nestedCancellationToken) =>
+                        ExecuteCommandSafely(nested, context, nestedDepth, nestedDryRun, nestedManualRun, nestedCancellationToken),
                     cancellationToken);
             }
 
             if (customTool != null && string.Equals(customTool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                return _vbaExecutor.ExecuteCustomTool(customTool, command, settings, dryRun, manualRun);
+                return _vbaExecutor.ExecuteCustomTool(customTool, command, context.Settings, dryRun, manualRun);
             }
 
             if (customTool != null)
@@ -144,36 +163,10 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Fail("Tool executor is not runnable yet: " + customTool.Executor);
             }
 
-            if (_vbaExecutor.IsControllerTool(command.ToolId))
+            ControllerExecutorKind controllerExecutor;
+            if (_controllerExecutors.TryGetValue(command.ToolId, out controllerExecutor))
             {
-                return _vbaExecutor.ExecuteControllerTool(
-                    command,
-                    dryRun,
-                    cancellationToken);
-            }
-
-            if (_skillExecutor.IsControllerTool(command.ToolId))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                return _skillExecutor.ExecuteControllerTool(command, settings, dryRun, manualRun);
-            }
-
-            if (_toolAuthoringExecutor.IsControllerTool(command.ToolId))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                return _toolAuthoringExecutor.ExecuteControllerTool(command, settings, dryRun, manualRun);
-            }
-
-            if (_promptToolExecutor.IsControllerTool(command.ToolId))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                return _promptToolExecutor.ExecuteControllerTool(command, settings, dryRun);
-            }
-
-            if (_htmlArtifactExecutor.IsControllerTool(command.ToolId))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                return _htmlArtifactExecutor.ExecuteControllerTool(command, session, dryRun);
+                return ExecuteControllerTool(controllerExecutor, command, context, dryRun, manualRun, cancellationToken);
             }
 
             if (dryRun)
@@ -204,18 +197,79 @@ namespace RNAssistant.Office.Tools
             return current == null ? "Unknown error." : current.Message;
         }
 
-        private IEnumerable<ToolDefinition> KnownTools(IEnumerable<ToolDefinition> providedTools)
+        private ToolResult ExecuteControllerTool(ControllerExecutorKind executor, ToolCommand command, ToolExecutionContext context, bool dryRun, bool manualRun, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            switch (executor)
+            {
+                case ControllerExecutorKind.Vba:
+                    return _vbaExecutor.ExecuteControllerTool(command, dryRun, cancellationToken);
+                case ControllerExecutorKind.Skill:
+                    return _skillExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun);
+                case ControllerExecutorKind.ToolAuthoring:
+                    return _toolAuthoringExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun);
+                case ControllerExecutorKind.Prompt:
+                    return _promptToolExecutor.ExecuteControllerTool(command, context.Settings, dryRun);
+                case ControllerExecutorKind.HtmlArtifact:
+                    return _htmlArtifactExecutor.ExecuteControllerTool(command, context.Session, dryRun);
+                default:
+                    return ToolResult.Fail("Unknown controller executor for tool: " + command.ToolId);
+            }
+        }
+
+        private void RegisterControllerTools(ICollection<ToolDefinition> target, IEnumerable<ToolDefinition> tools, ControllerExecutorKind executor)
+        {
+            foreach (var tool in tools ?? new ToolDefinition[0])
+            {
+                if (tool == null || string.IsNullOrWhiteSpace(tool.Id))
+                {
+                    continue;
+                }
+
+                if (_controllerExecutors.ContainsKey(tool.Id))
+                {
+                    throw new InvalidOperationException("Duplicate controller tool id: " + tool.Id);
+                }
+
+                _controllerExecutors.Add(tool.Id, executor);
+                target.Add(tool);
+            }
+        }
+
+        private IReadOnlyList<ToolDefinition> KnownTools(IEnumerable<ToolDefinition> providedTools)
         {
             var result = new List<ToolDefinition>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            AddTools(result, seen, _adapterTools);
+            AddTools(result, seen, _controllerTools);
             AddTools(result, seen, providedTools);
-            AddTools(result, seen, _adapter.GetBuiltInTools());
-            AddTools(result, seen, _vbaExecutor.GetControllerTools());
-            AddTools(result, seen, _skillExecutor.GetControllerTools());
-            AddTools(result, seen, _toolAuthoringExecutor.GetControllerTools());
-            AddTools(result, seen, _promptToolExecutor.GetControllerTools());
-            AddTools(result, seen, _htmlArtifactExecutor.GetControllerTools());
             return result;
+        }
+
+        private bool IsProtectedToolId(string id)
+        {
+            return !string.IsNullOrWhiteSpace(id) &&
+                (_adapterTools.Any(tool => tool != null && string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase)) ||
+                 _controllerExecutors.ContainsKey(id));
+        }
+
+        private static ToolResult ValidateAuthoredToolId(ToolCommand command, ToolExecutionContext context)
+        {
+            if (command == null ||
+                (!string.Equals(command.ToolId, "common.tools_validate", StringComparison.OrdinalIgnoreCase) &&
+                 !string.Equals(command.ToolId, "common.tools_save", StringComparison.OrdinalIgnoreCase)))
+            {
+                return null;
+            }
+
+            var id = ToolArgumentReader.String(command.Arguments, "id", string.Empty);
+            var existing = context.Find(id);
+            return existing != null && existing.BuiltIn ? ReservedToolId(id) : null;
+        }
+
+        private static ToolResult ReservedToolId(string id)
+        {
+            return ToolResult.Fail("Tool id is reserved by a built-in tool: " + id, null, "reserved_tool_id", false);
         }
 
         private static void AddTools(ICollection<ToolDefinition> result, ISet<string> seen, IEnumerable<ToolDefinition> tools)
@@ -232,15 +286,9 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private static ToolDefinition FindTool(IEnumerable<ToolDefinition> tools, string toolId)
-        {
-            return (tools ?? new ToolDefinition[0]).FirstOrDefault(s =>
-                string.Equals(s.Id, toolId, StringComparison.OrdinalIgnoreCase));
-        }
-
         private static ToolResult UnknownTool(string requestedToolId, IReadOnlyList<ToolDefinition> knownTools)
         {
-            var suggestions = SuggestToolIds(requestedToolId, knownTools, 5);
+            var suggestions = ToolIdSuggester.Suggest(requestedToolId, knownTools, 5);
             var message = "Unknown tool id: " + requestedToolId + ". Use only available tool ids.";
             if (suggestions.Count > 0)
             {
@@ -273,119 +321,56 @@ namespace RNAssistant.Office.Tools
             });
         }
 
-        internal static List<string> SuggestToolIds(string requestedToolId, IReadOnlyList<ToolDefinition> knownTools, int limit)
+        private sealed class ToolExecutionContext
         {
-            var requestedTokens = ExpandedTokens(Tokenize(requestedToolId));
-            if (requestedTokens.Count == 0)
+            private readonly IDictionary<string, ToolDefinition> _toolsById;
+            private readonly IDictionary<string, ToolSafetyProfile> _safetyById;
+
+            public ToolExecutionContext(IReadOnlyList<ToolDefinition> tools, AppSettings settings, ChatSession session)
             {
-                return new List<string>();
+                Tools = tools ?? new ToolDefinition[0];
+                Settings = settings;
+                Session = session;
+                _toolsById = Tools
+                    .Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))
+                    .ToDictionary(tool => tool.Id, StringComparer.OrdinalIgnoreCase);
+                _safetyById = new Dictionary<string, ToolSafetyProfile>(StringComparer.OrdinalIgnoreCase);
             }
 
-            return (knownTools ?? new ToolDefinition[0])
-                .Where(tool => tool != null && tool.Enabled && !string.IsNullOrWhiteSpace(tool.Id))
-                .Select(tool => new { Tool = tool, Score = SuggestionScore(requestedTokens, tool) })
-                .Where(item => item.Score > 0)
-                .OrderByDescending(item => item.Score)
-                .ThenBy(item => item.Tool.Id.Length)
-                .Take(Math.Max(1, limit))
-                .Select(item => item.Tool.Id)
-                .ToList();
-        }
+            public IReadOnlyList<ToolDefinition> Tools { get; private set; }
 
-        private static int SuggestionScore(ISet<string> requestedTokens, ToolDefinition tool)
-        {
-            var candidateTokens = ExpandedTokens(Tokenize(
-                (tool.Id ?? string.Empty) + " " +
-                (tool.Name ?? string.Empty) + " " +
-                (tool.Description ?? string.Empty)));
-            var score = 0;
-            foreach (var token in requestedTokens)
+            public AppSettings Settings { get; private set; }
+
+            public ChatSession Session { get; private set; }
+
+            public ToolDefinition Find(string toolId)
             {
-                if (candidateTokens.Contains(token))
+                ToolDefinition tool;
+                return !string.IsNullOrWhiteSpace(toolId) && _toolsById.TryGetValue(toolId, out tool)
+                    ? tool
+                    : null;
+            }
+
+            public ToolSafetyProfile Safety(ToolDefinition tool)
+            {
+                ToolSafetyProfile safety;
+                if (!_safetyById.TryGetValue(tool.Id, out safety))
                 {
-                    score += token.Length <= 2 ? 1 : 3;
-                }
-            }
-
-            return score;
-        }
-
-        private static ISet<string> ExpandedTokens(IEnumerable<string> tokens)
-        {
-            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var token in tokens ?? new string[0])
-            {
-                AddExpandedToken(result, token);
-            }
-
-            return result;
-        }
-
-        private static void AddExpandedToken(ISet<string> result, string token)
-        {
-            if (string.IsNullOrWhiteSpace(token))
-            {
-                return;
-            }
-
-            var value = token.Trim().ToLowerInvariant();
-            result.Add(value);
-            if (value.EndsWith("s", StringComparison.OrdinalIgnoreCase) && value.Length > 3)
-            {
-                result.Add(value.Substring(0, value.Length - 1));
-            }
-
-            if (string.Equals(value, "create", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(value, "make", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(value, "new", StringComparison.OrdinalIgnoreCase))
-            {
-                result.Add("add");
-            }
-            if (string.Equals(value, "worksheet", StringComparison.OrdinalIgnoreCase))
-            {
-                result.Add("sheet");
-            }
-            if (string.Equals(value, "diagram", StringComparison.OrdinalIgnoreCase))
-            {
-                result.Add("chart");
-            }
-            if (string.Equals(value, "delete", StringComparison.OrdinalIgnoreCase))
-            {
-                result.Add("remove");
-            }
-        }
-
-        private static IEnumerable<string> Tokenize(string value)
-        {
-            var token = string.Empty;
-            var previousWasLower = false;
-            foreach (var ch in value ?? string.Empty)
-            {
-                if (char.IsLetterOrDigit(ch))
-                {
-                    if (char.IsUpper(ch) && previousWasLower && token.Length > 0)
-                    {
-                        yield return token;
-                        token = string.Empty;
-                    }
-
-                    token += char.ToLowerInvariant(ch);
-                    previousWasLower = char.IsLower(ch);
-                    continue;
+                    safety = ToolSafetyPolicy.Resolve(tool, Tools);
+                    _safetyById[tool.Id] = safety;
                 }
 
-                if (token.Length > 0)
-                {
-                    yield return token;
-                    token = string.Empty;
-                }
-                previousWasLower = false;
+                return safety;
             }
+        }
 
-            if (token.Length > 0)
-            {
-                yield return token;
-            }
+        private enum ControllerExecutorKind
+        {
+            Vba,
+            Skill,
+            ToolAuthoring,
+            Prompt,
+            HtmlArtifact
         }
     }
 }
