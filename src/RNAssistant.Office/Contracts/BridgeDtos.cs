@@ -263,7 +263,7 @@ namespace RNAssistant.Office.Contracts
         public string Body { get; set; }
     }
 
-    public sealed class MessageActionPayload : ChatPayload
+    public class MessageActionPayload : ChatPayload
     {
         [JsonProperty("id")]
         public string Id { get; set; }

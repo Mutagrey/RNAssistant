@@ -265,6 +265,27 @@ namespace RNAssistant.Harness
             AssertEqual("chat-1", chatState["payload"]["activeChatId"].Value<string>(), "chat state active id");
         }
 
+        private static void BridgeUsesTypedEditMessagePayloadAndProgress()
+        {
+            var controller = new AssistantController();
+            var progressMessages = new List<string>();
+            var bridge = new AssistantWebBridge(controller, progressMessages.Add);
+            var token = BridgeToken(bridge);
+            var responseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"edit1\",\"type\":\"editMessage\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-2\",\"id\":\"message-7\",\"index\":3,\"text\":\"edited text\"}}")
+                .GetAwaiter()
+                .GetResult();
+
+            var response = JObject.Parse(responseJson);
+            AssertTrue(response["ok"].Value<bool>(), "edit response ok");
+            AssertEqual("edited text", controller.LastChatText, "edit text");
+            AssertEqual("chat-2", controller.LastChatId, "edit chat id");
+            AssertEqual("message-7", response["payload"]["activeChatModel"].Value<string>(), "edit stub payload");
+            AssertEqual(2, progressMessages.Count, "edit event count");
+            AssertEqual("thinking", JObject.Parse(progressMessages[0])["payload"]["phase"].Value<string>(), "edit progress phase");
+            AssertEqual("chatState", JObject.Parse(progressMessages[1])["type"].Value<string>(), "edit chat state event");
+        }
+
         private static void BridgeUsesTypedChatModePayload()
         {
             var controller = new AssistantController();

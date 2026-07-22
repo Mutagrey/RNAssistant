@@ -12,7 +12,7 @@
   <style>
     body {
       margin: 0;
-      background: #f3f6fa;
+      background: #ffffff;
       color: var(--text);
       font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
     }
@@ -63,11 +63,11 @@
     }
 
     .demo-stage {
-      padding: 18px 18px 14px;
-      border: 1px solid #dfe6ee;
-      border-radius: 18px;
-      background: #fff;
-      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
     }
 
     .demo-stage-note {
@@ -83,17 +83,68 @@
     }
 
     .demo-stage .message-footer {
+      width: auto;
+      max-width: none;
+      min-height: 0;
       opacity: 1;
       transform: none;
+    }
+
+    .demo-stage .message.user .message-footer {
+      width: 92%;
+      max-width: 92%;
+    }
+
+    .demo-stage .message.assistant .message-footer {
+      width: 94%;
+      max-width: 94%;
+    }
+
+    .demo-stage .message-actions {
+      align-items: center;
+      gap: 6px;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .demo-stage .message.assistant .markdown {
+      max-width: none;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      color: inherit;
+    }
+
+    .demo-stage .message.user .markdown {
+      background: #f3f4f6;
+      color: var(--text);
+      border: 0;
+      box-shadow: none;
     }
 
     .demo-stage .message-action {
       width: auto;
       min-width: 0;
-      padding: 0 8px;
-      border-radius: 999px;
-      background: rgba(226, 231, 239, 0.62);
+      min-height: auto;
+      padding: 0 4px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      color: #667085;
       font-size: 11px;
+    }
+
+    .demo-stage .message-action:hover,
+    .demo-stage .message-action:focus-visible {
+      background: transparent;
+      color: #344054;
+      border-color: transparent;
+      box-shadow: none;
     }
 
     .demo-stage .message-action svg {
@@ -104,20 +155,55 @@
       padding-left: 0;
     }
 
-    .demo-stage .message.user .markdown {
-      max-width: 86%;
-    }
-
     .demo-chip {
       display: inline-flex;
       align-items: center;
       gap: 6px;
       margin-top: 14px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: #f8fafc;
+      padding: 0;
+      border-radius: 0;
+      background: transparent;
       color: #667085;
       font-size: 12px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      body {
+        background: #0f1722;
+        color: #e5e7eb;
+      }
+
+      .demo-text,
+      .demo-stage-note,
+      .demo-chip {
+        color: #98a2b3;
+      }
+
+      .demo-toolbar button {
+        border-color: rgba(148, 163, 184, 0.26);
+        background: rgba(15, 23, 42, 0.34);
+        color: #d0d5dd;
+      }
+
+      .demo-toolbar button.is-active {
+        border-color: rgba(96, 165, 250, 0.34);
+        background: rgba(37, 99, 235, 0.18);
+        color: #eff6ff;
+      }
+
+      .demo-stage .message.user .markdown {
+        background: rgba(255, 255, 255, 0.1);
+        color: #e5e7eb;
+      }
+
+      .demo-stage .message-action {
+        color: #98a2b3;
+      }
+
+      .demo-stage .message-action:hover,
+      .demo-stage .message-action:focus-visible {
+        color: #f3f4f6;
+      }
     }
   </style>
 </head>

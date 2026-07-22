@@ -57,6 +57,9 @@ function activeChatUsesCurrentDocument() {
 
 function applyChatState(response) {
   response = response || {};
+  if (typeof resetMessageEditState === "function") {
+    resetMessageEditState();
+  }
   state.activeChatId = response.activeChatId || response.ActiveChatId || state.activeChatId || "";
   if (response.activeChatModel !== undefined || response.ActiveChatModel !== undefined) {
     state.activeChatModel = response.activeChatModel || response.ActiveChatModel || "";
@@ -103,6 +106,9 @@ function applyChatState(response) {
 
 function applyChatCatalogState(response) {
   response = response || {};
+  if (typeof resetMessageEditState === "function") {
+    resetMessageEditState();
+  }
   if (response.chats !== undefined || response.Chats !== undefined) {
     state.chats = response.chats || response.Chats || [];
   }

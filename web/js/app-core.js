@@ -249,7 +249,7 @@ if (window.chrome && window.chrome.webview) {
     if (response && response.type === "progress") {
       var progress = response.payload || {};
       var progressPending = state.pending[response.id];
-      var isChatProgress = progressPending && (progressPending.type === "sendChat" || progressPending.type === "confirmAgentTool");
+      var isChatProgress = progressPending && (progressPending.type === "sendChat" || progressPending.type === "confirmAgentTool" || progressPending.type === "editMessage");
       var progressChatId = progress.chatId || progress.ChatId || (progressPending && progressPending.payload && progressPending.payload.chatId) || "";
       var progressRunId = progress.runId || progress.RunId || "";
       if (progressChatId) {

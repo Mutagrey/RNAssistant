@@ -149,6 +149,71 @@ function renderChatEmptyState() {
   return empty;
 }
 
+function messageSupportsInlineEdit(message, index, activity) {
+  return !activity && !hasActiveMessageEdit() && canEditMessage(message) && !isEditingMessage(message, index);
+}
+
+function renderInlineMessageEditor(message, index) {
+  var editor = document.createElement("div");
+  editor.className = "message-inline-editor";
+
+  var textarea = document.createElement("textarea");
+  textarea.className = "message-inline-textarea";
+  textarea.value = state.editingText || "";
+  textarea.rows = 3;
+  textarea.placeholder = "Исправьте сообщение и перезапустите чат с этого места...";
+  textarea.disabled = !!state.editingBusy;
+  textarea.addEventListener("input", function () {
+    state.editingText = textarea.value;
+    syncMessageEditTextarea(textarea);
+    syncInlineMessageEditorState(editor, message, index);
+  });
+  textarea.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      event.preventDefault();
+      cancelMessageEdit();
+      return;
+    }
+
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      if (canSaveMessageEdit(message, index)) {
+        saveMessageEdit();
+      }
+    }
+  });
+  editor.appendChild(textarea);
+
+  var note = document.createElement("div");
+  note.className = "message-inline-note";
+  note.textContent = "После сохранения это сообщение останется, а вся история ниже будет пересобрана заново. Текущие вложения этого сообщения сохранятся.";
+  editor.appendChild(note);
+
+  var actions = document.createElement("div");
+  actions.className = "message-inline-actions";
+
+  var cancelButton = document.createElement("button");
+  cancelButton.type = "button";
+  cancelButton.className = "secondary";
+  cancelButton.textContent = "Cancel";
+  cancelButton.disabled = !!state.editingBusy;
+  cancelButton.addEventListener("click", cancelMessageEdit);
+  actions.appendChild(cancelButton);
+
+  var saveButton = document.createElement("button");
+  saveButton.type = "button";
+  saveButton.className = "primary message-inline-save";
+  saveButton.textContent = state.editingBusy ? "Saving..." : "Save";
+  saveButton.disabled = !canSaveMessageEdit(message, index);
+  saveButton.addEventListener("click", saveMessageEdit);
+  actions.appendChild(saveButton);
+
+  editor.appendChild(actions);
+  syncMessageEditTextarea(textarea);
+  syncInlineMessageEditorState(editor, message, index);
+  return editor;
+}
+
 function appendMessageFooter(node, message, index, activity) {
   var footer = document.createElement("div");
   footer.className = "message-footer";
@@ -169,6 +234,11 @@ function appendMessageFooter(node, message, index, activity) {
   actions.appendChild(smallIconButton("Ответвить чат отсюда", "branch", function () {
     forkChatAtMessage(message, index);
   }));
+  if (messageSupportsInlineEdit(message, index, activity)) {
+    actions.appendChild(smallIconButton("Изменить сообщение", "edit", function () {
+      startMessageEdit(message, index);
+    }));
+  }
   actions.appendChild(smallIconButton("Копировать сообщение", "copy", function () {
     copyText(activity ? activityText(activity) : messageContent(message));
     log("Сообщение скопировано.");
@@ -235,7 +305,7 @@ function renderActivityArticle(message, index, activity, options) {
 
 function renderMessageArticle(message, index) {
   var node = document.createElement("article");
-  node.className = "message " + messageRole(message) + (message.Pending ? " pending" : "") + (message.Failed ? " failed" : "");
+  node.className = "message " + messageRole(message) + (message.Pending ? " pending" : "") + (message.Failed ? " failed" : "") + (isEditingMessage(message, index) ? " is-editing" : "");
   var activity = messageActivity(message);
   if (activity) {
     return renderActivityArticle(message, index, activity, { live: false, current: false });
@@ -255,6 +325,9 @@ function renderMessageArticle(message, index) {
   body.className = "markdown";
   body.innerHTML = markdown(messageContent(message));
   node.appendChild(body);
+  if (isEditingMessage(message, index)) {
+    node.appendChild(renderInlineMessageEditor(message, index));
+  }
   appendMessageFooter(node, message, index, null);
 
   enhanceMarkdown(body);

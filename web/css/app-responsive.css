@@ -48,7 +48,8 @@
   }
 
   .message.user .markdown,
-  .message.user .message-footer {
+  .message.user .message-footer,
+  .message-inline-editor {
     max-width: 92%;
   }
 
@@ -259,16 +260,11 @@
     width: 100%;
   }
 
-  .message {
-    padding: 10px 0 8px;
-  }
-
-  .message.assistant {
-    padding-left: 14px;
-  }
-
   .message.user .markdown,
-  .message.user .message-footer {
+  .message.user .message-footer,
+  .message-inline-editor,
+  .message.assistant .markdown,
+  .message.assistant .message-footer {
     max-width: 96%;
   }
 
