@@ -532,17 +532,43 @@
 }
 
 .streaming-cursor {
-  display: inline-block;
-  width: 2px;
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
   height: 1em;
-  margin-left: 3px;
-  vertical-align: -0.12em;
-  background: currentColor;
-  animation: streaming-cursor-blink 0.9s steps(1, end) infinite;
+  margin-left: 4px;
+  vertical-align: -0.08em;
 }
 
-@keyframes streaming-cursor-blink {
-  50% { opacity: 0; }
+.streaming-cursor-dot {
+  width: 4px;
+  height: 4px;
+  flex: 0 0 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.28;
+  animation: streaming-dot-pulse 1.2s ease-in-out infinite;
+  animation-delay: var(--streaming-dot-phase, 0ms);
+}
+
+.streaming-cursor-dot:nth-child(2) {
+  animation-delay: calc(var(--streaming-dot-phase, 0ms) - 200ms);
+}
+
+.streaming-cursor-dot:nth-child(3) {
+  animation-delay: calc(var(--streaming-dot-phase, 0ms) - 400ms);
+}
+
+@keyframes streaming-dot-pulse {
+  0%, 60%, 100% { opacity: 0.28; }
+  30% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streaming-cursor-dot {
+    animation: none;
+    opacity: 0.55;
+  }
 }
 
 .message.failed .markdown {

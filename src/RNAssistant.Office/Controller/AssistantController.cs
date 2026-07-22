@@ -210,153 +210,20 @@ namespace RNAssistant.Office
             }
 
             return await ExecuteChatTurnAsync(
-                text ?? string.Empty,
                 session,
                 settings,
-                attachments,
+                new ChatTurnInput
+                {
+                    Text = text ?? string.Empty,
+                    Attachments = attachments,
+                    AppendUserMessage = true,
+                    CommitUserAttachments = true
+                },
+                null,
                 progress,
                 chatStateChanged,
                 cancellationToken,
-                runId,
-                true,
-                true).ConfigureAwait(false);
-
-#if false
-            var documentContext = LoadContext(session);
-            var skills = _skillCatalog.SelectRelevantSkills(text, documentContext, 5);
-            var titleUserSeed = ChatTitleBuilder.ResolveUserSeed(session, text);
-            var shouldGenerateLlmTitle = settings.SmartChatTitles != false && ChatTitleBuilder.ShouldAssign(session);
-            var provisionalTitle = ChatTitleBuilder.ShouldAssign(session)
-                ? ChatTitleBuilder.BuildDraftTitle(titleUserSeed)
-                : string.Empty;
-            if (!string.IsNullOrWhiteSpace(provisionalTitle))
-            {
-                session.Title = provisionalTitle;
-            }
-            var runCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            try
-            {
-                _chatRuns.Start(sessionId, runId, session, runCancellation);
-            }
-            catch
-            {
-                runCancellation.Dispose();
-                throw;
-            }
-            session.LastRun = new ChatRunRecord
-            {
-                RunId = runId,
-                RuntimeId = RuntimeId,
-                Status = "running",
-                Phase = "starting",
-                CurrentAction = "Подготавливаю запрос.",
-                StartedUtc = DateTime.UtcNow
-            };
-            // A started request is no longer an empty draft: persist its run marker so a crash can be recovered.
-            _chatStore.Save(session);
-            _chatSessions.NotifySaved(session);
-            if (!string.IsNullOrWhiteSpace(provisionalTitle) && chatStateChanged != null)
-            {
-                chatStateChanged(CreateStoredChatState(session.Host, session.DocumentKey, session.DocumentTitle));
-            }
-            var firstRunMessageIndex = session.Messages == null ? 0 : session.Messages.Count;
-            Action<string, string, ChatActivity> runProgress = (phase, message, activity) =>
-            {
-                _chatRuns.Update(sessionId, runId, phase, message);
-                if (session.LastRun != null && string.Equals(session.LastRun.RunId, runId, StringComparison.OrdinalIgnoreCase))
-                {
-                    session.LastRun.Phase = string.IsNullOrWhiteSpace(phase) ? session.LastRun.Phase : phase;
-                    session.LastRun.CurrentAction = string.IsNullOrWhiteSpace(message) ? session.LastRun.CurrentAction : message;
-                }
-                if (activity != null) AnnotateActivity(activity, runId, null);
-                if (progress != null) progress(phase, message, activity);
-            };
-            var runToken = runCancellation.Token;
-            ChatCompletionResult completion;
-            try
-            {
-                var executionMode = _chatModeSelector.Select(text, session, _adapter.HostName);
-                if (executionMode == ChatModes.Chat)
-                {
-                    completion = await _plainChatService.ExecuteAsync(
-                        text ?? string.Empty,
-                        session,
-                        documentContext,
-                        settings,
-                        attachments,
-                        runProgress,
-                        runToken).ConfigureAwait(false);
-                }
-                else if (_chatSessions.IsCurrentDocument(session))
-                {
-                    var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-                    completion = await _chatCompletionService.ExecuteAsync(text ?? string.Empty, session, documentContext, settings, tools, attachments, runProgress, RegisterPendingAgentTool, skills, runToken);
-                }
-                else
-                {
-                    var offlineTools = _toolCatalog.GetVisibleTools()
-                        .Where(s => s.Enabled &&
-                            string.Equals(s.Host, "Common", StringComparison.OrdinalIgnoreCase) &&
-                            !string.Equals(s.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
-                        .ToList();
-                    completion = await _offlineChatService.ExecuteAsync(text ?? string.Empty, session, documentContext, settings, offlineTools, attachments, runProgress, RegisterPendingAgentTool, skills, runToken);
-                }
-            }
-            catch (Exception ex)
-            {
-                try
-                {
-                    RecordFailedTurn(session, ex);
-                    if (session.LastRun != null)
-                    {
-                        session.LastRun.Status = ex is OperationCanceledException ? "cancelled" : "failed";
-                        session.LastRun.Phase = session.LastRun.Status;
-                        session.LastRun.CurrentAction = ex.Message;
-                    }
-                    AnnotateRunMessages(session, firstRunMessageIndex, runId);
-                    var failedUserMessage = session.Messages.LastOrDefault(m => m != null && string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase));
-                    _attachmentStore.Commit(ChatStore.GetSessionId(session), failedUserMessage);
-                    SaveSessionChanges(session);
-                }
-                finally
-                {
-                    _chatRuns.Complete(sessionId, runId);
-                }
-                throw;
-            }
-            try
-            {
-                if (settings.SmartChatTitles == false)
-                {
-                    ChatTitleBuilder.ApplyFallback(session, text, completion.AssistantText);
-                }
-
-                ReportProgress(runProgress, "saving", "Сохраняю историю...");
-                var userMessage = session.Messages.LastOrDefault(m => m != null && string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase));
-                _attachmentStore.Commit(ChatStore.GetSessionId(session), userMessage);
-                AnnotateRunMessages(session, firstRunMessageIndex, runId);
-                session.LastRun = null;
-                SaveSessionChanges(session);
-                var activeId = ChatStore.GetSessionId(session);
-                if (shouldGenerateLlmTitle)
-                {
-                    StartChatTitleGeneration(
-                        session,
-                        titleUserSeed,
-                        ChatTitleBuilder.ResolveAssistantSeed(session, completion.AssistantText),
-                        settings,
-                        provisionalTitle,
-                        chatStateChanged);
-                }
-
-                _chatRuns.Complete(sessionId, runId);
-                return new SendChatResponse { Message = completion.AssistantText, ToolResults = completion.ToolResults, ActiveChatId = activeId, ActiveChatModel = session.Model, ActiveChatMode = ChatModes.Normalize(session.Mode), ActiveChatHtmlMode = session.HtmlModeEnabled, Chats = _chatSessions.GetChatSummaries(activeId), Context = LoadContext(session), Messages = session.Messages, ContextUsage = completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace) };
-            }
-            finally
-            {
-                _chatRuns.Complete(sessionId, runId);
-            }
-#endif
+                runId).ConfigureAwait(false);
         }
 
         public bool CancelChatRun(string chatId, string runId)
@@ -442,14 +309,15 @@ namespace RNAssistant.Office
                 ChatStateResponse state;
                 lock (_syncRoot)
                 {
-                    var current = _chatStore.Load(host, documentKey, sessionId);
-                    if (!ChatTitleBuilder.CanReplaceAutoTitle(current, expectedCurrentTitle))
+                    if (!_chatSessions.TryApplyGeneratedTitle(
+                        host,
+                        documentKey,
+                        sessionId,
+                        expectedCurrentTitle,
+                        title))
                     {
                         return;
                     }
-
-                    current.Title = title;
-                    _chatStore.Save(current);
                     state = CreateStoredChatState(host, documentKey, documentTitle);
                 }
 
@@ -482,40 +350,34 @@ namespace RNAssistant.Office
             });
         }
 
+        private sealed class ChatTurnInput
+        {
+            public string Text { get; set; }
+            public IReadOnlyList<ChatAttachment> Attachments { get; set; }
+            public bool AppendUserMessage { get; set; }
+            public bool CommitUserAttachments { get; set; }
+        }
+
         private async Task<SendChatResponse> ExecuteChatTurnAsync(
-            string text,
             ChatSession session,
             AppSettings settings,
-            IReadOnlyList<ChatAttachment> attachments,
+            ChatTurnInput input,
+            Func<ChatSession, ChatTurnInput> prepareTurn,
             Action<string, string, ChatActivity> progress,
             Action<ChatStateResponse> chatStateChanged,
             CancellationToken cancellationToken,
-            string runId,
-            bool appendUserMessage,
-            bool commitUserAttachments)
+            string runId)
         {
             settings = settings ?? _settingsService.Load();
             session = session ?? LoadAddressedSession(null);
-            text = text ?? string.Empty;
-
             var sessionId = ChatStore.GetSessionId(session);
             runId = string.IsNullOrWhiteSpace(runId) ? Guid.NewGuid().ToString("N") : runId;
-            var documentContext = LoadContext(session);
-            var skills = _skillCatalog.SelectRelevantSkills(text, documentContext, 5);
-            var titleUserSeed = ChatTitleBuilder.ResolveUserSeed(session, text);
-            var shouldGenerateLlmTitle = settings.SmartChatTitles != false && ChatTitleBuilder.ShouldAssign(session);
-            var provisionalTitle = ChatTitleBuilder.ShouldAssign(session)
-                ? ChatTitleBuilder.BuildDraftTitle(titleUserSeed)
-                : string.Empty;
-            if (!string.IsNullOrWhiteSpace(provisionalTitle))
-            {
-                session.Title = provisionalTitle;
-            }
 
             var runCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            ChatRunLease runLease;
             try
             {
-                _chatRuns.Start(sessionId, runId, session, runCancellation);
+                runLease = _chatRuns.Start(sessionId, runId, session, runCancellation);
             }
             catch
             {
@@ -523,103 +385,118 @@ namespace RNAssistant.Office
                 throw;
             }
 
-            session.LastRun = new ChatRunRecord
-            {
-                RunId = runId,
-                RuntimeId = RuntimeId,
-                Status = "running",
-                Phase = "starting",
-                CurrentAction = "Preparing request.",
-                StartedUtc = DateTime.UtcNow
-            };
-            _chatStore.Save(session);
-            _chatSessions.NotifySaved(session);
-            if (!string.IsNullOrWhiteSpace(provisionalTitle) && chatStateChanged != null)
-            {
-                chatStateChanged(CreateStoredChatState(session.Host, session.DocumentKey, session.DocumentTitle));
-            }
-
-            var firstRunMessageIndex = session.Messages == null ? 0 : session.Messages.Count;
-            if (!appendUserMessage && session.Messages != null && session.Messages.Count > 0)
-            {
-                firstRunMessageIndex = Math.Max(0, session.Messages.Count - 1);
-            }
-
-            Action<string, string, ChatActivity> runProgress = (phase, message, activity) =>
-            {
-                _chatRuns.Update(sessionId, runId, phase, message);
-                if (session.LastRun != null && string.Equals(session.LastRun.RunId, runId, StringComparison.OrdinalIgnoreCase))
-                {
-                    session.LastRun.Phase = string.IsNullOrWhiteSpace(phase) ? session.LastRun.Phase : phase;
-                    session.LastRun.CurrentAction = string.IsNullOrWhiteSpace(message) ? session.LastRun.CurrentAction : message;
-                }
-                if (activity != null)
-                {
-                    AnnotateActivity(activity, runId, null);
-                }
-                if (progress != null)
-                {
-                    progress(phase, message, activity);
-                }
-            };
-
-            var runToken = runCancellation.Token;
-            ChatCompletionResult completion;
             try
             {
-                var executionMode = _chatModeSelector.Select(text, session, _adapter.HostName);
-                if (executionMode == ChatModes.Chat)
+                input = prepareTurn == null ? input : prepareTurn(session);
+                input = input ?? new ChatTurnInput();
+                var text = input.Text ?? string.Empty;
+                var attachments = input.Attachments ?? new ChatAttachment[0];
+                var documentContext = LoadContext(session);
+                var skills = _skillCatalog.SelectRelevantSkills(text, documentContext, 5);
+                var titleUserSeed = ChatTitleBuilder.ResolveUserSeed(session, text);
+                var shouldGenerateLlmTitle = settings.SmartChatTitles != false && ChatTitleBuilder.ShouldAssign(session);
+                var provisionalTitle = ChatTitleBuilder.ShouldAssign(session)
+                    ? ChatTitleBuilder.BuildDraftTitle(titleUserSeed)
+                    : string.Empty;
+                if (!string.IsNullOrWhiteSpace(provisionalTitle))
                 {
-                    completion = await _plainChatService.ExecuteAsync(
-                        text,
-                        session,
-                        documentContext,
-                        settings,
-                        attachments,
-                        runProgress,
-                        runToken,
-                        appendUserMessage).ConfigureAwait(false);
+                    session.Title = provisionalTitle;
                 }
-                else if (_chatSessions.IsCurrentDocument(session))
+
+                session.LastRun = new ChatRunRecord
                 {
-                    var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-                    completion = await _chatCompletionService.ExecuteAsync(
-                        text,
-                        session,
-                        documentContext,
-                        settings,
-                        tools,
-                        attachments,
-                        runProgress,
-                        RegisterPendingAgentTool,
-                        skills,
-                        runToken,
-                        appendUserMessage).ConfigureAwait(false);
-                }
-                else
+                    RunId = runId,
+                    RuntimeId = RuntimeId,
+                    Status = "running",
+                    Phase = "starting",
+                    CurrentAction = "Preparing request.",
+                    StartedUtc = DateTime.UtcNow
+                };
+                _chatStore.Save(session);
+                _chatSessions.NotifySaved(session);
+                if (!string.IsNullOrWhiteSpace(provisionalTitle) && chatStateChanged != null)
                 {
-                    var offlineTools = _toolCatalog.GetVisibleTools()
-                        .Where(s => s.Enabled &&
-                            string.Equals(s.Host, "Common", StringComparison.OrdinalIgnoreCase) &&
-                            !string.Equals(s.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
-                        .ToList();
-                    completion = await _offlineChatService.ExecuteAsync(
-                        text,
-                        session,
-                        documentContext,
-                        settings,
-                        offlineTools,
-                        attachments,
-                        runProgress,
-                        RegisterPendingAgentTool,
-                        skills,
-                        runToken,
-                        appendUserMessage).ConfigureAwait(false);
+                    chatStateChanged(CreateStoredChatState(session.Host, session.DocumentKey, session.DocumentTitle));
                 }
-            }
-            catch (Exception ex)
-            {
+
+                var firstRunMessageIndex = session.Messages == null ? 0 : session.Messages.Count;
+                if (!input.AppendUserMessage && session.Messages != null && session.Messages.Count > 0)
+                {
+                    firstRunMessageIndex = Math.Max(0, session.Messages.Count - 1);
+                }
+
+                Action<string, string, ChatActivity> runProgress = (phase, message, activity) =>
+                {
+                    _chatRuns.Update(sessionId, runId, phase, message);
+                    if (session.LastRun != null && string.Equals(session.LastRun.RunId, runId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        session.LastRun.Phase = string.IsNullOrWhiteSpace(phase) ? session.LastRun.Phase : phase;
+                        session.LastRun.CurrentAction = string.IsNullOrWhiteSpace(message) ? session.LastRun.CurrentAction : message;
+                    }
+                    if (activity != null)
+                    {
+                        AnnotateActivity(activity, runId, null);
+                    }
+                    if (progress != null)
+                    {
+                        progress(phase, message, activity);
+                    }
+                };
+
+                ChatCompletionResult completion;
                 try
+                {
+                    var executionMode = _chatModeSelector.Select(text, session, _adapter.HostName);
+                    if (executionMode == ChatModes.Chat)
+                    {
+                        completion = await _plainChatService.ExecuteAsync(
+                            text,
+                            session,
+                            documentContext,
+                            settings,
+                            attachments,
+                            runProgress,
+                            runCancellation.Token,
+                            input.AppendUserMessage).ConfigureAwait(false);
+                    }
+                    else if (_chatSessions.IsCurrentDocument(session))
+                    {
+                        var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
+                        completion = await _chatCompletionService.ExecuteAsync(
+                            text,
+                            session,
+                            documentContext,
+                            settings,
+                            tools,
+                            attachments,
+                            runProgress,
+                            RegisterPendingAgentTool,
+                            skills,
+                            runCancellation.Token,
+                            input.AppendUserMessage).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        var offlineTools = _toolCatalog.GetVisibleTools()
+                            .Where(tool => tool.Enabled &&
+                                string.Equals(tool.Host, "Common", StringComparison.OrdinalIgnoreCase) &&
+                                !string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
+                            .ToList();
+                        completion = await _offlineChatService.ExecuteAsync(
+                            text,
+                            session,
+                            documentContext,
+                            settings,
+                            offlineTools,
+                            attachments,
+                            runProgress,
+                            RegisterPendingAgentTool,
+                            skills,
+                            runCancellation.Token,
+                            input.AppendUserMessage).ConfigureAwait(false);
+                    }
+                }
+                catch (Exception ex)
                 {
                     RecordFailedTurn(session, ex);
                     if (session.LastRun != null)
@@ -629,35 +506,29 @@ namespace RNAssistant.Office
                         session.LastRun.CurrentAction = ex.Message;
                     }
                     AnnotateRunMessages(session, firstRunMessageIndex, runId);
-                    if (commitUserAttachments)
+                    if (input.CommitUserAttachments)
                     {
                         _attachmentStore.Commit(sessionId, LatestUserMessage(session));
                     }
                     SaveSessionChanges(session);
+                    throw;
                 }
-                finally
-                {
-                    _chatRuns.Complete(sessionId, runId);
-                }
-                throw;
-            }
 
-            try
-            {
                 if (settings.SmartChatTitles == false)
                 {
                     ChatTitleBuilder.ApplyFallback(session, text, completion.AssistantText);
                 }
 
                 ReportProgress(runProgress, "saving", "Saving chat history...");
-                if (commitUserAttachments)
+                if (input.CommitUserAttachments)
                 {
                     _attachmentStore.Commit(sessionId, LatestUserMessage(session));
                 }
                 AnnotateRunMessages(session, firstRunMessageIndex, runId);
                 session.LastRun = null;
                 SaveSessionChanges(session);
-
+                runLease.Dispose();
+                var response = CreateSendChatResponse(session, settings, completion);
                 if (shouldGenerateLlmTitle)
                 {
                     StartChatTitleGeneration(
@@ -669,11 +540,11 @@ namespace RNAssistant.Office
                         chatStateChanged);
                 }
 
-                return CreateSendChatResponse(session, settings, completion);
+                return response;
             }
             finally
             {
-                _chatRuns.Complete(sessionId, runId);
+                runLease.Dispose();
             }
         }
 

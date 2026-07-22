@@ -6,6 +6,7 @@ obj/
 *.cache
 *.log
 TestResults/
+/artifacts/
 Directory.Build.local.props
 certs/local/
 packages/PDFtoImage.*/

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 
@@ -122,41 +123,16 @@ namespace RNAssistant.Office.Services
 
         private static AppSettings CreateTitleSettings(AppSettings source)
         {
-            return new AppSettings
-            {
-                BaseUrl = source.BaseUrl,
-                ModelsConfigUrl = source.ModelsConfigUrl,
-                Model = source.Model,
-                SystemPrompt = source.SystemPrompt,
-                ChatSystemPrompt = source.ChatSystemPrompt,
-                SystemPromptRole = source.SystemPromptRole,
-                MaxTokens = 32,
-                RequestTimeoutSeconds = Math.Max(30, Math.Min(source.RequestTimeoutSeconds <= 0 ? 300 : source.RequestTimeoutSeconds, 60)),
-                Temperature = Math.Min(Math.Max(source.Temperature, 0), 0.2),
-                TopP = source.TopP <= 0 ? 1.0 : Math.Min(source.TopP, 1.0),
-                ContextCharLimit = source.ContextCharLimit,
-                StreamResponses = false,
-                AutoRunToolCalls = source.AutoRunToolCalls,
-                AutoConfirmToolActions = source.AutoConfirmToolActions,
-                AutoRetryToolErrors = source.AutoRetryToolErrors,
-                SmartChatTitles = source.SmartChatTitles,
-                IncludeVbaContext = source.IncludeVbaContext,
-                VbaContextCharLimit = source.VbaContextCharLimit,
-                MaxAgentIterations = source.MaxAgentIterations,
-                MaxAgentToolSteps = source.MaxAgentToolSteps,
-                MaxAgentToolsPerRequest = source.MaxAgentToolsPerRequest,
-                MaxAgentPlanSteps = source.MaxAgentPlanSteps,
-                MaxAgentReadOnlyPlanSteps = source.MaxAgentReadOnlyPlanSteps,
-                RequireVerificationForMutations = source.RequireVerificationForMutations,
-                AutoContinueAfterConfirmation = source.AutoContinueAfterConfirmation,
-                AllowAgentToolAuthoring = source.AllowAgentToolAuthoring,
-                AutoCompressContext = source.AutoCompressContext,
-                AgentPrompts = source.AgentPrompts,
-                UiFontScale = source.UiFontScale,
-                CustomHeaders = source.CustomHeaders == null
-                    ? null
-                    : new Dictionary<string, string>(source.CustomHeaders, StringComparer.OrdinalIgnoreCase)
-            };
+            var settings = JsonConvert.DeserializeObject<AppSettings>(
+                JsonConvert.SerializeObject(source)) ?? new AppSettings();
+            settings.MaxTokens = 32;
+            settings.RequestTimeoutSeconds = Math.Max(
+                30,
+                Math.Min(source.RequestTimeoutSeconds <= 0 ? 300 : source.RequestTimeoutSeconds, 60));
+            settings.Temperature = Math.Min(Math.Max(source.Temperature, 0), 0.2);
+            settings.TopP = source.TopP <= 0 ? 1.0 : Math.Min(source.TopP, 1.0);
+            settings.StreamResponses = false;
+            return settings;
         }
 
         private static string PromptRole(AppSettings settings)

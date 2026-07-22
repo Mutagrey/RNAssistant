@@ -9,6 +9,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office
 {
@@ -16,42 +17,136 @@ namespace RNAssistant.Office
     {
         public ChatStateResponse ConfirmAgentTool(string pendingId, string chatId = null)
         {
-            return ConfirmAgentToolAsync(pendingId, chatId, null, CancellationToken.None).GetAwaiter().GetResult();
+            return ConfirmAgentToolAsync(pendingId, chatId, null, CancellationToken.None, null).GetAwaiter().GetResult();
         }
 
         public async Task<ChatStateResponse> ConfirmAgentToolAsync(
             string pendingId,
             string chatId = null,
             Action<string, string, ChatActivity> progress = null,
-            CancellationToken cancellationToken = default(CancellationToken))
+            CancellationToken cancellationToken = default(CancellationToken),
+            string runId = null)
         {
             PendingAgentTool pending;
             var session = ResolvePendingAgentTool(pendingId, chatId, out pending);
-            RemovePendingAgentTool(pendingId);
-            var settings = _settingsService.Load();
-            var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-            cancellationToken.ThrowIfCancellationRequested();
-            var result = _toolExecutor.Execute(CloneCommand(pending.Command), tools, settings, false, true, session, cancellationToken);
-            UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
-            if (result.Success && settings.AutoContinueAfterConfirmation != false)
+            var sessionId = ChatStore.GetSessionId(session);
+            runId = string.IsNullOrWhiteSpace(runId) ? Guid.NewGuid().ToString("N") : runId;
+            var runCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            ChatRunLease runLease;
+            try
             {
-                tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-                var context = LoadContext(session);
-                var skills = _skillCatalog.SelectRelevantSkills("continue confirmed agent task", context, 5);
-                await _chatCompletionService.ContinueAfterToolAsync(
-                    CloneCommand(pending.Command),
-                    session,
-                    context,
-                    settings,
-                    tools,
-                    pending.Attachments ?? LatestUserAttachments(session),
-                    progress,
-                    RegisterPendingAgentTool,
-                    skills,
-                    cancellationToken).ConfigureAwait(false);
+                runLease = _chatRuns.Start(sessionId, runId, session, runCancellation);
             }
-            SaveSessionChanges(session);
-            return ChatState(session);
+            catch
+            {
+                runCancellation.Dispose();
+                throw;
+            }
+
+            try
+            {
+                if (!MarkPendingActivityExecuting(session, pending.PendingId))
+                {
+                    throw new InvalidOperationException("Pending tool was not found or was already resolved.");
+                }
+                RemovePendingAgentTool(pendingId);
+
+                session.LastRun = new ChatRunRecord
+                {
+                    RunId = runId,
+                    RuntimeId = RuntimeId,
+                    Status = "running",
+                    Phase = "executing",
+                    CurrentAction = "Executing confirmed tool.",
+                    StartedUtc = DateTime.UtcNow
+                };
+                SaveSessionChanges(session);
+
+                Action<string, string, ChatActivity> runProgress = (phase, message, activity) =>
+                {
+                    _chatRuns.Update(sessionId, runId, phase, message);
+                    if (session.LastRun != null && string.Equals(session.LastRun.RunId, runId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        session.LastRun.Phase = string.IsNullOrWhiteSpace(phase) ? session.LastRun.Phase : phase;
+                        session.LastRun.CurrentAction = string.IsNullOrWhiteSpace(message) ? session.LastRun.CurrentAction : message;
+                    }
+                    if (activity != null)
+                    {
+                        AnnotateActivity(activity, runId, null);
+                    }
+                    if (progress != null)
+                    {
+                        progress(phase, message, activity);
+                    }
+                };
+
+                var firstRunMessageIndex = session.Messages == null ? 0 : session.Messages.Count;
+                var settings = _settingsService.Load();
+                var tools = _toolCatalog.GetVisibleTools().Where(tool => tool.Enabled).ToList();
+                var pendingResolved = false;
+                try
+                {
+                    ReportProgress(runProgress, "executing", "Executing confirmed tool...");
+                    var result = _toolExecutor.Execute(
+                        CloneCommand(pending.Command),
+                        tools,
+                        settings,
+                        false,
+                        true,
+                        session,
+                        runCancellation.Token);
+                    UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
+                    pendingResolved = true;
+                    if (result.Success && settings.AutoContinueAfterConfirmation != false)
+                    {
+                        tools = _toolCatalog.GetVisibleTools().Where(tool => tool.Enabled).ToList();
+                        var context = LoadContext(session);
+                        var skills = _skillCatalog.SelectRelevantSkills("continue confirmed agent task", context, 5);
+                        await _chatCompletionService.ContinueAfterToolAsync(
+                            CloneCommand(pending.Command),
+                            session,
+                            context,
+                            settings,
+                            tools,
+                            pending.Attachments ?? LatestUserAttachments(session),
+                            runProgress,
+                            RegisterPendingAgentTool,
+                            skills,
+                            runCancellation.Token).ConfigureAwait(false);
+                    }
+
+                    AnnotateRunMessages(session, firstRunMessageIndex, runId);
+                    session.LastRun = null;
+                    SaveSessionChanges(session);
+                }
+                catch (Exception ex)
+                {
+                    if (!pendingResolved)
+                    {
+                        var failedResult = ex is OperationCanceledException
+                            ? ToolResult.Cancelled("Confirmed tool execution was cancelled.")
+                            : ToolResult.Fail(ex.Message, null, "confirmed_tool_failed", false);
+                        UpdatePendingActivity(session, pending.PendingId, pending.Command, failedResult);
+                    }
+                    RecordFailedTurn(session, ex);
+                    if (session.LastRun != null)
+                    {
+                        session.LastRun.Status = ex is OperationCanceledException ? "cancelled" : "failed";
+                        session.LastRun.Phase = session.LastRun.Status;
+                        session.LastRun.CurrentAction = ex.Message;
+                    }
+                    AnnotateRunMessages(session, firstRunMessageIndex, runId);
+                    SaveSessionChanges(session);
+                    throw;
+                }
+
+                runLease.Dispose();
+                return ChatState(session);
+            }
+            finally
+            {
+                runLease.Dispose();
+            }
         }
 
         private static IReadOnlyList<ChatAttachment> LatestUserAttachments(ChatSession session)
@@ -69,11 +164,14 @@ namespace RNAssistant.Office
         {
             PendingAgentTool pending;
             var session = ResolvePendingAgentTool(pendingId, chatId, out pending);
-            RemovePendingAgentTool(pendingId);
-            var result = ToolResult.Cancelled("Tool cancelled by user.");
-            result.PendingId = pending.PendingId;
-            UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
-            SaveSessionChanges(session);
+            using (ReserveChatOperation(session))
+            {
+                RemovePendingAgentTool(pendingId);
+                var result = ToolResult.Cancelled("Tool cancelled by user.");
+                result.PendingId = pending.PendingId;
+                UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
+                SaveSessionChanges(session);
+            }
             return ChatState(session);
         }
 
@@ -268,7 +366,9 @@ namespace RNAssistant.Office
                 return null;
             }
 
-            if (string.Equals(activity.PendingId, pendingId, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(activity.PendingId, pendingId, StringComparison.OrdinalIgnoreCase) &&
+                (string.IsNullOrWhiteSpace(activity.Status) ||
+                 string.Equals(activity.Status, "waiting", StringComparison.OrdinalIgnoreCase)))
             {
                 return activity;
             }
@@ -283,6 +383,30 @@ namespace RNAssistant.Office
             }
 
             return null;
+        }
+
+        private static bool MarkPendingActivityExecuting(ChatSession session, string pendingId)
+        {
+            if (session == null || session.Messages == null || string.IsNullOrWhiteSpace(pendingId))
+            {
+                return false;
+            }
+
+            foreach (var message in session.Messages)
+            {
+                var activity = FindPendingActivity(message == null ? null : message.Activity, pendingId);
+                if (activity == null)
+                {
+                    continue;
+                }
+
+                activity.Status = "running";
+                activity.ExecutionStatus = "executing";
+                activity.ResultMessage = "Executing confirmed tool.";
+                return true;
+            }
+
+            return false;
         }
 
         private static ToolCommand CommandFromActivity(ChatActivity activity)

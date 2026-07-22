@@ -17,6 +17,7 @@ namespace RNAssistant.Office
         public string LastChatText { get; private set; }
         public string LastChatId { get; private set; }
         public string LastChatMode { get; private set; }
+        public string LastRunId { get; private set; }
         public AppSettings LastSettings { get; private set; }
         public string LastApiKey { get; private set; }
         public string LastModuleName { get; private set; }
@@ -117,9 +118,12 @@ namespace RNAssistant.Office
             string pendingId,
             string chatId = null,
             Action<string, string, ChatActivity> progress = null,
-            CancellationToken cancellationToken = default(CancellationToken))
+            CancellationToken cancellationToken = default(CancellationToken),
+            string runId = null)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            LastChatId = chatId;
+            LastRunId = runId;
             if (progress != null)
             {
                 progress("executing", "Testing confirm", new ChatActivity { Kind = "tool", Title = pendingId, Status = "running" });

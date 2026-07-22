@@ -223,251 +223,6 @@ async function forkChatAtMessage(message, index) {
   }
 }
 
-function resetMessageEditState() {
-  state.editingMessageId = "";
-  state.editingMessageIndex = -1;
-  state.editingText = "";
-  state.editingBusy = false;
-}
-
-function hasActiveMessageEdit() {
-  return !!state.editingMessageId || state.editingMessageIndex >= 0;
-}
-
-function normalizeEditedMessageText(text) {
-  return String(text || "").replace(/\r\n/g, "\n").trim();
-}
-
-function findEditingMessage() {
-  var messages = state.messages || [];
-  var messageIndex;
-
-  if (state.editingMessageId) {
-    for (messageIndex = 0; messageIndex < messages.length; messageIndex += 1) {
-      if (messageId(messages[messageIndex]) === state.editingMessageId) {
-        return { message: messages[messageIndex], index: messageIndex };
-      }
-    }
-  }
-
-  messageIndex = state.editingMessageIndex;
-  if (messageIndex >= 0 && messageIndex < messages.length) {
-    return { message: messages[messageIndex], index: messageIndex };
-  }
-
-  return null;
-}
-
-function isEditingMessage(message, index) {
-  if (!hasActiveMessageEdit() || !message) {
-    return false;
-  }
-
-  var id = messageId(message);
-  if (state.editingMessageId && id) {
-    return state.editingMessageId === id;
-  }
-
-  return state.editingMessageIndex === index;
-}
-
-function canEditMessage(message) {
-  return !!message &&
-    !state.bridgeUnavailable &&
-    !currentActiveSend() &&
-    !message.Local &&
-    !message.Pending &&
-    !message.Failed &&
-    !messageActivity(message) &&
-    !!messageId(message) &&
-    messageRole(message).toLowerCase() === "user";
-}
-
-function canSaveMessageEdit(message, index) {
-  if (!isEditingMessage(message, index) ||
-      state.editingBusy ||
-      currentActiveSend() ||
-      !state.activeChatId) {
-    return false;
-  }
-
-  var text = normalizeEditedMessageText(state.editingText);
-  if (!text) {
-    return false;
-  }
-
-  return text !== normalizeEditedMessageText(messageContent(message));
-}
-
-function syncMessageEditTextarea(textarea) {
-  if (!textarea) {
-    return;
-  }
-
-  textarea.style.height = "auto";
-  textarea.style.height = Math.min(textarea.scrollHeight, 240) + "px";
-}
-
-function syncInlineMessageEditorState(editor, message, index) {
-  if (!editor) {
-    return;
-  }
-
-  var saveButton = editor.querySelector(".message-inline-save");
-  if (saveButton) {
-    saveButton.disabled = !canSaveMessageEdit(message, index);
-  }
-
-  editor.classList.toggle("is-busy", !!state.editingBusy);
-}
-
-function focusInlineMessageEditor() {
-  window.setTimeout(function () {
-    var textarea = document.querySelector(".message-inline-editor textarea");
-    if (!textarea) {
-      return;
-    }
-
-    syncMessageEditTextarea(textarea);
-    textarea.focus();
-    textarea.selectionStart = textarea.value.length;
-    textarea.selectionEnd = textarea.value.length;
-  }, 0);
-}
-
-function startMessageEdit(message, index) {
-  if (!canEditMessage(message)) {
-    return;
-  }
-
-  state.editingMessageId = messageId(message);
-  state.editingMessageIndex = index;
-  state.editingText = messageContent(message);
-  state.editingBusy = false;
-  clearSendError();
-  renderMessages();
-  renderSendControls();
-  focusInlineMessageEditor();
-}
-
-function cancelMessageEdit() {
-  if (!hasActiveMessageEdit() || state.editingBusy) {
-    return;
-  }
-
-  resetMessageEditState();
-  renderMessages();
-  renderSendControls();
-}
-
-function applyEditedMessagePreview(target, text) {
-  if (!target || !target.message) {
-    return;
-  }
-
-  var message = target.message;
-  var trimmed = normalizeEditedMessageText(text);
-  state.messages = (state.messages || []).slice(0, target.index + 1);
-  message.Content = trimmed;
-  message.content = trimmed;
-  message.Activity = null;
-  message.activity = null;
-  state.messages[target.index] = message;
-  state.liveActivity = null;
-  state.liveAgentRun = null;
-  state.liveStreamContent = null;
-  state.htmlWorkspace = { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [] };
-  state.htmlWorkspaceDirty = false;
-  updateEstimatedContextUsage();
-  renderMessages();
-  renderContextMeter();
-  if (typeof renderHtmlWorkspace === "function") {
-    renderHtmlWorkspace();
-  }
-}
-
-async function refreshChatAfterEditFailure(chatId) {
-  try {
-    var response = await send("listChats", {});
-    if (state.activeChatId === chatId) {
-      applyChatState(response);
-    } else {
-      applyChatCatalogState(response);
-    }
-  } catch (syncError) {
-    log(syncError.detail || syncError.message);
-  }
-}
-
-async function saveMessageEdit() {
-  var target = findEditingMessage();
-  if (!target || !canSaveMessageEdit(target.message, target.index)) {
-    return;
-  }
-
-  var sentChatId = state.activeChatId;
-  var text = normalizeEditedMessageText(state.editingText);
-  state.editingBusy = true;
-  clearSendError();
-  applyEditedMessagePreview(target, text);
-  setActivity("editing", "Перестраиваю чат с этого сообщения...");
-
-  var request = send("editMessage", {
-    chatId: sentChatId,
-    id: messageId(target.message),
-    index: target.index,
-    text: text
-  });
-
-  state.activeSends[sentChatId] = {
-    requestId: request.requestId,
-    text: text,
-    attachments: messageAttachments(target.message).slice(),
-    canceling: false,
-    editing: true
-  };
-  beginChatRunTracking(sentChatId);
-  renderMessages();
-  renderChatSessions();
-  renderModelControls();
-  renderSendControls();
-
-  try {
-    var response = await request;
-    if (state.activeChatId === sentChatId) {
-      applyChatState(response);
-      clearSendError();
-    } else {
-      applyChatCatalogState(response);
-    }
-    if (response.toolResults && response.toolResults.length) {
-      logToolResults(response.toolResults);
-    }
-    log("Сообщение обновлено. Нижняя история перестроена заново.");
-  } catch (error) {
-    if (error.cancelled) {
-      log("Редактирование сообщения отменено.");
-    } else {
-      log(error.message);
-      if (error.detail && error.detail !== error.message) {
-        log(error.detail);
-      }
-    }
-    await refreshChatAfterEditFailure(sentChatId);
-  } finally {
-    delete state.activeSends[sentChatId];
-    endChatRunTracking(sentChatId);
-    resetMessageEditState();
-    renderMessages();
-    renderChatSessions();
-    renderModelControls();
-    renderSendControls();
-    if (state.activeChatId === sentChatId) {
-      clearActivity();
-    }
-  }
-}
-
 function applyInitState(init) {
   state.bridgeUnavailable = false;
   document.body.classList.remove("bridge-unavailable");
@@ -865,6 +620,13 @@ function currentActiveSend() {
   return state.activeSends[state.activeChatId] || null;
 }
 
+function renderChatRunControls() {
+  renderMessages();
+  renderChatSessions();
+  renderModelControls();
+  renderSendControls();
+}
+
 function beginChatRunTracking(chatId) {
   if (!chatId) {
     return;
@@ -905,43 +667,36 @@ function restoreActiveChatRun() {
 }
 
 async function confirmAgentTool(pendingId) {
-  if (!pendingId) {
-    return;
-  }
-
-  setActivity("executing", "Исполняю подтвержденный tool...");
-  try {
-    applyChatState(await send("confirmAgentTool", { chatId: state.activeChatId, pendingId: pendingId }));
-    log("Agent tool confirmed.");
-  } catch (error) {
-    log(error.detail || error.message);
-  } finally {
-    clearActivity();
-  }
-}
-
-confirmAgentTool = async function (pendingId) {
-  if (!pendingId) {
+  if (!pendingId || currentActiveSend()) {
     return;
   }
 
   var chatId = state.activeChatId;
+  var request = send("confirmAgentTool", { chatId: chatId, pendingId: pendingId });
+  state.activeSends[chatId] = {
+    requestId: request.requestId,
+    text: "",
+    attachments: [],
+    canceling: false,
+    confirming: true
+  };
   beginChatRunTracking(chatId);
-  renderMessages();
-  renderChatSessions();
   setActivity("executing", "Исполняю подтвержденный tool...");
+  renderChatRunControls();
   try {
-    applyChatState(await send("confirmAgentTool", { chatId: chatId, pendingId: pendingId }));
+    var response = await request;
+    if (state.activeChatId === chatId) applyChatState(response);
+    else applyChatCatalogState(response);
     log("Agent tool confirmed.");
   } catch (error) {
     log(error.detail || error.message);
   } finally {
+    delete state.activeSends[chatId];
     endChatRunTracking(chatId);
-    renderMessages();
-    renderChatSessions();
-    clearActivity();
+    renderChatRunControls();
+    if (state.activeChatId === chatId) clearActivity();
   }
-};
+}
 
 async function cancelAgentTool(pendingId) {
   if (!pendingId) {
@@ -1042,7 +797,6 @@ function bindChatActions() {
     saveChatMode($("chatModeSelect").value);
   });
   $("clearChatButton").addEventListener("click", clearChat);
-  $("retrySendButton").addEventListener("click", retryFailedSend);
   $("stopButton").addEventListener("click", stopActiveSend);
   $("clearInputButton").addEventListener("click", function () { setChatInputText("", true); });
   $("chatInput").addEventListener("input", updateComposerInputState);

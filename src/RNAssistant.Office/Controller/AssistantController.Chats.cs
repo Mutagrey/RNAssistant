@@ -19,67 +19,83 @@ namespace RNAssistant.Office
         public ChatStateResponse DeleteMessage(string id, int index, string chatId = null)
         {
             var session = LoadSession(chatId);
-            var removed = false;
-            ChatMessage removedMessage = null;
-            if (!string.IsNullOrWhiteSpace(id))
+            using (ReserveChatOperation(session))
             {
-                removedMessage = session.Messages.FirstOrDefault(m => m != null && string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase));
-                removed = removedMessage != null && session.Messages.Remove(removedMessage);
-            }
+                var targetIndex = -1;
+                if (!string.IsNullOrWhiteSpace(id))
+                {
+                    targetIndex = session.Messages.FindIndex(message =>
+                        message != null && string.Equals(message.Id, id, StringComparison.OrdinalIgnoreCase));
+                    if (targetIndex < 0)
+                    {
+                        throw new InvalidOperationException("Message was not found.");
+                    }
+                }
+                else if (index >= 0 && index < session.Messages.Count)
+                {
+                    targetIndex = index;
+                }
 
-            if (!removed && index >= 0 && index < session.Messages.Count)
-            {
-                removedMessage = session.Messages[index];
-                session.Messages.RemoveAt(index);
-                removed = true;
-            }
+                if (targetIndex < 0)
+                {
+                    throw new InvalidOperationException("Message was not found.");
+                }
 
-            if (removed)
-            {
+                var removedMessage = session.Messages[targetIndex];
+                session.Messages.RemoveAt(targetIndex);
                 _attachmentStore.DeleteMessage(removedMessage);
                 RemovePendingAgentToolsForSession(ChatStore.GetSessionId(session));
                 CancelPendingActivities(session, "Pending action cancelled because chat history changed.");
                 SaveSessionChanges(session);
             }
 
-            var activeId = ChatStore.GetSessionId(session);
-            return new ChatStateResponse { ActiveChatId = activeId, ActiveChatModel = session.Model, ActiveChatMode = ChatModes.Normalize(session.Mode), ActiveChatHtmlMode = session.HtmlModeEnabled, Chats = _chatSessions.GetChatSummaries(activeId), Documents = ListOpenDocuments(), Context = LoadContext(session), Messages = session.Messages, ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load()), HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace) };
+            return ChatState(session);
         }
 
         public ChatStateResponse ForkChat(string id, int index, string chatId = null)
         {
             var source = LoadSession(chatId);
-            var sourceMessages = source.Messages ?? new List<ChatMessage>();
-            var targetIndex = -1;
-            if (!string.IsNullOrWhiteSpace(id))
+            ChatSession fork;
+            using (ReserveChatOperation(source))
             {
-                targetIndex = sourceMessages.FindIndex(m => m != null && string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase));
-            }
-            if (targetIndex < 0 && index >= 0 && index < sourceMessages.Count)
-            {
-                targetIndex = index;
-            }
-            if (targetIndex < 0)
-            {
-                targetIndex = sourceMessages.Count - 1;
+                var sourceMessages = source.Messages ?? new List<ChatMessage>();
+                var targetIndex = -1;
+                if (!string.IsNullOrWhiteSpace(id))
+                {
+                    targetIndex = sourceMessages.FindIndex(message =>
+                        message != null && string.Equals(message.Id, id, StringComparison.OrdinalIgnoreCase));
+                    if (targetIndex < 0)
+                    {
+                        throw new InvalidOperationException("Message was not found.");
+                    }
+                }
+                else if (index >= 0 && index < sourceMessages.Count)
+                {
+                    targetIndex = index;
+                }
+                else
+                {
+                    targetIndex = sourceMessages.Count - 1;
+                }
+
+                fork = _chatStore.CreateTransient(source.Host, source.DocumentKey, source.DocumentTitle, ChatSessionService.BuildForkTitle(source));
+                fork.Model = source.Model;
+                fork.Mode = ChatModes.Normalize(source.Mode);
+                fork.HtmlModeEnabled = source.HtmlModeEnabled;
+                fork.Context = ChatCloneService.CloneContext(LoadContext(source)) ?? CreateEmptyContext();
+                fork.HtmlWorkspace = ChatCloneService.CloneHtmlWorkspace(source.HtmlWorkspace);
+                fork.Messages = targetIndex < 0
+                    ? new List<ChatMessage>()
+                    : ChatCloneService.CloneMessages(sourceMessages.Take(targetIndex + 1));
+                foreach (var message in fork.Messages)
+                {
+                    _attachmentStore.CloneMessageAttachments(ChatStore.GetSessionId(fork), message);
+                }
+                NormalizeContext(fork.Context, fork);
+                SaveSessionChanges(fork);
+                _chatSessions.SetActiveSession(fork);
             }
 
-            var fork = _chatStore.CreateTransient(source.Host, source.DocumentKey, source.DocumentTitle, ChatSessionService.BuildForkTitle(source));
-            fork.Model = source.Model;
-            fork.Mode = ChatModes.Normalize(source.Mode);
-            fork.HtmlModeEnabled = source.HtmlModeEnabled;
-            fork.Context = ChatCloneService.CloneContext(LoadContext(source)) ?? CreateEmptyContext();
-            fork.HtmlWorkspace = ChatCloneService.CloneHtmlWorkspace(source.HtmlWorkspace);
-            fork.Messages = targetIndex < 0
-                ? new List<ChatMessage>()
-                : ChatCloneService.CloneMessages(sourceMessages.Take(targetIndex + 1));
-            foreach (var message in fork.Messages)
-            {
-                _attachmentStore.CloneMessageAttachments(ChatStore.GetSessionId(fork), message);
-            }
-            NormalizeContext(fork.Context, fork);
-            SaveSessionChanges(fork);
-            _chatSessions.SetActiveSession(fork);
             return ChatState(fork);
         }
 
@@ -95,24 +111,27 @@ namespace RNAssistant.Office
         {
             var session = LoadAddressedSession(chatId);
             var sessionId = ChatStore.GetSessionId(session);
-            if (_chatRuns.IsRunning(sessionId))
-            {
-                throw new InvalidOperationException("Stop the active request in this chat before editing messages.");
-            }
-
-            var edit = _chatHistoryEditService.RewriteUserMessage(session, sessionId, id, index, text);
-            SaveSessionChanges(session);
             return await ExecuteChatTurnAsync(
-                edit.Message == null ? string.Empty : edit.Message.Content,
                 session,
                 _settingsService.Load(),
-                edit.Message == null ? (IReadOnlyList<ChatAttachment>)new ChatAttachment[0] : edit.Message.Attachments,
+                null,
+                currentSession =>
+                {
+                    var edit = _chatHistoryEditService.RewriteUserMessage(currentSession, sessionId, id, index, text);
+                    return new ChatTurnInput
+                    {
+                        Text = edit.Message == null ? string.Empty : edit.Message.Content,
+                        Attachments = edit.Message == null
+                            ? (IReadOnlyList<ChatAttachment>)new ChatAttachment[0]
+                            : edit.Message.Attachments,
+                        AppendUserMessage = false,
+                        CommitUserAttachments = false
+                    };
+                },
                 progress,
                 chatStateChanged,
                 cancellationToken,
-                runId,
-                false,
-                false).ConfigureAwait(false);
+                runId).ConfigureAwait(false);
         }
 
         public ChatStateResponse UpdateMessageActivityData(string messageId, string dataJson, string chatId = null)
@@ -197,14 +216,17 @@ namespace RNAssistant.Office
 
         public ChatStateResponse RenameChat(string chatId, string title)
         {
-            var session = LoadSession(chatId);
-            if (!string.IsNullOrWhiteSpace(title))
+            lock (_syncRoot)
             {
-                session.Title = title.Trim();
-                SaveSessionChanges(session);
-            }
+                var session = LoadSession(chatId);
+                if (!string.IsNullOrWhiteSpace(title))
+                {
+                    session.Title = title.Trim();
+                    SaveSessionChanges(session);
+                }
 
-            return ChatState(session);
+                return ChatState(session);
+            }
         }
 
         public ChatStateResponse SetChatModel(string chatId, string model)
@@ -235,33 +257,34 @@ namespace RNAssistant.Office
 
         public ChatStateResponse ClearChat(string chatId)
         {
-            if (_chatRuns.IsRunning(chatId))
-            {
-                throw new InvalidOperationException("Сначала остановите выполняющийся запрос в этом чате.");
-            }
             var session = LoadSession(chatId);
-            var sessionId = ChatStore.GetSessionId(session);
-            _attachmentStore.DeleteSession(sessionId);
-            RemovePendingAgentToolsForSession(sessionId);
-            session.Messages.Clear();
-            session.Context = CreateEmptyContext();
-            session.HtmlWorkspace = new HtmlWorkspace();
-            NormalizeContext(session.Context, session);
-            SaveSessionChanges(session);
+            using (ReserveChatOperation(session))
+            {
+                var sessionId = ChatStore.GetSessionId(session);
+                _attachmentStore.DeleteSession(sessionId);
+                RemovePendingAgentToolsForSession(sessionId);
+                session.Messages.Clear();
+                session.Context = CreateEmptyContext();
+                session.HtmlWorkspace = new HtmlWorkspace();
+                NormalizeContext(session.Context, session);
+                SaveSessionChanges(session);
+            }
+
             return ChatState(session);
         }
 
         public ChatStateResponse DeleteChat(string chatId)
         {
-            if (_chatRuns.IsRunning(chatId))
-            {
-                throw new InvalidOperationException("Сначала остановите выполняющийся запрос в этом чате.");
-            }
             var current = LoadSession(chatId);
-            var sessionId = ChatStore.GetSessionId(current);
-            _attachmentStore.DeleteSession(sessionId);
-            RemovePendingAgentToolsForSession(sessionId);
-            var next = _chatSessions.DeleteAndSelectNext(sessionId);
+            ChatSession next;
+            using (ReserveChatOperation(current))
+            {
+                var sessionId = ChatStore.GetSessionId(current);
+                _attachmentStore.DeleteSession(sessionId);
+                RemovePendingAgentToolsForSession(sessionId);
+                next = _chatSessions.DeleteAndSelectNext(sessionId);
+            }
+
             return ChatState(next);
         }
 
@@ -301,6 +324,12 @@ namespace RNAssistant.Office
         private ChatSession LoadAddressedSession(string requestedSessionId)
         {
             return _chatSessions.LoadAddressedSession(requestedSessionId);
+        }
+
+        private ChatRunLease ReserveChatOperation(ChatSession session)
+        {
+            var sessionId = ChatStore.GetSessionId(session);
+            return _chatRuns.Start(sessionId, Guid.NewGuid().ToString("N"), session);
         }
 
         private ChatStateResponse ChatState(ChatSession session)

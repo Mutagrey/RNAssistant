@@ -346,33 +346,3 @@
 .composer-actions .hidden {
   display: none;
 }
-
-.send-error {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  padding: 9px 10px;
-  border: 1px solid #f1b8b1;
-  border-radius: var(--radius);
-  background: #fff7f6;
-  color: #7a271a;
-}
-
-.send-error.hidden {
-  display: none;
-}
-
-.send-error-title {
-  font-size: 12px;
-  font-weight: var(--title-font-weight);
-}
-
-.send-error-text {
-  max-height: 58px;
-  overflow: auto;
-  margin-top: 2px;
-  font-size: 12px;
-  line-height: 1.35;
-}

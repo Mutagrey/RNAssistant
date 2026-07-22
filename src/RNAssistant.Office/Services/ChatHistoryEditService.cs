@@ -92,6 +92,8 @@ namespace RNAssistant.Office.Services
                         return messageIndex;
                     }
                 }
+
+                return -1;
             }
 
             return index >= 0 && index < messages.Count ? index : -1;

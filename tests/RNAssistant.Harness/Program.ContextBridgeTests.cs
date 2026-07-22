@@ -286,6 +286,28 @@ namespace RNAssistant.Harness
             AssertEqual("chatState", JObject.Parse(progressMessages[1])["type"].Value<string>(), "edit chat state event");
         }
 
+        private static void BridgeConfirmProgressCarriesChatAndRunIds()
+        {
+            var controller = new AssistantController();
+            var progressMessages = new List<string>();
+            var bridge = new AssistantWebBridge(controller, progressMessages.Add);
+            var token = BridgeToken(bridge);
+            var responseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"confirm1\",\"type\":\"confirmAgentTool\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-confirm\",\"pendingId\":\"pending-1\"}}")
+                .GetAwaiter()
+                .GetResult();
+
+            var response = JObject.Parse(responseJson);
+            AssertTrue(response["ok"].Value<bool>(), "confirm response ok");
+            AssertEqual("chat-confirm", controller.LastChatId, "confirm chat id");
+            AssertTrue(!string.IsNullOrWhiteSpace(controller.LastRunId), "confirm run id forwarded");
+            AssertEqual(1, progressMessages.Count, "confirm progress count");
+            var progress = JObject.Parse(progressMessages[0]);
+            AssertEqual("chat-confirm", progress["payload"]["chatId"].Value<string>(), "confirm progress chat id");
+            AssertEqual(controller.LastRunId, progress["payload"]["runId"].Value<string>(), "confirm progress run id");
+            AssertEqual("executing", progress["payload"]["phase"].Value<string>(), "confirm progress phase");
+        }
+
         private static void BridgeUsesTypedChatModePayload()
         {
             var controller = new AssistantController();

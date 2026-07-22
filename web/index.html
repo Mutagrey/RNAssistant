@@ -8,10 +8,10 @@
   <link rel="stylesheet" href="css/vendor/katex.min.css">
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
-  <link rel="stylesheet" href="css/app.css?v=chatui-20260630-2">
-  <link rel="stylesheet" href="css/app-chat.css?v=chat-tree-20260722-3">
+  <link rel="stylesheet" href="css/app.css?v=composer-cleanup-20260723-1">
+  <link rel="stylesheet" href="css/app-chat.css?v=stream-dots-20260723-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=chatui-20260622-1">
-  <link rel="stylesheet" href="css/app-composer.css?v=chatui-20260622-10">
+  <link rel="stylesheet" href="css/app-composer.css?v=composer-cleanup-20260723-1">
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-models.css?v=mediarouting-20260722-1">
@@ -106,16 +106,6 @@
           </button>
         </div>
         <form class="composer" id="chatForm">
-          <div class="send-error hidden" id="sendError" role="alert">
-            <div>
-              <div class="send-error-title">Сообщение не отправлено</div>
-              <div class="send-error-text" id="sendErrorText"></div>
-            </div>
-            <button type="button" class="secondary icon-text-button" id="retrySendButton">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M6.1 9A7 7 0 0 1 18.2 6.8L20 11"/><path d="M17.9 15A7 7 0 0 1 5.8 17.2L4 13"/></svg>
-              <span>Повторить</span>
-            </button>
-          </div>
           <div class="composer-input-wrap">
             <textarea id="chatInput" rows="3" placeholder="Спросите про текущий документ..."></textarea>
             <button type="button" class="icon-button composer-clear-button" id="clearInputButton" title="Очистить ввод" aria-label="Очистить ввод" hidden>
@@ -687,7 +677,7 @@
   <script src="js/app-model-render.js?v=mediarouting-20260722-1"></script>
   <script src="js/app-models.js?v=chatui-20260703-2"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=chat-tree-20260722-1"></script>
+  <script src="js/app-chat-state.js?v=composer-cleanup-20260723-1"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
   <script src="js/app-tools.js?v=chatui-20260622-4"></script>
   <script src="js/app-skills.js?v=chatui-20260622-4"></script>
@@ -699,10 +689,11 @@
   <script src="js/app-chart-artifacts.js?v=chatui-20260622-2"></script>
   <script src="js/app-html-artifacts.js?v=chatui-20260702-2"></script>
   <script src="js/app-agent.js?v=chatui-20260702-1"></script>
-  <script src="js/app-messages.js?v=reasoning-20260722-2"></script>
+  <script src="js/app-messages.js?v=stream-dots-20260723-2"></script>
   <script src="js/app-reasoning.js?v=reasoning-20260722-1"></script>
   <script src="js/app-attachments.js?v=mediarouting-20260722-1"></script>
-  <script src="js/app-chat.js?v=chat-tree-20260722-2"></script>
+  <script src="js/app-chat.js?v=composer-cleanup-20260723-1"></script>
+  <script src="js/app-chat-edit.js?v=chat-edit-20260723-1"></script>
   <script src="js/app.js?v=chatui-20260630-3"></script>
 </body>
 </html>

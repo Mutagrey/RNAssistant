@@ -106,9 +106,6 @@ function applyChatState(response) {
 
 function applyChatCatalogState(response) {
   response = response || {};
-  if (typeof resetMessageEditState === "function") {
-    resetMessageEditState();
-  }
   if (response.chats !== undefined || response.Chats !== undefined) {
     state.chats = response.chats || response.Chats || [];
   }
@@ -554,20 +551,10 @@ function estimateTextTokens(text) {
 
 function showSendError(error, text) {
   state.failedSend = { text: text || "", error: error || "Unknown error" };
-  var box = $("sendError");
-  var message = $("sendErrorText");
-  if (box && message) {
-    message.textContent = state.failedSend.error;
-    box.classList.remove("hidden");
-  }
 }
 
 function clearSendError() {
   state.failedSend = null;
-  var box = $("sendError");
-  if (box) {
-    box.classList.add("hidden");
-  }
 }
 
 function markLocalMessage(text, values) {

@@ -249,6 +249,47 @@ namespace RNAssistant.Office.Services
             _chatStore.SaveActiveSessionId(session.Host, session.DocumentKey, _activeSessionId);
         }
 
+        internal bool TryApplyGeneratedTitle(
+            string host,
+            string documentKey,
+            string sessionId,
+            string expectedCurrentTitle,
+            string generatedTitle)
+        {
+            if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(generatedTitle))
+            {
+                return false;
+            }
+
+            var running = RunStateProvider == null ? null : RunStateProvider(sessionId);
+            var session = running == null ? null : running.Session;
+            if (session == null && _activeSession != null &&
+                string.Equals(_activeSessionId, sessionId, StringComparison.OrdinalIgnoreCase))
+            {
+                session = _activeSession;
+            }
+            if (session == null)
+            {
+                session = _chatStore.Load(host, documentKey, sessionId) ?? _chatStore.Load(sessionId);
+            }
+            if (!ChatTitleBuilder.CanReplaceAutoTitle(session, expectedCurrentTitle))
+            {
+                return false;
+            }
+
+            session.Title = generatedTitle.Trim();
+            if (running == null)
+            {
+                _chatStore.Save(session);
+            }
+            if (string.Equals(_activeSessionId, sessionId, StringComparison.OrdinalIgnoreCase))
+            {
+                _activeSession = session;
+                _activeSessionPersisted = _chatStore.IsPersisted(session);
+            }
+            return true;
+        }
+
         public ChatSession GetActiveSession()
         {
             if (_activeSession == null)
@@ -286,7 +327,13 @@ namespace RNAssistant.Office.Services
             foreach (var running in RunSessionsProvider == null ? new ChatSession[0] : RunSessionsProvider())
             {
                 var runningId = ChatStore.GetSessionId(running);
-                if (sessions.All(item => !string.Equals(ChatStore.GetSessionId(item), runningId, StringComparison.OrdinalIgnoreCase)))
+                var storedIndex = sessions.FindIndex(item =>
+                    string.Equals(ChatStore.GetSessionId(item), runningId, StringComparison.OrdinalIgnoreCase));
+                if (storedIndex >= 0)
+                {
+                    sessions[storedIndex] = running;
+                }
+                else
                 {
                     sessions.Insert(0, running);
                 }

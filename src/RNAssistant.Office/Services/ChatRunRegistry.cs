@@ -6,6 +6,30 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Services
 {
+    internal sealed class ChatRunLease : IDisposable
+    {
+        private readonly ChatRunRegistry _registry;
+        private int _completed;
+
+        internal ChatRunLease(ChatRunRegistry registry, string chatId, string runId)
+        {
+            _registry = registry;
+            ChatId = chatId;
+            RunId = runId;
+        }
+
+        public string ChatId { get; private set; }
+        public string RunId { get; private set; }
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _completed, 1) == 0)
+            {
+                _registry.Complete(ChatId, RunId);
+            }
+        }
+    }
+
     internal sealed class ChatRunSnapshot
     {
         public string ChatId { get; set; }
@@ -24,7 +48,7 @@ namespace RNAssistant.Office.Services
         private readonly Dictionary<string, ChatRunSnapshot> _runs =
             new Dictionary<string, ChatRunSnapshot>(StringComparer.OrdinalIgnoreCase);
 
-        public ChatRunSnapshot Start(string chatId, string runId, ChatSession session, CancellationTokenSource cancellation = null)
+        public ChatRunLease Start(string chatId, string runId, ChatSession session, CancellationTokenSource cancellation = null)
         {
             if (string.IsNullOrWhiteSpace(chatId) || string.IsNullOrWhiteSpace(runId))
             {
@@ -48,7 +72,7 @@ namespace RNAssistant.Office.Services
                     Cancellation = cancellation
                 };
                 _runs[chatId] = run;
-                return Clone(run);
+                return new ChatRunLease(this, chatId, runId);
             }
         }
 

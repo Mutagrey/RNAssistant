@@ -222,11 +222,13 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "confirmAgentTool":
                         var confirmAgentTool = Payload<PendingAgentToolPayload>(payload);
+                        var confirmRunId = Guid.NewGuid().ToString("N");
                         responsePayload = await _controller.ConfirmAgentToolAsync(
                             confirmAgentTool.PendingId,
                             confirmAgentTool.ChatId,
-                            (phase, message, activity) => ReportProgress(id, phase, message, activity),
-                            cancellationToken);
+                            (phase, message, activity) => ReportProgress(id, confirmAgentTool.ChatId, confirmRunId, phase, message, activity),
+                            cancellationToken,
+                            confirmRunId);
                         break;
                     case "cancelAgentTool":
                         var cancelAgentTool = Payload<PendingAgentToolPayload>(payload);

@@ -150,7 +150,7 @@ function renderChatEmptyState() {
 }
 
 function messageSupportsInlineEdit(message, index, activity) {
-  return !activity && !hasActiveMessageEdit() && canEditMessage(message) && !isEditingMessage(message, index);
+  return !activity && !currentActiveSend() && !hasActiveMessageEdit() && canEditMessage(message) && !isEditingMessage(message, index);
 }
 
 function renderInlineMessageEditor(message, index) {
@@ -222,18 +222,21 @@ function appendMessageFooter(node, message, index, activity) {
   meta.className = "message-footer-meta";
 
   var usage = messageUsageText(message);
-  if (usage || message.Pending || message.Failed) {
+  if (usage || message.Failed) {
     var usageNode = document.createElement("span");
     usageNode.className = "message-usage";
-    usageNode.textContent = message.Failed ? "Не отправлено" : (message.Pending ? "Отправляю..." : usage);
+    usageNode.textContent = message.Failed ? "Не отправлено" : usage;
     meta.appendChild(usageNode);
   }
 
   var actions = document.createElement("div");
   actions.className = "message-actions";
-  actions.appendChild(smallIconButton("Ответвить чат отсюда", "branch", function () {
-    forkChatAtMessage(message, index);
-  }));
+  var historyActionsBlocked = !!currentActiveSend() || hasActiveMessageEdit();
+  if (!historyActionsBlocked) {
+    actions.appendChild(smallIconButton("Ответвить чат отсюда", "branch", function () {
+      forkChatAtMessage(message, index);
+    }));
+  }
   if (messageSupportsInlineEdit(message, index, activity)) {
     actions.appendChild(smallIconButton("Изменить сообщение", "edit", function () {
       startMessageEdit(message, index);
@@ -243,9 +246,11 @@ function appendMessageFooter(node, message, index, activity) {
     copyText(activity ? activityText(activity) : messageContent(message));
     log("Сообщение скопировано.");
   }));
-  actions.appendChild(smallIconButton("Удалить сообщение", "trash", function () {
-    deleteMessage(message, index);
-  }));
+  if (!historyActionsBlocked) {
+    actions.appendChild(smallIconButton("Удалить сообщение", "trash", function () {
+      deleteMessage(message, index);
+    }));
+  }
 
   if (meta.childNodes.length) {
     footer.appendChild(meta);
@@ -387,6 +392,12 @@ function renderLiveStreamMessage() {
   var cursor = document.createElement("span");
   cursor.className = "streaming-cursor";
   cursor.setAttribute("aria-hidden", "true");
+  cursor.style.setProperty("--streaming-dot-phase", -(Date.now() % 1200) + "ms");
+  for (var dotIndex = 0; dotIndex < 3; dotIndex += 1) {
+    var dot = document.createElement("span");
+    dot.className = "streaming-cursor-dot";
+    cursor.appendChild(dot);
+  }
   body.appendChild(cursor);
   live.appendChild(body);
   enhanceMarkdown(body);

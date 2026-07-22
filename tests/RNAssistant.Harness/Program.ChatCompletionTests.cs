@@ -496,91 +496,61 @@ namespace RNAssistant.Harness
             AssertEqual("Как работает умное название чатов", ChatTitleBuilder.BuildDraftTitle("Проверь, как работает умное название чатов."), "draft title strips request prefix");
         }
 
-        private static void ControllerPublishesDraftTitleBeforeSmartRename()
+        private static void GeneratedSmartTitleSurvivesCachedSessionSave()
         {
             WithTempPaths(delegate(AppDataPaths paths)
             {
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
-                var llmCall = 0;
-                var controller = new AssistantController(
-                    adapter,
-                    paths,
-                    delegate(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        var call = Interlocked.Increment(ref llmCall);
-                        if (call == 1)
-                        {
-                            return Task.FromResult(new LlmCompletionResult
-                            {
-                                Content = FinalBlock("Отчет готов.")
-                            });
-                        }
+                var store = new ChatStore(paths);
+                var sessions = new ChatSessionService(adapter, store);
+                var runs = new ChatRunRegistry();
+                sessions.RunStateProvider = runs.Get;
+                sessions.RunSessionsProvider = runs.Sessions;
 
-                        return Task.FromResult(new LlmCompletionResult
-                        {
-                            Content = "Продажи по кварталу"
-                        });
-                    });
+                var draftTitle = ChatTitleBuilder.BuildDraftTitle("Сделай отчет по продажам за квартал");
+                var session = store.Create(
+                    adapter.HostName,
+                    adapter.DocumentKey,
+                    adapter.DocumentTitle,
+                    draftTitle);
+                var sessionId = ChatStore.GetSessionId(session);
+                sessions.SetActiveSession(session);
 
-                var created = controller.CreateChat("Новый чат");
-                var states = new List<ChatStateResponse>();
-                var requestText = "Сделай отчет по продажам за квартал";
-                var draftTitle = ChatTitleBuilder.BuildDraftTitle(requestText);
-
-                controller.SendChatAsync(
-                    requestText,
-                    created.ActiveChatId,
-                    null,
-                    null,
-                    delegate(ChatStateResponse state)
-                    {
-                        lock (states)
-                        {
-                            states.Add(state);
-                        }
-                    },
-                    CancellationToken.None,
-                    "run-1").GetAwaiter().GetResult();
-
-                ChatStateResponse firstState;
-                lock (states)
+                using (runs.Start(sessionId, "run-title", session))
                 {
-                    AssertTrue(states.Count >= 1, "draft title state published");
-                    firstState = states[0];
+                    AssertTrue(
+                        sessions.TryApplyGeneratedTitle(
+                            session.Host,
+                            session.DocumentKey,
+                            sessionId,
+                            draftTitle,
+                            "Продажи по кварталу"),
+                        "smart title applied to running session");
+                    AssertEqual("Продажи по кварталу", session.Title, "running session title updated");
+                    AssertEqual(
+                        "Продажи по кварталу",
+                        sessions.GetChatSummaries(sessionId).First(item => item.Id == sessionId).Title,
+                        "catalog uses live running session");
                 }
 
-                AssertEqual(draftTitle, ActiveChatTitle(firstState), "draft title published before smart rename");
-                AssertTrue(SpinWait.SpinUntil(delegate
-                {
-                    lock (states)
-                    {
-                        return states.Count >= 2;
-                    }
-                }, 2000), "smart rename state published");
+                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Следующее сохранение" });
+                store.Save(session);
+                sessions.NotifySaved(session);
+                AssertEqual("Продажи по кварталу", store.Load(sessionId).Title, "later save preserves smart title");
 
-                ChatStateResponse finalState;
-                lock (states)
-                {
-                    finalState = states[states.Count - 1];
-                }
-
-                AssertEqual("Продажи по кварталу", ActiveChatTitle(finalState), "smart title replaces draft");
+                session.Title = "Ручное название";
+                store.Save(session);
+                sessions.NotifySaved(session);
+                AssertTrue(
+                    !sessions.TryApplyGeneratedTitle(
+                        session.Host,
+                        session.DocumentKey,
+                        sessionId,
+                        draftTitle,
+                        "Устаревшее название"),
+                    "manual rename rejects stale smart title");
+                AssertEqual("Ручное название", store.Load(sessionId).Title, "manual title preserved");
             });
-        }
-
-        private static string ActiveChatTitle(ChatStateResponse state)
-        {
-            var activeId = state == null ? null : state.ActiveChatId;
-            foreach (var chat in state == null ? new ChatSessionSummary[0] : state.Chats ?? new List<ChatSessionSummary>())
-            {
-                if (chat != null && string.Equals(chat.Id, activeId, StringComparison.OrdinalIgnoreCase))
-                {
-                    return chat.Title;
-                }
-            }
-
-            return string.Empty;
         }
     }
 }
