@@ -251,8 +251,11 @@ namespace RNAssistant.Harness
             AssertEqual("b2", progress["id"].Value<string>(), "progress id");
             AssertEqual("thinking", progress["payload"]["phase"].Value<string>(), "progress phase");
             AssertEqual("Testing progress", progress["payload"]["activity"]["Title"].Value<string>(), "progress activity title");
-            AssertEqual(2, progressMessages.Count, "send chat event count");
-            var chatState = JObject.Parse(progressMessages[1]);
+            AssertEqual(3, progressMessages.Count, "send chat event count");
+            var stream = JObject.Parse(progressMessages[1]);
+            AssertEqual("streaming", stream["payload"]["phase"].Value<string>(), "stream phase");
+            AssertEqual("Hel", stream["payload"]["contentDelta"].Value<string>(), "stream content delta");
+            var chatState = JObject.Parse(progressMessages[2]);
             AssertEqual("chatState", chatState["type"].Value<string>(), "chat state event type");
             AssertEqual("chat-1", chatState["payload"]["activeChatId"].Value<string>(), "chat state active id");
         }

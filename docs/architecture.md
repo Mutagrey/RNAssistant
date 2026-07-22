@@ -135,7 +135,7 @@ Current coverage:
 - explicit Chat/Auto/Agent routing, plain-chat prompt isolation, rebuilt history after deletion, and empty-tool preflight diagnostics;
 - balanced tool slicing with exclusion diagnostics, prompt-budget boundaries, and strict parser boundary corpus;
 - Core context normalization/upsert/trim behavior;
-- typed bridge settings/context/VBA/tool/chat payload parsing, agent pending-tool status, and progress envelope;
+- typed bridge settings/context/VBA/tool/chat payload parsing, agent pending-tool status, and progress envelope with streamed content deltas;
 - no Office COM dependency.
 
 Next harness coverage:

@@ -120,10 +120,32 @@ namespace RNAssistant.Office
             }
 
             dynamic vbProject = GetVbaProject(documentObject);
-            dynamic component = vbProject.VBComponents.Add(StdModuleType);
-            component.Name = moduleName;
-            component.CodeModule.AddFromString(code);
-            return ToolResult.Ok("Inserted VBA module: " + moduleName);
+            dynamic component = null;
+            try
+            {
+                component = vbProject.VBComponents.Add(StdModuleType);
+                component.Name = moduleName;
+                component.CodeModule.AddFromString(code);
+                return ToolResult.Ok("Inserted VBA module: " + moduleName, JsonConvert.SerializeObject(new
+                {
+                    moduleName = (string)component.Name,
+                    lineCount = (int)component.CodeModule.CountOfLines
+                }));
+            }
+            catch
+            {
+                if (component != null)
+                {
+                    try
+                    {
+                        vbProject.VBComponents.Remove(component);
+                    }
+                    catch
+                    {
+                    }
+                }
+                throw;
+            }
         }
 
         private static object FindComponent(object vbProjectObject, string moduleName)

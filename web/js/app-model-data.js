@@ -26,38 +26,80 @@ function modelField(model, pascal, snake, camel, fallback) {
   return fallback;
 }
 
+function nullableModelBoolean(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "string") {
+    if (value.toLowerCase() === "true") return true;
+    if (value.toLowerCase() === "false") return false;
+  }
+  return !!value;
+}
+
+function modelFieldWithDefaults(model, pascal, snake, camel) {
+  var value = modelField(model, pascal, snake, camel, null);
+  if (value !== null && value !== undefined) return value;
+  var defaults = model.default_params || model.defaultParams || model.DefaultParams || {};
+  return modelField(defaults, pascal, snake, camel, null);
+}
+
 function normalizeModelCatalog(payload) {
   payload = payload || {};
   var catalog = payload.catalog || payload.Catalog || payload;
-  var rawModels = catalog.models || catalog.Models || [];
+  var rawModels = Array.isArray(catalog)
+    ? catalog
+    : (catalog.models || catalog.Models || catalog.data || catalog.Data || []);
   var seen = {};
   var models = [];
 
   rawModels.forEach(function (item) {
-    var value = String(modelField(item, "Value", "value", "value", "") || "").trim();
-    var title = String(modelField(item, "Title", "title", "title", value) || value).trim();
+    var value = String(modelField(item, "Value", "value", "value", item.id || item.Id || "") || "").trim();
+    var legacyTitle = modelField(item, "Title", "title", "title", value);
+    var title = String(modelField(item, "DisplayName", "display_name", "displayName", legacyTitle) || value).trim();
     if (!value || seen[value.toLowerCase()]) {
       return;
     }
     seen[value.toLowerCase()] = true;
+    var supportsImages = modelField(item, "SupportsImages", "supports_images", "supportsImages", null);
+    if (supportsImages === null || supportsImages === undefined) {
+      supportsImages = modelField(item, "SupportsVision", "supports_vision", "supportsVision", null);
+    }
     models.push({
       value: value,
       title: title || value,
       description: modelField(item, "Description", "description", "description", "") || "",
       maxContextTokens: modelField(item, "MaxContextTokens", "max_context_tokens", "maxContextTokens", null),
-      maxTokens: modelField(item, "MaxTokens", "max_tokens", "maxTokens", null),
+      maxTokens: modelFieldWithDefaults(item, "MaxTokens", "max_tokens", "maxTokens"),
       systemPrompt: modelField(item, "SystemPrompt", "system_prompt", "systemPrompt", "") || "",
-      temperature: modelField(item, "Temperature", "temperature", "temperature", null),
-      topP: modelField(item, "TopP", "top_p", "topP", null),
-      supportsImages: modelField(item, "SupportsImages", "supports_images", "supportsImages", null),
+      temperature: modelFieldWithDefaults(item, "Temperature", "temperature", "temperature"),
+      topP: modelFieldWithDefaults(item, "TopP", "top_p", "topP"),
+      topK: modelFieldWithDefaults(item, "TopK", "top_k", "topK"),
+      presencePenalty: modelFieldWithDefaults(item, "PresencePenalty", "presence_penalty", "presencePenalty"),
+      frequencyPenalty: modelFieldWithDefaults(item, "FrequencyPenalty", "frequency_penalty", "frequencyPenalty"),
+      seed: modelFieldWithDefaults(item, "Seed", "seed", "seed"),
+      supportsReasoning: nullableModelBoolean(modelField(item, "SupportsReasoning", "supports_reasoning", "supportsReasoning", null)),
+      supportsImages: nullableModelBoolean(supportsImages),
+      supportsAudio: nullableModelBoolean(modelField(item, "SupportsAudio", "supports_audio", "supportsAudio", null)),
+      isDefault: nullableModelBoolean(modelField(item, "IsDefault", "is_default", "isDefault", false)) === true,
       maxImagesPerPrompt: modelField(item, "MaxImagesPerPrompt", "max_images_per_prompt", "maxImagesPerPrompt", null),
       inputModalities: modelField(item, "InputModalities", "input_modalities", "inputModalities", []) || []
     });
   });
 
+  var configuredDefault = Array.isArray(catalog)
+    ? ""
+    : (catalog.default_model || catalog.defaultModel || catalog.DefaultModel || "");
+  if (!configuredDefault) {
+    for (var defaultIndex = 0; defaultIndex < models.length; defaultIndex += 1) {
+      if (models[defaultIndex].isDefault) {
+        configuredDefault = models[defaultIndex].value;
+        break;
+      }
+    }
+  }
+
   state.modelCatalog = {
     configUrl: payload.configUrl || payload.ConfigUrl || "",
-    defaultModel: catalog.default_model || catalog.defaultModel || catalog.DefaultModel || "",
+    defaultModel: configuredDefault,
     models: models,
     loaded: true,
     loading: false,
@@ -76,6 +118,8 @@ function modelCapabilitiesForSettings() {
     result[model.value] = {
       MaxContextTokens: model.maxContextTokens || null,
       SupportsImages: catalogModelSupportsImages(model),
+      SupportsReasoning: model.supportsReasoning,
+      SupportsAudio: model.supportsAudio,
       MaxImagesPerPrompt: model.maxImagesPerPrompt || null
     };
   });
@@ -110,6 +154,34 @@ function catalogModelSupportsImages(model) {
     : null;
 }
 
+function storedModelCapability(value, pascal, camel, snake) {
+  value = String(value || "").trim().toLowerCase();
+  var settings = state.settings || {};
+  var capabilities = settings.ModelCapabilities || settings.modelCapabilities || {};
+  var keys = Object.keys(capabilities);
+  for (var index = 0; index < keys.length; index += 1) {
+    if (keys[index].toLowerCase() !== value) continue;
+    var capability = capabilities[keys[index]] || {};
+    var support = modelField(capability, pascal, snake, camel, null);
+    return nullableModelBoolean(support);
+  }
+  return null;
+}
+
+function effectiveModelSupportsReasoning(value) {
+  var model = findModel(value);
+  return model && model.supportsReasoning !== null && model.supportsReasoning !== undefined
+    ? nullableModelBoolean(model.supportsReasoning)
+    : storedModelCapability(value, "SupportsReasoning", "supportsReasoning", "supports_reasoning");
+}
+
+function effectiveModelSupportsAudio(value) {
+  var model = findModel(value);
+  return model && model.supportsAudio !== null && model.supportsAudio !== undefined
+    ? nullableModelBoolean(model.supportsAudio)
+    : storedModelCapability(value, "SupportsAudio", "supportsAudio", "supports_audio");
+}
+
 function effectiveModelSupportsImages(value) {
   value = String(value || "").trim();
   var overrides = modelImageSupportOverrides();
@@ -119,18 +191,5 @@ function effectiveModelSupportsImages(value) {
   var catalogSupport = catalogModelSupportsImages(findModel(value));
   if (catalogSupport !== null) return catalogSupport;
 
-  var settings = state.settings || {};
-  var capabilities = settings.ModelCapabilities || settings.modelCapabilities || {};
-  var keys = Object.keys(capabilities);
-  for (var index = 0; index < keys.length; index += 1) {
-    if (keys[index].toLowerCase() !== value.toLowerCase()) continue;
-    var capability = capabilities[keys[index]] || {};
-    var support = capability.SupportsImages;
-    if (support === undefined) support = capability.supportsImages;
-    if (support === undefined) support = capability.supports_images;
-    if (support !== undefined && support !== null) {
-      return typeof support === "string" ? support.toLowerCase() === "true" : !!support;
-    }
-  }
-  return null;
+  return storedModelCapability(value, "SupportsImages", "supportsImages", "supports_images");
 }

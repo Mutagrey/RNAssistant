@@ -475,6 +475,7 @@ async function sendChat(text, attachments) {
   });
   state.activeSend = { requestId: request.requestId, text: text, attachments: attachments, canceling: false };
   state.liveAgentRun = [];
+  state.liveStreamContent = "";
   renderSendControls();
   try {
     var response = await request;
@@ -509,6 +510,7 @@ async function sendChat(text, attachments) {
     state.activeSend = null;
     state.liveActivity = null;
     state.liveAgentRun = null;
+    state.liveStreamContent = null;
     renderSendControls();
     renderMessages();
     renderModelControls();

@@ -203,7 +203,7 @@ Native tool calling is not required. In Agent mode, the model is a controlled pl
 }
 ```
 
-Final/clarifying answers use the same envelope with `kind` set to `final`, `clarify`, or `cannot_do` and an empty `steps` array. The runtime routes the user request, slices the tool catalog, validates the planner response, gates risk/confirmation, executes tools, normalizes observations, and runs deterministic verification for mutations.
+Final/clarifying answers use the same envelope with `kind` set to `final`, `clarify`, or `cannot_do`; `steps` may be an empty array, `null`, or omitted. Only `tool_plan` requires a non-empty `steps` array. The runtime routes the user request, slices the tool catalog, validates the planner response, gates risk/confirmation, executes tools, normalizes observations, and runs deterministic verification for mutations.
 
 The controlled agent loop accepts a strict planner JSON object in assistant text. A single clean `json` code fence is unwrapped for weak-model compatibility; prose around JSON, other fence types, legacy envelopes, content-part arrays, native `tool_calls`, and `function_call` are rejected. One bounded repair request is made for malformed output.
 

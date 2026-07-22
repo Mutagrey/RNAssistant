@@ -18,14 +18,26 @@ namespace RNAssistant.Office.Services
                 settings.ModelCapabilities = new Dictionary<string, ModelCapabilitySettings>(StringComparer.OrdinalIgnoreCase);
             }
             var changed = false;
-            var models = catalog["models"] ?? catalog["Models"];
+            var root = catalog as JObject;
+            var source = root == null
+                ? catalog
+                : (root["catalog"] ?? root["Catalog"] ?? catalog);
+            var sourceObject = source as JObject;
+            var models = source as JArray;
+            if (models == null && sourceObject != null)
+            {
+                models = sourceObject["models"] as JArray ??
+                    sourceObject["Models"] as JArray ??
+                    sourceObject["data"] as JArray ??
+                    sourceObject["Data"] as JArray;
+            }
             if (models == null)
             {
                 return false;
             }
             foreach (var model in models.Children<JObject>())
             {
-                var value = ReadString(model, "Value", "value");
+                var value = ReadString(model, "Value", "value", "id", "Id");
                 if (string.IsNullOrWhiteSpace(value))
                 {
                     continue;
@@ -33,7 +45,9 @@ namespace RNAssistant.Office.Services
                 var capability = new ModelCapabilitySettings
                 {
                     MaxContextTokens = ReadNullableInt(model, "MaxContextTokens", "max_context_tokens", "maxContextTokens"),
-                    SupportsImages = ReadNullableBool(model, "SupportsImages", "supports_images", "supportsImages"),
+                    SupportsImages = ReadNullableBool(model, "SupportsImages", "supports_images", "supportsImages", "supports_vision", "supportsVision"),
+                    SupportsReasoning = ReadNullableBool(model, "SupportsReasoning", "supports_reasoning", "supportsReasoning"),
+                    SupportsAudio = ReadNullableBool(model, "SupportsAudio", "supports_audio", "supportsAudio"),
                     MaxImagesPerPrompt = ReadNullableInt(model, "MaxImagesPerPrompt", "max_images_per_prompt", "maxImagesPerPrompt")
                 };
                 if (!capability.SupportsImages.HasValue)
@@ -47,6 +61,22 @@ namespace RNAssistant.Office.Services
                             if (string.Equals(modality, "image", StringComparison.OrdinalIgnoreCase))
                             {
                                 capability.SupportsImages = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (!capability.SupportsAudio.HasValue)
+                {
+                    var modalities = model["InputModalities"] ?? model["input_modalities"] ?? model["inputModalities"];
+                    if (modalities != null)
+                    {
+                        capability.SupportsAudio = false;
+                        foreach (var modality in modalities.Values<string>())
+                        {
+                            if (string.Equals(modality, "audio", StringComparison.OrdinalIgnoreCase))
+                            {
+                                capability.SupportsAudio = true;
                                 break;
                             }
                         }

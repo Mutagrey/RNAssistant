@@ -58,7 +58,7 @@ namespace RNAssistant.Office.Services
                 !ContainsAny(value, "custom tool", "tools", "prompt", "prompts", "skill", "skills", "инструмент", "промпт", "скилл"))
             {
                 route.Mode = "destructive_mutation";
-                route.TaskType = "destructive";
+                route.TaskType = DestructiveTaskType(value);
                 route.Phase = AgentPhases.ReadOnly;
                 route.RiskAllowed = 0;
                 route.RequiresTool = true;
@@ -81,14 +81,14 @@ namespace RNAssistant.Office.Services
 
             if (ContainsAny(value, "vba", "macro", "макрос", "макро", "visual basic"))
             {
-                route.Mode = "code_generation";
+                var mutatesVba = LooksLikeVbaMutation(value);
+                var inspectsExistingVba = mutatesVba && LooksLikeExistingVbaEdit(value) && !LooksLikeNewVbaModule(value);
+                route.Mode = mutatesVba ? "mutate_vba" : "read_vba";
                 route.TaskType = "vba";
-                route.Phase = ContainsAny(value, "replace", "замени", "insert", "встав", "run", "запусти")
-                    ? AgentPhases.Mutation
-                    : AgentPhases.ReadOnly;
-                route.RiskAllowed = string.Equals(route.Phase, AgentPhases.Mutation, StringComparison.OrdinalIgnoreCase) ? 3 : 0;
+                route.Phase = mutatesVba && !inspectsExistingVba ? AgentPhases.Mutation : AgentPhases.ReadOnly;
+                route.RiskAllowed = mutatesVba ? 3 : 0;
                 route.RequiresTool = true;
-                route.RequiresInspection = string.Equals(route.Phase, AgentPhases.ReadOnly, StringComparison.OrdinalIgnoreCase);
+                route.RequiresInspection = inspectsExistingVba;
                 route.DecisionReason = "vba_request";
                 return route;
             }
@@ -174,6 +174,40 @@ namespace RNAssistant.Office.Services
             }
 
             return route;
+        }
+
+        private static string DestructiveTaskType(string value)
+        {
+            if (ContainsAny(value, "график", "диаграм") || ContainsAnyToken(value, "chart", "plot"))
+            {
+                return "chart";
+            }
+            if (ContainsAny(value, "vba", "macro", "макрос", "макро", "visual basic"))
+            {
+                return "vba";
+            }
+            return "content";
+        }
+
+        private static bool LooksLikeVbaMutation(string value)
+        {
+            return ContainsAny(
+                    value,
+                    "создай", "создать", "созд", "добавь", "добавить", "добав",
+                    "напиши", "запиши", "встав", "замени", "измен", "исправ", "обнов", "удали", "очист") ||
+                ContainsAnyToken(value, "create", "add", "write", "insert", "replace", "update", "edit", "fix", "delete", "remove", "generate");
+        }
+
+        private static bool LooksLikeExistingVbaEdit(string value)
+        {
+            return ContainsAny(value, "замени", "измен", "исправ", "обнов", "удали", "очист", "patch", "патч") ||
+                ContainsAnyToken(value, "replace", "update", "edit", "fix", "delete", "remove", "patch");
+        }
+
+        private static bool LooksLikeNewVbaModule(string value)
+        {
+            return ContainsAny(value, "новый модул", "нового модул", "создай", "создать", "добавь", "добавить") ||
+                ContainsAnyToken(value, "create", "add", "insert", "new");
         }
 
         private static bool HasHtmlWorkspaceContent(ChatSession session)
@@ -342,7 +376,8 @@ namespace RNAssistant.Office.Services
             RoutedTask route,
             IEnumerable<ToolDefinition> tools,
             IReadOnlyList<AgentObservation> observations,
-            int maxTools = 24)
+            int maxTools = 24,
+            bool allowAgentToolAuthoring = false)
         {
             var slice = new ToolCatalogSlice();
             if (route != null && !route.RequiresTool)
@@ -363,7 +398,7 @@ namespace RNAssistant.Office.Services
                     slice.Excluded.Add(Exclude(tool, "wrong_phase", "Tool risk or mutation mode is not allowed in phase " + (route == null ? string.Empty : route.Phase) + "."));
                     continue;
                 }
-                if (!Relevant(tool, route))
+                if (!Relevant(tool, route) && !OptionalToolAuthoring(tool, route, allowAgentToolAuthoring))
                 {
                     slice.Excluded.Add(Exclude(tool, "not_relevant", "Tool does not match task type " + (route == null ? string.Empty : route.TaskType) + "."));
                     continue;
@@ -499,13 +534,13 @@ namespace RNAssistant.Office.Services
             }
 
             var id = tool.Id ?? string.Empty;
-            if (route.TaskType == "content")
-            {
-                return true;
-            }
             if (id.StartsWith("common.", StringComparison.OrdinalIgnoreCase) && route.TaskType != "html" && route.TaskType != "tool_authoring")
             {
                 return false;
+            }
+            if (route.TaskType == "content")
+            {
+                return true;
             }
             if (route.TaskType == "formatting")
             {
@@ -531,11 +566,27 @@ namespace RNAssistant.Office.Services
             {
                 return ContainsAny(id, "vba", "macro", "context");
             }
+            if (route.TaskType == "macro_execution")
+            {
+                return ContainsAny(id, "vba", "macro", "context");
+            }
             if (route.TaskType == "destructive")
             {
-                return !tool.MutatesDocument || ContainsAny(id, "search", "read", "list", "context");
+                return true;
             }
             return !tool.MutatesDocument || ContainsAny(id, "read", "list", "search", "context", "summary");
+        }
+
+        private static bool OptionalToolAuthoring(ToolDefinition tool, RoutedTask route, bool enabled)
+        {
+            if (!enabled || tool == null || route == null ||
+                !string.Equals(route.Phase, AgentPhases.Mutation, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return string.Equals(tool.Id, "common.tools_validate", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(tool.Id, "common.tools_save", StringComparison.OrdinalIgnoreCase);
         }
 
         private static int ToolPriority(ToolDefinition tool, RoutedTask route)
@@ -556,6 +607,10 @@ namespace RNAssistant.Office.Services
             if (route.TaskType == "chart" && ContainsAny(id, "chart"))
             {
                 return string.Equals(route.Phase, AgentPhases.Mutation, StringComparison.OrdinalIgnoreCase) ? 0 : 20;
+            }
+            if (ContainsAny(id, "common.tools_validate", "common.tools_save"))
+            {
+                return 5;
             }
             if (route.TaskType == "content" && tool.MutatesDocument)
             {
@@ -701,6 +756,10 @@ namespace RNAssistant.Office.Services
                     builder.AppendLine("This workspace already has content. Read it before any upsert, delete, or active-file change.");
                 }
                 builder.AppendLine("Keep HTML workspace output local. Put CSS and JavaScript in separate workspace files when content is large, and return at most one content-bearing upsert step per planner response. Continue with the next file after the tool observation.");
+            }
+            if (tools != null && tools.Tools.Any(tool => string.Equals(tool.Id, "common.tools_save", StringComparison.OrdinalIgnoreCase)))
+            {
+                builder.AppendLine("OPTIONAL TOOL AUTHORING IS ENABLED. Prefer an existing tool. Only when no existing capability can complete the task, define a narrowly scoped pipeline or VBA custom tool: call common.tools_validate, then common.tools_save, then use the saved exact tool id in a later planner step. Never claim the requested document change is complete after only saving the tool.");
             }
             builder.AppendLine();
             builder.AppendLine("CURRENT_OFFICE_CONTEXT:");
@@ -911,7 +970,12 @@ namespace RNAssistant.Office.Services
 
     internal sealed class AgentActionValidator
     {
-        public PlannerValidationResult Validate(AgentPlannerStep step, ToolCatalogSlice slice, RoutedTask route, IReadOnlyList<AgentObservation> observations)
+        public PlannerValidationResult Validate(
+            AgentPlannerStep step,
+            ToolCatalogSlice slice,
+            RoutedTask route,
+            IReadOnlyList<AgentObservation> observations,
+            IReadOnlyList<ToolDefinition> allTools)
         {
             if (step == null || string.IsNullOrWhiteSpace(step.ToolId))
             {
@@ -920,7 +984,24 @@ namespace RNAssistant.Office.Services
             var tool = slice == null ? null : slice.Find(step.ToolId);
             if (tool == null)
             {
-                return PlannerValidationResult.Fail("Tool is not available in the current route/phase: " + step.ToolId);
+                var known = AgentToolCatalogResolver.Find(allTools, step.ToolId);
+                if (known == null)
+                {
+                    var suggestions = ToolIdSuggestions.Find(step.ToolId, allTools, 3);
+                    return PlannerValidationResult.Fail(
+                        "Unknown tool id: " + step.ToolId + ". Use only exact ids from AVAILABLE_TOOLS." +
+                        (suggestions.Count == 0 ? string.Empty : " Did you mean: " + string.Join(", ", suggestions.ToArray()) + "?"));
+                }
+
+                var exclusion = slice == null
+                    ? null
+                    : slice.Excluded.FirstOrDefault(item =>
+                        item != null && string.Equals(item.ToolId, step.ToolId, StringComparison.OrdinalIgnoreCase));
+                return PlannerValidationResult.Fail(
+                    "Tool is excluded from the current route: " + step.ToolId + "." +
+                    (exclusion == null
+                        ? string.Empty
+                        : " Reason: " + exclusion.Reason + ". " + exclusion.Detail));
             }
             if (route != null && string.Equals(route.Phase, AgentPhases.ReadOnly, StringComparison.OrdinalIgnoreCase) && tool.MutatesDocument)
             {
@@ -960,6 +1041,62 @@ namespace RNAssistant.Office.Services
                 }
             }
             return false;
+        }
+    }
+
+    internal static class ToolIdSuggestions
+    {
+        public static List<string> Find(string requestedToolId, IEnumerable<ToolDefinition> tools, int limit)
+        {
+            var requested = Tokens(requestedToolId);
+            if (requested.Count == 0)
+            {
+                return new List<string>();
+            }
+
+            return (tools ?? new ToolDefinition[0])
+                .Where(tool => tool != null && tool.Enabled && !string.IsNullOrWhiteSpace(tool.Id))
+                .Select(tool => new
+                {
+                    Tool = tool,
+                    Score = Tokens((tool.Id ?? string.Empty) + " " + (tool.Name ?? string.Empty) + " " + (tool.Description ?? string.Empty))
+                        .Count(token => requested.Contains(token))
+                })
+                .Where(item => item.Score > 0)
+                .OrderByDescending(item => item.Score)
+                .ThenBy(item => item.Tool.Id.Length)
+                .Take(Math.Max(1, limit))
+                .Select(item => item.Tool.Id)
+                .ToList();
+        }
+
+        private static HashSet<string> Tokens(string value)
+        {
+            var tokens = new HashSet<string>(
+                (value ?? string.Empty)
+                    .ToLowerInvariant()
+                    .Split(new[] { '.', '_', '-', ' ', '/', '\\' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Where(token => token.Length > 1),
+                StringComparer.OrdinalIgnoreCase);
+            AddAliases(tokens, "create", "add", "insert");
+            AddAliases(tokens, "creation", "add", "insert");
+            AddAliases(tokens, "worksheet", "sheet");
+            AddAliases(tokens, "graph", "chart");
+            AddAliases(tokens, "remove", "delete");
+            AddAliases(tokens, "macro", "vba");
+            return tokens;
+        }
+
+        private static void AddAliases(ISet<string> tokens, string source, params string[] aliases)
+        {
+            if (tokens == null || !tokens.Contains(source))
+            {
+                return;
+            }
+            foreach (var alias in aliases ?? new string[0])
+            {
+                tokens.Add(alias);
+            }
         }
     }
 

@@ -91,6 +91,7 @@ namespace RNAssistant.Office.Services
             return new AppSettings
             {
                 BaseUrl = source.BaseUrl,
+                ModelsConfigUrl = source.ModelsConfigUrl,
                 Model = source.Model,
                 SystemPrompt = source.SystemPrompt,
                 ChatSystemPrompt = source.ChatSystemPrompt,
@@ -114,6 +115,8 @@ namespace RNAssistant.Office.Services
                 MaxAgentReadOnlyPlanSteps = source.MaxAgentReadOnlyPlanSteps,
                 RequireVerificationForMutations = source.RequireVerificationForMutations,
                 AutoContinueAfterConfirmation = source.AutoContinueAfterConfirmation,
+                AllowAgentToolAuthoring = source.AllowAgentToolAuthoring,
+                AutoCompressContext = source.AutoCompressContext,
                 AgentPrompts = source.AgentPrompts,
                 UiFontScale = source.UiFontScale,
                 CustomHeaders = source.CustomHeaders == null

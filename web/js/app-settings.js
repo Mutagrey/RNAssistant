@@ -18,6 +18,7 @@ function renderSettings() {
   var s = state.settings || {};
   applyUiFontScale(s);
   $("baseUrlInput").value = s.BaseUrl || s.baseUrl || "";
+  $("modelsConfigUrlInput").value = s.ModelsConfigUrl || s.modelsConfigUrl || "";
   $("modelInput").value = s.Model || s.model || "";
   $("systemPromptRoleInput").value = (s.SystemPromptRole || s.systemPromptRole || "user").toLowerCase() === "system" ? "system" : "user";
   $("maxTokensInput").value = s.MaxTokens || s.maxTokens || 2048;
@@ -32,6 +33,8 @@ function renderSettings() {
   $("autoRetryToolsInput").checked = (s.AutoRetryToolErrors !== false && s.autoRetryToolErrors !== false);
   $("requireVerificationInput").checked = (s.RequireVerificationForMutations !== false && s.requireVerificationForMutations !== false);
   $("autoContinueAfterConfirmationInput").checked = (s.AutoContinueAfterConfirmation !== false && s.autoContinueAfterConfirmation !== false);
+  $("allowAgentToolAuthoringInput").checked = !!(s.AllowAgentToolAuthoring || s.allowAgentToolAuthoring);
+  $("autoCompressContextInput").checked = (s.AutoCompressContext !== false && s.autoCompressContext !== false);
   $("smartChatTitlesInput").checked = (s.SmartChatTitles !== false && s.smartChatTitles !== false);
   $("includeVbaContextInput").checked = !!(s.IncludeVbaContext || s.includeVbaContext);
   $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || 8;
@@ -58,6 +61,7 @@ function readSettings() {
     : { SystemPrompt: "", ChatSystemPrompt: "", AgentPrompts: {} };
   return {
     BaseUrl: $("baseUrlInput").value.trim(),
+    ModelsConfigUrl: $("modelsConfigUrlInput").value.trim(),
     Model: $("modelInput").value.trim(),
     MaxTokens: Number($("maxTokensInput").value || 2048),
     RequestTimeoutSeconds: Number($("requestTimeoutInput").value || 300),
@@ -71,6 +75,8 @@ function readSettings() {
     AutoRetryToolErrors: $("autoRetryToolsInput").checked,
     RequireVerificationForMutations: $("requireVerificationInput").checked,
     AutoContinueAfterConfirmation: $("autoContinueAfterConfirmationInput").checked,
+    AllowAgentToolAuthoring: $("allowAgentToolAuthoringInput").checked,
+    AutoCompressContext: $("autoCompressContextInput").checked,
     SmartChatTitles: $("smartChatTitlesInput").checked,
     IncludeVbaContext: $("includeVbaContextInput").checked,
     MaxAgentIterations: Number($("maxAgentIterationsInput").value || 8),

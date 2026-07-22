@@ -24,6 +24,8 @@ var state = {
   activeSend: null,
   liveActivity: null,
   liveAgentRun: null,
+  liveStreamContent: null,
+  liveStreamRenderPending: false,
   modelCatalog: { configUrl: "", defaultModel: "", models: [], loaded: false, loading: false, error: "" },
   modelSaving: false,
   bridgeUnavailable: false,
@@ -224,6 +226,19 @@ if (window.chrome && window.chrome.webview) {
     if (response && response.type === "progress") {
       var progress = response.payload || {};
       var progressPending = state.pending[response.id];
+      var contentDelta = progress.contentDelta || progress.ContentDelta || "";
+      if (contentDelta && progressPending && progressPending.type === "sendChat") {
+        state.liveStreamContent = (state.liveStreamContent || "") + contentDelta;
+        state.liveActivity = null;
+        state.liveAgentRun = [];
+        setActivity("streaming", "Модель формирует ответ...");
+        if (typeof scheduleLiveStreamRender === "function") {
+          scheduleLiveStreamRender();
+        } else {
+          renderMessages();
+        }
+        return;
+      }
       setActivity(progress.phase || "working", progress.message || "Выполняю...");
       if (progressPending && progressPending.type === "sendChat") {
         if (!(progress.reasoningDelta || progress.ReasoningDelta || progress.reasoningComplete || progress.ReasoningComplete)) {

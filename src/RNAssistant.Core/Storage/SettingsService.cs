@@ -57,6 +57,7 @@ namespace RNAssistant.Core.Storage
                 settings.BaseUrl = defaults.BaseUrl;
             }
             settings.BaseUrl = NormalizeBaseUrl(settings.BaseUrl);
+            settings.ModelsConfigUrl = (settings.ModelsConfigUrl ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(settings.Model))
             {
                 settings.Model = defaults.Model;
@@ -122,6 +123,14 @@ namespace RNAssistant.Core.Storage
             if (!settings.AutoContinueAfterConfirmation.HasValue)
             {
                 settings.AutoContinueAfterConfirmation = defaults.AutoContinueAfterConfirmation;
+            }
+            if (!settings.AllowAgentToolAuthoring.HasValue)
+            {
+                settings.AllowAgentToolAuthoring = defaults.AllowAgentToolAuthoring;
+            }
+            if (!settings.AutoCompressContext.HasValue)
+            {
+                settings.AutoCompressContext = defaults.AutoCompressContext;
             }
             if (settings.VbaContextCharLimit <= 0)
             {

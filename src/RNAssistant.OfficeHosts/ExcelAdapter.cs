@@ -175,6 +175,7 @@ namespace RNAssistant.OfficeHosts
                 Skill("excel.find_cells", "Read-only: Find cells whose value or formula contains query text.", "{\"sheet\":\"\",\"query\":\"text\",\"lookIn\":\"values\",\"maxResults\":50}"),
                 Skill("excel.create_chat_chart", "Read-only: Create an interactive chart artifact in chat from a selection or range.", "{\"sheet\":\"\",\"address\":\"\",\"chartType\":\"auto\",\"title\":\"Chart title\"}"),
                 Skill("excel.list_charts", "Read-only: List chart objects in the workbook or one sheet.", "{\"sheet\":\"\"}"),
+                Skill("excel.get_chart", "Read-only: Read one worksheet chart, including its title, axes, series, position, and size.", "{\"sheet\":\"\",\"chartName\":\"Chart 1\"}"),
                 Skill("excel.list_tables", "Read-only: List Excel tables in the workbook or one sheet.", "{\"sheet\":\"\"}"),
                 Skill("excel.list_names", "Read-only: List workbook defined names.", "{}"),
                 Skill("excel.list_shapes", "Read-only: List shapes in the workbook or one sheet.", "{\"sheet\":\"\"}"),
@@ -182,7 +183,9 @@ namespace RNAssistant.OfficeHosts
                 Skill("excel.write_table", "Mutates document: Write a 2D JSON array to a worksheet starting at a cell.", "{\"sheet\":\"\",\"startAddress\":\"A1\",\"values\":[[\"Header\",\"Value\"],[\"A\",1]]}", true, true, 2),
                 Skill("excel.set_formula", "Mutates document: Write one formula to a worksheet range.", "{\"sheet\":\"\",\"address\":\"B2\",\"formula\":\"=SUM(A1:A10)\"}", true, true, 2),
                 Skill("excel.add_table", "Mutates document: Convert a source range into an Excel table.", "{\"sheet\":\"\",\"sourceRange\":\"A1:B6\",\"name\":\"Table1\",\"hasHeaders\":true,\"style\":\"TableStyleMedium2\"}", true, true, 2),
-                Skill("excel.add_chart", "Mutates document: Create a chart from a worksheet source range.", "{\"sheet\":\"\",\"sourceRange\":\"A1:B6\",\"chartType\":\"line\",\"title\":\"Chart title\",\"left\":300,\"top\":20,\"width\":480,\"height\":300}", true, true, 2),
+                Skill("excel.add_chart", "Mutates document: Create and position a chart from a worksheet source range.", "{\"sheet\":\"\",\"sourceRange\":\"A1:B6\",\"chartType\":\"line\",\"title\":\"Chart title\",\"chartName\":\"\",\"categoryLabelsRange\":\"\",\"xAxisTitle\":\"\",\"yAxisTitle\":\"\",\"left\":300,\"top\":20,\"width\":480,\"height\":300}", true, true, 2),
+                Skill("excel.update_chart", "Mutates document: Update an existing chart's data, type, labels, axes, position, or size. Only supplied fields are changed.", "{\"sheet\":\"\",\"chartName\":\"Chart 1\",\"sourceRange\":\"\",\"chartType\":\"\",\"title\":\"\",\"categoryLabelsRange\":\"\",\"xAxisTitle\":\"\",\"yAxisTitle\":\"\",\"left\":300,\"top\":20,\"width\":480,\"height\":300}", true, true, 2),
+                Skill("excel.delete_chart", "Mutates document: Delete one existing worksheet chart by name.", "{\"sheet\":\"\",\"chartName\":\"Chart 1\"}", true, false, 3),
                 Skill("excel.format_range", "Mutates document: Apply basic number, font, fill, and alignment formatting to a range.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"numberFormat\":\"\",\"bold\":true,\"italic\":false,\"fillColor\":\"#FFFF00\",\"fontColor\":\"#000000\",\"horizontalAlignment\":\"center\"}", true, true, 1),
                 Skill("excel.autofit", "Mutates document: Autofit rows and columns for a range or used range.", "{\"sheet\":\"\",\"address\":\"\"}", true, true, 1),
                 Skill("excel.add_sheet", "Mutates document: Add a new worksheet.", "{\"name\":\"Sheet name\"}", true, true, 1),
@@ -337,6 +340,8 @@ namespace RNAssistant.OfficeHosts
                         return CreateChatChart(command);
                     case "excel.list_charts":
                         return ListCharts(command);
+                    case "excel.get_chart":
+                        return GetChart(command);
                     case "excel.list_tables":
                         return ListTables(command);
                     case "excel.list_names":
@@ -353,6 +358,10 @@ namespace RNAssistant.OfficeHosts
                         return AddTable(command);
                     case "excel.add_chart":
                         return AddChart(command);
+                    case "excel.update_chart":
+                        return UpdateChart(command);
+                    case "excel.delete_chart":
+                        return DeleteChart(command);
                     case "excel.format_range":
                         return FormatRange(command);
                     case "excel.autofit":
@@ -593,22 +602,21 @@ namespace RNAssistant.OfficeHosts
                 for (var i = 1; i <= chartObjects.Count; i++)
                 {
                     var chartObject = (Excel.ChartObject)chartObjects.Item(i);
-                    var chart = chartObject.Chart;
-                    charts.Add(new
-                    {
-                        sheet = sheet.Name,
-                        name = chartObject.Name,
-                        title = ChartTitle(chart),
-                        chartType = chart.ChartType.ToString(),
-                        left = chartObject.Left,
-                        top = chartObject.Top,
-                        width = chartObject.Width,
-                        height = chartObject.Height
-                    });
+                    charts.Add(ChartDetails(sheet, chartObject));
                 }
             }
 
             return ToolResult.Ok("Charts listed: " + charts.Count, JsonConvert.SerializeObject(charts));
+        }
+
+        private ToolResult GetChart(ToolCommand command)
+        {
+            Excel.Worksheet sheet;
+            var chartObject = ResolveChartObject(
+                ToolArgumentReader.String(command.Arguments, "sheet", string.Empty),
+                ToolArgumentReader.String(command.Arguments, "chartName", string.Empty),
+                out sheet);
+            return ToolResult.Ok("Chart read: " + chartObject.Name, JsonConvert.SerializeObject(ChartDetails(sheet, chartObject)));
         }
 
         private ToolResult ListTables(ToolCommand command)
@@ -846,7 +854,80 @@ namespace RNAssistant.OfficeHosts
             chart.ChartType = ResolveChartType(chartType);
             chart.HasTitle = true;
             chart.ChartTitle.Text = title;
-            return ToolResult.Ok("Chart added: " + title, JsonConvert.SerializeObject(new { sheet = sheet.Name, sourceRange = sourceRange, chartType = chartType, title = title }));
+            var chartName = ToolArgumentReader.String(command.Arguments, "chartName", string.Empty);
+            if (!string.IsNullOrWhiteSpace(chartName))
+            {
+                chartObject.Name = chartName;
+            }
+            ApplyChartLabels(command, sheet, chart);
+            return ToolResult.Ok("Chart added: " + chartObject.Name, JsonConvert.SerializeObject(ChartDetails(sheet, chartObject)));
+        }
+
+        private ToolResult UpdateChart(ToolCommand command)
+        {
+            Excel.Worksheet sheet;
+            var chartObject = ResolveChartObject(
+                ToolArgumentReader.String(command.Arguments, "sheet", string.Empty),
+                ToolArgumentReader.String(command.Arguments, "chartName", string.Empty),
+                out sheet);
+            var chart = chartObject.Chart;
+
+            if (command.Arguments.ContainsKey("sourceRange"))
+            {
+                var sourceRange = ToolArgumentReader.String(command.Arguments, "sourceRange", string.Empty);
+                if (!string.IsNullOrWhiteSpace(sourceRange))
+                {
+                    chart.SetSourceData(sheet.Range[sourceRange]);
+                }
+            }
+            if (command.Arguments.ContainsKey("chartType"))
+            {
+                var chartType = ToolArgumentReader.String(command.Arguments, "chartType", string.Empty);
+                if (!string.IsNullOrWhiteSpace(chartType))
+                {
+                    chart.ChartType = ResolveChartType(chartType);
+                }
+            }
+            if (command.Arguments.ContainsKey("title"))
+            {
+                var title = ToolArgumentReader.String(command.Arguments, "title", string.Empty);
+                chart.HasTitle = !string.IsNullOrWhiteSpace(title);
+                if (chart.HasTitle)
+                {
+                    chart.ChartTitle.Text = title;
+                }
+            }
+            if (command.Arguments.ContainsKey("left"))
+            {
+                chartObject.Left = ToolArgumentReader.Int32(command.Arguments, "left", Convert.ToInt32(chartObject.Left));
+            }
+            if (command.Arguments.ContainsKey("top"))
+            {
+                chartObject.Top = ToolArgumentReader.Int32(command.Arguments, "top", Convert.ToInt32(chartObject.Top));
+            }
+            if (command.Arguments.ContainsKey("width"))
+            {
+                chartObject.Width = Math.Max(40, ToolArgumentReader.Int32(command.Arguments, "width", Convert.ToInt32(chartObject.Width)));
+            }
+            if (command.Arguments.ContainsKey("height"))
+            {
+                chartObject.Height = Math.Max(40, ToolArgumentReader.Int32(command.Arguments, "height", Convert.ToInt32(chartObject.Height)));
+            }
+
+            ApplyChartLabels(command, sheet, chart);
+            return ToolResult.Ok("Chart updated: " + chartObject.Name, JsonConvert.SerializeObject(ChartDetails(sheet, chartObject)));
+        }
+
+        private ToolResult DeleteChart(ToolCommand command)
+        {
+            Excel.Worksheet sheet;
+            var chartObject = ResolveChartObject(
+                ToolArgumentReader.String(command.Arguments, "sheet", string.Empty),
+                ToolArgumentReader.String(command.Arguments, "chartName", string.Empty),
+                out sheet);
+            var chartName = chartObject.Name;
+            chartObject.Delete();
+            return ToolResult.Ok("Chart deleted: " + chartName, JsonConvert.SerializeObject(new { sheet = sheet.Name, chartName = chartName }));
         }
 
         private ToolResult FormatRange(ToolCommand command)
@@ -1043,7 +1124,7 @@ namespace RNAssistant.OfficeHosts
             }
             catch (Exception ex)
             {
-                return ToolResult.Ok("VBA insert was blocked. Enable 'Trust access to the VBA project object model' or copy the code manually. " + ex.Message, JsonConvert.SerializeObject(new { moduleName = moduleName, code = code }));
+                return ToolResult.Fail("VBA insert was blocked. Enable 'Trust access to the VBA project object model' or copy the code manually. " + ex.Message, JsonConvert.SerializeObject(new { moduleName = moduleName, code = code }));
             }
         }
 
@@ -1392,6 +1473,143 @@ namespace RNAssistant.OfficeHosts
 
             return value is byte || value is short || value is int || value is long ||
                 value is float || value is double || value is decimal;
+        }
+
+        private Excel.ChartObject ResolveChartObject(string sheetName, string chartName, out Excel.Worksheet resolvedSheet)
+        {
+            if (string.IsNullOrWhiteSpace(chartName))
+            {
+                throw new InvalidOperationException("chartName is required.");
+            }
+
+            var workbook = RequireWorkbook();
+            foreach (Excel.Worksheet sheet in workbook.Worksheets)
+            {
+                if (!string.IsNullOrWhiteSpace(sheetName) &&
+                    !string.Equals(sheet.Name, sheetName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var chartObjects = (Excel.ChartObjects)sheet.ChartObjects(Type.Missing);
+                for (var i = 1; i <= chartObjects.Count; i++)
+                {
+                    var chartObject = (Excel.ChartObject)chartObjects.Item(i);
+                    if (string.Equals(chartObject.Name, chartName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        resolvedSheet = sheet;
+                        return chartObject;
+                    }
+                }
+            }
+
+            throw new InvalidOperationException("Chart not found: " + chartName);
+        }
+
+        private static object ChartDetails(Excel.Worksheet sheet, Excel.ChartObject chartObject)
+        {
+            var chart = chartObject.Chart;
+            return new
+            {
+                sheet = sheet == null ? string.Empty : sheet.Name,
+                name = chartObject.Name,
+                title = ChartTitle(chart),
+                chartType = chart.ChartType.ToString(),
+                xAxisTitle = AxisTitle(chart, Excel.XlAxisType.xlCategory),
+                yAxisTitle = AxisTitle(chart, Excel.XlAxisType.xlValue),
+                series = ChartSeries(chart),
+                left = chartObject.Left,
+                top = chartObject.Top,
+                width = chartObject.Width,
+                height = chartObject.Height
+            };
+        }
+
+        private static List<object> ChartSeries(Excel.Chart chart)
+        {
+            var result = new List<object>();
+            try
+            {
+                var collection = (Excel.SeriesCollection)chart.SeriesCollection(Type.Missing);
+                for (var i = 1; i <= collection.Count; i++)
+                {
+                    var series = (Excel.Series)collection.Item(i);
+                    result.Add(new { name = Convert.ToString(series.Name), formula = Convert.ToString(series.Formula) });
+                }
+            }
+            catch
+            {
+            }
+            return result;
+        }
+
+        private static string AxisTitle(Excel.Chart chart, Excel.XlAxisType axisType)
+        {
+            try
+            {
+                var axis = chart.Axes(axisType, Excel.XlAxisGroup.xlPrimary) as Excel.Axis;
+                return axis != null && axis.HasTitle ? axis.AxisTitle.Text : string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private static void ApplyChartLabels(ToolCommand command, Excel.Worksheet sheet, Excel.Chart chart)
+        {
+            if (command.Arguments.ContainsKey("categoryLabelsRange"))
+            {
+                var labelsRange = ToolArgumentReader.String(command.Arguments, "categoryLabelsRange", string.Empty);
+                if (!string.IsNullOrWhiteSpace(labelsRange))
+                {
+                    var labels = sheet.Range[labelsRange];
+                    var collection = (Excel.SeriesCollection)chart.SeriesCollection(Type.Missing);
+                    for (var i = 1; i <= collection.Count; i++)
+                    {
+                        ((Excel.Series)collection.Item(i)).XValues = labels;
+                    }
+                }
+            }
+
+            ApplyAxisTitle(command, chart, "xAxisTitle", Excel.XlAxisType.xlCategory);
+            ApplyAxisTitle(command, chart, "yAxisTitle", Excel.XlAxisType.xlValue);
+        }
+
+        private static void ApplyAxisTitle(ToolCommand command, Excel.Chart chart, string argumentName, Excel.XlAxisType axisType)
+        {
+            if (!command.Arguments.ContainsKey(argumentName))
+            {
+                return;
+            }
+
+            var title = ToolArgumentReader.String(command.Arguments, argumentName, string.Empty);
+            Excel.Axis axis;
+            try
+            {
+                axis = chart.Axes(axisType, Excel.XlAxisGroup.xlPrimary) as Excel.Axis;
+            }
+            catch (Exception ex)
+            {
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    return;
+                }
+                throw new InvalidOperationException("Chart does not support the requested axis title: " + argumentName, ex);
+            }
+            if (axis == null)
+            {
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    return;
+                }
+                throw new InvalidOperationException("Chart does not support the requested axis title: " + argumentName);
+            }
+            axis.HasTitle = !string.IsNullOrWhiteSpace(title);
+            if (axis.HasTitle)
+            {
+                axis.AxisTitle.Text = title;
+            }
         }
 
         private static string ChartTitle(Excel.Chart chart)

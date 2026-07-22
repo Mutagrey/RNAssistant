@@ -77,11 +77,14 @@ namespace RNAssistant.Core.Tools
             }
 
             var stepsToken = obj["steps"];
-            if (stepsToken == null)
+            var isToolPlan = string.Equals(response.Kind, AgentResponseKinds.ToolPlan, StringComparison.OrdinalIgnoreCase);
+            if ((stepsToken == null || stepsToken.Type == JTokenType.Null) && isToolPlan)
             {
                 return AgentPlannerParseResult.Fail("missing_steps", "Planner response requires a steps array.");
             }
-            var steps = stepsToken as JArray;
+            var steps = stepsToken == null || stepsToken.Type == JTokenType.Null
+                ? new JArray()
+                : stepsToken as JArray;
             if (steps == null)
             {
                 return AgentPlannerParseResult.Fail("invalid_steps", "Planner response steps must be an array.");
@@ -137,17 +140,17 @@ namespace RNAssistant.Core.Tools
                 response.Steps.Add(step);
             }
 
-            if (string.Equals(response.Kind, AgentResponseKinds.ToolPlan, StringComparison.OrdinalIgnoreCase) && response.Steps.Count == 0)
+            if (isToolPlan && response.Steps.Count == 0)
             {
                 return AgentPlannerParseResult.Fail("missing_steps", "tool_plan response requires at least one step.");
             }
 
-            if (!string.Equals(response.Kind, AgentResponseKinds.ToolPlan, StringComparison.OrdinalIgnoreCase) && response.Steps.Count > 0)
+            if (!isToolPlan && response.Steps.Count > 0)
             {
                 return AgentPlannerParseResult.Fail("unexpected_steps", "Only tool_plan responses may include steps.");
             }
 
-            if (!string.Equals(response.Kind, AgentResponseKinds.ToolPlan, StringComparison.OrdinalIgnoreCase) &&
+            if (!isToolPlan &&
                 string.IsNullOrWhiteSpace(response.Message))
             {
                 return AgentPlannerParseResult.Fail("missing_message", response.Kind + " response requires message.");

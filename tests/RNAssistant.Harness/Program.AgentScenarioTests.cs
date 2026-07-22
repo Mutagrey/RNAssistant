@@ -170,6 +170,9 @@ namespace RNAssistant.Harness
                 var tools = new List<ToolDefinition>(adapter.GetBuiltInTools());
                 var llm = new ScenarioLlm()
                     .Add(
+                        AgentBlock(Command("word.vba_read_module", "moduleName", "Module1")),
+                        "word.vba_read_module")
+                    .Add(
                         AgentBlock(Command("word.vba_replace_module", "moduleName", "Module1", "code", "Sub ChangedMacro()\nEnd Sub")),
                         "word.vba_replace_module")
                     .Add(

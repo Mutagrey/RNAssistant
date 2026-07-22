@@ -387,7 +387,7 @@ namespace RNAssistant.Office
 
             return new ModelCatalogResponse
             {
-                ConfigUrl = LlmClient.BuildModelsConfigUrl(settings.BaseUrl),
+                ConfigUrl = LlmClient.BuildModelsConfigUrl(settings),
                 Catalog = catalog
             };
         }

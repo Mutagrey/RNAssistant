@@ -412,6 +412,9 @@ namespace RNAssistant.Office.WebView
                     Phase = phase,
                     Message = message,
                     Activity = activity,
+                    ContentDelta = string.Equals(phase, "streaming", StringComparison.OrdinalIgnoreCase)
+                        ? message
+                        : null,
                     ReasoningDelta = activity != null && string.Equals(activity.Kind, "reasoning", StringComparison.OrdinalIgnoreCase)
                         ? activity.ResultMessage
                         : null,

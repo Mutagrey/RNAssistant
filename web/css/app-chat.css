@@ -435,6 +435,20 @@
   opacity: 0.78;
 }
 
+.streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 3px;
+  vertical-align: -0.12em;
+  background: currentColor;
+  animation: streaming-cursor-blink 0.9s steps(1, end) infinite;
+}
+
+@keyframes streaming-cursor-blink {
+  50% { opacity: 0; }
+}
+
 .message.failed .markdown {
   border-color: #f1b8b1;
   background: #fff7f6;

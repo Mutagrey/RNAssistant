@@ -9,12 +9,12 @@
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
   <link rel="stylesheet" href="css/app.css?v=chatui-20260630-2">
-  <link rel="stylesheet" href="css/app-chat.css?v=chatui-20260702-1">
+  <link rel="stylesheet" href="css/app-chat.css?v=contextstream-20260722-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-composer.css?v=chatui-20260622-10">
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260630-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=chatui-20260622-1">
-  <link rel="stylesheet" href="css/app-models.css?v=chatui-20260630-3">
+  <link rel="stylesheet" href="css/app-models.css?v=modelcaps-20260722-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=chatui-20260630-1">
   <link rel="stylesheet" href="css/app-tools.css?v=chatui-20260622-5">
   <link rel="stylesheet" href="css/app-prompts.css?v=chatui-20260630-2">
@@ -442,6 +442,7 @@
               </div>
               <div class="form-grid two-columns">
                 <label><span>Адрес API</span><input id="baseUrlInput" autocomplete="off" placeholder="https://host"></label>
+                <label><span>URL каталога моделей</span><input id="modelsConfigUrlInput" autocomplete="off" placeholder="Пусто = вычислять из адреса API"></label>
                 <label><span>API-ключ</span><input id="apiKeyInput" type="password" autocomplete="off" placeholder="Оставьте пустым, чтобы не менять"></label>
                 <label class="wide"><span>HTTP-заголовки</span><textarea id="headersInput" rows="4" placeholder="Header-Name: value"></textarea></label>
               </div>
@@ -459,8 +460,8 @@
                 <section class="model-capability-section wide" aria-labelledby="modelCapabilityTitle">
                   <div class="model-capability-heading">
                     <div>
-                      <h3 id="modelCapabilityTitle">Поддержка изображений</h3>
-                      <p>Галочка задаёт ручной статус. «Авто» возвращает значение из каталога.</p>
+                      <h3 id="modelCapabilityTitle">Возможности моделей</h3>
+                      <p>Reasoning, Vision и Audio берутся из каталога. Vision можно переопределить вручную; «Авто» возвращает значение каталога.</p>
                     </div>
                   </div>
                   <div class="model-capability-list" id="modelCapabilityList"></div>
@@ -489,6 +490,8 @@
                 <label class="checkline"><input id="autoRetryToolsInput" type="checkbox"><span>Авторемонт ошибок инструментов</span></label>
                 <label class="checkline"><input id="requireVerificationInput" type="checkbox"><span>Проверять результат мутаций</span></label>
                 <label class="checkline"><input id="autoContinueAfterConfirmationInput" type="checkbox"><span>Продолжать после подтверждения</span></label>
+                <label class="checkline"><input id="allowAgentToolAuthoringInput" type="checkbox"><span>Разрешить агенту создавать новые tools</span></label>
+                <label class="checkline"><input id="autoCompressContextInput" type="checkbox"><span>Автоматически сжимать старую историю</span></label>
                 <label class="checkline"><input id="includeVbaContextInput" type="checkbox"><span>Включать VBA-контекст автоматически</span></label>
                 <label><span>Макс. итераций агента</span><input id="maxAgentIterationsInput" type="number" min="1" max="50"></label>
                 <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1" max="200"></label>
@@ -660,18 +663,18 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=chatui-20260701-1"></script>
+  <script src="js/app-core.js?v=contextstream-20260722-1"></script>
   <script src="js/app-utils.js?v=chatui-20260620-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
   <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js?v=chatui-20260703-2"></script>
+  <script src="js/app-settings.js?v=contextstream-20260722-1"></script>
   <script src="js/app-prompts.js?v=chatui-20260703-1"></script>
-  <script src="js/app-model-data.js?v=chatui-20260703-2"></script>
-  <script src="js/app-model-render.js?v=chatui-20260630-3"></script>
+  <script src="js/app-model-data.js?v=modelcaps-20260722-1"></script>
+  <script src="js/app-model-render.js?v=modelcaps-20260722-1"></script>
   <script src="js/app-models.js?v=chatui-20260703-2"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=chatui-20260703-1"></script>
+  <script src="js/app-chat-state.js?v=contextstream-20260722-1"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
   <script src="js/app-tools.js?v=chatui-20260622-4"></script>
   <script src="js/app-skills.js?v=chatui-20260622-4"></script>
@@ -683,10 +686,10 @@
   <script src="js/app-chart-artifacts.js?v=chatui-20260622-2"></script>
   <script src="js/app-html-artifacts.js?v=chatui-20260702-2"></script>
   <script src="js/app-agent.js?v=chatui-20260702-1"></script>
-  <script src="js/app-messages.js?v=chatui-20260622-3"></script>
+  <script src="js/app-messages.js?v=contextstream-20260722-1"></script>
   <script src="js/app-reasoning.js?v=reasoning-20260630-1"></script>
   <script src="js/app-attachments.js?v=attachments-20260703-2"></script>
-  <script src="js/app-chat.js?v=chatui-20260703-3"></script>
+  <script src="js/app-chat.js?v=contextstream-20260722-1"></script>
   <script src="js/app.js?v=chatui-20260630-3"></script>
 </body>
 </html>

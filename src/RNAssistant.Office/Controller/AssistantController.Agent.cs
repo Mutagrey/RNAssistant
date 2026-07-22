@@ -35,6 +35,7 @@ namespace RNAssistant.Office
             UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
             if (result.Success && settings.AutoContinueAfterConfirmation != false)
             {
+                tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
                 var context = LoadContext(session);
                 var skills = _skillCatalog.SelectRelevantSkills("continue confirmed agent task", context, 5);
                 await _chatCompletionService.ContinueAfterToolAsync(

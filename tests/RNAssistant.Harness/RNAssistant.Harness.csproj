@@ -51,7 +51,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Agent\*.cs" Link="Office\Agent\%(Filename)%(Extension)" />
     <Compile
       Include="..\..\src\RNAssistant.Office\Services\*.cs"
-      Exclude="..\..\src\RNAssistant.Office\Services\AttachmentImageService.cs;..\..\src\RNAssistant.Office\Services\ModelAttachmentService.cs;..\..\src\RNAssistant.Office\Services\ModelCapabilityService.cs"
+      Exclude="..\..\src\RNAssistant.Office\Services\AttachmentImageService.cs;..\..\src\RNAssistant.Office\Services\ModelAttachmentService.cs"
       Link="Office\Services\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\*.cs" Link="Office\Tools\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\DispatchedOfficeApplicationAdapter.cs" Link="Office\Runtime\DispatchedOfficeApplicationAdapter.cs" />

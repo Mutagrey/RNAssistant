@@ -84,6 +84,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("reasoningComplete", NullValueHandling = NullValueHandling.Ignore)]
         public bool? ReasoningComplete { get; set; }
+
+        [JsonProperty("contentDelta", NullValueHandling = NullValueHandling.Ignore)]
+        public string ContentDelta { get; set; }
     }
 
     public sealed class ChatStateMessage

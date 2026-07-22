@@ -251,6 +251,41 @@ function renderLiveActivity() {
   return live;
 }
 
+function renderLiveStreamMessage() {
+  if (!state.liveStreamContent) {
+    return null;
+  }
+
+  var live = document.createElement("article");
+  live.className = "message assistant pending streaming-message";
+  var body = document.createElement("div");
+  body.className = "markdown";
+  body.innerHTML = markdown(state.liveStreamContent);
+  var cursor = document.createElement("span");
+  cursor.className = "streaming-cursor";
+  cursor.setAttribute("aria-hidden", "true");
+  body.appendChild(cursor);
+  live.appendChild(body);
+  enhanceMarkdown(body);
+  return live;
+}
+
+function scheduleLiveStreamRender() {
+  if (state.liveStreamRenderPending) {
+    return;
+  }
+  state.liveStreamRenderPending = true;
+  var render = function () {
+    state.liveStreamRenderPending = false;
+    renderMessages();
+  };
+  if (window.requestAnimationFrame) {
+    window.requestAnimationFrame(render);
+  } else {
+    window.setTimeout(render, 16);
+  }
+}
+
 function renderMessages(options) {
   options = options || {};
   var box = $("messages");
@@ -259,7 +294,7 @@ function renderMessages(options) {
 
   renderedMessagesChatId = state.activeChatId;
   box.innerHTML = "";
-  if (!state.messages.length && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
+  if (!state.messages.length && !state.liveStreamContent && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
     box.appendChild(renderChatEmptyState());
     syncChatScroll(false, false);
     return;
@@ -276,6 +311,11 @@ function renderMessages(options) {
 
     box.appendChild(renderMessageArticle(state.messages[index], index));
     index += 1;
+  }
+
+  var stream = renderLiveStreamMessage();
+  if (stream) {
+    box.appendChild(stream);
   }
 
   var live = renderLiveActivity();

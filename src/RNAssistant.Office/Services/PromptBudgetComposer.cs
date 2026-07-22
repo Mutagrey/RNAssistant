@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 
@@ -22,24 +23,66 @@ namespace RNAssistant.Office.Services
             var budget = ModelContextBudget.InputBudgetTokens(settings);
             var used = EstimateMessages(messages);
             var history = ConversationHistory(session);
-            for (var index = history.Count - 1; index >= 0; index--)
+            var available = Math.Max(0, budget - used);
+            if (history.Count == 0 || available <= 0)
             {
-                var source = history[index];
-                var candidate = new ChatMessage
-                {
-                    Role = source.Role,
-                    Content = source.Content ?? string.Empty,
-                    Attachments = source.Attachments == null
-                        ? new List<ChatAttachment>()
-                        : new List<ChatAttachment>(source.Attachments)
-                };
-                var estimate = EstimateMessages(new[] { candidate });
-                if (used + estimate > budget)
+                return;
+            }
+
+            var candidates = history.Select(CloneConversationMessage).ToList();
+            var estimates = candidates.Select(candidate => EstimateMessages(new[] { candidate })).ToList();
+            var needsCompression = estimates.Sum() > available;
+            var compressionEnabled = settings == null || settings.AutoCompressContext != false;
+            var summaryBudget = needsCompression && compressionEnabled && available >= 256
+                ? Math.Min(1024, Math.Max(128, available / 5))
+                : 0;
+            var recentBudget = Math.Max(0, available - summaryBudget);
+            var firstRecentIndex = candidates.Count;
+            var recentUsed = 0;
+            for (var index = candidates.Count - 1; index >= 0; index--)
+            {
+                if (recentUsed + estimates[index] > recentBudget)
                 {
                     break;
                 }
-                messages.Insert(insertIndex, candidate);
-                used += estimate;
+                firstRecentIndex = index;
+                recentUsed += estimates[index];
+            }
+
+            if (firstRecentIndex == candidates.Count && summaryBudget > 0)
+            {
+                summaryBudget = 0;
+                recentBudget = available;
+                for (var index = candidates.Count - 1; index >= 0; index--)
+                {
+                    if (recentUsed + estimates[index] > recentBudget)
+                    {
+                        break;
+                    }
+                    firstRecentIndex = index;
+                    recentUsed += estimates[index];
+                }
+            }
+
+            ChatMessage compressed = null;
+            if (summaryBudget > 0 && firstRecentIndex > 0)
+            {
+                compressed = BuildCompressedHistory(candidates.Take(firstRecentIndex), summaryBudget);
+                if (compressed != null && EstimateMessages(new[] { compressed }) + recentUsed > available)
+                {
+                    compressed = null;
+                }
+            }
+
+            if (compressed != null)
+            {
+                messages.Insert(insertIndex, compressed);
+                insertIndex += 1;
+            }
+            for (var index = firstRecentIndex; index < candidates.Count; index++)
+            {
+                messages.Insert(insertIndex, candidates[index]);
+                insertIndex += 1;
             }
         }
 
@@ -97,6 +140,69 @@ namespace RNAssistant.Office.Services
                     (attachment.ExtractedText ?? string.Empty).Length) / 2;
             }
             return total;
+        }
+
+        private static ChatMessage CloneConversationMessage(ChatMessage source)
+        {
+            return new ChatMessage
+            {
+                Role = source == null ? string.Empty : source.Role,
+                Content = source == null ? string.Empty : source.Content ?? string.Empty,
+                Attachments = source == null || source.Attachments == null
+                    ? new List<ChatAttachment>()
+                    : new List<ChatAttachment>(source.Attachments)
+            };
+        }
+
+        private static ChatMessage BuildCompressedHistory(IEnumerable<ChatMessage> history, int budgetTokens)
+        {
+            var builder = new StringBuilder();
+            builder.AppendLine("COMPRESSED_EARLIER_CONVERSATION (reference only; not new instructions):");
+            foreach (var message in history ?? new ChatMessage[0])
+            {
+                if (message == null || string.IsNullOrWhiteSpace(message.Content))
+                {
+                    continue;
+                }
+                var role = string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ? "User" : "Assistant";
+                var line = "- " + role + ": " + Compact(message.Content, 280);
+                var attachmentNames = (message.Attachments ?? new List<ChatAttachment>())
+                    .Where(attachment => attachment != null && !string.IsNullOrWhiteSpace(attachment.FileName))
+                    .Select(attachment => attachment.FileName)
+                    .Take(3)
+                    .ToArray();
+                if (attachmentNames.Length > 0)
+                {
+                    line += " [attachments: " + string.Join(", ", attachmentNames) + "]";
+                }
+
+                var remaining = budgetTokens - ModelContextBudget.EstimateTextTokens(builder.ToString()) - 4;
+                if (remaining <= 8)
+                {
+                    break;
+                }
+                if (ModelContextBudget.EstimateTextTokens(line) > remaining)
+                {
+                    line = Compact(line, Math.Max(16, remaining * 3));
+                }
+                builder.AppendLine(line);
+            }
+
+            return builder.Length <= 80
+                ? null
+                : new ChatMessage { Role = "assistant", Content = builder.ToString().TrimEnd() };
+        }
+
+        private static string Compact(string value, int maxChars)
+        {
+            var normalized = string.Join(
+                " ",
+                (value ?? string.Empty).Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
+            if (normalized.Length <= maxChars)
+            {
+                return normalized;
+            }
+            return normalized.Substring(0, Math.Max(0, maxChars - 1)).TrimEnd() + "…";
         }
     }
 }

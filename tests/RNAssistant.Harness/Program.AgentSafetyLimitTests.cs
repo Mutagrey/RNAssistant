@@ -27,7 +27,12 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var pendingIds = new List<string>();
-                var service = ChatServiceWithResponses(adapter, executor, null, AgentBlock(Command("word.vba_replace_module", "moduleName", "Module1", "code", "Sub Test()\nEnd Sub")));
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    null,
+                    AgentBlock(Command("word.vba_read_module", "moduleName", "Module1")),
+                    AgentBlock(Command("word.vba_replace_module", "moduleName", "Module1", "code", "Sub Test()\nEnd Sub")));
                 var session = NewSession(adapter);
 
                 var result = service.ExecuteAsync(
@@ -45,7 +50,8 @@ namespace RNAssistant.Harness
                         return "pending-1";
                     }).GetAwaiter().GetResult();
 
-                AssertEqual(0, adapter.Executed.Count, "adapter execution count");
+                AssertEqual(1, adapter.Executed.Count, "only inspection executes before confirmation");
+                AssertEqual("word.vba_read_module", adapter.Executed[0].ToolId, "inspection tool");
                 AssertEqual(1, pendingIds.Count, "pending count");
                 var resultJson = JsonConvert.SerializeObject(result.ToolResults);
                 AssertContains(resultJson, "waiting_confirmation", "waiting status");

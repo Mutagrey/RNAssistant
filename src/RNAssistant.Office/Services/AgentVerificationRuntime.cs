@@ -27,6 +27,16 @@ namespace RNAssistant.Office.Services
             }
 
             var host = tool.Host ?? string.Empty;
+            var vbaReadToolId = VbaReadToolId(host);
+            if (Contains(command.ToolId, "vba_") &&
+                !Contains(command.ToolId, "run_macro") &&
+                command.Arguments.ContainsKey("moduleName") &&
+                HasReadOnlyTool(allTools, vbaReadToolId))
+            {
+                yield return CopyArgs(new ToolCommand { ToolId = vbaReadToolId, Description = "Deterministic VBA verification" }, command, "moduleName");
+                yield break;
+            }
+
             if (string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase))
             {
                 if (HasReadOnlyTool(allTools, "excel.list_sheets") &&
@@ -34,6 +44,14 @@ namespace RNAssistant.Office.Services
                      string.Equals(command.ToolId, "excel.rename_sheet", StringComparison.OrdinalIgnoreCase)))
                 {
                     yield return new ToolCommand { ToolId = "excel.list_sheets", Description = "Deterministic verification" };
+                    yield break;
+                }
+                if (HasReadOnlyTool(allTools, "excel.get_chart") &&
+                    (string.Equals(command.ToolId, "excel.update_chart", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(command.ToolId, "excel.add_chart", StringComparison.OrdinalIgnoreCase)) &&
+                    command.Arguments.ContainsKey("chartName"))
+                {
+                    yield return CopyArgs(new ToolCommand { ToolId = "excel.get_chart", Description = "Deterministic chart verification" }, command, "sheet", "chartName");
                     yield break;
                 }
                 if (HasReadOnlyTool(allTools, "excel.list_charts") && Contains(command.ToolId, "chart"))
@@ -140,6 +158,23 @@ namespace RNAssistant.Office.Services
             return (value ?? string.Empty).IndexOf(term ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
+        private static string VbaReadToolId(string host)
+        {
+            if (string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase))
+            {
+                return "excel.vba_read_module";
+            }
+            if (string.Equals(host, "Word", StringComparison.OrdinalIgnoreCase))
+            {
+                return "word.vba_read_module";
+            }
+            if (string.Equals(host, "PowerPoint", StringComparison.OrdinalIgnoreCase))
+            {
+                return "powerpoint.vba_read_module";
+            }
+            return string.Empty;
+        }
+
         private static ToolCommand CopyArgs(ToolCommand target, ToolCommand source, params string[] names)
         {
             foreach (var name in names ?? new string[0])
@@ -174,6 +209,127 @@ namespace RNAssistant.Office.Services
     {
         public ToolResult Result { get; set; }
         public bool TimedOut { get; set; }
+    }
+
+    internal static class VerificationResultValidator
+    {
+        public static ToolResult Validate(ToolCommand mutation, ToolCommand verification, ToolResult result)
+        {
+            if (mutation == null || verification == null || result == null || !result.Success)
+            {
+                return result;
+            }
+
+            try
+            {
+                if (string.Equals(verification.ToolId, "excel.get_chart", StringComparison.OrdinalIgnoreCase))
+                {
+                    var actual = JObject.Parse(result.DataJson ?? "{}");
+                    var mismatch = FirstChartMismatch(mutation, actual);
+                    return string.IsNullOrWhiteSpace(mismatch)
+                        ? result
+                        : ToolResult.Fail("Chart verification failed: " + mismatch, result.DataJson);
+                }
+
+                if (string.Equals(mutation.ToolId, "excel.delete_chart", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(verification.ToolId, "excel.list_charts", StringComparison.OrdinalIgnoreCase))
+                {
+                    var chartName = Argument(mutation, "chartName");
+                    var charts = JArray.Parse(result.DataJson ?? "[]");
+                    if (charts.OfType<JObject>().Any(chart => string.Equals((string)chart["name"], chartName, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return ToolResult.Fail("Chart verification failed: chart still exists: " + chartName, result.DataJson);
+                    }
+                }
+
+                if (Contains(verification.ToolId, "vba_read_module") && mutation.Arguments.ContainsKey("code"))
+                {
+                    var actual = JObject.Parse(result.DataJson ?? "{}");
+                    var expectedCode = NormalizeCode(Argument(mutation, "code"));
+                    var actualCode = NormalizeCode((string)actual["code"]);
+                    if (!string.Equals(expectedCode, actualCode, StringComparison.Ordinal))
+                    {
+                        return ToolResult.Fail("VBA verification failed: module code does not match the requested code.", result.DataJson);
+                    }
+                }
+            }
+            catch (JsonException ex)
+            {
+                return ToolResult.Fail("Verification returned invalid JSON: " + ex.Message, result.DataJson);
+            }
+
+            return result;
+        }
+
+        private static string FirstChartMismatch(ToolCommand mutation, JObject actual)
+        {
+            var stringFields = new[]
+            {
+                new[] { "chartName", "name" },
+                new[] { "title", "title" },
+                new[] { "xAxisTitle", "xAxisTitle" },
+                new[] { "yAxisTitle", "yAxisTitle" },
+                new[] { "sourceRange", "sourceRange" }
+            };
+            foreach (var pair in stringFields)
+            {
+                if (!mutation.Arguments.ContainsKey(pair[0]) || actual[pair[1]] == null)
+                {
+                    continue;
+                }
+                var expected = Argument(mutation, pair[0]);
+                var value = Convert.ToString(actual[pair[1]]);
+                if (!string.Equals(expected, value, StringComparison.OrdinalIgnoreCase))
+                {
+                    return pair[0] + " expected '" + expected + "' but was '" + value + "'.";
+                }
+            }
+
+            if (mutation.Arguments.ContainsKey("chartType") && actual["chartType"] != null)
+            {
+                var expectedType = Argument(mutation, "chartType");
+                var actualType = Convert.ToString(actual["chartType"]);
+                if (actualType.IndexOf(expectedType, StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    return "chartType expected '" + expectedType + "' but was '" + actualType + "'.";
+                }
+            }
+
+            foreach (var field in new[] { "left", "top", "width", "height" })
+            {
+                if (!mutation.Arguments.ContainsKey(field) || actual[field] == null)
+                {
+                    continue;
+                }
+                double expected;
+                double value;
+                if (double.TryParse(Argument(mutation, field), out expected) &&
+                    double.TryParse(Convert.ToString(actual[field]), out value) &&
+                    Math.Abs(expected - value) > 1.0)
+                {
+                    return field + " expected " + expected + " but was " + value + ".";
+                }
+            }
+            return null;
+        }
+
+        private static string Argument(ToolCommand command, string name)
+        {
+            object value;
+            return command != null && command.Arguments.TryGetValue(name, out value) && value != null
+                ? Convert.ToString(value)
+                : string.Empty;
+        }
+
+        private static string NormalizeCode(string value)
+        {
+            return (value ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Trim();
+        }
+
+        private static bool Contains(string value, string term)
+        {
+            return (value ?? string.Empty).IndexOf(term ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
     }
 
     internal sealed class VerificationExecutor

@@ -52,7 +52,8 @@ namespace RNAssistant.Core.Storage
                 Host = host,
                 DocumentKey = documentKey,
                 DocumentTitle = documentTitle,
-                Title = string.IsNullOrWhiteSpace(title) ? "New chat" : title
+                Title = string.IsNullOrWhiteSpace(title) ? "New chat" : title,
+                Mode = ChatModes.Auto
             };
             NormalizeSession(session, host, documentKey, documentTitle);
             return session;

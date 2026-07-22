@@ -98,9 +98,8 @@ namespace RNAssistant.Harness
                     adapter,
                     executor,
                     null,
-                    AgentBlock(
-                        Command("common.tools_validate", definitionArgs),
-                        Command("common.tools_save", definitionArgs)),
+                    AgentBlock(Command("common.tools_validate", definitionArgs)),
+                    AgentBlock(Command("common.tools_save", definitionArgs)),
                     FinalBlock("Tool created."));
 
                 var result = service.ExecuteAsync(
@@ -117,6 +116,52 @@ namespace RNAssistant.Harness
                 var readResult = executor.Execute(read, new List<ToolDefinition>(executor.GetControllerTools()), new AppSettings(), false, true);
                 AssertTrue(readResult.Success, "agent-created tool readable");
                 AssertContains(readResult.DataJson, "excel.add_sheet", "agent-created pipeline preserved");
+            });
+        }
+
+        private static void AgentCanCreateAndUseToolDuringDocumentTaskWhenEnabled()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var definitionArgs = new object[]
+                {
+                    "id", "excel.custom_chart",
+                    "host", "Excel",
+                    "name", "Custom chart",
+                    "description", "Create the requested chart.",
+                    "argumentSchemaJson", "{}",
+                    "executor", "pipeline",
+                    "pipelineJson", "{\"steps\":[{\"toolId\":\"excel.add_chart\",\"arguments\":{\"sheet\":\"Data\",\"sourceRange\":\"A1:B4\",\"chartName\":\"Generated\",\"title\":\"Generated\"}}]}",
+                    "enabled", true,
+                    "requiresConfirmation", false,
+                    "mutatesDocument", true,
+                    "agentCanRun", true,
+                    "riskLevel", 2
+                };
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    null,
+                    AgentBlock(Command("common.tools_validate", definitionArgs)),
+                    AgentBlock(Command("common.tools_save", definitionArgs)),
+                    AgentBlock(Command("excel.custom_chart")),
+                    FinalBlock("Chart created."));
+
+                var result = service.ExecuteAsync(
+                    "Создай специальный график в текущей книге.",
+                    NewSession(adapter),
+                    NewContext(adapter),
+                    new AppSettings
+                    {
+                        AllowAgentToolAuthoring = true,
+                        AutoConfirmToolActions = true,
+                        RequireVerificationForMutations = false
+                    },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Chart created.", result.AssistantText, "tool-authoring task final");
+                AssertTrue(adapter.Executed.Any(command => string.Equals(command.ToolId, "excel.add_chart", StringComparison.OrdinalIgnoreCase)), "new pipeline tool executed in same run");
             });
         }
 

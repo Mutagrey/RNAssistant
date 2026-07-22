@@ -194,6 +194,51 @@ namespace RNAssistant.Harness
             AssertEqual("excel.list_sheets", verification.ToolId, "sheet verification tool");
         }
 
+        private static void VerificationUsesTargetedChartRead()
+        {
+            var adapter = FakeOfficeAdapter.ForHost("Excel");
+            var tools = adapter.GetBuiltInTools().ToList();
+            var mutation = tools.First(tool => string.Equals(tool.Id, "excel.update_chart", StringComparison.OrdinalIgnoreCase));
+            var command = Command("excel.update_chart", "sheet", "Data", "chartName", "Chart 1", "title", "Updated");
+
+            var verification = new VerificationRunner()
+                .BuildVerificationCommands(command, mutation, tools)
+                .Single();
+
+            AssertEqual("excel.get_chart", verification.ToolId, "chart verification tool");
+            AssertEqual("Chart 1", verification.Arguments["chartName"], "chart verification name");
+        }
+
+        private static void VerificationUsesVbaModuleReadAndComparesCode()
+        {
+            var adapter = FakeOfficeAdapter.ForHost("Excel");
+            var tools = adapter.GetBuiltInTools().ToList();
+            var mutation = tools.First(tool => string.Equals(tool.Id, "excel.insert_vba_module", StringComparison.OrdinalIgnoreCase));
+            var command = Command("excel.insert_vba_module", "moduleName", "ChartMacros", "code", "Sub Build()\nEnd Sub");
+
+            var verification = new VerificationRunner()
+                .BuildVerificationCommands(command, mutation, tools)
+                .Single();
+            AssertEqual("excel.vba_read_module", verification.ToolId, "VBA verification tool");
+
+            var mismatch = VerificationResultValidator.Validate(
+                command,
+                verification,
+                ToolResult.Ok("read", "{\"name\":\"ChartMacros\",\"code\":\"Sub Other()\\nEnd Sub\"}"));
+            AssertTrue(!mismatch.Success, "different VBA code fails verification");
+        }
+
+        private static void ExcelChartToolsUpdateAndDeleteState()
+        {
+            var adapter = FakeOfficeAdapter.ForHost("Excel");
+            AssertTrue(adapter.ExecuteTool(Command("excel.add_chart", "sheet", "Data", "chartName", "Production", "sourceRange", "A1:B4", "chartType", "line", "title", "Oil")).Success, "chart add");
+            AssertTrue(adapter.ExecuteTool(Command("excel.update_chart", "sheet", "Data", "chartName", "Production", "title", "Oil by year", "chartType", "column")).Success, "chart update");
+            var read = adapter.ExecuteTool(Command("excel.get_chart", "sheet", "Data", "chartName", "Production"));
+            AssertContains(read.DataJson, "Oil by year", "updated chart title");
+            AssertTrue(adapter.ExecuteTool(Command("excel.delete_chart", "sheet", "Data", "chartName", "Production")).Success, "chart delete");
+            AssertEqual(0, adapter.ChartCount("Data"), "chart removed");
+        }
+
         private static void VerificationHungReadTimesOut()
         {
             var release = new TaskCompletionSource<bool>();

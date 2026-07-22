@@ -42,6 +42,9 @@ function modelOptionTitle(model) {
   if (model.topP !== null && model.topP !== undefined) {
     parts.push("Top P: " + model.topP);
   }
+  if (model.supportsReasoning !== null) parts.push("Reasoning: " + (model.supportsReasoning ? "да" : "нет"));
+  if (model.supportsImages !== null) parts.push("Vision: " + (model.supportsImages ? "да" : "нет"));
+  if (model.supportsAudio !== null) parts.push("Audio: " + (model.supportsAudio ? "да" : "нет"));
   return parts.join("\n");
 }
 
@@ -194,6 +197,12 @@ function renderModelInfo(selectedValue) {
   appendModelMetric(metrics, "Ответ", model.maxTokens);
   appendModelMetric(metrics, "Temp", model.temperature);
   appendModelMetric(metrics, "Top P", model.topP);
+  appendModelMetric(metrics, "Top K", model.topK);
+  appendModelMetric(metrics, "Presence penalty", model.presencePenalty);
+  appendModelMetric(metrics, "Frequency penalty", model.frequencyPenalty);
+  appendModelMetric(metrics, "Reasoning", model.supportsReasoning === null ? "?" : (model.supportsReasoning ? "да" : "нет"));
+  appendModelMetric(metrics, "Vision", catalogModelSupportsImages(model) === null ? "?" : (catalogModelSupportsImages(model) ? "да" : "нет"));
+  appendModelMetric(metrics, "Audio", model.supportsAudio === null ? "?" : (model.supportsAudio ? "да" : "нет"));
   box.appendChild(metrics);
 
   if (model.systemPrompt) {
@@ -240,12 +249,36 @@ function renderActiveModelCapability() {
   var indicator = $("modelCapabilityIndicator");
   if (!indicator) return;
   var value = activeChatModel() || settingsModel();
-  var support = effectiveModelSupportsImages(value);
-  indicator.textContent = support === true ? "Изображения" : (support === false ? "Только текст" : "Модальность ?");
+  var vision = effectiveModelSupportsImages(value);
+  var reasoning = effectiveModelSupportsReasoning(value);
+  var audio = effectiveModelSupportsAudio(value);
+  var labels = [];
+  if (reasoning === true) labels.push("Reasoning");
+  if (vision === true) labels.push("Vision");
+  if (audio === true) labels.push("Audio");
+  var known = reasoning !== null || vision !== null || audio !== null;
+  indicator.textContent = labels.length ? labels.join(" · ") : (known ? "Только текст" : "Возможности ?");
   indicator.className = "model-capability-indicator " +
-    (support === true ? "is-enabled" : (support === false ? "is-disabled" : "is-unknown"));
-  indicator.title = "Модель: " + (value || "не выбрана") + ". " +
-    (support === true ? "Изображения поддерживаются." : (support === false ? "Изображения отключены." : "Поддержка изображений не определена."));
+    (labels.length ? "is-enabled" : (known ? "is-disabled" : "is-unknown"));
+  indicator.title = "Модель: " + (value || "не выбрана") +
+    ". Reasoning: " + (reasoning === null ? "?" : (reasoning ? "да" : "нет")) +
+    ". Vision: " + (vision === null ? "?" : (vision ? "да" : "нет")) +
+    ". Audio: " + (audio === null ? "?" : (audio ? "да" : "нет")) + ".";
+}
+
+function appendModelCapabilityToggle(row, label, value, enabled, onChange) {
+  var holder = document.createElement("label");
+  holder.className = "model-capability-flag";
+  holder.title = label + ": " + (value === null ? "не определено" : (value ? "поддерживается" : "не поддерживается"));
+  var toggle = document.createElement("input");
+  toggle.type = "checkbox";
+  toggle.checked = value === true;
+  toggle.indeterminate = value === null;
+  toggle.disabled = !enabled;
+  toggle.setAttribute("aria-label", label);
+  if (enabled && onChange) toggle.addEventListener("change", function () { onChange(toggle.checked); });
+  holder.appendChild(toggle);
+  row.appendChild(holder);
 }
 
 function setModelImageSupportOverride(value, enabled) {
@@ -271,7 +304,7 @@ function renderModelCapabilityList() {
   var models = (state.modelCatalog.models || []).slice();
   var manualValue = formModel();
   if (manualValue && !findModel(manualValue)) {
-    models.unshift({ value: manualValue, title: manualValue, supportsImages: null, inputModalities: [] });
+    models.unshift({ value: manualValue, title: manualValue, supportsReasoning: null, supportsImages: null, supportsAudio: null, inputModalities: [] });
   }
   list.innerHTML = "";
 
@@ -284,6 +317,14 @@ function renderModelCapabilityList() {
   }
 
   var overrides = modelImageSupportOverrides();
+  var header = document.createElement("div");
+  header.className = "model-capability-row model-capability-header";
+  ["Модель", "Reasoning", "Vision", "Audio", ""].forEach(function (label) {
+    var cell = document.createElement("span");
+    cell.textContent = label;
+    header.appendChild(cell);
+  });
+  list.appendChild(header);
   models.forEach(function (model) {
     var value = model.value;
     var hasOverride = Object.prototype.hasOwnProperty.call(overrides, value) && overrides[value] !== null;
@@ -293,43 +334,32 @@ function renderModelCapabilityList() {
     var row = document.createElement("div");
     row.className = "model-capability-row";
 
-    var toggle = document.createElement("input");
-    toggle.type = "checkbox";
-    toggle.checked = effective === true;
-    toggle.indeterminate = effective === null;
-    toggle.setAttribute("aria-label", "Поддержка изображений: " + value);
-    toggle.addEventListener("change", function () {
-      setModelImageSupportOverride(value, toggle.checked);
-    });
-    row.appendChild(toggle);
-
     var text = document.createElement("div");
     text.className = "model-capability-text";
     var title = document.createElement("div");
     title.className = "model-capability-title";
     title.textContent = model.title || value;
     text.appendChild(title);
-    if (model.title && model.title !== value) {
+    if ((model.title && model.title !== value) || hasOverride) {
       var id = document.createElement("div");
       id.className = "model-capability-id";
-      id.textContent = value;
+      id.textContent = value + (hasOverride ? " · Vision вручную" : "");
       text.appendChild(id);
     }
     row.appendChild(text);
 
-    var source = document.createElement("span");
-    source.className = "model-capability-source " + (hasOverride ? "is-manual" : "");
-    source.textContent = hasOverride
-      ? "Вручную"
-      : (catalogSupport === true ? "Каталог: да" : (catalogSupport === false ? "Каталог: нет" : "Не определено"));
-    row.appendChild(source);
+    appendModelCapabilityToggle(row, "Reasoning: " + value, nullableModelBoolean(model.supportsReasoning), false, null);
+    appendModelCapabilityToggle(row, "Vision: " + value, effective, true, function (checked) {
+      setModelImageSupportOverride(value, checked);
+    });
+    appendModelCapabilityToggle(row, "Audio: " + value, nullableModelBoolean(model.supportsAudio), false, null);
 
     var reset = document.createElement("button");
     reset.type = "button";
     reset.className = "model-capability-reset";
     reset.textContent = "Авто";
     reset.disabled = !hasOverride;
-    reset.title = hasOverride ? "Использовать статус из каталога" : "Уже используется статус из каталога";
+    reset.title = hasOverride ? "Вернуть Vision из каталога" : "Vision уже взят из каталога";
     reset.addEventListener("click", function () {
       setModelImageSupportOverride(value, null);
     });

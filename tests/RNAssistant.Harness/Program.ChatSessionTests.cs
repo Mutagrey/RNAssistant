@@ -148,6 +148,8 @@ namespace RNAssistant.Harness
                 var second = service.CreateChat("Another draft");
 
                 AssertTrue(!string.Equals(ChatStore.GetSessionId(first), ChatStore.GetSessionId(second), StringComparison.OrdinalIgnoreCase), "new draft id");
+                AssertEqual(ChatModes.Auto, first.Mode, "initial draft defaults to auto mode");
+                AssertEqual(ChatModes.Auto, second.Mode, "new draft defaults to auto mode");
                 AssertEqual(0, store.List(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle).Count, "empty drafts not persisted");
                 AssertTrue(!store.IsPersisted(second), "active draft remains in memory");
                 AssertEqual(ChatStore.GetSessionId(second), ChatStore.GetSessionId(service.GetActiveSession()), "active draft survives list refresh");

@@ -440,6 +440,7 @@ namespace RNAssistant.Harness
                 var sheet = EnsureSheet(sheetName);
                 var chart = new FakeChart
                 {
+                    Name = Argument(command, "chartName", "Chart " + (sheet.Charts.Count + 1)),
                     SourceRange = Argument(command, "sourceRange", string.Empty),
                     ChartType = Argument(command, "chartType", string.Empty),
                     Title = Argument(command, "title", string.Empty)
@@ -450,8 +451,58 @@ namespace RNAssistant.Harness
 
             if (string.Equals(command.ToolId, "excel.list_charts", StringComparison.OrdinalIgnoreCase))
             {
-                var charts = _sheets.SelectMany(pair => pair.Value.Charts.Select(c => new { sheet = pair.Key, title = c.Title, sourceRange = c.SourceRange, chartType = c.ChartType })).ToArray();
+                var sheetFilter = Argument(command, "sheet", string.Empty);
+                var charts = _sheets
+                    .Where(pair => string.IsNullOrWhiteSpace(sheetFilter) || string.Equals(pair.Key, sheetFilter, StringComparison.OrdinalIgnoreCase))
+                    .SelectMany(pair => pair.Value.Charts.Select(c => new { sheet = pair.Key, name = c.Name, title = c.Title, sourceRange = c.SourceRange, chartType = c.ChartType }))
+                    .ToArray();
                 return ToolResult.Ok("listed " + charts.Length + " chart(s)", JsonConvert.SerializeObject(charts));
+            }
+
+            if (string.Equals(command.ToolId, "excel.get_chart", StringComparison.OrdinalIgnoreCase))
+            {
+                FakeSheet chartSheet;
+                FakeChart chart;
+                if (!TryFindChart(Argument(command, "sheet", string.Empty), Argument(command, "chartName", string.Empty), out chartSheet, out chart))
+                {
+                    return ToolResult.Fail("Chart not found: " + Argument(command, "chartName", string.Empty));
+                }
+                return ToolResult.Ok("read chart " + chart.Name, JsonConvert.SerializeObject(new { sheet = chartSheet.Name, name = chart.Name, title = chart.Title, sourceRange = chart.SourceRange, chartType = chart.ChartType }));
+            }
+
+            if (string.Equals(command.ToolId, "excel.update_chart", StringComparison.OrdinalIgnoreCase))
+            {
+                FakeSheet chartSheet;
+                FakeChart chart;
+                if (!TryFindChart(Argument(command, "sheet", string.Empty), Argument(command, "chartName", string.Empty), out chartSheet, out chart))
+                {
+                    return ToolResult.Fail("Chart not found: " + Argument(command, "chartName", string.Empty));
+                }
+                if (command.Arguments.ContainsKey("sourceRange"))
+                {
+                    chart.SourceRange = Argument(command, "sourceRange", chart.SourceRange);
+                }
+                if (command.Arguments.ContainsKey("chartType"))
+                {
+                    chart.ChartType = Argument(command, "chartType", chart.ChartType);
+                }
+                if (command.Arguments.ContainsKey("title"))
+                {
+                    chart.Title = Argument(command, "title", chart.Title);
+                }
+                return ToolResult.Ok("updated chart " + chart.Name, JsonConvert.SerializeObject(new { sheet = chartSheet.Name, name = chart.Name, title = chart.Title, sourceRange = chart.SourceRange, chartType = chart.ChartType }));
+            }
+
+            if (string.Equals(command.ToolId, "excel.delete_chart", StringComparison.OrdinalIgnoreCase))
+            {
+                FakeSheet chartSheet;
+                FakeChart chart;
+                if (!TryFindChart(Argument(command, "sheet", string.Empty), Argument(command, "chartName", string.Empty), out chartSheet, out chart))
+                {
+                    return ToolResult.Fail("Chart not found: " + Argument(command, "chartName", string.Empty));
+                }
+                chartSheet.Charts.Remove(chart);
+                return ToolResult.Ok("deleted chart " + chart.Name);
             }
 
             if (string.Equals(command.ToolId, "excel.add_table", StringComparison.OrdinalIgnoreCase))
@@ -837,8 +888,33 @@ namespace RNAssistant.Harness
                 tableCount = s.Tables.Count,
                 chartCount = s.Charts.Count,
                 tables = s.Tables.ToArray(),
-                charts = s.Charts.Select(c => new { title = c.Title, sourceRange = c.SourceRange, chartType = c.ChartType }).ToArray()
+                charts = s.Charts.Select(c => new { name = c.Name, title = c.Title, sourceRange = c.SourceRange, chartType = c.ChartType }).ToArray()
             }).ToArray());
+        }
+
+        private bool TryFindChart(string sheetName, string chartName, out FakeSheet resolvedSheet, out FakeChart resolvedChart)
+        {
+            foreach (var pair in _sheets)
+            {
+                if (!string.IsNullOrWhiteSpace(sheetName) &&
+                    !string.Equals(pair.Key, sheetName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var chart = pair.Value.Charts.FirstOrDefault(item =>
+                    string.Equals(item.Name, chartName, StringComparison.OrdinalIgnoreCase));
+                if (chart != null)
+                {
+                    resolvedSheet = pair.Value;
+                    resolvedChart = chart;
+                    return true;
+                }
+            }
+
+            resolvedSheet = null;
+            resolvedChart = null;
+            return false;
         }
 
         private FakeSlide LastOrNewSlide()
@@ -941,6 +1017,7 @@ namespace RNAssistant.Harness
                 BuiltIn("Excel", "excel.find_cells", false, false, true),
                 BuiltIn("Excel", "excel.create_chat_chart", false, false, true),
                 BuiltIn("Excel", "excel.list_charts", false, false, true),
+                BuiltIn("Excel", "excel.get_chart", false, false, true),
                 BuiltIn("Excel", "excel.list_tables", false, false, true),
                 BuiltIn("Excel", "excel.list_names", false, false, true),
                 BuiltIn("Excel", "excel.list_shapes", false, false, true),
@@ -949,6 +1026,8 @@ namespace RNAssistant.Harness
                 BuiltIn("Excel", "excel.set_formula", false, true, true),
                 BuiltIn("Excel", "excel.add_table", false, true, true),
                 BuiltIn("Excel", "excel.add_chart", false, true, true),
+                BuiltIn("Excel", "excel.update_chart", false, true, true),
+                BuiltIn("Excel", "excel.delete_chart", false, true, false, 3),
                 BuiltIn("Excel", "excel.format_range", false, true, true, 1),
                 BuiltIn("Excel", "excel.autofit", false, true, true, 1),
                 BuiltIn("Excel", "excel.add_sheet", false, true, true, 1),
@@ -1149,6 +1228,7 @@ namespace RNAssistant.Harness
 
         private sealed class FakeChart
         {
+            public string Name { get; set; }
             public string SourceRange { get; set; }
             public string ChartType { get; set; }
             public string Title { get; set; }

@@ -103,6 +103,7 @@ namespace RNAssistant.Core.Models
         public DateTime CreatedUtc { get; set; }
         public DateTime UpdatedUtc { get; set; }
         public DocumentContext Context { get; set; }
+        public PendingAgentTask PendingAgentTask { get; set; }
         public HtmlWorkspace HtmlWorkspace { get; set; }
         public List<ChatMessage> Messages { get; set; }
 
@@ -117,6 +118,14 @@ namespace RNAssistant.Core.Models
             Messages = new List<ChatMessage>();
             Mode = ChatModes.Chat;
         }
+    }
+
+    public sealed class PendingAgentTask
+    {
+        public string Request { get; set; }
+        public string LastQuestion { get; set; }
+        public string Kind { get; set; }
+        public DateTime UpdatedUtc { get; set; }
     }
 
     public sealed class ChatSessionSummary

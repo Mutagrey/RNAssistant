@@ -395,7 +395,7 @@ namespace RNAssistant.Core.Llm
                 throw new ArgumentNullException("settings");
             }
 
-            var url = BuildModelsConfigUrl(settings.BaseUrl);
+            var url = BuildModelsConfigUrl(settings);
             Uri requestUri;
             if (!Uri.TryCreate(url, UriKind.Absolute, out requestUri))
             {
@@ -490,6 +490,15 @@ namespace RNAssistant.Core.Llm
             }
 
             return url + "/config/models.json";
+        }
+
+        public static string BuildModelsConfigUrl(AppSettings settings)
+        {
+            if (settings != null && !string.IsNullOrWhiteSpace(settings.ModelsConfigUrl))
+            {
+                return settings.ModelsConfigUrl.Trim();
+            }
+            return BuildModelsConfigUrl(settings == null ? null : settings.BaseUrl);
         }
 
         private static string CombineUrl(string baseUrl, string path)

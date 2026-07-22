@@ -90,7 +90,7 @@
 
 .model-capability-row {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto 46px;
+  grid-template-columns: minmax(130px, 1fr) repeat(3, minmax(58px, auto)) 46px;
   gap: 8px;
   align-items: center;
   min-height: 42px;
@@ -106,8 +106,32 @@
   background: var(--hover);
 }
 
-.model-capability-row input {
+.model-capability-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-height: 30px;
+  background: #f6f9ff;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: var(--label-font-weight);
+  text-align: center;
+}
+
+.model-capability-header span:first-child {
+  text-align: left;
+}
+
+.model-capability-flag {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
+}
+
+.model-capability-flag input {
   margin: 0;
+  opacity: 1;
 }
 
 .model-capability-text {

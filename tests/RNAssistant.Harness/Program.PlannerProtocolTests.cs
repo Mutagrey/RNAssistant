@@ -28,6 +28,16 @@ namespace RNAssistant.Harness
             AssertTrue(parsed.Success, "strict planner parse succeeds");
             AssertEqual(AgentResponseKinds.ToolPlan, parsed.Response.Kind, "planner kind");
             AssertEqual("excel.get_context", parsed.Response.Steps[0].ToolId, "planner tool id");
+
+            var clarify = new AgentPlannerResponseParser().Parse(
+                "{\"kind\":\"clarify\",\"intent\":\"clarify\",\"message\":\"Уточните задачу.\",\"steps\":null,\"expectedOutcome\":null}");
+            var finalWithoutSteps = new AgentPlannerResponseParser().Parse(
+                "{\"kind\":\"final\",\"intent\":\"answer\",\"message\":\"Готово.\"}");
+            var toolPlanWithoutSteps = new AgentPlannerResponseParser().Parse(
+                "{\"kind\":\"tool_plan\",\"intent\":\"read\",\"message\":null,\"steps\":null}");
+            AssertTrue(clarify.Success, "clarify accepts null steps");
+            AssertTrue(finalWithoutSteps.Success, "final accepts omitted steps");
+            AssertEqual("missing_steps", toolPlanWithoutSteps.ErrorCode, "tool plan still requires steps");
         }
 
         private static void PlannerAcceptsCleanJsonFenceAndRejectsProse()
@@ -72,7 +82,7 @@ namespace RNAssistant.Harness
             AssertEqual("invalid_intent", intent.ErrorCode, "invalid intent");
             AssertEqual("missing_tool_id", toolId.ErrorCode, "missing tool id");
             AssertEqual("invalid_arguments", arguments.ErrorCode, "invalid arguments");
-            AssertEqual("missing_steps", missingSteps.ErrorCode, "missing steps");
+            AssertTrue(missingSteps.Success, "non-tool response may omit steps");
             AssertEqual("unexpected_field", extra.ErrorCode, "unexpected root field");
             AssertEqual("invalid_message", objectMessage.ErrorCode, "object message");
             AssertEqual("unexpected_step_field", extraStep.ErrorCode, "unexpected step field");

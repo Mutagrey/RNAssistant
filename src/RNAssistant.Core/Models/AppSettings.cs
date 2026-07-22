@@ -7,6 +7,8 @@ namespace RNAssistant.Core.Models
     {
         public int? MaxContextTokens { get; set; }
         public bool? SupportsImages { get; set; }
+        public bool? SupportsReasoning { get; set; }
+        public bool? SupportsAudio { get; set; }
         public int? MaxImagesPerPrompt { get; set; }
     }
 
@@ -25,7 +27,7 @@ namespace RNAssistant.Core.Models
             ToolProtocolPrompt =
                 "Return exactly one raw JSON object. Start with { and end with }. No markdown, code fences, or prose outside JSON. Do not include internal reasoning, analysis, or a thought field.\n" +
                 "Allowed shape: {\"kind\":\"tool_plan|final|clarify|cannot_do\",\"intent\":\"read|analyze|mutate|verify|answer|clarify\",\"message\":\"string|null\",\"steps\":[{\"toolId\":\"exact tool id from AVAILABLE_TOOLS\",\"arguments\":{},\"reason\":\"short reason\"}],\"expectedOutcome\":\"string|null\"}.\n" +
-                "The object may contain only kind, intent, message, steps, and expectedOutcome. Each step may contain only toolId, arguments, and reason.\n" +
+                "The object may contain only kind, intent, message, steps, and expectedOutcome. For tool_plan, steps must be a non-empty array. For final, clarify, or cannot_do, steps may be [], null, or omitted. Each step may contain only toolId, arguments, and reason.\n" +
                 "Do not copy USER_REQUEST, ROUTE, CURRENT_OFFICE_CONTEXT, AVAILABLE_TOOLS, OBSERVATIONS, or RELEVANT_SKILLS into the response.";
             ToolRoutingPrompt =
                 "Use only exact tool ids from AVAILABLE_TOOLS. Never invent workbook, sheet, range, slide, email, or document content.\n" +
@@ -52,6 +54,7 @@ namespace RNAssistant.Core.Models
     public sealed class AppSettings
     {
         public string BaseUrl { get; set; }
+        public string ModelsConfigUrl { get; set; }
         public string Model { get; set; }
         public string SystemPrompt { get; set; }
         public string ChatSystemPrompt { get; set; }
@@ -76,6 +79,8 @@ namespace RNAssistant.Core.Models
         public int MaxAgentReadOnlyPlanSteps { get; set; }
         public bool? RequireVerificationForMutations { get; set; }
         public bool? AutoContinueAfterConfirmation { get; set; }
+        public bool? AllowAgentToolAuthoring { get; set; }
+        public bool? AutoCompressContext { get; set; }
         public AgentPromptSettings AgentPrompts { get; set; }
         public double UiFontScale { get; set; }
         public Dictionary<string, string> CustomHeaders { get; set; }
@@ -85,6 +90,7 @@ namespace RNAssistant.Core.Models
         public AppSettings()
         {
             BaseUrl = "https://api.openai.com";
+            ModelsConfigUrl = string.Empty;
             Model = "gpt-4o-mini";
             SystemPrompt = "You are RNAssistant Office Action Planner. Follow the planner protocol exactly and never expose internal reasoning.";
             ChatSystemPrompt = "You are RNAssistant, a concise Office assistant. Answer the user directly in natural language. Do not return planner JSON, internal reasoning, analysis, or a thought field. Do not claim to inspect or modify Office unless the provided context explicitly supports it.";
@@ -109,6 +115,8 @@ namespace RNAssistant.Core.Models
             MaxAgentReadOnlyPlanSteps = 4;
             RequireVerificationForMutations = true;
             AutoContinueAfterConfirmation = true;
+            AllowAgentToolAuthoring = false;
+            AutoCompressContext = true;
             AgentPrompts = new AgentPromptSettings();
             UiFontScale = 1.0;
             CustomHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

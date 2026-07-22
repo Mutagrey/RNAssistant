@@ -11,6 +11,11 @@ namespace RNAssistant.Office.Services
                 return ChatModes.Agent;
             }
 
+            if (AgentTaskContinuationResolver.ShouldContinue(text, session))
+            {
+                return ChatModes.Agent;
+            }
+
             var configured = ChatModes.Normalize(session == null ? null : session.Mode);
             if (configured != ChatModes.Auto)
             {

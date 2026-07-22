@@ -78,6 +78,7 @@ function applyChatState(response) {
   }
   if (response.messages || response.Messages) {
     state.liveActivity = null;
+    state.liveStreamContent = null;
     state.messages = response.messages || response.Messages || [];
   }
   if (response.contextUsage || response.ContextUsage) {

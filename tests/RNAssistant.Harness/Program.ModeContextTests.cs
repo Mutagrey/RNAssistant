@@ -8,6 +8,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace RNAssistant.Harness
 {
@@ -326,13 +327,220 @@ namespace RNAssistant.Harness
                 {
                     SystemPromptRole = "system",
                     ContextWindowOverrideTokens = 4096,
-                    MaxTokens = 2048
+                    MaxTokens = 2048,
+                    AutoCompressContext = false
                 },
                 null);
             var text = FlattenMessages(prompt);
             AssertContains(text, "current", "current request retained");
             AssertContains(text, "RECENT_AFTER_LARGE", "newest fitting history retained");
             AssertTrue(text.IndexOf("OLD_SMALL_SENTINEL", StringComparison.Ordinal) < 0, "history remains contiguous after overflow");
+        }
+
+        private static void PromptBudgetCompressesEarlierHistory()
+        {
+            var builder = new ChatContextWindowBuilder();
+            var session = new ChatSession();
+            session.Messages.Add(new ChatMessage { Role = "user", Content = "OLD_SMALL_SENTINEL" });
+            session.Messages.Add(new ChatMessage { Role = "assistant", Content = "old answer" });
+            session.Messages.Add(new ChatMessage { Role = "user", Content = new string('x', 12000) });
+            session.Messages.Add(new ChatMessage { Role = "assistant", Content = "RECENT_AFTER_LARGE" });
+            session.Messages.Add(new ChatMessage { Role = "user", Content = "current" });
+            var settings = new AppSettings
+            {
+                SystemPromptRole = "system",
+                ContextWindowOverrideTokens = 4096,
+                MaxTokens = 2048,
+                AutoCompressContext = true
+            };
+
+            var prompt = builder.BuildPlainMessages("current", session, new DocumentContext(), settings, null);
+            var text = FlattenMessages(prompt);
+            AssertContains(text, "COMPRESSED_EARLIER_CONVERSATION", "compressed history marker");
+            AssertContains(text, "OLD_SMALL_SENTINEL", "older history retained compactly");
+            AssertContains(text, "RECENT_AFTER_LARGE", "recent history retained verbatim");
+            AssertTrue(
+                new PromptBudgetComposer().EstimateMessages(prompt) <= ModelContextBudget.InputBudgetTokens(settings),
+                "compressed prompt remains within budget");
+        }
+
+        private static void ModelCatalogUsesExplicitUrlAndStandardDataShape()
+        {
+            var settings = new AppSettings
+            {
+                BaseUrl = "https://api.example.test/v1",
+                ModelsConfigUrl = " https://catalog.example.test/models "
+            };
+            AssertEqual(
+                "https://catalog.example.test/models",
+                LlmClient.BuildModelsConfigUrl(settings),
+                "explicit model catalog url");
+            AssertEqual(
+                "https://api.example.test/config/models.json",
+                LlmClient.BuildModelsConfigUrl(new AppSettings { BaseUrl = "https://api.example.test/v1" }),
+                "derived model catalog url fallback");
+
+            var catalog = JArray.Parse("[{\"id\":\"model-a\",\"display_name\":\"Model A\",\"max_context_tokens\":64000,\"supports_reasoning\":true,\"supports_vision\":true,\"supports_audio\":false}]");
+            AssertTrue(ModelCapabilityService.Merge(settings, catalog), "standard data catalog merged");
+            AssertEqual(64000, settings.ModelCapabilities["model-a"].MaxContextTokens.Value, "model context parsed");
+            AssertTrue(settings.ModelCapabilities["model-a"].SupportsImages == true, "model vision parsed");
+            AssertTrue(settings.ModelCapabilities["model-a"].SupportsReasoning == true, "model reasoning parsed");
+            AssertTrue(settings.ModelCapabilities["model-a"].SupportsAudio == false, "model audio parsed");
+        }
+
+        private static void VbaCreationRouteAllowsMutation()
+        {
+            var route = new OfficeIntentRouter().Route(
+                "Создай новый VBA-модуль и добавь в него макрос.",
+                new OfficeSnapshot { Host = "Excel" });
+
+            AssertEqual("vba", route.TaskType, "vba task type");
+            AssertEqual("mutate_vba", route.Mode, "vba mutation mode");
+            AssertEqual(AgentPhases.Mutation, route.Phase, "vba creation phase");
+            AssertEqual(3, route.RiskAllowed, "vba risk allowance");
+            AssertTrue(!route.RequiresInspection, "new vba module does not require prior module inspection");
+
+            var tools = new List<ToolDefinition>(FakeOfficeAdapter.ForHost("Excel").GetBuiltInTools());
+            var slice = new ToolCatalogSlicer().Slice(route, tools, new List<AgentObservation>());
+            AssertTrue(slice.Find("excel.insert_vba_module") != null, "insert vba module is available");
+
+            var macroRoute = new OfficeIntentRouter().Route("Запусти макрос Module1.Test", new OfficeSnapshot { Host = "Excel" });
+            AgentPhaseController.Advance(macroRoute, new List<AgentObservation>
+            {
+                new AgentObservation { Status = "success", ToolId = "excel.vba_read_project", Purpose = AgentObservationPurposes.Inspection }
+            }, false);
+            AssertTrue(new ToolCatalogSlicer().Slice(macroRoute, tools, new List<AgentObservation>()).Find("excel.run_macro") != null, "run macro is available after inspection");
+        }
+
+        private static void DestructiveChartRouteAdvancesToMutation()
+        {
+            var route = new OfficeIntentRouter().Route(
+                "Удали лишние графики, оставь один.",
+                new OfficeSnapshot { Host = "Excel" });
+            var tools = new List<ToolDefinition>
+            {
+                new ToolDefinition { Id = "excel.list_charts", Host = "Excel", Enabled = true, AgentCanRun = true },
+                new ToolDefinition { Id = "excel.delete_chart", Host = "Excel", Enabled = true, MutatesDocument = true, AgentCanRun = false, RiskLevel = 3 }
+            };
+
+            AssertEqual("chart", route.TaskType, "destructive target remains chart-specific");
+            AssertEqual(AgentPhases.ReadOnly, route.Phase, "destructive request inspects first");
+            AssertTrue(new ToolCatalogSlicer().Slice(route, tools, new List<AgentObservation>()).Find("excel.delete_chart") == null, "delete hidden before inspection");
+
+            AgentPhaseController.Advance(route, new List<AgentObservation>
+            {
+                new AgentObservation { Status = "success", ToolId = "excel.list_charts", Purpose = AgentObservationPurposes.Inspection }
+            }, false);
+
+            AssertEqual(AgentPhases.Mutation, route.Phase, "destructive route advances to mutation");
+            AssertEqual(3, route.RiskAllowed, "destructive route raises risk allowance");
+            AssertTrue(new ToolCatalogSlicer().Slice(route, tools, new List<AgentObservation>()).Find("excel.delete_chart") != null, "delete capability available after inspection");
+        }
+
+        private static void ShortFollowUpContinuesPendingAgentTask()
+        {
+            var session = new ChatSession
+            {
+                Mode = ChatModes.Auto,
+                PendingAgentTask = new PendingAgentTask
+                {
+                    Request = "Создай новый лист, график и VBA-макрос.",
+                    LastQuestion = "Подтвердите выполнение.",
+                    Kind = AgentResponseKinds.Clarify,
+                    UpdatedUtc = DateTime.UtcNow
+                }
+            };
+
+            AssertEqual(ChatModes.Agent, new ChatExecutionModeSelector().Select("да именно так", session, "Excel"), "auto mode keeps pending agent route");
+            var resolved = AgentTaskContinuationResolver.Resolve("да именно так", session);
+            AssertContains(resolved, "Создай новый лист", "original task retained");
+            AssertContains(resolved, "USER_FOLLOW_UP", "follow-up marker included");
+            AssertContains(resolved, "да именно так", "follow-up content included");
+
+            AssertEqual("Новая независимая задача", AgentTaskContinuationResolver.Resolve("Новая независимая задача", session), "substantive request is not merged");
+            AssertTrue(session.PendingAgentTask == null, "new request clears pending task");
+        }
+
+        private static void ToolValidationExplainsUnknownAndExcludedTools()
+        {
+            var insert = new ToolDefinition
+            {
+                Id = "excel.insert_vba_module",
+                Host = "Excel",
+                Enabled = true,
+                MutatesDocument = true,
+                RiskLevel = 3
+            };
+            var tools = new List<ToolDefinition> { insert };
+            var mutationRoute = new RoutedTask
+            {
+                App = "Excel",
+                TaskType = "vba",
+                Mode = "mutate_vba",
+                Phase = AgentPhases.Mutation,
+                RiskAllowed = 3,
+                RequiresTool = true
+            };
+            var mutationSlice = new ToolCatalogSlicer().Slice(mutationRoute, tools, new List<AgentObservation>());
+            var unknown = new AgentActionValidator().Validate(
+                new AgentPlannerStep { ToolId = "excel.vba_create_module" },
+                mutationSlice,
+                mutationRoute,
+                new List<AgentObservation>(),
+                tools);
+            AssertTrue(!unknown.Success, "unknown tool rejected");
+            AssertContains(unknown.Message, "Unknown tool id", "unknown diagnostic category");
+            AssertContains(unknown.Message, "excel.insert_vba_module", "unknown diagnostic suggestion");
+
+            var readRoute = new RoutedTask
+            {
+                App = "Excel",
+                TaskType = "vba",
+                Mode = "mutate_vba",
+                Phase = AgentPhases.ReadOnly,
+                RiskAllowed = 3,
+                RequiresTool = true,
+                RequiresInspection = true
+            };
+            var readSlice = new ToolCatalogSlicer().Slice(readRoute, tools, new List<AgentObservation>());
+            var excluded = new AgentActionValidator().Validate(
+                new AgentPlannerStep { ToolId = insert.Id },
+                readSlice,
+                readRoute,
+                new List<AgentObservation>(),
+                tools);
+            AssertTrue(!excluded.Success, "phase-excluded tool rejected");
+            AssertContains(excluded.Message, "wrong_phase", "excluded diagnostic reason");
+        }
+
+        private static void OptionalToolAuthoringIsExplicitAndDoesNotCompleteDocumentTask()
+        {
+            var route = new RoutedTask
+            {
+                App = "Excel",
+                TaskType = "chart",
+                Mode = "mutate_chart",
+                Phase = AgentPhases.Mutation,
+                RiskAllowed = 2,
+                RequiresTool = true
+            };
+            var tools = new List<ToolDefinition>
+            {
+                new ToolDefinition { Id = "excel.update_chart", Host = "Excel", Enabled = true, MutatesDocument = true, RiskLevel = 2 },
+                new ToolDefinition { Id = "common.tools_validate", Host = "Common", Enabled = true, RiskLevel = 0 },
+                new ToolDefinition { Id = "common.tools_save", Host = "Common", Enabled = true, MutatesLocalState = true, RiskLevel = 1 }
+            };
+
+            AssertTrue(new ToolCatalogSlicer().Slice(route, tools, new List<AgentObservation>()).Find("common.tools_save") == null, "tool authoring disabled by default");
+            var enabled = new ToolCatalogSlicer().Slice(route, tools, new List<AgentObservation>(), 24, true);
+            AssertTrue(enabled.Find("common.tools_validate") != null, "tool validation exposed by option");
+            AssertTrue(enabled.Find("common.tools_save") != null, "tool save exposed by option");
+
+            AgentPhaseController.Advance(route, new List<AgentObservation>
+            {
+                new AgentObservation { Status = "success", ToolId = "common.tools_save", LocalMutation = true, Purpose = AgentObservationPurposes.Mutation }
+            }, false);
+            AssertEqual(AgentPhases.Mutation, route.Phase, "saving helper tool does not complete chart task");
         }
 
     }
