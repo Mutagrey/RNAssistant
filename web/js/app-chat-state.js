@@ -227,37 +227,6 @@ function renderChatSessionList(chats) {
   });
 }
 
-function chatDocumentTreeKeys() {
-  var keys = {};
-  (state.chats || []).forEach(function (chat) {
-    keys[chatHost(chat) + "|" + chatDocumentKey(chat)] = true;
-  });
-  (state.documents || []).forEach(function (item) {
-    var host = item.host || item.Host || state.host || "";
-    var documentKey = item.documentKey || item.DocumentKey || "";
-    keys[host + "|" + documentKey] = true;
-  });
-  return Object.keys(keys);
-}
-
-function allChatDocumentsCollapsed() {
-  var keys = chatDocumentTreeKeys();
-  return keys.length > 0 && keys.every(function (key) {
-    return !!state.collapsedChatDocuments[key];
-  });
-}
-
-function setAllChatDocumentsCollapsed(collapsed) {
-  chatDocumentTreeKeys().forEach(function (key) {
-    if (collapsed) {
-      state.collapsedChatDocuments[key] = true;
-    } else {
-      delete state.collapsedChatDocuments[key];
-    }
-  });
-  state.chatTreeCollapsedAll = !!collapsed;
-}
-
 function renderChatDocumentNode(documentItem, query) {
   var group = document.createElement("section");
   group.className = "chat-document" + documentHostClass(documentItem.host) + (documentItem.current ? " is-current" : (documentItem.open ? " is-open" : " is-closed"));
@@ -268,7 +237,6 @@ function renderChatDocumentNode(documentItem, query) {
   header.setAttribute("aria-expanded", collapsed ? "false" : "true");
   header.innerHTML =
     "<button type=\"button\" class=\"chat-document-toggle\" aria-label=\"Свернуть или развернуть документ\">" +
-    "<span class=\"chat-document-caret\">›</span>" +
     "<span class=\"chat-document-icon\">" + documentHostIcon(documentItem.host) + "</span>" +
     "<span class=\"chat-document-name\"></span>" +
     "<span class=\"chat-document-state\">" + (documentItem.current ? "Активен" : (documentItem.open ? "Открыт" : "Закрыт")) + "</span></button>" +
@@ -280,7 +248,6 @@ function renderChatDocumentNode(documentItem, query) {
   header.querySelector(".chat-document-name").textContent = documentItem.title;
   header.querySelector(".chat-document-toggle").addEventListener("click", function () {
     state.collapsedChatDocuments[documentItem.key] = !children.hidden;
-    state.chatTreeCollapsedAll = allChatDocumentsCollapsed();
     renderChatSessionList(state.chats || []);
   });
   header.querySelector(".chat-document-new").addEventListener("click", function () {
@@ -319,18 +286,6 @@ function renderChatDocumentNode(documentItem, query) {
 }
 
 function renderChatTreeControls() {
-  var treeButton = $("toggleChatTreeButton");
-  if (treeButton) {
-    state.chatTreeCollapsedAll = allChatDocumentsCollapsed();
-    var collapse = !state.chatTreeCollapsedAll;
-    treeButton.title = collapse ? "Свернуть всё дерево" : "Развернуть всё дерево";
-    treeButton.setAttribute("aria-label", treeButton.title);
-    treeButton.setAttribute("aria-pressed", state.chatTreeCollapsedAll ? "true" : "false");
-    treeButton.innerHTML = state.chatTreeCollapsedAll
-      ? "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m8 8 4 4 4-4\"/><path d=\"m8 14 4 4 4-4\"/></svg>"
-      : "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m8 10 4-4 4 4\"/><path d=\"m8 16 4-4 4 4\"/></svg>";
-  }
-
   var layout = $("chatLayout");
   var sidebarButton = $("toggleChatSidebarButton");
   if (layout) {

@@ -10,41 +10,22 @@
   .composer-toolbar {
     align-items: center;
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 6px;
   }
 
-  .composer-toolbar #addSelectionContextButton,
-  .composer-toolbar #toggleVbaContextButton,
-  .composer-toolbar #toggleHtmlModeButton {
-    flex: 0 0 auto;
-    width: auto;
-    margin-right: 0;
-  }
-
-  .composer-left {
+  .composer-quick-actions {
     flex: 1 1 auto;
-    width: auto;
     flex-wrap: nowrap;
-    gap: 4px;
+    gap: 2px;
   }
 
   .context-meter {
     flex: 0 0 30px;
   }
 
-  .composer-model {
-    --chat-model-max-width: 220px;
-    flex: 0 1 auto;
-    min-width: 0;
-  }
-
   .context-meter em {
     display: none;
-  }
-
-  .composer textarea {
-    min-height: 68px;
   }
 
   .message.user .markdown,
@@ -99,25 +80,17 @@
   .vba-list-panel {
     padding-right: 0;
   }
+
+  .tool-layout > .tool-editor,
+  .prompt-editor {
+    padding-left: 0;
+  }
 }
 
 @media (max-width: 480px) {
-  .topbar {
-    padding: 9px 10px;
-  }
-
-  .brand {
-    font-size: 14px;
-  }
-
-  .docline {
-    max-width: 250px;
-  }
-
   .tabs {
     display: flex;
     overflow-x: auto;
-    scrollbar-width: thin;
   }
 
   .tab {
@@ -192,9 +165,8 @@
     gap: 4px;
   }
 
-  .composer-left {
+  .composer-quick-actions {
     flex: 1 1 auto;
-    width: auto;
     gap: 2px;
   }
 
@@ -202,34 +174,17 @@
     flex: 0 0 30px;
   }
 
-  .composer-model {
-    --chat-model-max-width: 150px;
-    flex: 0 1 auto;
-    min-width: 0;
-  }
-
   .composer-actions {
     margin-left: auto;
   }
 
-  .composer-toolbar #addSelectionContextButton,
-  .composer-toolbar #toggleVbaContextButton,
-  .composer-toolbar #toggleHtmlModeButton {
-    flex: 0 0 32px;
-    width: 32px;
-    padding: 0;
+  .composer-model {
+    --chat-model-max-width: 138px;
   }
 
-  .composer-toolbar #addSelectionContextButton span,
-  .composer-toolbar #toggleVbaContextButton span,
-  .composer-toolbar #toggleHtmlModeButton span {
-    display: none;
-  }
-
-  .composer textarea {
-    min-height: 48px;
-    padding-top: 5px;
-    padding-bottom: 5px;
+  .composer-options-panel {
+    left: -64px;
+    width: min(270px, calc(100vw - 28px));
   }
 
   .context-strip {
@@ -316,19 +271,15 @@
     font-size: 12px;
   }
 
-  .modal {
-    padding: 12px;
-  }
-
-  .modal-head,
-  .help-content {
-    padding: 11px;
-  }
 }
 
 @media (max-width: 700px) {
   .chat-workspace {
-    grid-template-columns: minmax(118px, 34vw) minmax(0, 1fr);
+    grid-template-columns: minmax(118px, 34vw) 1px minmax(0, 1fr);
+  }
+
+  .chat-workspace > .splitter {
+    display: block;
   }
 
   .chat-sidebar-head {
@@ -344,8 +295,6 @@
   }
 
   .chat-document-row {
-    grid-template-columns: 10px 18px minmax(0, 1fr);
-    gap: 3px;
     padding-right: 3px;
     padding-left: 3px;
   }
@@ -360,6 +309,6 @@
   }
 
   .chat-main {
-    padding: 8px;
+    padding: 0 8px 8px;
   }
 }

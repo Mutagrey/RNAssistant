@@ -247,9 +247,8 @@ function applyInitState(init) {
   state.chats = init.chats || [];
   state.documents = init.documents || init.Documents || [];
   state.messages = init.messages || [];
-  $("docLine").textContent = formatOfficeContextLine(init.officeContext, init.host, init.title);
-    $("toolsPath").textContent = state.toolsPath ? "Хранилище: " + state.toolsPath : "";
-    $("skillsPath").textContent = state.skillsPath ? "Хранилище: " + state.skillsPath : "";
+  $("toolsPath").textContent = state.toolsPath ? "Хранилище: " + state.toolsPath : "";
+  $("skillsPath").textContent = state.skillsPath ? "Хранилище: " + state.skillsPath : "";
   renderSettings();
   renderTools();
   renderSkills();
@@ -292,7 +291,6 @@ function applyBridgeUnavailableState(error) {
   state.htmlWorkspace = { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [] };
   state.htmlWorkspaceDirty = false;
 
-  $("docLine").textContent = "Office bridge недоступен";
   $("toolsPath").textContent = "";
   $("skillsPath").textContent = "";
   renderSettings();
@@ -343,30 +341,6 @@ async function synchronizeChatState() {
   }
 }
 
-function formatOfficeContextLine(context, host, title) {
-  if (!context) {
-    return (host || "") + " - " + (title || "");
-  }
-
-  var parts = [];
-  parts.push(context.Host || context.host || host || "");
-  parts.push(context.DocumentTitle || context.documentTitle || title || "");
-
-  var container = context.ContainerName || context.containerName || "";
-  var selection = context.SelectionAddress || context.selectionAddress || "";
-  if (container && selection && parts[0].toLowerCase() === "excel") {
-    parts.push(container + "!" + selection);
-  } else if (container && selection) {
-    parts.push(container + " · " + selection);
-  } else if (selection) {
-    parts.push(selection);
-  } else if (container) {
-    parts.push(container);
-  }
-
-  return parts.filter(function (part) { return !!part; }).join(" · ");
-}
-
 async function initialize() {
   if (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
       !confirmDiscardHtmlWorkspaceChanges("Обновить состояние")) {
@@ -407,7 +381,6 @@ function renderSendControls() {
   var isCanceling = isSending && !!activeSend.canceling;
   var sendButton = $("sendButton");
   var stopButton = $("stopButton");
-  var stopText = $("stopButtonText");
   var input = $("chatInput");
   var clearButton = $("clearInputButton");
   var modelSelect = $("chatModelSelect");
@@ -416,14 +389,12 @@ function renderSendControls() {
 
   if (sendButton) {
     sendButton.classList.toggle("hidden", isSending);
-    sendButton.disabled = isSending || state.modelSaving || state.bridgeUnavailable || !state.activeChatId || hasInlineEdit;
   }
   if (stopButton) {
     stopButton.classList.toggle("hidden", !isSending);
     stopButton.disabled = isCanceling;
-  }
-  if (stopText) {
-    stopText.textContent = isCanceling ? "Отмена" : "Стоп";
+    stopButton.title = isCanceling ? "Останавливаю запрос" : "Остановить запрос";
+    stopButton.setAttribute("aria-label", stopButton.title);
   }
   if (input) {
     input.readOnly = isSending || state.bridgeUnavailable;
@@ -452,6 +423,19 @@ function renderSendControls() {
   if ($("attachFileButton")) {
     $("attachFileButton").disabled = isSending || state.bridgeUnavailable || !state.activeChatId;
   }
+  var optionsMenu = $("composerOptionsMenu");
+  if (optionsMenu) {
+    var optionsDisabled = isSending || state.bridgeUnavailable || !state.activeChatId;
+    optionsMenu.classList.toggle("is-disabled", optionsDisabled);
+    if (optionsDisabled) {
+      optionsMenu.open = false;
+    }
+    var optionsSummary = optionsMenu.querySelector("summary");
+    if (optionsSummary) {
+      optionsSummary.setAttribute("aria-disabled", optionsDisabled ? "true" : "false");
+      optionsSummary.tabIndex = optionsDisabled ? -1 : 0;
+    }
+  }
   if (typeof renderHtmlModeToggle === "function") {
     renderHtmlModeToggle();
   }
@@ -471,6 +455,46 @@ function updateComposerInputState() {
   if (clearButton) {
     clearButton.hidden = !hasText;
   }
+  updateSendButtonAvailability(hasText || hasAttachments);
+  resizeChatInput();
+}
+
+function updateSendButtonAvailability(hasContent) {
+  var sendButton = $("sendButton");
+  if (!sendButton) {
+    return;
+  }
+
+  sendButton.disabled =
+    !!currentActiveSend() ||
+    state.modelSaving ||
+    state.bridgeUnavailable ||
+    !state.activeChatId ||
+    hasActiveMessageEdit() ||
+    !hasContent;
+}
+
+function resizeChatInput() {
+  var input = $("chatInput");
+  if (!input) {
+    return;
+  }
+
+  input.style.height = "auto";
+  var styles = window.getComputedStyle(input);
+  var fontSize = parseFloat(styles.fontSize) || 14;
+  var lineHeight = parseFloat(styles.lineHeight) || (fontSize * 1.45);
+  var verticalChrome =
+    (parseFloat(styles.paddingTop) || 0) +
+    (parseFloat(styles.paddingBottom) || 0) +
+    (parseFloat(styles.borderTopWidth) || 0) +
+    (parseFloat(styles.borderBottomWidth) || 0);
+  var minHeight = Math.ceil((lineHeight * 2) + verticalChrome);
+  var maxHeight = Math.ceil((lineHeight * 6) + verticalChrome);
+  var contentHeight = Math.max(input.scrollHeight, minHeight);
+
+  input.style.height = Math.min(contentHeight, maxHeight) + "px";
+  input.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
 }
 
 function setChatInputText(text, shouldFocus) {
@@ -481,6 +505,7 @@ function setChatInputText(text, shouldFocus) {
 
   input.value = text || "";
   updateComposerInputState();
+  window.requestAnimationFrame(resizeChatInput);
   if (shouldFocus) {
     input.focus();
   }
@@ -766,15 +791,39 @@ async function saveChatMode(mode) {
   }
 }
 
+function setChatSearchOpen(open, clearQuery) {
+  var wrap = $("chatSearchWrap");
+  var button = $("toggleChatSearchButton");
+  var input = $("chatSearchInput");
+  if (!wrap || !button || !input) {
+    return;
+  }
+
+  wrap.classList.toggle("is-open", !!open);
+  wrap.setAttribute("aria-hidden", open ? "false" : "true");
+  button.classList.toggle("active", !!open);
+  button.setAttribute("aria-expanded", open ? "true" : "false");
+
+  if (open) {
+    input.focus();
+    return;
+  }
+
+  if (clearQuery && (input.value || state.chatSearch)) {
+    input.value = "";
+    state.chatSearch = "";
+    renderChatSessionList(state.chats || []);
+  }
+}
+
 function bindChatActions() {
   bindMessageScrollControls();
   bindAttachmentActions();
-  $("refreshButton").addEventListener("click", initialize);
   $("chatSessionSelect").addEventListener("change", function () { selectChat($("chatSessionSelect").value); });
   $("newChatButton").addEventListener("click", createChat);
-  $("toggleChatTreeButton").addEventListener("click", function () {
-    setAllChatDocumentsCollapsed(!allChatDocumentsCollapsed());
-    renderChatSessionList(state.chats || []);
+  $("toggleChatSearchButton").addEventListener("click", function () {
+    var wrap = $("chatSearchWrap");
+    setChatSearchOpen(!wrap.classList.contains("is-open"), true);
   });
   $("toggleChatSidebarButton").addEventListener("click", function () {
     state.chatSidebarHidden = !state.chatSidebarHidden;
@@ -792,14 +841,35 @@ function bindChatActions() {
     state.chatSearch = $("chatSearchInput").value || "";
     renderChatSessionList(state.chats || []);
   });
+  $("chatSearchInput").addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setChatSearchOpen(false, true);
+      $("toggleChatSearchButton").focus();
+    }
+  });
   $("toggleHtmlModeButton").addEventListener("click", toggleChatHtmlMode);
   $("chatModeSelect").addEventListener("change", function () {
     saveChatMode($("chatModeSelect").value);
+  });
+  var optionsMenu = $("composerOptionsMenu");
+  document.addEventListener("pointerdown", function (event) {
+    if (optionsMenu && optionsMenu.open && !optionsMenu.contains(event.target)) {
+      optionsMenu.open = false;
+    }
+  });
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && optionsMenu && optionsMenu.open) {
+      optionsMenu.open = false;
+      var summary = optionsMenu.querySelector("summary");
+      if (summary) summary.focus();
+    }
   });
   $("clearChatButton").addEventListener("click", clearChat);
   $("stopButton").addEventListener("click", stopActiveSend);
   $("clearInputButton").addEventListener("click", function () { setChatInputText("", true); });
   $("chatInput").addEventListener("input", updateComposerInputState);
+  window.addEventListener("resize", resizeChatInput);
   $("chatInput").addEventListener("keydown", function (event) {
     if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
       event.preventDefault();

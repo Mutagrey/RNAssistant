@@ -40,10 +40,10 @@ async function saveChatModelSelection(value) {
     return false;
   } finally {
     state.modelSaving = false;
-    if ($("sendButton")) {
-      $("sendButton").disabled = false;
-    }
     renderModelControls();
+    if (typeof updateComposerInputState === "function") {
+      updateComposerInputState();
+    }
   }
 }
 

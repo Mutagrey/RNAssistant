@@ -8,46 +8,27 @@
   <link rel="stylesheet" href="css/vendor/katex.min.css">
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
-  <link rel="stylesheet" href="css/app.css?v=composer-cleanup-20260723-1">
-  <link rel="stylesheet" href="css/app-chat.css?v=chat-tree-polish-20260723-1">
+  <link rel="stylesheet" href="css/app.css?v=scrollbar-hover-20260723-1">
+  <link rel="stylesheet" href="css/app-chat.css?v=chat-title-weight-20260723-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=chatui-20260622-1">
-  <link rel="stylesheet" href="css/app-composer.css?v=composer-cleanup-20260723-1">
+  <link rel="stylesheet" href="css/app-composer.css?v=composer-soft-shadow-20260723-1">
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
-  <link rel="stylesheet" href="css/app-context-chips.css?v=chatui-20260622-1">
+  <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=mediarouting-20260722-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=chatui-20260630-1">
-  <link rel="stylesheet" href="css/app-tools.css?v=chatui-20260622-5">
-  <link rel="stylesheet" href="css/app-prompts.css?v=chatui-20260630-2">
+  <link rel="stylesheet" href="css/app-tools.css?v=sidebar-polish-20260723-1">
+  <link rel="stylesheet" href="css/app-prompts.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-vba.css?v=chatui-20260622-7">
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260702-2">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=chatui-20260702-2">
-  <link rel="stylesheet" href="css/app-dialogs.css?v=chatui-20260622-1">
-  <link rel="stylesheet" href="css/app-responsive.css?v=chat-header-count-20260723-1">
+  <link rel="stylesheet" href="css/app-responsive.css?v=chatbar-alignment-20260723-1">
   <link rel="stylesheet" href="css/app-agent.css?v=chatui-20260702-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=chatui-20260622-1">
 </head>
 <body>
   <div class="shell">
-    <header class="topbar">
-      <div>
-        <div class="brand">RN Assistant</div>
-        <div class="docline" id="docLine">Загрузка...</div>
-      </div>
-      <div class="top-actions">
-        <button class="icon-button secondary" id="fullscreenButton" title="Во весь экран" aria-label="Во весь экран">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5"/><path d="M16 3h5v5"/><path d="M8 21H3v-5"/><path d="M16 21h5v-5"/></svg>
-        </button>
-        <button class="icon-button secondary" id="helpButton" title="Как это работает" aria-label="Как это работает">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.6 9.1a2.7 2.7 0 1 1 4.7 1.8c-.9.8-1.8 1.4-1.8 2.9"/><path d="M12 17.5h.01"/><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
-        </button>
-        <button class="icon-button secondary" id="refreshButton" title="Обновить" aria-label="Обновить">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M6.1 9A7 7 0 0 1 18.2 6.8L20 11"/><path d="M17.9 15A7 7 0 0 1 5.8 17.2L4 13"/></svg>
-        </button>
-      </div>
-    </header>
-
     <nav class="tabs" aria-label="Разделы ассистента">
       <button class="tab active" data-tab="chat">Чат</button>
       <button class="tab" data-tab="tools">Инструменты</button>
@@ -58,23 +39,19 @@
       <button class="tab" data-tab="logs">Журнал</button>
     </nav>
 
-    <div class="activity" id="activityStatus" role="status" aria-live="polite">
-      <span id="activityText">Выполняю...</span>
-    </div>
-
     <main class="content">
       <section class="panel active" id="tab-chat">
         <div class="chat-workspace split-layout" id="chatLayout" data-split-key="chat-tree" data-default-ratio="0.27" data-min-left="240" data-min-ratio="0.2" data-max-ratio="0.42">
           <aside class="chat-sidebar" aria-label="Документы и чаты">
             <div class="chat-sidebar-head">
-              <label class="chat-search-wrap">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg>
-                <input id="chatSearchInput" class="chat-search" type="search" placeholder="Поиск по документам и чатам..." autocomplete="off">
-              </label>
               <div class="chat-tree-toolbar">
-                <button type="button" class="icon-button secondary" id="toggleChatTreeButton" title="Свернуть всё дерево" aria-label="Свернуть всё дерево"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 9 4-4 4 4"/><path d="m8 15 4 4 4-4"/></svg></button>
+                <button type="button" class="icon-button secondary" id="toggleChatSearchButton" title="Поиск по чатам" aria-label="Поиск по чатам" aria-expanded="false" aria-controls="chatSearchWrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg></button>
                 <button type="button" class="icon-button secondary" id="newChatButton" title="Новый чат" aria-label="Новый чат"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg></button>
               </div>
+              <label class="chat-search-wrap" id="chatSearchWrap" role="search" aria-hidden="true">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg>
+                <input id="chatSearchInput" class="chat-search" type="search" placeholder="Поиск по чатам..." autocomplete="off">
+              </label>
             </div>
             <select id="chatSessionSelect" class="hidden" aria-label="Сессия чата"></select>
             <div class="chat-session-list" id="chatSessionList" aria-label="Все документы и чаты"></div>
@@ -82,7 +59,7 @@
           <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину дерева документов и чатов"></div>
           <div class="chat-main">
         <div class="chatbar">
-          <button class="icon-button secondary html-sidebar-toggle-button" id="toggleChatSidebarButton" type="button" title="Скрыть список" aria-label="Скрыть список">
+          <button class="icon-button chatbar-icon-button html-sidebar-toggle-button" id="toggleChatSidebarButton" type="button" title="Скрыть список" aria-label="Скрыть список">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>
           </button>
           <div class="chat-title-block">
@@ -90,7 +67,7 @@
             <span id="activeChatSubtitle"></span>
           </div>
           <div class="chatbar-actions">
-            <button type="button" class="icon-button secondary" id="clearChatButton" title="Очистить чат" aria-label="Очистить чат" hidden>
+            <button type="button" class="icon-button chatbar-icon-button" id="clearChatButton" title="Очистить чат" aria-label="Очистить чат" hidden>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>
             </button>
           </div>
@@ -102,12 +79,12 @@
         <div class="chat-scroll-region">
           <div class="messages" id="messages"></div>
           <button type="button" class="chat-scroll-button" id="chatScrollBottomButton" title="К последним сообщениям" aria-label="К последним сообщениям" aria-hidden="true" tabindex="-1">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
           </button>
         </div>
         <form class="composer" id="chatForm">
           <div class="composer-input-wrap">
-            <textarea id="chatInput" rows="3" placeholder="Спросите про текущий документ..."></textarea>
+            <textarea id="chatInput" rows="2" placeholder="Спросите про текущий документ..."></textarea>
             <button type="button" class="icon-button composer-clear-button" id="clearInputButton" title="Очистить ввод" aria-label="Очистить ввод" hidden>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
             </button>
@@ -133,46 +110,54 @@
             </details>
           </div>
           <div class="composer-toolbar">
-            <div class="composer-left">
+            <div class="composer-quick-actions">
+              <button type="button" class="composer-icon-button" id="attachFileButton" title="Прикрепить файл" aria-label="Прикрепить файл">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.4 11.6-8.9 8.9a6 6 0 0 1-8.5-8.5l9.6-9.6a4 4 0 0 1 5.7 5.7l-9.6 9.6a2 2 0 1 1-2.8-2.8l8.9-8.9"/></svg>
+              </button>
+              <input id="attachmentFileInput" type="file" multiple hidden>
+              <button type="button" class="composer-icon-button" id="addSelectionContextButton" title="Добавить выделение документа" aria-label="Добавить выделение документа">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 3"/><path d="m10 9 7 7"/><path d="M12 16h5v-5"/></svg>
+              </button>
+              <details class="composer-options" id="composerOptionsMenu">
+                <summary class="composer-icon-button" title="Параметры запроса" aria-label="Параметры запроса">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10"/><path d="M18 7h2"/><circle cx="16" cy="7" r="2"/><path d="M4 17h2"/><path d="M10 17h10"/><circle cx="8" cy="17" r="2"/></svg>
+                </summary>
+                <div class="composer-options-panel">
+                  <div class="composer-options-title">Контекст</div>
+                  <div class="composer-option-actions">
+                    <button type="button" class="composer-option-button context-toggle-button" id="toggleVbaContextButton" title="Добавить или убрать VBA-проект из контекста">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4 4 12l4 8"/><path d="m16 4 4 8-4 8"/><path d="m14 4-4 16"/></svg>
+                      <span>VBA-контекст</span>
+                    </button>
+                    <button type="button" class="composer-option-button context-toggle-button html-mode-toggle-button" id="toggleHtmlModeButton" title="Вести этот чат как HTML workspace">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 9-4 3 4 3"/><path d="m16 9 4 3-4 3"/><path d="m14 5-4 14"/></svg>
+                      <span>HTML workspace</span>
+                    </button>
+                  </div>
+                  <span class="model-capability-indicator" id="modelCapabilityIndicator" title="Мультимодальность модели" aria-label="Мультимодальность модели"></span>
+                </div>
+              </details>
               <div class="context-meter" id="contextMeter" title="Использование контекста" aria-label="Использование контекста">
                 <strong id="contextMeterValue">0%</strong>
                 <em id="contextMeterDetail">0 / 0 символов</em>
               </div>
-              <label class="composer-model" title="Модель чата"><select id="chatModelSelect" aria-label="Модель чата"></select></label>
-              <label class="composer-model" title="Режим чата">
+            </div>
+            <div class="composer-actions">
+              <label class="composer-mode" title="Режим чата">
                 <select id="chatModeSelect" aria-label="Режим чата">
                   <option value="chat">Chat</option>
                   <option value="auto">Auto</option>
                   <option value="agent">Agent</option>
                 </select>
               </label>
-              <span class="model-capability-indicator" id="modelCapabilityIndicator" title="Мультимодальность модели" aria-label="Мультимодальность модели"></span>
-            </div>
-            <button type="button" class="secondary icon-text-button" id="attachFileButton" title="Добавить изображение или файл">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.4 11.6-8.9 8.9a6 6 0 0 1-8.5-8.5l9.6-9.6a4 4 0 0 1 5.7 5.7l-9.6 9.6a2 2 0 1 1-2.8-2.8l8.9-8.9"/></svg>
-              <span>Файл</span>
-            </button>
-            <input id="attachmentFileInput" type="file" multiple hidden>
-            <button type="button" class="secondary icon-text-button" id="addSelectionContextButton" title="Добавить текущее выделение Office в контекст">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-              <span>Выделение</span>
-            </button>
-            <button type="button" class="secondary icon-text-button context-toggle-button" id="toggleVbaContextButton" title="Добавить или убрать VBA-проект из контекста">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4 4 12l4 8"/><path d="m16 4 4 8-4 8"/><path d="m14 4-4 16"/></svg>
-              <span>VBA</span>
-            </button>
-            <button type="button" class="secondary icon-text-button context-toggle-button html-mode-toggle-button" id="toggleHtmlModeButton" title="Вести этот чат как HTML workspace">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 9-4 3 4 3"/><path d="m16 9 4 3-4 3"/><path d="m14 5-4 14"/></svg>
-              <span>HTML</span>
-            </button>
-            <div class="composer-actions">
-              <button type="submit" class="icon-text-button primary" id="sendButton">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4 20-7Z"/><path d="M22 2 11 13"/></svg>
-                <span>Отправить</span>
+              <label class="composer-model" title="Модель чата">
+                <select id="chatModelSelect" aria-label="Модель чата"></select>
+              </label>
+              <button type="submit" class="composer-send-button" id="sendButton" title="Отправить" aria-label="Отправить">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.75a1 1 0 0 1 .7.29l5.25 5.25a1 1 0 1 1-1.41 1.42L13 8.16V18a1 1 0 1 1-2 0V8.16l-3.54 3.55a1 1 0 0 1-1.41-1.42l5.25-5.25a1 1 0 0 1 .7-.29Z"/></svg>
               </button>
-              <button type="button" class="icon-text-button danger hidden" id="stopButton">
+              <button type="button" class="composer-stop-button hidden" id="stopButton" title="Остановить" aria-label="Остановить">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
-                <span id="stopButtonText">Стоп</span>
               </button>
             </div>
           </div>
@@ -606,53 +591,6 @@
     </main>
   </div>
 
-  <div class="modal hidden" id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
-    <div class="modal-panel">
-      <div class="modal-head">
-        <h2 id="helpTitle">Как работают инструменты RNAssistant</h2>
-        <button class="icon-button secondary" id="closeHelpButton" title="Закрыть" aria-label="Закрыть">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-        </button>
-      </div>
-      <div class="help-content">
-        <section>
-          <h3>Работа с чатом</h3>
-          <p>В режиме агента можно описывать нужный результат обычным языком. Модель возвращает JSON-блоки RNAssistant для действий с документом, а RNAssistant выполняет их, если включен автозапуск.</p>
-          <pre><code>Создай новый лист Sales Demo, сгенерируй данные продаж по месяцам и построй линейный график.</code></pre>
-        </section>
-        <section>
-          <h3>Формат агента</h3>
-          <p>Модель возвращает один JSON envelope без markdown. Для действий используется kind tool_plan; обычный ответ приходит как kind final. Один JSON-fence принимается только для совместимости.</p>
-          <pre><code>{"kind":"tool_plan","intent":"mutate","message":null,"steps":[
-  {"toolId":"excel.add_sheet","arguments":{"name":"Sales Demo"},"reason":"Добавить лист"},
-  {"toolId":"excel.write_table","arguments":{"sheet":"Sales Demo","startAddress":"A1","values":[["Month","Sales"],["Jan",120]]},"reason":"Записать данные"},
-  {"toolId":"excel.add_chart","arguments":{"sheet":"Sales Demo","sourceRange":"A1:B2","chartType":"line","title":"Sales"},"reason":"Построить график"}
-],"expectedOutcome":"Создан отчет с графиком."}</code></pre>
-        </section>
-        <section>
-          <h3>Работа с инструментами</h3>
-          <p>Откройте «Инструменты», выберите элемент и проверьте JSON-схему, pipeline, VBA-код и заметки. Для пользовательских инструментов и навыков сначала используйте проверку, затем запуск. VBA-код агента должен соответствовать текущему приложению Office.</p>
-        </section>
-        <section>
-          <h3>Переиспользуемые инструменты</h3>
-          <p>Пользовательские инструменты хранятся в %AppData%\RNAssistant\tools. Pipeline-инструменты последовательно вызывают существующие инструменты. VBA-инструменты хранят редактируемый код в code.vba.</p>
-        </section>
-        <section>
-          <h3>Markdown-навыки</h3>
-          <p>Навыки - это файлы-инструкции из %AppData%\RNAssistant\skills. Они помогают агенту выбрать подход, но исполняемые действия все равно выполняются через инструменты.</p>
-        </section>
-        <section>
-          <h3>Работа с VBA</h3>
-          <p>На вкладке VBA можно загрузить модули Office VBA, редактировать код, смотреть сравнение, сохранять изменения с автоматической резервной копией и восстанавливать копии. Переключатель VBA в чате добавляет проект в контекст активного чата.</p>
-        </section>
-        <section>
-          <h3>Настройки безопасности</h3>
-          <p>Настройки управляют таймаутом запросов, автозапуском безопасных инструментов, повтором после ошибок и тем, могут ли изменения документа/VBA выполняться без ручного подтверждения.</p>
-        </section>
-      </div>
-    </div>
-  </div>
-
   <script src="js/vendor/purify.min.js"></script>
   <script src="js/vendor/marked.min.js"></script>
   <script src="js/vendor/katex.min.js"></script>
@@ -666,7 +604,7 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=chat-tree-20260722-2"></script>
+  <script src="js/app-core.js?v=chat-tree-caret-removal-20260723-1"></script>
   <script src="js/app-utils.js?v=chatui-20260620-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
@@ -675,9 +613,9 @@
   <script src="js/app-prompts.js?v=chatui-20260703-1"></script>
   <script src="js/app-model-data.js?v=mediarouting-20260722-1"></script>
   <script src="js/app-model-render.js?v=mediarouting-20260722-1"></script>
-  <script src="js/app-models.js?v=chatui-20260703-2"></script>
+  <script src="js/app-models.js?v=send-button-polish-20260723-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=chat-tree-polish-20260723-1"></script>
+  <script src="js/app-chat-state.js?v=chat-tree-caret-removal-20260723-1"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
   <script src="js/app-tools.js?v=chatui-20260622-4"></script>
   <script src="js/app-skills.js?v=chatui-20260622-4"></script>
@@ -692,8 +630,8 @@
   <script src="js/app-messages.js?v=stream-dots-20260723-2"></script>
   <script src="js/app-reasoning.js?v=reasoning-20260722-1"></script>
   <script src="js/app-attachments.js?v=mediarouting-20260722-1"></script>
-  <script src="js/app-chat.js?v=composer-cleanup-20260723-1"></script>
+  <script src="js/app-chat.js?v=chat-tree-caret-removal-20260723-1"></script>
   <script src="js/app-chat-edit.js?v=chat-edit-20260723-1"></script>
-  <script src="js/app.js?v=chatui-20260630-3"></script>
+  <script src="js/app.js?v=topbar-removal-20260723-1"></script>
 </body>
 </html>

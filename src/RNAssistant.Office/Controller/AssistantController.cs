@@ -217,7 +217,8 @@ namespace RNAssistant.Office
                     Text = text ?? string.Empty,
                     Attachments = attachments,
                     AppendUserMessage = true,
-                    CommitUserAttachments = true
+                    CommitUserAttachments = true,
+                    ConsumeContext = true
                 },
                 null,
                 progress,
@@ -356,6 +357,7 @@ namespace RNAssistant.Office
             public IReadOnlyList<ChatAttachment> Attachments { get; set; }
             public bool AppendUserMessage { get; set; }
             public bool CommitUserAttachments { get; set; }
+            public bool ConsumeContext { get; set; }
         }
 
         private async Task<SendChatResponse> ExecuteChatTurnAsync(
@@ -517,6 +519,16 @@ namespace RNAssistant.Office
                 if (settings.SmartChatTitles == false)
                 {
                     ChatTitleBuilder.ApplyFallback(session, text, completion.AssistantText);
+                }
+
+                if (input.ConsumeContext)
+                {
+                    session.Context = CreateEmptyContext();
+                    NormalizeContext(session.Context, session);
+                    if (completion != null)
+                    {
+                        completion.ContextUsage = ContextUsageEstimator.FromSession(session, settings);
+                    }
                 }
 
                 ReportProgress(runProgress, "saving", "Saving chat history...");

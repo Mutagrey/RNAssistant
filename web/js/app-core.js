@@ -14,7 +14,6 @@ var state = {
   initializedChatDocuments: {},
   currentChatDocumentKey: "",
   chatSidebarHidden: false,
-  chatTreeCollapsedAll: false,
   activeChatId: "",
   activeChatModel: "",
   activeChatMode: "chat",
@@ -108,57 +107,11 @@ function logOnce(message) {
 }
 
 function setActivity(phase, message) {
-  var status = $("activityStatus");
-  var text = $("activityText");
-  if (!status || !text) {
-    return;
-  }
-
   state.activity = { visible: true, phase: phase || "working", message: message || "Выполняю..." };
-  status.classList.add("is-active");
-  status.dataset.phase = state.activity.phase;
-  text.textContent = state.activity.message;
 }
 
 function clearActivity() {
-  var status = $("activityStatus");
-  if (!status) {
-    return;
-  }
-
   state.activity = { visible: false, phase: "", message: "" };
-  status.classList.remove("is-active");
-  if ($("activityText")) {
-    $("activityText").textContent = "";
-  }
-  status.removeAttribute("data-phase");
-}
-
-function showHelp() {
-  var modal = $("helpModal");
-  if (modal) {
-    modal.classList.remove("hidden");
-  }
-}
-
-function hideHelp() {
-  var modal = $("helpModal");
-  if (modal) {
-    modal.classList.add("hidden");
-  }
-}
-
-function toggleFullscreen() {
-  var root = document.documentElement;
-  if (document.fullscreenElement) {
-    if (document.exitFullscreen) {
-      document.exitFullscreen();
-    }
-    return;
-  }
-  if (root.requestFullscreen) {
-    root.requestFullscreen().catch(function (error) { log(error.message); });
-  }
 }
 
 function send(type, payload) {

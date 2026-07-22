@@ -42,6 +42,8 @@
   --label-font-weight: 450;
   --title-font-weight: 500;
   --meta-font-weight: 400;
+  --scrollbar-thumb: rgba(100, 116, 139, 0.42);
+  --scrollbar-thumb-hover: rgba(71, 85, 105, 0.68);
 }
 
 * {
@@ -191,38 +193,6 @@ button.danger-soft:hover {
   min-width: 320px;
 }
 
-.topbar {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.96);
-}
-
-.top-actions {
-  display: flex;
-  gap: 7px;
-  align-items: center;
-  flex: none;
-}
-
-.brand {
-  font-weight: var(--title-font-weight);
-  font-size: 15px;
-}
-
-.docline {
-  color: var(--muted);
-  font-size: 12px;
-  margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 360px;
-}
-
 .icon-button {
   display: inline-flex;
   align-items: center;
@@ -289,34 +259,6 @@ button.danger-soft:hover {
   color: var(--accent);
   border-bottom-color: var(--accent);
   background: #fff;
-}
-
-.activity {
-  display: flex;
-  order: 10;
-  flex: 0 0 24px;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 14px;
-  border-top: 1px solid var(--line);
-  border-bottom: 0;
-  background: #fff;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: var(--label-font-weight);
-}
-
-.activity.is-active #activityText {
-  background: linear-gradient(90deg, #667085 20%, #1d4ed8 48%, #667085 76%);
-  background-size: 220% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: text-shimmer 1.8s linear infinite;
-}
-
-@keyframes text-shimmer {
-  to { background-position: -220% 0; }
 }
 
 .content {
@@ -583,16 +525,84 @@ button.danger-soft:hover {
 }
 
 .splitter {
-  width: 8px;
-  min-width: 8px;
+  position: relative;
+  z-index: 3;
+  width: 1px;
+  min-width: 1px;
   cursor: col-resize;
-  border-radius: 999px;
-  background: linear-gradient(90deg, transparent 0, transparent 3px, #d9e0ea 3px, #d9e0ea 5px, transparent 5px);
+  background: var(--line);
+  transition: background-color 0.12s ease;
+}
+
+.splitter::before {
+  position: absolute;
+  inset: 0 -5px;
+  content: "";
 }
 
 .splitter:hover,
 .resizing-pane .splitter {
-  background: linear-gradient(90deg, transparent 0, transparent 3px, var(--accent) 3px, var(--accent) 5px, transparent 5px);
+  background: var(--accent);
+}
+
+.shell,
+.shell * {
+  scrollbar-color: transparent transparent;
+  scrollbar-width: thin;
+}
+
+.shell:hover,
+.shell *:hover,
+.shell *:focus-within {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+.shell::-webkit-scrollbar,
+.shell *::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.shell::-webkit-scrollbar-track,
+.shell *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.shell::-webkit-scrollbar-thumb,
+.shell *::-webkit-scrollbar-thumb {
+  min-width: 32px;
+  min-height: 32px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  background-clip: content-box;
+}
+
+.shell:hover::-webkit-scrollbar-thumb,
+.shell *:hover::-webkit-scrollbar-thumb,
+.shell *:focus-within::-webkit-scrollbar-thumb,
+.shell .CodeMirror:hover .CodeMirror-vscrollbar::-webkit-scrollbar-thumb,
+.shell .CodeMirror:hover .CodeMirror-hscrollbar::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  background-clip: content-box;
+}
+
+.shell::-webkit-scrollbar-thumb:hover,
+.shell *::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: content-box;
+}
+
+.shell::-webkit-scrollbar-button,
+.shell *::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.shell::-webkit-scrollbar-corner,
+.shell *::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .resizing-pane {
@@ -637,21 +647,17 @@ button.danger-soft:hover {
   flex-direction: column;
 }
 
-body[data-ui-font-scale] .brand {
-  font-size: calc(15px * var(--ui-font-scale)) !important;
-}
-
-body[data-ui-font-scale] .docline,
-body[data-ui-font-scale] .activity,
 body[data-ui-font-scale] .link-button,
 body[data-ui-font-scale] .form-grid label,
 body[data-ui-font-scale] .status,
 body[data-ui-font-scale] .danger-zone-text,
 body[data-ui-font-scale] .message-footer-meta,
 body[data-ui-font-scale] .message-meta,
-body[data-ui-font-scale] .composer-toolbar .icon-text-button,
 body[data-ui-font-scale] .context-meter,
-body[data-ui-font-scale] .composer-model,
+body[data-ui-font-scale] .composer-mode select,
+body[data-ui-font-scale] .composer-model select,
+body[data-ui-font-scale] .composer-option-field,
+body[data-ui-font-scale] .composer-option-button,
 body[data-ui-font-scale] .workspace-note,
 body[data-ui-font-scale] .context-panel-meta,
 body[data-ui-font-scale] .model-info-description,

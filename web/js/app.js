@@ -30,21 +30,8 @@ document.addEventListener("DOMContentLoaded", function () {
     tab.addEventListener("click", function () { switchTab(tab.dataset.tab); });
   });
 
-  $("helpButton").addEventListener("click", showHelp);
-  $("fullscreenButton").addEventListener("click", toggleFullscreen);
-  $("closeHelpButton").addEventListener("click", hideHelp);
   $("clearLogButton").addEventListener("click", function () {
     $("logBox").textContent = "";
-  });
-  $("helpModal").addEventListener("click", function (event) {
-    if (event.target === $("helpModal")) {
-      hideHelp();
-    }
-  });
-  document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape") {
-      hideHelp();
-    }
   });
 
   bindChatActions();
