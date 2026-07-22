@@ -58,7 +58,7 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<SkillDefinition> skills = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            return ExecuteAsync(text, session, documentContext, settings, tools, null, progress, pendingToolRegistrar, skills, cancellationToken);
+            return ExecuteAsync(text, session, documentContext, settings, tools, null, progress, pendingToolRegistrar, skills, cancellationToken, true);
         }
 
         public Task<ChatCompletionResult> ExecuteAsync(
@@ -71,14 +71,15 @@ namespace RNAssistant.Office.Services
             Action<string, string, ChatActivity> progress,
             PendingToolRegistrar pendingToolRegistrar = null,
             IReadOnlyList<SkillDefinition> skills = null,
-            CancellationToken cancellationToken = default(CancellationToken))
+            CancellationToken cancellationToken = default(CancellationToken),
+            bool appendUserMessage = true)
         {
             var routing = AttachmentModelRoutingService.Select(settings, session, attachments);
             if (routing.IsRouted && progress != null)
             {
                 progress("routing", routing.ProgressMessage, null);
             }
-            return _agentRunService.RunUserTurnAsync(text, session, documentContext, routing.Settings, tools, attachments, progress, pendingToolRegistrar, skills, cancellationToken);
+            return _agentRunService.RunUserTurnAsync(text, session, documentContext, routing.Settings, tools, attachments, progress, pendingToolRegistrar, skills, cancellationToken, appendUserMessage);
         }
 
         public Task<ChatCompletionResult> ContinueAfterToolAsync(

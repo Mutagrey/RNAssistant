@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
@@ -79,6 +81,38 @@ namespace RNAssistant.Office
             SaveSessionChanges(fork);
             _chatSessions.SetActiveSession(fork);
             return ChatState(fork);
+        }
+
+        public async Task<ChatStateResponse> EditMessageAsync(
+            string text,
+            string id,
+            int index,
+            string chatId = null,
+            Action<string, string, ChatActivity> progress = null,
+            Action<ChatStateResponse> chatStateChanged = null,
+            CancellationToken cancellationToken = default(CancellationToken),
+            string runId = null)
+        {
+            var session = LoadAddressedSession(chatId);
+            var sessionId = ChatStore.GetSessionId(session);
+            if (_chatRuns.IsRunning(sessionId))
+            {
+                throw new InvalidOperationException("Stop the active request in this chat before editing messages.");
+            }
+
+            var edit = _chatHistoryEditService.RewriteUserMessage(session, sessionId, id, index, text);
+            SaveSessionChanges(session);
+            return await ExecuteChatTurnAsync(
+                edit.Message == null ? string.Empty : edit.Message.Content,
+                session,
+                _settingsService.Load(),
+                edit.Message == null ? (IReadOnlyList<ChatAttachment>)new ChatAttachment[0] : edit.Message.Attachments,
+                progress,
+                chatStateChanged,
+                cancellationToken,
+                runId,
+                false,
+                false).ConfigureAwait(false);
         }
 
         public ChatStateResponse UpdateMessageActivityData(string messageId, string dataJson, string chatId = null)

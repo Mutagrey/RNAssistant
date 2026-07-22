@@ -63,6 +63,29 @@ namespace RNAssistant.Office
         public bool CancelChatRun(string chatId, string runId) { LastChatId = chatId; return !string.IsNullOrWhiteSpace(runId); }
         public ChatStateResponse DeleteMessage(string id, int index, string chatId = null) { return ChatState(id, chatId); }
         public ChatStateResponse ForkChat(string id, int index, string chatId = null) { return ChatState(id, chatId); }
+        public Task<ChatStateResponse> EditMessageAsync(
+            string text,
+            string id,
+            int index,
+            string chatId = null,
+            Action<string, string, ChatActivity> progress = null,
+            Action<ChatStateResponse> chatStateChanged = null,
+            CancellationToken cancellationToken = default(CancellationToken),
+            string runId = null)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            LastChatText = text;
+            LastChatId = chatId;
+            if (progress != null)
+            {
+                progress("thinking", "Testing edit progress", new ChatActivity { Kind = "notice", Title = "Testing edit progress", Status = "running" });
+            }
+            if (chatStateChanged != null)
+            {
+                chatStateChanged(ChatState("Edited title", chatId));
+            }
+            return Task.FromResult(ChatState(id, chatId));
+        }
         public ChatStateResponse UpdateMessageActivityData(string messageId, string dataJson, string chatId = null) { return ChatState(messageId, chatId); }
         public SettingsResponse GetSettings() { return new SettingsResponse { Settings = new AppSettings(), HasApiKey = false }; }
         public Task<ModelCatalogResponse> GetModelCatalogAsync(AppSettings settings, string apiKey) { return Task.FromResult(new ModelCatalogResponse { Catalog = new JObject() }); }

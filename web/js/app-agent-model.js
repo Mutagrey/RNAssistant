@@ -24,11 +24,19 @@ function normalizeProgressActivity(progress) {
     var copy = cloneActivity(activity);
     var phase = (progress.phase || progress.Phase || "").toLowerCase();
     var message = progress.message || progress.Message || "";
-    if (message && (phase === "routing" || phase === "plan")) {
-      if (copy.Title !== undefined) {
-        copy.Title = message.replace(/[.]+$/, "");
+    if (message) {
+      var progressTitle = message.replace(/[.]+$/, "");
+      if (copy.ProgressTitle !== undefined) {
+        copy.ProgressTitle = progressTitle;
       } else {
-        copy.title = message.replace(/[.]+$/, "");
+        copy.progressTitle = progressTitle;
+      }
+      if (phase === "routing" || phase === "plan") {
+        if (copy.Title !== undefined) {
+          copy.Title = progressTitle;
+        } else {
+          copy.title = progressTitle;
+        }
       }
     }
     return copy;
@@ -52,6 +60,10 @@ function activityStatus(activity) {
 
 function activityTitle(activity) {
   return activityValue(activity, "Title", "title", "Agent step") || "Agent step";
+}
+
+function activityProgressTitle(activity) {
+  return activityValue(activity, "ProgressTitle", "progressTitle", "") || "";
 }
 
 function activityToolId(activity) {
@@ -109,17 +121,73 @@ function activityTimelineKey(activity) {
     return "pending:" + pendingId;
   }
 
+  var runId = activityValue(activity, "RunId", "runId", "") || "";
   var kind = activityKind(activity);
   if (kind === "plan") {
-    return "plan";
+    return [runId || "run", "plan"].join("|");
   }
 
   return [
+    runId || "run",
     kind || "activity",
     activityToolId(activity),
     activityTitle(activity),
     activityArgumentsJson(activity)
   ].join("|");
+}
+
+function setActivityStatusValue(activity, status) {
+  if (!activity) {
+    return;
+  }
+  if (activity.Status !== undefined) {
+    activity.Status = status;
+  } else {
+    activity.status = status;
+  }
+}
+
+function isActiveTimelineStatus(status) {
+  return status === "running" || status === "waiting";
+}
+
+function recordActivityTimeline(items, activity) {
+  if (!activity) {
+    return null;
+  }
+
+  items = items || [];
+  var copy = cloneActivity(activity);
+  var key = activityTimelineKey(copy);
+  var nextStatus = activityStatus(copy);
+  copy.__timelineKey = key;
+
+  if (isActiveTimelineStatus(nextStatus)) {
+    items.forEach(function (item) {
+      if (!item || item.__timelineKey === key || !isActiveTimelineStatus(activityStatus(item))) {
+        return;
+      }
+      setActivityStatusValue(item, "completed");
+    });
+  }
+
+  for (var i = items.length - 1; i >= 0; i -= 1) {
+    var existing = items[i];
+    if (!existing || existing.__timelineKey !== key) {
+      continue;
+    }
+
+    var existingStatus = activityStatus(existing);
+    if (isActiveTimelineStatus(existingStatus) ||
+        (existingStatus === nextStatus && activityResultMessage(existing) === activityResultMessage(copy))) {
+      items[i] = copy;
+      return copy;
+    }
+    break;
+  }
+
+  items.push(copy);
+  return copy;
 }
 
 function cloneActivity(activity) {
@@ -138,30 +206,7 @@ function recordLiveAgentActivity(activity) {
   if (!state.liveAgentRun) {
     state.liveAgentRun = [];
   }
-
-  var key = activityTimelineKey(activity);
-  var copy = cloneActivity(activity);
-  copy.__timelineKey = key;
-
-  state.liveAgentRun.forEach(function (item) {
-    if (!item || item.__timelineKey === key || activityStatus(item) !== "running") {
-      return;
-    }
-    if (item.Status !== undefined) {
-      item.Status = "completed";
-    } else {
-      item.status = "completed";
-    }
-  });
-
-  for (var i = state.liveAgentRun.length - 1; i >= 0; i -= 1) {
-    if (state.liveAgentRun[i] && state.liveAgentRun[i].__timelineKey === key) {
-      state.liveAgentRun[i] = copy;
-      return;
-    }
-  }
-
-  state.liveAgentRun.push(copy);
+  return recordActivityTimeline(state.liveAgentRun, activity);
 }
 
 function activityCountStatus(activity, counts) {

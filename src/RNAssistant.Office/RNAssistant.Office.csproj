@@ -76,6 +76,7 @@
     <Compile Include="Vba\VbaProjectSupport.cs" />
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />
     <Compile Include="Services\ChatCloneService.cs" />
+    <Compile Include="Services\ChatHistoryEditService.cs" />
     <Compile Include="Services\AgentRunService.cs" />
     <Compile Include="Services\AgentPlannerRuntime.cs" />
     <Compile Include="Services\AgentRuntimeModels.cs" />

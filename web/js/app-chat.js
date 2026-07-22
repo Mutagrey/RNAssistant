@@ -503,8 +503,7 @@ async function sendChat(text, attachments) {
     attachmentIds: attachments.map(attachmentId)
   });
   state.activeSends[sentChatId] = { requestId: request.requestId, text: text, attachments: attachments, canceling: false };
-  state.liveAgentRun = [];
-  state.liveStreamContent = "";
+  beginChatRunTracking(sentChatId);
   renderSendControls();
   renderChatSessions();
   try {
@@ -542,12 +541,7 @@ async function sendChat(text, attachments) {
     }
   } finally {
     delete state.activeSends[sentChatId];
-    delete state.chatRuns[sentChatId];
-    if (state.activeChatId === sentChatId) {
-      state.liveActivity = null;
-      state.liveAgentRun = null;
-      state.liveStreamContent = null;
-    }
+    endChatRunTracking(sentChatId);
     renderSendControls();
     if (state.activeChatId === sentChatId) renderMessages();
     renderChatSessions();
@@ -620,6 +614,36 @@ function currentActiveSend() {
   return state.activeSends[state.activeChatId] || null;
 }
 
+function beginChatRunTracking(chatId) {
+  if (!chatId) {
+    return;
+  }
+
+  state.chatRuns[chatId] = { activities: [], stream: "" };
+  if (state.activeChatId !== chatId) {
+    return;
+  }
+
+  state.liveActivity = null;
+  state.liveAgentRun = [];
+  state.liveStreamContent = "";
+}
+
+function endChatRunTracking(chatId) {
+  if (!chatId) {
+    return;
+  }
+
+  delete state.chatRuns[chatId];
+  if (state.activeChatId !== chatId) {
+    return;
+  }
+
+  state.liveActivity = null;
+  state.liveAgentRun = null;
+  state.liveStreamContent = null;
+}
+
 function restoreActiveChatRun() {
   var run = state.chatRuns[state.activeChatId];
   state.liveAgentRun = run && run.activities ? run.activities : null;
@@ -644,6 +668,29 @@ async function confirmAgentTool(pendingId) {
     clearActivity();
   }
 }
+
+confirmAgentTool = async function (pendingId) {
+  if (!pendingId) {
+    return;
+  }
+
+  var chatId = state.activeChatId;
+  beginChatRunTracking(chatId);
+  renderMessages();
+  renderChatSessions();
+  setActivity("executing", "Исполняю подтвержденный tool...");
+  try {
+    applyChatState(await send("confirmAgentTool", { chatId: chatId, pendingId: pendingId }));
+    log("Agent tool confirmed.");
+  } catch (error) {
+    log(error.detail || error.message);
+  } finally {
+    endChatRunTracking(chatId);
+    renderMessages();
+    renderChatSessions();
+    clearActivity();
+  }
+};
 
 async function cancelAgentTool(pendingId) {
   if (!pendingId) {

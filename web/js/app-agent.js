@@ -7,7 +7,7 @@ function renderActivityNode(activity, nested, current, context) {
   if (expandable) {
     var details = document.createElement("details");
     details.className = "agent-activity-toggle";
-    details.open = current || status === "failed" || status === "waiting";
+    details.open = current || status === "running" || status === "failed" || status === "waiting";
     details.appendChild(renderActivityRow(activity, current, true, context));
     appendActivityDetailsContent(details, activity, context);
     node.appendChild(details);
@@ -26,7 +26,7 @@ function renderActivityRow(activity, current, expandable, context) {
   var status = activityStatus(activity);
   var title = activityPrimaryText(activity);
   var comment = activityCommentText(activity);
-  row.className = "agent-activity-row";
+  row.className = "agent-activity-row" + (comment ? " has-comment" : " has-no-comment");
   row.title = [title, comment, agentStatusLabel(status)].filter(Boolean).join(" · ");
 
   var mark = document.createElement("span");
@@ -40,7 +40,7 @@ function renderActivityRow(activity, current, expandable, context) {
   row.appendChild(name);
 
   var commentNode = document.createElement("span");
-  commentNode.className = "agent-activity-comment";
+  commentNode.className = "agent-activity-comment" + (comment ? "" : " is-empty");
   commentNode.textContent = comment;
   row.appendChild(commentNode);
 
@@ -63,6 +63,11 @@ function renderActivityRow(activity, current, expandable, context) {
 }
 
 function activityPrimaryText(activity) {
+  var progressTitle = typeof activityProgressTitle === "function" ? activityProgressTitle(activity) : "";
+  if (progressTitle) {
+    return progressTitle;
+  }
+
   var title = activityTitle(activity);
   var toolId = activityToolId(activity);
   if (title && title !== toolId && title !== "Tool step" && title !== "Agent step") {
@@ -185,6 +190,15 @@ function appendActivityDetailsContent(node, activity, context) {
   var body = document.createElement("div");
   body.className = "agent-activity-detail-body";
 
+  if (children.length) {
+    var childList = document.createElement("div");
+    childList.className = "agent-activity-children";
+    children.forEach(function (child) {
+      childList.appendChild(renderActivityNode(child, true, context && activityContains(child, context.currentActivity), context));
+    });
+    body.appendChild(childList);
+  }
+
   appendActivityConfirmationPanel(body, activity);
   appendActivityErrorPanel(body, activity);
 
@@ -199,15 +213,6 @@ function appendActivityDetailsContent(node, activity, context) {
   }
   if (typeof appendActivityData === "function") {
     appendActivityData(body, "Данные результата", activityDataJson(activity), "Копировать результат");
-  }
-
-  if (children.length) {
-    var childList = document.createElement("div");
-    childList.className = "agent-activity-children";
-    children.forEach(function (child) {
-      childList.appendChild(renderActivityNode(child, true, context && activityContains(child, context.currentActivity), context));
-    });
-    body.appendChild(childList);
   }
 
   node.appendChild(body);

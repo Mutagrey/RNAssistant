@@ -29,6 +29,10 @@ var state = {
   liveAgentRun: null,
   liveStreamContent: null,
   liveStreamRenderPending: false,
+  editingMessageId: "",
+  editingMessageIndex: -1,
+  editingText: "",
+  editingBusy: false,
   modelCatalog: { configUrl: "", defaultModel: "", models: [], loaded: false, loading: false, error: "" },
   modelSaving: false,
   bridgeUnavailable: false,
@@ -188,20 +192,12 @@ function cancelChatRun(chatId, runId) {
 function recordChatRunActivityState(chatId, activity) {
   if (!chatId || !activity) return;
   var run = state.chatRuns[chatId] = state.chatRuns[chatId] || { activities: [], stream: "" };
-  var key = activityTimelineKey(activity);
-  var copy = cloneActivity(activity);
-  copy.__timelineKey = key;
-  (run.activities || []).forEach(function (item) {
-    if (!item || item.__timelineKey === key || activityStatus(item) !== "running") return;
-    if (item.Status !== undefined) item.Status = "completed"; else item.status = "completed";
-  });
-  for (var index = (run.activities || []).length - 1; index >= 0; index -= 1) {
-    if (run.activities[index] && run.activities[index].__timelineKey === key) {
-      run.activities[index] = copy;
-      return;
-    }
+  if (typeof recordActivityTimeline === "function") {
+    return recordActivityTimeline(run.activities, activity);
   }
+  var copy = cloneActivity(activity);
   run.activities.push(copy);
+  return copy;
 }
 
 function isKeyboardElement(element) {
@@ -253,6 +249,7 @@ if (window.chrome && window.chrome.webview) {
     if (response && response.type === "progress") {
       var progress = response.payload || {};
       var progressPending = state.pending[response.id];
+      var isChatProgress = progressPending && (progressPending.type === "sendChat" || progressPending.type === "confirmAgentTool");
       var progressChatId = progress.chatId || progress.ChatId || (progressPending && progressPending.payload && progressPending.payload.chatId) || "";
       var progressRunId = progress.runId || progress.RunId || "";
       if (progressChatId) {
@@ -261,12 +258,16 @@ if (window.chrome && window.chrome.webview) {
         state.chatRuns[progressChatId].phase = progress.phase || progress.Phase || "working";
       }
       var contentDelta = progress.contentDelta || progress.ContentDelta || "";
-      if (contentDelta && progressPending && progressPending.type === "sendChat") {
+      if (contentDelta && isChatProgress) {
         if (progressChatId) state.chatRuns[progressChatId].stream = (state.chatRuns[progressChatId].stream || "") + contentDelta;
         if (progressChatId !== state.activeChatId) { renderChatSessions(); return; }
         state.liveStreamContent = (state.liveStreamContent || "") + contentDelta;
-        state.liveActivity = null;
-        state.liveAgentRun = [];
+        if (progressChatId) {
+          state.liveAgentRun = state.chatRuns[progressChatId].activities;
+          if (!state.liveActivity && state.liveAgentRun && state.liveAgentRun.length) {
+            state.liveActivity = state.liveAgentRun[state.liveAgentRun.length - 1];
+          }
+        }
         setActivity("streaming", "Модель формирует ответ...");
         if (typeof scheduleLiveStreamRender === "function") {
           scheduleLiveStreamRender();
@@ -275,18 +276,18 @@ if (window.chrome && window.chrome.webview) {
         }
         return;
       }
-      if (progressPending && progressPending.type === "sendChat" &&
+      if (isChatProgress &&
           !(progress.reasoningDelta || progress.ReasoningDelta || progress.reasoningComplete || progress.ReasoningComplete)) {
         var normalizedActivity = normalizeProgressActivity(progress);
-        recordChatRunActivityState(progressChatId, normalizedActivity);
+        var storedActivity = recordChatRunActivityState(progressChatId, normalizedActivity);
         if (progressChatId === state.activeChatId) {
-          state.liveActivity = normalizedActivity;
+          state.liveActivity = storedActivity || normalizedActivity;
           state.liveAgentRun = state.chatRuns[progressChatId].activities;
         }
       }
       if (progressChatId !== state.activeChatId) { renderChatSessions(); return; }
       setActivity(progress.phase || "working", progress.message || "Выполняю...");
-      if (progressPending && progressPending.type === "sendChat") {
+      if (isChatProgress) {
         renderMessages();
       }
       log("[" + (progress.phase || "working") + "] " + (progress.message || "Выполняю..."));

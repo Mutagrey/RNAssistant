@@ -439,13 +439,13 @@
 .message {
   position: relative;
   margin: 0;
-  padding: 15px 0 11px;
+  padding: 11px 0 7px;
   border-bottom: 0;
   background: transparent;
 }
 
 .message:first-child {
-  padding-top: 6px;
+  padding-top: 4px;
 }
 
 .message.user {
@@ -479,6 +479,18 @@
 
 .message.assistant {
   padding-left: 0;
+}
+
+.message.assistant.is-activity-message {
+  padding: 2px 0 1px;
+}
+
+.message.assistant.is-activity-message.pending {
+  opacity: 1;
+}
+
+.message.assistant.streaming-message {
+  padding-top: 1px;
 }
 
 .message.assistant .markdown {
@@ -525,9 +537,9 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  min-height: 22px;
+  min-height: 18px;
   width: 100%;
-  margin: 4px 0 0;
+  margin: 1px 0 0;
   gap: 6px;
   opacity: 0;
   transform: translateY(-2px);
@@ -536,6 +548,11 @@
 
 .message.user .message-footer {
   max-width: 92%;
+}
+
+.message.assistant.is-activity-message .message-footer {
+  margin-top: 2px;
+  padding: 0;
 }
 
 .message:hover .message-footer,

@@ -40,12 +40,13 @@ namespace RNAssistant.Office.Services
             Action<string, string, ChatActivity> progress,
             ChatCompletionService.PendingToolRegistrar pendingToolRegistrar,
             IReadOnlyList<SkillDefinition> skills,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool appendUserMessage = true)
         {
             var adapter = new ClosedDocumentAdapter(session);
             var runner = new AgentRunService(adapter, _toolExecutor, _completeAsync, false);
             var service = new ChatCompletionService(runner);
-            return service.ExecuteAsync(text, session, context, settings, tools, attachments, progress, pendingToolRegistrar, skills, cancellationToken);
+            return service.ExecuteAsync(text, session, context, settings, tools, attachments, progress, pendingToolRegistrar, skills, cancellationToken, appendUserMessage);
         }
 
         private sealed class ClosedDocumentAdapter : IOfficeApplicationAdapter

@@ -184,10 +184,62 @@ function appendMessageFooter(node, message, index, activity) {
   node.appendChild(footer);
 }
 
+function renderActivityArticle(message, index, activity, options) {
+  options = options || {};
+  var node = document.createElement("article");
+  var classes = ["message", "assistant", "is-activity-message"];
+  if (options.live) {
+    classes.push("pending", "agent-live");
+  } else {
+    if (message && message.Pending) {
+      classes.push("pending");
+    }
+    if (message && message.Failed) {
+      classes.push("failed");
+    }
+  }
+  if (options.current) {
+    classes.push("is-current-activity");
+  }
+  node.className = classes.join(" ");
+
+  if (message) {
+    var attachments = messageAttachments(message);
+    if (attachments.length) {
+      var attachmentBox = document.createElement("div");
+      attachmentBox.className = "message-attachments";
+      attachments.forEach(function (attachment) {
+        attachmentBox.appendChild(attachmentCard(attachment, false));
+      });
+      node.appendChild(attachmentBox);
+    }
+  }
+
+  var body = document.createElement("div");
+  body.className = "agent-activity-wrap";
+  body.appendChild(renderActivityNode(activity, false, !!options.current, {
+    messageId: message ? messageId(message) : "",
+    index: index,
+    message: message || null,
+    currentActivity: options.current ? activity : null
+  }));
+  node.appendChild(body);
+
+  if (message && !options.live) {
+    appendMessageFooter(node, message, index, activity);
+  }
+
+  enhanceActivity(body);
+  return node;
+}
+
 function renderMessageArticle(message, index) {
   var node = document.createElement("article");
   node.className = "message " + messageRole(message) + (message.Pending ? " pending" : "") + (message.Failed ? " failed" : "");
   var activity = messageActivity(message);
+  if (activity) {
+    return renderActivityArticle(message, index, activity, { live: false, current: false });
+  }
   var attachments = messageAttachments(message);
 
   if (attachments.length) {
@@ -200,55 +252,53 @@ function renderMessageArticle(message, index) {
   }
 
   var body = document.createElement("div");
-  if (activity) {
-    body.className = "agent-activity-wrap";
-    body.appendChild(renderActivityNode(activity, false, false, {
-      messageId: messageId(message),
-      index: index,
-      message: message
-    }));
-  } else {
-    body.className = "markdown";
-    body.innerHTML = markdown(messageContent(message));
-  }
+  body.className = "markdown";
+  body.innerHTML = markdown(messageContent(message));
   node.appendChild(body);
-  appendMessageFooter(node, message, index, activity);
+  appendMessageFooter(node, message, index, null);
 
-  if (activity) {
-    enhanceActivity(body);
-  } else {
-    enhanceMarkdown(body);
-  }
+  enhanceMarkdown(body);
 
   return node;
 }
 
-function renderLiveActivity() {
-  if (state.liveAgentRun && state.liveAgentRun.length) {
-    return renderAgentRunArticle({
-      live: true,
-      items: state.liveAgentRun.map(function (activity) {
-        return {
-          message: { Role: "assistant", Content: "", Activity: activity },
-          index: -1,
-          activity: activity
-        };
-      })
-    });
-  }
-
-  if (!state.liveActivity) {
+function getLiveActivityState() {
+  var activities = state.liveAgentRun && state.liveAgentRun.length ? state.liveAgentRun : null;
+  if (!activities && !state.liveActivity) {
     return null;
   }
 
-  var live = document.createElement("article");
-  live.className = "message assistant pending agent-live";
-  var liveBody = document.createElement("div");
-  liveBody.className = "agent-activity-wrap";
-  liveBody.appendChild(renderActivityNode(state.liveActivity, false, false));
-  live.appendChild(liveBody);
-  enhanceActivity(liveBody);
-  return live;
+  var current = activities ? activities[activities.length - 1] : state.liveActivity;
+  var trail = [];
+  if (activities && activities.length) {
+    var currentIndex = Math.max(activities.length - 1, 0);
+    trail = activities.slice(0, currentIndex);
+  }
+
+  return {
+    trail: trail,
+    current: current
+  };
+}
+
+function renderLiveActivityTrail() {
+  var liveState = getLiveActivityState();
+  if (!liveState || !liveState.trail.length) {
+    return [];
+  }
+
+  return liveState.trail.map(function (activity) {
+    return renderActivityArticle(null, -1, activity, { live: true, current: false });
+  });
+}
+
+function renderLiveActivity() {
+  var liveState = getLiveActivityState();
+  if (!liveState || !liveState.current) {
+    return null;
+  }
+
+  return renderActivityArticle(null, -1, liveState.current, { live: true, current: true });
 }
 
 function renderLiveStreamMessage() {
@@ -300,18 +350,13 @@ function renderMessages(options) {
     return;
   }
 
-  var index = 0;
-  while (index < state.messages.length) {
-    if (isAgentRunStart(state.messages[index])) {
-      var run = collectAgentRun(index);
-      box.appendChild(renderAgentRunArticle(run));
-      index = run.nextIndex;
-      continue;
-    }
-
+  for (var index = 0; index < state.messages.length; index += 1) {
     box.appendChild(renderMessageArticle(state.messages[index], index));
-    index += 1;
   }
+
+  renderLiveActivityTrail().forEach(function (node) {
+    box.appendChild(node);
+  });
 
   var live = renderLiveActivity();
   if (live) {

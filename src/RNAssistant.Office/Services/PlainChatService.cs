@@ -26,7 +26,8 @@ namespace RNAssistant.Office.Services
             AppSettings settings,
             IReadOnlyList<ChatAttachment> attachments,
             Action<string, string, ChatActivity> progress,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool appendUserMessage = true)
         {
             var routing = AttachmentModelRoutingService.Select(settings, session, attachments);
             settings = routing.Settings;
@@ -34,14 +35,17 @@ namespace RNAssistant.Office.Services
             {
                 Report(progress, "routing", routing.ProgressMessage);
             }
-            session.Messages.Add(new ChatMessage
+            if (appendUserMessage)
             {
-                Role = "user",
-                Content = text ?? string.Empty,
-                Attachments = attachments == null
-                    ? new List<ChatAttachment>()
-                    : new List<ChatAttachment>(attachments)
-            });
+                session.Messages.Add(new ChatMessage
+                {
+                    Role = "user",
+                    Content = text ?? string.Empty,
+                    Attachments = attachments == null
+                        ? new List<ChatAttachment>()
+                        : new List<ChatAttachment>(attachments)
+                });
+            }
             var messages = _contextBuilder.BuildPlainMessages(text, session, context, settings, attachments);
             Report(progress, "thinking", "Модель готовит ответ...");
             var completion = await CompleteBufferedAsync(settings, messages, progress, cancellationToken).ConfigureAwait(false);

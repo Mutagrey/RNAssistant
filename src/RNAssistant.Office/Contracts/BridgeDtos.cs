@@ -272,6 +272,12 @@ namespace RNAssistant.Office.Contracts
         public int? Index { get; set; }
     }
 
+    public sealed class EditMessagePayload : MessageActionPayload
+    {
+        [JsonProperty("text")]
+        public string Text { get; set; }
+    }
+
     public sealed class UpdateMessageActivityDataPayload : ChatPayload
     {
         [JsonProperty("messageId")]

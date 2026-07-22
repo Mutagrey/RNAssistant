@@ -159,6 +159,19 @@ namespace RNAssistant.Office.WebView
                         var forkChat = Payload<MessageActionPayload>(payload);
                         responsePayload = _controller.ForkChat(forkChat.Id, forkChat.Index ?? -1, forkChat.ChatId);
                         break;
+                    case "editMessage":
+                        var editMessage = Payload<EditMessagePayload>(payload);
+                        var editRunId = Guid.NewGuid().ToString("N");
+                        responsePayload = await _controller.EditMessageAsync(
+                            editMessage.Text,
+                            editMessage.Id,
+                            editMessage.Index ?? -1,
+                            editMessage.ChatId,
+                            (phase, message, activity) => ReportProgress(id, editMessage.ChatId, editRunId, phase, message, activity),
+                            ReportChatState,
+                            cancellationToken,
+                            editRunId);
+                        break;
                     case "updateMessageActivityData":
                         var updateActivityData = Payload<UpdateMessageActivityDataPayload>(payload);
                         responsePayload = _controller.UpdateMessageActivityData(

@@ -70,15 +70,19 @@ namespace RNAssistant.Office.Services
             Action<string, string, ChatActivity> progress,
             ChatCompletionService.PendingToolRegistrar pendingToolRegistrar,
             IReadOnlyList<SkillDefinition> skills,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool appendUserMessage = true)
         {
             var taskText = AgentTaskContinuationResolver.Resolve(text, session);
-            session.Messages.Add(new ChatMessage
+            if (appendUserMessage)
             {
-                Role = "user",
-                Content = text,
-                Attachments = attachments == null ? new List<ChatAttachment>() : new List<ChatAttachment>(attachments)
-            });
+                session.Messages.Add(new ChatMessage
+                {
+                    Role = "user",
+                    Content = text,
+                    Attachments = attachments == null ? new List<ChatAttachment>() : new List<ChatAttachment>(attachments)
+                });
+            }
             return await RunLoopAsync(taskText, null, false, session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, cancellationToken).ConfigureAwait(false);
         }
 
