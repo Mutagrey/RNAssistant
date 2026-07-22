@@ -6,6 +6,7 @@ namespace RNAssistant.Core.Models
     public sealed class ModelCapabilitySettings
     {
         public int? MaxContextTokens { get; set; }
+        public int? MaxOutputTokens { get; set; }
         public bool? SupportsImages { get; set; }
         public bool? SupportsReasoning { get; set; }
         public bool? SupportsAudio { get; set; }
@@ -86,6 +87,7 @@ namespace RNAssistant.Core.Models
         public Dictionary<string, string> CustomHeaders { get; set; }
         public Dictionary<string, bool?> ModelImageSupportOverrides { get; set; }
         public Dictionary<string, ModelCapabilitySettings> ModelCapabilities { get; set; }
+        public List<string> HtmlNetworkAllowedOrigins { get; set; }
 
         public AppSettings()
         {
@@ -122,6 +124,7 @@ namespace RNAssistant.Core.Models
             CustomHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             ModelImageSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
             ModelCapabilities = new Dictionary<string, ModelCapabilitySettings>(StringComparer.OrdinalIgnoreCase);
+            HtmlNetworkAllowedOrigins = new List<string>();
         }
     }
 }

@@ -45,6 +45,7 @@ namespace RNAssistant.Office.Services
                 var capability = new ModelCapabilitySettings
                 {
                     MaxContextTokens = ReadNullableInt(model, "MaxContextTokens", "max_context_tokens", "maxContextTokens"),
+                    MaxOutputTokens = ReadNullableInt(model, "MaxOutputTokens", "max_output_tokens", "maxOutputTokens", "max_completion_tokens"),
                     SupportsImages = ReadNullableBool(model, "SupportsImages", "supports_images", "supportsImages", "supports_vision", "supportsVision"),
                     SupportsReasoning = ReadNullableBool(model, "SupportsReasoning", "supports_reasoning", "supportsReasoning"),
                     SupportsAudio = ReadNullableBool(model, "SupportsAudio", "supports_audio", "supportsAudio"),

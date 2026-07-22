@@ -106,6 +106,12 @@ namespace RNAssistant.Office.WebView
                         var setChatHtmlMode = Payload<SetChatHtmlModePayload>(payload);
                         responsePayload = _controller.SetChatHtmlMode(setChatHtmlMode.ChatId, setChatHtmlMode.Enabled == true);
                         break;
+                    case "allowHtmlNetworkOrigin":
+                        responsePayload = _controller.AllowHtmlNetworkOrigin(Payload<HtmlOriginPayload>(payload).Origin);
+                        break;
+                    case "htmlFetch":
+                        responsePayload = await _controller.HtmlFetchAsync(Payload<HtmlFetchRequest>(payload), cancellationToken);
+                        break;
                     case "clearChat":
                         responsePayload = _controller.ClearChat(Payload<ChatPayload>(payload).ChatId);
                         break;
@@ -114,13 +120,15 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "sendChat":
                         var sendChat = Payload<SendChatPayload>(payload);
+                        var runId = Guid.NewGuid().ToString("N");
                         responsePayload = await _controller.SendChatAsync(
                             sendChat.Text,
                             sendChat.ChatId,
                             sendChat.AttachmentIds,
-                            (phase, message, activity) => ReportProgress(id, phase, message, activity),
+                            (phase, message, activity) => ReportProgress(id, sendChat.ChatId, runId, phase, message, activity),
                             ReportChatState,
-                            cancellationToken);
+                            cancellationToken,
+                            runId);
                         break;
                     case "importAttachment":
                         var importAttachment = Payload<ImportAttachmentPayload>(payload);
@@ -335,7 +343,8 @@ namespace RNAssistant.Office.WebView
         {
             if (string.IsNullOrWhiteSpace(id) ||
                 (!string.Equals(type, "sendChat", StringComparison.OrdinalIgnoreCase) &&
-                 !string.Equals(type, "runTool", StringComparison.OrdinalIgnoreCase)))
+                 !string.Equals(type, "runTool", StringComparison.OrdinalIgnoreCase) &&
+                 !string.Equals(type, "htmlFetch", StringComparison.OrdinalIgnoreCase)))
             {
                 return null;
             }
@@ -402,10 +411,15 @@ namespace RNAssistant.Office.WebView
 
         private void ReportProgress(string id, string phase, string message)
         {
-            ReportProgress(id, phase, message, null);
+            ReportProgress(id, null, null, phase, message, null);
         }
 
         private void ReportProgress(string id, string phase, string message, ChatActivity activity)
+        {
+            ReportProgress(id, null, activity == null ? null : activity.RunId, phase, message, activity);
+        }
+
+        private void ReportProgress(string id, string chatId, string runId, string phase, string message, ChatActivity activity)
         {
             if (_postMessageJson == null)
             {
@@ -418,6 +432,8 @@ namespace RNAssistant.Office.WebView
                 Id = id,
                 Payload = new ProgressPayload
                 {
+                    ChatId = chatId,
+                    RunId = runId,
                     Phase = phase,
                     Message = message,
                     Activity = activity,

@@ -117,9 +117,9 @@ namespace RNAssistant.Harness
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
-                AssertContains(result.AssistantText, "Agent executed", "summary text");
+                AssertContains(result.AssistantText, "Готово: выполнено действий", "summary text");
                 AssertTrue(result.AssistantText.IndexOf("rnassistant-agent", StringComparison.OrdinalIgnoreCase) < 0, "no raw agent block");
-                AssertTrue(ContainsMessage(session.Messages, "Agent executed"), "runtime summary persisted");
+                AssertTrue(ContainsMessage(session.Messages, "Готово: выполнено действий"), "runtime summary persisted");
             });
         }
 
@@ -145,7 +145,7 @@ namespace RNAssistant.Harness
                     null).GetAwaiter().GetResult();
 
                 AssertEqual(1, adapter.Executed.Count, "adapter execution count");
-                AssertContains(result.AssistantText, "tool error", "step limit summary");
+                AssertContains(result.AssistantText, "ошибки инструмента", "step limit summary");
                 AssertTrue(ContainsMessage(session.Messages, "Agent tool step limit exceeded"), "step limit transcript");
             });
         }
@@ -348,8 +348,8 @@ namespace RNAssistant.Harness
                 var diagnostic = session.Messages.Last().Activity;
                 AssertTrue(diagnostic != null, "diagnostic activity");
                 AssertEqual("Planner JSON invalid", diagnostic.Title, "diagnostic title");
-                AssertContains(diagnostic.ResultMessage, "error=not_json_object", "diagnostic error");
-                AssertContains(diagnostic.ResultMessage, "not json after repair", "diagnostic response preview");
+                AssertContains(diagnostic.ResultMessage, "not_json_object", "diagnostic error");
+                AssertContains(diagnostic.DataJson, "not json after repair", "diagnostic response preview");
             });
         }
 

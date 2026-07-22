@@ -202,7 +202,7 @@ namespace RNAssistant.Harness
                         return "pending-1";
                     }).GetAwaiter().GetResult();
 
-                AssertContains(first.AssistantText, "paused for tool confirmation", "first assistant text");
+                AssertContains(first.AssistantText, "требуется подтверждение", "first assistant text");
                 AssertTrue(pendingCommand != null, "pending command captured");
                 AssertEqual("Sub OldMacro()\nEnd Sub", adapter.GetVbaModuleCode("Module1"), "module unchanged before confirmation");
 

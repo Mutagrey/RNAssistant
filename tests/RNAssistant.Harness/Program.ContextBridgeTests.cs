@@ -398,6 +398,23 @@ namespace RNAssistant.Harness
             AssertEqual("sales", controller.LastHtmlDataName, "html delete data name");
         }
 
+        private static void BridgeUsesTypedHtmlNetworkPayloads()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
+            var allow = bridge.HandleMessageAsync(
+                "{\"id\":\"net1\",\"type\":\"allowHtmlNetworkOrigin\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"origin\":\"https://example.test\"}}")
+                .GetAwaiter().GetResult();
+            var fetch = bridge.HandleMessageAsync(
+                "{\"id\":\"net2\",\"type\":\"htmlFetch\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"url\":\"https://example.test/data\",\"method\":\"POST\",\"headers\":{\"Content-Type\":\"application/json\"},\"body\":\"{}\"}}")
+                .GetAwaiter().GetResult();
+
+            AssertTrue(JObject.Parse(allow)["ok"].Value<bool>(), "html origin bridge response ok");
+            AssertTrue(JObject.Parse(fetch)["ok"].Value<bool>(), "html fetch bridge response ok");
+            AssertEqual(200, JObject.Parse(fetch)["payload"]["status"].Value<int>(), "html fetch status");
+        }
+
         private static string BridgeToken(AssistantWebBridge bridge)
         {
             var initJson = bridge.HandleMessageAsync("{\"id\":\"init\",\"type\":\"init\",\"payload\":{}}")

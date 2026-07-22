@@ -266,15 +266,17 @@ namespace RNAssistant.Office.Services
                         !AgentPhaseController.IsRouteComplete(route, state.PendingVerification) &&
                         string.Equals(response.Kind, AgentResponseKinds.Final, StringComparison.OrdinalIgnoreCase))
                     {
-                        var qualityFailure = AgentPlannerParseResult.Fail(
-                            "required_tool_plan",
-                            "Planner returned final although this request requires an available Office tool.");
-                        assistantText = RecordPlannerFailure(
-                            session,
-                            completion,
-                            JsonConvert.SerializeObject(response),
-                            qualityFailure,
-                            "Planner tool use required");
+                        assistantText = "Не удалось подобрать безопасное действие Office для этого запроса. Уточните объект или требуемое изменение.";
+                        session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, completion, new ChatActivity
+                        {
+                            Kind = "diagnostic",
+                            Title = "Действие Office не определено",
+                            Subtitle = "planner",
+                            Status = "failed",
+                            ExecutionStatus = "required_tool_plan",
+                            ResultMessage = assistantText,
+                            DataJson = JsonConvert.SerializeObject(new { response = response, route = route.TaskType })
+                        }));
                         break;
                     }
 
@@ -529,7 +531,7 @@ namespace RNAssistant.Office.Services
 
             if (string.IsNullOrWhiteSpace(assistantText))
             {
-                assistantText = resultLog.Count == 0 ? "Planner completed without a final text response." : AgentTranscript.CreateRunSummary(resultLog);
+                assistantText = resultLog.Count == 0 ? "Выполнение завершилось без итогового ответа модели." : AgentTranscript.CreateRunSummary(resultLog);
                 RememberPendingTask(session, taskText, assistantText, "incomplete");
                 session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, null));
             }
@@ -764,12 +766,6 @@ namespace RNAssistant.Office.Services
             return string.Empty;
         }
 
-        private static string BuildPlannerDiagnostic(string rawText, AgentPlannerParseResult parseResult)
-        {
-            return "error=" + (parseResult == null ? "unknown" : parseResult.ErrorCode + ": " + parseResult.ErrorMessage) +
-                "; response=" + TrimDiagnosticText(rawText, 1200);
-        }
-
         private static string RecordPlannerFailure(
             ChatSession session,
             LlmCompletionResult completion,
@@ -788,7 +784,13 @@ namespace RNAssistant.Office.Services
                     Subtitle = "strict_json",
                     Status = "failed",
                     ExecutionStatus = parseResult == null ? "unknown" : parseResult.ErrorCode,
-                    ResultMessage = BuildPlannerDiagnostic(rawText, parseResult)
+                    ResultMessage = "Модель вернула некорректный формат плана: " + (parseResult == null ? "unknown" : parseResult.ErrorCode) + ".",
+                    DataJson = JsonConvert.SerializeObject(new
+                    {
+                        errorCode = parseResult == null ? "unknown" : parseResult.ErrorCode,
+                        errorMessage = parseResult == null ? string.Empty : parseResult.ErrorMessage,
+                        responsePreview = TrimDiagnosticText(rawText, 1200)
+                    })
                 }));
             }
             return assistantText;

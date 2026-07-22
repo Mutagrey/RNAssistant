@@ -321,3 +321,16 @@
     margin-left: 14px;
   }
 }
+.chat-run-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-left: 7px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  vertical-align: -1px;
+  animation: rn-chat-run-spin .8s linear infinite;
+}
+
+@keyframes rn-chat-run-spin { to { transform: rotate(360deg); } }

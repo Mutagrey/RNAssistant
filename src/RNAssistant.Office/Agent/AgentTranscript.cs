@@ -157,24 +157,24 @@ namespace RNAssistant.Office
             var count = results == null ? 0 : results.Count;
             if (count == 0)
             {
-                return "Agent completed without a final text response.";
+                return "Выполнение завершилось без итогового ответа модели.";
             }
 
             var text = JsonConvert.SerializeObject(results);
             if (text.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                return "Agent paused for tool confirmation.";
+                return "Выполнение приостановлено: требуется подтверждение действия.";
             }
             if (text.IndexOf("skipped_auto_run", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                return "Agent prepared tool calls, but auto-run is disabled.";
+                return "Действия подготовлены, но автоматический запуск отключён.";
             }
             if (text.IndexOf("\"success\":false", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                return "Agent stopped after a tool error.";
+                return "Выполнение остановлено после ошибки инструмента. Откройте шаг с ошибкой для диагностики.";
             }
 
-            return "Agent executed " + count + " tool step(s).";
+            return "Готово: выполнено действий — " + count + ".";
         }
 
         private static string ToActivityStatus(ToolResult result)

@@ -169,5 +169,25 @@ namespace RNAssistant.Harness
                 AssertEqual("C:\\Docs\\Archive.docx", offline.DocumentPath, "document group draft keeps document path");
             });
         }
+
+        private static void BackgroundSaveKeepsActiveChat()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var service = new ChatSessionService(adapter, store);
+                var first = store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "First");
+                var second = store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "Second");
+                service.SetActiveSession(second);
+
+                first.Messages.Add(new ChatMessage { Role = "assistant", Content = "background result" });
+                store.Save(first);
+                service.NotifySaved(first);
+
+                AssertEqual(ChatStore.GetSessionId(second), ChatStore.GetSessionId(service.GetActiveSession()), "background save does not select chat");
+                AssertEqual(ChatStore.GetSessionId(second), store.LoadActiveSessionId(adapter.HostName, adapter.DocumentKey), "stored active chat remains selected");
+            });
+        }
     }
 }

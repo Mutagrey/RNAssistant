@@ -54,6 +54,7 @@ async function selectChat(id) {
   setActivity("loading", "Открываю чат...");
   try {
     applyChatState(await send("selectChat", { chatId: id }));
+    restoreActiveChatRun();
     clearSendError();
     log("Чат открыт.");
   } catch (error) {
@@ -328,7 +329,7 @@ function chatNavigationSignature(payload) {
 }
 
 async function synchronizeChatState() {
-  if (state.bridgeUnavailable || state.activeSend || document.hidden) return;
+  if (state.bridgeUnavailable || currentActiveSend() || document.hidden) return;
   try {
     var response = await send("listChats", {});
     var current = { activeChatId: state.activeChatId, chats: state.chats, documents: state.documents };
@@ -398,8 +399,9 @@ async function clearRuntimeData() {
 }
 
 function renderSendControls() {
-  var isSending = !!state.activeSend;
-  var isCanceling = isSending && !!state.activeSend.canceling;
+  var activeSend = currentActiveSend();
+  var isSending = !!activeSend;
+  var isCanceling = isSending && !!activeSend.canceling;
   var sendButton = $("sendButton");
   var stopButton = $("stopButton");
   var stopText = $("stopButtonText");
@@ -493,60 +495,70 @@ function removeLocalMessage(text) {
 
 async function sendChat(text, attachments) {
   attachments = attachments || [];
+  var sentChatId = state.activeChatId;
   setActivity("thinking", "Модель думает...");
   var request = send("sendChat", {
     chatId: state.activeChatId,
     text: text,
     attachmentIds: attachments.map(attachmentId)
   });
-  state.activeSend = { requestId: request.requestId, text: text, attachments: attachments, canceling: false };
+  state.activeSends[sentChatId] = { requestId: request.requestId, text: text, attachments: attachments, canceling: false };
   state.liveAgentRun = [];
   state.liveStreamContent = "";
   renderSendControls();
+  renderChatSessions();
   try {
     var response = await request;
-    applyChatState(response);
-    clearDraftAttachments();
-    clearSendError();
+    if (state.activeChatId === sentChatId) applyChatState(response);
+    else applyChatCatalogState(response);
+    if (state.activeChatId === sentChatId) clearSendError();
     if (response.toolResults && response.toolResults.length) {
       logToolResults(response.toolResults);
     }
   } catch (error) {
     if (error.cancelled) {
-      removeLocalMessage(text);
-      if (!$("chatInput").value.trim()) {
-        setChatInputText(text, false);
+      if (state.activeChatId === sentChatId) {
+        removeLocalMessage(text);
+        if (!$("chatInput").value.trim()) setChatInputText(text, false);
+        state.draftAttachments = attachments.slice();
+        renderDraftAttachments();
+        updateEstimatedContextUsage();
+        renderContextMeter();
+        clearSendError();
       }
-      updateEstimatedContextUsage();
       renderChatSessions();
-      renderContextMeter();
-      clearSendError();
       log("Chat request cancelled.");
     } else {
-      markLocalMessage(text, { Pending: false, Failed: true });
-      renderMessages();
-      showSendError(error.detail || error.message, text);
-      state.failedSend.attachments = attachments;
+      if (state.activeChatId === sentChatId) {
+        markLocalMessage(text, { Pending: false, Failed: true });
+        renderMessages();
+        showSendError(error.detail || error.message, text);
+        state.failedSend.attachments = attachments;
+      }
       log(error.message);
       if (error.detail && error.detail !== error.message) {
         log(error.detail);
       }
     }
   } finally {
-    state.activeSend = null;
-    state.liveActivity = null;
-    state.liveAgentRun = null;
-    state.liveStreamContent = null;
+    delete state.activeSends[sentChatId];
+    delete state.chatRuns[sentChatId];
+    if (state.activeChatId === sentChatId) {
+      state.liveActivity = null;
+      state.liveAgentRun = null;
+      state.liveStreamContent = null;
+    }
     renderSendControls();
-    renderMessages();
+    if (state.activeChatId === sentChatId) renderMessages();
+    renderChatSessions();
     renderModelControls();
     renderSendControls();
-    clearActivity();
+    if (state.activeChatId === sentChatId) clearActivity();
   }
 }
 
 async function submitChatInput() {
-  if (state.activeSend || state.modelSaving) {
+  if (currentActiveSend() || state.modelSaving) {
     return;
   }
 
@@ -559,13 +571,14 @@ async function submitChatInput() {
       !(await ensureImageCapableModel())) {
     return;
   }
-  if (state.activeSend || state.modelSaving) {
+  if (currentActiveSend() || state.modelSaving) {
     return;
   }
 
   setChatInputText("", false);
   clearSendError();
   state.messages.push({ Id: "local-" + Date.now(), Role: "user", Content: text, Attachments: attachments, Local: true, Pending: true });
+  clearDraftAttachments();
   updateEstimatedContextUsage();
   renderMessages({ forceScroll: true });
   renderChatSessions();
@@ -574,7 +587,7 @@ async function submitChatInput() {
 }
 
 function retryFailedSend() {
-  if (state.activeSend || !state.failedSend || (!state.failedSend.text && !(state.failedSend.attachments || []).length)) {
+  if (currentActiveSend() || !state.failedSend || (!state.failedSend.text && !(state.failedSend.attachments || []).length)) {
     return;
   }
 
@@ -590,16 +603,30 @@ function retryFailedSend() {
 }
 
 function stopActiveSend() {
-  if (!state.activeSend || state.activeSend.canceling) {
+  var activeSend = currentActiveSend();
+  if (!activeSend || activeSend.canceling) {
     return;
   }
 
-  state.activeSend.canceling = true;
+  activeSend.canceling = true;
   setActivity("canceling", "Отменяю ответ...");
   renderSendControls();
-  cancelBridgeRequest(state.activeSend.requestId).catch(function (error) {
+  cancelBridgeRequest(activeSend.requestId).catch(function (error) {
     log(error.detail || error.message);
   });
+}
+
+function currentActiveSend() {
+  return state.activeSends[state.activeChatId] || null;
+}
+
+function restoreActiveChatRun() {
+  var run = state.chatRuns[state.activeChatId];
+  state.liveAgentRun = run && run.activities ? run.activities : null;
+  state.liveStreamContent = run && run.stream ? run.stream : null;
+  state.liveActivity = state.liveAgentRun && state.liveAgentRun.length ? state.liveAgentRun[state.liveAgentRun.length - 1] : null;
+  renderMessages();
+  renderSendControls();
 }
 
 async function confirmAgentTool(pendingId) {
@@ -652,7 +679,7 @@ async function runQuickAction(action) {
 }
 
 async function toggleChatHtmlMode() {
-  if (!state.activeChatId || state.bridgeUnavailable || state.activeSend) {
+  if (!state.activeChatId || state.bridgeUnavailable || currentActiveSend()) {
     return;
   }
 
@@ -671,7 +698,7 @@ async function toggleChatHtmlMode() {
 }
 
 async function saveChatMode(mode) {
-  if (!state.activeChatId || state.bridgeUnavailable || state.activeSend) {
+  if (!state.activeChatId || state.bridgeUnavailable || currentActiveSend()) {
     return;
   }
   try {

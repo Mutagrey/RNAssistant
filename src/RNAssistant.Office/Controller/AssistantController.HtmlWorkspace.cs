@@ -2,11 +2,23 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Tools;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
+        public Task<HtmlFetchResponse> HtmlFetchAsync(HtmlFetchRequest request, CancellationToken cancellationToken)
+        {
+            return _htmlNetwork.FetchAsync(request, cancellationToken);
+        }
+
+        public object AllowHtmlNetworkOrigin(string origin)
+        {
+            return new { origin = _htmlNetwork.AllowOrigin(origin), allowed = true };
+        }
+
         public HtmlWorkspaceResponse GetHtmlWorkspace(string chatId = null)
         {
             var session = LoadSession(chatId);

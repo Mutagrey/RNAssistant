@@ -17,6 +17,8 @@ namespace RNAssistant.Office.Services
         private string _activeRuntimeDocumentKey;
         private ChatSession _activeSession;
         private bool _activeSessionPersisted;
+        internal Func<string, ChatRunSnapshot> RunStateProvider { get; set; }
+        internal Func<IReadOnlyList<ChatSession>> RunSessionsProvider { get; set; }
 
         public ChatSessionService(IOfficeApplicationAdapter adapter, ChatStore chatStore)
         {
@@ -77,7 +79,13 @@ namespace RNAssistant.Office.Services
             ChatSession session = null;
             if (!string.IsNullOrWhiteSpace(requestedSessionId))
             {
+                if (RunStateProvider != null)
+                {
+                    var running = RunStateProvider(requestedSessionId);
+                    if (running != null) session = running.Session;
+                }
                 if (_activeSession != null &&
+                    session == null &&
                     string.Equals(requestedSessionId, _activeSessionId, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(_activeHost, host, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(_activeDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))
@@ -187,11 +195,33 @@ namespace RNAssistant.Office.Services
             }
         }
 
+        public void NotifySaved(ChatSession session)
+        {
+            if (session == null ||
+                !string.Equals(ChatStore.GetSessionId(session), _activeSessionId, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+            _activeSession = session;
+            _activeSessionPersisted = true;
+            _chatStore.SaveActiveSessionId(session.Host, session.DocumentKey, _activeSessionId);
+        }
+
         public ChatSession GetActiveSession()
         {
             if (_activeSession == null)
             {
                 return null;
+            }
+
+            if (RunStateProvider != null)
+            {
+                var running = RunStateProvider(_activeSessionId);
+                if (running != null && running.Session != null)
+                {
+                    _activeSession = running.Session;
+                    return _activeSession;
+                }
             }
 
             if (_activeSessionPersisted)
@@ -211,6 +241,14 @@ namespace RNAssistant.Office.Services
         public IReadOnlyList<ChatSessionSummary> GetChatSummaries(string activeId)
         {
             var sessions = _chatStore.List().ToList();
+            foreach (var running in RunSessionsProvider == null ? new ChatSession[0] : RunSessionsProvider())
+            {
+                var runningId = ChatStore.GetSessionId(running);
+                if (sessions.All(item => !string.Equals(ChatStore.GetSessionId(item), runningId, StringComparison.OrdinalIgnoreCase)))
+                {
+                    sessions.Insert(0, running);
+                }
+            }
             if (_activeSession != null && !_activeSessionPersisted &&
                 string.Equals(ChatStore.GetSessionId(_activeSession), activeId, StringComparison.OrdinalIgnoreCase) &&
                 sessions.All(item => !string.Equals(ChatStore.GetSessionId(item), activeId, StringComparison.OrdinalIgnoreCase)))
@@ -223,9 +261,11 @@ namespace RNAssistant.Office.Services
 
         private ChatSessionSummary ToSummary(ChatSession session)
         {
+            var id = ChatStore.GetSessionId(session);
+            var run = RunStateProvider == null ? null : RunStateProvider(id);
             return new ChatSessionSummary
             {
-                Id = ChatStore.GetSessionId(session),
+                Id = id,
                 Host = session.Host,
                 DocumentKey = session.DocumentKey,
                 DocumentTitle = session.DocumentTitle,
@@ -240,7 +280,11 @@ namespace RNAssistant.Office.Services
                 CreatedUtc = session.CreatedUtc,
                 UpdatedUtc = session.UpdatedUtc,
                 MessageCount = session.Messages == null ? 0 : session.Messages.Count,
-                IsCurrentDocument = IsCurrentDocument(session)
+                IsCurrentDocument = IsCurrentDocument(session),
+                RunId = run == null ? null : run.RunId,
+                RunStatus = run == null ? null : run.Status,
+                RunPhase = run == null ? null : run.Phase,
+                RunStartedUtc = run == null ? (DateTime?)null : run.StartedUtc
             };
         }
 

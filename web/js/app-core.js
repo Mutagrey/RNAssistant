@@ -23,7 +23,8 @@ var state = {
   messages: [],
   draftAttachments: [],
   failedSend: null,
-  activeSend: null,
+  activeSends: {},
+  chatRuns: {},
   liveActivity: null,
   liveAgentRun: null,
   liveStreamContent: null,
@@ -164,7 +165,7 @@ function send(type, payload) {
       return;
     }
 
-    state.pending[id] = { resolve: resolve, reject: reject, type: type };
+    state.pending[id] = { resolve: resolve, reject: reject, type: type, payload: payload || {} };
     window.chrome.webview.postMessage({ id: id, type: type, bridgeToken: state.bridgeToken || null, payload: payload || {} });
   });
   promise.requestId = id;
@@ -177,6 +178,25 @@ function cancelBridgeRequest(requestId) {
   }
 
   return send("cancelRequest", { requestId: requestId });
+}
+
+function recordChatRunActivityState(chatId, activity) {
+  if (!chatId || !activity) return;
+  var run = state.chatRuns[chatId] = state.chatRuns[chatId] || { activities: [], stream: "" };
+  var key = activityTimelineKey(activity);
+  var copy = cloneActivity(activity);
+  copy.__timelineKey = key;
+  (run.activities || []).forEach(function (item) {
+    if (!item || item.__timelineKey === key || activityStatus(item) !== "running") return;
+    if (item.Status !== undefined) item.Status = "completed"; else item.status = "completed";
+  });
+  for (var index = (run.activities || []).length - 1; index >= 0; index -= 1) {
+    if (run.activities[index] && run.activities[index].__timelineKey === key) {
+      run.activities[index] = copy;
+      return;
+    }
+  }
+  run.activities.push(copy);
 }
 
 function isKeyboardElement(element) {
@@ -228,8 +248,17 @@ if (window.chrome && window.chrome.webview) {
     if (response && response.type === "progress") {
       var progress = response.payload || {};
       var progressPending = state.pending[response.id];
+      var progressChatId = progress.chatId || progress.ChatId || (progressPending && progressPending.payload && progressPending.payload.chatId) || "";
+      var progressRunId = progress.runId || progress.RunId || "";
+      if (progressChatId) {
+        state.chatRuns[progressChatId] = state.chatRuns[progressChatId] || { activities: [], stream: "" };
+        state.chatRuns[progressChatId].runId = progressRunId;
+        state.chatRuns[progressChatId].phase = progress.phase || progress.Phase || "working";
+      }
       var contentDelta = progress.contentDelta || progress.ContentDelta || "";
       if (contentDelta && progressPending && progressPending.type === "sendChat") {
+        if (progressChatId) state.chatRuns[progressChatId].stream = (state.chatRuns[progressChatId].stream || "") + contentDelta;
+        if (progressChatId !== state.activeChatId) { renderChatSessions(); return; }
         state.liveStreamContent = (state.liveStreamContent || "") + contentDelta;
         state.liveActivity = null;
         state.liveAgentRun = [];
@@ -241,14 +270,18 @@ if (window.chrome && window.chrome.webview) {
         }
         return;
       }
+      if (progressPending && progressPending.type === "sendChat" &&
+          !(progress.reasoningDelta || progress.ReasoningDelta || progress.reasoningComplete || progress.ReasoningComplete)) {
+        var normalizedActivity = normalizeProgressActivity(progress);
+        recordChatRunActivityState(progressChatId, normalizedActivity);
+        if (progressChatId === state.activeChatId) {
+          state.liveActivity = normalizedActivity;
+          state.liveAgentRun = state.chatRuns[progressChatId].activities;
+        }
+      }
+      if (progressChatId !== state.activeChatId) { renderChatSessions(); return; }
       setActivity(progress.phase || "working", progress.message || "Выполняю...");
       if (progressPending && progressPending.type === "sendChat") {
-        if (!(progress.reasoningDelta || progress.ReasoningDelta || progress.reasoningComplete || progress.ReasoningComplete)) {
-          state.liveActivity = normalizeProgressActivity(progress);
-          if (typeof recordLiveAgentActivity === "function") {
-            recordLiveAgentActivity(state.liveActivity);
-          }
-        }
         renderMessages();
       }
       log("[" + (progress.phase || "working") + "] " + (progress.message || "Выполняю..."));

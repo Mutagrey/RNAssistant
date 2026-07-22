@@ -27,6 +27,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Net.Http" />
     <Reference Include="Microsoft.Web.WebView2.Core">
       <HintPath>..\..\packages\Microsoft.Web.WebView2.1.0.2903.40\lib\net462\Microsoft.Web.WebView2.Core.dll</HintPath>
       <Private>True</Private>
@@ -93,6 +94,8 @@
     <Compile Include="Services\ModelCapabilityService.cs" />
     <Compile Include="Services\ChatTitleBuilder.cs" />
     <Compile Include="Services\ChatSessionService.cs" />
+    <Compile Include="Services\ChatRunRegistry.cs" />
+    <Compile Include="Services\HtmlNetworkService.cs" />
     <Compile Include="Services\DocumentOpenService.cs" />
     <Compile Include="Services\ContextService.cs" />
     <Compile Include="Services\BuiltInSkillProvider.cs" />

@@ -414,8 +414,9 @@ namespace RNAssistant.Harness
                     null).GetAwaiter().GetResult();
 
                 AssertEqual(0, adapter.Executed.Count, "repeated final executes no tools");
-                AssertContains(result.AssistantText, "required_tool_plan", "required tool quality error");
-                AssertEqual("Planner tool use required", session.Messages.Last().Activity.Title, "quality diagnostic");
+                AssertContains(result.AssistantText, "Не удалось подобрать безопасное действие", "localized required tool quality error");
+                AssertEqual("Действие Office не определено", session.Messages.Last().Activity.Title, "quality diagnostic");
+                AssertEqual("required_tool_plan", session.Messages.Last().Activity.ExecutionStatus, "quality diagnostic code");
             });
         }
 

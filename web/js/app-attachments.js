@@ -82,7 +82,7 @@ function fileToBase64(file) {
 async function addAttachmentFiles(files) {
   files = Array.prototype.slice.call(files || []);
   if (!files.length) return;
-  if (state.activeSend || state.bridgeUnavailable) return;
+  if (currentActiveSend() || state.bridgeUnavailable) return;
 
   var existingBytes = state.draftAttachments.reduce(function (sum, item) { return sum + attachmentSize(item); }, 0);
   if (state.draftAttachments.length + files.length > ATTACHMENT_MAX_FILES) {

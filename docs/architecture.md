@@ -55,6 +55,8 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - `src/RNAssistant.Office/Vba`: shared VBA project support.
 - `src/RNAssistant.Office/Agent`: agent transcript/plan formatting and retry policy.
 - `src/RNAssistant.Office/Services`: host-neutral application services used by controller orchestration, such as chat/session lifecycle, tool/skill catalog composition, context normalization, and chat completion flow.
+- `src/RNAssistant.Office/Services/ChatRunRegistry.cs`: in-memory per-chat run ownership and live status; switching the selected chat never transfers or cancels a run.
+- `src/RNAssistant.Office/Services/HtmlNetworkService.cs`: permission-gated HTTP(S) transport for sandboxed HTML workspace previews.
 - `src/RNAssistant.Office/Services/AgentRunService.cs`: controlled planner loop, route/slice/validate/execute flow, normalized observations, deterministic mutation verification, VBA context capture, and confirmation resume continuation.
 - `src/RNAssistant.Office/Services/AgentPlannerCompletionRunner.cs`: planner completion streaming, strict JSON parsing, and the single bounded format-repair attempt.
 - `src/RNAssistant.Office/Services/AgentPlannerRuntime.cs`: deterministic router, tool catalog slicer, planner prompt context, action validation, and observation normalization.
@@ -85,6 +87,7 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - Tools are executable actions described by `ToolDefinition`; skills are markdown guidance described by `SkillDefinition`.
 - Tool safety belongs to `ToolDefinition` metadata: `MutatesDocument`, `MutatesLocalState`, `AgentCanRun`, `RequiresConfirmation`, risk/capability fields, and verification metadata. Pipeline effective safety recursively includes nested steps and fails closed for missing tools, malformed definitions, duplicate step ids, and cycles. Built-in/controller ids take precedence over custom definitions.
 - Agent runs are bounded by settings for max iterations and max tool steps; confirmed pending tools may resume the same run. Document mutation remains pending until a new verification observation succeeds.
+- Different chats may run LLM work concurrently. A chat accepts only one active run, and document mutations are serialized by host/document identity. Saving a background run never changes the selected chat.
 - A required-tool route accepts `final` only after its route phase reaches `final_phase`; inspection alone cannot complete a pending mutation. Format repair and required-tool correction have separate one-shot guards.
 - Tool slices record explicit exclusion reasons and reserve prompt capacity for both mutation and inspection tools. The per-request tool limit is configurable from 8 to 64.
 - Controller coordinates request flow; it should not contain pipeline execution, VBA patch logic, or JS rendering logic.
@@ -99,6 +102,7 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - Desktop target selection uses `Auto follow` by default. `Manual` mode pins the selected working target; Excel task panes refresh on workbook activate/open/close events.
 - The Desktop target registry stores only lightweight descriptors, not long-lived Office COM objects.
 - UI sends typed bridge messages; business rules stay in C# unless they are purely presentation behavior.
+- HTML workspace preview remains sandboxed. Its HTTP(S) `fetch` compatibility layer uses typed host messages, requires an explicit per-origin permission, strips credential headers, and enforces redirect/time/size limits.
 - Concurrent task-pane/desktop WebViews periodically reconcile typed chat/document state from the shared local stores; mutation and Office targeting remain in C#.
 - WebView response serialization belongs in `AssistantWebBridge`; controller methods should return DTOs or domain models.
 

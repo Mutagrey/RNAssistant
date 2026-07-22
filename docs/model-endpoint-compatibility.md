@@ -6,6 +6,7 @@ RNAssistant talks to an OpenAI-compatible Chat Completions endpoint. Chat mode u
 
 - `POST /v1/chat/completions`, or a `BaseUrl` that already ends with `/chat/completions`.
 - JSON request body with `model`, `messages`, `max_tokens`, `temperature`, `top_p`, and the configured `stream` value.
+- `max_tokens` is capped per request by the configured/model output limit and the remaining context window after prompt and safety reserve.
 - Non-stream response compatible with `choices[0].message.content`, or SSE chunks compatible with `choices[0].delta.content` when streaming is enabled.
 - Canonical assistant content in Agent mode is exactly one JSON object with `kind`, `intent`, `message`, and `steps`.
 
@@ -13,7 +14,7 @@ RNAssistant talks to an OpenAI-compatible Chat Completions endpoint. Chat mode u
 
 - `usage.prompt_tokens`, `usage.completion_tokens`, `usage.total_tokens`: stored when present. `input_tokens` and `output_tokens` aliases are also accepted.
 - Reasoning may be returned in `message.reasoning_content` / `message.reasoning` and their SSE delta equivalents, or as one leading `<think>...</think>` block in assistant content. It is removed from final Chat/planner content, stored separately, and rendered as a collapsible block. Reasoning token counts are recognized in `completion_tokens_details`, `output_tokens_details`, or a root `reasoning_tokens` usage field.
-- Model catalog GET endpoint: defaults to `/config/models.json` derived from `BaseUrl`, but can be set independently in Settings. Catalogs may use `models` with `value`, OpenAI-style `data` with `id`, or a root array with `id`/`display_name`. The root-array format also recognizes `supports_reasoning`, `supports_vision`, `supports_audio`, `is_default`, limits, and `default_params`. Manual model entry still works without it.
+- Model catalog GET endpoint: defaults to `/config/models.json` derived from `BaseUrl`, but can be set independently in Settings. Catalogs may use `models` with `value`, OpenAI-style `data` with `id`, or a root array with `id`/`display_name`. Recognized limits include context and maximum output tokens. Manual model entry still works without it.
 - SSE streaming for Chat mode when `StreamResponses` is enabled. Text deltas are displayed incrementally in the chat.
 - Custom request headers: supported from Settings, except unsafe headers such as `Content-Length` and `Host`.
 

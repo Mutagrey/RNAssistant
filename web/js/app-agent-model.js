@@ -306,16 +306,23 @@ function isAgentRunFinalMessage(message) {
     && !!messageContent(message).trim();
 }
 
+function messageRunId(message) {
+  return message ? (message.RunId || message.runId || "") : "";
+}
+
 function collectAgentRun(startIndex) {
   var items = [{ message: state.messages[startIndex], index: startIndex, activity: messageActivity(state.messages[startIndex]) }];
+  var runId = messageRunId(state.messages[startIndex]);
   var index = startIndex + 1;
-  while (index < state.messages.length && isAgentRunContinuation(state.messages[index])) {
+  while (index < state.messages.length &&
+      (runId ? (messageRunId(state.messages[index]) === runId && !!messageActivity(state.messages[index])) : isAgentRunContinuation(state.messages[index]))) {
     items.push({ message: state.messages[index], index: index, activity: messageActivity(state.messages[index]) });
     index += 1;
   }
 
   var finalMessage = null;
-  if (index < state.messages.length && isAgentRunFinalMessage(state.messages[index])) {
+  if (index < state.messages.length && isAgentRunFinalMessage(state.messages[index]) &&
+      (!runId || messageRunId(state.messages[index]) === runId)) {
     finalMessage = { message: state.messages[index], index: index };
     index += 1;
   }

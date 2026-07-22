@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Services;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Tools;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -307,6 +308,66 @@ namespace RNAssistant.Harness
             AssertEqual(8, compact.Tools.Count, "compact slice size");
             AssertTrue(compact.Tools.Any(tool => !tool.MutatesDocument), "compact slice keeps inspection");
             AssertTrue(compact.Tools.Any(tool => tool.MutatesDocument), "compact slice keeps mutation");
+        }
+
+        private static void ConversationHistoryAvoidsOfficeTools()
+        {
+            var route = new OfficeIntentRouter().Route(
+                "Что было в первом сообщении нашей переписки?",
+                new OfficeSnapshot { Host = "Excel" },
+                new ChatSession());
+            AssertEqual("conversation_history", route.TaskType, "conversation route");
+            AssertTrue(!route.RequiresTool, "conversation history does not require Office tool");
+            AssertEqual(ChatModes.Chat, new ChatExecutionModeSelector().Select(
+                "Сделай саммари нашего чата и диалога",
+                new ChatSession { Mode = ChatModes.Auto },
+                "Excel"), "auto mode uses plain chat");
+        }
+
+        private static void OutputBudgetReservesPromptSpace()
+        {
+            var settings = new AppSettings
+            {
+                ContextWindowOverrideTokens = 65536,
+                MaxTokens = 65536
+            };
+            var messages = new[] { new ChatMessage { Role = "user", Content = new string('я', 10580) } };
+            var output = ModelContextBudget.EffectiveOutputTokens(settings, messages);
+            AssertTrue(output < 65536, "output is reduced below full context window");
+            AssertTrue(output + ModelContextBudget.EstimateMessagesTokens(messages) < 65536, "prompt space remains reserved");
+        }
+
+        private static void ChatRunRegistryIsolatesSessions()
+        {
+            var registry = new ChatRunRegistry();
+            var first = new ChatSession { Id = "chat-a", SessionId = "chat-a" };
+            var second = new ChatSession { Id = "chat-b", SessionId = "chat-b" };
+            registry.Start("chat-a", "run-a", first);
+            registry.Start("chat-b", "run-b", second);
+            AssertEqual(2, registry.Sessions().Count, "parallel chat sessions");
+            AssertEqual("run-a", registry.Get("chat-a").RunId, "first run isolated");
+            AssertEqual("run-b", registry.Get("chat-b").RunId, "second run isolated");
+            var duplicateRejected = false;
+            try { registry.Start("chat-a", "run-c", first); }
+            catch (InvalidOperationException) { duplicateRejected = true; }
+            AssertTrue(duplicateRejected, "duplicate run rejected");
+            registry.Complete("chat-a", "run-a");
+            AssertTrue(!registry.IsRunning("chat-a") && registry.IsRunning("chat-b"), "completion only removes matching chat");
+        }
+
+        private static void HtmlNetworkOriginRequiresPermission()
+        {
+            var settings = new AppSettings();
+            var service = new HtmlNetworkService(() => settings, value => settings = value);
+            var denied = false;
+            try
+            {
+                service.FetchAsync(new HtmlFetchRequest { Url = "https://example.test/data", Method = "GET" }, CancellationToken.None).GetAwaiter().GetResult();
+            }
+            catch (UnauthorizedAccessException) { denied = true; }
+            AssertTrue(denied, "origin denied by default");
+            AssertEqual("https://example.test", service.AllowOrigin("https://example.test/path"), "origin normalized");
+            AssertEqual(1, settings.HtmlNetworkAllowedOrigins.Count, "origin persisted once");
         }
 
         private static void PromptBudgetKeepsContiguousRecentHistory()

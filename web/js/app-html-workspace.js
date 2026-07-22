@@ -1,6 +1,36 @@
 (function () {
   var htmlPreviewRefreshTimer = 0;
 
+  window.addEventListener("message", function (event) {
+    var frame = $("htmlWorkspacePreviewFrame");
+    var data = event.data || {};
+    if (!frame || event.source !== frame.contentWindow || data.type !== "rnassistant-html-fetch") return;
+    var payload = data.request || {};
+    function reply(ok, value) {
+      if (frame.contentWindow) frame.contentWindow.postMessage({ type: "rnassistant-html-fetch-result", requestId: data.requestId, ok: ok, value: value }, "*");
+    }
+    function execute() {
+      return send("htmlFetch", payload).then(function (response) { reply(true, response); });
+    }
+    execute().catch(function (error) {
+      var message = error.detail || error.message || "HTTP request failed";
+      var origin = "";
+      try { origin = new URL(payload.url).origin; } catch (ignore) {}
+      var deniedOrigin = String(message).match(/not allowed:\s*(https?:\/\/[^\s]+)/i);
+      if (deniedOrigin) origin = deniedOrigin[1].replace(/[.,;]+$/, "");
+      if (origin && /not allowed|не разреш/i.test(message) && window.confirm("HTML workspace запрашивает доступ к сети:\n" + origin + "\n\nРазрешить этот origin?")) {
+        send("allowHtmlNetworkOrigin", { origin: origin }).then(function () {
+          var list = state.settings.HtmlNetworkAllowedOrigins || state.settings.htmlNetworkAllowedOrigins || [];
+          if (list.indexOf(origin) < 0) list.push(origin);
+          state.settings.HtmlNetworkAllowedOrigins = list;
+          return execute();
+        }).catch(function (allowError) { reply(false, allowError.detail || allowError.message); });
+        return;
+      }
+      reply(false, message);
+    });
+  });
+
   function prop(source, pascal, camel, fallback) {
     source = source || {};
     return source[camel] !== undefined ? source[camel] : (source[pascal] !== undefined ? source[pascal] : fallback);
@@ -510,6 +540,14 @@
     return "<style data-rn-preview-reset>html,body{min-height:100%;margin:0;}*,*::before,*::after{box-sizing:border-box;}</style>";
   }
 
+  function networkBridgeScript() {
+    return "<script>(function(){" +
+      "var nativeFetch=window.fetch&&window.fetch.bind(window),seq=1,pending={};" +
+      "window.addEventListener('message',function(e){var d=e.data||{};if(d.type!=='rnassistant-html-fetch-result'||!pending[d.requestId])return;var p=pending[d.requestId];delete pending[d.requestId];if(!d.ok){p.reject(new TypeError(String(d.value||'HTTP request failed')));return;}var v=d.value||{},h=v.headers||v.Headers||{};p.resolve(new Response(v.body||v.Body||'',{status:v.status||v.Status||200,statusText:v.statusText||v.StatusText||'',headers:h}));});" +
+      "window.fetch=function(input,init){init=init||{};var url=typeof input==='string'?input:(input&&input.url)||'';if(!/^https?:\\/\\//i.test(url)){return nativeFetch?nativeFetch(input,init):Promise.reject(new TypeError('Only HTTP(S) URLs are supported'));}var headers={};try{new Headers(init.headers||(input&&input.headers)||{}).forEach(function(v,k){headers[k]=v;});}catch(ignore){}var id=String(seq++);return new Promise(function(resolve,reject){pending[id]={resolve:resolve,reject:reject};window.parent.postMessage({type:'rnassistant-html-fetch',requestId:id,request:{url:url,method:init.method||(input&&input.method)||'GET',headers:headers,body:typeof init.body==='string'?init.body:''}},'*');});};" +
+      "}());<\/script>";
+  }
+
   function encodeHtml(value) {
     return String(value || "")
       .replace(/&/g, "&amp;")
@@ -521,7 +559,7 @@
   function buildPreviewHtml() {
     var file = activeHtmlFile();
     var html = file ? fileContent(file) : "";
-    var headInject = previewViewportReset() + "\n" + dataScript() + "\n" + cssBlock();
+    var headInject = previewViewportReset() + "\n" + networkBridgeScript() + "\n" + dataScript() + "\n" + cssBlock();
     var bodyInject = scriptBlock();
     if (!html.trim()) {
       html = "<div style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">HTML workspace пуст.</div>";

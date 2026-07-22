@@ -42,8 +42,32 @@ namespace RNAssistant.Core.Llm
         {
             var window = Math.Max(4096, ContextWindowTokens(settings, model));
             var output = Math.Max(1, settings == null ? 2048 : settings.MaxTokens);
+            var capability = Capability(settings, model);
+            if (capability != null && capability.MaxOutputTokens.GetValueOrDefault() > 0)
+            {
+                output = Math.Min(output, capability.MaxOutputTokens.Value);
+            }
+            output = Math.Min(output, Math.Max(2048, window / 2));
             var safety = Math.Max(1024, (int)Math.Ceiling(window * 0.05));
             return Math.Max(1024, window - output - safety);
+        }
+
+        public static int EffectiveOutputTokens(AppSettings settings, IEnumerable<ChatMessage> messages, string model = null)
+        {
+            settings = settings ?? new AppSettings();
+            var window = Math.Max(4096, ContextWindowTokens(settings, model));
+            var prompt = EstimateMessagesTokens(messages);
+            var safety = Math.Max(1024, (int)Math.Ceiling(window * 0.05));
+            var remaining = window - prompt - safety;
+            if (remaining < 128)
+            {
+                throw new InvalidOperationException("Prompt exceeds the available model context window. Reduce chat context or attachments.");
+            }
+            var requested = Math.Max(1, settings.MaxTokens);
+            var capability = Capability(settings, model);
+            var modelLimit = capability == null ? 0 : capability.MaxOutputTokens.GetValueOrDefault();
+            if (modelLimit > 0) requested = Math.Min(requested, modelLimit);
+            return Math.Max(128, Math.Min(requested, remaining));
         }
 
         public static bool SupportsImages(AppSettings settings, string model = null)
@@ -87,6 +111,9 @@ namespace RNAssistant.Core.Llm
                 total += (message.Attachments ?? new List<ChatAttachment>())
                     .Where(attachment => attachment != null && attachment.Kind == "image")
                     .Count() * EstimatedImageTokens;
+                total += (message.Attachments ?? new List<ChatAttachment>())
+                    .Where(attachment => attachment != null)
+                    .Sum(attachment => Math.Max(attachment.ExtractedCharCount, (attachment.ExtractedText ?? string.Empty).Length) / 2);
             }
             return total;
         }

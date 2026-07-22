@@ -47,6 +47,7 @@ function renderSettings() {
     renderPromptSettings(s);
   }
   $("headersInput").value = headersToText(s.CustomHeaders || s.customHeaders || {});
+  $("htmlNetworkOriginsInput").value = (s.HtmlNetworkAllowedOrigins || s.htmlNetworkAllowedOrigins || []).join("\n");
   renderModelControls();
   settingsDirty = false;
   updateSettingsSaveButton();
@@ -91,6 +92,7 @@ function readSettings() {
     AgentPrompts: promptSettings.AgentPrompts,
     ModelImageSupportOverrides: modelImageSupportOverrides(),
     ModelCapabilities: modelCapabilitiesForSettings(),
+    HtmlNetworkAllowedOrigins: $("htmlNetworkOriginsInput").value.split(/\r?\n/).map(function (value) { return value.trim(); }).filter(Boolean),
     CustomHeaders: textToHeaders($("headersInput").value)
   };
 }

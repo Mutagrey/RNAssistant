@@ -137,7 +137,7 @@ function populateChatModelSelect(select) {
 
   select.value = selected;
   select.title = selected || defaultModel ? ("Модель чата: " + (selected || defaultModel)) : "Модель чата не выбрана";
-  select.disabled = state.modelCatalog.loading || state.modelSaving || !!state.activeSend || !state.activeChatId;
+  select.disabled = state.modelCatalog.loading || state.modelSaving || !!currentActiveSend() || !state.activeChatId;
   setChatModelSelectWidth(select);
 }
 

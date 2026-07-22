@@ -30,6 +30,8 @@ namespace RNAssistant.Core.Models
         public string ReasoningContent { get; set; }
         public int? ReasoningTokens { get; set; }
         public bool ReasoningTruncated { get; set; }
+        public string RunId { get; set; }
+        public int? Sequence { get; set; }
         public DateTime CreatedUtc { get; set; }
 
         public ChatMessage()
@@ -70,6 +72,8 @@ namespace RNAssistant.Core.Models
 
     public sealed class ChatActivity
     {
+        public string RunId { get; set; }
+        public int? Sequence { get; set; }
         public string Kind { get; set; }
         public string Title { get; set; }
         public string Subtitle { get; set; }
@@ -148,6 +152,10 @@ namespace RNAssistant.Core.Models
         public DateTime UpdatedUtc { get; set; }
         public int MessageCount { get; set; }
         public bool IsCurrentDocument { get; set; }
+        public string RunId { get; set; }
+        public string RunStatus { get; set; }
+        public string RunPhase { get; set; }
+        public DateTime? RunStartedUtc { get; set; }
     }
 
     public sealed class HtmlWorkspace

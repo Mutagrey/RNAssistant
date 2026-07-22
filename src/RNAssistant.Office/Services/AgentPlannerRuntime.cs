@@ -47,6 +47,17 @@ namespace RNAssistant.Office.Services
                 DecisionReason = "default_answer"
             };
 
+            if (LooksLikeConversationHistoryQuestion(value))
+            {
+                route.Mode = "answer";
+                route.TaskType = "conversation_history";
+                route.Phase = AgentPhases.Final;
+                route.RequiresTool = false;
+                route.RequiresInspection = false;
+                route.DecisionReason = "conversation_history";
+                return route;
+            }
+
             if (LooksLikeGeneralQuestion(value) &&
                 !LooksLikeCurrentOfficeQuestion(value) &&
                 !MentionsCurrentOfficeContext(value))
@@ -197,6 +208,17 @@ namespace RNAssistant.Office.Services
                     "создай", "создать", "созд", "добавь", "добавить", "добав",
                     "напиши", "запиши", "встав", "замени", "измен", "исправ", "обнов", "удали", "очист") ||
                 ContainsAnyToken(value, "create", "add", "write", "insert", "replace", "update", "edit", "fix", "delete", "remove", "generate");
+        }
+
+        private static bool LooksLikeConversationHistoryQuestion(string value)
+        {
+            var mentionsConversation = ContainsAny(value,
+                "чат", "переписк", "диалог", "сообщени", "мы обсуждали", "мы общались",
+                "conversation", "chat history", "previous message", "earlier message");
+            if (!mentionsConversation) return false;
+            return ContainsAny(value,
+                "перв", "предыдущ", "раньше", "помни", "истори", "саммари", "сводк", "резюм", "контекст",
+                "first", "previous", "earlier", "remember", "history", "summary", "context", "what did");
         }
 
         private static bool LooksLikeExistingVbaEdit(string value)
@@ -752,6 +774,7 @@ namespace RNAssistant.Office.Services
             {
                 builder.AppendLine("HTML MODE IS ENABLED FOR THIS CHAT.");
                 builder.AppendLine("Use common.html_workspace_read before editing or deleting existing files. Use common.html_workspace_upsert_file/data for editable HTML workspace output and common.html_workspace_delete_file/data to remove items.");
+                builder.AppendLine("HTML preview supports normal fetch(http/https) through the RNAssistant host after the user explicitly allows the target origin. Do not suggest mode:no-cors and never embed RNAssistant API keys or credentials.");
                 if (route.RequiresInspection)
                 {
                     builder.AppendLine("This workspace already has content. Read it before any upsert, delete, or active-file change.");

@@ -12,6 +12,7 @@ using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 using RNAssistant.Office.WebView;
@@ -78,6 +79,7 @@ namespace RNAssistant.Harness
                 Test("context: deleted message absent from rebuilt prompt", DeletedMessageIsAbsentFromRebuiltContext),
                 Test("routing: required empty tool slice stops before llm", RequiredEmptyToolSliceStopsBeforeLlm),
                 Test("routing: tool slice balances mutation and inspection", ToolSliceBalancesMutationAndInspection),
+                Test("routing: conversation history avoids Office tools", ConversationHistoryAvoidsOfficeTools),
                 Test("routing: vba creation enters mutation phase", VbaCreationRouteAllowsMutation),
                 Test("routing: destructive chart advances to delete capability", DestructiveChartRouteAdvancesToMutation),
                 Test("routing: short follow-up continues pending agent task", ShortFollowUpContinuesPendingAgentTask),
@@ -85,6 +87,9 @@ namespace RNAssistant.Harness
                 Test("routing: optional tool authoring is explicit", OptionalToolAuthoringIsExplicitAndDoesNotCompleteDocumentTask),
                 Test("context: prompt budget keeps contiguous recent history", PromptBudgetKeepsContiguousRecentHistory),
                 Test("context: prompt budget compresses earlier history", PromptBudgetCompressesEarlierHistory),
+                Test("context: output budget reserves prompt space", OutputBudgetReservesPromptSpace),
+                Test("chat runs: registry isolates sessions", ChatRunRegistryIsolatesSessions),
+                Test("html network: origin requires permission", HtmlNetworkOriginRequiresPermission),
                 Test("models: explicit catalog url and standard data shape", ModelCatalogUsesExplicitUrlAndStandardDataShape),
                 Test("desktop target: parses json descriptor", ParsesOfficeTargetJsonDescriptor),
                 Test("desktop target: parses base64 descriptor", ParsesOfficeTargetBase64Descriptor),
@@ -115,6 +120,7 @@ namespace RNAssistant.Harness
                 Test("chat sessions: document key migration", ChatSessionServiceMigratesDocumentKey),
                 Test("chat sessions: stale requested id fallback", ChatSessionServiceFallsBackForStaleRequestedId),
                 Test("chat sessions: empty drafts are transient", EmptyChatDraftsAreNotPersisted),
+                Test("chat sessions: background save keeps active chat", BackgroundSaveKeepsActiveChat),
                 Test("pipeline: dry-run resolves placeholders", PipelineDryRunResolvesPlaceholders),
                 Test("pipeline: executes fake adapter steps", PipelineExecutesFakeAdapterSteps),
                 Test("pipeline: resolves step output placeholders", PipelineResolvesStepOutputPlaceholders),
@@ -237,7 +243,8 @@ namespace RNAssistant.Harness
                 Test("bridge: typed tool and skill payloads", BridgeUsesTypedToolAndSkillPayloads),
                 Test("bridge: typed context payload", BridgeUsesTypedContextPayload),
                 Test("bridge: typed vba payload", BridgeUsesTypedVbaPayload),
-                Test("bridge: typed html workspace delete payloads", BridgeUsesTypedHtmlWorkspaceDeletePayloads)
+                Test("bridge: typed html workspace delete payloads", BridgeUsesTypedHtmlWorkspaceDeletePayloads),
+                Test("bridge: typed html network payloads", BridgeUsesTypedHtmlNetworkPayloads)
             };
 
             var duplicates = tests

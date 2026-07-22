@@ -20,6 +20,8 @@ namespace RNAssistant.Office.Tools
         private readonly HtmlArtifactToolExecutor _htmlArtifactExecutor;
         private readonly IReadOnlyList<ToolDefinition> _controllerTools;
         private readonly IDictionary<string, ControllerExecutorKind> _controllerExecutors;
+        private readonly object _mutationGateSync = new object();
+        private readonly IDictionary<string, object> _mutationGates = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
         public OfficeToolExecutor(
             IOfficeApplicationAdapter adapter,
@@ -139,6 +141,26 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.WaitingConfirmation("Tool requires confirmation before execution: " + command.ToolId);
             }
 
+            if (tool.MutatesDocument && !dryRun)
+            {
+                var gate = MutationGate(context.Session);
+                EnterMutationGate(gate, cancellationToken);
+                try
+                {
+                    return ExecuteResolvedCommand(command, context, depth, dryRun, manualRun, cancellationToken, customTool);
+                }
+                finally
+                {
+                    Monitor.Exit(gate);
+                }
+            }
+
+            return ExecuteResolvedCommand(command, context, depth, dryRun, manualRun, cancellationToken, customTool);
+        }
+
+        private ToolResult ExecuteResolvedCommand(ToolCommand command, ToolExecutionContext context, int depth, bool dryRun, bool manualRun, CancellationToken cancellationToken, ToolDefinition customTool)
+        {
+
             if (customTool != null && string.Equals(customTool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
             {
                 return _pipelineExecutor.Execute(
@@ -185,6 +207,31 @@ namespace RNAssistant.Office.Tools
 
             cancellationToken.ThrowIfCancellationRequested();
             return _adapter.ExecuteTool(command);
+        }
+
+        private object MutationGate(ChatSession session)
+        {
+            var key = session == null
+                ? (_adapter.HostName + "|" + _adapter.DocumentKey)
+                : ((session.Host ?? _adapter.HostName) + "|" + (session.DocumentKey ?? _adapter.DocumentKey));
+            lock (_mutationGateSync)
+            {
+                object gate;
+                if (!_mutationGates.TryGetValue(key, out gate))
+                {
+                    gate = new object();
+                    _mutationGates[key] = gate;
+                }
+                return gate;
+            }
+        }
+
+        private static void EnterMutationGate(object gate, CancellationToken cancellationToken)
+        {
+            while (!Monitor.TryEnter(gate, 100))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
         }
 
         private static string DeepestMessage(Exception exception)

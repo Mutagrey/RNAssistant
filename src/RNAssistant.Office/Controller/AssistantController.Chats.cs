@@ -134,6 +134,7 @@ namespace RNAssistant.Office
         public ChatStateResponse SelectChat(string chatId)
         {
             var session = LoadSession(chatId);
+            _chatSessions.SetActiveSession(session);
             return ChatState(session);
         }
 
@@ -200,6 +201,10 @@ namespace RNAssistant.Office
 
         public ChatStateResponse ClearChat(string chatId)
         {
+            if (_chatRuns.IsRunning(chatId))
+            {
+                throw new InvalidOperationException("Сначала остановите выполняющийся запрос в этом чате.");
+            }
             var session = LoadSession(chatId);
             var sessionId = ChatStore.GetSessionId(session);
             _attachmentStore.DeleteSession(sessionId);
@@ -214,6 +219,10 @@ namespace RNAssistant.Office
 
         public ChatStateResponse DeleteChat(string chatId)
         {
+            if (_chatRuns.IsRunning(chatId))
+            {
+                throw new InvalidOperationException("Сначала остановите выполняющийся запрос в этом чате.");
+            }
             var current = LoadSession(chatId);
             var sessionId = ChatStore.GetSessionId(current);
             _attachmentStore.DeleteSession(sessionId);
@@ -227,6 +236,10 @@ namespace RNAssistant.Office
             if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(documentKey))
             {
                 throw new InvalidOperationException("Документ не указан.");
+            }
+            if (_chatRuns.IsDocumentRunning(host, documentKey))
+            {
+                throw new InvalidOperationException("Сначала остановите запросы в чатах этого документа.");
             }
 
             var sessions = _chatStore.List(host, documentKey, string.Empty);
@@ -277,7 +290,7 @@ namespace RNAssistant.Office
             }
 
             _chatStore.Save(session);
-            _chatSessions.SetActiveSession(session);
+            _chatSessions.NotifySaved(session);
         }
 
         private static bool HasCompletedExchange(ChatSession session)

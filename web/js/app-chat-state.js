@@ -35,7 +35,7 @@ function renderChatSessions() {
   var hasActive = !!state.activeChatId;
   var hasMessages = !!(state.messages && state.messages.length);
   $("newChatButton").disabled = !!state.bridgeUnavailable;
-  $("clearChatButton").disabled = !hasActive || !hasMessages;
+  $("clearChatButton").disabled = !hasActive || !hasMessages || !!currentActiveSend();
   $("clearChatButton").hidden = !hasActive || !hasMessages;
   if ($("chatModeSelect")) {
     $("chatModeSelect").value = state.activeChatMode || "chat";
@@ -343,6 +343,14 @@ function renderChatTreeRow(chat) {
   var title = document.createElement("span");
   title.className = "chat-session-title";
   title.textContent = chatTitle(chat);
+  var run = state.chatRuns[id] || state.activeSends[id];
+  var persistedRunStatus = chat.RunStatus || chat.runStatus || "";
+  if (run || persistedRunStatus === "running") {
+    var spinner = document.createElement("span");
+    spinner.className = "chat-run-spinner";
+    spinner.title = "Запрос выполняется";
+    title.appendChild(spinner);
+  }
   button.appendChild(title);
   var meta = document.createElement("span");
   meta.className = "chat-session-meta";
@@ -354,6 +362,10 @@ function renderChatTreeRow(chat) {
   actions.innerHTML = "<button type=\"button\" class=\"chat-row-action chat-edit\" title=\"Переименовать\" aria-label=\"Переименовать чат\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 20h9\"/><path d=\"M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z\"/></svg></button><button type=\"button\" class=\"chat-row-action chat-delete\" title=\"Удалить\" aria-label=\"Удалить чат\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 6h18\"/><path d=\"M8 6V4h8v2\"/><path d=\"m19 6-1 14H6L5 6\"/><path d=\"M10 11v5\"/><path d=\"M14 11v5\"/></svg></button>";
   actions.querySelector(".chat-edit").addEventListener("click", function () { renameChat(id); });
   actions.querySelector(".chat-delete").addEventListener("click", function () { deleteChat(id); });
+  if (run || persistedRunStatus === "running") {
+    actions.querySelector(".chat-delete").disabled = true;
+    actions.querySelector(".chat-delete").title = "Сначала остановите запрос";
+  }
   row.appendChild(actions);
   return row;
 }

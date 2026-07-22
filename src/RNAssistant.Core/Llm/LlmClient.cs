@@ -144,7 +144,7 @@ namespace RNAssistant.Core.Llm
                 {
                     model = settings.Model,
                     messages = apiMessages,
-                    max_tokens = settings.MaxTokens,
+                    max_tokens = ModelContextBudget.EffectiveOutputTokens(settings, messageList, settings.Model),
                     temperature = settings.Temperature,
                     top_p = settings.TopP,
                     stream = settings.StreamResponses,
