@@ -366,7 +366,9 @@ namespace RNAssistant.OfficeHosts
             }
             catch (Exception ex)
             {
-                return ToolResult.Fail(ex.Message);
+                var isVba = (command == null ? string.Empty : command.ToolId ?? string.Empty)
+                    .IndexOf(".vba_", StringComparison.OrdinalIgnoreCase) >= 0;
+                return ToolResult.Fail(ex.Message, null, isVba ? "vba_access_error" : "office_tool_error", !isVba);
             }
         }
 
@@ -673,7 +675,7 @@ namespace RNAssistant.OfficeHosts
             }
             catch (Exception ex)
             {
-                return ToolResult.Fail("VBA insert was blocked. Enable 'Trust access to the VBA project object model' or copy the code manually. " + ex.Message, JsonConvert.SerializeObject(new { moduleName = moduleName, code = code }));
+                return ToolResult.Fail("VBA insert was blocked. Enable 'Trust access to the VBA project object model' or copy the code manually. " + ex.Message, JsonConvert.SerializeObject(new { moduleName = moduleName, code = code }), "vba_access_error", false);
             }
         }
 

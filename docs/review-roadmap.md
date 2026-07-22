@@ -13,6 +13,8 @@
 9. Pipeline safety is resolved recursively before execution; nested mutation, risk and confirmation metadata cannot be hidden.
 10. Document mutation completion is tied to a fresh successful verification observation.
 11. Tool/skill storage uses atomic per-item writes and no longer recreates entire user directories.
+12. VBA replacement is fail-closed around rollback creation, restores original code after a failed write, and verifies controller mutations using the expected code hash.
+13. Tool failures carry optional error/retry metadata; partial VBA and pipeline mutations are not automatically repeated.
 
 ## Short-Term Plan
 

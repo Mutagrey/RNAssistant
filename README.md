@@ -287,6 +287,8 @@ Office VBA support requires Office setting `Trust access to the VBA project obje
 - `Preview Diff` shows the current editor changes before saving.
 - `Save Module` replaces the selected module and stores the previous version under `%AppData%\RNAssistant\vba-backups`.
 - `Restore Backup` restores the selected backup; restoring also backs up the current module first.
+- Existing-module writes fail closed when a rollback backup cannot be created. A failed code write restores the original module when Office still permits access.
+- Agent mutations verify the resulting module against the expected code hash before reporting completion.
 - `Review in Chat` sends loaded VBA modules to chat for review and improvement suggestions.
 
 The model can call host-specific tools such as `excel.vba_read_project`, `word.vba_read_module`, `powerpoint.vba_apply_patch`, `*.vba_replace_text`, `*.vba_replace_module`, `*.vba_list_backups`, and `*.vba_restore_backup`. Prefer `*.vba_apply_patch` for small structured patches and `*.vba_replace_module` only for whole-module replacement.

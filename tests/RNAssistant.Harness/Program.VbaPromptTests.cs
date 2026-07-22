@@ -76,6 +76,164 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaBackupFailureBlocksReplacement()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                adapter.VbaModuleCode = "Sub Original()\nEnd Sub";
+                adapter.QueueResult("excel.vba_read_module", ToolResult.Ok("malformed read", "{}"));
+                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths));
+                var command = Command("excel.vba_replace_module", "moduleName", "Module1", "code", "Sub Changed()\nEnd Sub", "createIfMissing", false);
+
+                var result = executor.Execute(command, adapter.GetBuiltInTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
+
+                AssertTrue(!result.Success, "replacement blocked");
+                AssertEqual("vba_backup_failed", result.ErrorCode, "backup failure code");
+                AssertEqual(false, result.Retryable, "backup failure retryable");
+                AssertEqual("Sub Original()\nEnd Sub", adapter.VbaModuleCode, "module unchanged");
+                AssertEqual(1, adapter.Executed.Count, "only backup read executed");
+
+                adapter.Executed.Clear();
+                var create = Command("excel.vba_replace_module", "moduleName", "NewModule", "code", "Sub NewMacro()\nEnd Sub", "createIfMissing", true);
+                var created = executor.Execute(create, adapter.GetBuiltInTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
+                AssertTrue(created.Success, "missing module can be created");
+                AssertContains(adapter.GetVbaModuleCode("NewModule"), "NewMacro", "new module code");
+            });
+        }
+
+        private static void VbaPatchRejectsLineOverrun()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.VbaModuleCode = "Sub Main()\nEnd Sub";
+                var command = Command(
+                    executor.VbaToolId("vba_apply_patch"),
+                    "moduleName", "Module1",
+                    "patch", "[{\"op\":\"replaceLines\",\"startLine\":2,\"deleteCount\":5,\"text\":\"End Sub\"}]");
+
+                var result = executor.Execute(command, adapter.GetBuiltInTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
+
+                AssertTrue(!result.Success, "line overrun rejected");
+                AssertContains(result.Message, "past the end", "line overrun message");
+                AssertEqual("Sub Main()\nEnd Sub", adapter.VbaModuleCode, "line overrun leaves module unchanged");
+            });
+        }
+
+        private static void VbaCustomMacroFailureIsPartial()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var tool = new ToolDefinition
+                {
+                    Id = "excel.custom_vba",
+                    Host = "Excel",
+                    Name = "Custom VBA",
+                    Executor = "vba",
+                    Code = "Sub Main()\nEnd Sub",
+                    Enabled = true,
+                    BuiltIn = false,
+                    MutatesDocument = true,
+                    RequiresConfirmation = true,
+                    RiskLevel = 3
+                };
+                adapter.QueueResult("excel.run_macro", ToolResult.Fail("macro failed", null, "macro_failed", true));
+                var command = Command(tool.Id, "moduleName", "CustomModule", "macroName", "CustomModule.Main");
+                var tools = adapter.GetBuiltInTools().Concat(new[] { tool }).ToList();
+
+                var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+
+                AssertTrue(!result.Success, "custom macro result");
+                AssertEqual("partial_failure", result.Status, "custom macro partial status");
+                AssertEqual(false, result.Retryable, "custom macro retryable");
+                AssertContains(adapter.GetVbaModuleCode("CustomModule"), "Sub Main", "custom module remains inserted");
+                AssertTrue(result.Verification != null, "partial result verification metadata");
+            });
+        }
+
+        private static void VbaFailedModuleWriteRestoresCode()
+        {
+            var document = new FakeVbaDocumentObject();
+            var component = document.VBProject.VBComponents.Seed("Module1", "Sub Original()\nEnd Sub");
+            component.CodeModule.FailNextAdd = true;
+
+            try
+            {
+                VbaProjectSupport.ReplaceModule(document, "Module1", "Sub Changed()\nEnd Sub", false);
+                throw new InvalidOperationException("failed VBA replacement was accepted");
+            }
+            catch (InvalidOperationException ex)
+            {
+                AssertContains(ex.Message, "original code was restored", "atomic replacement diagnostic");
+            }
+
+            AssertEqual("Sub Original()\nEnd Sub", component.CodeModule.Code, "original code restored");
+
+            var newDocument = new FakeVbaDocumentObject();
+            newDocument.VBProject.VBComponents.FailNextAddedModuleWrite = true;
+            try
+            {
+                VbaProjectSupport.ReplaceModule(newDocument, "NewModule", "Sub Main()\nEnd Sub", true);
+                throw new InvalidOperationException("failed new VBA module was accepted");
+            }
+            catch (InvalidOperationException ex)
+            {
+                AssertContains(ex.Message, "incomplete module was removed", "new module cleanup diagnostic");
+            }
+            AssertEqual(0, newDocument.VBProject.VBComponents.Count, "incomplete module removed");
+        }
+
+        private static void VerificationUsesControllerVbaExpectedCode()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.VbaModuleCode = "Sub Main()\nEnd Sub";
+                var command = Command(
+                    executor.VbaToolId("vba_apply_patch"),
+                    "moduleName", "Module1",
+                    "patch", "[{\"op\":\"replaceFirst\",\"find\":\"Main\",\"text\":\"Changed\"}]");
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var mutation = tools.First(tool => string.Equals(tool.Id, command.ToolId, StringComparison.OrdinalIgnoreCase));
+                var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+
+                var verification = new VerificationRunner().BuildVerificationCommands(command, mutation, tools, result).Single();
+                var mismatch = VerificationResultValidator.Validate(
+                    command,
+                    verification,
+                    ToolResult.Ok("read", "{\"name\":\"Module1\",\"code\":\"Sub Main()\\nEnd Sub\"}"));
+                var match = VerificationResultValidator.Validate(
+                    command,
+                    verification,
+                    ToolResult.Ok("read", JsonConvert.SerializeObject(new { name = "Module1", code = adapter.VbaModuleCode })));
+
+                AssertTrue(!mismatch.Success, "controller VBA mismatch rejected");
+                AssertEqual("vba_verification_mismatch", mismatch.ErrorCode, "controller VBA mismatch code");
+                AssertTrue(match.Success, "controller VBA expected code accepted");
+            });
+        }
+
+        private static void VbaRestoreExposesVerification()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                adapter.VbaModuleCode = "Sub Current()\nEnd Sub";
+                var backupStore = new VbaBackupStore(paths);
+                var backup = backupStore.Save("Excel", "doc", "Harness.xlsx", "Module1", "StdModule", "Sub Restored()\nEnd Sub");
+                var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
+                var command = Command(executor.VbaToolId("vba_restore_backup"), "backupId", backup.BackupId, "moduleName", "Module1");
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+
+                var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+
+                AssertTrue(result.Success, "restore result");
+                AssertContains(adapter.VbaModuleCode, "Restored", "restored module code");
+                AssertTrue(result.Verification != null, "restore verification metadata");
+                AssertEqual(VbaToolExecutor.CodeSha256(adapter.VbaModuleCode), result.Verification.ExpectedCodeSha256, "restore expected hash");
+                AssertEqual(2, backupStore.List("Excel", "doc").Count, "restore preserves current version as backup");
+            });
+        }
+
         private static void VbaBackupStoreSkipsBrokenFiles()
         {
             WithTempPaths(delegate(AppDataPaths paths)

@@ -6,15 +6,26 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
 {
     internal sealed class VerificationRunner
     {
-        public IEnumerable<ToolCommand> BuildVerificationCommands(ToolCommand command, ToolDefinition tool, IReadOnlyList<ToolDefinition> allTools)
+        public IEnumerable<ToolCommand> BuildVerificationCommands(ToolCommand command, ToolDefinition tool, IReadOnlyList<ToolDefinition> allTools, ToolResult mutationResult = null)
         {
             if (command == null || tool == null || !tool.MutatesDocument)
             {
+                yield break;
+            }
+
+            var resultVerification = BuildResultVerification(mutationResult);
+            if (resultVerification != null)
+            {
+                if (HasReadOnlyTool(allTools, resultVerification.ToolId))
+                {
+                    yield return resultVerification;
+                }
                 yield break;
             }
 
@@ -33,7 +44,12 @@ namespace RNAssistant.Office.Services
                 command.Arguments.ContainsKey("moduleName") &&
                 HasReadOnlyTool(allTools, vbaReadToolId))
             {
-                yield return CopyArgs(new ToolCommand { ToolId = vbaReadToolId, Description = "Deterministic VBA verification" }, command, "moduleName");
+                var verify = CopyArgs(new ToolCommand { ToolId = vbaReadToolId, Description = "Deterministic VBA verification" }, command, "moduleName");
+                if (command.Arguments.ContainsKey("code"))
+                {
+                    verify.Arguments["__expectedCodeSha256"] = VbaToolExecutor.CodeSha256(Convert.ToString(command.Arguments["code"]));
+                }
+                yield return verify;
                 yield break;
             }
 
@@ -102,6 +118,26 @@ namespace RNAssistant.Office.Services
             {
                 yield return new ToolCommand { ToolId = "outlook.get_context", Description = "Deterministic verification" };
             }
+        }
+
+        private static ToolCommand BuildResultVerification(ToolResult result)
+        {
+            var spec = result == null ? null : result.Verification;
+            if (spec == null || string.IsNullOrWhiteSpace(spec.ToolId))
+            {
+                return null;
+            }
+
+            var command = new ToolCommand { ToolId = spec.ToolId, Description = "Deterministic result verification" };
+            foreach (var pair in spec.Arguments ?? new Dictionary<string, object>())
+            {
+                command.Arguments[pair.Key] = pair.Value;
+            }
+            if (!string.IsNullOrWhiteSpace(spec.ExpectedCodeSha256))
+            {
+                command.Arguments["__expectedCodeSha256"] = spec.ExpectedCodeSha256;
+            }
+            return command;
         }
 
         private static bool TryBuildExplicitVerification(ToolCommand command, ToolDefinition tool, out ToolCommand verify)
@@ -242,14 +278,23 @@ namespace RNAssistant.Office.Services
                     }
                 }
 
-                if (Contains(verification.ToolId, "vba_read_module") && mutation.Arguments.ContainsKey("code"))
+                if (Contains(verification.ToolId, "vba_read_module"))
                 {
                     var actual = JObject.Parse(result.DataJson ?? "{}");
-                    var expectedCode = NormalizeCode(Argument(mutation, "code"));
-                    var actualCode = NormalizeCode((string)actual["code"]);
-                    if (!string.Equals(expectedCode, actualCode, StringComparison.Ordinal))
+                    var expectedHash = Argument(verification, "__expectedCodeSha256");
+                    if (string.IsNullOrWhiteSpace(expectedHash) && mutation.Arguments.ContainsKey("code"))
                     {
-                        return ToolResult.Fail("VBA verification failed: module code does not match the requested code.", result.DataJson);
+                        expectedHash = VbaToolExecutor.CodeSha256(Argument(mutation, "code"));
+                    }
+                    if (string.IsNullOrWhiteSpace(expectedHash))
+                    {
+                        return ToolResult.Fail("VBA verification failed: expected module code is unavailable.", result.DataJson, "vba_verification_missing_expected", false);
+                    }
+
+                    var actualHash = VbaToolExecutor.CodeSha256((string)actual["code"]);
+                    if (!string.Equals(expectedHash, actualHash, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return ToolResult.Fail("VBA verification failed: module code does not match the requested code.", result.DataJson, "vba_verification_mismatch", true);
                     }
                 }
             }
@@ -321,11 +366,6 @@ namespace RNAssistant.Office.Services
                 : string.Empty;
         }
 
-        private static string NormalizeCode(string value)
-        {
-            return (value ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Trim();
-        }
-
         private static bool Contains(string value, string term)
         {
             return (value ?? string.Empty).IndexOf(term ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0;
@@ -377,7 +417,10 @@ namespace RNAssistant.Office.Services
                 Result = ToolResult.Fail(
                     "Deterministic verification timed out after " +
                     Math.Max(1, Convert.ToInt32(Math.Ceiling(_timeout.TotalSeconds))) +
-                    " seconds while running " + (toolId ?? string.Empty) + ". The mutation completed, but verification did not.")
+                    " seconds while running " + (toolId ?? string.Empty) + ". The mutation completed, but verification did not.",
+                    null,
+                    "verification_timeout",
+                    false)
             };
         }
     }

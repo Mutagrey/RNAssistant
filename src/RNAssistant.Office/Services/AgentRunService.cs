@@ -451,7 +451,7 @@ namespace RNAssistant.Office.Services
                         {
                             state.PendingVerification = true;
                             route.Phase = AgentPhases.Verification;
-                            var verificationCommands = _verificationRunner.BuildVerificationCommands(command, tool, allTools).ToList();
+                            var verificationCommands = _verificationRunner.BuildVerificationCommands(command, tool, allTools, result).ToList();
                             if (verificationCommands.Count == 0)
                             {
                                 var unavailable = ToolResult.Fail("No deterministic verification tool is available for " + command.ToolId + ".");

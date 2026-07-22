@@ -53,37 +53,73 @@ namespace RNAssistant.Core.Models
         }
     }
 
+    public sealed class ToolVerification
+    {
+        public string ToolId { get; set; }
+        public Dictionary<string, object> Arguments { get; set; }
+        public string ExpectedCodeSha256 { get; set; }
+
+        public ToolVerification()
+        {
+            Arguments = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
     public sealed class ToolResult
     {
         public bool Success { get; set; }
         public string Status { get; set; }
+        public string ErrorCode { get; set; }
+        public bool? Retryable { get; set; }
         public string PendingId { get; set; }
         public string Message { get; set; }
         public string DataJson { get; set; }
+        public ToolVerification Verification { get; set; }
 
         public static ToolResult Ok(string message, string dataJson = null)
         {
             return new ToolResult { Success = true, Status = "completed", Message = message, DataJson = dataJson };
         }
 
-        public static ToolResult Fail(string message, string dataJson = null)
+        public static ToolResult Fail(string message, string dataJson = null, string errorCode = null, bool? retryable = null)
         {
-            return new ToolResult { Success = false, Status = "failed", Message = message, DataJson = dataJson };
+            return new ToolResult
+            {
+                Success = false,
+                Status = "failed",
+                ErrorCode = errorCode,
+                Retryable = retryable,
+                Message = message,
+                DataJson = dataJson
+            };
+        }
+
+        public static ToolResult PartialFailure(string message, string dataJson = null, string errorCode = "partial_failure")
+        {
+            return new ToolResult
+            {
+                Success = false,
+                Status = "partial_failure",
+                ErrorCode = errorCode,
+                Retryable = false,
+                Message = message,
+                DataJson = dataJson
+            };
         }
 
         public static ToolResult WaitingConfirmation(string message)
         {
-            return new ToolResult { Success = false, Status = "waiting_confirmation", Message = message };
+            return new ToolResult { Success = false, Status = "waiting_confirmation", Retryable = false, Message = message };
         }
 
         public static ToolResult SkippedAutoRun(string message)
         {
-            return new ToolResult { Success = false, Status = "skipped_auto_run", Message = message };
+            return new ToolResult { Success = false, Status = "skipped_auto_run", Retryable = false, Message = message };
         }
 
         public static ToolResult Cancelled(string message)
         {
-            return new ToolResult { Success = false, Status = "cancelled", Message = message };
+            return new ToolResult { Success = false, Status = "cancelled", Retryable = false, Message = message };
         }
     }
 }

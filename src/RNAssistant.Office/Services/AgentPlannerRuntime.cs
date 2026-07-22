@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
 {
@@ -987,7 +988,7 @@ namespace RNAssistant.Office.Services
                 var known = AgentToolCatalogResolver.Find(allTools, step.ToolId);
                 if (known == null)
                 {
-                    var suggestions = ToolIdSuggestions.Find(step.ToolId, allTools, 3);
+                    var suggestions = OfficeToolExecutor.SuggestToolIds(step.ToolId, allTools, 3);
                     return PlannerValidationResult.Fail(
                         "Unknown tool id: " + step.ToolId + ". Use only exact ids from AVAILABLE_TOOLS." +
                         (suggestions.Count == 0 ? string.Empty : " Did you mean: " + string.Join(", ", suggestions.ToArray()) + "?"));
@@ -1044,62 +1045,6 @@ namespace RNAssistant.Office.Services
         }
     }
 
-    internal static class ToolIdSuggestions
-    {
-        public static List<string> Find(string requestedToolId, IEnumerable<ToolDefinition> tools, int limit)
-        {
-            var requested = Tokens(requestedToolId);
-            if (requested.Count == 0)
-            {
-                return new List<string>();
-            }
-
-            return (tools ?? new ToolDefinition[0])
-                .Where(tool => tool != null && tool.Enabled && !string.IsNullOrWhiteSpace(tool.Id))
-                .Select(tool => new
-                {
-                    Tool = tool,
-                    Score = Tokens((tool.Id ?? string.Empty) + " " + (tool.Name ?? string.Empty) + " " + (tool.Description ?? string.Empty))
-                        .Count(token => requested.Contains(token))
-                })
-                .Where(item => item.Score > 0)
-                .OrderByDescending(item => item.Score)
-                .ThenBy(item => item.Tool.Id.Length)
-                .Take(Math.Max(1, limit))
-                .Select(item => item.Tool.Id)
-                .ToList();
-        }
-
-        private static HashSet<string> Tokens(string value)
-        {
-            var tokens = new HashSet<string>(
-                (value ?? string.Empty)
-                    .ToLowerInvariant()
-                    .Split(new[] { '.', '_', '-', ' ', '/', '\\' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Where(token => token.Length > 1),
-                StringComparer.OrdinalIgnoreCase);
-            AddAliases(tokens, "create", "add", "insert");
-            AddAliases(tokens, "creation", "add", "insert");
-            AddAliases(tokens, "worksheet", "sheet");
-            AddAliases(tokens, "graph", "chart");
-            AddAliases(tokens, "remove", "delete");
-            AddAliases(tokens, "macro", "vba");
-            return tokens;
-        }
-
-        private static void AddAliases(ISet<string> tokens, string source, params string[] aliases)
-        {
-            if (tokens == null || !tokens.Contains(source))
-            {
-                return;
-            }
-            foreach (var alias in aliases ?? new string[0])
-            {
-                tokens.Add(alias);
-            }
-        }
-    }
-
     internal sealed class ObservationNormalizer
     {
         private int _nextId = 1;
@@ -1132,11 +1077,14 @@ namespace RNAssistant.Office.Services
             var toolId = command == null ? string.Empty : command.ToolId;
             var status = result != null && result.Success ? "succeeded" : "failed";
             var message = result == null ? string.Empty : result.Message ?? string.Empty;
+            var errorCode = result == null || string.IsNullOrWhiteSpace(result.ErrorCode)
+                ? string.Empty
+                : " [" + result.ErrorCode + "]";
             if (!string.IsNullOrWhiteSpace(message))
             {
-                return toolId + " " + status + ": " + Trim(message, 500);
+                return toolId + " " + status + errorCode + ": " + Trim(message, 500);
             }
-            return toolId + " " + status + ".";
+            return toolId + " " + status + errorCode + ".";
         }
 
         private static string BuildFactsJson(ToolCommand command, ToolResult result)

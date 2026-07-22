@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
@@ -46,11 +45,6 @@ namespace RNAssistant.Office
             };
         }
 
-        public static ChatMessage CreateAgentPlanChatMessage(IReadOnlyList<ToolCommand> commands, LlmCompletionResult completion)
-        {
-            return CreateAssistantMessage(CreateAgentPlanMessage(commands), completion, CreateAgentPlanActivity(commands));
-        }
-
         public static object DescribeResult(ToolCommand command, ToolResult result)
         {
             return new
@@ -59,6 +53,8 @@ namespace RNAssistant.Office
                 description = command == null ? string.Empty : command.Description,
                 success = result != null && result.Success,
                 status = result == null ? string.Empty : result.Status,
+                errorCode = result == null ? string.Empty : result.ErrorCode,
+                retryable = result == null ? null : result.Retryable,
                 pendingId = result == null ? string.Empty : result.PendingId,
                 message = result == null ? string.Empty : result.Message,
                 dataJson = result == null ? null : result.DataJson
@@ -132,6 +128,8 @@ namespace RNAssistant.Office
                 Subtitle = command == null ? string.Empty : command.ToolId,
                 Status = ToActivityStatus(result),
                 ExecutionStatus = executionStatus,
+                ErrorCode = result == null ? null : result.ErrorCode,
+                Retryable = result == null ? null : result.Retryable,
                 PendingId = result == null ? null : result.PendingId,
                 ToolId = command == null ? string.Empty : command.ToolId,
                 ArgumentsJson = command == null ? null : JsonConvert.SerializeObject(command.Arguments, Formatting.Indented),
@@ -258,6 +256,7 @@ namespace RNAssistant.Office
                     var successToken = step["success"];
                     var success = successToken != null && successToken.Type == JTokenType.Boolean && successToken.Value<bool>();
                     var status = (string)step["status"];
+                    var retryableToken = step["retryable"];
                     if (string.IsNullOrWhiteSpace(status))
                     {
                         status = success ? "completed" : "failed";
@@ -269,6 +268,10 @@ namespace RNAssistant.Office
                         Subtitle = toolId,
                         Status = success ? "completed" : "failed",
                         ExecutionStatus = status,
+                        ErrorCode = (string)step["errorCode"],
+                        Retryable = retryableToken == null || retryableToken.Type == JTokenType.Null
+                            ? (bool?)null
+                            : retryableToken.Value<bool>(),
                         ToolId = toolId,
                         ResultMessage = (string)step["message"],
                         DataJson = (string)step["dataJson"]
@@ -283,25 +286,13 @@ namespace RNAssistant.Office
             }
         }
 
-        public static bool ShouldForceAgentToolUse(string text, string host)
-        {
-            var value = (text ?? string.Empty).ToLowerInvariant();
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return false;
-            }
-
-            var action = Regex.IsMatch(value, "(создай|создать|сделай|построй|сгенерируй|заполни|вставь|замени|измени|добавь|нарисуй|create|make|add|insert|replace|update|write|generate|build|chart)");
-            if (!action)
-            {
-                return false;
-            }
-
-            return Regex.IsMatch(value, "(лист|таблиц|диапазон|ячейк|график|диаграмм|html|page|страниц|report|отчет|component|компонент|ui|sheet|table|range|cell|chart|slide|слайд|document|документ|selection|выдел|mail|email|письм)");
-        }
-
         public static bool CanRetryToolError(ToolResult result)
         {
+            if (result != null && result.Retryable.HasValue)
+            {
+                return result.Retryable.Value;
+            }
+
             var message = result == null ? string.Empty : result.Message ?? string.Empty;
             return !IsWaitingResult(result) &&
                 message.IndexOf("requires confirmation", StringComparison.OrdinalIgnoreCase) < 0 &&

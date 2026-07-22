@@ -65,7 +65,7 @@ namespace RNAssistant.Office
             dynamic component = FindComponent(GetVbaProject(documentObject), moduleName);
             if (component == null)
             {
-                return ToolResult.Fail("VBA module not found: " + moduleName);
+                return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
             }
 
             var code = Trim(ReadComponentCode(component), maxChars);
@@ -91,24 +91,59 @@ namespace RNAssistant.Office
 
             dynamic vbProject = GetVbaProject(documentObject);
             dynamic component = FindComponent(vbProject, moduleName);
-            if (component == null)
+            var created = false;
+            dynamic module = null;
+            var originalCode = string.Empty;
+            try
             {
-                if (!createIfMissing)
+                if (component == null)
                 {
-                    return ToolResult.Fail("VBA module not found: " + moduleName);
+                    if (!createIfMissing)
+                    {
+                        return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
+                    }
+
+                    component = vbProject.VBComponents.Add(StdModuleType);
+                    created = true;
+                    component.Name = moduleName;
                 }
 
-                component = vbProject.VBComponents.Add(StdModuleType);
-                component.Name = moduleName;
+                module = component.CodeModule;
+                originalCode = created ? string.Empty : ReadComponentCode(component);
+                ReplaceCode(module, code);
             }
-
-            dynamic module = component.CodeModule;
-            if ((int)module.CountOfLines > 0)
+            catch (Exception ex)
             {
-                module.DeleteLines(1, (int)module.CountOfLines);
-            }
+                Exception rollbackError = null;
+                try
+                {
+                    if (created)
+                    {
+                        vbProject.VBComponents.Remove(component);
+                    }
+                    else
+                    {
+                        ReplaceCode(module, originalCode);
+                    }
+                }
+                catch (Exception rollbackException)
+                {
+                    rollbackError = rollbackException;
+                }
 
-            module.AddFromString(code);
+                if (rollbackError != null)
+                {
+                    throw new InvalidOperationException(
+                        "VBA module replacement failed and the original code could not be restored: " + rollbackError.Message,
+                        ex);
+                }
+
+                throw new InvalidOperationException(
+                    created
+                        ? "VBA module replacement failed; the incomplete module was removed."
+                        : "VBA module replacement failed; the original code was restored.",
+                    ex);
+            }
             return ToolResult.Ok("VBA module replaced: " + component.Name, JsonConvert.SerializeObject(new { moduleName = (string)component.Name, lineCount = (int)component.CodeModule.CountOfLines }));
         }
 
@@ -190,6 +225,18 @@ namespace RNAssistant.Office
         {
             dynamic module = component.CodeModule;
             return (int)module.CountOfLines <= 0 ? string.Empty : (string)module.Lines[1, (int)module.CountOfLines];
+        }
+
+        private static void ReplaceCode(dynamic module, string code)
+        {
+            if ((int)module.CountOfLines > 0)
+            {
+                module.DeleteLines(1, (int)module.CountOfLines);
+            }
+            if (!string.IsNullOrEmpty(code))
+            {
+                module.AddFromString(code);
+            }
         }
 
         private static string ComponentTypeName(int type)

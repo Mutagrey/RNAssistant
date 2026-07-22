@@ -80,13 +80,15 @@ namespace RNAssistant.Office.Tools
 
                 var result = runCommand(nested, skills, settings, depth + 1, dryRun, manualRun, cancellationToken) ?? ToolResult.Fail("Pipeline step returned no result.");
                 stepResults[stepId] = result;
-                output.Add(new { id = stepId, toolId = toolId, success = result.Success, status = result.Status, message = result.Message, dataJson = result.DataJson });
+                output.Add(new { id = stepId, toolId = toolId, success = result.Success, status = result.Status, errorCode = result.ErrorCode, retryable = result.Retryable, message = result.Message, dataJson = result.DataJson });
 
                 if (!result.Success)
                 {
-                    return ToolResult.Fail(
-                        "Pipeline step failed: " + stepId + ". " + result.Message,
-                        JsonConvert.SerializeObject(new { toolId = tool.Id, dryRun = dryRun, steps = output }));
+                    var message = "Pipeline step failed: " + stepId + ". " + result.Message;
+                    var dataJson = JsonConvert.SerializeObject(new { toolId = tool.Id, dryRun = dryRun, steps = output });
+                    return output.Count > 1
+                        ? ToolResult.PartialFailure(message, dataJson, "pipeline_partial_failure")
+                        : ToolResult.Fail(message, dataJson, result.ErrorCode ?? "pipeline_step_failed", result.Retryable);
                 }
             }
 

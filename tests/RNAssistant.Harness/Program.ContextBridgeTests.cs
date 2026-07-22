@@ -67,7 +67,10 @@ namespace RNAssistant.Harness
                 {
                     Kind = "tool",
                     Title = "Write table",
-                    Status = "completed",
+                    Status = "failed",
+                    ExecutionStatus = "partial_failure",
+                    ErrorCode = "pipeline_partial_failure",
+                    Retryable = false,
                     ToolId = "excel.write_table",
                     Children = new List<ChatActivity>
                     {
@@ -85,6 +88,8 @@ namespace RNAssistant.Harness
             AssertTrue(!object.ReferenceEquals(sourceMessage.Activity, clonedMessages[0].Activity), "activity cloned");
             AssertTrue(!object.ReferenceEquals(sourceMessage.Activity.Children[0], clonedMessages[0].Activity.Children[0]), "activity child cloned");
             AssertEqual("Write table", clonedMessages[0].Activity.Title, "activity title");
+            AssertEqual("pipeline_partial_failure", clonedMessages[0].Activity.ErrorCode, "activity error code");
+            AssertEqual(false, clonedMessages[0].Activity.Retryable, "activity retryable");
             sourceMessage.Content = "Changed";
             sourceMessage.Activity.Title = "Changed activity";
             AssertEqual("Done", clonedMessages[0].Content, "message clone independent");

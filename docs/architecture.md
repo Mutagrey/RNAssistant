@@ -123,13 +123,13 @@ Current coverage:
 - chat/tool/skill/VBA store fixtures using temp directories, including broken files being skipped;
 - chat session lifecycle fixtures, including document-key migration;
 - pipeline dry-run and execution fixtures with fake `IOfficeApplicationAdapter`;
-- pipeline failure diagnostics, cycle/missing-reference rejection, recursive risk/confirmation gates, and protection from partial execution;
+- pipeline failure diagnostics, cycle/missing-reference rejection, recursive risk/confirmation gates, and non-retryable partial-execution reporting;
 - agent runtime guards for strict planner repair, sliced tools, waiting confirmations, stopped batches, max iterations, max tool steps, fail-closed mutation verification/recovery, and VBA context prompt inclusion;
 - model-quality fixtures that catch final answers when Office tool use is required;
 - markdown skill store/catalog/prompt separation, prompt body limiting, and agent skill-save confirmation;
 - agent custom tool save/read confirmation and validation;
 - metadata-driven mutation safety gates;
-- VBA replace-text flow with rollback backup using fake `IOfficeApplicationAdapter`;
+- VBA replace/patch/restore flows with fail-closed rollback backups, code-hash verification, bounded line patches, and atomic module-write recovery using fake Office/VBProject objects;
 - tool catalog service merge/filter behavior;
 - prompt message trimming, context usage estimates, and basic no-network chat completion flow;
 - explicit Chat/Auto/Agent routing, plain-chat prompt isolation, rebuilt history after deletion, and empty-tool preflight diagnostics;

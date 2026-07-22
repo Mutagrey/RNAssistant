@@ -86,6 +86,8 @@ namespace RNAssistant.Harness
                 var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
 
                 AssertTrue(!result.Success, "pipeline should fail");
+                AssertEqual("partial_failure", result.Status, "pipeline partial failure status");
+                AssertEqual(false, result.Retryable, "pipeline partial failure retryable");
                 AssertContains(result.Message, "Pipeline step failed: table", "failure message");
                 AssertContains(result.DataJson, "\"id\":\"table\"", "failure data keeps failed step");
                 AssertEqual(2, adapter.Executed.Count, "adapter execution count");

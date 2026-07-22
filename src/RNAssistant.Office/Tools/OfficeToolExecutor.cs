@@ -77,7 +77,7 @@ namespace RNAssistant.Office.Tools
             catch (Exception ex)
             {
                 var toolId = command == null ? string.Empty : command.ToolId ?? string.Empty;
-                return ToolResult.Fail("Tool execution failed: " + toolId + ". " + DeepestMessage(ex));
+                return ToolResult.Fail("Tool execution failed: " + toolId + ". " + DeepestMessage(ex), null, "tool_execution_exception", true);
             }
         }
 
@@ -148,12 +148,7 @@ namespace RNAssistant.Office.Tools
             {
                 return _vbaExecutor.ExecuteControllerTool(
                     command,
-                    skills,
-                    settings,
                     dryRun,
-                    manualRun,
-                    (nested, nestedSkills, nestedSettings, nestedDepth, nestedDryRun, nestedManualRun, nestedCancellationToken) =>
-                        ExecuteCommandSafely(nested, nestedSkills, nestedSettings, nestedDepth, nestedDryRun, nestedManualRun, session, nestedCancellationToken),
                     cancellationToken);
             }
 
@@ -188,7 +183,11 @@ namespace RNAssistant.Office.Tools
 
             if (string.Equals(command.ToolId, VbaToolId("vba_replace_module"), StringComparison.OrdinalIgnoreCase))
             {
-                _vbaExecutor.BackupModuleBeforeReplace(command, settings);
+                var backupError = _vbaExecutor.PrepareBackupBeforeReplace(command);
+                if (backupError != null)
+                {
+                    return backupError;
+                }
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -241,21 +240,23 @@ namespace RNAssistant.Office.Tools
 
         private static ToolResult UnknownTool(string requestedToolId, IReadOnlyList<ToolDefinition> knownTools)
         {
-            var suggestions = SuggestToolIds(requestedToolId, knownTools);
+            var suggestions = SuggestToolIds(requestedToolId, knownTools, 5);
             var message = "Unknown tool id: " + requestedToolId + ". Use only available tool ids.";
             if (suggestions.Count > 0)
             {
                 message += " Did you mean: " + string.Join(", ", suggestions.ToArray()) + "?";
             }
 
-            return ToolResult.Fail(message, ToolDiagnosticJson(requestedToolId, knownTools, suggestions, false));
+            return ToolResult.Fail(message, ToolDiagnosticJson(requestedToolId, knownTools, suggestions, false), "unknown_tool", true);
         }
 
         private static ToolResult DisabledTool(string requestedToolId, IReadOnlyList<ToolDefinition> knownTools)
         {
             return ToolResult.Fail(
                 "Tool is disabled: " + requestedToolId + ". Enable it or use another available tool id.",
-                ToolDiagnosticJson(requestedToolId, knownTools, new List<string>(), true));
+                ToolDiagnosticJson(requestedToolId, knownTools, new List<string>(), true),
+                "tool_disabled",
+                false);
         }
 
         private static string ToolDiagnosticJson(string requestedToolId, IReadOnlyList<ToolDefinition> knownTools, IReadOnlyList<string> suggestions, bool disabled)
@@ -272,7 +273,7 @@ namespace RNAssistant.Office.Tools
             });
         }
 
-        private static List<string> SuggestToolIds(string requestedToolId, IReadOnlyList<ToolDefinition> knownTools)
+        internal static List<string> SuggestToolIds(string requestedToolId, IReadOnlyList<ToolDefinition> knownTools, int limit)
         {
             var requestedTokens = ExpandedTokens(Tokenize(requestedToolId));
             if (requestedTokens.Count == 0)
@@ -286,7 +287,7 @@ namespace RNAssistant.Office.Tools
                 .Where(item => item.Score > 0)
                 .OrderByDescending(item => item.Score)
                 .ThenBy(item => item.Tool.Id.Length)
-                .Take(5)
+                .Take(Math.Max(1, limit))
                 .Select(item => item.Tool.Id)
                 .ToList();
         }

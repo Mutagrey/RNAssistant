@@ -301,7 +301,7 @@ namespace RNAssistant.Harness
                 FakeVbaModule module;
                 if (!_vbaModules.TryGetValue(moduleName, out module))
                 {
-                    return ToolResult.Fail("VBA module not found: " + moduleName);
+                    return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
                 }
 
                 return ToolResult.Ok("read " + command.ToolId, JsonConvert.SerializeObject(new { name = module.Name, code = module.Code, type = module.Type }));

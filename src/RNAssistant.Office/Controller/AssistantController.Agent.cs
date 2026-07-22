@@ -339,6 +339,8 @@ namespace RNAssistant.Office
             target.Subtitle = source.Subtitle;
             target.Status = source.Status;
             target.ExecutionStatus = source.ExecutionStatus;
+            target.ErrorCode = source.ErrorCode;
+            target.Retryable = source.Retryable;
             target.PendingId = source.PendingId;
             target.ToolId = source.ToolId;
             target.ArgumentsJson = source.ArgumentsJson;

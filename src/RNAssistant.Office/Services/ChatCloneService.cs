@@ -115,6 +115,8 @@ namespace RNAssistant.Office.Services
                 Subtitle = activity.Subtitle,
                 Status = activity.Status,
                 ExecutionStatus = activity.ExecutionStatus,
+                ErrorCode = activity.ErrorCode,
+                Retryable = activity.Retryable,
                 PendingId = activity.PendingId,
                 ToolId = activity.ToolId,
                 ArgumentsJson = activity.ArgumentsJson,
