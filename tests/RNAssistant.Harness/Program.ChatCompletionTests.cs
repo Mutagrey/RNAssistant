@@ -55,6 +55,30 @@ namespace RNAssistant.Harness
             AssertEqual(7, thinkResult.ReasoningTokens.Value, "output reasoning token alias");
 
             updates.Clear();
+            using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(thinkStream)))
+            {
+                var sniffedResult = LlmClient.ReadStreamingOrJsonResponseAsync(
+                    stream,
+                    updates.Add,
+                    CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(thinkResult.Content, sniffedResult.Content, "stream body detected without content type");
+                AssertTrue(updates.Any(item => item.Completed), "stream body completion progress");
+                AssertEqual(sniffedResult.Content, string.Concat(updates.Select(item => item.ContentDelta)), "stream body live content progress");
+            }
+
+            updates.Clear();
+            using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(
+                "{\"choices\":[{\"message\":{\"content\":\"ordinary json\"}}]}")))
+            {
+                var jsonResult = LlmClient.ReadStreamingOrJsonResponseAsync(
+                    stream,
+                    updates.Add,
+                    CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual("ordinary json", jsonResult.Content, "stream request accepts ordinary json fallback");
+                AssertEqual(0, updates.Count, "ordinary json fallback has no false stream progress");
+            }
+
+            updates.Clear();
             var duplicateResult = LlmClient.ParseStreamingResponse(
                 "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"same\",\"content\":\"<think>same</think>Done\"}}]}\n\ndata: [DONE]\n\n",
                 updates.Add);

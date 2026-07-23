@@ -173,42 +173,34 @@ namespace RNAssistant.Core.Llm
                     {
                         response = await client.PostAsync(requestUri, requestContent, cancellationToken).ConfigureAwait(false);
                     }
-                    var responseMediaType = response.Content.Headers.ContentType == null
-                        ? string.Empty
-                        : response.Content.Headers.ContentType.MediaType ?? string.Empty;
-                    var isEventStream = responseMediaType.IndexOf("text/event-stream", StringComparison.OrdinalIgnoreCase) >= 0;
-                    var responseJson = response.IsSuccessStatusCode && settings.StreamResponses && isEventStream
-                        ? null
-                        : await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                    if (!response.IsSuccessStatusCode)
+                    using (response)
                     {
-                        if ((hasImages || hasAudio) && (int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
+                        if (!response.IsSuccessStatusCode)
                         {
-                            var inputKind = hasImages && hasAudio
-                                ? "изображения и аудио"
-                                : (hasImages ? "изображения" : "аудио");
-                            throw new InvalidOperationException(
-                                "Выбранная модель или endpoint не принял " + inputKind + ". Проверьте capabilities модели и формат мультимодального входа. HTTP " +
-                                (int)response.StatusCode + ". Response: " + responseJson);
+                            var errorBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                            if ((hasImages || hasAudio) && (int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
+                            {
+                                var inputKind = hasImages && hasAudio
+                                    ? "изображения и аудио"
+                                    : (hasImages ? "изображения" : "аудио");
+                                throw new InvalidOperationException(
+                                    "Выбранная модель или endpoint не принял " + inputKind + ". Проверьте capabilities модели и формат мультимодального входа. HTTP " +
+                                    (int)response.StatusCode + ". Response: " + errorBody);
+                            }
+                            throw new InvalidOperationException("LLM request failed: HTTP " + (int)response.StatusCode + " " + response.ReasonPhrase + ". " + diagnostics + ". Response: " + errorBody);
                         }
-                        throw new InvalidOperationException("LLM request failed: HTTP " + (int)response.StatusCode + " " + response.ReasonPhrase + ". " + diagnostics + ". Response: " + responseJson);
-                    }
 
-                    if (settings.StreamResponses && isEventStream)
-                    {
-                        using (response)
-                        using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                        if (settings.StreamResponses)
                         {
-                            return await ReadStreamingResponseAsync(stream, streamProgress, cancellationToken).ConfigureAwait(false);
+                            using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                            {
+                                return await ReadStreamingOrJsonResponseAsync(stream, streamProgress, cancellationToken).ConfigureAwait(false);
+                            }
                         }
-                    }
-                    if (settings.StreamResponses && !string.IsNullOrWhiteSpace(responseJson) &&
-                        responseJson.TrimStart().StartsWith("data:", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return ParseStreamingResponse(responseJson);
-                    }
 
-                    return ParseCompletionResponse(responseJson);
+                        var responseJson = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        return ParseCompletionResponse(responseJson);
+                    }
                 }
                 catch (TaskCanceledException ex)
                 {
@@ -279,27 +271,79 @@ namespace RNAssistant.Core.Llm
             return BuildCompletionResult(message, parsed["usage"] as JObject);
         }
 
-        private static async Task<LlmCompletionResult> ReadStreamingResponseAsync(
+        internal static async Task<LlmCompletionResult> ReadStreamingOrJsonResponseAsync(
             Stream stream,
             Action<LlmStreamUpdate> streamProgress,
             CancellationToken cancellationToken)
         {
+            if (stream == null)
+            {
+                throw new ArgumentNullException("stream");
+            }
+
             var state = new StreamingCompletionState(streamProgress);
+            var bufferedJson = new StringBuilder();
+            bool? isEventStream = null;
             using (var reader = new StreamReader(stream, Encoding.UTF8, true, 4096, true))
             {
-                while (!reader.EndOfStream)
+                while (true)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var line = await reader.ReadLineAsync().ConfigureAwait(false);
-                    ProcessStreamingLine(line, state);
+                    if (line == null)
+                    {
+                        break;
+                    }
+
+                    if (!isEventStream.HasValue && !string.IsNullOrWhiteSpace(line))
+                    {
+                        var probe = line.TrimStart('\uFEFF').TrimStart();
+                        if (!string.IsNullOrWhiteSpace(probe))
+                        {
+                            isEventStream = IsEventStreamLine(probe);
+                        }
+                    }
+
+                    if (isEventStream == true)
+                    {
+                        ProcessStreamingLine(line, state);
+                    }
+                    else if (isEventStream == false)
+                    {
+                        if (bufferedJson.Length > 0)
+                        {
+                            bufferedJson.AppendLine();
+                        }
+                        bufferedJson.Append(line);
+                    }
                 }
             }
+
+            if (isEventStream != true)
+            {
+                return ParseCompletionResponse(bufferedJson.ToString());
+            }
+
             var result = state.ToResult();
             if (streamProgress != null)
             {
                 streamProgress(new LlmStreamUpdate { Completed = true });
             }
             return result;
+        }
+
+        private static bool IsEventStreamLine(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                return false;
+            }
+
+            return line.StartsWith("data:", StringComparison.OrdinalIgnoreCase) ||
+                line.StartsWith("event:", StringComparison.OrdinalIgnoreCase) ||
+                line.StartsWith("id:", StringComparison.OrdinalIgnoreCase) ||
+                line.StartsWith("retry:", StringComparison.OrdinalIgnoreCase) ||
+                line.StartsWith(":", StringComparison.Ordinal);
         }
 
         private static void ProcessStreamingLine(string line, StreamingCompletionState state)
