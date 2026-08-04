@@ -226,7 +226,7 @@ namespace RNAssistant.Office.Services
             value = Regex.Replace(value, "^(еще\\s+)?(я\\s+хочу\\s+)?", string.Empty, RegexOptions.IgnoreCase);
             value = Regex.Replace(
                 value,
-                "^(пожалуйста|можешь|можно|нужно|надо|сделай|создай|напиши|проверь|добавь|исправь|улучши|реализуй|обнови|please|can you|could you|make|create|write|check|add|fix|improve|update|implement)\\s+",
+                "^(пожалуйста|можешь|можно|нужно|надо|сделай|создай|напиши|проверь|добавь|исправь|улучши|реализуй|обнови|please|can you|could you|make|create|write|check|add|fix|improve|update|implement)(?:\\s*[,;:]\\s*|\\s+)",
                 string.Empty,
                 RegexOptions.IgnoreCase);
             return Normalize(value);
