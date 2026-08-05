@@ -260,8 +260,10 @@ namespace RNAssistant.Harness
                     null).GetAwaiter().GetResult();
 
                 AssertContains(result.AssistantText, "not_json_object", "invalid response result");
-                var diagnostic = session.Messages.Last().Activity;
+                var diagnosticMessage = session.Messages.Last();
+                var diagnostic = diagnosticMessage.Activity;
                 AssertTrue(diagnostic != null, "diagnostic activity");
+                AssertTrue(diagnosticMessage.ExcludeFromModelContext, "terminal diagnostic excluded from model context");
                 AssertEqual("Planner JSON invalid", diagnostic.Title, "diagnostic title");
                 AssertContains(diagnostic.ResultMessage, "not_json_object", "diagnostic error");
                 AssertContains(diagnostic.DataJson, "not json after repair", "diagnostic response preview");

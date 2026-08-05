@@ -57,6 +57,7 @@ namespace RNAssistant.Harness
                 Id = "message-1",
                 Role = "assistant",
                 Content = "Done",
+                ExcludeFromModelContext = true,
                 ToolCallId = "call-1",
                 ToolName = "excel_write_table",
                 ToolCalls = new List<LlmToolCall>
@@ -92,6 +93,7 @@ namespace RNAssistant.Harness
             AssertTrue(!object.ReferenceEquals(sourceMessage, clonedMessages[0]), "message cloned");
             AssertEqual("message-1", clonedMessages[0].Id, "message id");
             AssertEqual("assistant", clonedMessages[0].Role, "message role");
+            AssertTrue(clonedMessages[0].ExcludeFromModelContext, "message context exclusion");
             AssertEqual("call-1", clonedMessages[0].ToolCallId, "tool call id");
             AssertEqual("excel_write_table", clonedMessages[0].ToolCalls[0].Name, "tool call name");
             AssertTrue(!object.ReferenceEquals(sourceMessage.ToolCalls[0], clonedMessages[0].ToolCalls[0]), "tool call cloned");
@@ -363,7 +365,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"systemPromptRole\":\"system\",\"modelImageSupportOverrides\":{\"gpt-test\":true},\"modelAudioSupportOverrides\":{\"gpt-audio\":true},\"attachmentModelPriority\":[\"gpt-test\",\"gpt-audio\"]},\"apiKey\":\"secret\"}}")
+                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"systemPromptRole\":\"system\",\"maxAgentFormatRetries\":4,\"modelImageSupportOverrides\":{\"gpt-test\":true},\"modelAudioSupportOverrides\":{\"gpt-audio\":true},\"attachmentModelPriority\":[\"gpt-test\",\"gpt-audio\"]},\"apiKey\":\"secret\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -371,6 +373,7 @@ namespace RNAssistant.Harness
             AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
             AssertEqual("gpt-test", controller.LastSettings.Model, "settings model");
             AssertEqual("system", controller.LastSettings.SystemPromptRole, "system prompt role");
+            AssertEqual(4, controller.LastSettings.MaxAgentFormatRetries, "format retry limit");
             AssertEqual(true, controller.LastSettings.ModelImageSupportOverrides["gpt-test"].Value, "model image override");
             AssertEqual(true, controller.LastSettings.ModelAudioSupportOverrides["gpt-audio"].Value, "model audio override");
             AssertEqual("gpt-test", controller.LastSettings.AttachmentModelPriority[0], "attachment model priority");

@@ -182,7 +182,7 @@ namespace RNAssistant.Core.Llm
 
         public static int EstimateMessageTokens(ChatMessage message, bool includeExtractedAttachments = true)
         {
-            if (message == null) return 0;
+            if (message == null || message.ExcludeFromModelContext) return 0;
             var total = 4 + EstimateTextTokens(message.Role) + EstimateTextTokens(message.Content);
             if (message.ToolCalls != null && message.ToolCalls.Count > 0)
             {

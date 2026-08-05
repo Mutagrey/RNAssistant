@@ -26,7 +26,7 @@ namespace RNAssistant.Core.Llm
             {
                 foreach (var message in promptMessages)
                 {
-                    if (message == null)
+                    if (message == null || message.ExcludeFromModelContext)
                     {
                         continue;
                     }
@@ -60,6 +60,7 @@ namespace RNAssistant.Core.Llm
                 foreach (var message in session.Messages)
                 {
                     if (message == null ||
+                        message.ExcludeFromModelContext ||
                         message.Activity != null ||
                         string.IsNullOrWhiteSpace(message.Content) ||
                         (!string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) &&

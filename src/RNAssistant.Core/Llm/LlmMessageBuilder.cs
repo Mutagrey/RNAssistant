@@ -48,7 +48,7 @@ namespace RNAssistant.Core.Llm
             foreach (var message in messageList)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (message == null || string.IsNullOrWhiteSpace(message.Role))
+                if (message == null || message.ExcludeFromModelContext || string.IsNullOrWhiteSpace(message.Role))
                 {
                     continue;
                 }
@@ -206,6 +206,7 @@ namespace RNAssistant.Core.Llm
             var count = 0;
             foreach (var message in messages ?? new ChatMessage[0])
             {
+                if (message == null || message.ExcludeFromModelContext) continue;
                 var attachments = message == null ? null : message.Attachments;
                 var ordinary = Math.Min(
                     Math.Max(0, maxImages - count),

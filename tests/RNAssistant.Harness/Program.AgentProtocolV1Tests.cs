@@ -135,7 +135,8 @@ namespace RNAssistant.Harness
             var source = new[]
             {
                 new ChatMessage { Role = "assistant", Content = string.Empty, ToolCalls = new List<LlmToolCall> { call } },
-                new ChatMessage { Role = "tool", ToolCallId = "call_1", ToolName = call.Name, Content = "{\"ok\":true}" }
+                new ChatMessage { Role = "tool", ToolCallId = "call_1", ToolName = call.Name, Content = "{\"ok\":true}" },
+                new ChatMessage { Role = "assistant", Content = "EXCLUDED_DIAGNOSTIC", ExcludeFromModelContext = true }
             };
             var serialized = new LlmMessageBuilder().Build(source, null).Messages;
             var json = JArray.FromObject(serialized);
@@ -145,6 +146,7 @@ namespace RNAssistant.Harness
             AssertEqual("tool", (string)json.SelectToken("[1].role"), "tool result role");
             AssertEqual("call_1", (string)json.SelectToken("[1].tool_call_id"), "tool result call id");
             AssertContains((string)json.SelectToken("[1].content"), "\"ok\":true", "tool result content");
+            AssertEqual(2, json.Count, "excluded diagnostic is not serialized");
         }
 
         private static void AgentNativeToolCallRoundTripUsesMatchingCallId()
