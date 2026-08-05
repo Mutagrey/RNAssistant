@@ -18,6 +18,7 @@ var state = {
   activeChatModel: "",
   activeChatMode: "agent",
   activeChatHtmlMode: false,
+  activeChatReasoning: false,
   bridgeToken: "",
   messages: [],
   draftAttachments: [],
@@ -35,6 +36,7 @@ var state = {
   editingBusy: false,
   modelCatalog: { configUrl: "", defaultModel: "", models: [], loaded: false, loading: false, error: "" },
   modelSaving: false,
+  reasoningSaving: false,
   bridgeUnavailable: false,
   selectedToolIndex: -1,
   selectedSkillIndex: -1,
@@ -212,10 +214,13 @@ if (window.chrome && window.chrome.webview) {
         state.chatRuns[progressChatId].phase = progress.phase || progress.Phase || "working";
       }
       var contentDelta = progress.contentDelta || progress.ContentDelta || "";
+      var hasReasoningProgress = !!(progress.reasoningDelta || progress.ReasoningDelta || progress.reasoningComplete || progress.ReasoningComplete);
       if (contentDelta && isChatProgress) {
         if (progressChatId) state.chatRuns[progressChatId].stream = (state.chatRuns[progressChatId].stream || "") + contentDelta;
         if (progressChatId !== state.activeChatId) { renderChatSessions(); return; }
-        state.liveStreamContent = (state.liveStreamContent || "") + contentDelta;
+        state.liveStreamContent = progressChatId
+          ? state.chatRuns[progressChatId].stream
+          : (state.liveStreamContent || "") + contentDelta;
         if (progressChatId) {
           state.liveAgentRun = state.chatRuns[progressChatId].activities;
           if (!state.liveActivity && state.liveAgentRun && state.liveAgentRun.length) {
@@ -230,8 +235,11 @@ if (window.chrome && window.chrome.webview) {
         }
         return;
       }
-      if (isChatProgress &&
-          !(progress.reasoningDelta || progress.ReasoningDelta || progress.reasoningComplete || progress.ReasoningComplete)) {
+      if (hasReasoningProgress && isChatProgress) {
+        if (progressChatId !== state.activeChatId) renderChatSessions();
+        return;
+      }
+      if (isChatProgress) {
         var normalizedActivity = normalizeProgressActivity(progress);
         var storedActivity = recordChatRunActivityState(progressChatId, normalizedActivity);
         if (progressChatId === state.activeChatId) {

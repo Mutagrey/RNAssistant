@@ -84,6 +84,9 @@ function applyChatState(response) {
   if (response.activeChatHtmlMode !== undefined || response.ActiveChatHtmlMode !== undefined) {
     state.activeChatHtmlMode = !!(response.activeChatHtmlMode || response.ActiveChatHtmlMode);
   }
+  if (response.activeChatReasoning !== undefined || response.ActiveChatReasoning !== undefined) {
+    state.activeChatReasoning = !!(response.activeChatReasoning || response.ActiveChatReasoning);
+  }
   if (response.chats !== undefined || response.Chats !== undefined) {
     state.chats = response.chats || response.Chats || [];
   }
@@ -421,6 +424,13 @@ function lastTokenUsageText() {
   return "";
 }
 
+function formatCompactTokenCount(value) {
+  value = Number(value || 0);
+  if (value >= 1000000) return (Math.round(value / 100000) / 10) + "M";
+  if (value >= 1000) return (Math.round(value / 100) / 10) + "K";
+  return formatNumber(value);
+}
+
 function renderContextMeter() {
   var usage = state.contextUsage || {};
   var used = Number(usage.usedTokens || usage.UsedTokens || 0);
@@ -436,6 +446,7 @@ function renderContextMeter() {
   }
 
   percent = Math.max(0, Math.min(100, percent));
+  var compactDetail = formatCompactTokenCount(used) + " / " + formatCompactTokenCount(limit);
   var detailText = formatNumber(used) + " / " + formatNumber(limit) + " вход";
   if (windowTokens) detailText += " · окно " + formatNumber(windowTokens);
   if (reservedOutput) detailText += " · ответ до " + formatNumber(reservedOutput);
@@ -445,7 +456,7 @@ function renderContextMeter() {
   meter.style.setProperty("--context-meter-percent", percent + "%");
   meter.style.setProperty("--context-meter-color", level === "danger" ? "var(--danger)" : (level === "warn" ? "#b7791f" : "var(--success)"));
   value.textContent = percent + "%";
-  detail.textContent = detailText;
+  detail.textContent = compactDetail;
   meter.title = "Контекст: " + percent + "%\n" + detailText;
   meter.setAttribute("aria-label", meter.title);
 }
@@ -453,7 +464,7 @@ function renderContextMeter() {
 function updateEstimatedContextUsage() {
   var used = 0;
   state.messages.forEach(function (message) {
-    if (messageActivity(message)) return;
+    if (messageActivity(message) || message.ExcludeFromModelContext || message.excludeFromModelContext) return;
     var role = messageRole(message).toLowerCase();
     if (role !== "user" && role !== "assistant") return;
     var content = messageContent(message);

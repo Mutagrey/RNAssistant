@@ -118,6 +118,20 @@ namespace RNAssistant.Core.Tools
             return result;
         }
 
+        public static IReadOnlyList<LlmToolDefinition> BuildApiToolNames(IEnumerable<ToolDefinition> tools)
+        {
+            var result = new List<LlmToolDefinition>();
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var tool in tools ?? new ToolDefinition[0])
+            {
+                if (tool == null || !ToolIsAvailable(tool)) continue;
+                var apiName = ApiName(tool.Id, names);
+                names.Add(apiName);
+                result.Add(new LlmToolDefinition { ToolId = tool.Id, ApiName = apiName });
+            }
+            return result;
+        }
+
         public static string ResolveToolId(string apiName, IEnumerable<LlmToolDefinition> tools)
         {
             var match = (tools ?? new LlmToolDefinition[0]).FirstOrDefault(tool =>

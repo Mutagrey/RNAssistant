@@ -446,6 +446,7 @@ function renderMessages(options) {
   if (!state.messages.length && !state.liveStreamContent && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
     box.appendChild(renderChatEmptyState());
     renderAgentPlanDock();
+    renderAgentApprovalDock();
     syncChatScroll(false, false);
     return;
   }
@@ -471,5 +472,6 @@ function renderMessages(options) {
   }
 
   renderAgentPlanDock();
+  renderAgentApprovalDock();
   syncChatScroll(shouldScroll, false);
 }

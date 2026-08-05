@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -26,8 +24,8 @@ namespace RNAssistant.Core.Llm
         public LlmClient(
             Func<string> apiKeyProvider,
             Func<ChatAttachment, byte[]> attachmentReader,
-            Func<ChatAttachment, string> attachmentTextReader,
-            Func<AppSettings, ChatAttachment, IReadOnlyList<ModelImagePart>> modelImageProvider)
+            LlmAttachmentTextReader attachmentTextReader,
+            LlmModelImageProvider modelImageProvider)
         {
             _apiKeyProvider = apiKeyProvider;
             _messageBuilder = new LlmMessageBuilder(attachmentReader, attachmentTextReader, modelImageProvider);
@@ -53,128 +51,128 @@ namespace RNAssistant.Core.Llm
                 throw new InvalidOperationException("Invalid LLM endpoint URL: " + url);
             }
 
-            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-
-            using (var client = new HttpClient())
+            requestOptions = requestOptions ?? new LlmRequestOptions();
+            var messageList = messages as IList<ChatMessage> ??
+                (messages == null ? new List<ChatMessage>() : messages.ToList());
+            var apiBuild = _messageBuilder.Build(messageList, settings, requestOptions, cancellationToken);
+            var apiMessages = apiBuild.Messages;
+            var hasImages = apiBuild.HasImages;
+            var hasAudio = apiBuild.HasAudio;
+            if (apiMessages.Count == 0)
             {
-                client.Timeout = TimeSpan.FromSeconds(Math.Max(30, settings.RequestTimeoutSeconds <= 0 ? 300 : settings.RequestTimeoutSeconds));
-                client.DefaultRequestHeaders.Accept.Clear();
-                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue(
-                    settings.StreamResponses ? "text/event-stream" : "application/json"));
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("RNAssistant/0.1");
-                if (!string.IsNullOrWhiteSpace(apiKey))
-                {
-                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-                }
+                throw new InvalidOperationException("LLM request has no messages.");
+            }
 
-                string contentTypeOverride = null;
-                if (settings.CustomHeaders != null)
-                {
-                    foreach (var header in settings.CustomHeaders)
-                    {
-                        if (!string.IsNullOrWhiteSpace(header.Key) && !string.IsNullOrWhiteSpace(header.Value))
-                        {
-                            if (string.Equals(header.Key, "Content-Type", StringComparison.OrdinalIgnoreCase))
-                            {
-                                contentTypeOverride = header.Value;
-                                continue;
-                            }
+            var body = BuildRequestBody(settings, apiMessages, apiBuild.EstimatedPromptTokens, requestOptions);
+            var content = LlmHttpTransport.CreateJsonContent(body);
+            var diagnostics = CreateDiagnostics(requestUri, settings, apiMessages.Count, !string.IsNullOrWhiteSpace(apiKey));
+            var timeout = TimeSpan.FromSeconds(Math.Max(30, settings.RequestTimeoutSeconds <= 0 ? 300 : settings.RequestTimeoutSeconds));
+            apiBuild = null;
+            apiMessages = null;
+            body = null;
 
-                            if (string.Equals(header.Key, "Content-Length", StringComparison.OrdinalIgnoreCase) ||
-                                string.Equals(header.Key, "Host", StringComparison.OrdinalIgnoreCase))
-                            {
-                                throw new InvalidOperationException("Custom header cannot be set manually: " + header.Key);
-                            }
-
-                            client.DefaultRequestHeaders.Remove(header.Key);
-                            if (!client.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value))
-                            {
-                                throw new InvalidOperationException("Custom header is not valid for request headers: " + header.Key);
-                            }
-                        }
-                    }
-                }
-
-                var messageList = messages == null ? new List<ChatMessage>() : messages.ToList();
-                var apiBuild = _messageBuilder.Build(messageList, settings);
-                var apiMessages = apiBuild.Messages;
-                var hasImages = apiBuild.HasImages;
-                var hasAudio = apiBuild.HasAudio;
-                if (apiMessages.Count == 0)
-                {
-                    throw new InvalidOperationException("LLM request has no messages.");
-                }
-
-                var body = BuildRequestBody(settings, apiMessages, apiBuild.EstimatedPromptTokens, requestOptions);
-                var json = body.ToString(Formatting.None);
-                var diagnostics = CreateDiagnostics(requestUri, settings, apiMessages.Count, !string.IsNullOrWhiteSpace(apiKey));
+            using (content)
+            using (var timeoutSource = new CancellationTokenSource())
+            using (var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token))
+            {
+                timeoutSource.CancelAfter(timeout);
                 try
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    HttpResponseMessage response;
-                    using (var request = new HttpRequestMessage(HttpMethod.Post, requestUri))
-                    {
-                        request.Content = new StringContent(json, Encoding.UTF8, "application/json");
-                        if (!string.IsNullOrWhiteSpace(contentTypeOverride))
-                        {
-                            request.Content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentTypeOverride);
-                        }
-                        response = await client.SendAsync(
-                            request,
-                            settings.StreamResponses ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead,
-                            cancellationToken).ConfigureAwait(false);
-                    }
+                    requestCancellation.Token.ThrowIfCancellationRequested();
+                    var response = await LlmHttpTransport.SendAsync(
+                        HttpMethod.Post,
+                        requestUri,
+                        content,
+                        settings,
+                        apiKey,
+                        settings.StreamResponses ? "text/event-stream" : "application/json",
+                        requestCancellation.Token).ConfigureAwait(false);
 
                     using (response)
                     {
                         if (!response.IsSuccessStatusCode)
                         {
-                            var errorBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                            var errorBody = await LlmHttpTransport.ReadContentAsStringAsync(
+                                response.Content,
+                                LlmHttpTransport.MaxErrorBodyBytes,
+                                requestCancellation.Token).ConfigureAwait(false);
+                            var failureKind = LlmHttpTransport.FailureKind(response.StatusCode, errorBody, requestOptions);
                             if ((hasImages || hasAudio) && (int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
                             {
                                 var inputKind = hasImages && hasAudio
                                     ? "изображения и аудио"
                                     : (hasImages ? "изображения" : "аудио");
-                                throw new InvalidOperationException(
+                                throw new LlmRequestException(
+                                    failureKind,
                                     "Выбранная модель или endpoint не принял " + inputKind + ". Проверьте capabilities модели и формат мультимодального входа. HTTP " +
-                                    (int)response.StatusCode + ". Response: " + errorBody);
+                                    (int)response.StatusCode + ". Response: " + errorBody,
+                                    null,
+                                    (int)response.StatusCode);
                             }
-                            throw new InvalidOperationException("LLM request failed: HTTP " + (int)response.StatusCode + " " + response.ReasonPhrase + ". " + diagnostics + ". Response: " + errorBody);
+                            throw new LlmRequestException(
+                                failureKind,
+                                "LLM request failed: HTTP " + (int)response.StatusCode + " " + response.ReasonPhrase + ". " + diagnostics + ". Response: " + errorBody,
+                                null,
+                                (int)response.StatusCode);
                         }
 
                         if (settings.StreamResponses)
                         {
                             using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
                             {
-                                return await LlmResponseParser.ReadStreamingOrJsonResponseAsync(stream, streamProgress, cancellationToken).ConfigureAwait(false);
+                                return await LlmResponseParser.ReadStreamingOrJsonResponseAsync(stream, streamProgress, requestCancellation.Token).ConfigureAwait(false);
                             }
                         }
 
-                        var responseJson = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        var responseJson = await LlmHttpTransport.ReadContentAsStringAsync(
+                            response.Content,
+                            LlmHttpTransport.MaxResponseBodyBytes,
+                            requestCancellation.Token).ConfigureAwait(false);
                         return LlmResponseParser.ParseCompletionResponse(responseJson);
                     }
                 }
-                catch (TaskCanceledException ex)
+                catch (OperationCanceledException ex)
                 {
                     if (cancellationToken.IsCancellationRequested)
                     {
                         throw new OperationCanceledException("LLM request cancelled.", ex, cancellationToken);
                     }
-
-                    throw new InvalidOperationException("LLM request timed out after " + client.Timeout.TotalSeconds + " seconds. " + diagnostics + ". " + DeepestMessage(ex), ex);
+                    if (timeoutSource.IsCancellationRequested)
+                    {
+                        throw new LlmRequestException(
+                            LlmFailureKind.Timeout,
+                            "LLM request timed out after " + timeout.TotalSeconds + " seconds. " + diagnostics + ". " + DeepestMessage(ex),
+                            ex);
+                    }
+                    throw;
+                }
+                catch (LlmRequestException)
+                {
+                    throw;
                 }
                 catch (HttpRequestException ex)
                 {
-                    throw new InvalidOperationException("LLM request could not be sent. " + diagnostics + ". " + DeepestMessage(ex), ex);
+                    throw new LlmRequestException(LlmFailureKind.Network, "LLM request could not be sent. " + diagnostics + ". " + DeepestMessage(ex), ex);
                 }
                 catch (WebException ex)
                 {
-                    throw new InvalidOperationException("LLM network error. " + diagnostics + ". " + DeepestMessage(ex), ex);
+                    throw new LlmRequestException(LlmFailureKind.Network, "LLM network error. " + diagnostics + ". " + DeepestMessage(ex), ex);
+                }
+                catch (System.IO.IOException ex)
+                {
+                    throw new LlmRequestException(LlmFailureKind.Network, "LLM response stream failed. " + diagnostics + ". " + DeepestMessage(ex), ex);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    throw new LlmRequestException(LlmFailureKind.InvalidResponse, ex.Message, ex);
                 }
             }
         }
 
-        public async Task<string> GetModelsConfigJsonAsync(AppSettings settings, string apiKeyOverride)
+        public async Task<string> GetModelsConfigJsonAsync(
+            AppSettings settings,
+            string apiKeyOverride,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
             if (settings == null)
             {
@@ -188,71 +186,65 @@ namespace RNAssistant.Core.Llm
                 throw new InvalidOperationException("Invalid models config URL: " + url);
             }
 
-            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-
-            using (var client = new HttpClient())
+            var timeout = TimeSpan.FromSeconds(30);
+            var apiKey = apiKeyOverride ?? (_apiKeyProvider == null ? null : _apiKeyProvider());
+            using (var timeoutSource = new CancellationTokenSource())
+            using (var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token))
             {
-                client.Timeout = TimeSpan.FromSeconds(30);
-                client.DefaultRequestHeaders.Accept.Clear();
-                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("RNAssistant/0.1");
-
-                var apiKey = apiKeyOverride ?? (_apiKeyProvider == null ? null : _apiKeyProvider());
-                if (!string.IsNullOrWhiteSpace(apiKey))
-                {
-                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-                }
-
-                if (settings.CustomHeaders != null)
-                {
-                    foreach (var header in settings.CustomHeaders)
-                    {
-                        if (!string.IsNullOrWhiteSpace(header.Key) && !string.IsNullOrWhiteSpace(header.Value))
-                        {
-                            if (string.Equals(header.Key, "Content-Type", StringComparison.OrdinalIgnoreCase))
-                            {
-                                continue;
-                            }
-
-                            if (string.Equals(header.Key, "Content-Length", StringComparison.OrdinalIgnoreCase) ||
-                                string.Equals(header.Key, "Host", StringComparison.OrdinalIgnoreCase))
-                            {
-                                throw new InvalidOperationException("Custom header cannot be set manually: " + header.Key);
-                            }
-
-                            client.DefaultRequestHeaders.Remove(header.Key);
-                            if (!client.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value))
-                            {
-                                throw new InvalidOperationException("Custom header is not valid for request headers: " + header.Key);
-                            }
-                        }
-                    }
-                }
-
+                timeoutSource.CancelAfter(timeout);
                 try
                 {
-                    using (var response = await client.GetAsync(requestUri).ConfigureAwait(false))
+                    using (var response = await LlmHttpTransport.SendAsync(
+                        HttpMethod.Get,
+                        requestUri,
+                        null,
+                        settings,
+                        apiKey,
+                        "application/json",
+                        requestCancellation.Token).ConfigureAwait(false))
                     {
-                        var responseJson = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        var responseJson = await LlmHttpTransport.ReadContentAsStringAsync(
+                            response.Content,
+                            LlmHttpTransport.MaxModelsConfigBytes,
+                            requestCancellation.Token).ConfigureAwait(false);
                         if (!response.IsSuccessStatusCode)
                         {
-                            throw new InvalidOperationException("Models config request failed: HTTP " + (int)response.StatusCode + " " + response.ReasonPhrase + ". Endpoint: " + requestUri + ". Response: " + responseJson);
+                            throw new LlmRequestException(
+                                LlmHttpTransport.FailureKind(response.StatusCode, responseJson, null),
+                                "Models config request failed: HTTP " + (int)response.StatusCode + " " + response.ReasonPhrase + ". Endpoint: " + requestUri + ". Response: " + responseJson,
+                                null,
+                                (int)response.StatusCode);
                         }
 
                         return responseJson;
                     }
                 }
-                catch (TaskCanceledException ex)
+                catch (OperationCanceledException ex)
                 {
-                    throw new InvalidOperationException("Models config request timed out after " + client.Timeout.TotalSeconds + " seconds. Endpoint: " + requestUri + ". " + DeepestMessage(ex), ex);
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        throw new OperationCanceledException("Models config request cancelled.", ex, cancellationToken);
+                    }
+                    throw new LlmRequestException(
+                        LlmFailureKind.Timeout,
+                        "Models config request timed out after " + timeout.TotalSeconds + " seconds. Endpoint: " + requestUri + ". " + DeepestMessage(ex),
+                        ex);
+                }
+                catch (LlmRequestException)
+                {
+                    throw;
                 }
                 catch (HttpRequestException ex)
                 {
-                    throw new InvalidOperationException("Models config request could not be sent. Endpoint: " + requestUri + ". " + DeepestMessage(ex), ex);
+                    throw new LlmRequestException(LlmFailureKind.Network, "Models config request could not be sent. Endpoint: " + requestUri + ". " + DeepestMessage(ex), ex);
                 }
                 catch (WebException ex)
                 {
-                    throw new InvalidOperationException("Models config network error. Endpoint: " + requestUri + ". " + DeepestMessage(ex), ex);
+                    throw new LlmRequestException(LlmFailureKind.Network, "Models config network error. Endpoint: " + requestUri + ". " + DeepestMessage(ex), ex);
+                }
+                catch (System.IO.IOException ex)
+                {
+                    throw new LlmRequestException(LlmFailureKind.Network, "Models config response failed. Endpoint: " + requestUri + ". " + DeepestMessage(ex), ex);
                 }
             }
         }
@@ -365,6 +357,8 @@ namespace RNAssistant.Core.Llm
             };
             if (settings.StreamResponses) body["stream_options"] = new JObject { ["include_usage"] = true };
 
+            AppendReasoningRequest(body, settings, requestOptions);
+
             if (string.Equals(requestOptions.ResponseFormat, LlmResponseFormats.JsonObject, StringComparison.OrdinalIgnoreCase))
             {
                 body["response_format"] = new JObject { ["type"] = "json_object" };
@@ -403,6 +397,48 @@ namespace RNAssistant.Core.Llm
                 body["parallel_tool_calls"] = false;
             }
             return body;
+        }
+
+        private static void AppendReasoningRequest(JObject body, AppSettings settings, LlmRequestOptions requestOptions)
+        {
+            if (!requestOptions.ReasoningEnabled.HasValue)
+            {
+                return;
+            }
+
+            var reasoningSupport = ModelContextBudget.ReasoningSupport(settings, settings.Model);
+            if (reasoningSupport == false)
+            {
+                return;
+            }
+
+            var capability = ModelContextBudget.Capability(settings, settings.Model);
+            var configuredMode = capability == null ? null : capability.ReasoningRequestMode;
+            var mode = ReasoningRequestModes.Normalize(string.IsNullOrWhiteSpace(configuredMode)
+                ? settings.ReasoningRequestMode
+                : configuredMode);
+            var enabled = requestOptions.ReasoningEnabled.Value;
+
+            if (string.Equals(mode, ReasoningRequestModes.EnableThinking, StringComparison.Ordinal))
+            {
+                body["enable_thinking"] = enabled;
+                return;
+            }
+            if (string.Equals(mode, ReasoningRequestModes.ChatTemplateKwargs, StringComparison.Ordinal))
+            {
+                body["chat_template_kwargs"] = new JObject { ["enable_thinking"] = enabled };
+                return;
+            }
+            if (string.Equals(mode, ReasoningRequestModes.ReasoningEnabled, StringComparison.Ordinal))
+            {
+                body["reasoning"] = new JObject { ["enabled"] = enabled };
+                return;
+            }
+
+            if (enabled || reasoningSupport == true)
+            {
+                body["reasoning_effort"] = enabled ? "medium" : "none";
+            }
         }
 
     }

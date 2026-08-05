@@ -340,6 +340,23 @@ namespace RNAssistant.Harness
             AssertEqual("agent", response["payload"]["activeChatMode"].Value<string>(), "mode response");
         }
 
+        private static void BridgeUsesTypedChatReasoningPayload()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
+            var responseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"reasoning1\",\"type\":\"setChatReasoning\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-1\",\"enabled\":true}}")
+                .GetAwaiter()
+                .GetResult();
+
+            var response = JObject.Parse(responseJson);
+            AssertTrue(response["ok"].Value<bool>(), "reasoning response ok");
+            AssertEqual("chat-1", controller.LastChatId, "reasoning chat id");
+            AssertTrue(controller.LastChatReasoning, "reasoning payload");
+            AssertTrue(response["payload"]["activeChatReasoning"].Value<bool>(), "reasoning response");
+        }
+
         private static void BridgeUsesTypedSettingsPayload()
         {
             var controller = new AssistantController();

@@ -1,4 +1,5 @@
 (function () {
+  var MAX_LIVE_REASONING_CHARS = 24000;
   state.liveReasoning = state.liveReasoning || "";
   state.liveReasoningComplete = false;
 
@@ -49,7 +50,7 @@
       article = document.createElement("article");
       article.className = "message assistant pending agent-live";
     }
-    var block = reasoningBlock(state.liveReasoning, null, !state.liveReasoningComplete, state.liveReasoning.length >= 100000);
+    var block = reasoningBlock(state.liveReasoning, null, !state.liveReasoningComplete, state.liveReasoning.length >= MAX_LIVE_REASONING_CHARS);
     article.insertBefore(block, article.firstChild);
     return article;
   };
@@ -69,17 +70,21 @@
       }
       if (!response || response.type !== "progress") return;
       var payload = response.payload || {};
+      var pending = state.pending[response.id];
+      var progressChatId = payload.chatId || payload.ChatId || (pending && pending.payload && pending.payload.chatId) || "";
+      if (progressChatId && progressChatId !== state.activeChatId) return;
       var delta = payload.reasoningDelta || payload.ReasoningDelta || "";
       var completed = !!(payload.reasoningComplete || payload.ReasoningComplete);
       if (!delta && !completed) return;
       if (delta) {
         state.liveReasoning += delta;
-        if (state.liveReasoning.length > 100000) {
-          state.liveReasoning = state.liveReasoning.substring(0, 100000);
+        if (state.liveReasoning.length > MAX_LIVE_REASONING_CHARS) {
+          state.liveReasoning = state.liveReasoning.substring(0, MAX_LIVE_REASONING_CHARS);
         }
       }
       state.liveReasoningComplete = completed;
-      renderMessages();
+      if (typeof scheduleLiveStreamRender === "function") scheduleLiveStreamRender();
+      else renderMessages();
     });
   }
 }());

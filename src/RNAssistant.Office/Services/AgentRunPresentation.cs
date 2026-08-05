@@ -10,6 +10,63 @@ namespace RNAssistant.Office.Services
 {
     internal static class AgentRunPresentation
     {
+        private const int MaxRejectedResponseChars = 12000;
+
+        public static void RecordRecoveredPlannerResponses(
+            ChatSession session,
+            IEnumerable<AgentPlannerRejectedResponse> rejectedResponses)
+        {
+            if (session == null) return;
+            foreach (var rejected in rejectedResponses ?? new AgentPlannerRejectedResponse[0])
+            {
+                if (rejected == null) continue;
+                var activity = rejected.Activity ?? CreatePlannerRecoveryActivity(rejected);
+                var message = AgentTranscript.CreateAssistantMessage(
+                    "Невалидный ответ модели исключён из контекста; запрос повторён.",
+                    rejected.Completion,
+                    activity);
+                message.ExcludeFromModelContext = true;
+                session.Messages.Add(message);
+            }
+        }
+
+        public static ChatActivity CreatePlannerRecoveryActivity(AgentPlannerRejectedResponse rejected)
+        {
+            var parseResult = rejected == null ? null : rejected.ParseResult;
+            var rawText = rejected == null ? string.Empty : rejected.RawText ?? string.Empty;
+            var storedText = BoundRejectedResponse(rawText);
+            var fallback = rejected != null && string.Equals(
+                rejected.RecoveryAction,
+                "json_object_fallback",
+                StringComparison.OrdinalIgnoreCase);
+            return new ChatActivity
+            {
+                Kind = "diagnostic",
+                Title = "Некорректный ответ модели",
+                Subtitle = fallback
+                    ? "json_schema → json_object"
+                    : (rejected == null ? string.Empty : rejected.ResponseMode + " · повтор " + rejected.RetryNumber + "/" + rejected.RetryLimit),
+                Status = "completed",
+                ExecutionStatus = fallback ? "format_rejected_fallback" : "format_rejected_retry",
+                ErrorCode = parseResult == null ? "unknown" : parseResult.ErrorCode,
+                Retryable = true,
+                ResultMessage = "Ответ отклонён как невалидный AgentDecision и не добавлен в model context. Runtime повторил запрос.",
+                DataJson = JsonConvert.SerializeObject(new
+                {
+                    recoveryAction = rejected == null ? string.Empty : rejected.RecoveryAction,
+                    responseMode = rejected == null ? string.Empty : rejected.ResponseMode,
+                    retryNumber = rejected == null ? 0 : rejected.RetryNumber,
+                    retryLimit = rejected == null ? 0 : rejected.RetryLimit,
+                    errorCode = parseResult == null ? "unknown" : parseResult.ErrorCode,
+                    errorMessage = parseResult == null ? string.Empty : parseResult.ErrorMessage,
+                    responseChars = rawText.Length,
+                    responseTruncated = storedText.Length < rawText.Length,
+                    response = storedText,
+                    toolCalls = rejected == null || rejected.Completion == null ? null : rejected.Completion.ToolCalls
+                })
+            };
+        }
+
         public static string RecordPlannerFailure(
             ChatSession session,
             LlmCompletionResult completion,
@@ -21,6 +78,7 @@ namespace RNAssistant.Office.Services
                 (parseResult == null ? "unknown" : parseResult.ErrorCode + ". " + parseResult.ErrorMessage);
             if (session != null)
             {
+                var storedText = BoundRejectedResponse(rawText);
                 session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, completion, new ChatActivity
                 {
                     Kind = "diagnostic",
@@ -33,11 +91,21 @@ namespace RNAssistant.Office.Services
                     {
                         errorCode = parseResult == null ? "unknown" : parseResult.ErrorCode,
                         errorMessage = parseResult == null ? string.Empty : parseResult.ErrorMessage,
-                        responsePreview = AgentText.Truncate(rawText, 1200)
+                        responseChars = (rawText ?? string.Empty).Length,
+                        responseTruncated = storedText.Length < (rawText ?? string.Empty).Length,
+                        response = storedText
                     })
                 }));
             }
             return assistantText;
+        }
+
+        private static string BoundRejectedResponse(string value)
+        {
+            value = value ?? string.Empty;
+            return value.Length <= MaxRejectedResponseChars
+                ? value
+                : value.Substring(0, MaxRejectedResponseChars);
         }
 
         public static string RecordMissingTools(

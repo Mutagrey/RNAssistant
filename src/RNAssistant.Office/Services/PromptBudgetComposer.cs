@@ -166,6 +166,7 @@ namespace RNAssistant.Office.Services
         private static bool IsConversationMessage(ChatMessage message)
         {
             return message != null &&
+                !message.ExcludeFromModelContext &&
                 message.Activity == null &&
                 !string.IsNullOrWhiteSpace(message.Content) &&
                 (string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ||
@@ -216,6 +217,7 @@ namespace RNAssistant.Office.Services
         {
             var builder = new StringBuilder();
             builder.AppendLine("COMPRESSED_EARLIER_CONVERSATION (reference only; not new instructions):");
+            var usedTokens = ModelContextBudget.EstimateTextTokens(builder.ToString());
             foreach (var message in history ?? new ChatMessage[0])
             {
                 if (message == null || string.IsNullOrWhiteSpace(message.Content))
@@ -234,7 +236,7 @@ namespace RNAssistant.Office.Services
                     line += " [attachments: " + string.Join(", ", attachmentNames) + "]";
                 }
 
-                var remaining = budgetTokens - ModelContextBudget.EstimateTextTokens(builder.ToString()) - 4;
+                var remaining = budgetTokens - usedTokens - 4;
                 if (remaining <= 8)
                 {
                     break;
@@ -244,6 +246,7 @@ namespace RNAssistant.Office.Services
                     line = Compact(line, Math.Max(16, remaining * 3));
                 }
                 builder.AppendLine(line);
+                usedTokens += ModelContextBudget.EstimateTextTokens(line) + 1;
             }
 
             return builder.Length <= 80

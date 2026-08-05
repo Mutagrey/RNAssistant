@@ -87,6 +87,14 @@ namespace RNAssistant.Core.Storage
             settings.SystemPromptRole = NormalizePromptRole(settings.SystemPromptRole, defaults.SystemPromptRole);
             settings.ToolResultRole = NormalizeToolResultRole(settings.ToolResultRole, defaults.ToolResultRole);
             settings.AgentResponseMode = NormalizeResponseMode(settings.AgentResponseMode, defaults.AgentResponseMode);
+            settings.ReasoningRequestMode = ReasoningRequestModes.Normalize(settings.ReasoningRequestMode);
+            foreach (var capability in settings.ModelCapabilities.Values)
+            {
+                if (capability != null)
+                {
+                    capability.ReasoningRequestMode = ReasoningRequestModes.NormalizeOverride(capability.ReasoningRequestMode);
+                }
+            }
             NormalizeAgentPrompts(settings);
             if (settings.MaxTokens <= 0)
             {
@@ -132,6 +140,11 @@ namespace RNAssistant.Core.Storage
             {
                 settings.MaxAgentIterations = 50;
             }
+            if (settings.MaxAgentFormatRetries <= 0)
+            {
+                settings.MaxAgentFormatRetries = defaults.MaxAgentFormatRetries;
+            }
+            settings.MaxAgentFormatRetries = Math.Max(1, Math.Min(5, settings.MaxAgentFormatRetries));
             if (settings.MaxAgentToolSteps <= 0)
             {
                 settings.MaxAgentToolSteps = defaults.MaxAgentToolSteps;

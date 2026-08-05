@@ -88,6 +88,7 @@
     <Compile Include="Models\ToolModels.cs" />
     <Compile Include="Models\VbaModels.cs" />
     <Compile Include="Llm\LlmClient.cs" />
+    <Compile Include="Llm\LlmHttpTransport.cs" />
     <Compile Include="Llm\LlmMessageBuilder.cs" />
     <Compile Include="Llm\LlmRequestModels.cs" />
     <Compile Include="Llm\LlmResponseModels.cs" />

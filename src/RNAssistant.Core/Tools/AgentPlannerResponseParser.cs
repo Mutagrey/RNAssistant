@@ -147,7 +147,7 @@ namespace RNAssistant.Core.Tools
             {
                 ["protocolVersion"] = AgentDecisionProtocol.Version,
                 ["kind"] = AgentResponseKinds.Tool,
-                ["decisionSummary"] = "Call " + toolId,
+                ["decisionSummary"] = VisibleNativeSummary(completion, toolId),
                 ["goal"] = null,
                 ["plan"] = null,
                 ["tool"] = new JObject { ["toolId"] = toolId, ["arguments"] = arguments },
@@ -159,6 +159,14 @@ namespace RNAssistant.Core.Tools
                 parsed.Response.Tool.ToolCallId = call.Id;
             }
             return parsed;
+        }
+
+        private static string VisibleNativeSummary(LlmCompletionResult completion, string toolId)
+        {
+            var content = completion == null ? null : completion.Content;
+            return string.IsNullOrWhiteSpace(content)
+                ? "Выполняю следующее действие: " + toolId + "."
+                : content.Trim();
         }
 
         private static bool KnownKind(string kind)

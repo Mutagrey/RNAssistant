@@ -326,10 +326,64 @@ namespace RNAssistant.Harness
                 AssertEqual("Done.", result.AssistantText, "assistant text");
                 AssertEqual(3, calls.Count, "llm call count");
                 AssertTrue(ContainsMessage(calls[1], "previous response was not a valid AgentDecision v1 decision"), "repair prompt");
+                AssertTrue(!ContainsMessage(calls[1], "```rnassistant-agent"), "malformed response omitted from repair context");
                 AssertTrue(ContainsMessage(calls[1], "Create a new sheet named Report."), "repair keeps original request");
                 AssertTrue(ContainsMessage(calls[1], "excel.add_sheet"), "repair keeps available tools");
                 AssertEqual(1, adapter.Executed.Count, "adapter execution count");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "executed tool");
+            });
+        }
+
+        private static void ChatRepeatedMalformedResponsesRecoverWithoutReplayPollution()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                const string firstGarbage = "FORMAT_GARBAGE_ONE";
+                const string secondGarbage = "FORMAT_GARBAGE_TWO";
+                const string laterGarbage = "FORMAT_GARBAGE_LATER";
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    RawResponse(firstGarbage + ": safety proxy prose"),
+                    RawResponse("{\"refusal\":\"" + secondGarbage + "\"}"),
+                    AgentBlock(Command("excel.get_context")),
+                    RawResponse(laterGarbage + ": another non-JSON answer"),
+                    FinalBlock("Context read after recovery."));
+                var session = NewSession(adapter);
+
+                var result = service.ExecuteAsync(
+                    "What is in the current workbook?",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings
+                    {
+                        FallbackToJsonObject = false,
+                        MaxAgentFormatRetries = 2
+                    },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Context read after recovery.", result.AssistantText, "final response after repeated format recovery");
+                AssertEqual(5, calls.Count, "two initial retries and one later-turn retry");
+                AssertEqual(1, adapter.Executed.Count, "tool executes once after recovery");
+                AssertTrue(!ContainsMessage(calls[1], firstGarbage), "first rejected response omitted from first retry");
+                AssertTrue(!ContainsMessage(calls[2], firstGarbage) && !ContainsMessage(calls[2], secondGarbage), "retries rebuild from clean base context");
+                AssertTrue(!ContainsMessage(calls[3], firstGarbage) && !ContainsMessage(calls[3], secondGarbage), "rejected responses absent after tool turn");
+                AssertTrue(!ContainsMessage(calls[4], laterGarbage), "later rejected response omitted from its retry");
+
+                var diagnostics = session.Messages
+                    .Where(message => message != null && message.Activity != null &&
+                        (message.Activity.ExecutionStatus ?? string.Empty).StartsWith("format_rejected", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                AssertEqual(3, diagnostics.Count, "all recovered responses remain visible as diagnostics");
+                AssertTrue(diagnostics.All(message => message.ExcludeFromModelContext), "recovery diagnostics explicitly excluded from model context");
+                var diagnosticJson = JsonConvert.SerializeObject(diagnostics.Select(message => message.Activity));
+                AssertContains(diagnosticJson, firstGarbage, "first raw response available in diagnostic details");
+                AssertContains(diagnosticJson, secondGarbage, "second raw response available in diagnostic details");
+                AssertContains(diagnosticJson, laterGarbage, "later raw response available in diagnostic details");
+                AssertTrue(!ContainsMessage(PromptBudgetComposer.ConversationHistory(session), firstGarbage), "diagnostics absent from rebuilt conversation history");
             });
         }
 
@@ -382,7 +436,7 @@ namespace RNAssistant.Harness
                     "Create a new sheet named Report.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, FallbackToJsonObject = false },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, FallbackToJsonObject = false, MaxAgentFormatRetries = 1 },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using PDFtoImage;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
@@ -16,14 +17,17 @@ namespace RNAssistant.Office.Services
         public static IReadOnlyList<ModelImagePart> ReadForModel(
             AttachmentStore store,
             AppSettings settings,
-            ChatAttachment attachment)
+            ChatAttachment attachment,
+            int maxImages,
+            CancellationToken cancellationToken)
         {
             if (attachment == null)
             {
                 return new ModelImagePart[0];
             }
-            if (attachment.Kind == "image")
+            if (string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var bytes = AttachmentImageService.ReadForModel(store, attachment);
                 return bytes == null || bytes.Length == 0
                     ? (IReadOnlyList<ModelImagePart>)new ModelImagePart[0]
@@ -37,7 +41,8 @@ namespace RNAssistant.Office.Services
                         }
                     };
             }
-            if (attachment.Kind != "pdf" || !ModelContextBudget.SupportsImages(settings))
+            if (!string.Equals(attachment.Kind, "pdf", StringComparison.OrdinalIgnoreCase) ||
+                !ModelContextBudget.SupportsImages(settings))
             {
                 return new ModelImagePart[0];
             }
@@ -49,11 +54,13 @@ namespace RNAssistant.Office.Services
             }
 
             var pageCount = attachment.PageCount > 0 ? attachment.PageCount : Conversion.GetPageCount(pdf);
-            var limit = Math.Min(pageCount, ModelContextBudget.MaxImagesPerPrompt(settings));
+            var requested = maxImages <= 0 ? ModelContextBudget.MaxImagesPerPrompt(settings) : maxImages;
+            var limit = Math.Min(pageCount, Math.Min(ModelContextBudget.MaxImagesPerPrompt(settings), requested));
             var indexes = SelectPages(attachment.PageTextLengths, pageCount, limit);
             var result = new List<ModelImagePart>();
             foreach (var pageIndex in indexes)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var pageSize = Conversion.GetPageSize(pdf, new Index(pageIndex));
                 var options = pageSize.Width >= pageSize.Height
                     ? new RenderOptions(Width: MaxPdfPageDimension, Height: null, WithAspectRatio: true)

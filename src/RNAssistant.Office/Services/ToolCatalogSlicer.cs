@@ -66,18 +66,43 @@ namespace RNAssistant.Office.Services
         {
             if (slice == null || settings == null || slice.Tools.Count <= 1) return;
             var limit = Math.Max(512, ModelContextBudget.InputBudgetTokens(settings) / 2);
-            while (slice.Tools.Count > 1)
+            if (EstimateRequestTokens(slice.Tools, settings) <= limit) return;
+
+            var low = 1;
+            var high = slice.Tools.Count - 1;
+            var selectedCount = 1;
+            while (low <= high)
             {
-                var options = AgentPlannerCompletionRunner.BuildOptions(settings.AgentResponseMode, slice.Tools);
-                var requestTokens = ModelContextBudget.EstimateRequestOptionsTokens(options) + EstimatePromptToolTokens(slice.Tools);
-                if (requestTokens <= limit) break;
-                var omitted = slice.Tools[slice.Tools.Count - 1];
-                slice.Tools.RemoveAt(slice.Tools.Count - 1);
+                var middle = low + (high - low) / 2;
+                var candidate = slice.Tools.Take(middle).ToList();
+                if (EstimateRequestTokens(candidate, settings) <= limit)
+                {
+                    selectedCount = middle;
+                    low = middle + 1;
+                }
+                else
+                {
+                    high = middle - 1;
+                }
+            }
+
+            for (var index = slice.Tools.Count - 1; index >= selectedCount; index--)
+            {
+                var omitted = slice.Tools[index];
                 slice.Excluded.Add(Exclude(omitted, "request_token_limit", "Tool schema was omitted to keep the request inside the model context budget."));
             }
+            slice.Tools.RemoveRange(selectedCount, slice.Tools.Count - selectedCount);
         }
 
-        private static int EstimatePromptToolTokens(IEnumerable<ToolDefinition> tools)
+        private static int EstimateRequestTokens(IReadOnlyList<ToolDefinition> tools, AppSettings settings)
+        {
+            var options = AgentPlannerCompletionRunner.BuildOptions(settings.AgentResponseMode, tools);
+            var structured = options.NativeTools ||
+                string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.OrdinalIgnoreCase);
+            return ModelContextBudget.EstimateRequestOptionsTokens(options) + EstimatePromptToolTokens(tools, structured);
+        }
+
+        private static int EstimatePromptToolTokens(IEnumerable<ToolDefinition> tools, bool structured)
         {
             return (tools ?? new ToolDefinition[0]).Sum(tool => tool == null
                 ? 0
@@ -87,7 +112,7 @@ namespace RNAssistant.Office.Services
                     (tool.ArgumentSchemaJson ?? string.Empty) + "\n" +
                     (tool.UseWhen ?? string.Empty) + "\n" +
                     (tool.DoNotUseWhen ?? string.Empty) + "\n" +
-                    (tool.ExamplesJson ?? string.Empty)));
+                    (structured ? string.Empty : tool.ExamplesJson ?? string.Empty)));
         }
 
         private static ToolExclusion CandidateExclusion(ToolDefinition tool, string host)

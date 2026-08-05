@@ -237,16 +237,38 @@ namespace RNAssistant.Core.Storage
 
         public string ReadExtractedText(ChatAttachment attachment)
         {
-            if (attachment == null)
+            return ReadExtractedText(attachment, int.MaxValue);
+        }
+
+        public string ReadExtractedText(ChatAttachment attachment, int maxChars)
+        {
+            if (attachment == null || maxChars <= 0)
             {
                 return string.Empty;
             }
             var path = ExtractedTextAbsolutePath(attachment);
             if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
             {
-                return File.ReadAllText(path, Encoding.UTF8);
+                if (maxChars == int.MaxValue)
+                {
+                    return File.ReadAllText(path, Encoding.UTF8);
+                }
+
+                var builder = new StringBuilder(Math.Min(maxChars, 16384));
+                var buffer = new char[Math.Min(maxChars, 4096)];
+                using (var reader = new StreamReader(path, Encoding.UTF8, true))
+                {
+                    while (builder.Length < maxChars)
+                    {
+                        var read = reader.Read(buffer, 0, Math.Min(buffer.Length, maxChars - builder.Length));
+                        if (read <= 0) break;
+                        builder.Append(buffer, 0, read);
+                    }
+                }
+                return builder.ToString();
             }
-            return attachment.ExtractedText ?? string.Empty;
+            var inline = attachment.ExtractedText ?? string.Empty;
+            return inline.Length <= maxChars ? inline : inline.Substring(0, maxChars);
         }
 
         private void ExtractText(ChatAttachment attachment, string path)

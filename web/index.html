@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="css/app.css?v=scrollbar-hover-20260723-1">
   <link rel="stylesheet" href="css/app-chat.css?v=chat-title-weight-20260723-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=chatui-20260622-1">
-  <link rel="stylesheet" href="css/app-composer.css?v=composer-soft-shadow-20260723-1">
+  <link rel="stylesheet" href="css/app-composer.css?v=compact-runtime-20260805-3">
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=mediarouting-20260722-1">
@@ -23,9 +23,9 @@
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260702-2">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=chatui-20260702-2">
-  <link rel="stylesheet" href="css/app-responsive.css?v=chatbar-alignment-20260723-1">
-  <link rel="stylesheet" href="css/app-agent.css?v=agent-plan-20260805-1">
-  <link rel="stylesheet" href="css/app-agent-data.css?v=chatui-20260622-1">
+  <link rel="stylesheet" href="css/app-responsive.css?v=compact-runtime-20260805-2">
+  <link rel="stylesheet" href="css/app-agent.css?v=compact-runtime-20260805-2">
+  <link rel="stylesheet" href="css/app-agent-data.css?v=agent-transcript-20260805-3">
 </head>
 <body>
   <div class="shell">
@@ -82,7 +82,14 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
           </button>
         </div>
-        <div class="agent-plan-dock hidden" id="agentPlanDock" aria-live="polite"></div>
+        <div class="chat-runtime-dock" id="chatRuntimeDock">
+          <div class="context-meter" id="contextMeter" title="Использование контекста" aria-label="Использование контекста">
+            <strong id="contextMeterValue">0%</strong>
+            <em id="contextMeterDetail">0 / 0</em>
+          </div>
+          <div class="agent-plan-dock hidden" id="agentPlanDock" aria-live="polite"></div>
+        </div>
+        <div class="agent-approval-dock hidden" id="agentApprovalDock" aria-live="polite"></div>
         <form class="composer" id="chatForm">
           <div class="composer-input-wrap">
             <textarea id="chatInput" rows="2" placeholder="Спросите про текущий документ..."></textarea>
@@ -138,21 +145,32 @@
                   <span class="model-capability-indicator" id="modelCapabilityIndicator" title="Мультимодальность модели" aria-label="Мультимодальность модели"></span>
                 </div>
               </details>
-              <div class="context-meter" id="contextMeter" title="Использование контекста" aria-label="Использование контекста">
-                <strong id="contextMeterValue">0%</strong>
-                <em id="contextMeterDetail">0 / 0 символов</em>
-              </div>
             </div>
             <div class="composer-actions">
-              <label class="composer-mode" title="Режим чата">
-                <select id="chatModeSelect" aria-label="Режим чата">
-                  <option value="agent">Agent</option>
-                  <option value="chat">Chat</option>
-                </select>
-              </label>
-              <label class="composer-model" title="Модель чата">
-                <select id="chatModelSelect" aria-label="Модель чата"></select>
-              </label>
+              <details class="composer-picker composer-mode-picker" id="chatModePicker">
+                <summary class="composer-picker-trigger" id="chatModeButton" title="Режим чата" aria-label="Режим чата">
+                  <span class="composer-picker-trigger-icon" id="chatModeButtonIcon" aria-hidden="true"></span>
+                  <span class="composer-picker-trigger-label" id="chatModeButtonLabel">Agent</span>
+                  <span class="composer-picker-trigger-caret" aria-hidden="true">⌄</span>
+                </summary>
+                <div class="composer-picker-menu composer-mode-menu" id="chatModeMenu" role="listbox" aria-label="Выбор режима чата"></div>
+              </details>
+              <select id="chatModeSelect" class="hidden" aria-label="Режим чата">
+                <option value="agent">Agent</option>
+                <option value="chat">Chat</option>
+              </select>
+              <details class="composer-picker composer-model-picker" id="chatModelPicker">
+                <summary class="composer-picker-trigger" id="chatModelButton" title="Модель чата" aria-label="Модель чата">
+                  <span class="composer-picker-trigger-icon model" aria-hidden="true">✦</span>
+                  <span class="composer-picker-trigger-label" id="chatModelButtonLabel">Модель</span>
+                  <span class="composer-picker-trigger-caret" aria-hidden="true">⌄</span>
+                </summary>
+                <div class="composer-picker-menu composer-model-menu" id="chatModelMenu" role="listbox" aria-label="Выбор модели чата"></div>
+              </details>
+              <select id="chatModelSelect" class="hidden" aria-label="Модель чата"></select>
+              <button type="button" class="composer-reasoning-button" id="chatReasoningToggle" title="Reasoning выключен" aria-label="Включить reasoning" aria-pressed="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M8.4 14.7A6 6 0 1 1 15.6 14.7c-.9.7-1.4 1.6-1.6 2.3h-4c-.2-.7-.7-1.6-1.6-2.3Z"/><path d="M12 1V0"/><path d="m4.9 4.9-.8-.8"/><path d="m19.9 4.1-.8.8"/></svg>
+              </button>
               <button type="submit" class="composer-send-button" id="sendButton" title="Отправить" aria-label="Отправить">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.75a1 1 0 0 1 .7.29l5.25 5.25a1 1 0 1 1-1.41 1.42L13 8.16V18a1 1 0 1 1-2 0V8.16l-3.54 3.55a1 1 0 0 1-1.41-1.42l5.25-5.25a1 1 0 0 1 .7-.29Z"/></svg>
               </button>
@@ -450,6 +468,7 @@
               <div class="form-grid two-columns">
                 <label><span>Модель по умолчанию</span><select id="modelSelect"></select></label>
                 <label><span>ID модели вручную</span><input id="modelInput" autocomplete="off" placeholder="Если модели нет в каталоге"></label>
+                <label class="wide"><span>Параметр reasoning API</span><select id="reasoningRequestModeInput"><option value="auto">Авто — стандарт OpenAI reasoning_effort</option><option value="reasoning_effort">reasoning_effort: medium / none</option><option value="enable_thinking">enable_thinking: true / false</option><option value="chat_template_kwargs">chat_template_kwargs.enable_thinking</option><option value="reasoning_enabled">reasoning.enabled: true / false</option></select><small>Для QwenCloud выберите enable_thinking, для vLLM — chat_template_kwargs, для OpenRouter — reasoning.enabled. Каталог модели может переопределить режим.</small></label>
                 <div class="model-info wide" id="modelInfo"></div>
                 <section class="model-capability-section wide" aria-labelledby="modelCapabilityTitle">
                   <div class="model-capability-heading">
@@ -500,6 +519,7 @@
                 <label class="checkline"><input id="autoCompressContextInput" type="checkbox"><span>Сжимать старую историю при нехватке контекста</span></label>
                 <label class="checkline"><input id="includeVbaContextInput" type="checkbox"><span>Включать VBA-контекст автоматически</span></label>
                 <label><span>Макс. итераций агента</span><input id="maxAgentIterationsInput" type="number" min="1" max="50"></label>
+                <label><span>Повторов при ошибке формата</span><input id="maxAgentFormatRetriesInput" type="number" min="1" max="5"></label>
                 <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1" max="200"></label>
                 <label><span>Tools в одном planner prompt</span><input id="maxAgentToolsPerRequestInput" type="number" min="8" max="64"></label>
                 <label><span>VBA-контекст, символы</span><input id="vbaContextLimitInput" type="number" min="1000" max="200000"></label>
@@ -622,18 +642,18 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=agent-plan-20260805-1"></script>
+  <script src="js/app-core.js?v=reasoning-toggle-20260805-1"></script>
   <script src="js/app-utils.js?v=chatui-20260620-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
   <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js?v=mediarouting-20260722-1"></script>
+  <script src="js/app-settings.js?v=reasoning-transport-20260805-1"></script>
   <script src="js/app-prompts.js?v=chatui-20260703-1"></script>
-  <script src="js/app-model-data.js?v=mediarouting-20260722-1"></script>
-  <script src="js/app-model-render.js?v=mediarouting-20260722-1"></script>
-  <script src="js/app-models.js?v=send-button-polish-20260723-1"></script>
+  <script src="js/app-model-data.js?v=reasoning-transport-20260805-1"></script>
+  <script src="js/app-model-render.js?v=rich-model-picker-20260805-1"></script>
+  <script src="js/app-models.js?v=reasoning-toggle-20260805-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=chat-tree-caret-removal-20260723-1"></script>
+  <script src="js/app-chat-state.js?v=compact-context-20260805-1"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
   <script src="js/app-tools.js?v=chatui-20260622-4"></script>
   <script src="js/app-skills.js?v=chatui-20260622-4"></script>
@@ -641,14 +661,14 @@
   <script src="js/app-html-workspace.js?v=chatui-20260703-2"></script>
   <script src="js/app-context.js?v=chatui-20260622-1"></script>
   <script src="js/app-agent-data.js?v=chatui-20260622-1"></script>
-  <script src="js/app-agent-model.js?v=agent-plan-20260805-1"></script>
+  <script src="js/app-agent-model.js?v=agent-transcript-20260805-2"></script>
   <script src="js/app-chart-artifacts.js?v=chatui-20260622-2"></script>
   <script src="js/app-html-artifacts.js?v=chatui-20260702-2"></script>
-  <script src="js/app-agent.js?v=agent-plan-20260805-1"></script>
-  <script src="js/app-messages.js?v=agent-plan-20260805-1"></script>
-  <script src="js/app-reasoning.js?v=reasoning-20260722-1"></script>
+  <script src="js/app-agent.js?v=compact-plan-20260805-1"></script>
+  <script src="js/app-messages.js?v=agent-transcript-20260805-3"></script>
+  <script src="js/app-reasoning.js?v=reasoning-20260805-1"></script>
   <script src="js/app-attachments.js?v=mediarouting-20260722-1"></script>
-  <script src="js/app-chat.js?v=chat-tree-caret-removal-20260723-1"></script>
+  <script src="js/app-chat.js?v=rich-composer-picker-20260805-1"></script>
   <script src="js/app-chat-edit.js?v=chat-edit-20260723-1"></script>
   <script src="js/app.js?v=topbar-removal-20260723-1"></script>
 </body>

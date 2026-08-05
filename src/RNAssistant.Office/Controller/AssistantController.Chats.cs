@@ -82,6 +82,7 @@ namespace RNAssistant.Office
                 fork.Model = source.Model;
                 fork.Mode = ChatModes.Normalize(source.Mode);
                 fork.HtmlModeEnabled = source.HtmlModeEnabled;
+                fork.ReasoningEnabled = source.ReasoningEnabled;
                 fork.Context = ChatCloneService.CloneContext(LoadContext(source)) ?? CreateEmptyContext();
                 fork.HtmlWorkspace = ChatCloneService.CloneWorkspaceForFork(source.HtmlWorkspace);
                 fork.Messages = targetIndex < 0
@@ -255,6 +256,14 @@ namespace RNAssistant.Office
             return ChatState(session);
         }
 
+        public ChatStateResponse SetChatReasoning(string chatId, bool enabled)
+        {
+            var session = LoadSession(chatId);
+            session.ReasoningEnabled = enabled;
+            SaveSessionChanges(session);
+            return ChatState(session);
+        }
+
         public ChatStateResponse ClearChat(string chatId)
         {
             var session = LoadSession(chatId);
@@ -341,6 +350,7 @@ namespace RNAssistant.Office
                 ActiveChatModel = session == null ? string.Empty : session.Model,
                 ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
                 ActiveChatHtmlMode = session != null && session.HtmlModeEnabled,
+                ActiveChatReasoning = session != null && session.ReasoningEnabled,
                 Chats = _chatSessions.GetChatSummaries(activeId),
                 Documents = ListOpenDocuments(),
                 Context = session == null ? CreateEmptyContext() : LoadContext(session),

@@ -24,6 +24,7 @@ function normalizeProgressActivity(progress) {
     var copy = cloneActivity(activity);
     var phase = (progress.phase || progress.Phase || "").toLowerCase();
     var message = progress.message || progress.Message || "";
+    copy.__progressPhase = phase;
     if (message) {
       var progressTitle = message.replace(/[.]+$/, "");
       if (copy.ProgressTitle !== undefined) {
@@ -37,6 +38,9 @@ function normalizeProgressActivity(progress) {
         } else {
           copy.title = progressTitle;
         }
+      }
+      if (phase === "plan") {
+        copy.__decisionMessage = message.trim();
       }
     }
     return copy;
@@ -117,7 +121,7 @@ function activityText(activity) {
 
 function activityTimelineKey(activity) {
   var pendingId = activityPendingId(activity);
-  if (pendingId) {
+  if (pendingId && !activityToolId(activity)) {
     return "pending:" + pendingId;
   }
 
@@ -175,6 +179,10 @@ function recordActivityTimeline(items, activity) {
     var existing = items[i];
     if (!existing || existing.__timelineKey !== key) {
       continue;
+    }
+
+    if (!copy.__decisionMessage && existing.__decisionMessage) {
+      copy.__decisionMessage = existing.__decisionMessage;
     }
 
     if (kind === "plan") {

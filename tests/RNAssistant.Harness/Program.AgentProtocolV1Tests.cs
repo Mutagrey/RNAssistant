@@ -59,6 +59,39 @@ namespace RNAssistant.Harness
             AssertEqual("rna_excel_get_context", (string)nativeBody.SelectToken("tools[0].function.name"), "native function name");
             AssertEqual(true, (bool)nativeBody.SelectToken("tools[0].function.strict"), "native function strict flag");
 
+            settings.ModelCapabilities["test-model"] = new ModelCapabilitySettings { SupportsReasoning = true };
+            var reasoningBody = LlmClient.BuildRequestBody(settings, messages, 10, new LlmRequestOptions { ReasoningEnabled = true });
+            AssertEqual("medium", (string)reasoningBody["reasoning_effort"], "reasoning toggle enables medium effort");
+            var noReasoningBody = LlmClient.BuildRequestBody(settings, messages, 10, new LlmRequestOptions { ReasoningEnabled = false });
+            AssertEqual("none", (string)noReasoningBody["reasoning_effort"], "reasoning toggle disables effort");
+
+            settings.ReasoningRequestMode = ReasoningRequestModes.EnableThinking;
+            var enableThinkingBody = LlmClient.BuildRequestBody(settings, messages, 10, new LlmRequestOptions { ReasoningEnabled = true });
+            AssertEqual(true, (bool)enableThinkingBody["enable_thinking"], "reasoning toggle supports enable_thinking boolean");
+            var disableThinkingBody = LlmClient.BuildRequestBody(settings, messages, 10, new LlmRequestOptions { ReasoningEnabled = false });
+            AssertEqual(false, (bool)disableThinkingBody["enable_thinking"], "reasoning toggle disables enable_thinking boolean");
+
+            settings.ReasoningRequestMode = ReasoningRequestModes.ChatTemplateKwargs;
+            var kwargsBody = LlmClient.BuildRequestBody(settings, messages, 10, new LlmRequestOptions { ReasoningEnabled = true });
+            AssertEqual(true, (bool)kwargsBody.SelectToken("chat_template_kwargs.enable_thinking"), "reasoning toggle supports vLLM chat template kwargs");
+
+            settings.ReasoningRequestMode = ReasoningRequestModes.ReasoningEnabled;
+            var reasoningEnabledBody = LlmClient.BuildRequestBody(settings, messages, 10, new LlmRequestOptions { ReasoningEnabled = false });
+            AssertEqual(false, (bool)reasoningEnabledBody.SelectToken("reasoning.enabled"), "reasoning toggle supports reasoning enabled object");
+
+            settings.ModelCapabilities["test-model"].ReasoningRequestMode = ReasoningRequestModes.EnableThinking;
+            var modelOverrideBody = LlmClient.BuildRequestBody(settings, messages, 10, new LlmRequestOptions { ReasoningEnabled = true });
+            AssertEqual(true, (bool)modelOverrideBody["enable_thinking"], "model reasoning request mode overrides global setting");
+            AssertTrue(modelOverrideBody["reasoning"] == null, "model reasoning override omits global transport");
+            settings.ModelCapabilities["test-model"].ReasoningRequestMode = null;
+            settings.ReasoningRequestMode = ReasoningRequestModes.Auto;
+
+            settings.Model = "text-model";
+            settings.ModelCapabilities["text-model"] = new ModelCapabilitySettings { SupportsReasoning = false };
+            var unsupportedReasoningBody = LlmClient.BuildRequestBody(settings, messages, 10, new LlmRequestOptions { ReasoningEnabled = true });
+            AssertTrue(unsupportedReasoningBody["reasoning_effort"] == null, "non-reasoning model omits reasoning effort");
+            settings.Model = "test-model";
+
             var nativeDecisionSchema = JObject.Parse(AgentDecisionSchemaBuilder.Build(new ToolDefinition[0], false));
             AssertTrue(!((JArray)nativeDecisionSchema.SelectToken("properties.kind.enum")).Values<string>().Contains("tool"), "native content schema excludes tool decisions");
 
@@ -74,6 +107,21 @@ namespace RNAssistant.Harness
                 new[] { localTool },
                 ToolSchemaSupport.BuildApiTools(new[] { localTool }));
             AssertEqual("native_tool_call_required", contentTool.ErrorCode, "native mode rejects content-based tool selection");
+
+            var apiTools = ToolSchemaSupport.BuildApiTools(new[] { localTool });
+            var visibleNative = new AgentPlannerResponseParser().ParseNative(
+                new LlmCompletionResult
+                {
+                    Content = "Контекст определен. Читаю текущий диапазон.",
+                    ToolCalls = new List<LlmToolCall>
+                    {
+                        new LlmToolCall { Id = "call_visible", Name = apiTools[0].ApiName, ArgumentsJson = "{}" }
+                    }
+                },
+                new[] { localTool },
+                apiTools);
+            AssertTrue(visibleNative.Success, "native progress text parses with tool call");
+            AssertEqual("Контекст определен. Читаю текущий диапазон.", visibleNative.Response.DecisionSummary, "native progress text remains visible");
         }
 
         private static void LlmSerializesOpenAiToolRoundTrip()
@@ -191,6 +239,8 @@ namespace RNAssistant.Harness
                         var resultMessage = calls[1].First(message => string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase));
                         var assistant = calls[1].First(message => message.ToolCalls != null && message.ToolCalls.Count == 1);
                         AssertEqual(assistant.ToolCalls[0].Id, resultMessage.ToolCallId, "synthetic JSON call id");
+                        AssertEqual(assistant.ToolCalls[0].Name, resultMessage.ToolName, "synthetic JSON tool name");
+                        new LlmMessageBuilder().Build(calls[1], null);
                     }
                     else
                     {
@@ -206,6 +256,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var modes = new List<string>();
+                var calls = new List<List<ChatMessage>>();
                 var turn = 0;
                 var service = new ChatCompletionService(
                     adapter,
@@ -218,6 +269,7 @@ namespace RNAssistant.Harness
                         CancellationToken cancellationToken)
                     {
                         modes.Add(requestOptions.ResponseFormat);
+                        calls.Add(new List<ChatMessage>(messages));
                         turn += 1;
                         if (turn == 1) return Task.FromResult(new LlmCompletionResult { Content = "endpoint ignored schema" });
                         if (turn == 2) return Task.FromResult(new LlmCompletionResult { Content = AgentBlock(Command("excel.get_context")) });
@@ -237,7 +289,80 @@ namespace RNAssistant.Harness
                 AssertEqual(LlmResponseFormats.JsonSchema, modes[0], "initial schema mode");
                 AssertEqual(LlmResponseFormats.JsonObject, modes[1], "fallback object mode");
                 AssertEqual(LlmResponseFormats.JsonObject, modes[2], "fallback mode persisted after tool execution");
+                AssertContains(FlattenMessages(calls[0]), "responseMode: json_schema", "initial prompt mode");
+                AssertContains(FlattenMessages(calls[1]), "responseMode: json_object", "fallback prompt mode switches with transport");
             });
+        }
+
+        private static void AgentTimeoutDoesNotTriggerSchemaFallback()
+        {
+            var calls = 0;
+            var runner = new AgentPlannerCompletionRunner(delegate
+            {
+                calls += 1;
+                return Task.FromException<LlmCompletionResult>(new LlmRequestException(
+                    LlmFailureKind.Timeout,
+                    "timeout"));
+            });
+            var thrown = false;
+            try
+            {
+                runner.CompleteAsync(
+                    new AppSettings(),
+                    new[] { new ChatMessage { Role = "user", Content = "test" } },
+                    new ToolDefinition[0],
+                    new AgentRunState(),
+                    null,
+                    null,
+                    "thinking",
+                    "repairing",
+                    "repair",
+                    CancellationToken.None).GetAwaiter().GetResult();
+            }
+            catch (LlmRequestException ex)
+            {
+                thrown = ex.Kind == LlmFailureKind.Timeout;
+            }
+            AssertTrue(thrown, "timeout propagated");
+            AssertEqual(1, calls, "timeout is not retried as json_object");
+        }
+
+        private static void AgentSchemaRejectionTriggersFallback()
+        {
+            var modes = new List<string>();
+            var runner = new AgentPlannerCompletionRunner(delegate(
+                AppSettings settings,
+                IEnumerable<ChatMessage> messages,
+                LlmRequestOptions requestOptions,
+                Action<LlmStreamUpdate> progress,
+                CancellationToken cancellationToken)
+            {
+                modes.Add(requestOptions.ResponseFormat);
+                if (modes.Count == 1)
+                {
+                    return Task.FromException<LlmCompletionResult>(new LlmRequestException(
+                        LlmFailureKind.ResponseFormatUnsupported,
+                        "response_format is unsupported"));
+                }
+                return Task.FromResult(new LlmCompletionResult { Content = FinalBlock("ok") });
+            });
+
+            var attempt = runner.CompleteAsync(
+                new AppSettings(),
+                new[] { new ChatMessage { Role = "user", Content = "test" } },
+                new ToolDefinition[0],
+                new AgentRunState(),
+                null,
+                null,
+                "thinking",
+                "repairing",
+                "repair",
+                CancellationToken.None).GetAwaiter().GetResult();
+
+            AssertTrue(attempt.ParseResult.Success, "explicit schema rejection falls back successfully");
+            AssertEqual(2, modes.Count, "schema rejection retries once");
+            AssertEqual(LlmResponseFormats.JsonSchema, modes[0], "schema rejection starts in schema mode");
+            AssertEqual(LlmResponseFormats.JsonObject, modes[1], "schema rejection retries in object mode");
         }
 
         private static void InvalidCustomToolSchemaIsIgnored()

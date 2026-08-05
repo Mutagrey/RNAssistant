@@ -12,6 +12,8 @@ namespace RNAssistant.Office
 {
     internal static class AgentTranscript
     {
+        private const int MaxTranscriptReasoningChars = 24000;
+
         public static void AddLocalResultMessage(ChatSession session, ToolCommand command, ToolResult result)
         {
             session.Messages.Add(CreateLocalResultMessage(command, result));
@@ -24,24 +26,30 @@ namespace RNAssistant.Office
             {
                 Role = "assistant",
                 Content = CreateToolFallbackContent(activity),
+                ExcludeFromModelContext = true,
                 Activity = activity
             };
         }
 
         public static ChatMessage CreateAssistantMessage(string content, LlmCompletionResult completion, ChatActivity activity = null)
         {
+            var reasoning = completion == null ? null : completion.ReasoningContent;
+            var transcriptReasoningTruncated = !string.IsNullOrEmpty(reasoning) && reasoning.Length > MaxTranscriptReasoningChars;
             return new ChatMessage
             {
                 Role = "assistant",
                 Content = content ?? string.Empty,
+                ExcludeFromModelContext = activity != null,
                 Activity = activity,
                 PromptTokens = completion == null ? null : completion.PromptTokens,
                 CompletionTokens = completion == null ? null : completion.CompletionTokens,
                 TotalTokens = completion == null ? null : completion.TotalTokens,
                 UsageJson = completion == null ? null : completion.UsageJson,
-                ReasoningContent = completion == null ? null : completion.ReasoningContent,
+                ReasoningContent = transcriptReasoningTruncated
+                    ? reasoning.Substring(0, MaxTranscriptReasoningChars)
+                    : reasoning,
                 ReasoningTokens = completion == null ? null : completion.ReasoningTokens,
-                ReasoningTruncated = completion != null && completion.ReasoningTruncated
+                ReasoningTruncated = completion != null && (completion.ReasoningTruncated || transcriptReasoningTruncated)
             };
         }
 

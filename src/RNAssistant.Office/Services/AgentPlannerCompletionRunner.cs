@@ -25,6 +25,7 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<ChatMessage> messages,
             IReadOnlyList<ToolDefinition> tools,
             AgentRunState state,
+            LlmRequestOptions preparedOptions,
             Action<string, string, ChatActivity> progress,
             string progressMessage,
             string repairMessage,
@@ -32,21 +33,29 @@ namespace RNAssistant.Office.Services
             CancellationToken cancellationToken)
         {
             settings = settings ?? new AppSettings();
-            var activeMessages = messages;
             var mode = NormalizeMode(string.IsNullOrWhiteSpace(state == null ? null : state.ResponseMode)
                 ? settings.AgentResponseMode
                 : state.ResponseMode);
-            var options = BuildOptions(mode, tools);
+            var activeMessages = WithResponseMode(messages, mode);
+            var baseMessages = activeMessages;
+            var options = preparedOptions ?? BuildOptions(mode, tools);
+            var runCache = options.RunCache;
+            var rejectedResponses = new List<AgentPlannerRejectedResponse>();
+            var maxFormatRetries = Math.Max(1, Math.Min(5, settings.MaxAgentFormatRetries));
             LlmCompletionResult completion;
             try
             {
                 completion = await CompleteWithProgressAsync(settings, activeMessages, options, progress, progressMessage, cancellationToken).ConfigureAwait(false);
             }
-            catch (InvalidOperationException) when (CanFallback(settings, state, mode))
+            catch (LlmRequestException ex) when (
+                ex.Kind == LlmFailureKind.ResponseFormatUnsupported &&
+                CanFallback(settings, state, mode))
             {
                 mode = AgentResponseModes.JsonObject;
                 RememberFallback(settings, state, mode);
-                options = BuildOptions(mode, tools);
+                options = RebuildOptions(mode, tools, runCache, options);
+                baseMessages = WithResponseMode(messages, mode);
+                activeMessages = baseMessages;
                 Report(progress, "fallback", "Endpoint не принял json_schema; повторяю через json_object.", null);
                 completion = await CompleteWithProgressAsync(settings, activeMessages, options, progress, progressMessage, cancellationToken).ConfigureAwait(false);
             }
@@ -54,19 +63,37 @@ namespace RNAssistant.Office.Services
             var parsed = ParseCompletion(completion, mode, tools, options.Tools);
             if (!parsed.Success && CanFallback(settings, state, mode))
             {
+                var rejected = CreateRejectedResponse(
+                    completion,
+                    parsed,
+                    mode,
+                    "json_object_fallback",
+                    0,
+                    maxFormatRetries);
+                rejectedResponses.Add(rejected);
                 mode = AgentResponseModes.JsonObject;
                 RememberFallback(settings, state, mode);
-                options = BuildOptions(mode, tools);
-                Report(progress, "fallback", "Ответ json_schema не прошёл проверку; повторяю через json_object.", null);
+                options = RebuildOptions(mode, tools, runCache, options);
+                baseMessages = WithResponseMode(messages, mode);
+                activeMessages = baseMessages;
+                Report(progress, "fallback", "Ответ json_schema не прошёл проверку; повторяю через json_object.", rejected.Activity);
                 completion = await CompleteWithProgressAsync(settings, activeMessages, options, progress, progressMessage, cancellationToken).ConfigureAwait(false);
                 parsed = ParseCompletion(completion, mode, tools, options.Tools);
             }
 
-            if (!parsed.Success && !state.FormatRepairUsed)
+            for (var retry = 1; !parsed.Success && retry <= maxFormatRetries; retry++)
             {
-                state.FormatRepairUsed = true;
-                Report(progress, "repairing", repairMessage, null);
-                activeMessages = BuildRepairMessages(activeMessages, completion == null ? string.Empty : completion.Content, parsed, repairPrompt, mode);
+                var rejected = CreateRejectedResponse(
+                    completion,
+                    parsed,
+                    mode,
+                    "format_retry",
+                    retry,
+                    maxFormatRetries);
+                rejectedResponses.Add(rejected);
+                var retryMessage = (repairMessage ?? "Исправляю формат ответа...") + " (" + retry + "/" + maxFormatRetries + ")";
+                Report(progress, "repairing", retryMessage, rejected.Activity);
+                activeMessages = BuildRepairMessages(baseMessages, parsed, repairPrompt, mode, retry, maxFormatRetries);
                 completion = await CompleteWithProgressAsync(settings, activeMessages, options, progress, repairMessage, cancellationToken).ConfigureAwait(false);
                 parsed = ParseCompletion(completion, mode, tools, options.Tools);
             }
@@ -78,6 +105,7 @@ namespace RNAssistant.Office.Services
                 ParseResult = parsed,
                 ResponseMode = mode,
                 RequestOptions = options,
+                RejectedResponses = rejectedResponses,
                 ContextUsage = ContextUsageEstimator.FromPrompt(activeMessages, settings, completion == null ? null : completion.PromptTokens, options)
             };
         }
@@ -89,19 +117,36 @@ namespace RNAssistant.Office.Services
                 : _parser.Parse(completion == null ? null : completion.Content, tools);
         }
 
-        internal static LlmRequestOptions BuildOptions(string mode, IEnumerable<ToolDefinition> tools)
+        internal static LlmRequestOptions BuildOptions(
+            string mode,
+            IEnumerable<ToolDefinition> tools,
+            LlmRunCache runCache = null)
         {
             var native = string.Equals(mode, AgentResponseModes.NativeToolCalls, StringComparison.OrdinalIgnoreCase);
             var jsonObject = string.Equals(mode, AgentResponseModes.JsonObject, StringComparison.OrdinalIgnoreCase);
-            var apiTools = ToolSchemaSupport.BuildApiTools(tools);
+            var apiTools = native
+                ? ToolSchemaSupport.BuildApiTools(tools)
+                : ToolSchemaSupport.BuildApiToolNames(tools);
             return new LlmRequestOptions
             {
                 ResponseFormat = jsonObject ? LlmResponseFormats.JsonObject : LlmResponseFormats.JsonSchema,
                 ResponseSchemaName = jsonObject ? null : AgentDecisionProtocol.SchemaName,
                 ResponseSchemaJson = jsonObject ? null : AgentDecisionSchemaBuilder.Build(tools, !native),
                 NativeTools = native,
-                Tools = apiTools
+                Tools = apiTools,
+                RunCache = runCache
             };
+        }
+
+        private static LlmRequestOptions RebuildOptions(
+            string mode,
+            IEnumerable<ToolDefinition> tools,
+            LlmRunCache runCache,
+            LlmRequestOptions previous)
+        {
+            var options = BuildOptions(mode, tools, runCache);
+            options.ReasoningEnabled = previous == null ? (bool?)null : previous.ReasoningEnabled;
+            return options;
         }
 
         private static bool CanFallback(AppSettings settings, AgentRunState state, string mode)
@@ -158,20 +203,81 @@ namespace RNAssistant.Office.Services
             return completion ?? new LlmCompletionResult();
         }
 
-        private static List<ChatMessage> BuildRepairMessages(IEnumerable<ChatMessage> originalMessages, string badText, AgentPlannerParseResult parseResult, string repairPrompt, string mode)
+        private static List<ChatMessage> BuildRepairMessages(
+            IEnumerable<ChatMessage> originalMessages,
+            AgentPlannerParseResult parseResult,
+            string repairPrompt,
+            string mode,
+            int retry,
+            int retryLimit)
         {
             var messages = new List<ChatMessage>(originalMessages ?? new ChatMessage[0]);
-            if (!string.IsNullOrWhiteSpace(badText))
-            {
-                messages.Add(new ChatMessage { Role = "assistant", Content = badText.Length <= 2000 ? badText : "Invalid response omitted because it is too large." });
-            }
             messages.Add(new ChatMessage
             {
                 Role = "user",
                 Content = (repairPrompt ?? string.Empty) +
                     "\nActive responseMode: " + mode +
+                    "\nFormat retry: " + retry + " of " + retryLimit +
+                    "\nThe rejected response is intentionally omitted from model context." +
                     "\nValidation error: " + (parseResult == null ? string.Empty : parseResult.ErrorCode + " " + parseResult.ErrorMessage)
             });
+            return messages;
+        }
+
+        private static AgentPlannerRejectedResponse CreateRejectedResponse(
+            LlmCompletionResult completion,
+            AgentPlannerParseResult parseResult,
+            string mode,
+            string recoveryAction,
+            int retry,
+            int retryLimit)
+        {
+            var rejected = new AgentPlannerRejectedResponse
+            {
+                Completion = completion ?? new LlmCompletionResult(),
+                RawText = completion == null ? string.Empty : completion.Content ?? string.Empty,
+                ParseResult = parseResult,
+                ResponseMode = mode,
+                RecoveryAction = recoveryAction,
+                RetryNumber = retry,
+                RetryLimit = retryLimit
+            };
+            rejected.Activity = AgentRunPresentation.CreatePlannerRecoveryActivity(rejected);
+            return rejected;
+        }
+
+        private static IReadOnlyList<ChatMessage> WithResponseMode(IReadOnlyList<ChatMessage> source, string mode)
+        {
+            var messages = new List<ChatMessage>(source ?? new ChatMessage[0]);
+            for (var index = 0; index < messages.Count; index++)
+            {
+                var message = messages[index];
+                var content = message == null ? null : message.Content;
+                var marker = content == null ? -1 : content.IndexOf("\nresponseMode:", StringComparison.Ordinal);
+                if (marker < 0 || content.IndexOf("\nROUTE:", StringComparison.Ordinal) < 0)
+                {
+                    continue;
+                }
+
+                var lineStart = marker + 1;
+                var lineEnd = content.IndexOf('\n', lineStart);
+                if (lineEnd < 0) lineEnd = content.Length;
+                var replaced = content.Substring(0, lineStart) +
+                    "responseMode: " + mode +
+                    content.Substring(lineEnd);
+                messages[index] = new ChatMessage
+                {
+                    Id = message.Id,
+                    Role = message.Role,
+                    Content = replaced,
+                    ExcludeFromModelContext = message.ExcludeFromModelContext,
+                    Attachments = message.Attachments == null
+                        ? new List<ChatAttachment>()
+                        : new List<ChatAttachment>(message.Attachments),
+                    CreatedUtc = message.CreatedUtc
+                };
+                break;
+            }
             return messages;
         }
 
@@ -195,6 +301,19 @@ namespace RNAssistant.Office.Services
         public AgentPlannerParseResult ParseResult { get; set; }
         public string ResponseMode { get; set; }
         public LlmRequestOptions RequestOptions { get; set; }
+        public IReadOnlyList<AgentPlannerRejectedResponse> RejectedResponses { get; set; }
         public object ContextUsage { get; set; }
+    }
+
+    internal sealed class AgentPlannerRejectedResponse
+    {
+        public LlmCompletionResult Completion { get; set; }
+        public string RawText { get; set; }
+        public AgentPlannerParseResult ParseResult { get; set; }
+        public string ResponseMode { get; set; }
+        public string RecoveryAction { get; set; }
+        public int RetryNumber { get; set; }
+        public int RetryLimit { get; set; }
+        public ChatActivity Activity { get; set; }
     }
 }

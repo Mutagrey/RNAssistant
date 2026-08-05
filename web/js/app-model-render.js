@@ -50,6 +50,127 @@ function modelOptionTitle(model) {
   return parts.join("\n");
 }
 
+function compactModelTokenCount(value) {
+  value = Number(value || 0);
+  if (!value) return "";
+  if (value >= 1000000) return (Math.round(value / 100000) / 10) + "M";
+  if (value >= 1000) return (Math.round(value / 100) / 10) + "K";
+  return String(value);
+}
+
+function setComposerPickerDisabled(picker, disabled) {
+  if (!picker) return;
+  var summary = picker.querySelector("summary");
+  picker.classList.toggle("is-disabled", !!disabled);
+  if (disabled) picker.open = false;
+  if (summary) {
+    summary.setAttribute("aria-disabled", disabled ? "true" : "false");
+    summary.tabIndex = disabled ? -1 : 0;
+  }
+}
+
+function appendModelPickerBadge(parent, className, text) {
+  if (!text) return;
+  var badge = document.createElement("span");
+  badge.className = "composer-model-badge " + className;
+  badge.textContent = text;
+  parent.appendChild(badge);
+}
+
+function createChatModelPickerItem(value, model, isDefault, selected) {
+  var button = document.createElement("button");
+  button.type = "button";
+  button.className = "composer-picker-item composer-model-item" + (selected ? " is-selected" : "");
+  button.setAttribute("role", "option");
+  button.setAttribute("aria-selected", selected ? "true" : "false");
+  button.dataset.value = value;
+
+  var header = document.createElement("span");
+  header.className = "composer-model-item-head";
+  var title = document.createElement("strong");
+  title.textContent = isDefault ? "По умолчанию" : ((model && model.title) || value || "Модель");
+  header.appendChild(title);
+  if (selected) {
+    var check = document.createElement("span");
+    check.className = "composer-picker-check";
+    check.setAttribute("aria-hidden", "true");
+    check.textContent = "✓";
+    header.appendChild(check);
+  }
+  button.appendChild(header);
+
+  var modelValue = model ? model.value : value;
+  var subtitle = document.createElement("span");
+  subtitle.className = "composer-model-item-id";
+  subtitle.textContent = isDefault
+    ? ((model && model.title && model.title !== modelValue ? model.title + " · " : "") + (modelValue || settingsModel() || "не задана"))
+    : (model && model.title !== modelValue ? modelValue : "");
+  if (subtitle.textContent) button.appendChild(subtitle);
+
+  var descriptionText = isDefault
+    ? "Использовать модель из общих настроек"
+    : String((model && model.description) || "").trim();
+  if (descriptionText) {
+    var description = document.createElement("span");
+    description.className = "composer-model-item-description";
+    description.textContent = descriptionText;
+    button.appendChild(description);
+  }
+
+  if (model) {
+    var badges = document.createElement("span");
+    badges.className = "composer-model-badges";
+    if (model.supportsReasoning === true) appendModelPickerBadge(badges, "is-reasoning", "Reasoning");
+    if (catalogModelSupportsImages(model) === true) appendModelPickerBadge(badges, "is-vision", "Vision");
+    if (catalogModelSupportsAudio(model) === true) appendModelPickerBadge(badges, "is-audio", "Audio");
+    appendModelPickerBadge(badges, "", compactModelTokenCount(model.maxContextTokens) ? compactModelTokenCount(model.maxContextTokens) + " контекст" : "");
+    appendModelPickerBadge(badges, "", compactModelTokenCount(model.maxOutputTokens) ? compactModelTokenCount(model.maxOutputTokens) + " ответ" : "");
+    if (badges.childNodes.length) button.appendChild(badges);
+  }
+  return button;
+}
+
+function renderChatModelPicker() {
+  var picker = $("chatModelPicker");
+  var menu = $("chatModelMenu");
+  var label = $("chatModelButtonLabel");
+  var select = $("chatModelSelect");
+  if (!picker || !menu || !label) return;
+
+  var selected = activeChatModel();
+  var defaultValue = settingsModel();
+  var effectiveValue = selected || defaultValue;
+  var effectiveModel = findModel(effectiveValue);
+  label.textContent = (effectiveModel && effectiveModel.title) || effectiveValue || "Модель";
+  picker.title = effectiveValue ? "Модель чата: " + effectiveValue : "Модель чата не выбрана";
+  var disabled = state.modelCatalog.loading || state.modelSaving || state.reasoningSaving ||
+    !!currentActiveSend() || state.bridgeUnavailable || !state.activeChatId;
+  setComposerPickerDisabled(picker, disabled);
+
+  menu.replaceChildren();
+  var defaultModel = findModel(defaultValue);
+  var defaultItem = createChatModelPickerItem("", defaultModel || (defaultValue ? { value: defaultValue, title: defaultValue } : null), true, !selected);
+  menu.appendChild(defaultItem);
+
+  if (selected && !findModel(selected)) {
+    menu.appendChild(createChatModelPickerItem(selected, { value: selected, title: selected, description: "Модель этого чата отсутствует в текущем каталоге" }, false, true));
+  }
+  (state.modelCatalog.models || []).forEach(function (model) {
+    menu.appendChild(createChatModelPickerItem(model.value, model, false,
+      String(model.value).toLowerCase() === String(selected).toLowerCase()));
+  });
+
+  Array.prototype.slice.call(menu.querySelectorAll(".composer-model-item")).forEach(function (item) {
+    item.addEventListener("click", function () {
+      if (picker.classList.contains("is-disabled")) return;
+      var value = item.dataset.value || "";
+      picker.open = false;
+      if (select) select.value = value;
+      saveChatModelSelection(value);
+    });
+  });
+}
+
 function setChatModelSelectWidth(select) {
   if (!select) {
     return;
@@ -247,6 +368,31 @@ function renderModelControls() {
   renderModelCapabilityList();
   renderAttachmentModelPriority();
   renderActiveModelCapability();
+  renderReasoningToggle();
+  renderChatModelPicker();
+}
+
+function renderReasoningToggle() {
+  var button = $("chatReasoningToggle");
+  if (!button) return;
+  var model = activeChatModel() || settingsModel();
+  var support = effectiveModelSupportsReasoning(model);
+  var active = !!state.activeChatReasoning && support !== false;
+  var disabled = !!currentActiveSend() || state.modelSaving || state.reasoningSaving ||
+    state.bridgeUnavailable || !state.activeChatId || support === false;
+
+  button.classList.toggle("active", active);
+  button.classList.toggle("is-unknown", support === null);
+  button.disabled = disabled;
+  button.setAttribute("aria-pressed", active ? "true" : "false");
+  if (support === false) {
+    button.title = "Выбранная модель не поддерживает reasoning";
+  } else if (active) {
+    button.title = "Reasoning включен";
+  } else {
+    button.title = support === null ? "Включить reasoning · поддержка модели не определена" : "Включить reasoning";
+  }
+  button.setAttribute("aria-label", active ? "Выключить reasoning" : "Включить reasoning");
 }
 
 function renderActiveModelCapability() {

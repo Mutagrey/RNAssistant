@@ -89,6 +89,10 @@ namespace RNAssistant.Harness
             AssertEqual("same", string.Concat(updates.Select(item => item.ReasoningDelta)), "stream duplicate reasoning suppressed");
             AssertEqual("Done", duplicateResult.Content, "stream duplicate think removed");
 
+            var doneResult = LlmResponseParser.ParseStreamingResponse(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"done\"}}]}\n\ndata: [DONE]\n\ndata: invalid\n\n");
+            AssertEqual("done", doneResult.Content, "done marker terminates stream parsing");
+
             var oversizedChunk = new JObject
             {
                 ["choices"] = new JArray
@@ -104,9 +108,30 @@ namespace RNAssistant.Harness
             };
             var oversizedStream = LlmResponseParser.ParseStreamingResponse(
                 "data: " + oversizedChunk.ToString(Formatting.None) + "\n\ndata: [DONE]\n\n");
-            AssertEqual(100000, oversizedStream.ReasoningContent.Length, "stream reasoning storage limit");
+            AssertEqual(24000, oversizedStream.ReasoningContent.Length, "stream reasoning storage limit");
             AssertTrue(oversizedStream.ReasoningTruncated, "stream reasoning truncation flag");
             AssertEqual("ok", oversizedStream.Content, "stream content survives reasoning truncation");
+        }
+
+        private static void LlmStreamingCancellationInterruptsRead()
+        {
+            using (var stream = new DisposeUnblocksStream())
+            using (var cancellation = new CancellationTokenSource(100))
+            {
+                var cancelled = false;
+                try
+                {
+                    LlmResponseParser.ReadStreamingOrJsonResponseAsync(
+                        stream,
+                        null,
+                        cancellation.Token).GetAwaiter().GetResult();
+                }
+                catch (OperationCanceledException)
+                {
+                    cancelled = true;
+                }
+                AssertTrue(cancelled, "blocked stream read observes cancellation");
+            }
         }
 
         private static void LlmReasoningMetadataIsSeparated()
@@ -151,9 +176,41 @@ namespace RNAssistant.Harness
                 }
             };
             var truncated = LlmResponseParser.ParseCompletionResponse(oversized.ToString(Formatting.None));
-            AssertEqual(100000, truncated.ReasoningContent.Length, "reasoning storage limit");
+            AssertEqual(24000, truncated.ReasoningContent.Length, "reasoning storage limit");
             AssertTrue(truncated.ReasoningTruncated, "reasoning truncation flag");
             AssertEqual("ok", truncated.Content, "content survives reasoning truncation");
+        }
+
+        private sealed class DisposeUnblocksStream : Stream
+        {
+            private readonly TaskCompletionSource<int> _read =
+                new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            public override bool CanRead { get { return true; } }
+            public override bool CanSeek { get { return false; } }
+            public override bool CanWrite { get { return false; } }
+            public override long Length { get { throw new NotSupportedException(); } }
+            public override long Position
+            {
+                get { throw new NotSupportedException(); }
+                set { throw new NotSupportedException(); }
+            }
+
+            public override void Flush() { }
+            public override int Read(byte[] buffer, int offset, int count) { throw new NotSupportedException(); }
+            public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            {
+                return _read.Task;
+            }
+            public override long Seek(long offset, SeekOrigin origin) { throw new NotSupportedException(); }
+            public override void SetLength(long value) { throw new NotSupportedException(); }
+            public override void Write(byte[] buffer, int offset, int count) { throw new NotSupportedException(); }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing) _read.TrySetException(new ObjectDisposedException("stream"));
+                base.Dispose(disposing);
+            }
         }
 
         private static void LlmAlternateCompletionFormatsAreRejected()

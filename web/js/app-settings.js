@@ -24,6 +24,9 @@ function renderSettings() {
   $("systemPromptRoleInput").value = instructionRole === "system" || instructionRole === "user" ? instructionRole : "developer";
   var responseMode = String(s.AgentResponseMode || s.agentResponseMode || "json_schema").toLowerCase();
   $("agentResponseModeInput").value = responseMode === "native_tool_calls" || responseMode === "json_object" ? responseMode : "json_schema";
+  var reasoningRequestMode = String(s.ReasoningRequestMode || s.reasoningRequestMode || "auto").toLowerCase();
+  var reasoningModes = ["auto", "reasoning_effort", "enable_thinking", "chat_template_kwargs", "reasoning_enabled"];
+  $("reasoningRequestModeInput").value = reasoningModes.indexOf(reasoningRequestMode) >= 0 ? reasoningRequestMode : "auto";
   $("fallbackJsonObjectInput").checked = (s.FallbackToJsonObject !== false && s.fallbackToJsonObject !== false);
   var toolResultRole = String(s.ToolResultRole || s.toolResultRole || "tool").toLowerCase();
   $("toolResultRoleInput").value = toolResultRole === "developer" || toolResultRole === "user" ? toolResultRole : "tool";
@@ -44,6 +47,7 @@ function renderSettings() {
   $("smartChatTitlesInput").checked = (s.SmartChatTitles !== false && s.smartChatTitles !== false);
   $("includeVbaContextInput").checked = !!(s.IncludeVbaContext || s.includeVbaContext);
   $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || 8;
+  $("maxAgentFormatRetriesInput").value = s.MaxAgentFormatRetries || s.maxAgentFormatRetries || 2;
   $("maxAgentToolStepsInput").value = s.MaxAgentToolSteps || s.maxAgentToolSteps || 40;
   $("maxAgentToolsPerRequestInput").value = s.MaxAgentToolsPerRequest || s.maxAgentToolsPerRequest || 24;
   $("vbaContextLimitInput").value = s.VbaContextCharLimit || s.vbaContextCharLimit || 30000;
@@ -69,6 +73,7 @@ function readSettings() {
     ModelsConfigUrl: $("modelsConfigUrlInput").value.trim(),
     Model: $("modelInput").value.trim(),
     AgentResponseMode: $("agentResponseModeInput").value,
+    ReasoningRequestMode: $("reasoningRequestModeInput").value,
     FallbackToJsonObject: $("fallbackJsonObjectInput").checked,
     ToolResultRole: $("toolResultRoleInput").value,
     MaxTokens: Number($("maxTokensInput").value || 2048),
@@ -88,6 +93,7 @@ function readSettings() {
     SmartChatTitles: $("smartChatTitlesInput").checked,
     IncludeVbaContext: $("includeVbaContextInput").checked,
     MaxAgentIterations: Number($("maxAgentIterationsInput").value || 8),
+    MaxAgentFormatRetries: Number($("maxAgentFormatRetriesInput").value || 2),
     MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || 40),
     MaxAgentToolsPerRequest: Number($("maxAgentToolsPerRequestInput").value || 24),
     VbaContextCharLimit: Number($("vbaContextLimitInput").value || 30000),

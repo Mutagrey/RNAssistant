@@ -17,6 +17,7 @@ namespace RNAssistant.Office
         public string LastChatText { get; private set; }
         public string LastChatId { get; private set; }
         public string LastChatMode { get; private set; }
+        public bool LastChatReasoning { get; private set; }
         public string LastRunId { get; private set; }
         public AppSettings LastSettings { get; private set; }
         public string LastApiKey { get; private set; }
@@ -59,6 +60,14 @@ namespace RNAssistant.Office
             return state;
         }
         public ChatStateResponse SetChatHtmlMode(string chatId, bool enabled) { return ChatState(enabled ? "html" : string.Empty, chatId); }
+        public ChatStateResponse SetChatReasoning(string chatId, bool enabled)
+        {
+            LastChatId = chatId;
+            LastChatReasoning = enabled;
+            var state = ChatState(null, chatId);
+            state.ActiveChatReasoning = enabled;
+            return state;
+        }
         public ChatStateResponse ClearChat(string chatId) { return ChatState(null, chatId); }
         public ChatStateResponse DeleteChat(string chatId) { return ChatState(null, chatId); }
         public bool CancelChatRun(string chatId, string runId) { LastChatId = chatId; return !string.IsNullOrWhiteSpace(runId); }

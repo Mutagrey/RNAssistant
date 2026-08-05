@@ -78,8 +78,9 @@ namespace RNAssistant.Office
             _llmClient = new LlmClient(
                 () => _settingsService.LoadApiKey(),
                 attachment => AttachmentImageService.ReadForModel(_attachmentStore, attachment),
-                attachment => _attachmentStore.ReadExtractedText(attachment),
-                (settings, attachment) => ModelAttachmentService.ReadForModel(_attachmentStore, settings, attachment));
+                (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars),
+                (settings, attachment, maxImages, cancellationToken) =>
+                    ModelAttachmentService.ReadForModel(_attachmentStore, settings, attachment, maxImages, cancellationToken));
             if (completeAsync == null)
             {
                 LlmCompletionDelegate completion =
@@ -122,6 +123,7 @@ namespace RNAssistant.Office
                 ActiveChatModel = session == null ? string.Empty : session.Model,
                 ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
                 ActiveChatHtmlMode = session != null && session.HtmlModeEnabled,
+                ActiveChatReasoning = session != null && session.ReasoningEnabled,
                 Chats = _chatSessions.GetChatSummaries(activeId),
                 Documents = ListOpenDocuments(),
                 Settings = settings,
@@ -577,6 +579,7 @@ namespace RNAssistant.Office
                 ActiveChatModel = session == null ? string.Empty : session.Model,
                 ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
                 ActiveChatHtmlMode = session != null && session.HtmlModeEnabled,
+                ActiveChatReasoning = session != null && session.ReasoningEnabled,
                 Chats = _chatSessions.GetChatSummaries(activeId),
                 Documents = ListOpenDocuments(),
                 Context = session == null ? CreateEmptyContext() : LoadContext(session),
@@ -620,6 +623,7 @@ namespace RNAssistant.Office
                 ActiveChatModel = active == null ? string.Empty : active.Model,
                 ActiveChatMode = ChatModes.Normalize(active == null ? null : active.Mode),
                 ActiveChatHtmlMode = active != null && active.HtmlModeEnabled,
+                ActiveChatReasoning = active != null && active.ReasoningEnabled,
                 Chats = chats,
                 Documents = ListOpenDocuments()
             };

@@ -63,7 +63,7 @@ RNAssistant использует локальный agent harness поверх O
 }
 ```
 
-`decisionSummary` — короткое объяснение наблюдаемого действия, а не chain-of-thought. Детальные рассуждения не входят в протокол. Если provider отдельно возвращает `reasoning_content`, runtime показывает его как необязательные transport metadata и не смешивает с JSON решения.
+`decisionSummary` — видимое сообщение модели перед выбранным действием, а не chain-of-thought. Для tool turn оно кратко фиксирует уже подтвержденный результат и следующее действие. В `native_tool_calls` тот же текст передается через assistant content и сохраняется runtime как `decisionSummary`. Детальные рассуждения не входят в протокол. Если provider отдельно возвращает `reasoning_content`, runtime показывает его как необязательные transport metadata и не смешивает с JSON решения.
 
 Для сложной задачи `kind=plan` возвращается не более одного раза. Его шаги — короткие упорядоченные наблюдаемые действия (включая ожидаемые чтение, изменение и проверку), а их runtime-статусы `pending`, `running`, `waiting`, `completed`, `failed`, `cancelled` принадлежат локальному harness и не задаются последующими ответами модели.
 
@@ -80,6 +80,8 @@ RNAssistant использует локальный agent harness поверх O
 Даже Structured Outputs не заменяет локальную проверку. Runtime повторно проверяет точный набор полей, семантику `kind`, наличие tool в текущем slice и аргументы по его schema.
 
 `json_object` не использует ручной поиск JSON в тексте: весь `message.content` обязан быть одним object. Локальный parser нужен только для строгой проверки протокола и аргументов; fences, префиксы, alternate envelopes и частичный JSON не восстанавливаются.
+
+Если content или native tool call не проходит parser, runtime повторяет текущий model turn до `MaxAgentFormatRetries` раз (по умолчанию 2, допустимо 1–5). Каждый retry строится заново из исходного чистого prompt и одного `RepairDecisionPrompt` с кодом validation error. Отклонённый raw-ответ намеренно не добавляется ни как `assistant`, ни в следующий retry/replay. Он сохраняется только как раскрываемая diagnostic activity с `ExcludeFromModelContext=true`, поэтому пользователь видит ошибку и raw response, но модель не получает этот мусор на следующих turn. После исчерпания лимита последний ответ сохраняется как terminal diagnostic и run останавливается без выполнения непроверенного действия.
 
 ## Роли сообщений
 
@@ -126,7 +128,7 @@ RNAssistant использует локальный agent harness поверх O
 
 ## Сборка и бюджет контекста
 
-Agent request собирается заново на каждом model turn в таком порядке: instruction role; непрерывный хвост обычной user/assistant chat history; текущий `USER_REQUEST` и динамические секции; ограниченный run-local protocol replay. Activity, diagnostics и provider reasoning в replay не входят. Tool exchange передаётся парой assistant `tool_calls` + `role: tool` либо выбранной обычной ролью. Нормализованные `OBSERVATIONS` дополнительно дают модели компактное состояние текущего run.
+Agent request собирается заново на каждом model turn в таком порядке: instruction role; непрерывный хвост обычной user/assistant chat history; текущий `USER_REQUEST` и динамические секции; ограниченный run-local protocol replay. Activity, diagnostics, сообщения с `ExcludeFromModelContext=true` и provider reasoning в replay не входят. Tool exchange передаётся парой assistant `tool_calls` + `role: tool` либо выбранной обычной ролью. Нормализованные `OBSERVATIONS` дополнительно дают модели компактное состояние текущего run.
 
 Окно берётся из ручного override, capability активной модели или консервативного default `32768`. Runtime резервирует 2% окна (минимум 1024, максимум 16384) и запрошенный output. В оценку запроса входят сообщения, вложения, `response_format` schema и native tool schemas. Tool catalog уменьшается, если его prompt/API-представления занимают больше половины input budget; минимум один необходимый tool сохраняется.
 

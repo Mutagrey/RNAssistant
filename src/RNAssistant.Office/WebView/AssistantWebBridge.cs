@@ -117,6 +117,10 @@ namespace RNAssistant.Office.WebView
                         var setChatHtmlMode = Payload<SetChatHtmlModePayload>(payload);
                         responsePayload = _controller.SetChatHtmlMode(setChatHtmlMode.ChatId, setChatHtmlMode.Enabled == true);
                         break;
+                    case "setChatReasoning":
+                        var setChatReasoning = Payload<SetChatReasoningPayload>(payload);
+                        responsePayload = _controller.SetChatReasoning(setChatReasoning.ChatId, setChatReasoning.Enabled == true);
+                        break;
                     case "allowHtmlNetworkOrigin":
                         responsePayload = _controller.AllowHtmlNetworkOrigin(Payload<HtmlOriginPayload>(payload).Origin);
                         break;
@@ -459,6 +463,8 @@ namespace RNAssistant.Office.WebView
                 return;
             }
 
+            var streaming = string.Equals(phase, "streaming", StringComparison.OrdinalIgnoreCase);
+            var reasoning = activity != null && string.Equals(activity.Kind, "reasoning", StringComparison.OrdinalIgnoreCase);
             _postMessageJson(JsonConvert.SerializeObject(new ProgressMessage
             {
                 Type = "progress",
@@ -468,15 +474,11 @@ namespace RNAssistant.Office.WebView
                     ChatId = chatId,
                     RunId = runId,
                     Phase = phase,
-                    Message = message,
-                    Activity = activity,
-                    ContentDelta = string.Equals(phase, "streaming", StringComparison.OrdinalIgnoreCase)
-                        ? message
-                        : null,
-                    ReasoningDelta = activity != null && string.Equals(activity.Kind, "reasoning", StringComparison.OrdinalIgnoreCase)
-                        ? activity.ResultMessage
-                        : null,
-                    ReasoningComplete = activity != null && string.Equals(activity.Kind, "reasoning", StringComparison.OrdinalIgnoreCase)
+                    Message = streaming ? null : message,
+                    Activity = reasoning ? null : activity,
+                    ContentDelta = streaming ? message : null,
+                    ReasoningDelta = reasoning ? activity.ResultMessage : null,
+                    ReasoningComplete = reasoning
                         ? (bool?)(string.Equals(activity.Status, "completed", StringComparison.OrdinalIgnoreCase))
                         : null
                 }

@@ -48,7 +48,7 @@ namespace RNAssistant.Office.Services
             }
             var messages = _contextBuilder.BuildPlainMessages(text, session, context, settings, attachments);
             Report(progress, "thinking", "Модель готовит ответ...");
-            var completion = await CompleteBufferedAsync(settings, messages, progress, cancellationToken).ConfigureAwait(false);
+            var completion = await CompleteBufferedAsync(settings, messages, session, progress, cancellationToken).ConfigureAwait(false);
             if (completion == null)
             {
                 throw new InvalidOperationException("Model returned no completion.");
@@ -66,13 +66,23 @@ namespace RNAssistant.Office.Services
         private async Task<LlmCompletionResult> CompleteBufferedAsync(
             AppSettings settings,
             IEnumerable<ChatMessage> messages,
+            ChatSession session,
             Action<string, string, ChatActivity> progress,
             CancellationToken cancellationToken)
         {
             var pendingReasoning = new StringBuilder();
+            var pendingContent = new StringBuilder();
             var reasoningSeen = false;
             var reasoningCompleted = false;
             var lastReasoningReportUtc = DateTime.UtcNow;
+            var lastContentReportUtc = DateTime.UtcNow;
+            Action flushContent = () =>
+            {
+                if (pendingContent.Length == 0) return;
+                Report(progress, "streaming", pendingContent.ToString());
+                pendingContent.Clear();
+                lastContentReportUtc = DateTime.UtcNow;
+            };
             Action<bool> flushReasoning = completed =>
             {
                 if (completed && reasoningCompleted ||
@@ -95,7 +105,10 @@ namespace RNAssistant.Office.Services
                     reasoningCompleted = true;
                 }
             };
-            var completion = await _completeAsync(settings, messages, null, update =>
+            var completion = await _completeAsync(settings, messages, new LlmRequestOptions
+            {
+                ReasoningEnabled = session == null ? (bool?)null : session.ReasoningEnabled
+            }, update =>
             {
                 if (update == null)
                 {
@@ -112,13 +125,18 @@ namespace RNAssistant.Office.Services
                 {
                     flushReasoning(update.Completed);
                 }
-                if (string.IsNullOrEmpty(update.ContentDelta))
+                if (!string.IsNullOrEmpty(update.ContentDelta))
                 {
-                    return;
+                    pendingContent.Append(update.ContentDelta);
                 }
-                Report(progress, "streaming", update.ContentDelta);
+                if (update.Completed || pendingContent.Length >= 256 ||
+                    pendingContent.Length > 0 && DateTime.UtcNow - lastContentReportUtc >= TimeSpan.FromMilliseconds(50))
+                {
+                    flushContent();
+                }
             }, cancellationToken).ConfigureAwait(false);
             flushReasoning(true);
+            flushContent();
             return completion;
         }
 

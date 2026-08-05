@@ -363,6 +363,7 @@ namespace RNAssistant.Office.Services
                 Model = session.Model,
                 Mode = ChatModes.Normalize(session.Mode),
                 HtmlModeEnabled = session.HtmlModeEnabled,
+                ReasoningEnabled = session.ReasoningEnabled,
                 HasHtmlWorkspace = HasHtmlWorkspace(session.HtmlWorkspace),
                 HtmlFileCount = session.HtmlWorkspace == null || session.HtmlWorkspace.Files == null ? 0 : session.HtmlWorkspace.Files.Count,
                 HtmlDataSourceCount = session.HtmlWorkspace == null || session.HtmlWorkspace.DataSources == null ? 0 : session.HtmlWorkspace.DataSources.Count,

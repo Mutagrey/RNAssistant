@@ -12,7 +12,11 @@ namespace RNAssistant.Core.Llm
 {
     internal static class LlmResponseParser
     {
-        private const int MaxStoredReasoningChars = 100000;
+        private const int MaxStoredReasoningChars = 24000;
+        private const int MaxStoredContentChars = 16 * 1024 * 1024;
+        private const int MaxToolArgumentsChars = 4 * 1024 * 1024;
+        private const int MaxToolCalls = 64;
+        private const int MaxUsageJsonChars = 64 * 1024;
 
         internal static LlmCompletionResult ParseStreamingResponse(string sse)
         {
@@ -27,7 +31,7 @@ namespace RNAssistant.Core.Llm
                 string line;
                 while ((line = reader.ReadLine()) != null)
                 {
-                    ProcessStreamingLine(line, state);
+                    if (ProcessStreamingLine(line, state)) break;
                 }
             }
             var result = state.ToResult();
@@ -79,37 +83,51 @@ namespace RNAssistant.Core.Llm
             var bufferedJson = new StringBuilder();
             bool? isEventStream = null;
             using (var reader = new StreamReader(stream, Encoding.UTF8, true, 4096, true))
+            using (cancellationToken.Register(streamState => ((Stream)streamState).Dispose(), stream))
             {
-                while (true)
+                try
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var line = await reader.ReadLineAsync().ConfigureAwait(false);
-                    if (line == null)
+                    while (true)
                     {
-                        break;
-                    }
-
-                    if (!isEventStream.HasValue && !string.IsNullOrWhiteSpace(line))
-                    {
-                        var probe = line.TrimStart('\uFEFF').TrimStart();
-                        if (!string.IsNullOrWhiteSpace(probe))
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var line = await reader.ReadLineAsync().ConfigureAwait(false);
+                        if (line == null) break;
+                        if (line.Length > MaxStoredContentChars)
                         {
-                            isEventStream = IsEventStreamLine(probe);
+                            throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM response line exceeds the safety limit.");
+                        }
+
+                        if (!isEventStream.HasValue && !string.IsNullOrWhiteSpace(line))
+                        {
+                            var probe = line.TrimStart('\uFEFF').TrimStart();
+                            if (!string.IsNullOrWhiteSpace(probe))
+                            {
+                                isEventStream = IsEventStreamLine(probe);
+                            }
+                        }
+
+                        if (isEventStream == true)
+                        {
+                            if (ProcessStreamingLine(line, state)) break;
+                        }
+                        else if (isEventStream == false)
+                        {
+                            if (bufferedJson.Length + line.Length + 2 > MaxStoredContentChars)
+                            {
+                                throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM response exceeds the safety limit.");
+                            }
+                            if (bufferedJson.Length > 0) bufferedJson.AppendLine();
+                            bufferedJson.Append(line);
                         }
                     }
-
-                    if (isEventStream == true)
-                    {
-                        ProcessStreamingLine(line, state);
-                    }
-                    else if (isEventStream == false)
-                    {
-                        if (bufferedJson.Length > 0)
-                        {
-                            bufferedJson.AppendLine();
-                        }
-                        bufferedJson.Append(line);
-                    }
+                }
+                catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw new OperationCanceledException(cancellationToken);
+                }
+                catch (IOException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw new OperationCanceledException(cancellationToken);
                 }
             }
 
@@ -147,29 +165,34 @@ namespace RNAssistant.Core.Llm
                 line.StartsWith(":", StringComparison.Ordinal);
         }
 
-        private static void ProcessStreamingLine(string line, StreamingCompletionState state)
+        private static bool ProcessStreamingLine(string line, StreamingCompletionState state)
         {
             if (state == null || string.IsNullOrWhiteSpace(line))
             {
-                return;
+                return false;
             }
 
             var trimmed = line.Trim();
             if (!trimmed.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
             {
-                return;
+                return false;
             }
 
             var data = trimmed.Substring(5).Trim();
-            if (string.Equals(data, "[DONE]", StringComparison.OrdinalIgnoreCase) || data.Length == 0)
+            if (string.Equals(data, "[DONE]", StringComparison.OrdinalIgnoreCase))
             {
-                return;
+                return true;
+            }
+            if (data.Length == 0)
+            {
+                return false;
             }
 
             try
             {
                 var chunk = JObject.Parse(data.TrimStart('\uFEFF'));
                 state.Add(chunk);
+                return false;
             }
             catch (JsonException ex)
             {
@@ -238,6 +261,10 @@ namespace RNAssistant.Core.Llm
                         StreamingToolCallState call;
                         if (!_toolCalls.TryGetValue(index, out call))
                         {
+                            if (_toolCalls.Count >= MaxToolCalls)
+                            {
+                                throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM response contains too many tool calls.");
+                            }
                             call = new StreamingToolCallState();
                             _toolCalls[index] = call;
                         }
@@ -271,6 +298,10 @@ namespace RNAssistant.Core.Llm
                 if (string.IsNullOrEmpty(value))
                 {
                     return;
+                }
+                if (_content.Length + value.Length > MaxStoredContentChars)
+                {
+                    throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM response content exceeds the safety limit.");
                 }
                 _content.Append(value);
                 if (_progress != null)
@@ -330,12 +361,38 @@ namespace RNAssistant.Core.Llm
             public void Add(JObject token)
             {
                 if (token == null) return;
-                if (token["id"] != null) _id = (string)token["id"];
-                if (token["type"] != null) _type = (string)token["type"];
+                if (token["id"] != null) _id = BoundedMetadata((string)token["id"]);
+                if (token["type"] != null) _type = BoundedMetadata((string)token["type"]);
                 var function = token["function"] as JObject;
                 if (function == null) return;
-                if (function["name"] != null) _name.Append((string)function["name"]);
-                if (function["arguments"] != null) _arguments.Append((string)function["arguments"]);
+                if (function["name"] != null)
+                {
+                    var name = (string)function["name"] ?? string.Empty;
+                    if (_name.Length + name.Length > 1024)
+                    {
+                        throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM tool name exceeds the safety limit.");
+                    }
+                    _name.Append(name);
+                }
+                if (function["arguments"] != null)
+                {
+                    var arguments = (string)function["arguments"] ?? string.Empty;
+                    if (_arguments.Length + arguments.Length > MaxToolArgumentsChars)
+                    {
+                        throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM tool arguments exceed the safety limit.");
+                    }
+                    _arguments.Append(arguments);
+                }
+            }
+
+            private static string BoundedMetadata(string value)
+            {
+                value = value ?? string.Empty;
+                if (value.Length > 1024)
+                {
+                    throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM tool metadata exceeds the safety limit.");
+                }
+                return value;
             }
 
             public JObject ToJson()
@@ -378,6 +435,10 @@ namespace RNAssistant.Core.Llm
                 {
                     _content(value);
                     return;
+                }
+                if (_pending.Length + value.Length > MaxStoredContentChars)
+                {
+                    throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM response content exceeds the safety limit.");
                 }
                 _pending.Append(value);
                 Process(false);
@@ -475,7 +536,12 @@ namespace RNAssistant.Core.Llm
                 return string.Empty;
             }
 
-            return ReadStringToken(message["content"], "choices[0].message.content");
+            var content = ReadStringToken(message["content"], "choices[0].message.content");
+            if (content.Length > MaxStoredContentChars)
+            {
+                throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM response content exceeds the safety limit.");
+            }
+            return content;
         }
 
         private static string ReadReasoningContent(JObject message)
@@ -538,7 +604,7 @@ namespace RNAssistant.Core.Llm
                 PromptTokens = promptTokens,
                 CompletionTokens = completionTokens,
                 TotalTokens = totalTokens,
-                UsageJson = usage == null ? null : usage.ToString(Formatting.None)
+                UsageJson = BoundedUsageJson(usage)
             };
         }
 
@@ -546,16 +612,32 @@ namespace RNAssistant.Core.Llm
         {
             var result = new List<LlmToolCall>();
             var calls = message == null ? null : message["tool_calls"] as JArray;
+            if (calls != null && calls.Count > MaxToolCalls)
+            {
+                throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM response contains too many tool calls.");
+            }
             foreach (var token in calls == null ? new JObject[0] : calls.OfType<JObject>())
             {
                 var function = token["function"] as JObject;
                 if (function == null) continue;
+                var id = (string)token["id"] ?? string.Empty;
+                var type = (string)token["type"] ?? "function";
+                var name = (string)function["name"] ?? string.Empty;
+                var arguments = (string)function["arguments"] ?? "{}";
+                if (id.Length > 1024 || type.Length > 1024 || name.Length > 1024)
+                {
+                    throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM tool metadata exceeds the safety limit.");
+                }
+                if (arguments.Length > MaxToolArgumentsChars)
+                {
+                    throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM tool arguments exceed the safety limit.");
+                }
                 result.Add(new LlmToolCall
                 {
-                    Id = (string)token["id"],
-                    Type = (string)token["type"] ?? "function",
-                    Name = (string)function["name"],
-                    ArgumentsJson = (string)function["arguments"] ?? "{}"
+                    Id = id,
+                    Type = type,
+                    Name = name,
+                    ArgumentsJson = arguments
                 });
             }
             return result;
@@ -582,12 +664,24 @@ namespace RNAssistant.Core.Llm
             }
             var reasoningStart = leading + openTag.Length;
             var closeIndex = content.IndexOf(closeTag, reasoningStart, StringComparison.OrdinalIgnoreCase);
-            var rawReasoning = closeIndex < 0
-                ? content.Substring(reasoningStart)
-                : content.Substring(reasoningStart, closeIndex - reasoningStart);
-            truncated = rawReasoning.Length > MaxStoredReasoningChars;
-            reasoning = truncated ? rawReasoning.Substring(0, MaxStoredReasoningChars) : rawReasoning;
+            var reasoningLength = closeIndex < 0
+                ? content.Length - reasoningStart
+                : closeIndex - reasoningStart;
+            truncated = reasoningLength > MaxStoredReasoningChars;
+            reasoning = content.Substring(reasoningStart, Math.Min(reasoningLength, MaxStoredReasoningChars));
             return closeIndex < 0 ? string.Empty : content.Substring(closeIndex + closeTag.Length);
+        }
+
+        private static string BoundedUsageJson(JObject usage)
+        {
+            if (usage == null) return null;
+            var json = usage.ToString(Formatting.None);
+            if (json.Length <= MaxUsageJsonChars) return json;
+            return new JObject
+            {
+                ["truncated"] = true,
+                ["originalChars"] = json.Length
+            }.ToString(Formatting.None);
         }
 
         private static string ReadStringToken(JToken token, string field)

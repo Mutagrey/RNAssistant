@@ -59,7 +59,10 @@ namespace RNAssistant.Office.Services
                     SupportsImages = ReadNullableBool(model, "SupportsImages", "supports_images", "supportsImages", "supports_vision", "supportsVision"),
                     SupportsReasoning = ReadNullableBool(model, "SupportsReasoning", "supports_reasoning", "supportsReasoning"),
                     SupportsAudio = ReadNullableBool(model, "SupportsAudio", "supports_audio", "supportsAudio"),
-                    MaxImagesPerPrompt = ReadNullableInt(model, "MaxImagesPerPrompt", "max_images_per_prompt", "maxImagesPerPrompt")
+                    MaxImagesPerPrompt = ReadNullableInt(model, "MaxImagesPerPrompt", "max_images_per_prompt", "maxImagesPerPrompt"),
+                    ReasoningRequestMode = ReasoningRequestModes.NormalizeOverride(ReadString(
+                        model,
+                        "ReasoningRequestMode", "reasoning_request_mode", "reasoningRequestMode", "reasoning_transport"))
                 };
                 if (!capability.SupportsImages.HasValue)
                 {

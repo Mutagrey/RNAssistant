@@ -108,6 +108,12 @@ namespace RNAssistant.Core.Llm
             return AudioSupport(settings, model) == true;
         }
 
+        public static bool? ReasoningSupport(AppSettings settings, string model = null)
+        {
+            var capability = Capability(settings, model);
+            return capability == null ? null : capability.SupportsReasoning;
+        }
+
         public static bool? AudioSupport(AppSettings settings, string model = null)
         {
             var key = string.IsNullOrWhiteSpace(model) ? (settings == null ? null : settings.Model) : model;
@@ -134,6 +140,29 @@ namespace RNAssistant.Core.Llm
             return string.IsNullOrEmpty(text)
                 ? 0
                 : Math.Max(1, (int)Math.Ceiling(Encoding.UTF8.GetByteCount(text) / 3.0));
+        }
+
+        public static string TruncateText(string text, int maxTokens)
+        {
+            if (string.IsNullOrEmpty(text) || maxTokens <= 0)
+            {
+                return string.Empty;
+            }
+            if (EstimateTextTokens(text) <= maxTokens)
+            {
+                return text;
+            }
+
+            var low = 0;
+            var high = text.Length;
+            while (low < high)
+            {
+                var middle = low + (high - low + 1) / 2;
+                var tokens = Math.Max(1, (int)Math.Ceiling(Encoding.UTF8.GetByteCount(text, 0, middle) / 3.0));
+                if (tokens <= maxTokens) low = middle;
+                else high = middle - 1;
+            }
+            return text.Substring(0, low);
         }
 
         public static int EstimateMessagesTokens(IEnumerable<ChatMessage> messages)

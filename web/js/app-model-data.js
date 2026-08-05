@@ -82,6 +82,8 @@ function normalizeModelCatalog(payload) {
       frequencyPenalty: modelFieldWithDefaults(item, "FrequencyPenalty", "frequency_penalty", "frequencyPenalty"),
       seed: modelFieldWithDefaults(item, "Seed", "seed", "seed"),
       supportsReasoning: nullableModelBoolean(modelField(item, "SupportsReasoning", "supports_reasoning", "supportsReasoning", null)),
+      reasoningRequestMode: String(modelField(item, "ReasoningRequestMode", "reasoning_request_mode", "reasoningRequestMode",
+        modelField(item, "ReasoningTransport", "reasoning_transport", "reasoningTransport", "")) || "").trim(),
       supportsImages: nullableModelBoolean(supportsImages),
       supportsAudio: nullableModelBoolean(modelField(item, "SupportsAudio", "supports_audio", "supportsAudio", null)),
       isDefault: nullableModelBoolean(modelField(item, "IsDefault", "is_default", "isDefault", false)) === true,
@@ -120,11 +122,20 @@ function modelCapabilitiesForSettings() {
     result[key] = existing[key];
   });
   (state.modelCatalog.models || []).forEach(function (model) {
+    var stored = existing[model.value] || {};
+    if (!existing[model.value]) {
+      Object.keys(existing).some(function (key) {
+        if (key.toLowerCase() !== String(model.value).toLowerCase()) return false;
+        stored = existing[key] || {};
+        return true;
+      });
+    }
     result[model.value] = {
       MaxContextTokens: model.maxContextTokens || null,
       MaxOutputTokens: model.maxOutputTokens || null,
       SupportsImages: catalogModelSupportsImages(model),
       SupportsReasoning: model.supportsReasoning,
+      ReasoningRequestMode: model.reasoningRequestMode || stored.ReasoningRequestMode || stored.reasoningRequestMode || null,
       SupportsAudio: catalogModelSupportsAudio(model),
       MaxImagesPerPrompt: model.maxImagesPerPrompt || null
     };

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 
@@ -11,35 +12,42 @@ namespace RNAssistant.Core.Llm
     internal sealed class LlmMessageBuilder
     {
         private readonly Func<ChatAttachment, byte[]> _attachmentReader;
-        private readonly Func<ChatAttachment, string> _attachmentTextReader;
-        private readonly Func<AppSettings, ChatAttachment, IReadOnlyList<ModelImagePart>> _modelImageProvider;
+        private readonly LlmAttachmentTextReader _attachmentTextReader;
+        private readonly LlmModelImageProvider _modelImageProvider;
 
         public LlmMessageBuilder(
             Func<ChatAttachment, byte[]> attachmentReader = null,
-            Func<ChatAttachment, string> attachmentTextReader = null,
-            Func<AppSettings, ChatAttachment, IReadOnlyList<ModelImagePart>> modelImageProvider = null)
+            LlmAttachmentTextReader attachmentTextReader = null,
+            LlmModelImageProvider modelImageProvider = null)
         {
             _attachmentReader = attachmentReader;
             _attachmentTextReader = attachmentTextReader;
             _modelImageProvider = modelImageProvider;
         }
 
-        public LlmApiMessageBuildResult Build(IEnumerable<ChatMessage> messages, AppSettings settings)
+        public LlmApiMessageBuildResult Build(
+            IEnumerable<ChatMessage> messages,
+            AppSettings settings,
+            LlmRequestOptions requestOptions = null,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
             var build = new LlmApiMessageBuildResult();
             if (messages == null)
             {
                 return build;
             }
-            var messageList = messages.ToList();
+            var messageList = messages as IList<ChatMessage> ?? messages.ToList();
+            var runCache = requestOptions == null ? null : requestOptions.RunCache;
             var remainingAttachmentTokens = Math.Max(
                 0,
                 ModelContextBudget.InputBudgetTokens(settings) -
                 ModelContextBudget.EstimateMessagesTokens(messageList, false) -
                 EstimatePdfImageTokens(messageList, settings));
+            var remainingImages = ModelContextBudget.MaxImagesPerPrompt(settings);
 
             foreach (var message in messageList)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (message == null || string.IsNullOrWhiteSpace(message.Role))
                 {
                     continue;
@@ -85,27 +93,30 @@ namespace RNAssistant.Core.Llm
                 }
 
                 var attachments = message.Attachments ?? new List<ChatAttachment>();
-                var text = AppendExtractedText(message.Content ?? string.Empty, attachments, ref remainingAttachmentTokens);
+                var text = AppendExtractedText(message.Content ?? string.Empty, attachments, ref remainingAttachmentTokens, runCache, cancellationToken);
                 var imageParts = new List<ModelImagePart>();
                 var audioAttachments = attachments
                     .Where(attachment => attachment != null && string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase))
                     .ToList();
-                var imageLimit = ModelContextBudget.MaxImagesPerPrompt(settings);
-                foreach (var attachment in attachments.Where(a => a != null && a.Kind == "image"))
+                foreach (var attachment in attachments.Where(a => a != null && string.Equals(a.Kind, "image", StringComparison.OrdinalIgnoreCase)))
                 {
-                    imageParts.AddRange(ReadModelImages(settings, attachment));
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (remainingImages <= 0) break;
+                    var selected = ReadModelImages(settings, attachment, remainingImages, runCache, cancellationToken)
+                        .Take(remainingImages)
+                        .ToList();
+                    imageParts.AddRange(selected);
+                    remainingImages -= selected.Count;
                 }
-                foreach (var attachment in attachments.Where(a => a != null && a.Kind == "pdf"))
+                foreach (var attachment in attachments.Where(a => a != null && string.Equals(a.Kind, "pdf", StringComparison.OrdinalIgnoreCase)))
                 {
-                    if (imageParts.Count >= imageLimit)
-                    {
-                        break;
-                    }
-                    imageParts.AddRange(ReadModelImages(settings, attachment).Take(imageLimit - imageParts.Count));
-                }
-                if (imageParts.Count > imageLimit)
-                {
-                    imageParts = imageParts.Take(imageLimit).ToList();
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (remainingImages <= 0) break;
+                    var selected = ReadModelImages(settings, attachment, remainingImages, runCache, cancellationToken)
+                        .Take(remainingImages)
+                        .ToList();
+                    imageParts.AddRange(selected);
+                    remainingImages -= selected.Count;
                 }
                 if (imageParts.Count == 0 && audioAttachments.Count == 0)
                 {
@@ -127,6 +138,7 @@ namespace RNAssistant.Core.Llm
                 var parts = new List<object> { new { type = "text", text = text } };
                 foreach (var image in imageParts)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     if (image == null || image.Bytes == null || image.Bytes.Length == 0)
                     {
                         continue;
@@ -140,7 +152,8 @@ namespace RNAssistant.Core.Llm
                 }
                 foreach (var audioAttachment in audioAttachments)
                 {
-                    var bytes = _attachmentReader == null ? null : _attachmentReader(audioAttachment);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var bytes = ReadAttachmentBytes(audioAttachment, runCache);
                     if (bytes == null || bytes.Length == 0)
                     {
                         throw new InvalidOperationException("Attachment file is missing: " + (audioAttachment.FileName ?? audioAttachment.Id));
@@ -150,7 +163,7 @@ namespace RNAssistant.Core.Llm
                         type = "input_audio",
                         input_audio = new
                         {
-                            data = Convert.ToBase64String(bytes),
+                            data = bytes,
                             format = AudioFormat(audioAttachment)
                         }
                     });
@@ -194,64 +207,104 @@ namespace RNAssistant.Core.Llm
             foreach (var message in messages ?? new ChatMessage[0])
             {
                 var attachments = message == null ? null : message.Attachments;
-                var ordinary = (attachments ?? new List<ChatAttachment>()).Count(attachment => attachment != null && attachment.Kind == "image");
-                var remaining = Math.Max(0, maxImages - ordinary);
-                foreach (var pdf in (attachments ?? new List<ChatAttachment>()).Where(attachment => attachment != null && attachment.Kind == "pdf"))
+                var ordinary = Math.Min(
+                    Math.Max(0, maxImages - count),
+                    (attachments ?? new List<ChatAttachment>()).Count(attachment =>
+                        attachment != null && string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase)));
+                count += ordinary;
+                var remaining = Math.Max(0, maxImages - count);
+                foreach (var pdf in (attachments ?? new List<ChatAttachment>()).Where(attachment =>
+                    attachment != null && string.Equals(attachment.Kind, "pdf", StringComparison.OrdinalIgnoreCase)))
                 {
                     if (remaining <= 0) break;
                     var pages = Math.Min(remaining, Math.Max(1, pdf.PageCount));
                     count += pages;
                     remaining -= pages;
                 }
+                if (count >= maxImages) break;
             }
             return count * ModelContextBudget.EstimatedImageTokens;
         }
 
-        private IEnumerable<ModelImagePart> ReadModelImages(AppSettings settings, ChatAttachment attachment)
+        private IEnumerable<ModelImagePart> ReadModelImages(
+            AppSettings settings,
+            ChatAttachment attachment,
+            int maxImages,
+            LlmRunCache runCache,
+            CancellationToken cancellationToken)
         {
-            var supplied = _modelImageProvider == null ? null : _modelImageProvider(settings, attachment);
+            var key = AttachmentKey(attachment) + "|model=" + (settings == null ? string.Empty : settings.Model) + "|images=" + maxImages;
+            IReadOnlyList<ModelImagePart> cached;
+            if (runCache != null && runCache.TryGetModelImages(key, out cached))
+            {
+                return cached;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            var supplied = _modelImageProvider == null
+                ? null
+                : _modelImageProvider(settings, attachment, maxImages, cancellationToken);
             if (supplied != null && supplied.Count > 0)
             {
-                return supplied.Where(part => part != null).ToList();
+                cached = supplied.Where(part => part != null).Take(maxImages).ToList();
+                if (runCache != null) runCache.StoreModelImages(key, cached);
+                return cached;
             }
-            if (attachment == null || attachment.Kind != "image")
+            if (attachment == null || !string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase))
             {
                 return new ModelImagePart[0];
             }
-            var bytes = _attachmentReader == null ? null : _attachmentReader(attachment);
+            var bytes = ReadAttachmentBytes(attachment, runCache);
             if (bytes == null || bytes.Length == 0)
             {
                 throw new InvalidOperationException("Attachment file is missing: " + (attachment.FileName ?? attachment.Id));
             }
-            return new[]
+            cached = new[]
             {
                 new ModelImagePart { Bytes = bytes, ContentType = attachment.ContentType, Label = attachment.FileName }
             };
+            if (runCache != null) runCache.StoreModelImages(key, cached);
+            return cached;
         }
 
         private string AppendExtractedText(
             string content,
             IEnumerable<ChatAttachment> attachments,
-            ref int remainingTokens)
+            ref int remainingTokens,
+            LlmRunCache runCache,
+            CancellationToken cancellationToken)
         {
             var builder = new StringBuilder(content ?? string.Empty);
             foreach (var attachment in attachments ?? new ChatAttachment[0])
             {
-                var extracted = attachment == null
-                    ? string.Empty
-                    : (_attachmentTextReader == null ? attachment.ExtractedText : _attachmentTextReader(attachment));
+                cancellationToken.ThrowIfCancellationRequested();
+                if (remainingTokens <= 0) break;
+                var maxChars = (int)Math.Min(1000000L, Math.Max(64L, (long)remainingTokens * 3L + 16L));
+                var cacheKey = AttachmentKey(attachment) + "|text";
+                string extracted = null;
+                var cached = runCache != null && runCache.TryGetAttachmentText(cacheKey, out extracted);
+                if (!cached ||
+                    extracted.Length < maxChars && attachment != null && attachment.ExtractedCharCount > extracted.Length)
+                {
+                    extracted = attachment == null
+                        ? string.Empty
+                        : (_attachmentTextReader == null ? attachment.ExtractedText : _attachmentTextReader(attachment, maxChars));
+                    if (runCache != null) runCache.StoreAttachmentText(cacheKey, extracted);
+                }
                 if (string.IsNullOrWhiteSpace(extracted))
                 {
                     continue;
                 }
-                var selected = TruncateToEstimatedTokens(extracted, remainingTokens);
+                var selected = ModelContextBudget.TruncateText(extracted, remainingTokens);
                 var selectedTokens = ModelContextBudget.EstimateTextTokens(selected);
                 remainingTokens = Math.Max(0, remainingTokens - selectedTokens);
                 builder.AppendLine();
                 builder.AppendLine();
                 builder.AppendLine("[Attachment: " + attachment.FileName + "]");
                 builder.Append(selected);
-                if (attachment.TextTruncated || selected.Length < extracted.Length)
+                if (attachment.TextTruncated ||
+                    attachment.ExtractedCharCount > extracted.Length ||
+                    selected.Length < extracted.Length)
                 {
                     builder.AppendLine();
                     builder.Append("[Content truncated]");
@@ -262,31 +315,22 @@ namespace RNAssistant.Core.Llm
             return builder.ToString();
         }
 
-        private static string TruncateToEstimatedTokens(string text, int maxTokens)
+        private byte[] ReadAttachmentBytes(ChatAttachment attachment, LlmRunCache runCache)
         {
-            if (string.IsNullOrEmpty(text) || maxTokens <= 0)
-            {
-                return string.Empty;
-            }
-            if (ModelContextBudget.EstimateTextTokens(text) <= maxTokens)
-            {
-                return text;
-            }
-            var low = 0;
-            var high = text.Length;
-            while (low < high)
-            {
-                var middle = low + (high - low + 1) / 2;
-                if (ModelContextBudget.EstimateTextTokens(text.Substring(0, middle)) <= maxTokens)
-                {
-                    low = middle;
-                }
-                else
-                {
-                    high = middle - 1;
-                }
-            }
-            return text.Substring(0, low);
+            var key = AttachmentKey(attachment) + "|bytes";
+            byte[] bytes;
+            if (runCache != null && runCache.TryGetAttachmentBytes(key, out bytes)) return bytes;
+            bytes = _attachmentReader == null ? null : _attachmentReader(attachment);
+            if (runCache != null && bytes != null) runCache.StoreAttachmentBytes(key, bytes);
+            return bytes;
+        }
+
+        private static string AttachmentKey(ChatAttachment attachment)
+        {
+            if (attachment == null) return "missing";
+            return (attachment.Id ?? string.Empty) + "|" +
+                (attachment.RelativePath ?? string.Empty) + "|" +
+                attachment.Size + "|" + attachment.ExtractedCharCount;
         }
 
     }

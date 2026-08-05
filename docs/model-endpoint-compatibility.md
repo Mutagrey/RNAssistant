@@ -21,7 +21,7 @@ RNAssistant independently budgets prompt and output tokens so `messages + respon
 
 The canonical AgentDecision fields are `protocolVersion`, `kind`, `decisionSummary`, `goal`, `plan`, `tool`, and `message`. Every field is present; inactive fields are JSON `null`. Markdown fences, prose around JSON, content arrays as planner output, alternate envelopes, `function_call`, and multiple/parallel tool calls are rejected.
 
-If `json_schema` fails before any tool execution and fallback is enabled, RNAssistant retries via `json_object` and keeps that mode for the rest of the run. It does not switch after a tool has run and does not auto-fallback from `native_tool_calls`, because replay could duplicate a mutation.
+If an endpoint explicitly rejects `json_schema` before any tool execution and fallback is enabled, RNAssistant retries via `json_object` and keeps that mode for the rest of the run. Timeouts, network failures, rate limits and server errors are propagated without changing the protocol or duplicating the request. It does not switch after a tool has run and does not auto-fallback from `native_tool_calls`, because replay could duplicate a mutation.
 
 ## Tool Result History
 
@@ -33,7 +33,8 @@ Endpoints that reject tool-call history can use `developer` or `user` result rol
 
 - `usage.prompt_tokens`, `usage.completion_tokens`, and `usage.total_tokens`; `input_tokens`/`output_tokens` aliases are also accepted.
 - Reasoning in `message.reasoning_content` / `message.reasoning`, their SSE delta equivalents, or one leading `<think>...</think>` block. It is separated from normal content and never treated as AgentDecision fields.
-- A model catalog endpoint, defaulting to `/config/models.json` derived from `BaseUrl`. RNAssistant understands OpenAI-style `data[].id`, `models[].value`, and root arrays plus common context/output capability aliases.
+- Per-chat reasoning toggle for compatible models. `ReasoningRequestMode` selects the raw Chat Completions JSON shape: OpenAI `reasoning_effort` (`medium`/`none`), Qwen-style `enable_thinking` boolean, vLLM `chat_template_kwargs.enable_thinking` boolean, or OpenRouter-style `reasoning.enabled` boolean. `auto` uses `reasoning_effort`. Python SDK examples often place non-standard fields in `extra_body`; RNAssistant sends their contents directly because it owns the raw HTTP body.
+- A model catalog endpoint, defaulting to `/config/models.json` derived from `BaseUrl`. RNAssistant understands OpenAI-style `data[].id`, `models[].value`, and root arrays plus common context/output capability aliases. A model entry may override the global reasoning transport through `reasoning_request_mode` / `ReasoningRequestMode`.
 - SSE streaming. RNAssistant detects an SSE body even if a compatible endpoint omits or mislabels `Content-Type`.
 - Custom request headers except unsafe transport headers such as `Content-Length` and `Host`.
 - `image_url` content parts for image/scanned-PDF turns and OpenAI-compatible `input_audio` parts for MP3/WAV. The response is still text.

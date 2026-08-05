@@ -491,12 +491,13 @@ namespace RNAssistant.Harness
                 LlmClient.BuildModelsConfigUrl(new AppSettings { BaseUrl = "https://api.example.test/v1" }),
                 "derived model catalog url fallback");
 
-            var catalog = JArray.Parse("[{\"id\":\"model-a\",\"display_name\":\"Model A\",\"context_window\":1048576,\"max_completion_tokens\":8192,\"supports_reasoning\":true,\"supports_vision\":true,\"supports_audio\":false}]");
+            var catalog = JArray.Parse("[{\"id\":\"model-a\",\"display_name\":\"Model A\",\"context_window\":1048576,\"max_completion_tokens\":8192,\"supports_reasoning\":true,\"reasoning_request_mode\":\"enable_thinking\",\"supports_vision\":true,\"supports_audio\":false}]");
             AssertTrue(ModelCapabilityService.Merge(settings, catalog), "standard data catalog merged");
             AssertEqual(1048576, settings.ModelCapabilities["model-a"].MaxContextTokens.Value, "model context parsed");
             AssertEqual(8192, settings.ModelCapabilities["model-a"].MaxOutputTokens.Value, "model output parsed separately");
             AssertTrue(settings.ModelCapabilities["model-a"].SupportsImages == true, "model vision parsed");
             AssertTrue(settings.ModelCapabilities["model-a"].SupportsReasoning == true, "model reasoning parsed");
+            AssertEqual(ReasoningRequestModes.EnableThinking, settings.ModelCapabilities["model-a"].ReasoningRequestMode, "model reasoning request mode parsed");
             AssertTrue(settings.ModelCapabilities["model-a"].SupportsAudio == false, "model audio parsed");
             AssertEqual("model-a", settings.AttachmentModelPriority[0], "multimodal model appended to priority");
         }

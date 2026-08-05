@@ -128,7 +128,6 @@ namespace RNAssistant.Office.Services
     internal sealed class AgentRunState
     {
         public int TotalToolSteps { get; set; }
-        public bool FormatRepairUsed { get; set; }
         public bool ToolCorrectionUsed { get; set; }
         public bool PendingVerification { get; set; }
         public bool PlanDeclared { get; set; }

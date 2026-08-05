@@ -244,6 +244,7 @@ function applyInitState(init) {
   state.activeChatModel = init.activeChatModel || "";
   state.activeChatMode = init.activeChatMode || init.ActiveChatMode || "agent";
   state.activeChatHtmlMode = !!(init.activeChatHtmlMode || init.ActiveChatHtmlMode);
+  state.activeChatReasoning = !!(init.activeChatReasoning || init.ActiveChatReasoning);
   state.chats = init.chats || [];
   state.documents = init.documents || init.Documents || [];
   state.messages = init.messages || [];
@@ -280,6 +281,7 @@ function applyBridgeUnavailableState(error) {
   state.documents = [];
   state.activeChatId = "";
   state.activeChatHtmlMode = false;
+  state.activeChatReasoning = false;
   state.messages = [];
   state.tools = [];
   state.skills = [];
@@ -374,6 +376,67 @@ async function clearRuntimeData() {
   }
 }
 
+function chatModeDefinition(mode) {
+  return mode === "chat"
+    ? { value: "chat", title: "Chat", icon: "○", description: "Прямой ответ модели без инструментов" }
+    : { value: "agent", title: "Agent", icon: "✦", description: "Планирует, вызывает инструменты и проверяет результат" };
+}
+
+function renderChatModePicker() {
+  var picker = $("chatModePicker");
+  var menu = $("chatModeMenu");
+  var label = $("chatModeButtonLabel");
+  var icon = $("chatModeButtonIcon");
+  if (!picker || !menu || !label || !icon) return;
+
+  var active = chatModeDefinition(state.activeChatMode || "agent");
+  label.textContent = active.title;
+  icon.textContent = active.icon;
+  icon.dataset.mode = active.value;
+  var disabled = !!currentActiveSend() || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
+  if (typeof setComposerPickerDisabled === "function") setComposerPickerDisabled(picker, disabled);
+
+  menu.replaceChildren();
+  [chatModeDefinition("agent"), chatModeDefinition("chat")].forEach(function (mode) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "composer-picker-item composer-mode-item" + (mode.value === active.value ? " is-selected" : "");
+    button.setAttribute("role", "option");
+    button.setAttribute("aria-selected", mode.value === active.value ? "true" : "false");
+
+    var modeIcon = document.createElement("span");
+    modeIcon.className = "composer-mode-item-icon";
+    modeIcon.dataset.mode = mode.value;
+    modeIcon.textContent = mode.icon;
+    button.appendChild(modeIcon);
+
+    var copy = document.createElement("span");
+    copy.className = "composer-mode-item-copy";
+    var title = document.createElement("strong");
+    title.textContent = mode.title;
+    copy.appendChild(title);
+    var description = document.createElement("span");
+    description.textContent = mode.description;
+    copy.appendChild(description);
+    button.appendChild(copy);
+
+    if (mode.value === active.value) {
+      var check = document.createElement("span");
+      check.className = "composer-picker-check";
+      check.setAttribute("aria-hidden", "true");
+      check.textContent = "✓";
+      button.appendChild(check);
+    }
+    button.addEventListener("click", function () {
+      if (picker.classList.contains("is-disabled")) return;
+      picker.open = false;
+      $("chatModeSelect").value = mode.value;
+      saveChatMode(mode.value);
+    });
+    menu.appendChild(button);
+  });
+}
+
 function renderSendControls() {
   var activeSend = currentActiveSend();
   var hasInlineEdit = hasActiveMessageEdit();
@@ -397,7 +460,7 @@ function renderSendControls() {
     stopButton.setAttribute("aria-label", stopButton.title);
   }
   if (input) {
-    input.readOnly = isSending || state.bridgeUnavailable;
+    input.readOnly = isSending || state.reasoningSaving || state.bridgeUnavailable;
     input.placeholder = state.bridgeUnavailable
       ? "Откройте RNAssistant внутри Office, чтобы начать чат..."
       : (currentDocumentAvailable ? "Спросите про текущий документ..." : "Обсудите сохранённый контекст...");
@@ -406,10 +469,17 @@ function renderSendControls() {
     clearButton.disabled = isSending;
   }
   if (modelSelect) {
-    modelSelect.disabled = isSending || state.modelCatalog.loading || state.modelSaving || state.bridgeUnavailable || !state.activeChatId;
+    modelSelect.disabled = isSending || state.modelCatalog.loading || state.modelSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
   }
   if (modeSelect) {
-    modeSelect.disabled = isSending || state.bridgeUnavailable || !state.activeChatId;
+    modeSelect.disabled = isSending || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
+  }
+  renderChatModePicker();
+  if (typeof renderChatModelPicker === "function") {
+    renderChatModelPicker();
+  }
+  if (typeof renderReasoningToggle === "function") {
+    renderReasoningToggle();
   }
   if ($("addSelectionContextButton")) {
     $("addSelectionContextButton").disabled = isSending || state.bridgeUnavailable || !currentDocumentAvailable;
@@ -468,6 +538,7 @@ function updateSendButtonAvailability(hasContent) {
   sendButton.disabled =
     !!currentActiveSend() ||
     state.modelSaving ||
+    state.reasoningSaving ||
     state.bridgeUnavailable ||
     !state.activeChatId ||
     hasActiveMessageEdit() ||
@@ -580,7 +651,7 @@ async function sendChat(text, attachments) {
 }
 
 async function submitChatInput() {
-  if (currentActiveSend() || state.modelSaving || hasActiveMessageEdit()) {
+  if (currentActiveSend() || state.modelSaving || state.reasoningSaving || hasActiveMessageEdit()) {
     if (hasActiveMessageEdit()) {
       focusInlineMessageEditor();
     }
@@ -592,7 +663,7 @@ async function submitChatInput() {
   if (!text && !attachments.length) {
     return;
   }
-  if (currentActiveSend() || state.modelSaving) {
+  if (currentActiveSend() || state.modelSaving || state.reasoningSaving) {
     return;
   }
 
@@ -853,16 +924,39 @@ function bindChatActions() {
     saveChatMode($("chatModeSelect").value);
   });
   var optionsMenu = $("composerOptionsMenu");
+  var composerPickers = [$("chatModePicker"), $("chatModelPicker")].filter(Boolean);
+  composerPickers.forEach(function (picker) {
+    var summary = picker.querySelector("summary");
+    if (summary) {
+      summary.addEventListener("click", function (event) {
+        if (picker.classList.contains("is-disabled")) event.preventDefault();
+      });
+    }
+    picker.addEventListener("toggle", function () {
+      if (!picker.open) return;
+      if (optionsMenu) optionsMenu.open = false;
+      composerPickers.forEach(function (other) {
+        if (other !== picker) other.open = false;
+      });
+    });
+  });
   document.addEventListener("pointerdown", function (event) {
     if (optionsMenu && optionsMenu.open && !optionsMenu.contains(event.target)) {
       optionsMenu.open = false;
     }
+    composerPickers.forEach(function (picker) {
+      if (picker.open && !picker.contains(event.target)) picker.open = false;
+    });
   });
   document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape" && optionsMenu && optionsMenu.open) {
-      optionsMenu.open = false;
-      var summary = optionsMenu.querySelector("summary");
-      if (summary) summary.focus();
+    if (event.key === "Escape") {
+      var opened = composerPickers.filter(function (picker) { return picker.open; })[0] ||
+        (optionsMenu && optionsMenu.open ? optionsMenu : null);
+      if (opened) {
+        opened.open = false;
+        var summary = opened.querySelector("summary");
+        if (summary) summary.focus();
+      }
     }
   });
   $("clearChatButton").addEventListener("click", clearChat);

@@ -150,6 +150,7 @@ namespace RNAssistant.Office.Services
             var state = new AgentRunState { PendingVerification = initialVerificationRequired };
             var routingDiagnosticsJson = string.Empty;
             var protocolMessages = new List<ChatMessage>(initialProtocolMessages ?? new ChatMessage[0]);
+            var llmRunCache = new LlmRunCache();
             if (initialPlanResult != null && AgentPlanStateService.Restore(session, state) != null)
             {
                 ReportPlanProgress(progress, state.PlanActivity);
@@ -178,6 +179,11 @@ namespace RNAssistant.Office.Services
                     break;
                 }
                 var requestText = taskText;
+                var requestOptions = AgentPlannerCompletionRunner.BuildOptions(
+                    string.IsNullOrWhiteSpace(state.ResponseMode) ? settings.AgentResponseMode : state.ResponseMode,
+                    slice.Tools,
+                    llmRunCache);
+                requestOptions.ReasoningEnabled = session == null ? (bool?)null : session.ReasoningEnabled;
                 var messages = _plannerPromptComposer.BuildMessages(
                     requestText,
                     snapshot,
@@ -189,7 +195,8 @@ namespace RNAssistant.Office.Services
                     settings,
                     session,
                     attachments,
-                    protocolMessages);
+                    protocolMessages,
+                    requestOptions);
                 contextUsage = ContextUsageEstimator.FromPrompt(messages, settings);
                 ReportProgress(progress, "thinking", AgentRunPresentation.BuildTaskProgressMessage(route, true));
                 var plannerAttempt = await _plannerCompletion.CompleteAsync(
@@ -197,6 +204,7 @@ namespace RNAssistant.Office.Services
                     messages,
                     slice.Tools,
                     state,
+                    requestOptions,
                     progress,
                     AgentRunPresentation.BuildTaskProgressMessage(route, true),
                     "Исправляю формат следующего действия...",
@@ -207,6 +215,7 @@ namespace RNAssistant.Office.Services
                 var completion = plannerAttempt.Completion;
                 var plannerText = plannerAttempt.Text;
                 var parsed = plannerAttempt.ParseResult;
+                AgentRunPresentation.RecordRecoveredPlannerResponses(session, plannerAttempt.RejectedResponses);
 
                 if (!parsed.Success)
                 {
@@ -250,18 +259,20 @@ namespace RNAssistant.Office.Services
                         !state.ToolCorrectionUsed)
                     {
                         state.ToolCorrectionUsed = true;
-                        var forced = BuildPlannerCorrectionMessages(PromptText(settings, p => p.ForceToolUsePrompt), snapshot, route, slice, observations, documentContext, skills, settings, requestText, session, attachments, protocolMessages);
+                        var forced = BuildPlannerCorrectionMessages(PromptText(settings, p => p.ForceToolUsePrompt), snapshot, route, slice, observations, documentContext, skills, settings, requestText, session, attachments, protocolMessages, plannerAttempt.RequestOptions);
                         var correctionAttempt = await _plannerCompletion.CompleteAsync(
                             settings,
                             forced,
                             slice.Tools,
                             state,
+                            plannerAttempt.RequestOptions,
                             progress,
                             "Подбираю доступное действие для задачи...",
                             "Повторно исправляю формат действия...",
                             PromptText(settings, p => p.RepairDecisionPrompt),
                             cancellationToken).ConfigureAwait(false);
                         contextUsage = correctionAttempt.ContextUsage;
+                        AgentRunPresentation.RecordRecoveredPlannerResponses(session, correctionAttempt.RejectedResponses);
                         if (!correctionAttempt.ParseResult.Success)
                         {
                             assistantText = AgentRunPresentation.RecordPlannerFailure(session, correctionAttempt.Completion, correctionAttempt.Text, correctionAttempt.ParseResult, "Planner correction invalid");
@@ -326,7 +337,6 @@ namespace RNAssistant.Office.Services
                 }
                 var command = validation.Command;
                 var plannedActivity = AgentRunPresentation.CreateRunningActivity(command, "planned", "tool");
-                plannedActivity.Title = response.DecisionSummary;
                 plannedActivity.DataJson = routingDiagnosticsJson;
                 session.Messages.Add(AgentTranscript.CreateAssistantMessage(response.DecisionSummary, completion, plannedActivity));
                 ReportProgress(progress, "plan", response.DecisionSummary, plannedActivity);
@@ -621,9 +631,10 @@ namespace RNAssistant.Office.Services
             string taskText,
             ChatSession session,
             IReadOnlyList<ChatAttachment> attachments,
-            IReadOnlyList<ChatMessage> protocolMessages)
+            IReadOnlyList<ChatMessage> protocolMessages,
+            LlmRequestOptions requestOptions)
         {
-            var messages = _plannerPromptComposer.BuildMessages(taskText, snapshot, route, slice, observations, context, skills, settings, session, attachments, protocolMessages);
+            var messages = _plannerPromptComposer.BuildMessages(taskText, snapshot, route, slice, observations, context, skills, settings, session, attachments, protocolMessages, requestOptions);
             messages.Add(new ChatMessage
             {
                 Role = "user",

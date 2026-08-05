@@ -1,13 +1,13 @@
 function renderActivityNode(activity, nested, current, context) {
   var node = document.createElement("div");
   var status = activityStatus(activity);
-  node.className = "agent-activity" + (nested ? " nested" : "") + (current ? " current" : "") + " status-" + status;
+  var kind = activityKind(activity) || "activity";
+  node.className = "agent-activity kind-" + kind + (nested ? " nested" : "") + (current ? " current" : "") + " status-" + status;
 
   var expandable = activityHasDetails(activity);
   if (expandable) {
     var details = document.createElement("details");
     details.className = "agent-activity-toggle";
-    details.open = current || status === "running" || status === "failed" || status === "waiting";
     details.appendChild(renderActivityRow(activity, current, true, context));
     appendActivityDetailsContent(details, activity, context);
     node.appendChild(details);
@@ -34,31 +34,37 @@ function renderActivityRow(activity, current, expandable, context) {
   mark.setAttribute("aria-hidden", "true");
   row.appendChild(mark);
 
+  var copy = document.createElement("span");
+  copy.className = "agent-activity-copy";
+
   var name = document.createElement("span");
   name.className = "agent-activity-name";
   name.textContent = title;
-  row.appendChild(name);
+  copy.appendChild(name);
 
   var commentNode = document.createElement("span");
   commentNode.className = "agent-activity-comment" + (comment ? "" : " is-empty");
   commentNode.textContent = comment;
-  row.appendChild(commentNode);
+  copy.appendChild(commentNode);
 
   var metaParts = [agentStatusLabel(status)];
   var time = activityTimeText(context);
   if (time) {
-    metaParts.unshift(time);
+    metaParts.push(time);
   }
-  var meta = document.createElement("div");
+  var meta = document.createElement("span");
   meta.className = "agent-activity-meta";
   meta.textContent = metaParts.join(" · ");
-  row.appendChild(meta);
+  copy.appendChild(meta);
+  row.appendChild(copy);
 
-  var caret = document.createElement("span");
-  caret.className = "agent-activity-caret" + (expandable ? "" : " is-hidden");
-  caret.setAttribute("aria-hidden", "true");
-  caret.textContent = "›";
-  row.appendChild(caret);
+  if (expandable) {
+    var caret = document.createElement("span");
+    caret.className = "agent-activity-caret";
+    caret.setAttribute("aria-hidden", "true");
+    caret.textContent = "›";
+    copy.appendChild(caret);
+  }
   return row;
 }
 
@@ -126,32 +132,6 @@ function createAgentTextButton(label, className, onClick) {
   return button;
 }
 
-function appendActivityConfirmationPanel(node, activity) {
-  var pendingId = activityPendingId(activity);
-  if (!pendingId || activityStatus(activity) !== "waiting" || currentActiveSend()) {
-    return;
-  }
-
-  var panel = document.createElement("div");
-  panel.className = "agent-confirm-panel";
-
-  var reason = document.createElement("div");
-  reason.className = "agent-confirm-reason";
-  reason.textContent = activityResultMessage(activity) || "Инструмент ждет подтверждения.";
-  panel.appendChild(reason);
-
-  var actions = document.createElement("div");
-  actions.className = "agent-inline-actions";
-  actions.appendChild(createAgentTextButton("Подтвердить", "primary", function () {
-    confirmAgentTool(pendingId);
-  }));
-  actions.appendChild(createAgentTextButton("Отменить", "secondary", function () {
-    cancelAgentTool(pendingId);
-  }));
-  panel.appendChild(actions);
-  node.appendChild(panel);
-}
-
 function appendActivityErrorPanel(node, activity) {
   if (activityStatus(activity) !== "failed") {
     return;
@@ -199,7 +179,6 @@ function appendActivityDetailsContent(node, activity, context) {
     body.appendChild(childList);
   }
 
-  appendActivityConfirmationPanel(body, activity);
   appendActivityErrorPanel(body, activity);
 
   if (activityStatus(activity) !== "failed" && activityResultMessage(activity)) {
@@ -272,101 +251,54 @@ function appendActivityTreeArtifacts(parent, activity, context) {
   });
 }
 
-function agentActivityGroup(activity) {
-  var kind = activityKind(activity);
-  if (kind === "reasoning" || kind === "routing" || kind === "notice") {
-    return { key: "preparation", title: "Подготовка" };
+function agentDecisionText(item) {
+  if (!item) return "";
+  if (item.decisionText) return String(item.decisionText).trim();
+  var activity = item.activity || {};
+  var explicit = activity.__decisionMessage || activityValue(activity, "DecisionMessage", "decisionMessage", "");
+  if (explicit) return String(explicit).trim();
+  if ((activityKind(activity) === "plan" || activityStatus(activity) === "planned") && item.message) {
+    return messageContent(item.message).trim();
   }
-  if (kind === "verification") {
-    return { key: "verification", title: "Проверка результата" };
-  }
-  if (kind === "retry") {
-    return { key: "retry", title: "Повторные попытки" };
-  }
-  if (kind === "diagnostic") {
-    return { key: "diagnostic", title: "Диагностика" };
-  }
-  return { key: "actions", title: "Действия агента" };
+  return "";
 }
 
-function groupAgentTimeline(timeline) {
-  var groups = [];
-  (timeline || []).forEach(function (item) {
-    var info = agentActivityGroup(item.activity);
-    var group = groups.length ? groups[groups.length - 1] : null;
-    if (!group || group.key !== info.key) {
-      group = { key: info.key, title: info.title, items: [] };
-      groups.push(group);
-    }
-    group.items.push(item);
-  });
-  return groups;
+function appendAgentDecisionMessage(parent, text) {
+  text = String(text || "").trim();
+  if (!text) return;
+  var message = document.createElement("div");
+  message.className = "agent-decision-message markdown";
+  message.innerHTML = markdown(text);
+  parent.appendChild(message);
+  enhanceMarkdown(message);
 }
 
-function appendAgentActivityGroup(parent, group, stats, live, isLast) {
-  var counts = timelineStatusCounts(group.items);
-  var status = statusFromCounts(counts);
-  var currentStatus = stats.current ? activityStatus(stats.current) : "";
-  var currentIsActive = isActiveTimelineStatus(currentStatus) || currentStatus === "failed" || currentStatus === "cancelled";
-  var hasCurrent = !!(currentIsActive && group.items.some(function (item) {
-    return activityContains(item.activity, stats.current);
-  }));
-  var process = document.createElement("details");
-  process.className = "agent-run-process agent-activity-group status-" + status;
-  process.open = hasCurrent || status === "waiting" || status === "failed" || (live && isLast && status !== "completed");
-
-  var summary = document.createElement("summary");
-  summary.className = "agent-run-process-summary";
-  var icon = document.createElement("span");
-  icon.className = "agent-run-process-icon";
-  icon.setAttribute("aria-hidden", "true");
-  summary.appendChild(icon);
-  var label = document.createElement("span");
-  label.className = "agent-run-process-label";
-  label.textContent = hasCurrent
-    ? activityPrimaryText(stats.current)
-    : group.title;
-  summary.appendChild(label);
-
-  var meta = document.createElement("span");
-  meta.className = "agent-run-process-meta";
-  meta.textContent = group.items.length + " · " + agentStatusLabel(status);
-  summary.appendChild(meta);
-  var caret = document.createElement("span");
-  caret.className = "agent-run-process-caret";
-  caret.setAttribute("aria-hidden", "true");
-  caret.textContent = "›";
-  summary.appendChild(caret);
-  process.appendChild(summary);
-
-  var steps = document.createElement("div");
-  steps.className = "agent-run-steps";
-  group.items.forEach(function (item) {
-    var isCurrent = stats.current && activityContains(item.activity, stats.current);
-    steps.appendChild(renderActivityNode(item.activity, false, isCurrent, {
-      messageId: messageId(item.message),
-      index: item.index,
-      message: item.message,
-      currentActivity: stats.current,
-      renderInlineArtifacts: false
-    }));
-  });
-  process.appendChild(steps);
-  parent.appendChild(process);
-}
-
-function appendAgentRunProcess(parent, timeline, stats, live) {
-  var groups = groupAgentTimeline(timeline);
-  if (!groups.length) {
+function appendAgentRunProcess(parent, timeline, stats) {
+  if (!timeline.length) {
     var empty = document.createElement("div");
     empty.className = "agent-run-empty";
     empty.textContent = "Шаги пока не получены.";
     parent.appendChild(empty);
     return;
   }
-  groups.forEach(function (group, index) {
-    appendAgentActivityGroup(parent, group, stats, live, index === groups.length - 1);
+
+  var process = document.createElement("div");
+  process.className = "agent-run-process";
+  timeline.forEach(function (item) {
+    var entry = document.createElement("div");
+    entry.className = "agent-transcript-entry";
+    appendAgentDecisionMessage(entry, agentDecisionText(item));
+    var isCurrent = stats.current && activityContains(item.activity, stats.current);
+    entry.appendChild(renderActivityNode(item.activity, false, isCurrent, {
+      messageId: messageId(item.message),
+      index: item.index,
+      message: item.message,
+      currentActivity: stats.current,
+      renderInlineArtifacts: false
+    }));
+    process.appendChild(entry);
   });
+  parent.appendChild(process);
 }
 
 function collectAgentRunTimelineItems(items) {
@@ -384,10 +316,6 @@ function collectAgentRunTimelineItems(items) {
   return items.slice();
 }
 
-function hasAgentFinalAnswer(finalMessage) {
-  return !!(finalMessage && messageContent(finalMessage.message).trim());
-}
-
 function collectVisibleAgentTimelineItems(items, finalMessage) {
   var timeline = collapseAgentTimelineItems(collectAgentRunTimelineItems(items));
   return timeline.filter(function (item, index) {
@@ -399,6 +327,12 @@ function collapseAgentTimelineItems(timeline) {
   var result = [];
   var latestByKey = {};
   (timeline || []).forEach(function (item) {
+    var nextItem = {
+      message: item.message,
+      index: item.index,
+      activity: item.activity,
+      decisionText: agentDecisionText(item)
+    };
     var key = activityTimelineKey(item.activity);
     var existingIndex = latestByKey[key];
     if (existingIndex !== undefined) {
@@ -406,12 +340,13 @@ function collapseAgentTimelineItems(timeline) {
       var nextStatus = activityStatus(item.activity);
       if (existingStatus === "planned" || existingStatus === "running" || existingStatus === "waiting" ||
           (existingStatus === "failed" && nextStatus === "completed")) {
-        result[existingIndex] = item;
+        nextItem.decisionText = result[existingIndex].decisionText || nextItem.decisionText;
+        result[existingIndex] = nextItem;
         return;
       }
     }
     latestByKey[key] = result.length;
-    result.push(item);
+    result.push(nextItem);
   });
   return result;
 }
@@ -430,7 +365,7 @@ function isRecoveredFailureItem(timeline, index, finalMessage) {
       return true;
     }
   }
-  return hasAgentFinalAnswer(finalMessage);
+  return false;
 }
 
 function timelineStatusCounts(timeline) {
@@ -479,11 +414,11 @@ function activityContains(activity, target) {
   return false;
 }
 
-function findAgentPlanActivity(items) {
+function findAgentPlanItem(items) {
   var plan = null;
   (items || []).forEach(function (item) {
     if (item && activityKind(item.activity) === "plan") {
-      plan = item.activity;
+      plan = item;
     }
   });
   return plan;
@@ -547,7 +482,6 @@ function appendAgentRunPlan(parent, plan) {
   var info = agentPlanInfo(plan);
   var details = document.createElement("details");
   details.className = "agent-run-plan status-" + activityStatus(plan);
-  details.open = activityStatus(plan) === "failed" || activityStatus(plan) === "waiting";
   var summary = document.createElement("summary");
   summary.className = "agent-run-plan-summary";
   var label = document.createElement("strong");
@@ -568,17 +502,99 @@ function appendAgentRunPlan(parent, plan) {
 
 function activeAgentPlanActivity() {
   var activeSend = currentActiveSend();
-  if (!activeSend) return null;
+  var approval = pendingAgentApprovalActivity();
+  if (!activeSend && !approval) return null;
   var activities = state.liveAgentRun || [];
   for (var i = activities.length - 1; i >= 0; i -= 1) {
     if (activityKind(activities[i]) === "plan") return activities[i];
   }
-  if (!activeSend.confirming) return null;
+  if (!approval && (!activeSend || !activeSend.confirming)) return null;
   for (var messageIndex = state.messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
     var activity = messageActivity(state.messages[messageIndex]);
     if (activityKind(activity) === "plan") return activity;
   }
   return null;
+}
+
+function pendingConfirmationInActivity(activity) {
+  if (!activity) return null;
+  if (activityPendingId(activity) && activityStatus(activity) === "waiting") {
+    return activity;
+  }
+  var children = activityChildren(activity);
+  for (var index = children.length - 1; index >= 0; index -= 1) {
+    var child = pendingConfirmationInActivity(children[index]);
+    if (child) return child;
+  }
+  return null;
+}
+
+function pendingAgentApprovalActivity() {
+  if (currentActiveSend()) return null;
+  var live = state.liveAgentRun || [];
+  for (var liveIndex = live.length - 1; liveIndex >= 0; liveIndex -= 1) {
+    var liveMatch = pendingConfirmationInActivity(live[liveIndex]);
+    if (liveMatch) return liveMatch;
+  }
+  for (var messageIndex = state.messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    var match = pendingConfirmationInActivity(messageActivity(state.messages[messageIndex]));
+    if (match) return match;
+  }
+  return null;
+}
+
+function renderAgentApprovalDock() {
+  var dock = $("agentApprovalDock");
+  if (!dock) return;
+  var activity = pendingAgentApprovalActivity();
+  if (!activity) {
+    dock.replaceChildren();
+    dock.classList.add("hidden");
+    return;
+  }
+
+  var pendingId = activityPendingId(activity);
+  var panel = document.createElement("section");
+  panel.className = "agent-approval-panel";
+  panel.setAttribute("aria-label", "Подтверждение действия агента");
+
+  var mark = document.createElement("span");
+  mark.className = "agent-approval-mark";
+  mark.setAttribute("aria-hidden", "true");
+  mark.textContent = "!";
+  panel.appendChild(mark);
+
+  var copy = document.createElement("div");
+  copy.className = "agent-approval-copy";
+  var title = document.createElement("div");
+  title.className = "agent-approval-title";
+  title.textContent = activityPrimaryText(activity);
+  copy.appendChild(title);
+  var meta = document.createElement("div");
+  meta.className = "agent-approval-meta";
+  meta.textContent = ["Нужно подтверждение", activityToolId(activity)].filter(Boolean).join(" · ");
+  copy.appendChild(meta);
+  var reason = activityResultMessage(activity);
+  if (reason) {
+    var reasonNode = document.createElement("div");
+    reasonNode.className = "agent-approval-reason";
+    reasonNode.textContent = reason;
+    copy.appendChild(reasonNode);
+  }
+  panel.appendChild(copy);
+
+  var actions = document.createElement("div");
+  actions.className = "agent-approval-actions";
+  actions.appendChild(createAgentTextButton("Отменить", "secondary", function () {
+    cancelAgentTool(pendingId);
+  }));
+  actions.appendChild(createAgentTextButton("Подтвердить", "primary", function () {
+    confirmAgentTool(pendingId);
+  }));
+  panel.appendChild(actions);
+
+  dock.replaceChildren(panel);
+  dock.classList.remove("hidden");
 }
 
 function renderAgentPlanDock() {
@@ -602,9 +618,18 @@ function renderAgentPlanDock() {
 
   var summary = document.createElement("summary");
   summary.className = "agent-plan-card-summary";
+  var mark = document.createElement("span");
+  mark.className = "agent-plan-card-mark";
+  mark.setAttribute("aria-hidden", "true");
+  mark.textContent = "☷";
+  summary.appendChild(mark);
   var heading = document.createElement("strong");
-  heading.textContent = "План · " + info.completed + "/" + info.total;
+  heading.textContent = "План";
   summary.appendChild(heading);
+  var count = document.createElement("span");
+  count.className = "agent-plan-card-count";
+  count.textContent = info.completed + " из " + info.total;
+  summary.appendChild(count);
   var current = document.createElement("span");
   current.className = "agent-plan-card-current";
   current.textContent = info.current ? activityTitle(info.current) : activityTitle(plan);
@@ -652,6 +677,65 @@ async function deleteAgentRun(items, finalMessage) {
   }
 }
 
+function agentActionCountLabel(count) {
+  if (!count) return "Ход выполнения";
+  var mod10 = count % 10;
+  var mod100 = count % 100;
+  var word = mod10 === 1 && mod100 !== 11
+    ? "действие"
+    : (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? "действия" : "действий");
+  return "Выполнено " + count + " " + word;
+}
+
+function buildAgentRunTranscript(items, timeline, stats, includePlan) {
+  var transcript = document.createElement("div");
+  transcript.className = "agent-run-transcript";
+  var planItem = findAgentPlanItem(items);
+  if (planItem) {
+    appendAgentDecisionMessage(transcript, agentDecisionText(planItem));
+    if (includePlan) {
+      appendAgentRunPlan(transcript, planItem.activity);
+    }
+  }
+  if (timeline.length) {
+    appendAgentRunProcess(transcript, timeline, stats);
+  }
+  appendAgentRunArtifacts(transcript, timeline);
+  return transcript;
+}
+
+function appendCollapsedAgentRun(parent, transcript, timeline, stats) {
+  var details = document.createElement("details");
+  details.className = "agent-run-history status-" + stats.status;
+
+  var summary = document.createElement("summary");
+  summary.className = "agent-run-history-summary";
+  var icon = document.createElement("span");
+  icon.className = "agent-run-history-icon";
+  icon.setAttribute("aria-hidden", "true");
+  summary.appendChild(icon);
+  var title = document.createElement("span");
+  title.className = "agent-run-history-title";
+  title.textContent = agentActionCountLabel(timeline.length);
+  summary.appendChild(title);
+  var meta = document.createElement("span");
+  meta.className = "agent-run-history-meta";
+  meta.textContent = [stats.elapsed, agentStatusLabel(stats.status)].filter(Boolean).join(" · ");
+  summary.appendChild(meta);
+  var caret = document.createElement("span");
+  caret.className = "agent-run-history-caret";
+  caret.setAttribute("aria-hidden", "true");
+  caret.textContent = "›";
+  summary.appendChild(caret);
+  details.appendChild(summary);
+
+  var content = document.createElement("div");
+  content.className = "agent-run-history-content";
+  content.appendChild(transcript);
+  details.appendChild(content);
+  parent.appendChild(details);
+}
+
 function renderAgentRunArticle(run) {
   var items = run.items || [];
   var finalMessage = run.finalMessage || null;
@@ -662,14 +746,13 @@ function renderAgentRunArticle(run) {
 
   var body = document.createElement("div");
   body.className = "agent-run-wrap";
-
-  if (!run.live) {
-    appendAgentRunPlan(body, findAgentPlanActivity(items));
+  var dockCurrentPlan = !finalMessage && (!!currentActiveSend() || !!pendingAgentApprovalActivity());
+  var transcript = buildAgentRunTranscript(items, timeline, stats, !dockCurrentPlan);
+  if (finalMessage && !run.live) {
+    appendCollapsedAgentRun(body, transcript, timeline, stats);
+  } else {
+    body.appendChild(transcript);
   }
-  if (timeline.length) {
-    appendAgentRunProcess(body, timeline, stats, !!run.live);
-  }
-  appendAgentRunArtifacts(body, timeline);
   appendAgentFinalAnswer(body, finalMessage);
   node.appendChild(body);
 

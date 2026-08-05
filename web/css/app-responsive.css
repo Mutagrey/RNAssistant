@@ -20,14 +20,6 @@
     gap: 2px;
   }
 
-  .context-meter {
-    flex: 0 0 30px;
-  }
-
-  .context-meter em {
-    display: none;
-  }
-
   .message.user .markdown,
   .message.user .message-footer,
   .message-inline-editor {
@@ -154,7 +146,7 @@
   .composer {
     position: sticky;
     bottom: 0;
-    z-index: 8;
+    z-index: 10;
     border-radius: 8px;
     padding: 6px;
   }
@@ -170,16 +162,28 @@
     gap: 2px;
   }
 
-  .context-meter {
-    flex: 0 0 30px;
-  }
-
   .composer-actions {
     margin-left: auto;
   }
 
   .composer-model {
     --chat-model-max-width: 138px;
+  }
+
+  .composer-picker-trigger-label {
+    max-width: 88px;
+  }
+
+  .composer-mode-picker .composer-picker-trigger-label {
+    display: none;
+  }
+
+  .context-meter em {
+    display: none;
+  }
+
+  .agent-plan-card-current {
+    max-width: 130px;
   }
 
   .composer-options-panel {

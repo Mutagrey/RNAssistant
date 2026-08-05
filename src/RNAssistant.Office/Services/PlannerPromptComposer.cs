@@ -10,7 +10,7 @@ namespace RNAssistant.Office.Services
     {
         public List<ChatMessage> BuildMessages(string userText, OfficeSnapshot snapshot, RoutedTask route, ToolCatalogSlice tools, IEnumerable<AgentObservation> observations, DocumentContext context, IEnumerable<SkillDefinition> skills, AppSettings settings)
         {
-            return BuildMessages(userText, snapshot, route, tools, observations, context, skills, settings, null, null, null);
+            return BuildMessages(userText, snapshot, route, tools, observations, context, skills, settings, null, null, null, null);
         }
 
         public List<ChatMessage> BuildMessages(
@@ -24,12 +24,13 @@ namespace RNAssistant.Office.Services
             AppSettings settings,
             ChatSession session,
             IReadOnlyList<ChatAttachment> currentAttachments,
-            IReadOnlyList<ChatMessage> protocolMessages = null)
+            IReadOnlyList<ChatMessage> protocolMessages = null,
+            LlmRequestOptions requestOptions = null)
         {
             settings = settings ?? new AppSettings();
             var messages = new List<ChatMessage>();
             var instruction = BuildInstructionPrompt(settings);
-            var plannerContext = BuildPlannerContext(userText, snapshot, route, tools, observations, context, skills, settings);
+            var plannerContext = BuildPlannerContext(userText, snapshot, route, tools, observations, context, skills, settings, requestOptions);
             var instructionRole = PromptRole(settings);
             var separateInstruction = string.Equals(instructionRole, "system", StringComparison.Ordinal) ||
                 string.Equals(instructionRole, "developer", StringComparison.Ordinal);
@@ -48,7 +49,7 @@ namespace RNAssistant.Office.Services
             current.Attachments = currentAttachments == null
                 ? new List<ChatAttachment>()
                 : new List<ChatAttachment>(currentAttachments);
-            var options = AgentPlannerCompletionRunner.BuildOptions(settings.AgentResponseMode, tools == null ? null : tools.Tools);
+            var options = requestOptions ?? AgentPlannerCompletionRunner.BuildOptions(settings.AgentResponseMode, tools == null ? null : tools.Tools);
             var inputBudget = Math.Max(
                 256,
                 ModelContextBudget.InputBudgetTokens(settings) - ModelContextBudget.EstimateRequestOptionsTokens(options));
@@ -78,9 +79,21 @@ namespace RNAssistant.Office.Services
             return "user";
         }
 
-        private static string BuildPlannerContext(string userText, OfficeSnapshot snapshot, RoutedTask route, ToolCatalogSlice tools, IEnumerable<AgentObservation> observations, DocumentContext context, IEnumerable<SkillDefinition> skills, AppSettings settings)
+        private static string BuildPlannerContext(
+            string userText,
+            OfficeSnapshot snapshot,
+            RoutedTask route,
+            ToolCatalogSlice tools,
+            IEnumerable<AgentObservation> observations,
+            DocumentContext context,
+            IEnumerable<SkillDefinition> skills,
+            AppSettings settings,
+            LlmRequestOptions requestOptions)
         {
             var builder = new StringBuilder();
+            var structuredTools = requestOptions != null &&
+                (requestOptions.NativeTools ||
+                 string.Equals(requestOptions.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.OrdinalIgnoreCase));
             builder.AppendLine("USER_REQUEST:");
             builder.AppendLine(userText ?? string.Empty);
             builder.AppendLine();
@@ -92,8 +105,8 @@ namespace RNAssistant.Office.Services
             builder.AppendLine("phase: " + (route == null ? string.Empty : route.Phase));
             builder.AppendLine("requiresTool: " + (route != null && route.RequiresTool ? "true" : "false"));
             builder.AppendLine("requiresInspection: " + (route != null && route.RequiresInspection ? "true" : "false"));
-            builder.AppendLine("Return exactly one tool call per model turn. For a visible kind=plan, keep steps ordered and observable, including expected inspection, mutation, and verification actions; the runtime advances one visible step per executed tool.");
-            builder.AppendLine("responseMode: " + (settings == null ? AgentResponseModes.JsonSchema : settings.AgentResponseMode));
+            builder.AppendLine("Return exactly one tool call per model turn. decisionSummary is displayed as a normal chat message immediately before the selected action: briefly state established progress and the next action without exposing internal reasoning. For a visible kind=plan, keep steps ordered and observable, including expected inspection, mutation, and verification actions; the runtime advances one visible step per executed tool.");
+            builder.AppendLine("responseMode: " + RequestResponseMode(requestOptions, settings));
             if (route != null && string.Equals(route.TaskType, "html", StringComparison.OrdinalIgnoreCase))
             {
                 builder.AppendLine("HTML MODE IS ENABLED FOR THIS CHAT.");
@@ -136,7 +149,7 @@ namespace RNAssistant.Office.Services
                 {
                     builder.AppendLine("   doNotUseWhen: " + AgentText.Truncate(tool.DoNotUseWhen, 220));
                 }
-                if (!string.IsNullOrWhiteSpace(tool.ExamplesJson))
+                if (!structuredTools && !string.IsNullOrWhiteSpace(tool.ExamplesJson))
                 {
                     builder.AppendLine("   examples: " + AgentText.Truncate(tool.ExamplesJson, 500));
                 }
@@ -214,21 +227,7 @@ namespace RNAssistant.Office.Services
 
         private static string TruncateToTokens(string value, int maxTokens)
         {
-            if (string.IsNullOrEmpty(value) || ModelContextBudget.EstimateTextTokens(value) <= maxTokens)
-            {
-                return value ?? string.Empty;
-            }
-            var low = 0;
-            var high = value.Length;
-            while (low < high)
-            {
-                var middle = low + (high - low + 1) / 2;
-                if (ModelContextBudget.EstimateTextTokens(value.Substring(0, middle)) <= maxTokens)
-                    low = middle;
-                else
-                    high = middle - 1;
-            }
-            return value.Substring(0, low);
+            return ModelContextBudget.TruncateText(value, maxTokens);
         }
 
         private static void AppendSkills(StringBuilder builder, IEnumerable<SkillDefinition> skills, AppSettings settings)
@@ -262,6 +261,20 @@ namespace RNAssistant.Office.Services
                     builder.AppendLine(body);
                 }
             }
+        }
+
+        private static string RequestResponseMode(LlmRequestOptions requestOptions, AppSettings settings)
+        {
+            if (requestOptions != null && requestOptions.NativeTools) return AgentResponseModes.NativeToolCalls;
+            if (requestOptions != null && string.Equals(requestOptions.ResponseFormat, LlmResponseFormats.JsonObject, StringComparison.OrdinalIgnoreCase))
+            {
+                return AgentResponseModes.JsonObject;
+            }
+            if (requestOptions != null && string.Equals(requestOptions.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.OrdinalIgnoreCase))
+            {
+                return AgentResponseModes.JsonSchema;
+            }
+            return settings == null ? AgentResponseModes.JsonSchema : settings.AgentResponseMode;
         }
 
 

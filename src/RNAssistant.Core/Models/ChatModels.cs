@@ -22,6 +22,7 @@ namespace RNAssistant.Core.Models
         public string Id { get; set; }
         public string Role { get; set; }
         public string Content { get; set; }
+        public bool ExcludeFromModelContext { get; set; }
         public string ToolCallId { get; set; }
         public string ToolName { get; set; }
         public List<LlmToolCall> ToolCalls { get; set; }
@@ -114,6 +115,7 @@ namespace RNAssistant.Core.Models
         public string Model { get; set; }
         public string Mode { get; set; }
         public bool HtmlModeEnabled { get; set; }
+        public bool ReasoningEnabled { get; set; }
         public DateTime CreatedUtc { get; set; }
         public DateTime UpdatedUtc { get; set; }
         public DocumentContext Context { get; set; }
@@ -164,6 +166,7 @@ namespace RNAssistant.Core.Models
         public string Model { get; set; }
         public string Mode { get; set; }
         public bool HtmlModeEnabled { get; set; }
+        public bool ReasoningEnabled { get; set; }
         public bool HasHtmlWorkspace { get; set; }
         public int HtmlFileCount { get; set; }
         public int HtmlDataSourceCount { get; set; }

@@ -19,6 +19,9 @@ async function loadModelCatalog(useFormSettings) {
 
 async function saveChatModelSelection(value) {
   value = String(value || "").trim();
+  if (state.reasoningSaving) {
+    return false;
+  }
   if (value === activeChatModel()) {
     return true;
   }
@@ -47,6 +50,28 @@ async function saveChatModelSelection(value) {
   }
 }
 
+async function saveChatReasoningSelection(enabled) {
+  if (!state.activeChatId || state.modelSaving || state.reasoningSaving || !!currentActiveSend()) {
+    return false;
+  }
+  state.reasoningSaving = true;
+  renderReasoningToggle();
+  renderSendControls();
+  try {
+    var response = await send("setChatReasoning", { chatId: state.activeChatId, enabled: !!enabled });
+    applyChatState(response);
+    log(enabled ? "Reasoning enabled." : "Reasoning disabled.");
+    return state.activeChatReasoning === !!enabled;
+  } catch (error) {
+    log(error.detail || error.message);
+    return false;
+  } finally {
+    state.reasoningSaving = false;
+    renderModelControls();
+    renderSendControls();
+  }
+}
+
 function bindModelActions() {
   $("modelSelect").addEventListener("change", function () {
     if ($("modelSelect").value) {
@@ -59,6 +84,10 @@ function bindModelActions() {
   $("chatModelSelect").addEventListener("change", function () {
     setChatModelSelectWidth($("chatModelSelect"));
     saveChatModelSelection($("chatModelSelect").value);
+  });
+  $("chatReasoningToggle").addEventListener("click", function () {
+    if (effectiveModelSupportsReasoning(activeChatModel() || settingsModel()) === false) return;
+    saveChatReasoningSelection(!state.activeChatReasoning);
   });
   $("loadModelsButton").addEventListener("click", function () {
     loadModelCatalog(true);

@@ -67,6 +67,7 @@ namespace RNAssistant.Harness
                     null).Messages;
                 var json = JsonConvert.SerializeObject(payload);
                 AssertContains(json, "\"type\":\"input_audio\"", "audio content part");
+                AssertContains(json, Convert.ToBase64String(wav), "audio bytes serialize as base64");
                 AssertContains(json, "\"format\":\"wav\"", "audio format");
 
                 var mp3Bytes = new byte[427];
@@ -138,6 +139,7 @@ namespace RNAssistant.Harness
                 AssertEqual(4000, attachment.ExtractedText.Length, "inline preview length");
                 AssertEqual(5000, attachment.ExtractedCharCount, "extracted char count");
                 AssertEqual(full, store.ReadExtractedText(attachment), "sidecar full text");
+                AssertEqual(123, store.ReadExtractedText(attachment, 123).Length, "sidecar bounded read");
             });
         }
 
@@ -152,11 +154,15 @@ namespace RNAssistant.Harness
                 PageTextLengths = new List<int> { 0 },
                 ExtractedText = "[PDF page 1]"
             };
+            var providerCalls = 0;
+            var providerLimit = 0;
             var builder = new LlmMessageBuilder(
                 null,
                 delegate { return attachment.ExtractedText; },
-                delegate
+                delegate(AppSettings providerSettings, ChatAttachment providerAttachment, int maxImages, System.Threading.CancellationToken cancellationToken)
                 {
+                    providerCalls += 1;
+                    providerLimit = maxImages;
                     return new[]
                     {
                         new ModelImagePart
@@ -167,10 +173,24 @@ namespace RNAssistant.Harness
                         }
                     };
                 });
+            var settings = new AppSettings { Model = "vision" };
+            settings.ModelCapabilities["vision"] = new ModelCapabilitySettings
+            {
+                SupportsImages = true,
+                MaxImagesPerPrompt = 1
+            };
+            var options = new LlmRequestOptions { RunCache = new LlmRunCache() };
             var payload = builder.Build(
                 new[] { new ChatMessage { Role = "user", Content = "read", Attachments = new List<ChatAttachment> { attachment } } },
-                null).Messages;
+                settings,
+                options).Messages;
+            builder.Build(
+                new[] { new ChatMessage { Role = "user", Content = "read", Attachments = new List<ChatAttachment> { attachment } } },
+                settings,
+                options);
             AssertContains(JsonConvert.SerializeObject(payload), "\"type\":\"image_url\"", "pdf page image content");
+            AssertEqual(1, providerLimit, "pdf provider receives remaining image limit");
+            AssertEqual(1, providerCalls, "pdf model image is cached for one run");
         }
 
         private static void AttachmentRejectsUnsupportedFile()

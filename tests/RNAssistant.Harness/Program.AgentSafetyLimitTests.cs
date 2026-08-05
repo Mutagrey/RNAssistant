@@ -255,7 +255,7 @@ namespace RNAssistant.Harness
                     "Summarize the presentation.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { FallbackToJsonObject = false },
+                    new AppSettings { FallbackToJsonObject = false, MaxAgentFormatRetries = 1 },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -287,7 +287,7 @@ namespace RNAssistant.Harness
                     "Hello.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { FallbackToJsonObject = false },
+                    new AppSettings { FallbackToJsonObject = false, MaxAgentFormatRetries = 1 },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
