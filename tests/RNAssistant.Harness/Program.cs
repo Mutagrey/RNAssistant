@@ -218,6 +218,7 @@ namespace RNAssistant.Harness
                 Test("chat: stateful Excel scenario verifies result", ChatExcelStatefulScenarioVerifiesResult),
                 Test("chat: scenario llm checks prompt contracts", ChatScenarioLlmChecksPromptContracts),
                 Test("chat: agent activity transcript", AgentTranscriptCreatesActivityTree),
+                Test("chat: agent plan runtime statuses", AgentPlanRuntimeStatusesStayOnCurrentStep),
                 Test("chat: prose action forces tool follow-up", ChatProseActionForcesToolFollowUp),
                 Test("chat: malformed action response forces repair", ChatMalformedActionResponseForcesRepair),
                 Test("chat: repair final still forces tool", ChatRepairThenFinalStillForcesTool),

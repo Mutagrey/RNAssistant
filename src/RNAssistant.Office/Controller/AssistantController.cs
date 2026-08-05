@@ -500,6 +500,10 @@ namespace RNAssistant.Office
                 }
                 catch (Exception ex)
                 {
+                    AgentPlanStateService.MarkCurrentForRun(
+                        session,
+                        runId,
+                        ex is OperationCanceledException ? "cancelled" : "failed");
                     RecordFailedTurn(session, ex);
                     if (session.LastRun != null)
                     {

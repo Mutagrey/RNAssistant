@@ -135,6 +135,7 @@ namespace RNAssistant.Office.Services
         public string ResponseMode { get; set; }
         public string WorkingGoal { get; set; }
         public List<AgentPlanStep> Plan { get; set; }
+        public ChatActivity PlanActivity { get; set; }
 
         public AgentRunState()
         {

@@ -470,5 +470,42 @@ namespace RNAssistant.Harness
             AssertTrue(session.Messages[0].Activity != null, "transcript activity exists");
             AssertContains(session.Messages[0].Content, "Agent step", "fallback content");
         }
+
+        private static void AgentPlanRuntimeStatusesStayOnCurrentStep()
+        {
+            var plan = new ChatActivity
+            {
+                Kind = "plan",
+                Title = "Подготовить отчёт",
+                Status = "planned"
+            };
+            plan.Children.Add(new ChatActivity { Kind = "plan_step", Title = "Проверить данные", Subtitle = "inspect", Status = "pending" });
+            plan.Children.Add(new ChatActivity { Kind = "plan_step", Title = "Обновить отчёт", Subtitle = "update", Status = "pending" });
+            var session = new ChatSession();
+            session.Messages.Add(AgentTranscript.CreateAssistantMessage("План готов.", null, plan));
+            var state = new AgentRunState();
+
+            AssertTrue(AgentPlanStateService.Restore(session, state) != null, "plan restored");
+            AgentPlanStateService.BeginCurrent(session, state);
+            AssertEqual("running", plan.Children[0].Status, "first step running");
+
+            AgentPlanStateService.ApplyResult(session, state, ToolResult.Fail("retry", null, "temporary", true), true);
+            AssertEqual("running", plan.Children[0].Status, "retry stays on first step");
+            AssertEqual("pending", plan.Children[1].Status, "retry does not advance");
+
+            AgentPlanStateService.ApplyResult(session, state, ToolResult.Ok("done"), false);
+            AssertEqual("completed", plan.Children[0].Status, "first step completed");
+            AgentPlanStateService.BeginCurrent(session, state);
+            AssertEqual("running", plan.Children[1].Status, "second step running");
+
+            AgentPlanStateService.ApplyResult(session, state, ToolResult.WaitingConfirmation("confirm"), false);
+            AssertEqual("waiting", plan.Children[1].Status, "confirmation keeps current step");
+            AssertEqual("waiting", plan.Status, "plan exposes waiting status");
+
+            var snapshot = AgentPlanStateService.Snapshot(plan);
+            AssertTrue(!object.ReferenceEquals(plan, snapshot), "progress uses plan snapshot");
+            AgentPlanStateService.ApplyLatestResult(session, ToolResult.Cancelled("cancelled"), false);
+            AssertEqual("cancelled", plan.Children[1].Status, "cancelled current step");
+        }
     }
 }

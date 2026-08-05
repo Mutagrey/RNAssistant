@@ -92,6 +92,7 @@ namespace RNAssistant.Office.Services
             builder.AppendLine("phase: " + (route == null ? string.Empty : route.Phase));
             builder.AppendLine("requiresTool: " + (route != null && route.RequiresTool ? "true" : "false"));
             builder.AppendLine("requiresInspection: " + (route != null && route.RequiresInspection ? "true" : "false"));
+            builder.AppendLine("Return exactly one tool call per model turn. For a visible kind=plan, keep steps ordered and observable, including expected inspection, mutation, and verification actions; the runtime advances one visible step per executed tool.");
             builder.AppendLine("responseMode: " + (settings == null ? AgentResponseModes.JsonSchema : settings.AgentResponseMode));
             if (route != null && string.Equals(route.TaskType, "html", StringComparison.OrdinalIgnoreCase))
             {

@@ -78,6 +78,7 @@
     <Compile Include="Services\ChatCloneService.cs" />
     <Compile Include="Services\ChatHistoryEditService.cs" />
     <Compile Include="Services\AgentRunService.cs" />
+    <Compile Include="Services\AgentPlanStateService.cs" />
     <Compile Include="Services\AgentProtocolHistory.cs" />
     <Compile Include="Services\AgentRunPresentation.cs" />
     <Compile Include="Services\OfficeIntentRouter.cs" />

@@ -31,7 +31,7 @@ function normalizeProgressActivity(progress) {
       } else {
         copy.progressTitle = progressTitle;
       }
-      if (phase === "routing" || phase === "plan") {
+      if (phase === "routing") {
         if (copy.Title !== undefined) {
           copy.Title = progressTitle;
         } else {
@@ -131,7 +131,6 @@ function activityTimelineKey(activity) {
     runId || "run",
     kind || "activity",
     activityToolId(activity),
-    activityTitle(activity),
     activityArgumentsJson(activity)
   ].join("|");
 }
@@ -160,9 +159,10 @@ function recordActivityTimeline(items, activity) {
   var copy = cloneActivity(activity);
   var key = activityTimelineKey(copy);
   var nextStatus = activityStatus(copy);
+  var kind = activityKind(copy);
   copy.__timelineKey = key;
 
-  if (isActiveTimelineStatus(nextStatus)) {
+  if (kind !== "plan" && isActiveTimelineStatus(nextStatus)) {
     items.forEach(function (item) {
       if (!item || item.__timelineKey === key || !isActiveTimelineStatus(activityStatus(item))) {
         return;
@@ -175,6 +175,11 @@ function recordActivityTimeline(items, activity) {
     var existing = items[i];
     if (!existing || existing.__timelineKey !== key) {
       continue;
+    }
+
+    if (kind === "plan") {
+      items[i] = copy;
+      return copy;
     }
 
     var existingStatus = activityStatus(existing);
@@ -339,7 +344,24 @@ function isAgentRunStart(message) {
 
 function isAgentRunContinuation(message) {
   var kind = activityKind(messageActivity(message));
-  return messageRole(message) === "assistant" && (kind === "tool" || kind === "retry");
+  return messageRole(message) === "assistant" &&
+    (kind === "tool" || kind === "verification" || kind === "retry" || kind === "diagnostic");
+}
+
+function canCollectAgentRunAt(index) {
+  var message = state.messages[index];
+  if (!message || messageRole(message) !== "assistant" || !messageActivity(message)) {
+    return false;
+  }
+  if (isAgentRunStart(message)) {
+    return true;
+  }
+  var runId = messageRunId(message);
+  if (!runId) {
+    return false;
+  }
+  var previous = index > 0 ? state.messages[index - 1] : null;
+  return !previous || messageRunId(previous) !== runId || !messageActivity(previous);
 }
 
 function isAgentRunFinalMessage(message) {

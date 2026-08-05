@@ -379,6 +379,21 @@ function renderLiveActivity() {
   return renderActivityArticle(null, -1, liveState.current, { live: true, current: true });
 }
 
+function renderLiveAgentRun() {
+  var activities = state.liveAgentRun && state.liveAgentRun.length
+    ? state.liveAgentRun
+    : (state.liveActivity ? [state.liveActivity] : []);
+  if (!activities.length) return null;
+  if (!activities.some(function (activity) { return activityKind(activity) !== "plan"; })) return null;
+  return renderAgentRunArticle({
+    live: true,
+    items: activities.map(function (activity) {
+      return { message: null, index: -1, activity: activity };
+    }),
+    finalMessage: null
+  });
+}
+
 function renderLiveStreamMessage() {
   if (!state.liveStreamContent) {
     return null;
@@ -430,19 +445,22 @@ function renderMessages(options) {
   box.innerHTML = "";
   if (!state.messages.length && !state.liveStreamContent && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
     box.appendChild(renderChatEmptyState());
+    renderAgentPlanDock();
     syncChatScroll(false, false);
     return;
   }
 
   for (var index = 0; index < state.messages.length; index += 1) {
-    box.appendChild(renderMessageArticle(state.messages[index], index));
+    if (canCollectAgentRunAt(index)) {
+      var run = collectAgentRun(index);
+      box.appendChild(renderAgentRunArticle(run));
+      index = run.nextIndex - 1;
+    } else {
+      box.appendChild(renderMessageArticle(state.messages[index], index));
+    }
   }
 
-  renderLiveActivityTrail().forEach(function (node) {
-    box.appendChild(node);
-  });
-
-  var live = renderLiveActivity();
+  var live = renderLiveAgentRun();
   if (live) {
     box.appendChild(live);
   }
@@ -452,5 +470,6 @@ function renderMessages(options) {
     box.appendChild(stream);
   }
 
+  renderAgentPlanDock();
   syncChatScroll(shouldScroll, false);
 }

@@ -86,6 +86,7 @@ namespace RNAssistant.Office
                 var pendingResolved = false;
                 try
                 {
+                    ReportAgentPlanProgress(runProgress, AgentPlanStateService.MarkLatestCurrent(session, "running"));
                     ReportProgress(runProgress, "executing", "Executing confirmed tool...");
                     var result = _toolExecutor.Execute(
                         CloneCommand(pending.Command),
@@ -96,6 +97,7 @@ namespace RNAssistant.Office
                         session,
                         runCancellation.Token);
                     UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
+                    ReportAgentPlanProgress(runProgress, AgentPlanStateService.ApplyLatestResult(session, result, false));
                     pendingResolved = true;
                     if (result.Success && settings.AutoContinueAfterConfirmation)
                     {
@@ -128,6 +130,11 @@ namespace RNAssistant.Office
                             ? ToolResult.Cancelled("Confirmed tool execution was cancelled.")
                             : ToolResult.Fail(ex.Message, null, "confirmed_tool_failed", false);
                         UpdatePendingActivity(session, pending.PendingId, pending.Command, failedResult);
+                        AgentPlanStateService.ApplyLatestResult(session, failedResult, false);
+                    }
+                    else
+                    {
+                        AgentPlanStateService.MarkLatestCurrent(session, ex is OperationCanceledException ? "cancelled" : "failed");
                     }
                     RecordFailedTurn(session, ex);
                     if (session.LastRun != null)
@@ -171,6 +178,7 @@ namespace RNAssistant.Office
                 var result = ToolResult.Cancelled("Tool cancelled by user.");
                 result.PendingId = pending.PendingId;
                 UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
+                AgentPlanStateService.ApplyLatestResult(session, result, false);
                 SaveSessionChanges(session);
             }
             return ChatState(session);
@@ -511,6 +519,14 @@ namespace RNAssistant.Office
                 "Tool: " + (activity == null ? string.Empty : activity.ToolId) + Environment.NewLine +
                 "Status: " + (activity == null ? string.Empty : activity.Status) + Environment.NewLine +
                 "Result: " + (activity == null ? string.Empty : activity.ResultMessage);
+        }
+
+        private static void ReportAgentPlanProgress(Action<string, string, ChatActivity> progress, ChatActivity plan)
+        {
+            if (progress != null && plan != null)
+            {
+                progress("plan_update", AgentPlanStateService.ProgressText(plan), AgentPlanStateService.Snapshot(plan));
+            }
         }
 
         private sealed class PendingAgentTool

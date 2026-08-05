@@ -24,7 +24,7 @@
   <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260702-2">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=chatui-20260702-2">
   <link rel="stylesheet" href="css/app-responsive.css?v=chatbar-alignment-20260723-1">
-  <link rel="stylesheet" href="css/app-agent.css?v=chatui-20260702-1">
+  <link rel="stylesheet" href="css/app-agent.css?v=agent-plan-20260805-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=chatui-20260622-1">
 </head>
 <body>
@@ -82,6 +82,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
           </button>
         </div>
+        <div class="agent-plan-dock hidden" id="agentPlanDock" aria-live="polite"></div>
         <form class="composer" id="chatForm">
           <div class="composer-input-wrap">
             <textarea id="chatInput" rows="2" placeholder="Спросите про текущий документ..."></textarea>
@@ -621,7 +622,7 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=chat-tree-caret-removal-20260723-1"></script>
+  <script src="js/app-core.js?v=agent-plan-20260805-1"></script>
   <script src="js/app-utils.js?v=chatui-20260620-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
@@ -640,11 +641,11 @@
   <script src="js/app-html-workspace.js?v=chatui-20260703-2"></script>
   <script src="js/app-context.js?v=chatui-20260622-1"></script>
   <script src="js/app-agent-data.js?v=chatui-20260622-1"></script>
-  <script src="js/app-agent-model.js?v=agent-status-20260722-1"></script>
+  <script src="js/app-agent-model.js?v=agent-plan-20260805-1"></script>
   <script src="js/app-chart-artifacts.js?v=chatui-20260622-2"></script>
   <script src="js/app-html-artifacts.js?v=chatui-20260702-2"></script>
-  <script src="js/app-agent.js?v=chatui-20260702-1"></script>
-  <script src="js/app-messages.js?v=stream-dots-20260723-2"></script>
+  <script src="js/app-agent.js?v=agent-plan-20260805-1"></script>
+  <script src="js/app-messages.js?v=agent-plan-20260805-1"></script>
   <script src="js/app-reasoning.js?v=reasoning-20260722-1"></script>
   <script src="js/app-attachments.js?v=mediarouting-20260722-1"></script>
   <script src="js/app-chat.js?v=chat-tree-caret-removal-20260723-1"></script>
