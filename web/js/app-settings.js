@@ -14,9 +14,31 @@ function applyUiFontScale(settings) {
   document.body.setAttribute("data-ui-font-scale", String(scale));
 }
 
+function normalizeUiTheme(value) {
+  return String(value || "").toLowerCase() === "dark" ? "dark" : "light";
+}
+
+function applyUiTheme(settings, persist) {
+  var theme = normalizeUiTheme((settings || {}).UiTheme || (settings || {}).uiTheme);
+  document.documentElement.setAttribute("data-theme", theme);
+  document.documentElement.style.colorScheme = theme;
+  if (document.body) {
+    document.body.setAttribute("data-theme", theme);
+  }
+  if (persist !== false) {
+    try {
+      localStorage.setItem("rnassistant.ui.theme", theme);
+    } catch (error) {
+      // WebView storage may be unavailable while its profile is being reset.
+    }
+  }
+  return theme;
+}
+
 function renderSettings() {
   var s = state.settings || {};
   applyUiFontScale(s);
+  var uiTheme = applyUiTheme(s);
   $("baseUrlInput").value = s.BaseUrl || s.baseUrl || "";
   $("modelsConfigUrlInput").value = s.ModelsConfigUrl || s.modelsConfigUrl || "";
   $("modelInput").value = s.Model || s.model || "";
@@ -35,6 +57,9 @@ function renderSettings() {
   $("temperatureInput").value = s.Temperature || s.temperature || 0.2;
   $("topPInput").value = s.TopP || s.topP || 1;
   $("uiFontScaleInput").value = Math.round(clampUiFontScale(s.UiFontScale || s.uiFontScale || 1) * 100);
+  Array.prototype.slice.call(document.querySelectorAll('input[name="uiTheme"]')).forEach(function (input) {
+    input.checked = input.value === uiTheme;
+  });
   $("contextLimitInput").value = s.ContextWindowOverrideTokens || s.contextWindowOverrideTokens || 0;
   $("streamInput").checked = !!(s.StreamResponses || s.streamResponses);
   $("autoRunToolsInput").checked = (s.AutoRunToolCalls !== false && s.autoRunToolCalls !== false);
@@ -81,6 +106,7 @@ function readSettings() {
     Temperature: Number($("temperatureInput").value || 0.2),
     TopP: Number($("topPInput").value || 1),
     UiFontScale: clampUiFontScale(Number($("uiFontScaleInput").value || 100) / 100),
+    UiTheme: normalizeUiTheme((document.querySelector('input[name="uiTheme"]:checked') || {}).value),
     ContextWindowOverrideTokens: Number($("contextLimitInput").value || 0),
     StreamResponses: $("streamInput").checked,
     AutoRunToolCalls: $("autoRunToolsInput").checked,
@@ -126,6 +152,14 @@ function bindSettingsActions() {
 
   $("uiFontScaleInput").addEventListener("input", function () {
     applyUiFontScale({ UiFontScale: Number($("uiFontScaleInput").value || 100) / 100 });
+  });
+
+  Array.prototype.slice.call(document.querySelectorAll('input[name="uiTheme"]')).forEach(function (input) {
+    input.addEventListener("change", function () {
+      if (input.checked) {
+        applyUiTheme({ UiTheme: input.value }, false);
+      }
+    });
   });
 
   Array.prototype.slice.call(document.querySelectorAll("#tab-settings input, #tab-settings textarea, #tab-settings select")).forEach(function (control) {

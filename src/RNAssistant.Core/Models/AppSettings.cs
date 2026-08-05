@@ -36,6 +36,17 @@ namespace RNAssistant.Core.Models
         }
     }
 
+    public static class UiThemes
+    {
+        public const string Light = "light";
+        public const string Dark = "dark";
+
+        public static string Normalize(string value)
+        {
+            return string.Equals(value, Dark, StringComparison.OrdinalIgnoreCase) ? Dark : Light;
+        }
+    }
+
     public sealed class ModelCapabilitySettings
     {
         public int? MaxContextTokens { get; set; }
@@ -107,6 +118,7 @@ namespace RNAssistant.Core.Models
         public bool AutoCompressContext { get; set; }
         public AgentPromptSettings AgentPrompts { get; set; }
         public double UiFontScale { get; set; }
+        public string UiTheme { get; set; }
         public Dictionary<string, string> CustomHeaders { get; set; }
         public Dictionary<string, bool?> ModelImageSupportOverrides { get; set; }
         public Dictionary<string, bool?> ModelAudioSupportOverrides { get; set; }
@@ -155,6 +167,7 @@ namespace RNAssistant.Core.Models
             AutoCompressContext = true;
             AgentPrompts = new AgentPromptSettings();
             UiFontScale = 1.0;
+            UiTheme = UiThemes.Light;
             CustomHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             ModelImageSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
             ModelAudioSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);

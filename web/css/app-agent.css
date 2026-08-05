@@ -476,20 +476,24 @@
 
 .agent-plan-dock {
   position: relative;
+  z-index: 9;
+  display: flex;
   flex: 0 0 auto;
+  justify-content: center;
   min-width: 0;
-  margin: 0;
+  margin: 0 0 5px;
+  padding: 0 4px;
 }
 
 .agent-plan-card {
   position: relative;
   width: fit-content;
   max-width: min(430px, calc(100vw - 34px));
-  border: 1px solid #e0e3e8;
+  border: 1px solid rgba(102, 112, 133, .24);
   border-radius: 999px;
   background: #f7f7f8;
   color: var(--text);
-  box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .05);
 }
 
 .agent-plan-card-summary {
@@ -504,6 +508,12 @@
 
 .agent-plan-card-summary:hover {
   background: #f5f5f6;
+}
+
+.agent-plan-card-summary:focus-visible {
+  border-radius: 999px;
+  outline: 0;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, .42);
 }
 
 .agent-plan-card-summary strong {
@@ -557,7 +567,7 @@
   gap: 2px;
   margin: 0;
   padding: 7px 10px;
-  border: 1px solid #e0e3e8;
+  border: 1px solid rgba(102, 112, 133, .25);
   border-radius: 11px;
   background: #fafafa;
   box-shadow: 0 10px 28px rgba(16, 24, 40, .14);
@@ -583,7 +593,7 @@
 }
 
 :where(html[data-theme="dark"], body[data-theme="dark"]) .agent-plan-card {
-  border-color: #3d4652;
+  border-color: rgba(160, 174, 192, .25);
   background: #292f38;
   box-shadow: 0 1px 2px rgba(0, 0, 0, .2);
 }
@@ -604,7 +614,7 @@
 }
 
 :where(html[data-theme="dark"], body[data-theme="dark"]) .agent-plan-card > .agent-plan-list {
-  border-color: #3d4652;
+  border-color: rgba(160, 174, 192, .25);
   background: #292f38;
   box-shadow: 0 12px 30px rgba(0, 0, 0, .4);
 }

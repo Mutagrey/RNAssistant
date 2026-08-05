@@ -1,10 +1,22 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; frame-src 'self' blob: data:; child-src 'self' blob: data:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' blob: data:;">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RN Assistant</title>
+  <script>
+    (function () {
+      var theme = "light";
+      try {
+        theme = localStorage.getItem("rnassistant.ui.theme") === "dark" ? "dark" : "light";
+      } catch (error) {
+        theme = "light";
+      }
+      document.documentElement.setAttribute("data-theme", theme);
+      document.documentElement.style.colorScheme = theme;
+    }());
+  </script>
   <link rel="stylesheet" href="css/vendor/katex.min.css">
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
@@ -26,6 +38,7 @@
   <link rel="stylesheet" href="css/app-responsive.css?v=compact-runtime-20260805-2">
   <link rel="stylesheet" href="css/app-agent.css?v=compact-runtime-20260805-2">
   <link rel="stylesheet" href="css/app-agent-data.css?v=agent-transcript-20260805-3">
+  <link rel="stylesheet" href="css/app-theme.css?v=full-theme-20260805-1">
 </head>
 <body>
   <div class="shell">
@@ -82,13 +95,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
           </button>
         </div>
-        <div class="chat-runtime-dock" id="chatRuntimeDock">
-          <div class="context-meter" id="contextMeter" title="Использование контекста" aria-label="Использование контекста">
-            <strong id="contextMeterValue">0%</strong>
-            <em id="contextMeterDetail">0 / 0</em>
-          </div>
-          <div class="agent-plan-dock hidden" id="agentPlanDock" aria-live="polite"></div>
-        </div>
+        <div class="agent-plan-dock hidden" id="agentPlanDock" aria-live="polite"></div>
         <div class="agent-approval-dock hidden" id="agentApprovalDock" aria-live="polite"></div>
         <form class="composer" id="chatForm">
           <div class="composer-input-wrap">
@@ -145,6 +152,10 @@
                   <span class="model-capability-indicator" id="modelCapabilityIndicator" title="Мультимодальность модели" aria-label="Мультимодальность модели"></span>
                 </div>
               </details>
+              <div class="context-meter" id="contextMeter" title="Использование контекста" aria-label="Использование контекста">
+                <strong id="contextMeterValue">0%</strong>
+                <em id="contextMeterDetail">0 / 0</em>
+              </div>
             </div>
             <div class="composer-actions">
               <details class="composer-picker composer-mode-picker" id="chatModePicker">
@@ -441,6 +452,7 @@
             <button class="settings-nav-button" type="button" data-settings-page="model">Модель</button>
             <button class="settings-nav-button" type="button" data-settings-page="agent">Агент</button>
             <button class="settings-nav-button" type="button" data-settings-page="interface">Интерфейс</button>
+            <button class="settings-nav-button" type="button" data-settings-page="theme">Тема</button>
             <button class="settings-nav-button" type="button" data-settings-page="prompts">Промпты</button>
             <button class="settings-nav-button" type="button" data-settings-page="service">Сервис</button>
           </nav>
@@ -537,6 +549,37 @@
                 <label class="checkline"><input id="smartChatTitlesInput" type="checkbox"><span>Умные названия чатов</span></label>
               </div>
               <div class="setting-note">HTML preview и его скрипты всегда доступны в sandboxed iframe.</div>
+            </section>
+
+            <section class="settings-page" data-settings-page="theme">
+              <div class="settings-heading">
+                <h2>Тема</h2>
+                <p>Цветовая схема применяется ко всему интерфейсу, меню и рабочим областям.</p>
+              </div>
+              <div class="theme-choice-grid" role="radiogroup" aria-label="Тема интерфейса">
+                <label class="theme-choice">
+                  <input id="uiThemeLightInput" name="uiTheme" type="radio" value="light">
+                  <span class="theme-choice-card">
+                    <span class="theme-preview theme-preview-light" aria-hidden="true">
+                      <span class="theme-preview-sidebar"><i></i><i></i><i></i></span>
+                      <span class="theme-preview-main"><b></b><i></i><i></i><em></em></span>
+                    </span>
+                    <span class="theme-choice-copy"><strong>Светлая</strong><span>Светлый фон и спокойные серые поверхности</span></span>
+                    <span class="theme-choice-check" aria-hidden="true">✓</span>
+                  </span>
+                </label>
+                <label class="theme-choice">
+                  <input id="uiThemeDarkInput" name="uiTheme" type="radio" value="dark">
+                  <span class="theme-choice-card">
+                    <span class="theme-preview theme-preview-dark" aria-hidden="true">
+                      <span class="theme-preview-sidebar"><i></i><i></i><i></i></span>
+                      <span class="theme-preview-main"><b></b><i></i><i></i><em></em></span>
+                    </span>
+                    <span class="theme-choice-copy"><strong>Тёмная</strong><span>Контрастная тёмная схема без ярких заливок</span></span>
+                    <span class="theme-choice-check" aria-hidden="true">✓</span>
+                  </span>
+                </label>
+              </div>
             </section>
 
             <section class="settings-page" data-settings-page="prompts">
@@ -647,13 +690,13 @@
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
   <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js?v=reasoning-transport-20260805-1"></script>
-  <script src="js/app-prompts.js?v=chatui-20260703-1"></script>
+  <script src="js/app-settings.js?v=reasoning-transport-20260805-2"></script>
+  <script src="js/app-prompts.js?v=format-recovery-20260805-1"></script>
   <script src="js/app-model-data.js?v=reasoning-transport-20260805-1"></script>
   <script src="js/app-model-render.js?v=rich-model-picker-20260805-1"></script>
   <script src="js/app-models.js?v=reasoning-toggle-20260805-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=compact-context-20260805-1"></script>
+  <script src="js/app-chat-state.js?v=format-recovery-20260805-1"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
   <script src="js/app-tools.js?v=chatui-20260622-4"></script>
   <script src="js/app-skills.js?v=chatui-20260622-4"></script>

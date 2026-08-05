@@ -343,20 +343,6 @@
   width: min(var(--chat-model-select-width, 14ch), calc(var(--chat-model-max-width) - 18px));
 }
 
-.chat-runtime-dock {
-  position: relative;
-  z-index: 9;
-  display: flex;
-  flex: 0 0 auto;
-  gap: 6px;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  min-height: 27px;
-  margin: 0 0 5px;
-  padding: 0 4px;
-}
-
 .context-meter {
   position: relative;
   display: inline-flex;
@@ -364,13 +350,13 @@
   gap: 5px;
   align-items: center;
   width: auto;
-  height: 27px;
+  height: 25px;
   min-width: 0;
-  min-height: 27px;
+  min-height: 25px;
   overflow: hidden;
   border: 1px solid #e0e3e8;
   border-radius: 999px;
-  padding: 0 8px;
+  padding: 0 7px;
   background: #f7f7f8;
   color: var(--text);
   box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
