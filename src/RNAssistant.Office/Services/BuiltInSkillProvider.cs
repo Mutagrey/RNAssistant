@@ -14,19 +14,19 @@ namespace RNAssistant.Office.Services
                     "common.task_planning",
                     "Task planning",
                     "Break Office requests into safe, executable tool steps.",
-                    new[] { "planning", "agent", "tools" },
+                    new[] { "planning", "agent", "tools", "план", "задача" },
                     "# Task Planning\n\nUse this skill when the user asks RNAssistant to act on Office content.\n\n- Decide whether the task needs document inspection, mutation, or only prose.\n- Use existing tools exactly by id; never invent tool ids.\n- Prefer small steps with clear arguments.\n- If data is missing, inspect the document or ask a concise question.\n- Stop after the local tool result is sufficient and answer normally."),
                 Skill(
                     "common.tool_authoring",
                     "Tool authoring",
                     "Design reusable pipeline or VBA tools safely.",
-                    new[] { "authoring", "tools", "pipeline", "vba" },
-                    "# Tool Authoring\n\nUse this skill when creating or editing executable RNAssistant tools.\n\n- Tools are executable actions, not guidance documents.\n- Pipeline tools call existing tool ids through ordered JSON steps.\n- VBA tools must be host-specific and require confirmation for mutations.\n- Keep schemas small and explicit.\n- Do not store secrets in tool code or metadata."),
+                    new[] { "authoring", "tools", "pipeline", "vba", "инструмент", "создание" },
+                    "# Tool Authoring\n\nUse this skill when creating or editing executable RNAssistant tools.\n\n- Prefer an existing capability. Create a tool only when the requested work needs a reusable missing capability.\n- Tools are executable actions, not guidance documents. Pipeline tools call existing exact tool ids through ordered JSON steps.\n- Read an existing definition before changing it. For a new or changed tool call common.tools_validate, then common.tools_save, then use the saved exact id in a later turn.\n- Saving a tool does not complete the original Office task.\n- VBA tools must be host-specific and require confirmation for mutations. Keep formal object schemas small and explicit.\n- Do not store secrets in code or metadata, weaken safety flags, or shadow built-in ids."),
                 Skill(
                     "common.vba_tool_authoring",
                     "VBA tool authoring",
                     "Create versioned RNAssistant VBA tool packages with a strict manifest and String-returning entry function.",
-                    new[] { "authoring", "tools", "vba", "macro", "excel", "word", "powerpoint" },
+                    new[] { "authoring", "tools", "vba", "macro", "макрос", "excel", "word", "powerpoint" },
                     "# VBA Tool Authoring\n\nUse this skill only for reusable VBA tools. Prefer an existing built-in or pipeline tool first.\n\n" +
                     "## Package\n\n- The global AppData package is canonical. Put source in `src/*.bas` and `src/*.cls`.\n- The first component is a standard entry module. Supporting standard/class modules are allowed. UserForms, document modules and binary FRX assets are not supported in v1.\n- Component names start with a Latin letter, contain only letters/numbers/underscore and are at most 40 characters. Use `RNA_<Tool>` for the entry module, `RNATool_<Tool>` for the function and `RNA_<Tool>_<Role>` for dependencies.\n\n" +
                     "## Manifest and signature\n\n- Put exactly one comment-delimited JSON object between `<RNAssistantTool>` and `</RNAssistantTool>` immediately before the entry function.\n- Required fields: protocolVersion=1, id, name, description, host, packageVersion, entryPoint, components, argumentOrder, formal parameters JSON Schema, mutatesDocument, agentCanRun and requiresConfirmation.\n- Use `additionalProperties:false`. Only String, Long, Double and Boolean arguments are allowed, with at most 30 positional arguments. Every function argument is `ByVal`, follows argumentOrder and matches its schema type. Optional arguments require a schema default.\n- The entry declaration is `Public Function ... As String`. Return a concise useful String. Raise a normal VBA error for failure; RNAssistant creates the JSON result envelope. Do not add a VBA JSON parser or manually build a result envelope.\n\n" +
@@ -35,8 +35,20 @@ namespace RNAssistant.Office.Services
                     "common.skill_authoring",
                     "Skill authoring",
                     "Create markdown skills that guide agent behavior without executing actions.",
-                    new[] { "authoring", "skills", "markdown" },
-                    "# Skill Authoring\n\nUse this skill when creating or editing RNAssistant skills.\n\nA skill is a markdown instruction file, usually named SKILL.md. It should describe when to use the skill, the approach, constraints, and preferred tools. It must not pretend to execute actions by itself.\n\nRecommended sections:\n\n- Purpose\n- When to use\n- Workflow\n- Constraints\n- Useful tools")
+                    new[] { "authoring", "skills", "markdown", "скилл", "навык", "инструкции" },
+                    "# Skill Authoring\n\nUse this skill when the user asks to create or edit RNAssistant guidance.\n\nA skill is a markdown instruction file, usually named SKILL.md. It describes when to use the skill, workflow, constraints, and preferred tools; it never executes actions itself. Use common.skills_list/read before editing and common.skills_save only for a focused custom skill. Built-in skill ids are reserved. Never store secrets or weaken runtime safety.\n\nRecommended sections:\n\n- Purpose\n- When to use\n- Workflow\n- Constraints\n- Useful tools"),
+                Skill(
+                    "common.prompt_authoring",
+                    "Prompt authoring",
+                    "Review and improve RNAssistant editable prompts without weakening its protocol or safety.",
+                    new[] { "authoring", "prompt", "prompts", "agent", "settings", "промпт", "настройки" },
+                    "# Prompt Authoring\n\nUse this skill only when the user asks to inspect or improve RNAssistant prompts.\n\n- Call common.prompts_read_defaults before proposing a change.\n- The main SystemPrompt owns AgentDecision v1, transport, context, tool, skill, and self-improvement rules.\n- Change only fields needed for the request and preserve the exact AgentDecision field names and one-tool-per-turn invariant.\n- Do not weaken confirmation, verification, secret-handling, or prompt-injection boundaries.\n- common.prompts_save changes local settings and requires confirmation."),
+                Skill(
+                    "common.html_workspace_authoring",
+                    "HTML workspace authoring",
+                    "Build and edit local HTML workspace pages, reports, dashboards, CSS, scripts, and data sources.",
+                    new[] { "html", "workspace", "web", "page", "dashboard", "ui", "report", "страница", "дашборд" },
+                    "# HTML Workspace Authoring\n\n- Use common.html_workspace_read before changing or deleting existing workspace content.\n- Use common.html_workspace_upsert_file for html, css, or script files and common.html_workspace_upsert_data for editable data. Use the matching delete tools for removal.\n- Keep pages local and editable. Split substantial CSS and JavaScript into separate files and return at most one content-bearing upsert step per model turn.\n- Default to a responsive full-page layout with body margin 0; do not force a narrow centered card unless requested.\n- Network fetch is allowed only through the RNAssistant host after the user explicitly allows the HTTP(S) origin. Never use mode:no-cors or embed API keys and credentials.")
             };
 
             var hostProvider = adapter as IOfficeBuiltInSkillProvider;

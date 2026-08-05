@@ -27,7 +27,7 @@ namespace RNAssistant.Office.Services
 
             foreach (var skill in _skillStore.Load().Where(IsVisible))
             {
-                if (!string.IsNullOrWhiteSpace(skill.Id))
+                if (!string.IsNullOrWhiteSpace(skill.Id) && !result.ContainsKey(skill.Id))
                 {
                     result[skill.Id] = skill;
                 }

@@ -145,9 +145,8 @@
             <div class="composer-actions">
               <label class="composer-mode" title="Режим чата">
                 <select id="chatModeSelect" aria-label="Режим чата">
-                  <option value="chat">Chat</option>
-                  <option value="auto">Auto</option>
                   <option value="agent">Agent</option>
+                  <option value="chat">Chat</option>
                 </select>
               </label>
               <label class="composer-model" title="Модель чата">
@@ -490,19 +489,21 @@
               <div class="form-grid">
                 <label><span>Формат Agent API</span><select id="agentResponseModeInput"><option value="json_schema">json_schema — по умолчанию</option><option value="json_object">json_object + prompt</option><option value="native_tool_calls">native tool_calls + json_schema</option></select></label>
                 <label><span>Роль результата tool</span><select id="toolResultRoleInput"><option value="tool">tool — по умолчанию</option><option value="developer">developer</option><option value="user">user</option></select></label>
+                <label class="checkline"><input id="fallbackJsonObjectInput" type="checkbox"><span>Fallback json_schema → json_object до первого tool</span></label>
                 <label class="checkline"><input id="autoRunToolsInput" type="checkbox"><span>Автозапуск инструментов</span></label>
                 <label class="checkline"><input id="autoConfirmToolsInput" type="checkbox"><span>Автоподтверждение действий</span></label>
                 <label class="checkline"><input id="autoRetryToolsInput" type="checkbox"><span>Авторемонт ошибок инструментов</span></label>
                 <label class="checkline"><input id="requireVerificationInput" type="checkbox"><span>Проверять результат мутаций</span></label>
                 <label class="checkline"><input id="autoContinueAfterConfirmationInput" type="checkbox"><span>Продолжать после подтверждения</span></label>
-                <label class="checkline"><input id="allowAgentToolAuthoringInput" type="checkbox"><span>Разрешить агенту создавать новые tools</span></label>
-                <label class="checkline"><input id="autoCompressContextInput" type="checkbox"><span>Автоматически сжимать старую историю</span></label>
+                <label class="checkline"><input id="allowAgentToolAuthoringInput" type="checkbox"><span>Создавать missing tool по ходу задачи</span></label>
+                <label class="checkline"><input id="autoCompressContextInput" type="checkbox"><span>Сжимать старую историю при нехватке контекста</span></label>
                 <label class="checkline"><input id="includeVbaContextInput" type="checkbox"><span>Включать VBA-контекст автоматически</span></label>
                 <label><span>Макс. итераций агента</span><input id="maxAgentIterationsInput" type="number" min="1" max="50"></label>
                 <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1" max="200"></label>
                 <label><span>Tools в одном planner prompt</span><input id="maxAgentToolsPerRequestInput" type="number" min="8" max="64"></label>
                 <label><span>VBA-контекст, символы</span><input id="vbaContextLimitInput" type="number" min="1000" max="200000"></label>
               </div>
+              <div class="setting-note">json_schema и json_object передают AgentDecision через content; native_tool_calls передаёт действия через OpenAI tools API. Роль tool создаёт matching assistant tool_calls/tool_call_id. Fallback разрешён только до первого выполненного tool.</div>
             </section>
 
             <section class="settings-page" data-settings-page="interface">
@@ -520,7 +521,7 @@
             <section class="settings-page" data-settings-page="prompts">
               <div class="settings-heading">
                 <h2>Промпты</h2>
-                <p>Редактируемые prompt-блоки чата и агента. Текст можно писать как Markdown.</p>
+                <p>Главные инструкции и короткие служебные prompts текущего harness. Текст можно писать как Markdown.</p>
               </div>
               <div class="form-grid two-columns">
                 <label>
@@ -533,7 +534,7 @@
                 </label>
                 <button class="secondary" id="resetAllPromptsButton" type="button" title="Вернуть встроенные значения всех промптов">Сбросить все промпты</button>
               </div>
-              <div class="setting-note">Роль сообщения с Chat, базовым Agent, protocol и routing prompts. Сброс применяется после сохранения настроек.</div>
+              <div class="setting-note">Роль применяется к главной инструкции Agent, инструкции Chat и генератору названий. Динамические route, tools, observations и skills добавляет runtime.</div>
               <div class="prompt-layout split-layout" id="promptsLayout" data-split-key="prompts" data-default-ratio="0.3" data-min-left="180" data-min-ratio="0.2" data-max-ratio="0.48">
                 <div class="tool-list-panel surface-panel">
                   <input class="tool-search" id="promptSearchInput" placeholder="Поиск промптов..." autocomplete="off">
@@ -570,7 +571,7 @@
                   </div>
                 </section>
               </div>
-              <div class="status">Retry placeholders: {{availableToolIds}}, {{toolId}}, {{argumentsJson}}, {{error}}, {{dataJsonBlock}}. Пустые поля используют встроенный дефолт.</div>
+              <div class="status">Пустое поле после сохранения восстанавливает встроенное значение. Агент может читать и менять эти поля через common.prompts_read_defaults и common.prompts_save с подтверждением.</div>
             </section>
 
             <section class="settings-page" data-settings-page="service">

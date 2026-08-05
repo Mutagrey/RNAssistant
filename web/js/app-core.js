@@ -16,7 +16,7 @@ var state = {
   chatSidebarHidden: false,
   activeChatId: "",
   activeChatModel: "",
-  activeChatMode: "chat",
+  activeChatMode: "agent",
   activeChatHtmlMode: false,
   bridgeToken: "",
   messages: [],

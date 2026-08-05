@@ -86,8 +86,7 @@ namespace RNAssistant.Core.Storage
             }
             settings.SystemPromptRole = NormalizePromptRole(settings.SystemPromptRole, defaults.SystemPromptRole);
             settings.ToolResultRole = NormalizeToolResultRole(settings.ToolResultRole, defaults.ToolResultRole);
-            settings.AgentResponseMode = NormalizeResponseMode(settings.AgentResponseMode, defaults.AgentResponseMode, true);
-            settings.AgentResponseFallbackMode = NormalizeResponseMode(settings.AgentResponseFallbackMode, defaults.AgentResponseFallbackMode, false);
+            settings.AgentResponseMode = NormalizeResponseMode(settings.AgentResponseMode, defaults.AgentResponseMode);
             NormalizeAgentPrompts(settings);
             if (settings.MaxTokens <= 0)
             {
@@ -161,13 +160,10 @@ namespace RNAssistant.Core.Storage
                 settings.AgentPrompts = new AgentPromptSettings();
             }
 
-            settings.AgentPrompts.ToolProtocolPrompt = DefaultIfBlank(settings.AgentPrompts.ToolProtocolPrompt, defaults.ToolProtocolPrompt);
-            settings.AgentPrompts.ToolRoutingPrompt = DefaultIfBlank(settings.AgentPrompts.ToolRoutingPrompt, defaults.ToolRoutingPrompt);
             settings.AgentPrompts.ForceToolUsePrompt = DefaultIfBlank(settings.AgentPrompts.ForceToolUsePrompt, defaults.ForceToolUsePrompt);
-            settings.AgentPrompts.RepairMalformedToolBlockPrompt = DefaultIfBlank(settings.AgentPrompts.RepairMalformedToolBlockPrompt, defaults.RepairMalformedToolBlockPrompt);
-            settings.AgentPrompts.AfterToolResultsPrompt = DefaultIfBlank(settings.AgentPrompts.AfterToolResultsPrompt, defaults.AfterToolResultsPrompt);
-            settings.AgentPrompts.VerifyMutationPrompt = DefaultIfBlank(settings.AgentPrompts.VerifyMutationPrompt, defaults.VerifyMutationPrompt);
-            settings.AgentPrompts.ConfirmedToolContinuationPrompt = DefaultIfBlank(settings.AgentPrompts.ConfirmedToolContinuationPrompt, defaults.ConfirmedToolContinuationPrompt);
+            settings.AgentPrompts.RepairDecisionPrompt = DefaultIfBlank(settings.AgentPrompts.RepairDecisionPrompt, defaults.RepairDecisionPrompt);
+            settings.AgentPrompts.PlanContinuationPrompt = DefaultIfBlank(settings.AgentPrompts.PlanContinuationPrompt, defaults.PlanContinuationPrompt);
+            settings.AgentPrompts.ChatTitlePrompt = DefaultIfBlank(settings.AgentPrompts.ChatTitlePrompt, defaults.ChatTitlePrompt);
         }
 
         private static string NormalizePromptRole(string value, string fallback)
@@ -178,7 +174,8 @@ namespace RNAssistant.Core.Storage
             }
             if (string.Equals(value, "system", StringComparison.OrdinalIgnoreCase)) return "system";
             if (string.Equals(value, "developer", StringComparison.OrdinalIgnoreCase)) return "developer";
-            return "user";
+            if (string.Equals(value, "user", StringComparison.OrdinalIgnoreCase)) return "user";
+            return fallback;
         }
 
         private static string NormalizeToolResultRole(string value, string fallback)
@@ -189,10 +186,10 @@ namespace RNAssistant.Core.Storage
             return "tool";
         }
 
-        private static string NormalizeResponseMode(string value, string fallback, bool allowNative)
+        private static string NormalizeResponseMode(string value, string fallback)
         {
             value = string.IsNullOrWhiteSpace(value) ? fallback : value;
-            if (allowNative && string.Equals(value, AgentResponseModes.NativeToolCalls, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(value, AgentResponseModes.NativeToolCalls, StringComparison.OrdinalIgnoreCase))
             {
                 return AgentResponseModes.NativeToolCalls;
             }

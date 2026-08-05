@@ -352,18 +352,19 @@ namespace RNAssistant.Core.Llm
         internal static JObject BuildRequestBody(AppSettings settings, IList<object> apiMessages, int estimatedPromptTokens, LlmRequestOptions requestOptions)
         {
             settings = settings ?? new AppSettings();
+            requestOptions = requestOptions ?? new LlmRequestOptions();
+            var estimatedRequestTokens = estimatedPromptTokens + ModelContextBudget.EstimateRequestOptionsTokens(requestOptions);
             var body = new JObject
             {
                 ["model"] = settings.Model,
                 ["messages"] = JArray.FromObject(apiMessages ?? new object[0]),
-                ["max_tokens"] = ModelContextBudget.EffectiveOutputTokens(settings, estimatedPromptTokens, settings.Model),
+                ["max_tokens"] = ModelContextBudget.EffectiveOutputTokens(settings, estimatedRequestTokens, settings.Model),
                 ["temperature"] = settings.Temperature,
                 ["top_p"] = settings.TopP,
                 ["stream"] = settings.StreamResponses
             };
             if (settings.StreamResponses) body["stream_options"] = new JObject { ["include_usage"] = true };
 
-            requestOptions = requestOptions ?? new LlmRequestOptions();
             if (string.Equals(requestOptions.ResponseFormat, LlmResponseFormats.JsonObject, StringComparison.OrdinalIgnoreCase))
             {
                 body["response_format"] = new JObject { ["type"] = "json_object" };

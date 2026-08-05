@@ -15,23 +15,19 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static void ModesSelectChatAutoAndAgent()
+        private static void ModesSelectChatAndAgent()
         {
             var selector = new ChatExecutionModeSelector();
             var session = new ChatSession { Mode = ChatModes.Chat };
-            AssertEqual(ChatModes.Chat, selector.Select("write values into A1", session, "Excel"), "explicit chat");
+            AssertEqual(ChatModes.Chat, selector.Select("write values into A1", session), "explicit chat");
 
             session.Mode = ChatModes.Agent;
-            AssertEqual(ChatModes.Agent, selector.Select("hello", session, "Excel"), "explicit agent");
-
-            session.Mode = ChatModes.Auto;
-            AssertEqual(ChatModes.Chat, selector.Select("explain pivot tables", session, "Excel"), "auto plain question");
-            AssertEqual(ChatModes.Agent, selector.Select("write values into A1", session, "Excel"), "auto office action");
-            AssertEqual(ChatModes.Agent, selector.Select("объясни содержимое текущего документа", session, "Word"), "auto current document explanation");
+            AssertEqual(ChatModes.Agent, selector.Select("hello", session), "explicit agent");
+            AssertEqual(ChatModes.Agent, selector.Select("hello", null), "missing session defaults to agent");
 
             session.Mode = ChatModes.Chat;
             session.HtmlModeEnabled = true;
-            AssertEqual(ChatModes.Agent, selector.Select("hello", session, "Excel"), "html forces agent");
+            AssertEqual(ChatModes.Agent, selector.Select("hello", session), "html forces agent");
         }
 
         private static void PlainChatOmitsPlannerAndActivities()
@@ -43,7 +39,7 @@ namespace RNAssistant.Harness
                 {
                     capturedModel = settings.Model;
                     captured = messages.ToList();
-                    return Task.FromResult(new LlmCompletionResult { Content = "plain answer", PromptTokens = 12 });
+                    return Task.FromResult(new LlmCompletionResult { Content = "{\"thought\":\"model text\",\"answer\":\"plain answer\"}", PromptTokens = 12 });
                 });
             var session = new ChatSession { Model = "vision-model" };
             session.Messages.Add(new ChatMessage { Role = "user", Content = "old question" });
@@ -71,7 +67,7 @@ namespace RNAssistant.Harness
                 CancellationToken.None).GetAwaiter().GetResult();
 
             var prompt = FlattenMessages(captured);
-            AssertEqual("plain answer", result.AssistantText, "plain result");
+            AssertEqual("{\"thought\":\"model text\",\"answer\":\"plain answer\"}", result.AssistantText, "plain chat does not parse content envelopes");
             AssertEqual("vision-model", capturedModel, "chat model applied");
             AssertContains(prompt, "new question", "current request");
             AssertContains(prompt, "old question", "history");
@@ -79,58 +75,6 @@ namespace RNAssistant.Harness
             AssertTrue(prompt.IndexOf("PLANNER_ONLY", StringComparison.OrdinalIgnoreCase) < 0, "agent base prompt omitted");
             AssertTrue(prompt.IndexOf("tool_plan", StringComparison.OrdinalIgnoreCase) < 0, "planner protocol omitted");
             AssertTrue(prompt.IndexOf("tool diagnostic", StringComparison.OrdinalIgnoreCase) < 0, "activity omitted");
-        }
-
-        private static void PlainChatRepairsThoughtOnlyJson()
-        {
-            var calls = 0;
-            IReadOnlyList<ChatMessage> repairMessages = null;
-            var service = new PlainChatService(
-                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, LlmRequestOptions requestOptions, Action<LlmStreamUpdate> progress, CancellationToken cancellationToken)
-                {
-                    calls += 1;
-                    if (calls == 1)
-                    {
-                        return Task.FromResult(new LlmCompletionResult
-                        {
-                            Content = "{\"thought\":\"Нужно поприветствовать пользователя.\"}"
-                        });
-                    }
-                    repairMessages = messages.ToList();
-                    return Task.FromResult(new LlmCompletionResult { Content = "Здравствуйте! Чем могу помочь?" });
-                });
-            var session = new ChatSession();
-
-            var result = service.ExecuteAsync(
-                "Привет",
-                session,
-                new DocumentContext(),
-                new AppSettings(),
-                null,
-                null,
-                CancellationToken.None).GetAwaiter().GetResult();
-
-            AssertEqual(2, calls, "thought-only response repaired once");
-            AssertEqual("Здравствуйте! Чем могу помочь?", result.AssistantText, "repaired plain answer");
-            AssertTrue(result.AssistantText.IndexOf("thought", StringComparison.OrdinalIgnoreCase) < 0, "thought hidden");
-            AssertContains(FlattenMessages(repairMessages), "Do not return JSON", "repair instruction");
-            AssertEqual(2, session.Messages.Count, "only user and final assistant persisted");
-
-            var failedRepairService = new PlainChatService(
-                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, LlmRequestOptions requestOptions, Action<LlmStreamUpdate> progress, CancellationToken cancellationToken)
-                {
-                    return Task.FromResult(new LlmCompletionResult { Content = "{\"thought\":\"still internal\"}" });
-                });
-            var failedRepair = failedRepairService.ExecuteAsync(
-                "Привет",
-                new ChatSession(),
-                new DocumentContext(),
-                new AppSettings(),
-                null,
-                null,
-                CancellationToken.None).GetAwaiter().GetResult();
-            AssertContains(failedRepair.AssistantText, "не вернула пользовательский ответ", "failed repair returns safe message");
-            AssertTrue(failedRepair.AssistantText.IndexOf("still internal", StringComparison.OrdinalIgnoreCase) < 0, "failed repair thought hidden");
         }
 
         private static void AttachmentRoutingIsRequestScoped()
@@ -225,32 +169,6 @@ namespace RNAssistant.Harness
                 rejected = ex.Message.IndexOf("приоритет", StringComparison.OrdinalIgnoreCase) >= 0;
             }
             AssertTrue(rejected, "empty ambiguous priority requires explicit order");
-        }
-
-        private static void PlainChatExtractsAnswerWithoutThought()
-        {
-            var calls = 0;
-            var service = new PlainChatService(
-                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, LlmRequestOptions requestOptions, Action<LlmStreamUpdate> progress, CancellationToken cancellationToken)
-                {
-                    calls += 1;
-                    return Task.FromResult(new LlmCompletionResult
-                    {
-                        Content = "{\"thought\":\"internal\",\"answer\":\"Готовый ответ.\"}"
-                    });
-                });
-
-            var result = service.ExecuteAsync(
-                "Ответь",
-                new ChatSession(),
-                new DocumentContext(),
-                new AppSettings(),
-                null,
-                null,
-                CancellationToken.None).GetAwaiter().GetResult();
-
-            AssertEqual(1, calls, "embedded answer avoids repair request");
-            AssertEqual("Готовый ответ.", result.AssistantText, "user-facing answer extracted");
         }
 
         private static void OfflineAgentKeepsRequestOptions()
@@ -400,6 +318,27 @@ namespace RNAssistant.Harness
             AssertEqual(8, compact.Tools.Count, "compact slice size");
             AssertTrue(compact.Tools.Any(tool => !tool.MutatesDocument), "compact slice keeps inspection");
             AssertTrue(compact.Tools.Any(tool => tool.MutatesDocument), "compact slice keeps mutation");
+
+            foreach (var tool in tools)
+            {
+                tool.ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"payload\":{\"type\":\"string\",\"description\":\"" + new string('x', 1800) + "\"}},\"required\":[\"payload\"],\"additionalProperties\":false}";
+            }
+            var budgeted = new ToolCatalogSlicer().Slice(
+                new RoutedTask
+                {
+                    App = "Excel",
+                    TaskType = "content",
+                    Phase = AgentPhases.Mutation,
+                    RiskAllowed = 2,
+                    RequiresTool = true
+                },
+                tools,
+                new List<AgentObservation>(),
+                24,
+                false,
+                new AppSettings { ContextWindowOverrideTokens = 4096 });
+            AssertTrue(budgeted.Tools.Count < 24, "large schemas are trimmed by request budget");
+            AssertTrue(budgeted.Excluded.Any(item => item.Reason == "request_token_limit"), "schema budget exclusion reason");
         }
 
         private static void ConversationHistoryAvoidsOfficeTools()
@@ -410,10 +349,9 @@ namespace RNAssistant.Harness
                 new ChatSession());
             AssertEqual("conversation_history", route.TaskType, "conversation route");
             AssertTrue(!route.RequiresTool, "conversation history does not require Office tool");
-            AssertEqual(ChatModes.Chat, new ChatExecutionModeSelector().Select(
+            AssertEqual(ChatModes.Agent, new ChatExecutionModeSelector().Select(
                 "Сделай саммари нашего чата и диалога",
-                new ChatSession { Mode = ChatModes.Auto },
-                "Excel"), "auto mode uses plain chat");
+                new ChatSession { Mode = ChatModes.Agent }), "agent answers conversation history without Office tools");
         }
 
         private static void OutputBudgetReservesPromptSpace()
@@ -616,7 +554,7 @@ namespace RNAssistant.Harness
         {
             var session = new ChatSession
             {
-                Mode = ChatModes.Auto,
+                Mode = ChatModes.Chat,
                 PendingAgentTask = new PendingAgentTask
                 {
                     Request = "Создай новый лист, график и VBA-макрос.",
@@ -626,7 +564,7 @@ namespace RNAssistant.Harness
                 }
             };
 
-            AssertEqual(ChatModes.Agent, new ChatExecutionModeSelector().Select("да именно так", session, "Excel"), "auto mode keeps pending agent route");
+            AssertEqual(ChatModes.Agent, new ChatExecutionModeSelector().Select("да именно так", session), "pending agent task overrides chat mode");
             var resolved = AgentTaskContinuationResolver.Resolve("да именно так", session);
             AssertContains(resolved, "Создай новый лист", "original task retained");
             AssertContains(resolved, "USER_FOLLOW_UP", "follow-up marker included");
@@ -690,6 +628,12 @@ namespace RNAssistant.Harness
 
         private static void OptionalToolAuthoringIsExplicitAndDoesNotCompleteDocumentTask()
         {
+            var promptRoute = new OfficeIntentRouter().Route(
+                "Улучши главный системный промпт агента.",
+                new OfficeSnapshot { Host = "Excel" });
+            AssertEqual("tool_authoring", promptRoute.TaskType, "prompt authoring route");
+            AssertEqual(AgentPhases.Mutation, promptRoute.Phase, "prompt improvement allows confirmed save");
+
             var route = new RoutedTask
             {
                 App = "Excel",

@@ -57,7 +57,7 @@
   };
 
   window.chatMode = function (chat) {
-    return objectValue(chat, "Mode", "mode", "chat") || "chat";
+    return objectValue(chat, "Mode", "mode", "agent") || "agent";
   };
 
   window.chatHost = function (chat) {

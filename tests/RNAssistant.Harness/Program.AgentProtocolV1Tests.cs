@@ -144,7 +144,7 @@ namespace RNAssistant.Harness
                 AssertEqual("Context read.", result.AssistantText, "native final response");
                 AssertTrue(options[0].NativeTools, "native tools enabled");
                 AssertEqual(LlmResponseFormats.JsonSchema, options[0].ResponseFormat, "native final response format");
-                AssertContains(FlattenMessages(calls[0]), "emit exactly one native API function call", "native transport prompt");
+                AssertContains(FlattenMessages(calls[0]), "exactly one native function call", "native transport prompt");
                 var assistantCall = calls[1].First(message => message.ToolCalls != null && message.ToolCalls.Count == 1);
                 var toolResult = calls[1].First(message => string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase));
                 AssertEqual("native_call_1", assistantCall.ToolCalls[0].Id, "native assistant call id");

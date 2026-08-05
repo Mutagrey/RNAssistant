@@ -62,8 +62,7 @@ namespace RNAssistant.Core.Llm
                             }
                         }))
                     });
-                    build.EstimatedPromptTokens += 12 + ModelContextBudget.EstimateTextTokens(message.Content) +
-                        message.ToolCalls.Sum(call => ModelContextBudget.EstimateTextTokens(call.Name) + ModelContextBudget.EstimateTextTokens(call.ArgumentsJson));
+                    build.EstimatedPromptTokens += ModelContextBudget.EstimateMessageTokens(message, false);
                     continue;
                 }
 
@@ -81,7 +80,7 @@ namespace RNAssistant.Core.Llm
                     };
                     if (!string.IsNullOrWhiteSpace(message.ToolName)) toolMessage["name"] = message.ToolName;
                     build.Messages.Add(toolMessage);
-                    build.EstimatedPromptTokens += 6 + ModelContextBudget.EstimateTextTokens(message.Content);
+                    build.EstimatedPromptTokens += ModelContextBudget.EstimateMessageTokens(message, false);
                     continue;
                 }
 
@@ -119,7 +118,9 @@ namespace RNAssistant.Core.Llm
                             unreadablePdf.FileName + ": PDF contains no usable text and the selected model does not support visual PDF pages.");
                     }
                     build.Messages.Add(new { role = message.Role, content = text });
-                    build.EstimatedPromptTokens += 4 + ModelContextBudget.EstimateTextTokens(text);
+                    build.EstimatedPromptTokens += 4 +
+                        ModelContextBudget.EstimateTextTokens(message.Role) +
+                        ModelContextBudget.EstimateTextTokens(text);
                     continue;
                 }
 
@@ -154,9 +155,10 @@ namespace RNAssistant.Core.Llm
                         }
                     });
                     build.HasAudio = true;
+                    build.EstimatedPromptTokens += ModelContextBudget.EstimateAudioTokens(bytes.LongLength);
                 }
                 build.Messages.Add(new { role = message.Role, content = parts });
-                build.EstimatedPromptTokens += 4 + ModelContextBudget.EstimateTextTokens(text) +
+                build.EstimatedPromptTokens += 4 + ModelContextBudget.EstimateTextTokens(message.Role) + ModelContextBudget.EstimateTextTokens(text) +
                     imageParts.Count * ModelContextBudget.EstimatedImageTokens;
             }
 

@@ -54,41 +54,6 @@ namespace RNAssistant.Office.Services
                 throw new InvalidOperationException("Model returned no completion.");
             }
             var assistantText = completion.Content ?? string.Empty;
-            string extractedAnswer;
-            if (PlainChatResponseNormalizer.TryGetUserFacingText(assistantText, out extractedAnswer))
-            {
-                if (!string.IsNullOrWhiteSpace(extractedAnswer))
-                {
-                    assistantText = extractedAnswer;
-                }
-                else
-                {
-                    Report(progress, "repairing", "Модель вернула внутренний JSON, запрашиваю обычный ответ...");
-                    var repairMessages = new List<ChatMessage>(messages)
-                    {
-                        new ChatMessage { Role = "assistant", Content = assistantText },
-                        new ChatMessage
-                        {
-                            Role = "user",
-                            Content = "The previous response exposed internal reasoning or planner JSON instead of answering. Return only the user-facing answer to the original request in natural language. Do not return JSON, code fences, a thought/reasoning field, or commentary about this correction."
-                        }
-                    };
-                    completion = await CompleteBufferedAsync(settings, repairMessages, progress, cancellationToken).ConfigureAwait(false);
-                    if (completion == null)
-                    {
-                        throw new InvalidOperationException("Model returned no completion.");
-                    }
-
-                    assistantText = completion.Content ?? string.Empty;
-                    if (PlainChatResponseNormalizer.TryGetUserFacingText(assistantText, out extractedAnswer))
-                    {
-                        assistantText = string.IsNullOrWhiteSpace(extractedAnswer)
-                            ? "Модель не вернула пользовательский ответ. Повторите запрос или выберите другую модель."
-                            : extractedAnswer;
-                    }
-                    messages = repairMessages;
-                }
-            }
             session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, completion));
             return new ChatCompletionResult
             {
@@ -104,10 +69,7 @@ namespace RNAssistant.Office.Services
             Action<string, string, ChatActivity> progress,
             CancellationToken cancellationToken)
         {
-            var prefix = new StringBuilder();
             var pendingReasoning = new StringBuilder();
-            var streamDecisionMade = false;
-            var suppressStream = false;
             var reasoningSeen = false;
             var reasoningCompleted = false;
             var lastReasoningReportUtc = DateTime.UtcNow;
@@ -154,31 +116,7 @@ namespace RNAssistant.Office.Services
                 {
                     return;
                 }
-
-                if (streamDecisionMade)
-                {
-                    if (!suppressStream)
-                    {
-                        Report(progress, "streaming", update.ContentDelta);
-                    }
-                    return;
-                }
-
-                prefix.Append(update.ContentDelta);
-                var trimmed = prefix.ToString().TrimStart();
-                if (trimmed.Length == 0)
-                {
-                    return;
-                }
-
-                suppressStream = trimmed.StartsWith("{", StringComparison.Ordinal) ||
-                    trimmed.StartsWith("[", StringComparison.Ordinal) ||
-                    trimmed.StartsWith("`", StringComparison.Ordinal);
-                streamDecisionMade = true;
-                if (!suppressStream)
-                {
-                    Report(progress, "streaming", prefix.ToString());
-                }
+                Report(progress, "streaming", update.ContentDelta);
             }, cancellationToken).ConfigureAwait(false);
             flushReasoning(true);
             return completion;

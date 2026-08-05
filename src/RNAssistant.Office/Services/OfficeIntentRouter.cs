@@ -114,8 +114,8 @@ namespace RNAssistant.Office.Services
             if (AgentText.ContainsAny(value, "custom tool", "tools", "prompt", "prompts", "skill", "skills", "инструмент", "промпт", "скилл"))
             {
                 var mutatesCatalog =
-                    AgentText.ContainsAny(value, "создай", "создать", "добавь", "измени", "обнови", "удали", "сохрани") ||
-                    ContainsAnyToken(value, "create", "add", "update", "delete", "remove", "save");
+                    AgentText.ContainsAny(value, "создай", "создать", "добавь", "измени", "обнови", "улучш", "редактир", "перепиш", "правк", "удали", "сохрани") ||
+                    ContainsAnyToken(value, "create", "add", "update", "improve", "edit", "rewrite", "delete", "remove", "save");
                 route.Mode = mutatesCatalog ? "mutate_tool_authoring" : "read_tool_authoring";
                 route.TaskType = "tool_authoring";
                 route.Phase = mutatesCatalog ? AgentPhases.Mutation : AgentPhases.ReadOnly;

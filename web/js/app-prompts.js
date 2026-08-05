@@ -1,14 +1,11 @@
 (function () {
   var promptDefinitions = [
-    { key: "systemPrompt", label: "Базовый промпт агента", group: "Base", source: "root", field: "SystemPrompt", description: "Роль и общий контекст planner." },
+    { key: "systemPrompt", label: "Главный промпт агента", group: "Base", source: "root", field: "SystemPrompt", description: "AgentDecision v1, transport, контекст, tools, skills и правила self-improvement." },
     { key: "chatSystemPrompt", label: "Базовый промпт чата", group: "Base", source: "root", field: "ChatSystemPrompt", description: "Прямой текстовый ответ без planner JSON и внутреннего reasoning." },
-    { key: "toolProtocolPrompt", label: "Протокол planner JSON", group: "Runtime", source: "agent", field: "ToolProtocolPrompt", description: "Формат strict JSON envelope и аргументов." },
-    { key: "toolRoutingPrompt", label: "Routing tools", group: "Runtime", source: "agent", field: "ToolRoutingPrompt", description: "Правила выбора tool, VBA, chart/html artifacts и проверок." },
     { key: "forceToolUsePrompt", label: "Force tool use", group: "Recovery", source: "agent", field: "ForceToolUsePrompt", description: "Follow-up, когда модель ответила текстом на явное действие." },
-    { key: "repairMalformedToolBlockPrompt", label: "Repair malformed JSON", group: "Recovery", source: "agent", field: "RepairMalformedToolBlockPrompt", description: "Follow-up для невалидного planner JSON." },
-    { key: "afterToolResultsPrompt", label: "After tool results", group: "Loop", source: "agent", field: "AfterToolResultsPrompt", description: "Продолжение после успешных локальных tool results." },
-    { key: "verifyMutationPrompt", label: "Verify mutation", group: "Loop", source: "agent", field: "VerifyMutationPrompt", description: "Проверка после мутации документа или VBA." },
-    { key: "confirmedToolContinuationPrompt", label: "After confirmation", group: "Loop", source: "agent", field: "ConfirmedToolContinuationPrompt", description: "Продолжение после ручного подтверждения tool." }
+    { key: "repairDecisionPrompt", label: "Repair AgentDecision", group: "Recovery", source: "agent", field: "RepairDecisionPrompt", description: "Единственный повторный запрос для невалидного решения модели." },
+    { key: "planContinuationPrompt", label: "Continue plan", group: "Loop", source: "agent", field: "PlanContinuationPrompt", description: "Переход от видимого plan к следующему решению." },
+    { key: "chatTitlePrompt", label: "Название чата", group: "Utility", source: "agent", field: "ChatTitlePrompt", description: "Отдельный короткий запрос для генерации названия чата." }
   ];
 
   function promptValue(settings, def) {
@@ -224,7 +221,7 @@
         state.promptDrafts[def.key] = "";
       });
       $("promptEditInput").value = "";
-      $("systemPromptRoleInput").value = "user";
+      $("systemPromptRoleInput").value = "developer";
       settingsDirty = true;
       renderPromptList();
       updateSettingsSaveButton();

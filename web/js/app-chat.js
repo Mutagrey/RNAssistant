@@ -242,7 +242,7 @@ function applyInitState(init) {
   state.htmlWorkspaceDirty = false;
   state.activeChatId = init.activeChatId || "";
   state.activeChatModel = init.activeChatModel || "";
-  state.activeChatMode = init.activeChatMode || init.ActiveChatMode || "chat";
+  state.activeChatMode = init.activeChatMode || init.ActiveChatMode || "agent";
   state.activeChatHtmlMode = !!(init.activeChatHtmlMode || init.ActiveChatHtmlMode);
   state.chats = init.chats || [];
   state.documents = init.documents || init.Documents || [];
@@ -782,11 +782,11 @@ async function saveChatMode(mode) {
   try {
     applyChatState(await send("setChatMode", {
       chatId: state.activeChatId,
-      mode: mode || "chat"
+      mode: mode || "agent"
     }));
     log("Режим чата: " + state.activeChatMode + ".");
   } catch (error) {
-    $("chatModeSelect").value = state.activeChatMode || "chat";
+    $("chatModeSelect").value = state.activeChatMode || "agent";
     log(error.detail || error.message);
   }
 }

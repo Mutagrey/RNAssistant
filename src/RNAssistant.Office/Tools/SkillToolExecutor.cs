@@ -83,11 +83,6 @@ namespace RNAssistant.Office.Tools
 
         private ToolResult SaveSkill(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)
         {
-            if (!dryRun && !manualRun && !(settings ?? new AppSettings()).AutoConfirmToolActions)
-            {
-                return ToolResult.WaitingConfirmation("Skill save requires confirmation: " + ToolArgumentReader.String(command.Arguments, "id", string.Empty));
-            }
-
             var skill = ReadSkillDefinition(command);
             if (string.IsNullOrWhiteSpace(skill.Id))
             {
@@ -97,6 +92,15 @@ namespace RNAssistant.Office.Tools
             if (string.IsNullOrWhiteSpace(skill.BodyMarkdown))
             {
                 return ToolResult.Fail("Skill bodyMarkdown is required.");
+            }
+            if (BuiltInSkillProvider.GetSkills(_adapter).Any(item =>
+                item != null && string.Equals(item.Id, skill.Id, StringComparison.OrdinalIgnoreCase)))
+            {
+                return ToolResult.Fail("Built-in skill id is reserved: " + skill.Id, null, "reserved_skill_id", false);
+            }
+            if (!dryRun && !manualRun && !(settings ?? new AppSettings()).AutoConfirmToolActions)
+            {
+                return ToolResult.WaitingConfirmation("Skill save requires confirmation: " + skill.Id);
             }
 
             if (dryRun)
@@ -195,7 +199,7 @@ namespace RNAssistant.Office.Tools
 
             foreach (var skill in _skillStore.Load().Where(IsVisible))
             {
-                result[skill.Id] = skill;
+                if (!result.ContainsKey(skill.Id)) result[skill.Id] = skill;
             }
 
             return result.Values.OrderBy(s => s.Host).ThenBy(s => s.Id);

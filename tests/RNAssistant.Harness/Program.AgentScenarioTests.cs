@@ -27,7 +27,7 @@ namespace RNAssistant.Harness
                 var llm = new ScenarioLlm()
                     .Add(
                         AgentBlock(Command("excel.add_sheet", "name", "Report")),
-                        "RNAssistant Office Action Planner",
+                        "You are RNAssistant, a local Office assistant and action agent",
                         "ROUTE:",
                         "excel.add_sheet",
                         "Reporting Guard",
@@ -95,7 +95,7 @@ namespace RNAssistant.Harness
                         AgentBlock(Command("excel.read_range", "sheet", "Data", "address", "A1:B4")),
                         new[]
                         {
-                            "RNAssistant Office Action Planner",
+                            "You are RNAssistant, a local Office assistant and action agent",
                             "AVAILABLE_TOOLS",
                             "excel.read_range",
                             "Contract Skill",
@@ -179,11 +179,9 @@ namespace RNAssistant.Harness
                         "word.vba_replace_module")
                     .Add(
                         AgentBlock(Command("word.vba_read_module", "moduleName", "Module1")),
-                        "user confirmed",
                         "verification_phase",
-                        "Confirmed tool:",
                         "word.vba_replace_module",
-                        "status: completed")
+                        "\"status\":\"completed\"")
                     .Add(
                         "Confirmed and verified.",
                         "ChangedMacro");

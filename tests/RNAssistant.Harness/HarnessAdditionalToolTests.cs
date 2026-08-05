@@ -431,7 +431,7 @@ namespace RNAssistant.Harness
                     "Сделай локальный HTML-график.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { RequireVerificationForMutations = false, AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
+                    new AppSettings { RequireVerificationForMutations = false, FallbackToJsonObject = false },
                     new List<ToolDefinition>(executor.GetControllerTools()),
                     null).GetAwaiter().GetResult();
 
@@ -440,7 +440,7 @@ namespace RNAssistant.Harness
                 AssertTrue(
                     FlattenMessages(calls[1]).IndexOf(new string('x', 64), StringComparison.Ordinal) < 0,
                     "large malformed body omitted from repair prompt");
-                AssertContains(FlattenMessages(calls[1]), "at most one content-bearing upsert step", "repair asks for bounded html step");
+                AssertContains(FlattenMessages(calls[1]), "previous response was not a valid AgentDecision v1 decision", "repair requests a valid decision");
             });
         }
 
@@ -491,7 +491,7 @@ namespace RNAssistant.Harness
                     () => settingsStore,
                     value => settingsStore = value);
                 var command = new ToolCommand { ToolId = "common.prompts_save" };
-                command.Arguments["toolRoutingPrompt"] = "CUSTOM ROUTING";
+                command.Arguments["repairDecisionPrompt"] = "CUSTOM REPAIR";
                 command.Arguments["chatSystemPrompt"] = "CUSTOM CHAT";
                 command.Arguments["systemPromptRole"] = "developer";
 
@@ -512,10 +512,10 @@ namespace RNAssistant.Harness
                     false);
                 AssertTrue(saved.Success, "prompt save succeeds");
 
-                AssertEqual("CUSTOM ROUTING", settingsStore.AgentPrompts.ToolRoutingPrompt, "routing prompt saved");
+                AssertEqual("CUSTOM REPAIR", settingsStore.AgentPrompts.RepairDecisionPrompt, "repair prompt saved");
                 AssertEqual("CUSTOM CHAT", settingsStore.ChatSystemPrompt, "chat prompt saved");
                 AssertEqual("developer", settingsStore.SystemPromptRole, "developer prompt role saved");
-                AssertEqual("CUSTOM ROUTING", runtimeSettings.AgentPrompts.ToolRoutingPrompt, "runtime routing prompt updated");
+                AssertEqual("CUSTOM REPAIR", runtimeSettings.AgentPrompts.RepairDecisionPrompt, "runtime repair prompt updated");
                 AssertEqual("developer", runtimeSettings.SystemPromptRole, "runtime developer prompt role updated");
 
                 var read = executor.Execute(
@@ -525,7 +525,7 @@ namespace RNAssistant.Harness
                     false,
                     false);
                 AssertTrue(read.Success, "prompt read succeeds");
-                AssertContains(read.DataJson, "CUSTOM ROUTING", "prompt read data");
+                AssertContains(read.DataJson, "CUSTOM REPAIR", "prompt read data");
             });
         }
 
@@ -535,7 +535,7 @@ namespace RNAssistant.Harness
             {
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
                 var settingsStore = new AppSettings();
-                settingsStore.AgentPrompts.ToolRoutingPrompt = "CUSTOM ROUTING";
+                settingsStore.AgentPrompts.RepairDecisionPrompt = "CUSTOM REPAIR";
                 var executor = new OfficeToolExecutor(
                     adapter,
                     new VbaBackupStore(paths),
@@ -552,9 +552,9 @@ namespace RNAssistant.Harness
                     false);
 
                 AssertTrue(read.Success, "prompt defaults read succeeds");
-                AssertContains(read.DataJson, "CUSTOM ROUTING", "current prompt returned");
-                AssertContains(read.DataJson, "built-in tools cannot solve", "default prompt returned");
-                AssertContains(read.DataJson, "Answer the user directly", "default chat prompt returned");
+                AssertContains(read.DataJson, "CUSTOM REPAIR", "current prompt returned");
+                AssertContains(read.DataJson, "local Office assistant and action agent", "default main prompt returned");
+                AssertContains(read.DataJson, "in Chat mode", "default chat prompt returned");
             });
         }
 
@@ -600,7 +600,7 @@ namespace RNAssistant.Harness
                     "Create a new worksheet named Report.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, FallbackToJsonObject = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -608,8 +608,8 @@ namespace RNAssistant.Harness
                 AssertEqual(3, calls.Count, "llm call count");
                 AssertContains(FlattenMessages(calls[1]), "Validation error: unknown_tool", "semantic repair prompt");
                 AssertContains(FlattenMessages(calls[1]), "excel.add_sheet", "retry prompt contains exact tool id");
-                AssertContains(FlattenMessages(calls[2]), "Local normalized observations are available", "successful retry clears stale failure directive");
-                AssertTrue(FlattenMessages(calls[2]).IndexOf("failed or was rejected", StringComparison.OrdinalIgnoreCase) < 0, "successful retry does not keep failure directive");
+                AssertContains(FlattenMessages(calls[2]), "excel.add_sheet succeeded", "successful retry is present as an observation");
+                AssertTrue(FlattenMessages(calls[2]).IndexOf("unknown_tool", StringComparison.OrdinalIgnoreCase) < 0, "successful retry does not keep stale validation error");
                 AssertEqual(1, adapter.Executed.Count, "adapter execution count");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "retry tool");
                 var resultJson = Newtonsoft.Json.JsonConvert.SerializeObject(result.ToolResults);

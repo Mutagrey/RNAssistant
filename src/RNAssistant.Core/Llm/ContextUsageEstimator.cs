@@ -13,6 +13,11 @@ namespace RNAssistant.Core.Llm
 
         public static object FromPrompt(IEnumerable<ChatMessage> promptMessages, AppSettings settings, int? actualPromptTokens)
         {
+            return FromPrompt(promptMessages, settings, actualPromptTokens, null);
+        }
+
+        public static object FromPrompt(IEnumerable<ChatMessage> promptMessages, AppSettings settings, int? actualPromptTokens, LlmRequestOptions requestOptions)
+        {
             var limit = ModelContextBudget.InputBudgetTokens(settings);
             var usedChars = 0;
             var estimatedTokens = 0;
@@ -27,7 +32,7 @@ namespace RNAssistant.Core.Llm
                     }
 
                     usedChars += (message.Content ?? string.Empty).Length;
-                    estimatedTokens += 4 + ModelContextBudget.EstimateTextTokens(message.Content);
+                    estimatedTokens += ModelContextBudget.EstimateMessageTokens(message, false);
                     foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
                     {
                         if (attachment == null) continue;
@@ -35,12 +40,12 @@ namespace RNAssistant.Core.Llm
                             ? attachment.ExtractedCharCount
                             : (attachment.ExtractedText ?? string.Empty).Length;
                         estimatedTokens += Math.Max(attachment.ExtractedCharCount, (attachment.ExtractedText ?? string.Empty).Length) / 2;
-                        if (attachment.Kind == "image") estimatedTokens += ModelContextBudget.EstimatedImageTokens;
                     }
                     count += 1;
                 }
             }
 
+            estimatedTokens += ModelContextBudget.EstimateRequestOptionsTokens(requestOptions);
             return Usage(usedChars, actualPromptTokens ?? estimatedTokens, limit, count, actualPromptTokens.HasValue, settings);
         }
 
@@ -64,7 +69,9 @@ namespace RNAssistant.Core.Llm
                     }
 
                     usedChars += (message.Content ?? string.Empty).Length;
-                    usedTokens += 4 + ModelContextBudget.EstimateTextTokens(message.Content);
+                    usedTokens += 4 +
+                        ModelContextBudget.EstimateTextTokens(message.Role) +
+                        ModelContextBudget.EstimateTextTokens(message.Content);
                     foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
                     {
                         if (attachment == null)
@@ -76,10 +83,6 @@ namespace RNAssistant.Core.Llm
                             (attachment.ExtractedText ?? string.Empty).Length);
                         usedChars += extractedChars;
                         usedTokens += extractedChars / 2;
-                        if (attachment.Kind == "image")
-                        {
-                            usedTokens += ModelContextBudget.EstimatedImageTokens;
-                        }
                     }
                     count += 1;
                 }

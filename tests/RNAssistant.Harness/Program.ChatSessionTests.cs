@@ -195,15 +195,15 @@ namespace RNAssistant.Harness
                 var second = service.CreateChat("Another draft");
 
                 AssertTrue(!string.Equals(first.Id, second.Id, StringComparison.OrdinalIgnoreCase), "new draft id");
-                AssertEqual(ChatModes.Auto, first.Mode, "initial draft defaults to auto mode");
-                AssertEqual(ChatModes.Auto, second.Mode, "new draft defaults to auto mode");
+                AssertEqual(ChatModes.Agent, first.Mode, "initial draft defaults to agent mode");
+                AssertEqual(ChatModes.Agent, second.Mode, "new draft defaults to agent mode");
                 AssertEqual(0, store.List(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle).Count, "empty drafts not persisted");
                 AssertTrue(!store.IsPersisted(second), "active draft remains in memory");
                 AssertEqual(second.Id, service.GetActiveSession().Id, "active draft survives list refresh");
 
                 var draftSummaries = service.GetChatSummaries(second.Id);
                 AssertEqual(1, draftSummaries.Count, "active transient draft is visible in chat tree");
-                AssertEqual(ChatModes.Auto, draftSummaries[0].Mode, "visible transient draft keeps auto mode");
+                AssertEqual(ChatModes.Agent, draftSummaries[0].Mode, "visible transient draft keeps agent mode");
 
                 var offline = service.CreateChatForDocument(
                     "Offline draft",
@@ -211,7 +211,7 @@ namespace RNAssistant.Harness
                     "archived-doc",
                     "Archive.docx",
                     "C:\\Docs\\Archive.docx");
-                AssertEqual(ChatModes.Auto, offline.Mode, "document group draft defaults to auto mode");
+                AssertEqual(ChatModes.Agent, offline.Mode, "document group draft defaults to agent mode");
                 AssertEqual("archived-doc", offline.DocumentKey, "document group draft uses target document");
                 AssertEqual("C:\\Docs\\Archive.docx", offline.DocumentPath, "document group draft keeps document path");
             });

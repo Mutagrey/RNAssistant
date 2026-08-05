@@ -172,7 +172,7 @@ namespace RNAssistant.Harness
                     {
                         AutoConfirmToolActions = true,
                         RequireVerificationForMutations = false,
-                        AgentResponseFallbackMode = AgentResponseModes.JsonSchema
+                        FallbackToJsonObject = false
                     },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
@@ -181,7 +181,7 @@ namespace RNAssistant.Harness
                 AssertEqual(1, adapter.Executed.Count, "only corrected action executed");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "corrected action");
                 AssertContains(FlattenMessages(calls[1]), "Validation error: unexpected_field", "multiple-call decision rejected");
-                AssertContains(FlattenMessages(calls[1]), "exactly one tool object", "repair enforces one call");
+                AssertContains(FlattenMessages(calls[1]), "at most one external tool", "repair enforces one call");
             });
         }
 
@@ -227,7 +227,7 @@ namespace RNAssistant.Harness
                     "Summarize the presentation.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
+                    new AppSettings { FallbackToJsonObject = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -255,7 +255,7 @@ namespace RNAssistant.Harness
                     "Summarize the presentation.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
+                    new AppSettings { FallbackToJsonObject = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -287,7 +287,7 @@ namespace RNAssistant.Harness
                     "Hello.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
+                    new AppSettings { FallbackToJsonObject = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 

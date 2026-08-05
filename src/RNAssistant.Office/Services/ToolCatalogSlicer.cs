@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Services
@@ -12,7 +13,8 @@ namespace RNAssistant.Office.Services
             IEnumerable<ToolDefinition> tools,
             IReadOnlyList<AgentObservation> observations,
             int maxTools = 24,
-            bool allowAgentToolAuthoring = false)
+            bool allowAgentToolAuthoring = false,
+            AppSettings settings = null)
         {
             var slice = new ToolCatalogSlice();
             if (route != null && !route.RequiresTool)
@@ -49,12 +51,43 @@ namespace RNAssistant.Office.Services
                 .ThenBy(t => t.Id)
                 .ToList();
             slice.Tools = SelectBalancedTools(ordered, route, Math.Max(8, Math.Min(64, maxTools)));
+            FitRequestBudget(slice, settings);
             var selectedIds = new HashSet<string>(slice.Tools.Select(tool => tool.Id), StringComparer.OrdinalIgnoreCase);
-            foreach (var omitted in ordered.Where(tool => !selectedIds.Contains(tool.Id)))
+            foreach (var omitted in ordered.Where(tool =>
+                !selectedIds.Contains(tool.Id) &&
+                !slice.Excluded.Any(exclusion => string.Equals(exclusion.ToolId, tool.Id, StringComparison.OrdinalIgnoreCase))))
             {
                 slice.Excluded.Add(Exclude(omitted, "selection_limit", "A higher-priority balanced set filled the prompt tool budget."));
             }
             return slice;
+        }
+
+        private static void FitRequestBudget(ToolCatalogSlice slice, AppSettings settings)
+        {
+            if (slice == null || settings == null || slice.Tools.Count <= 1) return;
+            var limit = Math.Max(512, ModelContextBudget.InputBudgetTokens(settings) / 2);
+            while (slice.Tools.Count > 1)
+            {
+                var options = AgentPlannerCompletionRunner.BuildOptions(settings.AgentResponseMode, slice.Tools);
+                var requestTokens = ModelContextBudget.EstimateRequestOptionsTokens(options) + EstimatePromptToolTokens(slice.Tools);
+                if (requestTokens <= limit) break;
+                var omitted = slice.Tools[slice.Tools.Count - 1];
+                slice.Tools.RemoveAt(slice.Tools.Count - 1);
+                slice.Excluded.Add(Exclude(omitted, "request_token_limit", "Tool schema was omitted to keep the request inside the model context budget."));
+            }
+        }
+
+        private static int EstimatePromptToolTokens(IEnumerable<ToolDefinition> tools)
+        {
+            return (tools ?? new ToolDefinition[0]).Sum(tool => tool == null
+                ? 0
+                : 16 + ModelContextBudget.EstimateTextTokens(
+                    (tool.Id ?? string.Empty) + "\n" +
+                    (tool.Description ?? string.Empty) + "\n" +
+                    (tool.ArgumentSchemaJson ?? string.Empty) + "\n" +
+                    (tool.UseWhen ?? string.Empty) + "\n" +
+                    (tool.DoNotUseWhen ?? string.Empty) + "\n" +
+                    (tool.ExamplesJson ?? string.Empty)));
         }
 
         private static ToolExclusion CandidateExclusion(ToolDefinition tool, string host)

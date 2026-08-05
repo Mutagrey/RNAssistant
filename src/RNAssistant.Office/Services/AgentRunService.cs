@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -70,7 +69,7 @@ namespace RNAssistant.Office.Services
                     Attachments = attachments == null ? new List<ChatAttachment>() : new List<ChatAttachment>(attachments)
                 });
             }
-            return RunLoopAsync(taskText, null, false, session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, null, cancellationToken);
+            return RunLoopAsync(taskText, false, session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, null, cancellationToken);
         }
 
         public Task<ChatCompletionResult> ContinueAfterToolAsync(
@@ -91,12 +90,8 @@ namespace RNAssistant.Office.Services
             {
                 AgentProtocolHistory.AppendToolExchange(initialProtocolMessages, null, confirmedCommand, confirmedResult, settings);
             }
-            var prompt = BuildConfirmedToolContinuation(
-                confirmedCommand,
-                session,
-                PromptText(settings, p => p.ConfirmedToolContinuationPrompt));
-            var taskText = LatestUserRequest(session, prompt);
-            return RunLoopAsync(taskText, prompt, CommandMutates(confirmedCommand, tools), session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, initialProtocolMessages, cancellationToken);
+            var taskText = LatestUserRequest(session, confirmedCommand == null ? string.Empty : confirmedCommand.ToolId);
+            return RunLoopAsync(taskText, CommandMutates(confirmedCommand, tools), session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, initialProtocolMessages, cancellationToken);
         }
 
         private static bool CommandMutates(ToolCommand command, IReadOnlyList<ToolDefinition> tools)
@@ -113,7 +108,6 @@ namespace RNAssistant.Office.Services
 
         private async Task<ChatCompletionResult> RunLoopAsync(
             string taskText,
-            string initialFollowUpPrompt,
             bool initialVerificationRequired,
             ChatSession session,
             DocumentContext documentContext,
@@ -159,7 +153,7 @@ namespace RNAssistant.Office.Services
             for (var iteration = 0; iteration < maxIterations; iteration++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var slice = _toolCatalogSlicer.Slice(route, allTools, observations, settings.MaxAgentToolsPerRequest, settings.AllowAgentToolAuthoring);
+                var slice = _toolCatalogSlicer.Slice(route, allTools, observations, settings.MaxAgentToolsPerRequest, settings.AllowAgentToolAuthoring, settings);
                 routingDiagnosticsJson = AgentRunPresentation.BuildRoutingDiagnosticsJson(route, slice);
                 if (iteration == 0)
                 {
@@ -178,9 +172,7 @@ namespace RNAssistant.Office.Services
                     });
                     break;
                 }
-                var requestText = string.IsNullOrWhiteSpace(initialFollowUpPrompt)
-                    ? taskText
-                    : taskText + "\n\nContinuation: " + initialFollowUpPrompt;
+                var requestText = taskText;
                 var messages = _plannerPromptComposer.BuildMessages(
                     requestText,
                     snapshot,
@@ -191,8 +183,8 @@ namespace RNAssistant.Office.Services
                     skills,
                     settings,
                     session,
-                    attachments);
-                messages.AddRange(protocolMessages);
+                    attachments,
+                    protocolMessages);
                 contextUsage = ContextUsageEstimator.FromPrompt(messages, settings);
                 ReportProgress(progress, "thinking", AgentRunPresentation.BuildTaskProgressMessage(route, true));
                 var plannerAttempt = await _plannerCompletion.CompleteAsync(
@@ -203,7 +195,7 @@ namespace RNAssistant.Office.Services
                     progress,
                     AgentRunPresentation.BuildTaskProgressMessage(route, true),
                     "Исправляю формат следующего действия...",
-                    PromptText(settings, p => p.RepairMalformedToolBlockPrompt),
+                    PromptText(settings, p => p.RepairDecisionPrompt),
                     cancellationToken).ConfigureAwait(false);
                 contextUsage = plannerAttempt.ContextUsage;
                 cancellationToken.ThrowIfCancellationRequested();
@@ -240,7 +232,7 @@ namespace RNAssistant.Office.Services
                     session.Messages.Add(AgentTranscript.CreateAssistantMessage(response.DecisionSummary, completion, visiblePlan));
                     ReportProgress(progress, "plan", response.DecisionSummary, visiblePlan);
                     protocolMessages.Add(new ChatMessage { Role = "assistant", Content = plannerText });
-                    protocolMessages.Add(new ChatMessage { Role = "user", Content = "Continue with the next AgentDecision for this plan." });
+                    protocolMessages.Add(new ChatMessage { Role = "user", Content = PromptText(settings, p => p.PlanContinuationPrompt) });
                     continue;
                 }
 
@@ -252,7 +244,7 @@ namespace RNAssistant.Office.Services
                         !state.ToolCorrectionUsed)
                     {
                         state.ToolCorrectionUsed = true;
-                        var forced = BuildPlannerCorrectionMessages("This task requires Office tool use before a final answer.", snapshot, route, slice, observations, documentContext, skills, settings, requestText, session, attachments);
+                        var forced = BuildPlannerCorrectionMessages(PromptText(settings, p => p.ForceToolUsePrompt), snapshot, route, slice, observations, documentContext, skills, settings, requestText, session, attachments, protocolMessages);
                         var correctionAttempt = await _plannerCompletion.CompleteAsync(
                             settings,
                             forced,
@@ -261,7 +253,7 @@ namespace RNAssistant.Office.Services
                             progress,
                             "Подбираю доступное действие для задачи...",
                             "Повторно исправляю формат действия...",
-                            PromptText(settings, p => p.RepairMalformedToolBlockPrompt),
+                            PromptText(settings, p => p.RepairDecisionPrompt),
                             cancellationToken).ConfigureAwait(false);
                         contextUsage = correctionAttempt.ContextUsage;
                         if (!correctionAttempt.ParseResult.Success)
@@ -613,68 +605,6 @@ namespace RNAssistant.Office.Services
             return fallback ?? string.Empty;
         }
 
-        private static string BuildConfirmedToolContinuation(ToolCommand command, ChatSession session, string prompt)
-        {
-            var builder = new StringBuilder();
-            builder.AppendLine(prompt ?? string.Empty);
-            builder.AppendLine("Confirmed tool:");
-            builder.AppendLine("toolId: " + (command == null ? string.Empty : command.ToolId));
-            builder.AppendLine("arguments: " + AgentText.Truncate(
-                JsonConvert.SerializeObject(command == null ? null : command.Arguments),
-                2000));
-
-            var activity = FindLatestToolActivity(session, command == null ? null : command.ToolId);
-            if (activity != null)
-            {
-                builder.AppendLine("status: " + (activity.ExecutionStatus ?? activity.Status ?? string.Empty));
-                builder.AppendLine("result: " + AgentText.Truncate(activity.ResultMessage, 1200));
-                if (!string.IsNullOrWhiteSpace(activity.DataJson))
-                {
-                    builder.AppendLine("data: " + AgentText.Truncate(activity.DataJson, 2000));
-                }
-            }
-            return builder.ToString().Trim();
-        }
-
-        private static ChatActivity FindLatestToolActivity(ChatSession session, string toolId)
-        {
-            if (session == null || session.Messages == null || string.IsNullOrWhiteSpace(toolId))
-            {
-                return null;
-            }
-            for (var index = session.Messages.Count - 1; index >= 0; index--)
-            {
-                var found = FindToolActivity(session.Messages[index] == null ? null : session.Messages[index].Activity, toolId);
-                if (found != null)
-                {
-                    return found;
-                }
-            }
-            return null;
-        }
-
-        private static ChatActivity FindToolActivity(ChatActivity activity, string toolId)
-        {
-            if (activity == null)
-            {
-                return null;
-            }
-            if (string.Equals(activity.ToolId, toolId, StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(activity.Status, "planned", StringComparison.OrdinalIgnoreCase))
-            {
-                return activity;
-            }
-            foreach (var child in activity.Children ?? new List<ChatActivity>())
-            {
-                var found = FindToolActivity(child, toolId);
-                if (found != null)
-                {
-                    return found;
-                }
-            }
-            return null;
-        }
-
         private List<ChatMessage> BuildPlannerCorrectionMessages(
             string correction,
             OfficeSnapshot snapshot,
@@ -686,13 +616,14 @@ namespace RNAssistant.Office.Services
             AppSettings settings,
             string taskText,
             ChatSession session,
-            IReadOnlyList<ChatAttachment> attachments)
+            IReadOnlyList<ChatAttachment> attachments,
+            IReadOnlyList<ChatMessage> protocolMessages)
         {
-            var messages = _plannerPromptComposer.BuildMessages(taskText, snapshot, route, slice, observations, context, skills, settings, session, attachments);
+            var messages = _plannerPromptComposer.BuildMessages(taskText, snapshot, route, slice, observations, context, skills, settings, session, attachments, protocolMessages);
             messages.Add(new ChatMessage
             {
                 Role = "user",
-                Content = correction + " " + PromptText(settings, p => p.ForceToolUsePrompt) + " Return kind=tool with one available read/context tool, or kind=cannot_complete if no tool can satisfy it."
+                Content = correction ?? string.Empty
             });
             return messages;
         }

@@ -79,9 +79,9 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - Agent API mode is explicit: `json_schema` by default, `json_object`, or `native_tool_calls`. Strict-schema fallback to `json_object` is permitted only before the first executed tool and persists for the rest of that run.
 - Editable Chat/Agent instructions use `developer` by default; Settings may choose `system` or `user`. Tool observations use `role: tool` by default with a matching assistant `tool_calls`/`tool_call_id` pair, or `developer`/`user` for endpoints that cannot replay tool history.
 - `decisionSummary`, visible goals/plans, normalized observations and deterministic verification are observable harness state. They must not contain or require chain-of-thought. Provider reasoning remains separate transport metadata.
-- Chat mode is a plain completion path with its own `ChatSystemPrompt`, without planner/tool prompts. Thought/reasoning JSON in content is never persisted: a user-facing field is extracted or one bounded repair is requested. Auto mode chooses Chat or Agent before the model request; the selected mode is persisted per chat.
+- There are only two persisted chat modes: `Agent` (default) and `Chat`. Agent can answer without tools when routing does not require Office state. Chat is a transparent plain completion path with its own `ChatSystemPrompt`; it performs no JSON/thought-envelope repair, while provider reasoning remains separate metadata. HTML and pending agent continuations force Agent.
 - Model reasoning is transport metadata (`reasoning_content`, `reasoning`, or one leading `<think>...</think>` block), stored and rendered separately; it is never mixed into planner JSON or replayed as chat history. Think tags elsewhere in ordinary content are preserved literally.
-- Context limits are token budgets resolved from the active model capability catalog.
+- Context limits are token budgets resolved from the active model capability catalog or an explicit override. Message/media estimates, response schema and native tool schemas all reduce the available request/output budget.
 - Chat and planner context are rebuilt from the active session for every request. They use reference-deduplicated notes plus recent user/assistant messages and their attachments; agent activity, diagnostics, and reasoning metadata are never replayed.
 - Chat and Agent share `PromptBudgetComposer` for chronological history selection and attachment accounting. Once a recent message exceeds the remaining budget, older history is not reintroduced.
 - Deterministic verification uses the narrowest available read tool and has a 15-second runtime timeout. A timeout ends the run with a diagnostic instead of starting another COM operation against a potentially blocked Office host.
@@ -92,7 +92,7 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - Agent runs are bounded by settings for max iterations and max tool steps; confirmed pending tools may resume the same run. Document mutation remains pending until a new verification observation succeeds.
 - Different chats may run LLM work concurrently. A chat accepts only one active run, and document mutations are serialized by host/document identity. Saving a background run never changes the selected chat.
 - A required-tool route accepts `final` only after its route phase reaches `final_phase`; inspection alone cannot complete a pending mutation. Format repair and required-tool correction have separate one-shot guards.
-- Tool slices record explicit exclusion reasons and reserve prompt capacity for both mutation and inspection tools. The per-request tool limit is configurable from 8 to 64.
+- Tool slices record explicit exclusion reasons, balance mutation/inspection capabilities, and fit both prompt and API schema representations into a bounded share of context. The per-request tool limit is configurable from 8 to 64.
 - Controller coordinates request flow; it should not contain pipeline execution, VBA patch logic, or JS rendering logic.
 - Office host adapters expose executable capabilities through `ToolDefinition` and `ExecuteTool`; they should not know chat/session/storage details.
 - Desktop target descriptors must be validated before tool execution; a closed or mismatched target should fail instead of falling back to an unrelated active document.
@@ -141,7 +141,7 @@ Current coverage:
 - VBA replace/patch/restore flows plus manifest/schema/signature validation, `.bas`/`.cls` package storage, document discovery, typed positional execution, session cleanup, persistent ownership and export-normalized hashes using fake Office/VBProject objects;
 - tool catalog service merge/filter behavior;
 - prompt message trimming, context usage estimates, and basic no-network chat completion flow;
-- explicit Chat/Auto/Agent routing, plain-chat prompt isolation, rebuilt history after deletion, and empty-tool preflight diagnostics;
+- explicit Agent/Chat selection with Agent defaults, plain-chat prompt isolation, rebuilt history after deletion, and empty-tool preflight diagnostics;
 - balanced tool slicing with exclusion diagnostics, prompt-budget boundaries, and strict parser boundary corpus;
 - Core context normalization/upsert/trim behavior;
 - typed bridge settings/context/VBA/tool/chat payload parsing, agent pending-tool status, and progress envelope with streamed content deltas;

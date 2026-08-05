@@ -161,7 +161,7 @@ Runtime data is stored under:
 
 `%AppData%\RNAssistant`
 
-- `settings.json` - API base URL, model, headers, token limits, prompt.
+- `settings.json` - API base URL, model, headers, token limits, response/tool roles and editable prompts.
 - `secret.bin` - API key protected with DPAPI CurrentUser.
 - `tools` - central editable executable tool library.
 - `skills` - markdown guidance files used by the agent when choosing an approach.
@@ -179,10 +179,9 @@ Endpoint compatibility details are in `docs/model-endpoint-compatibility.md`; th
 Each chat stores an explicit execution mode:
 
 - `Chat` sends a normal completion without planner instructions, Office snapshots, or tools.
-- `Auto` deterministically chooses Chat or Agent before the model request.
-- `Agent` uses the local planner/tool loop. HTML workspace mode always uses Agent.
+- `Agent` is the default and uses the local planner/tool loop. It can also answer ordinary questions without tools. HTML workspace and unfinished agent continuations always use Agent.
 
-Editable Chat/Agent instructions use `developer` by default. The Prompts settings page can switch the role to `system` or `user`.
+Editable Chat/Agent instructions use `developer` by default. The Prompts settings page can switch the role to `system` or `user` and edit the main Agent prompt, Chat prompt, recovery transitions and title prompt. Agent-side prompt changes use `common.prompts_read_defaults` and confirmed `common.prompts_save`.
 
 In Agent mode the model returns one `AgentDecision v1` object. One model turn contains at most one tool call:
 
@@ -212,6 +211,7 @@ Routing happens before Office context capture. General questions receive an empt
 In Agent mode, tools are available only when selected by the deterministic router and current phase. Level 2/3 or confirmation-required actions pause for user confirmation unless `Auto-confirm tool actions` is enabled. Confirmed tools can continue the same run.
 If a route requires a tool but filtering leaves no available tool, the runtime records a local diagnostic without calling the model.
 Decision activities store routing diagnostics: route reason, selected tool ids, exclusion counts, and bounded per-tool exclusion details. Tool selection keeps mutation and inspection capabilities balanced; `Tools in one planner prompt` controls the bounded catalog size.
+Context accounting includes message roles/content, current attachments, response schema and native tool definitions. Recent history is selected as one contiguous suffix; older history may be locally compressed. Exact assembly and estimator limits are documented in `docs/agent-decision-protocol.md`.
 Pipeline safety is resolved recursively before execution. Nested document/local mutations, risk, confirmation requirements, invalid references, and cycles cannot be hidden by incorrect top-level metadata.
 After a document mutation, only a new verification observation can complete the route; an earlier inspection does not count as verification.
 

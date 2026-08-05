@@ -8,13 +8,12 @@ namespace RNAssistant.Core.Models
     public static class ChatModes
     {
         public const string Chat = "chat";
-        public const string Auto = "auto";
         public const string Agent = "agent";
 
         public static string Normalize(string value)
         {
             value = (value ?? string.Empty).Trim().ToLowerInvariant();
-            return value == Auto || value == Agent ? value : Chat;
+            return value == Chat ? Chat : Agent;
         }
     }
 
@@ -132,7 +131,7 @@ namespace RNAssistant.Core.Models
             Context = new DocumentContext();
             HtmlWorkspace = new HtmlWorkspace();
             Messages = new List<ChatMessage>();
-            Mode = ChatModes.Chat;
+            Mode = ChatModes.Agent;
         }
     }
 

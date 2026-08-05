@@ -13,14 +13,15 @@ namespace RNAssistant.Office.Services
             List<ChatMessage> messages,
             int insertIndex,
             ChatSession session,
-            AppSettings settings)
+            AppSettings settings,
+            int inputBudgetTokens = 0)
         {
             if (messages == null)
             {
                 return;
             }
 
-            var budget = ModelContextBudget.InputBudgetTokens(settings);
+            var budget = inputBudgetTokens > 0 ? inputBudgetTokens : ModelContextBudget.InputBudgetTokens(settings);
             var used = EstimateMessages(messages);
             var history = ConversationHistory(session);
             var available = Math.Max(0, budget - used);
@@ -86,6 +87,30 @@ namespace RNAssistant.Office.Services
             }
         }
 
+        public void AddProtocolHistory(
+            List<ChatMessage> messages,
+            IEnumerable<ChatMessage> protocolMessages,
+            int inputBudgetTokens)
+        {
+            if (messages == null) return;
+            var available = Math.Max(0, inputBudgetTokens - EstimateMessages(messages));
+            if (available <= 0) return;
+
+            var selected = new List<IReadOnlyList<ChatMessage>>();
+            var groups = ProtocolGroups(protocolMessages);
+            for (var index = groups.Count - 1; index >= 0; index--)
+            {
+                var cost = EstimateMessages(groups[index]);
+                if (cost > available) break;
+                selected.Insert(0, groups[index]);
+                available -= cost;
+            }
+            foreach (var group in selected)
+            {
+                messages.AddRange(group);
+            }
+        }
+
         public int EstimateMessages(IEnumerable<ChatMessage> messages)
         {
             return ModelContextBudget.EstimateMessagesTokens(messages);
@@ -113,6 +138,29 @@ namespace RNAssistant.Office.Services
             return session.Messages
                 .Where((message, index) => index != activeUserIndex && IsConversationMessage(message))
                 .ToList();
+        }
+
+        private static List<IReadOnlyList<ChatMessage>> ProtocolGroups(IEnumerable<ChatMessage> source)
+        {
+            var messages = (source ?? new ChatMessage[0]).Where(message => message != null).ToList();
+            var groups = new List<IReadOnlyList<ChatMessage>>();
+            for (var index = 0; index < messages.Count; index++)
+            {
+                var group = new List<ChatMessage> { messages[index] };
+                if (string.Equals(messages[index].Role, "assistant", StringComparison.OrdinalIgnoreCase) && index + 1 < messages.Count)
+                {
+                    var next = messages[index + 1];
+                    if (string.Equals(next.Role, "tool", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(next.Role, "developer", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(next.Role, "user", StringComparison.OrdinalIgnoreCase))
+                    {
+                        group.Add(next);
+                        index += 1;
+                    }
+                }
+                groups.Add(group);
+            }
+            return groups;
         }
 
         private static bool IsConversationMessage(ChatMessage message)

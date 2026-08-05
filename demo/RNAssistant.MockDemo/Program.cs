@@ -163,15 +163,15 @@ namespace RNAssistant.MockDemo
             var init = await SendAsync(bridge, "1", "init", null, null).ConfigureAwait(false);
             var token = Payload(init)["bridgeToken"].ToString();
             var chatId = Payload(init)["activeChatId"].ToString();
-            if (!string.Equals((string)Payload(init)["activeChatMode"], "chat", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals((string)Payload(init)["activeChatMode"], "agent", StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException("new chat did not default to Chat mode");
+                throw new InvalidOperationException("new chat did not default to Agent mode");
             }
             await SendAsync(bridge, "2", "setChatModel", new { chatId = chatId, model = model }, token).ConfigureAwait(false);
-            var mode = await SendAsync(bridge, "2-mode", "setChatMode", new { chatId = chatId, mode = "auto" }, token).ConfigureAwait(false);
-            if (!string.Equals((string)Payload(mode)["activeChatMode"], "auto", StringComparison.OrdinalIgnoreCase))
+            var mode = await SendAsync(bridge, "2-mode", "setChatMode", new { chatId = chatId, mode = "agent" }, token).ConfigureAwait(false);
+            if (!string.Equals((string)Payload(mode)["activeChatMode"], "agent", StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException("Auto mode was not persisted by the bridge");
+                throw new InvalidOperationException("Agent mode was not persisted by the bridge");
             }
             var send = await SendAsync(
                 bridge,

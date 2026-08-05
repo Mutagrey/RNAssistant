@@ -24,6 +24,7 @@ function renderSettings() {
   $("systemPromptRoleInput").value = instructionRole === "system" || instructionRole === "user" ? instructionRole : "developer";
   var responseMode = String(s.AgentResponseMode || s.agentResponseMode || "json_schema").toLowerCase();
   $("agentResponseModeInput").value = responseMode === "native_tool_calls" || responseMode === "json_object" ? responseMode : "json_schema";
+  $("fallbackJsonObjectInput").checked = (s.FallbackToJsonObject !== false && s.fallbackToJsonObject !== false);
   var toolResultRole = String(s.ToolResultRole || s.toolResultRole || "tool").toLowerCase();
   $("toolResultRoleInput").value = toolResultRole === "developer" || toolResultRole === "user" ? toolResultRole : "tool";
   $("maxTokensInput").value = s.MaxTokens || s.maxTokens || 2048;
@@ -68,7 +69,7 @@ function readSettings() {
     ModelsConfigUrl: $("modelsConfigUrlInput").value.trim(),
     Model: $("modelInput").value.trim(),
     AgentResponseMode: $("agentResponseModeInput").value,
-    AgentResponseFallbackMode: "json_object",
+    FallbackToJsonObject: $("fallbackJsonObjectInput").checked,
     ToolResultRole: $("toolResultRoleInput").value,
     MaxTokens: Number($("maxTokensInput").value || 2048),
     RequestTimeoutSeconds: Number($("requestTimeoutInput").value || 300),

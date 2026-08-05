@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
@@ -11,7 +10,7 @@ namespace RNAssistant.Office.Services
     {
         public List<ChatMessage> BuildMessages(string userText, OfficeSnapshot snapshot, RoutedTask route, ToolCatalogSlice tools, IEnumerable<AgentObservation> observations, DocumentContext context, IEnumerable<SkillDefinition> skills, AppSettings settings)
         {
-            return BuildMessages(userText, snapshot, route, tools, observations, context, skills, settings, null, null);
+            return BuildMessages(userText, snapshot, route, tools, observations, context, skills, settings, null, null, null);
         }
 
         public List<ChatMessage> BuildMessages(
@@ -24,8 +23,10 @@ namespace RNAssistant.Office.Services
             IEnumerable<SkillDefinition> skills,
             AppSettings settings,
             ChatSession session,
-            IReadOnlyList<ChatAttachment> currentAttachments)
+            IReadOnlyList<ChatAttachment> currentAttachments,
+            IReadOnlyList<ChatMessage> protocolMessages = null)
         {
+            settings = settings ?? new AppSettings();
             var messages = new List<ChatMessage>();
             var instruction = BuildInstructionPrompt(settings);
             var plannerContext = BuildPlannerContext(userText, snapshot, route, tools, observations, context, skills, settings);
@@ -41,39 +42,33 @@ namespace RNAssistant.Office.Services
                 Role = "user",
                 Content = separateInstruction ? plannerContext : instruction + "\n\n" + plannerContext
             };
+            var currentIndex = messages.Count;
             messages.Add(current);
 
             current.Attachments = currentAttachments == null
                 ? new List<ChatAttachment>()
                 : new List<ChatAttachment>(currentAttachments);
-            new PromptBudgetComposer().AddConversationHistory(
+            var options = AgentPlannerCompletionRunner.BuildOptions(settings.AgentResponseMode, tools == null ? null : tools.Tools);
+            var inputBudget = Math.Max(
+                256,
+                ModelContextBudget.InputBudgetTokens(settings) - ModelContextBudget.EstimateRequestOptionsTokens(options));
+            var budgetComposer = new PromptBudgetComposer();
+            budgetComposer.AddProtocolHistory(messages, protocolMessages, inputBudget);
+            budgetComposer.AddConversationHistory(
                 messages,
-                messages.Count - 1,
+                currentIndex,
                 session,
-                settings);
+                settings,
+                inputBudget);
             return messages;
         }
 
         private static string BuildInstructionPrompt(AppSettings settings)
         {
             settings = settings ?? new AppSettings();
-            var prompts = settings.AgentPrompts ?? new AgentPromptSettings();
-            return string.Join(
-                "\n\n",
-                new[]
-                {
-                    settings.SystemPrompt,
-                    prompts.ToolProtocolPrompt,
-                    prompts.ToolRoutingPrompt,
-                    TransportPrompt(settings)
-                }.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim()));
-        }
-
-        private static string TransportPrompt(AppSettings settings)
-        {
-            return settings != null && string.Equals(settings.AgentResponseMode, AgentResponseModes.NativeToolCalls, StringComparison.OrdinalIgnoreCase)
-                ? "TRANSPORT OVERRIDE: For an Office action, emit exactly one native API function call and no kind=tool content. Use AgentDecision JSON content only for plan, clarify, final, or cannot_complete."
-                : "TRANSPORT OVERRIDE: Do not emit API tool_calls. Select an Office action only through one AgentDecision kind=tool object.";
+            return string.IsNullOrWhiteSpace(settings.SystemPrompt)
+                ? new AppSettings().SystemPrompt
+                : settings.SystemPrompt.Trim();
         }
 
         private static string PromptRole(AppSettings settings)
@@ -97,22 +92,14 @@ namespace RNAssistant.Office.Services
             builder.AppendLine("phase: " + (route == null ? string.Empty : route.Phase));
             builder.AppendLine("requiresTool: " + (route != null && route.RequiresTool ? "true" : "false"));
             builder.AppendLine("requiresInspection: " + (route != null && route.RequiresInspection ? "true" : "false"));
-            builder.AppendLine("Return exactly one tool call per model turn. A visible kind=plan decision describes complex work but never executes tools.");
             builder.AppendLine("responseMode: " + (settings == null ? AgentResponseModes.JsonSchema : settings.AgentResponseMode));
             if (route != null && string.Equals(route.TaskType, "html", StringComparison.OrdinalIgnoreCase))
             {
                 builder.AppendLine("HTML MODE IS ENABLED FOR THIS CHAT.");
-                builder.AppendLine("Use common.html_workspace_read before editing or deleting existing files. Use common.html_workspace_upsert_file/data for editable HTML workspace output and common.html_workspace_delete_file/data to remove items.");
-                builder.AppendLine("HTML preview supports normal fetch(http/https) through the RNAssistant host after the user explicitly allows the target origin. Do not suggest mode:no-cors and never embed RNAssistant API keys or credentials.");
                 if (route.RequiresInspection)
                 {
                     builder.AppendLine("This workspace already has content. Read it before any upsert, delete, or active-file change.");
                 }
-                builder.AppendLine("Keep HTML workspace output local. Put CSS and JavaScript in separate workspace files when content is large, and return at most one content-bearing upsert step per planner response. Continue with the next file after the tool observation.");
-            }
-            if (tools != null && tools.Tools.Any(tool => string.Equals(tool.Id, "common.tools_save", StringComparison.OrdinalIgnoreCase)))
-            {
-                builder.AppendLine("OPTIONAL TOOL AUTHORING IS ENABLED. Prefer an existing tool. Only when no existing capability can complete the task, define a narrowly scoped pipeline or VBA custom tool: call common.tools_validate, then common.tools_save, then use the saved exact tool id in a later planner step. Never claim the requested document change is complete after only saving the tool.");
             }
             builder.AppendLine();
             builder.AppendLine("CURRENT_OFFICE_CONTEXT:");
@@ -169,28 +156,6 @@ namespace RNAssistant.Office.Services
             if (!any)
             {
                 builder.AppendLine("none");
-            }
-            else
-            {
-                builder.AppendLine();
-                builder.AppendLine("PLANNER_DIRECTIVE:");
-                var promptSettings = settings == null || settings.AgentPrompts == null
-                    ? new AgentPromptSettings()
-                    : settings.AgentPrompts;
-                var observationList = (observations ?? new AgentObservation[0]).Where(o => o != null).ToList();
-                var latestObservation = observationList.LastOrDefault();
-                if (latestObservation != null && !string.Equals(latestObservation.Status, "success", StringComparison.OrdinalIgnoreCase))
-                {
-                    builder.AppendLine("A local tool call failed or was rejected. Use the error observation to return one corrected kind=tool decision, or cannot_complete if it cannot be corrected.");
-                }
-                else if (observationList.Any(o => o.Mutation) && (settings == null || settings.RequireVerificationForMutations))
-                {
-                    builder.AppendLine(promptSettings.VerifyMutationPrompt);
-                }
-                else
-                {
-                    builder.AppendLine(promptSettings.AfterToolResultsPrompt);
-                }
             }
             AppendSkills(builder, skills, settings);
             return builder.ToString();
@@ -280,7 +245,6 @@ namespace RNAssistant.Office.Services
                 {
                     builder.AppendLine();
                     builder.AppendLine("RELEVANT_SKILLS:");
-                    builder.AppendLine("Skills are guidance documents only; they are not executable tools.");
                     any = true;
                 }
                 var body = skill.BodyMarkdown ?? string.Empty;

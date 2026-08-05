@@ -78,7 +78,7 @@ namespace RNAssistant.Office.Services
                 ParseResult = parsed,
                 ResponseMode = mode,
                 RequestOptions = options,
-                ContextUsage = ContextUsageEstimator.FromPrompt(activeMessages, settings, completion == null ? null : completion.PromptTokens)
+                ContextUsage = ContextUsageEstimator.FromPrompt(activeMessages, settings, completion == null ? null : completion.PromptTokens, options)
             };
         }
 
@@ -89,17 +89,16 @@ namespace RNAssistant.Office.Services
                 : _parser.Parse(completion == null ? null : completion.Content, tools);
         }
 
-        private static LlmRequestOptions BuildOptions(string mode, IEnumerable<ToolDefinition> tools)
+        internal static LlmRequestOptions BuildOptions(string mode, IEnumerable<ToolDefinition> tools)
         {
             var native = string.Equals(mode, AgentResponseModes.NativeToolCalls, StringComparison.OrdinalIgnoreCase);
+            var jsonObject = string.Equals(mode, AgentResponseModes.JsonObject, StringComparison.OrdinalIgnoreCase);
             var apiTools = ToolSchemaSupport.BuildApiTools(tools);
             return new LlmRequestOptions
             {
-                ResponseFormat = string.Equals(mode, AgentResponseModes.JsonObject, StringComparison.OrdinalIgnoreCase)
-                    ? LlmResponseFormats.JsonObject
-                    : LlmResponseFormats.JsonSchema,
-                ResponseSchemaName = AgentDecisionProtocol.SchemaName,
-                ResponseSchemaJson = AgentDecisionSchemaBuilder.Build(tools, !native),
+                ResponseFormat = jsonObject ? LlmResponseFormats.JsonObject : LlmResponseFormats.JsonSchema,
+                ResponseSchemaName = jsonObject ? null : AgentDecisionProtocol.SchemaName,
+                ResponseSchemaJson = jsonObject ? null : AgentDecisionSchemaBuilder.Build(tools, !native),
                 NativeTools = native,
                 Tools = apiTools
             };
@@ -109,7 +108,7 @@ namespace RNAssistant.Office.Services
         {
             return state != null && state.TotalToolSteps == 0 &&
                 string.Equals(mode, AgentResponseModes.JsonSchema, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(settings == null ? null : settings.AgentResponseFallbackMode, AgentResponseModes.JsonObject, StringComparison.OrdinalIgnoreCase);
+                (settings == null || settings.FallbackToJsonObject);
         }
 
         private static void RememberFallback(AppSettings settings, AgentRunState state, string mode)
@@ -169,10 +168,9 @@ namespace RNAssistant.Office.Services
             messages.Add(new ChatMessage
             {
                 Role = "user",
-                Content = (repairPrompt ?? string.Empty) + "\nValidation error: " + (parseResult == null ? string.Empty : parseResult.ErrorCode + " " + parseResult.ErrorMessage) +
-                    (string.Equals(mode, AgentResponseModes.NativeToolCalls, StringComparison.OrdinalIgnoreCase)
-                        ? "\nFor a tool action, return exactly one native function call. Use AgentDecision v1 content only for plan, clarify, final, or cannot_complete."
-                        : "\nReturn AgentDecision v1 only. A tool decision contains exactly one tool object.")
+                Content = (repairPrompt ?? string.Empty) +
+                    "\nActive responseMode: " + mode +
+                    "\nValidation error: " + (parseResult == null ? string.Empty : parseResult.ErrorCode + " " + parseResult.ErrorMessage)
             });
             return messages;
         }

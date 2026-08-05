@@ -113,7 +113,7 @@ namespace RNAssistant.Harness
                 AssertEqual(4, calls.Count, "adapter exception retry call count");
                 AssertEqual(2, adapter.Executed.Count, "adapter exception execution count");
                 AssertContains(FlattenMessages(calls[1]), "scripted adapter failure", "adapter exception becomes observation");
-                AssertContains(FlattenMessages(calls[2]), "requires Office tool use", "failed tool does not satisfy required tool gate");
+                AssertContains(FlattenMessages(calls[2]), "requires a local Office tool", "failed tool does not satisfy required tool gate");
                 AssertEqual("Done after retry.", result.AssistantText, "final after successful retry");
             });
         }
@@ -144,7 +144,7 @@ namespace RNAssistant.Harness
                 AssertEqual(2, adapter.Executed.Count, "inspection and mutation executed");
                 AssertEqual("excel.get_context", adapter.Executed[0].ToolId, "inspection tool");
                 AssertEqual("excel.format_range", adapter.Executed[1].ToolId, "mutation tool");
-                AssertContains(FlattenMessages(calls[2]), "requires Office tool use", "premature final corrected");
+                AssertContains(FlattenMessages(calls[2]), "requires a local Office tool", "premature final corrected");
                 AssertEqual("Formatting done.", result.AssistantText, "final after mutation");
             });
         }

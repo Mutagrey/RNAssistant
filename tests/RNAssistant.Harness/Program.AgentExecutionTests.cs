@@ -43,7 +43,7 @@ namespace RNAssistant.Harness
                     "Привет",
                     NewSession(adapter),
                     NewContext(adapter),
-                    new AppSettings { AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
+                    new AppSettings { FallbackToJsonObject = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -92,7 +92,7 @@ namespace RNAssistant.Harness
                     "Build a sales report.",
                     NewSession(adapter),
                     NewContext(adapter),
-                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, FallbackToJsonObject = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -286,14 +286,14 @@ namespace RNAssistant.Harness
                     "Create a new sheet named Report.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, FallbackToJsonObject = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     new[] { attachment },
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("Done.", result.AssistantText, "assistant text");
                 AssertEqual(3, calls.Count, "llm call count");
-                AssertTrue(ContainsMessage(calls[1], "requires Office tool use"), "forced follow-up prompt");
+                AssertTrue(ContainsMessage(calls[1], "requires a local Office tool"), "forced follow-up prompt");
                 AssertTrue(ContainsMessage(calls[1], "Earlier tool context"), "forced follow-up keeps history");
                 AssertEqual(1, calls[1].Sum(message => message.Attachments.Count(item => item.FileName == "instruction.txt")), "forced follow-up keeps current attachment");
                 AssertEqual(1, adapter.Executed.Count, "adapter execution count");
@@ -319,13 +319,13 @@ namespace RNAssistant.Harness
                     "Create a new sheet named Report.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, FallbackToJsonObject = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("Done.", result.AssistantText, "assistant text");
                 AssertEqual(3, calls.Count, "llm call count");
-                AssertTrue(ContainsMessage(calls[1], "previous AgentDecision or native tool selection was semantically invalid"), "repair prompt");
+                AssertTrue(ContainsMessage(calls[1], "previous response was not a valid AgentDecision v1 decision"), "repair prompt");
                 AssertTrue(ContainsMessage(calls[1], "Create a new sheet named Report."), "repair keeps original request");
                 AssertTrue(ContainsMessage(calls[1], "excel.add_sheet"), "repair keeps available tools");
                 AssertEqual(1, adapter.Executed.Count, "adapter execution count");
@@ -351,13 +351,13 @@ namespace RNAssistant.Harness
                     "Create a new sheet named Report.",
                     NewSession(adapter),
                     NewContext(adapter),
-                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, FallbackToJsonObject = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
                 AssertEqual(4, calls.Count, "repair then correction call count");
-                AssertTrue(ContainsMessage(calls[1], "previous AgentDecision or native tool selection was semantically invalid"), "format repair requested");
-                AssertTrue(ContainsMessage(calls[2], "requires Office tool use"), "tool correction requested after repair");
+                AssertTrue(ContainsMessage(calls[1], "previous response was not a valid AgentDecision v1 decision"), "format repair requested");
+                AssertTrue(ContainsMessage(calls[2], "requires a local Office tool"), "tool correction requested after repair");
                 AssertEqual(1, adapter.Executed.Count, "tool executed after repair and correction");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "corrected tool id");
                 AssertEqual("Done.", result.AssistantText, "final answer");
@@ -382,7 +382,7 @@ namespace RNAssistant.Harness
                     "Create a new sheet named Report.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, FallbackToJsonObject = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 

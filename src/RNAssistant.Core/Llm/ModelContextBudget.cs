@@ -146,22 +146,59 @@ namespace RNAssistant.Core.Llm
             var total = 0;
             foreach (var message in messages ?? new ChatMessage[0])
             {
-                if (message == null)
-                {
-                    continue;
-                }
-                total += 4 + EstimateTextTokens(message.Content);
-                total += (message.Attachments ?? new List<ChatAttachment>())
-                    .Where(attachment => attachment != null && attachment.Kind == "image")
-                    .Count() * EstimatedImageTokens;
+                total += EstimateMessageTokens(message, includeExtractedAttachments);
+            }
+            return total;
+        }
+
+        public static int EstimateMessageTokens(ChatMessage message, bool includeExtractedAttachments = true)
+        {
+            if (message == null) return 0;
+            var total = 4 + EstimateTextTokens(message.Role) + EstimateTextTokens(message.Content);
+            if (message.ToolCalls != null && message.ToolCalls.Count > 0)
+            {
+                total += 8;
+                total += message.ToolCalls.Sum(call => call == null
+                    ? 0
+                    : 4 + EstimateTextTokens(call.Id) + EstimateTextTokens(call.Name) + EstimateTextTokens(call.ArgumentsJson));
+            }
+            if (string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase))
+            {
+                total += 2 + EstimateTextTokens(message.ToolCallId) + EstimateTextTokens(message.ToolName);
+            }
+            foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
+            {
+                if (attachment == null) continue;
+                if (string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase)) total += EstimatedImageTokens;
+                if (string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase)) total += EstimateAudioTokens(attachment.Size);
                 if (includeExtractedAttachments)
                 {
-                    total += (message.Attachments ?? new List<ChatAttachment>())
-                        .Where(attachment => attachment != null)
-                        .Sum(attachment => Math.Max(attachment.ExtractedCharCount, (attachment.ExtractedText ?? string.Empty).Length) / 2);
+                    total += Math.Max(attachment.ExtractedCharCount, (attachment.ExtractedText ?? string.Empty).Length) / 2;
                 }
             }
             return total;
+        }
+
+        public static int EstimateRequestOptionsTokens(LlmRequestOptions options)
+        {
+            if (options == null) return 0;
+            var total = 8 + EstimateTextTokens(options.ResponseFormat);
+            if (string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.OrdinalIgnoreCase))
+            {
+                total += EstimateTextTokens(options.ResponseSchemaName) + EstimateTextTokens(options.ResponseSchemaJson);
+            }
+            if (options.NativeTools)
+            {
+                total += (options.Tools ?? new LlmToolDefinition[0]).Sum(tool => tool == null
+                    ? 0
+                    : 12 + EstimateTextTokens(tool.ApiName) + EstimateTextTokens(tool.Description) + EstimateTextTokens(tool.ParametersSchemaJson));
+            }
+            return total;
+        }
+
+        public static int EstimateAudioTokens(long bytes)
+        {
+            return bytes <= 0 ? 0 : Math.Max(1, (int)Math.Ceiling(bytes / 512.0));
         }
     }
 }

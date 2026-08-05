@@ -9,7 +9,7 @@ RNAssistant uses an OpenAI-compatible Chat Completions endpoint. Chat mode expec
 - A non-stream response compatible with `choices[0].message`, or SSE chunks compatible with `choices[0].delta`.
 - Ordinary `user` and `assistant` history. Depending on settings, the endpoint may also need `developer`, `system`, and `tool` roles.
 
-RNAssistant independently budgets prompt and output tokens so `prompt + response + safety <= context window`. For very large contexts the estimator caps its safety reserve at 16,384 tokens.
+RNAssistant independently budgets prompt and output tokens so `messages + response_format/tools schemas + response + safety <= context window`. For very large contexts the estimator caps its safety reserve at 16,384 tokens. Provider usage wins when available; otherwise the UI uses a provider-neutral estimate.
 
 ## Agent Request Profiles
 

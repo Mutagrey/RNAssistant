@@ -448,7 +448,7 @@ namespace RNAssistant.Office
                 ChatCompletionResult completion;
                 try
                 {
-                    var executionMode = _chatModeSelector.Select(text, session, _adapter.HostName);
+                    var executionMode = _chatModeSelector.Select(text, session);
                     if (executionMode == ChatModes.Chat)
                     {
                         completion = await _plainChatService.ExecuteAsync(
@@ -725,7 +725,13 @@ namespace RNAssistant.Office
 
         public IReadOnlyList<SkillDefinition> SaveSkills(IEnumerable<SkillDefinition> skills)
         {
-            _skillStore.Save((skills ?? new SkillDefinition[0]).Where(s => !s.BuiltIn), _adapter.HostName);
+            var custom = (skills ?? new SkillDefinition[0]).Where(s => s != null && !s.BuiltIn).ToList();
+            var builtInIds = new HashSet<string>(
+                _skillCatalog.GetVisibleSkills().Where(s => s.BuiltIn).Select(s => s.Id),
+                StringComparer.OrdinalIgnoreCase);
+            var collision = custom.FirstOrDefault(s => builtInIds.Contains(s.Id ?? string.Empty));
+            if (collision != null) throw new InvalidOperationException("Built-in skill id is reserved: " + collision.Id);
+            _skillStore.Save(custom, _adapter.HostName);
             return GetSkills();
         }
 

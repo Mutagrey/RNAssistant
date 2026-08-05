@@ -42,7 +42,7 @@ function renderChatSessions() {
   $("clearChatButton").disabled = !hasActive || !hasMessages || !!currentActiveSend();
   $("clearChatButton").hidden = !hasActive || !hasMessages;
   if ($("chatModeSelect")) {
-    $("chatModeSelect").value = state.activeChatMode || "chat";
+    $("chatModeSelect").value = state.activeChatMode || "agent";
   }
   renderHtmlModeToggle();
   renderSendControls();
@@ -79,7 +79,7 @@ function applyChatState(response) {
     state.activeChatModel = response.activeChatModel || response.ActiveChatModel || "";
   }
   if (response.activeChatMode !== undefined || response.ActiveChatMode !== undefined) {
-    state.activeChatMode = response.activeChatMode || response.ActiveChatMode || "chat";
+    state.activeChatMode = response.activeChatMode || response.ActiveChatMode || "agent";
   }
   if (response.activeChatHtmlMode !== undefined || response.ActiveChatHtmlMode !== undefined) {
     state.activeChatHtmlMode = !!(response.activeChatHtmlMode || response.ActiveChatHtmlMode);
@@ -111,7 +111,7 @@ function applyChatState(response) {
   renderContextMeter();
   renderModelControls();
   if ($("chatModeSelect")) {
-    $("chatModeSelect").value = state.activeChatMode || "chat";
+    $("chatModeSelect").value = state.activeChatMode || "agent";
   }
   if (typeof renderHtmlWorkspace === "function") {
     renderHtmlWorkspace();
@@ -459,14 +459,16 @@ function updateEstimatedContextUsage() {
     var content = messageContent(message);
     var pending = message.Local || message.local || message.Pending || message.pending;
     if (!content.trim() && !pending) return;
-    if (content.trim()) used += 4 + estimateTextTokens(content);
-    if (pending) {
-      messageAttachments(message).forEach(function (attachment) {
-        var chars = Number(attachment.ExtractedCharCount || attachment.extractedCharCount || 0);
-        used += Math.ceil(chars / 2);
-        if (attachmentKind(attachment) === "image") used += 4096;
-      });
-    }
+    used += 4 + estimateTextTokens(role) + estimateTextTokens(content);
+    messageAttachments(message).forEach(function (attachment) {
+      var extracted = String(attachment.ExtractedText || attachment.extractedText || "");
+      var chars = Math.max(Number(attachment.ExtractedCharCount || attachment.extractedCharCount || 0), extracted.length);
+      used += Math.ceil(chars / 2);
+      if (pending && attachmentKind(attachment) === "image") used += 4096;
+      if (pending && attachmentKind(attachment) === "audio") {
+        used += Math.ceil(Number(attachment.Size || attachment.size || 0) / 512);
+      }
+    });
   });
   var includedContext = {};
   contextNotes().forEach(function (note) {

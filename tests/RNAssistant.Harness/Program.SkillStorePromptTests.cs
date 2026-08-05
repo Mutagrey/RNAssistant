@@ -124,11 +124,13 @@ namespace RNAssistant.Harness
 
                 var visible = catalog.GetVisibleSkills();
                 var selected = catalog.SelectRelevantSkills("Create an Excel chart report.", NewContext(adapter), 5);
+                var promptSkills = catalog.SelectRelevantSkills("Улучши главный системный промпт.", NewContext(adapter), 5);
 
                 AssertTrue(HasSkill(visible, "common.task_planning"), "common built-in visible");
                 AssertTrue(HasSkill(visible, "excel.analysis_reporting"), "excel built-in visible");
                 AssertTrue(!HasSkill(visible, "word.hidden_review"), "other host custom skill hidden");
                 AssertTrue(HasSkill(selected, "excel.analysis_reporting"), "excel analysis selected");
+                AssertTrue(HasSkill(promptSkills, "common.prompt_authoring"), "russian prompt authoring skill selected");
             });
         }
 
@@ -162,9 +164,9 @@ namespace RNAssistant.Harness
 
             AssertContains(prompt, "RELEVANT_SKILLS", "skills section");
             AssertContains(prompt, "AVAILABLE_TOOLS", "tools section");
-            AssertContains(prompt, "Use only exact tool ids from AVAILABLE_TOOLS", "tool id protocol");
-            AssertContains(prompt, "exactly one tool call per model turn", "single tool call protocol");
-            AssertContains(prompt, "Skills are guidance documents only", "skill guidance boundary");
+            AssertContains(prompt, "Use only exact ids and schemas from AVAILABLE_TOOLS", "tool id protocol");
+            AssertContains(prompt, "at most one external tool per model turn", "single tool call protocol");
+            AssertContains(prompt, "a skill is guidance, not an executable action", "skill guidance boundary");
         }
 
         private static void PromptLimitsSkillBodies()
@@ -192,16 +194,13 @@ namespace RNAssistant.Harness
 
         private static void PromptUsesEditableAgentPromptBlocks()
         {
-            var settings = new AppSettings();
-            settings.AgentPrompts.ToolProtocolPrompt = "CUSTOM_TOOL_PROTOCOL";
-            settings.AgentPrompts.ToolRoutingPrompt = "CUSTOM_TOOL_ROUTING";
+            var settings = new AppSettings { SystemPrompt = "CUSTOM_AGENT_MAIN" };
 
             var messages = BuildPlannerMessages(settings, new ToolDefinition[0], new SkillDefinition[0]);
             var prompt = FlattenMessages(messages);
 
-            AssertContains(prompt, "CUSTOM_TOOL_PROTOCOL", "custom tool protocol prompt");
-            AssertContains(prompt, "CUSTOM_TOOL_ROUTING", "custom tool routing prompt");
-            AssertTrue(prompt.IndexOf("Required tool response format", StringComparison.OrdinalIgnoreCase) < 0, "default protocol replaced");
+            AssertContains(prompt, "CUSTOM_AGENT_MAIN", "custom main agent prompt");
+            AssertTrue(prompt.IndexOf("You are RNAssistant, a local Office assistant", StringComparison.OrdinalIgnoreCase) < 0, "default main prompt replaced");
             AssertEqual("developer", messages[0].Role, "default instruction role");
 
             settings.SystemPromptRole = "system";
@@ -218,27 +217,19 @@ namespace RNAssistant.Harness
                     SystemPrompt = "BASE_V1",
                     SystemPromptRole = "user"
                 };
-                settings.AgentPrompts.ToolProtocolPrompt = "PROTOCOL_V1";
-                settings.AgentPrompts.ToolRoutingPrompt = "ROUTING_V1";
                 store.Save(paths.SettingsFile, settings);
 
                 var first = BuildPlannerMessages(store.Load(paths.SettingsFile, new AppSettings()), new ToolDefinition[0], new SkillDefinition[0]);
                 AssertEqual("user", first[0].Role, "first prompt role");
                 AssertContains(first[0].Content, "BASE_V1", "first base prompt");
-                AssertContains(first[0].Content, "PROTOCOL_V1", "first protocol prompt");
-                AssertContains(first[0].Content, "ROUTING_V1", "first routing prompt");
 
                 settings.SystemPrompt = "BASE_V2";
                 settings.SystemPromptRole = "system";
-                settings.AgentPrompts.ToolProtocolPrompt = "PROTOCOL_V2";
-                settings.AgentPrompts.ToolRoutingPrompt = "ROUTING_V2";
                 store.Save(paths.SettingsFile, settings);
 
                 var second = BuildPlannerMessages(store.Load(paths.SettingsFile, new AppSettings()), new ToolDefinition[0], new SkillDefinition[0]);
                 AssertEqual("system", second[0].Role, "updated prompt role");
                 AssertContains(second[0].Content, "BASE_V2", "updated base prompt");
-                AssertContains(second[0].Content, "PROTOCOL_V2", "updated protocol prompt");
-                AssertContains(second[0].Content, "ROUTING_V2", "updated routing prompt");
                 AssertTrue(second[0].Content.IndexOf("BASE_V1", StringComparison.Ordinal) < 0, "old prompt removed");
             });
         }
@@ -264,6 +255,12 @@ namespace RNAssistant.Harness
                 AssertTrue(saved.Success, "skill save succeeds after confirmation");
                 AssertTrue(read.Success, "saved skill readable");
                 AssertContains(read.DataJson, "Generated skill", "saved skill data");
+
+                var reserved = new ToolCommand { ToolId = "common.skills_save" };
+                reserved.Arguments["id"] = "common.task_planning";
+                reserved.Arguments["bodyMarkdown"] = "# Shadow";
+                var reservedResult = executor.Execute(reserved, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
+                AssertEqual("reserved_skill_id", reservedResult.ErrorCode, "built-in skill id cannot be shadowed");
             });
         }
     }

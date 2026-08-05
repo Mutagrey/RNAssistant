@@ -4,13 +4,14 @@ RNAssistant использует локальный agent harness поверх O
 
 ## Цикл выполнения
 
-1. Детерминированный router определяет `Chat` или `Agent`, тип задачи, риск и необходимость чтения/мутации.
-2. Catalog slicer выбирает ограниченный набор доступных tools. В prompt попадают только их id, описание, safety metadata и JSON Schema аргументов.
-3. Runtime собирает сообщения из инструкции, запроса, актуального chat context, выбранных skills, route и нормализованных observations.
-4. Модель возвращает одно решение `AgentDecision v1` либо один native `tool_call`.
-5. Runtime строго проверяет решение, tool id и аргументы, применяет confirmation/safety policy и вызывает локальный `OfficeToolExecutor`.
-6. Результат нормализуется и добавляется в рабочий контекст. Следующий запрос решает, нужен ли ещё один tool, уточнение или финальный ответ.
-7. После мутации runtime запускает отдельную read-only verification. Старое наблюдение не считается проверкой нового изменения.
+1. Chat session хранит явный режим `Agent` или `Chat`; новый chat создаётся в `Agent`. HTML workspace и продолжение незавершённой agent-задачи всегда используют Agent.
+2. В Agent mode детерминированный router определяет тип задачи, риск и необходимость чтения/мутации. Agent способен дать обычный ответ без tools, если route не требует действия Office.
+3. Catalog slicer выбирает ограниченный набор доступных tools. В prompt попадают только их id, описание, safety metadata и JSON Schema аргументов.
+4. Runtime собирает сообщения из инструкции, запроса, актуального chat context, выбранных skills, route и нормализованных observations.
+5. Модель возвращает одно решение `AgentDecision v1` либо один native `tool_call`.
+6. Runtime строго проверяет решение, tool id и аргументы, применяет confirmation/safety policy и вызывает локальный `OfficeToolExecutor`.
+7. Результат нормализуется и добавляется в рабочий контекст. Следующий запрос решает, нужен ли ещё один tool, уточнение или финальный ответ.
+8. После мутации runtime запускает отдельную read-only verification. Старое наблюдение не считается проверкой нового изменения.
 
 История протокола живёт только внутри текущего run. В постоянную chat history не возвращаются скрытые route diagnostics, полный prompt и provider reasoning.
 
@@ -76,6 +77,8 @@ RNAssistant использует локальный agent harness поверх O
 
 Даже Structured Outputs не заменяет локальную проверку. Runtime повторно проверяет точный набор полей, семантику `kind`, наличие tool в текущем slice и аргументы по его schema.
 
+`json_object` не использует ручной поиск JSON в тексте: весь `message.content` обязан быть одним object. Локальный parser нужен только для строгой проверки протокола и аргументов; fences, префиксы, alternate envelopes и частичный JSON не восстанавливаются.
+
 ## Роли сообщений
 
 Роль общей Chat/Agent инструкции выбирается в Settings: `developer` (по умолчанию), `system` или `user`. При `user` инструкция объединяется с текущим пользовательским контекстом; при `developer`/`system` отправляется отдельным сообщением.
@@ -106,6 +109,29 @@ RNAssistant использует локальный agent harness поверх O
 
 Крупное `data` ограничивается в replay-контексте. Вместо полного payload runtime передаёт `{truncated, originalChars, preview}`; для планирования остаётся отдельное bounded observation. Полный локальный ToolResult при этом не изменяется.
 
+## Prompt ownership
+
+Все изменяемые model-facing инструкции находятся в Settings:
+
+- `SystemPrompt` — единственный главный prompt Agent: AgentDecision, transports, контекст, tools, skills и правила self-improvement;
+- `ChatSystemPrompt` — обычный текстовый Chat без tools;
+- `ForceToolUsePrompt`, `RepairDecisionPrompt`, `PlanContinuationPrompt` — короткие переходы runtime;
+- `ChatTitlePrompt` — отдельная инструкция генератора названий.
+
+`ROUTE`, `CURRENT_OFFICE_CONTEXT`, `AVAILABLE_TOOLS`, `OBSERVATIONS` и `RELEVANT_SKILLS` — динамические данные runtime, а не скрытые prompt-шаблоны. Их формат не редактируется как инструкция.
+
+Промпты редактируются во вкладке Prompts. Агент может вызвать `common.prompts_read`, `common.prompts_read_defaults` и подтверждаемый `common.prompts_save`. Встроенный `common.prompt_authoring` требует сохранять поля AgentDecision, one-tool invariant, confirmation и verification. Skills и tools изменяются через отдельные CRUD tools; встроенные id нельзя перекрыть custom-объектом.
+
+## Сборка и бюджет контекста
+
+Agent request собирается заново на каждом model turn в таком порядке: instruction role; непрерывный хвост обычной user/assistant chat history; текущий `USER_REQUEST` и динамические секции; ограниченный run-local protocol replay. Activity, diagnostics и provider reasoning в replay не входят. Tool exchange передаётся парой assistant `tool_calls` + `role: tool` либо выбранной обычной ролью. Нормализованные `OBSERVATIONS` дополнительно дают модели компактное состояние текущего run.
+
+Окно берётся из ручного override, capability активной модели или консервативного default `32768`. Runtime резервирует 2% окна (минимум 1024, максимум 16384) и запрошенный output. В оценку запроса входят сообщения, вложения, `response_format` schema и native tool schemas. Tool catalog уменьшается, если его prompt/API-представления занимают больше половины input budget; минимум один необходимый tool сохраняется.
+
+История выбирается только назад от самых новых сообщений: если очередное сообщение не помещается, более старые не возвращаются. При включённом compression ранний хвост заменяется локальным bounded summary. Notes дедуплицируются по reference, skill bodies, observations, tool results и extracted attachment text ограничиваются. Бинарные image/audio отправляются только для текущего turn и не считаются частью будущей истории. При наличии provider `usage.prompt_tokens` UI показывает фактическое значение последнего запроса; до запроса и после перезагрузки показывает оценку сохранённой history/context без ещё неизвестных route и tool schemas.
+
+Оценка намеренно provider-neutral: UTF-8 text примерно `bytes/3`, image — 4096 tokens, audio — `bytes/512`, extracted text — консервативно `chars/2`. Она не заменяет tokenizer конкретной модели. Если обязательные текущие данные всё равно переполняют окно, runtime уменьшает output, а при полном переполнении завершает запрос ошибкой вместо скрытого удаления текущей инструкции или запроса пользователя.
+
 ## Tool schemas
 
 Custom tools обязаны хранить формальный JSON Schema с `type: "object"` и `properties`. Любая другая форма получает `invalid_tool_schema` и не выполняется. Краткие описания встроенных tools разворачиваются в формальную схему один раз при создании определения.
@@ -118,5 +144,6 @@ Custom tools обязаны хранить формальный JSON Schema с `
 - Совместимость `developer`, `role: tool`, strict JSON Schema и сочетания `tools + response_format` различается у локальных OpenAI-compatible серверов; режимы нужно проверять отдельно для каждого endpoint.
 - Часть серверов поддерживает только подмножество JSON Schema (`anyOf`, `const` и nullable types могут быть проблемой). Для них нужен `json_object`.
 - `json_object` гарантирует только JSON на стороне API; точность `kind` и аргументов зависит от prompt following и локальной валидации.
+- Оценка токенов приблизительна для локальных моделей; корректные capability metadata и provider usage улучшают показания UI.
 - Выполняется один внешний tool call за model turn. Это делает подтверждения, наблюдения и восстановление однозначными, но увеличивает число запросов.
 - Runtime показывает цель, план, текущие действия, observations и verification как собственный transcript. Это наблюдаемое состояние, не скрытая цепочка рассуждений модели.

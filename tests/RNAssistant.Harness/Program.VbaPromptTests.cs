@@ -272,6 +272,18 @@ namespace RNAssistant.Harness
             AssertEqual(2, promptUsage["messageCount"].Value<int>(), "prompt message count");
             AssertTrue(promptUsage["actual"].Value<bool>(), "prompt actual");
 
+            var estimatedWithSchema = JObject.FromObject(ContextUsageEstimator.FromPrompt(
+                new[] { new ChatMessage { Role = "user", Content = "hello" } },
+                settings,
+                null,
+                new LlmRequestOptions
+                {
+                    ResponseFormat = LlmResponseFormats.JsonSchema,
+                    ResponseSchemaName = "decision",
+                    ResponseSchemaJson = "{\"type\":\"object\",\"description\":\"" + new string('x', 600) + "\"}"
+                }));
+            AssertTrue(estimatedWithSchema["usedTokens"].Value<int>() > 150, "response schema counts toward estimated request usage");
+
             var session = new ChatSession();
             session.Messages.Add(new ChatMessage
             {
@@ -291,7 +303,7 @@ namespace RNAssistant.Harness
             session.Context.Notes.Add(new ContextNote { Text = "selection!" });
             var sessionUsage = JObject.FromObject(ContextUsageEstimator.FromSession(session, settings));
             AssertEqual(10015, sessionUsage["usedChars"].Value<int>(), "session used chars");
-            AssertEqual(9106, sessionUsage["usedTokens"].Value<int>(), "session used tokens");
+            AssertEqual(5012, sessionUsage["usedTokens"].Value<int>(), "session used tokens");
             AssertEqual(1, sessionUsage["messageCount"].Value<int>(), "session message count");
             AssertTrue(!sessionUsage["actual"].Value<bool>(), "session actual");
         }

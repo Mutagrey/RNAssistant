@@ -28,8 +28,16 @@ namespace RNAssistant.Office.Tools
             yield return ControllerToolDefinition.Create(
                 "common.prompts_save",
                 "Common",
-                "Mutates settings: Update RNAssistant agent prompt templates after the user asks to edit or improve RNAssistant prompts.",
-                "{\"systemPrompt\":\"\",\"chatSystemPrompt\":\"\",\"systemPromptRole\":\"developer|system|user\",\"toolProtocolPrompt\":\"\",\"toolRoutingPrompt\":\"\",\"forceToolUsePrompt\":\"\",\"repairMalformedToolBlockPrompt\":\"\",\"afterToolResultsPrompt\":\"\",\"verifyMutationPrompt\":\"\",\"confirmedToolContinuationPrompt\":\"\"}",
+                "Mutates settings: Update RNAssistant Agent, Chat, recovery, or title prompts after the user asks to edit them.",
+                "{\"type\":\"object\",\"properties\":{" +
+                    "\"systemPrompt\":{\"type\":\"string\"}," +
+                    "\"chatSystemPrompt\":{\"type\":\"string\"}," +
+                    "\"systemPromptRole\":{\"type\":\"string\",\"enum\":[\"developer\",\"system\",\"user\"]}," +
+                    "\"forceToolUsePrompt\":{\"type\":\"string\"}," +
+                    "\"repairDecisionPrompt\":{\"type\":\"string\"}," +
+                    "\"planContinuationPrompt\":{\"type\":\"string\"}," +
+                    "\"chatTitlePrompt\":{\"type\":\"string\"}}," +
+                    "\"required\":[],\"additionalProperties\":false}",
                 mutatesLocalState: true,
                 requiresConfirmation: true,
                 riskLevel: 1,
@@ -46,13 +54,13 @@ namespace RNAssistant.Office.Tools
             if (string.Equals(command.ToolId, "common.prompts_read", StringComparison.OrdinalIgnoreCase))
             {
                 var current = _loadSettings();
-                return ToolResult.Ok("Agent prompt templates read.", JsonConvert.SerializeObject(ToPayload(current)));
+                return ToolResult.Ok("RNAssistant prompt templates read.", JsonConvert.SerializeObject(ToPayload(current)));
             }
 
             if (string.Equals(command.ToolId, "common.prompts_read_defaults", StringComparison.OrdinalIgnoreCase))
             {
                 var current = _loadSettings();
-                return ToolResult.Ok("Agent prompt templates and defaults read.", JsonConvert.SerializeObject(new
+                return ToolResult.Ok("RNAssistant prompt templates and defaults read.", JsonConvert.SerializeObject(new
                 {
                     current = ToPayload(current),
                     defaults = ToPayload(new AppSettings())
@@ -83,22 +91,19 @@ namespace RNAssistant.Office.Tools
             ApplyIfPresent(command, "systemPrompt", value => settings.SystemPrompt = value);
             ApplyIfPresent(command, "chatSystemPrompt", value => settings.ChatSystemPrompt = value);
             ApplyIfPresent(command, "systemPromptRole", value => settings.SystemPromptRole = NormalizePromptRole(value));
-            ApplyIfPresent(command, "toolProtocolPrompt", value => settings.AgentPrompts.ToolProtocolPrompt = value);
-            ApplyIfPresent(command, "toolRoutingPrompt", value => settings.AgentPrompts.ToolRoutingPrompt = value);
             ApplyIfPresent(command, "forceToolUsePrompt", value => settings.AgentPrompts.ForceToolUsePrompt = value);
-            ApplyIfPresent(command, "repairMalformedToolBlockPrompt", value => settings.AgentPrompts.RepairMalformedToolBlockPrompt = value);
-            ApplyIfPresent(command, "afterToolResultsPrompt", value => settings.AgentPrompts.AfterToolResultsPrompt = value);
-            ApplyIfPresent(command, "verifyMutationPrompt", value => settings.AgentPrompts.VerifyMutationPrompt = value);
-            ApplyIfPresent(command, "confirmedToolContinuationPrompt", value => settings.AgentPrompts.ConfirmedToolContinuationPrompt = value);
+            ApplyIfPresent(command, "repairDecisionPrompt", value => settings.AgentPrompts.RepairDecisionPrompt = value);
+            ApplyIfPresent(command, "planContinuationPrompt", value => settings.AgentPrompts.PlanContinuationPrompt = value);
+            ApplyIfPresent(command, "chatTitlePrompt", value => settings.AgentPrompts.ChatTitlePrompt = value);
 
             if (dryRun)
             {
-                return ToolResult.Ok("Dry run: would save agent prompt templates.", JsonConvert.SerializeObject(ToPayload(settings)));
+                return ToolResult.Ok("Dry run: would save RNAssistant prompt templates.", JsonConvert.SerializeObject(ToPayload(settings)));
             }
 
             _saveSettings(settings);
             var saved = _loadSettings();
-            return ToolResult.Ok("Agent prompt templates saved.", JsonConvert.SerializeObject(ToPayload(saved)));
+            return ToolResult.Ok("RNAssistant prompt templates saved.", JsonConvert.SerializeObject(ToPayload(saved)));
         }
 
         private static void ApplyIfPresent(ToolCommand command, string name, Action<string> apply)

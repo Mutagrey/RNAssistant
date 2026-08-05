@@ -29,11 +29,13 @@ RNAssistant - локальный VSTO/WebView2 ассистент для Office,
 
 ## Tool/Agent Protocol
 
+- Поддерживаются только режимы `agent` и `chat`; новый chat создается в `agent`. Agent может отвечать без tools, отдельного auto-router режима нет.
 - Семантический runtime protocol — AgentDecision v1: один raw JSON object с обязательными полями `protocolVersion`, `kind`, `decisionSummary`, `goal`, `plan`, `tool`, `message`. Kind: `plan`, `tool`, `clarify`, `final`, `cannot_complete`.
 - Один model turn может выбрать ровно один внешний tool. Fences, surrounding prose, alternate envelopes, `function_call` и parallel tool calls не поддерживаются.
 - Transport modes: `json_schema` по умолчанию, `json_object`, `native_tool_calls`. Fallback `json_schema -> json_object` допустим только до первого выполненного tool. Office tools всегда выполняются локально.
 - Роль инструкций выбирается из `developer` (default), `system`, `user`. Роль результата выбирается независимо: `tool` (default с matching assistant `tool_calls`/`tool_call_id`), `developer`, `user`.
 - `decisionSummary` и видимый plan не являются chain-of-thought. Provider reasoning хранится отдельно и не смешивается с протоколом или replay history.
+- `SystemPrompt` — единый редактируемый prompt Agent; служебные переходы хранятся в `AgentPromptSettings`. Динамические route/tools/observations/skills остаются runtime data. Изменение prompt через tool требует подтверждения.
 - Custom tools обязаны иметь formal object JSON Schema. Другие формы отклоняются без миграции.
 - Built-in Office mutation tools могут исполняться в Agent mode, кроме VBA mutation tools.
 - Custom tools с `requiresConfirmation` и VBA mutation tools требуют подтверждения, если `AutoConfirmToolActions` выключен.
