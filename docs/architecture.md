@@ -41,7 +41,7 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 
 ## Current Code Zones
 
-- `src/RNAssistant.Core/Llm`: API client, request/response transport models, `json_object`/`json_schema`/native tool-call payloads, SSE/reasoning parsing, model capability budgeting, prompt composition and context usage estimates.
+- `src/RNAssistant.Core/Llm`: `LlmClient` owns HTTP transport, `LlmMessageBuilder` owns multimodal API messages, and `LlmResponseParser` owns JSON/SSE/reasoning decoding. Request/response models, schema payloads, model budgets and context usage remain host-neutral.
 - `src/RNAssistant.Core/Tools`: strict AgentDecision parsing, dynamic response schema, formal tool-schema validation and VBA manifest parsing.
 - `src/RNAssistant.Office/Services/BuiltInSkillProvider.cs`: common built-in markdown skills; host adapters provide application-specific skills through `IOfficeBuiltInSkillProvider`.
 - `src/RNAssistant.Core/Services`: Office-agnostic model services such as context normalization.
@@ -57,9 +57,10 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - `src/RNAssistant.Office/Services`: host-neutral application services used by controller orchestration, such as chat/session lifecycle, tool/skill catalog composition, context normalization, and chat completion flow.
 - `src/RNAssistant.Office/Services/ChatRunRegistry.cs`: in-memory per-chat run ownership, live status/current action, and cancellation addressed by chat/run id; switching the selected chat never transfers or cancels a run. A lightweight persisted marker converts abandoned runs to `cancelled` after an application restart.
 - `src/RNAssistant.Office/Services/HtmlNetworkService.cs`: permission-gated HTTP(S) transport for sandboxed HTML workspace previews.
-- `src/RNAssistant.Office/Services/AgentRunService.cs`: controlled planner loop, route/slice/validate/execute flow, normalized observations, deterministic mutation verification, VBA context capture, and confirmation resume continuation.
+- `src/RNAssistant.Office/Services/AgentRunService.cs`: controlled planner loop and route/slice/validate/execute/verify orchestration.
 - `src/RNAssistant.Office/Services/AgentPlannerCompletionRunner.cs`: response-mode selection, pre-execution `json_schema` fallback, planner completion streaming, native/text parsing, and one bounded format-repair attempt.
-- `src/RNAssistant.Office/Services/AgentPlannerRuntime.cs`: deterministic router, tool catalog slicer, planner prompt context, action validation, and observation normalization.
+- `OfficeIntentRouter`, `ToolCatalogSlicer`, `PlannerPromptComposer`, `AgentActionValidator`, and `ObservationNormalizer` each own one planner responsibility.
+- `AgentProtocolHistory`, `AgentRunPresentation`, and `OfficeSnapshotReader` own protocol replay, observable run UI/diagnostics, and Office context capture respectively.
 - `src/RNAssistant.Office/Services/AgentRuntimeModels.cs`: route, observation, catalog slice, and run-state models.
 - `src/RNAssistant.Office/Services/AgentExecutionRuntime.cs`: effective tool catalog resolution and phase transitions.
 - `src/RNAssistant.Office/Services/AgentVerificationRuntime.cs`: deterministic verification selection and result validation.

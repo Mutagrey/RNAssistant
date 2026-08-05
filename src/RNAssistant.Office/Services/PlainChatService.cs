@@ -10,10 +10,10 @@ namespace RNAssistant.Office.Services
 {
     internal sealed class PlainChatService
     {
-        private readonly ChatCompletionService.CompletionDelegate _completeAsync;
+        private readonly LlmCompletionDelegate _completeAsync;
         private readonly ChatContextWindowBuilder _contextBuilder;
 
-        public PlainChatService(ChatCompletionService.CompletionDelegate completeAsync)
+        public PlainChatService(LlmCompletionDelegate completeAsync)
         {
             _completeAsync = completeAsync;
             _contextBuilder = new ChatContextWindowBuilder();
@@ -133,7 +133,7 @@ namespace RNAssistant.Office.Services
                     reasoningCompleted = true;
                 }
             };
-            var completion = await _completeAsync(settings, messages, update =>
+            var completion = await _completeAsync(settings, messages, null, update =>
             {
                 if (update == null)
                 {

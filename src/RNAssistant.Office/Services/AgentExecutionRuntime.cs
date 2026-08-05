@@ -99,7 +99,7 @@ namespace RNAssistant.Office.Services
             {
                 tools.Remove(existing);
             }
-            tools.Add(Clone(tool));
+            tools.Add(tool.Clone());
             ApplySafety(tools);
         }
 
@@ -145,50 +145,7 @@ namespace RNAssistant.Office.Services
             {
                 return;
             }
-            tools[tool.Id] = Clone(tool);
-        }
-
-        private static ToolDefinition Clone(ToolDefinition tool)
-        {
-            return new ToolDefinition
-            {
-                Id = tool.Id,
-                Host = tool.Host,
-                Name = tool.Name,
-                Description = tool.Description,
-                ArgumentSchemaJson = tool.ArgumentSchemaJson,
-                Executor = tool.Executor,
-                RequiresConfirmation = tool.RequiresConfirmation,
-                MutatesDocument = tool.MutatesDocument,
-                MutatesLocalState = tool.MutatesLocalState,
-                AgentCanRun = tool.AgentCanRun,
-                PipelineJson = tool.PipelineJson,
-                Code = tool.Code,
-                Readme = tool.Readme,
-                StoragePath = tool.StoragePath,
-                Enabled = tool.Enabled,
-                BuiltIn = tool.BuiltIn,
-                RiskLevel = tool.RiskLevel,
-                UseWhen = tool.UseWhen,
-                DoNotUseWhen = tool.DoNotUseWhen,
-                ExamplesJson = tool.ExamplesJson,
-                VerifyJson = tool.VerifyJson,
-                CapabilityStatus = tool.CapabilityStatus,
-                Limitations = tool.Limitations,
-                PackageVersion = tool.PackageVersion,
-                EntryPoint = tool.EntryPoint,
-                ArgumentOrder = new List<string>(tool.ArgumentOrder ?? new List<string>()),
-                Components = (tool.Components ?? new List<VbaToolComponent>()).Select(component => new VbaToolComponent
-                {
-                    Name = component.Name,
-                    Type = component.Type,
-                    FileName = component.FileName,
-                    Code = component.Code,
-                    CodeSha256 = component.CodeSha256
-                }).ToList(),
-                Scope = tool.Scope,
-                InstallationStatus = tool.InstallationStatus
-            };
+            tools[tool.Id] = tool.Clone();
         }
     }
 

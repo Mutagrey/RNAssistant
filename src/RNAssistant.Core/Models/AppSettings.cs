@@ -18,6 +18,11 @@ namespace RNAssistant.Core.Models
         public bool? SupportsReasoning { get; set; }
         public bool? SupportsAudio { get; set; }
         public int? MaxImagesPerPrompt { get; set; }
+
+        public ModelCapabilitySettings Clone()
+        {
+            return (ModelCapabilitySettings)MemberwiseClone();
+        }
     }
 
     public sealed class AgentPromptSettings
@@ -56,6 +61,11 @@ namespace RNAssistant.Core.Models
             AfterToolResultsPrompt = "Local normalized observations are available. If the task is complete, return kind=final. If more Office actions are needed, select the next single tool using the active transport.";
             VerifyMutationPrompt = "Local deterministic verification observations are available. If verification succeeded, return kind=final with what changed and what was verified. If verification failed, select one corrective tool using the active transport or return cannot_complete.";
             ConfirmedToolContinuationPrompt = "The user confirmed and RNAssistant executed the pending local tool. Continue the same task from normalized observations.";
+        }
+
+        public AgentPromptSettings Clone()
+        {
+            return (AgentPromptSettings)MemberwiseClone();
         }
     }
 
@@ -136,6 +146,29 @@ namespace RNAssistant.Core.Models
             ModelCapabilities = new Dictionary<string, ModelCapabilitySettings>(StringComparer.OrdinalIgnoreCase);
             AttachmentModelPriority = new List<string>();
             HtmlNetworkAllowedOrigins = new List<string>();
+        }
+
+        public AppSettings Clone()
+        {
+            var clone = (AppSettings)MemberwiseClone();
+            clone.AgentPrompts = AgentPrompts == null ? null : AgentPrompts.Clone();
+            clone.CustomHeaders = new Dictionary<string, string>(
+                CustomHeaders ?? new Dictionary<string, string>(),
+                StringComparer.OrdinalIgnoreCase);
+            clone.ModelImageSupportOverrides = new Dictionary<string, bool?>(
+                ModelImageSupportOverrides ?? new Dictionary<string, bool?>(),
+                StringComparer.OrdinalIgnoreCase);
+            clone.ModelAudioSupportOverrides = new Dictionary<string, bool?>(
+                ModelAudioSupportOverrides ?? new Dictionary<string, bool?>(),
+                StringComparer.OrdinalIgnoreCase);
+            clone.ModelCapabilities = new Dictionary<string, ModelCapabilitySettings>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in ModelCapabilities ?? new Dictionary<string, ModelCapabilitySettings>())
+            {
+                clone.ModelCapabilities[pair.Key] = pair.Value == null ? null : pair.Value.Clone();
+            }
+            clone.AttachmentModelPriority = new List<string>(AttachmentModelPriority ?? new List<string>());
+            clone.HtmlNetworkAllowedOrigins = new List<string>(HtmlNetworkAllowedOrigins ?? new List<string>());
+            return clone;
         }
     }
 }

@@ -82,23 +82,20 @@ namespace RNAssistant.Office
                 (settings, attachment) => ModelAttachmentService.ReadForModel(_attachmentStore, settings, attachment));
             if (completeAsync == null)
             {
-                ChatCompletionService.AgentCompletionDelegate agentCompletion =
+                LlmCompletionDelegate completion =
                     (settings, messages, requestOptions, streamProgress, cancellationToken) =>
                         _llmClient.CompleteAsync(settings, messages, requestOptions, streamProgress, cancellationToken);
-                ChatCompletionService.CompletionDelegate streamingCompletion =
-                    (settings, messages, streamProgress, cancellationToken) =>
-                        _llmClient.CompleteAsync(settings, messages, streamProgress, cancellationToken);
-                _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, agentCompletion);
-                _offlineChatService = new OfflineChatService(_toolExecutor, streamingCompletion);
-                _plainChatService = new PlainChatService(streamingCompletion);
+                _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, completion);
+                _offlineChatService = new OfflineChatService(_toolExecutor, completion);
+                _plainChatService = new PlainChatService(completion);
             }
             else
             {
-                ChatCompletionService.CompletionDelegate completion =
-                    (settings, messages, streamProgress, cancellationToken) =>
+                LlmCompletionDelegate completion =
+                    (settings, messages, requestOptions, streamProgress, cancellationToken) =>
                         completeAsync(settings, messages, cancellationToken);
-                _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, completeAsync);
-                _offlineChatService = new OfflineChatService(_toolExecutor, completeAsync);
+                _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, completion);
+                _offlineChatService = new OfflineChatService(_toolExecutor, completion);
                 _plainChatService = new PlainChatService(completion);
             }
             _contextService = new ContextService(_adapter);

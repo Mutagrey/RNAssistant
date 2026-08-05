@@ -5,6 +5,42 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Services
 {
+    internal static class AgentText
+    {
+        public static bool ContainsAny(string value, params string[] terms)
+        {
+            foreach (var term in terms ?? new string[0])
+            {
+                if (!string.IsNullOrWhiteSpace(term) && value.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public static string FirstNonEmpty(params string[] values)
+        {
+            foreach (var value in values ?? new string[0])
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+            return string.Empty;
+        }
+
+        public static string Truncate(string value, int maxChars)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length <= maxChars)
+            {
+                return value ?? string.Empty;
+            }
+            return value.Substring(0, Math.Max(0, maxChars)) + "\n[truncated]";
+        }
+    }
+
     internal sealed class OfficeSnapshot
     {
         public string Host { get; set; }

@@ -211,7 +211,7 @@ namespace RNAssistant.Harness
             return new ChatCompletionService(
                 adapter,
                 executor,
-                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
+                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, LlmRequestOptions requestOptions, Action<LlmStreamUpdate> streamProgress, CancellationToken cancellationToken)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     if (calls != null)
@@ -257,7 +257,12 @@ namespace RNAssistant.Harness
                 return Add(response, mustContain, null);
             }
 
-            public Task<LlmCompletionResult> CompleteAsync(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
+            public Task<LlmCompletionResult> CompleteAsync(
+                AppSettings settings,
+                IEnumerable<ChatMessage> messages,
+                LlmRequestOptions requestOptions,
+                Action<LlmStreamUpdate> streamProgress,
+                CancellationToken cancellationToken)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var captured = new List<ChatMessage>(messages ?? new ChatMessage[0]);

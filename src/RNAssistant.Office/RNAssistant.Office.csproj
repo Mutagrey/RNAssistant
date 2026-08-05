@@ -78,7 +78,14 @@
     <Compile Include="Services\ChatCloneService.cs" />
     <Compile Include="Services\ChatHistoryEditService.cs" />
     <Compile Include="Services\AgentRunService.cs" />
-    <Compile Include="Services\AgentPlannerRuntime.cs" />
+    <Compile Include="Services\AgentProtocolHistory.cs" />
+    <Compile Include="Services\AgentRunPresentation.cs" />
+    <Compile Include="Services\OfficeIntentRouter.cs" />
+    <Compile Include="Services\ToolCatalogSlicer.cs" />
+    <Compile Include="Services\PlannerPromptComposer.cs" />
+    <Compile Include="Services\AgentActionValidator.cs" />
+    <Compile Include="Services\ObservationNormalizer.cs" />
+    <Compile Include="Services\OfficeSnapshotReader.cs" />
     <Compile Include="Services\AgentRuntimeModels.cs" />
     <Compile Include="Services\AgentPlannerCompletionRunner.cs" />
     <Compile Include="Services\AgentExecutionRuntime.cs" />

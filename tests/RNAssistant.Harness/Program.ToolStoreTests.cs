@@ -244,6 +244,7 @@ namespace RNAssistant.Harness
                 AssertTrue(refreshed != null && refreshed.MutatesDocument, "nested mutation propagated after refresh");
                 AssertTrue(!refreshed.AgentCanRun, "nested mutation agent safety propagated after refresh");
                 AssertTrue(refreshed.RiskLevel > 0, "nested mutation risk propagated after refresh");
+                AssertTrue(!pipeline.MutatesDocument, "source tool remains unchanged");
             });
         }
 

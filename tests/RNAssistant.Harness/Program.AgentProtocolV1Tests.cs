@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
@@ -79,8 +78,6 @@ namespace RNAssistant.Harness
 
         private static void LlmSerializesOpenAiToolRoundTrip()
         {
-            var client = new LlmClient(() => string.Empty);
-            var method = typeof(LlmClient).GetMethod("ToApiMessages", BindingFlags.Instance | BindingFlags.NonPublic);
             var call = new LlmToolCall
             {
                 Id = "call_1",
@@ -92,7 +89,7 @@ namespace RNAssistant.Harness
                 new ChatMessage { Role = "assistant", Content = string.Empty, ToolCalls = new List<LlmToolCall> { call } },
                 new ChatMessage { Role = "tool", ToolCallId = "call_1", ToolName = call.Name, Content = "{\"ok\":true}" }
             };
-            var serialized = (List<object>)method.Invoke(client, new object[] { source });
+            var serialized = new LlmMessageBuilder().Build(source, null).Messages;
             var json = JArray.FromObject(serialized);
 
             AssertEqual("assistant", (string)json.SelectToken("[0].role"), "assistant tool-call role");

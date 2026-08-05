@@ -39,7 +39,7 @@ namespace RNAssistant.Harness
             IReadOnlyList<ChatMessage> captured = null;
             string capturedModel = null;
             var service = new PlainChatService(
-                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, Action<LlmStreamUpdate> progress, CancellationToken cancellationToken)
+                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, LlmRequestOptions requestOptions, Action<LlmStreamUpdate> progress, CancellationToken cancellationToken)
                 {
                     capturedModel = settings.Model;
                     captured = messages.ToList();
@@ -86,7 +86,7 @@ namespace RNAssistant.Harness
             var calls = 0;
             IReadOnlyList<ChatMessage> repairMessages = null;
             var service = new PlainChatService(
-                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, Action<LlmStreamUpdate> progress, CancellationToken cancellationToken)
+                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, LlmRequestOptions requestOptions, Action<LlmStreamUpdate> progress, CancellationToken cancellationToken)
                 {
                     calls += 1;
                     if (calls == 1)
@@ -117,7 +117,7 @@ namespace RNAssistant.Harness
             AssertEqual(2, session.Messages.Count, "only user and final assistant persisted");
 
             var failedRepairService = new PlainChatService(
-                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, Action<LlmStreamUpdate> progress, CancellationToken cancellationToken)
+                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, LlmRequestOptions requestOptions, Action<LlmStreamUpdate> progress, CancellationToken cancellationToken)
                 {
                     return Task.FromResult(new LlmCompletionResult { Content = "{\"thought\":\"still internal\"}" });
                 });
@@ -149,6 +149,10 @@ namespace RNAssistant.Harness
             AssertEqual("vision-first", routed.Settings.Model, "request copy model");
             AssertEqual("text-only", session.Model, "session model unchanged");
             AssertEqual("global-text", settings.Model, "stored settings unchanged");
+            routed.Settings.ModelCapabilities["text-only"].SupportsImages = true;
+            routed.Settings.AttachmentModelPriority.Clear();
+            AssertEqual(false, settings.ModelCapabilities["text-only"].SupportsImages.Value, "capability settings cloned deeply");
+            AssertEqual(1, settings.AttachmentModelPriority.Count, "model priority cloned deeply");
 
             var text = AttachmentModelRoutingService.Select(settings, session, null);
             AssertEqual("text-only", text.SelectedModel, "next text request uses chat model");
@@ -227,7 +231,7 @@ namespace RNAssistant.Harness
         {
             var calls = 0;
             var service = new PlainChatService(
-                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, Action<LlmStreamUpdate> progress, CancellationToken cancellationToken)
+                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, LlmRequestOptions requestOptions, Action<LlmStreamUpdate> progress, CancellationToken cancellationToken)
                 {
                     calls += 1;
                     return Task.FromResult(new LlmCompletionResult
@@ -247,6 +251,43 @@ namespace RNAssistant.Harness
 
             AssertEqual(1, calls, "embedded answer avoids repair request");
             AssertEqual("Готовый ответ.", result.AssistantText, "user-facing answer extracted");
+        }
+
+        private static void OfflineAgentKeepsRequestOptions()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                LlmRequestOptions captured = null;
+                var service = new OfflineChatService(
+                    executor,
+                    delegate(
+                        AppSettings settings,
+                        IEnumerable<ChatMessage> messages,
+                        LlmRequestOptions requestOptions,
+                        Action<LlmStreamUpdate> streamProgress,
+                        CancellationToken cancellationToken)
+                    {
+                        captured = requestOptions;
+                        return Task.FromResult(new LlmCompletionResult { Content = FinalBlock("Done.") });
+                    });
+
+                var result = service.ExecuteAsync(
+                    "What is a pivot table?",
+                    NewSession(adapter),
+                    NewContext(adapter),
+                    new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema },
+                    new List<ToolDefinition>(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    CancellationToken.None).GetAwaiter().GetResult();
+
+                AssertEqual("Done.", result.AssistantText, "offline answer");
+                AssertTrue(captured != null, "offline request options preserved");
+                AssertEqual(LlmResponseFormats.JsonSchema, captured.ResponseFormat, "offline response mode");
+                AssertContains(captured.ResponseSchemaJson, "protocolVersion", "offline decision schema");
+            });
         }
 
         private static void DeletedMessageIsAbsentFromRebuiltContext()
@@ -279,7 +320,7 @@ namespace RNAssistant.Harness
                 var runner = new AgentRunService(
                     adapter,
                     executor,
-                    delegate(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
+                    delegate(AppSettings settings, IEnumerable<ChatMessage> messages, LlmRequestOptions requestOptions, Action<LlmStreamUpdate> streamProgress, CancellationToken cancellationToken)
                     {
                         calls += 1;
                         return Task.FromResult(new LlmCompletionResult { Content = FinalBlock("unexpected") });

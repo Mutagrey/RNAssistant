@@ -47,6 +47,18 @@ namespace RNAssistant.Core.Models
             Components = new List<VbaToolComponent>();
             Scope = "global";
         }
+
+        public ToolDefinition Clone()
+        {
+            var clone = (ToolDefinition)MemberwiseClone();
+            clone.ArgumentOrder = new List<string>(ArgumentOrder ?? new List<string>());
+            clone.Components = new List<VbaToolComponent>();
+            foreach (var component in Components ?? new List<VbaToolComponent>())
+            {
+                clone.Components.Add(component == null ? null : component.Clone());
+            }
+            return clone;
+        }
     }
 
     public sealed class VbaToolComponent
@@ -56,6 +68,11 @@ namespace RNAssistant.Core.Models
         public string FileName { get; set; }
         public string Code { get; set; }
         public string CodeSha256 { get; set; }
+
+        public VbaToolComponent Clone()
+        {
+            return (VbaToolComponent)MemberwiseClone();
+        }
     }
 
     public sealed class ToolCommand

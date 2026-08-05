@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Services
@@ -30,7 +31,7 @@ namespace RNAssistant.Office.Services
                 : messages.Select(CloneMessage).ToList();
         }
 
-        public static HtmlWorkspace CloneHtmlWorkspace(HtmlWorkspace workspace)
+        public static HtmlWorkspace CloneWorkspaceForFork(HtmlWorkspace workspace)
         {
             if (workspace == null)
             {
@@ -46,7 +47,7 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        public static ChatMessage CloneMessage(ChatMessage message)
+        private static ChatMessage CloneMessage(ChatMessage message)
         {
             if (message == null)
             {
@@ -58,6 +59,11 @@ namespace RNAssistant.Office.Services
                 Id = message.Id,
                 Role = message.Role,
                 Content = message.Content,
+                ToolCallId = message.ToolCallId,
+                ToolName = message.ToolName,
+                ToolCalls = message.ToolCalls == null
+                    ? new List<LlmToolCall>()
+                    : message.ToolCalls.Select(CloneToolCall).ToList(),
                 Attachments = message.Attachments == null
                     ? new List<ChatAttachment>()
                     : message.Attachments.Select(CloneAttachment).ToList(),
@@ -69,8 +75,23 @@ namespace RNAssistant.Office.Services
                 ReasoningContent = message.ReasoningContent,
                 ReasoningTokens = message.ReasoningTokens,
                 ReasoningTruncated = message.ReasoningTruncated,
+                RunId = message.RunId,
+                Sequence = message.Sequence,
                 CreatedUtc = message.CreatedUtc
             };
+        }
+
+        private static LlmToolCall CloneToolCall(LlmToolCall call)
+        {
+            return call == null
+                ? null
+                : new LlmToolCall
+                {
+                    Id = call.Id,
+                    Type = call.Type,
+                    Name = call.Name,
+                    ArgumentsJson = call.ArgumentsJson
+                };
         }
 
         private static ChatAttachment CloneAttachment(ChatAttachment attachment)
@@ -100,7 +121,7 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        public static ChatActivity CloneActivity(ChatActivity activity)
+        private static ChatActivity CloneActivity(ChatActivity activity)
         {
             if (activity == null)
             {
@@ -109,6 +130,8 @@ namespace RNAssistant.Office.Services
 
             return new ChatActivity
             {
+                RunId = activity.RunId,
+                Sequence = activity.Sequence,
                 Kind = activity.Kind,
                 Title = activity.Title,
                 Subtitle = activity.Subtitle,
@@ -125,7 +148,7 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        public static HtmlWorkspaceFile CloneHtmlFile(HtmlWorkspaceFile file)
+        private static HtmlWorkspaceFile CloneHtmlFile(HtmlWorkspaceFile file)
         {
             if (file == null)
             {
@@ -143,7 +166,7 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        public static HtmlWorkspaceDataSource CloneHtmlDataSource(HtmlWorkspaceDataSource dataSource)
+        private static HtmlWorkspaceDataSource CloneHtmlDataSource(HtmlWorkspaceDataSource dataSource)
         {
             if (dataSource == null)
             {
@@ -160,7 +183,7 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        public static ContextNote CloneContextNote(ContextNote note)
+        private static ContextNote CloneContextNote(ContextNote note)
         {
             if (note == null)
             {

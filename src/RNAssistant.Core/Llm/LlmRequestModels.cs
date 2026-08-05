@@ -1,8 +1,18 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Llm
 {
+    public delegate Task<LlmCompletionResult> LlmCompletionDelegate(
+        AppSettings settings,
+        IEnumerable<ChatMessage> messages,
+        LlmRequestOptions requestOptions,
+        Action<LlmStreamUpdate> streamProgress,
+        CancellationToken cancellationToken);
+
     public static class LlmResponseFormats
     {
         public const string Text = "text";
@@ -23,6 +33,13 @@ namespace RNAssistant.Core.Llm
             ResponseFormat = LlmResponseFormats.Text;
             Tools = new LlmToolDefinition[0];
         }
+    }
+
+    public sealed class ModelImagePart
+    {
+        public string ContentType { get; set; }
+        public byte[] Bytes { get; set; }
+        public string Label { get; set; }
     }
 
     public sealed class LlmToolDefinition

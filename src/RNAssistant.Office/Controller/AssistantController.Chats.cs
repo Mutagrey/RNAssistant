@@ -83,7 +83,7 @@ namespace RNAssistant.Office
                 fork.Mode = ChatModes.Normalize(source.Mode);
                 fork.HtmlModeEnabled = source.HtmlModeEnabled;
                 fork.Context = ChatCloneService.CloneContext(LoadContext(source)) ?? CreateEmptyContext();
-                fork.HtmlWorkspace = ChatCloneService.CloneHtmlWorkspace(source.HtmlWorkspace);
+                fork.HtmlWorkspace = ChatCloneService.CloneWorkspaceForFork(source.HtmlWorkspace);
                 fork.Messages = targetIndex < 0
                     ? new List<ChatMessage>()
                     : ChatCloneService.CloneMessages(sourceMessages.Take(targetIndex + 1));

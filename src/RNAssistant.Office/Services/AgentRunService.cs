@@ -5,7 +5,6 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
@@ -15,9 +14,6 @@ namespace RNAssistant.Office.Services
 {
     public sealed class AgentRunService
     {
-        private const int MaxProtocolDataChars = 6000;
-        private const int MaxProtocolSummaryChars = 1200;
-
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly OfficeToolExecutor _toolExecutor;
         private readonly AgentPlannerCompletionRunner _plannerCompletion;
@@ -29,38 +25,12 @@ namespace RNAssistant.Office.Services
         private readonly VerificationRunner _verificationRunner;
         private readonly VerificationExecutor _verificationExecutor;
         private readonly AgentToolCatalogResolver _toolCatalogResolver;
+        private readonly OfficeSnapshotReader _snapshotReader;
 
         public AgentRunService(
             IOfficeApplicationAdapter adapter,
             OfficeToolExecutor toolExecutor,
-            Func<AppSettings, IEnumerable<ChatMessage>, CancellationToken, Task<LlmCompletionResult>> completeAsync,
-            bool includeControllerTools = true)
-            : this(
-                adapter,
-                toolExecutor,
-                (settings, messages, streamProgress, cancellationToken) => completeAsync(settings, messages, cancellationToken),
-                includeControllerTools)
-        {
-        }
-
-        public AgentRunService(
-            IOfficeApplicationAdapter adapter,
-            OfficeToolExecutor toolExecutor,
-            ChatCompletionService.CompletionDelegate completeAsync,
-            bool includeControllerTools = true)
-            : this(
-                adapter,
-                toolExecutor,
-                (settings, messages, requestOptions, streamProgress, cancellationToken) =>
-                    completeAsync(settings, messages, streamProgress, cancellationToken),
-                includeControllerTools)
-        {
-        }
-
-        public AgentRunService(
-            IOfficeApplicationAdapter adapter,
-            OfficeToolExecutor toolExecutor,
-            ChatCompletionService.AgentCompletionDelegate completeAsync,
+            LlmCompletionDelegate completeAsync,
             bool includeControllerTools = true)
         {
             _adapter = adapter;
@@ -74,9 +44,10 @@ namespace RNAssistant.Office.Services
             _verificationRunner = new VerificationRunner();
             _verificationExecutor = new VerificationExecutor(TimeSpan.FromSeconds(15));
             _toolCatalogResolver = new AgentToolCatalogResolver(toolExecutor, includeControllerTools);
+            _snapshotReader = new OfficeSnapshotReader(adapter);
         }
 
-        public async Task<ChatCompletionResult> RunUserTurnAsync(
+        public Task<ChatCompletionResult> RunUserTurnAsync(
             string text,
             ChatSession session,
             DocumentContext documentContext,
@@ -99,35 +70,10 @@ namespace RNAssistant.Office.Services
                     Attachments = attachments == null ? new List<ChatAttachment>() : new List<ChatAttachment>(attachments)
                 });
             }
-            return await RunLoopAsync(taskText, null, false, session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, null, cancellationToken).ConfigureAwait(false);
+            return RunLoopAsync(taskText, null, false, session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, null, cancellationToken);
         }
 
-        public async Task<ChatCompletionResult> ContinueAfterToolAsync(
-            ToolCommand confirmedCommand,
-            ChatSession session,
-            DocumentContext documentContext,
-            AppSettings settings,
-            IReadOnlyList<ToolDefinition> tools,
-            Action<string, string, ChatActivity> progress,
-            ChatCompletionService.PendingToolRegistrar pendingToolRegistrar,
-            IReadOnlyList<SkillDefinition> skills,
-            CancellationToken cancellationToken)
-        {
-            return await ContinueAfterToolAsync(
-                confirmedCommand,
-                null,
-                session,
-                documentContext,
-                settings,
-                tools,
-                null,
-                progress,
-                pendingToolRegistrar,
-                skills,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        public async Task<ChatCompletionResult> ContinueAfterToolAsync(
+        public Task<ChatCompletionResult> ContinueAfterToolAsync(
             ToolCommand confirmedCommand,
             ToolResult confirmedResult,
             ChatSession session,
@@ -143,17 +89,17 @@ namespace RNAssistant.Office.Services
             var initialProtocolMessages = new List<ChatMessage>();
             if (confirmedResult != null)
             {
-                AppendProtocolToolExchange(initialProtocolMessages, null, confirmedCommand, confirmedResult, settings);
+                AgentProtocolHistory.AppendToolExchange(initialProtocolMessages, null, confirmedCommand, confirmedResult, settings);
             }
             var prompt = BuildConfirmedToolContinuation(
                 confirmedCommand,
                 session,
                 PromptText(settings, p => p.ConfirmedToolContinuationPrompt));
             var taskText = LatestUserRequest(session, prompt);
-            return await RunLoopAsync(taskText, prompt, CommandMutates(confirmedCommand, tools), session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, initialProtocolMessages, cancellationToken).ConfigureAwait(false);
+            return RunLoopAsync(taskText, prompt, CommandMutates(confirmedCommand, tools), session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, initialProtocolMessages, cancellationToken);
         }
 
-        public bool CommandMutates(ToolCommand command, IReadOnlyList<ToolDefinition> tools)
+        private static bool CommandMutates(ToolCommand command, IReadOnlyList<ToolDefinition> tools)
         {
             if (command == null || string.IsNullOrWhiteSpace(command.ToolId))
             {
@@ -180,25 +126,6 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<ChatMessage> initialProtocolMessages,
             CancellationToken cancellationToken)
         {
-            settings = settings ?? new AppSettings();
-            return await RunControlledLoopAsync(taskText, initialFollowUpPrompt, initialVerificationRequired, session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, initialProtocolMessages, cancellationToken).ConfigureAwait(false);
-        }
-
-        private async Task<ChatCompletionResult> RunControlledLoopAsync(
-            string taskText,
-            string initialFollowUpPrompt,
-            bool initialVerificationRequired,
-            ChatSession session,
-            DocumentContext documentContext,
-            AppSettings settings,
-            IReadOnlyList<ToolDefinition> tools,
-            IReadOnlyList<ChatAttachment> attachments,
-            Action<string, string, ChatActivity> progress,
-            ChatCompletionService.PendingToolRegistrar pendingToolRegistrar,
-            IReadOnlyList<SkillDefinition> skills,
-            IReadOnlyList<ChatMessage> initialProtocolMessages,
-            CancellationToken cancellationToken)
-        {
             cancellationToken.ThrowIfCancellationRequested();
             settings = settings ?? new AppSettings();
             tools = tools ?? new ToolDefinition[0];
@@ -211,11 +138,11 @@ namespace RNAssistant.Office.Services
                 route.Phase = AgentPhases.Verification;
                 route.RequiresTool = true;
             }
-            if (route.RequiresInspection || settings.IncludeVbaContext || LooksLikeVbaTask(taskText))
+            if (route.RequiresInspection || settings.IncludeVbaContext || OfficeSnapshotReader.IsVbaTask(taskText))
             {
                 ReportProgress(progress, "context", "Собираю необходимый контекст Office...");
-                snapshot = CaptureOfficeSnapshot(settings, taskText);
-                route.App = FirstNonEmpty(snapshot.Host, route.App);
+                snapshot = _snapshotReader.Read(settings, taskText);
+                route.App = AgentText.FirstNonEmpty(snapshot.Host, route.App);
             }
 
             var observations = new List<AgentObservation>();
@@ -232,15 +159,15 @@ namespace RNAssistant.Office.Services
             for (var iteration = 0; iteration < maxIterations; iteration++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var slice = _toolCatalogSlicer.Slice(route, allTools, observations, settings.MaxAgentToolsPerRequest, settings.AllowAgentToolAuthoring == true);
-                routingDiagnosticsJson = BuildRoutingDiagnosticsJson(route, slice);
+                var slice = _toolCatalogSlicer.Slice(route, allTools, observations, settings.MaxAgentToolsPerRequest, settings.AllowAgentToolAuthoring);
+                routingDiagnosticsJson = AgentRunPresentation.BuildRoutingDiagnosticsJson(route, slice);
                 if (iteration == 0)
                 {
-                    ReportProgress(progress, "routing", BuildTaskProgressMessage(route, false), BuildRoutingActivity(route, slice));
+                    ReportProgress(progress, "routing", AgentRunPresentation.BuildTaskProgressMessage(route, false), AgentRunPresentation.BuildRoutingActivity(route, slice));
                 }
                 if (route.RequiresTool && slice.Tools.Count == 0)
                 {
-                    assistantText = RecordMissingTools(session, route, slice);
+                    assistantText = AgentRunPresentation.RecordMissingTools(session, route, slice);
                     RememberPendingTask(session, taskText, assistantText, AgentResponseKinds.CannotComplete);
                     resultLog.Add(new
                     {
@@ -267,14 +194,14 @@ namespace RNAssistant.Office.Services
                     attachments);
                 messages.AddRange(protocolMessages);
                 contextUsage = ContextUsageEstimator.FromPrompt(messages, settings);
-                ReportProgress(progress, "thinking", BuildTaskProgressMessage(route, true));
+                ReportProgress(progress, "thinking", AgentRunPresentation.BuildTaskProgressMessage(route, true));
                 var plannerAttempt = await _plannerCompletion.CompleteAsync(
                     settings,
                     messages,
                     slice.Tools,
                     state,
                     progress,
-                    BuildTaskProgressMessage(route, true),
+                    AgentRunPresentation.BuildTaskProgressMessage(route, true),
                     "Исправляю формат следующего действия...",
                     PromptText(settings, p => p.RepairMalformedToolBlockPrompt),
                     cancellationToken).ConfigureAwait(false);
@@ -286,7 +213,7 @@ namespace RNAssistant.Office.Services
 
                 if (!parsed.Success)
                 {
-                    assistantText = RecordPlannerFailure(session, completion, plannerText, parsed, "Planner JSON invalid");
+                    assistantText = AgentRunPresentation.RecordPlannerFailure(session, completion, plannerText, parsed, "Planner JSON invalid");
                     RememberPendingTask(session, taskText, assistantText, "planner_error");
                     break;
                 }
@@ -339,7 +266,7 @@ namespace RNAssistant.Office.Services
                         contextUsage = correctionAttempt.ContextUsage;
                         if (!correctionAttempt.ParseResult.Success)
                         {
-                            assistantText = RecordPlannerFailure(session, correctionAttempt.Completion, correctionAttempt.Text, correctionAttempt.ParseResult, "Planner correction invalid");
+                            assistantText = AgentRunPresentation.RecordPlannerFailure(session, correctionAttempt.Completion, correctionAttempt.Text, correctionAttempt.ParseResult, "Planner correction invalid");
                             break;
                         }
                         response = correctionAttempt.ParseResult.Response;
@@ -400,7 +327,7 @@ namespace RNAssistant.Office.Services
                     continue;
                 }
                 var command = validation.Command;
-                var plannedActivity = CreateRunningActivity(command, "planned", "tool");
+                var plannedActivity = AgentRunPresentation.CreateRunningActivity(command, "planned", "tool");
                 plannedActivity.Title = response.DecisionSummary;
                 plannedActivity.DataJson = routingDiagnosticsJson;
                 session.Messages.Add(AgentTranscript.CreateAssistantMessage(response.DecisionSummary, completion, plannedActivity));
@@ -437,14 +364,14 @@ namespace RNAssistant.Office.Services
                     progress,
                     settings.AutoRunToolCalls ? "executing" : "waiting",
                     settings.AutoRunToolCalls
-                        ? "Выполняю: " + FriendlyToolAction(command) + "..."
-                        : "Ожидаю ручного запуска: " + FriendlyToolAction(command) + ".",
-                    CreateRunningActivity(command, settings.AutoRunToolCalls ? "running" : "waiting", "tool"));
+                        ? "Выполняю: " + AgentRunPresentation.FriendlyToolAction(command) + "..."
+                        : "Ожидаю ручного запуска: " + AgentRunPresentation.FriendlyToolAction(command) + ".",
+                    AgentRunPresentation.CreateRunningActivity(command, settings.AutoRunToolCalls ? "running" : "waiting", "tool"));
                 var result = settings.AutoRunToolCalls
                     ? _toolExecutor.Execute(command, allTools, settings, false, false, session, cancellationToken)
                     : ToolResult.SkippedAutoRun("Auto tool execution is disabled: " + command.ToolId);
                 UpdateRuntimePlan(session, state, result);
-                AppendProtocolToolExchange(protocolMessages, plannerAttempt, command, result, settings);
+                AgentProtocolHistory.AppendToolExchange(protocolMessages, plannerAttempt, command, result, settings);
                 AttachPendingId(session, command, result, pendingToolRegistrar);
                 RefreshCreatedTool(allTools, command, result);
                 var purpose = string.Equals(route.Phase, AgentPhases.Verification, StringComparison.OrdinalIgnoreCase)
@@ -507,7 +434,7 @@ namespace RNAssistant.Office.Services
                             stopped = !continueAfterRecoverableError;
                             break;
                         }
-                        ReportProgress(progress, "verifying", "Проверяю результат через " + verify.ToolId, CreateRunningActivity(verify, "running", "verification"));
+                        ReportProgress(progress, "verifying", "Проверяю результат через " + verify.ToolId, AgentRunPresentation.CreateRunningActivity(verify, "running", "verification"));
                         var verifyExecution = await _verificationExecutor.ExecuteAsync(
                             verify.ToolId,
                             () => _toolExecutor.Execute(verify, allTools, settings, false, false, session, CancellationToken.None),
@@ -628,116 +555,6 @@ namespace RNAssistant.Office.Services
             if (activityStep != null) activityStep.Status = step.Status;
         }
 
-        private static void AppendProtocolToolExchange(
-            ICollection<ChatMessage> protocolMessages,
-            AgentPlannerAttempt attempt,
-            ToolCommand command,
-            ToolResult result,
-            AppSettings settings)
-        {
-            if (protocolMessages == null || command == null) return;
-            var callId = string.IsNullOrWhiteSpace(command.ToolCallId)
-                ? "call_" + Guid.NewGuid().ToString("N")
-                : command.ToolCallId;
-            command.ToolCallId = callId;
-            var apiTool = attempt == null || attempt.RequestOptions == null
-                ? null
-                : (attempt.RequestOptions.Tools ?? new LlmToolDefinition[0]).FirstOrDefault(tool =>
-                    tool != null && string.Equals(tool.ToolId, command.ToolId, StringComparison.OrdinalIgnoreCase));
-            var apiName = !string.IsNullOrWhiteSpace(command.ToolApiName)
-                ? command.ToolApiName
-                : apiTool == null ? command.ToolId.Replace('.', '_') : apiTool.ApiName;
-            command.ToolApiName = apiName;
-            var argumentsJson = JsonConvert.SerializeObject(command.Arguments ?? new Dictionary<string, object>());
-            var toolCall = new LlmToolCall
-            {
-                Id = callId,
-                Name = apiName,
-                ArgumentsJson = argumentsJson
-            };
-
-            var resultJson = JsonConvert.SerializeObject(new
-            {
-                protocolVersion = AgentDecisionProtocol.Version,
-                callId = callId,
-                toolId = command.ToolId,
-                ok = result != null && result.Success,
-                status = result == null ? "failed" : result.Status,
-                summary = BoundText(result == null ? "Tool returned no result." : result.Message, MaxProtocolSummaryChars),
-                data = ParseProtocolData(result == null ? null : result.DataJson),
-                error = result != null && result.Success ? null : new
-                {
-                    code = result == null ? "missing_result" : result.ErrorCode,
-                    message = BoundText(result == null ? "Tool returned no result." : result.Message, MaxProtocolSummaryChars),
-                    retryable = result == null ? (bool?)false : result.Retryable
-                }
-            });
-
-            var role = NormalizeToolResultRole(settings == null ? null : settings.ToolResultRole);
-            if (string.Equals(role, "tool", StringComparison.Ordinal))
-            {
-                var nativeCalls = attempt == null || attempt.Completion == null ? null : attempt.Completion.ToolCalls;
-                var assistantCall = nativeCalls != null && nativeCalls.Count == 1
-                    ? new LlmToolCall
-                    {
-                        Id = callId,
-                        Type = string.IsNullOrWhiteSpace(nativeCalls[0].Type) ? "function" : nativeCalls[0].Type,
-                        Name = string.IsNullOrWhiteSpace(nativeCalls[0].Name) ? apiName : nativeCalls[0].Name,
-                        ArgumentsJson = string.IsNullOrWhiteSpace(nativeCalls[0].ArgumentsJson) ? argumentsJson : nativeCalls[0].ArgumentsJson
-                    }
-                    : toolCall;
-                protocolMessages.Add(new ChatMessage
-                {
-                    Role = "assistant",
-                    Content = string.Empty,
-                    ToolCalls = new List<LlmToolCall> { assistantCall }
-                });
-                protocolMessages.Add(new ChatMessage
-                {
-                    Role = "tool",
-                    ToolCallId = callId,
-                    ToolName = apiName,
-                    Content = resultJson
-                });
-                return;
-            }
-
-            if (attempt != null && !string.IsNullOrWhiteSpace(attempt.Text))
-            {
-                protocolMessages.Add(new ChatMessage { Role = "assistant", Content = attempt.Text });
-            }
-            protocolMessages.Add(new ChatMessage { Role = role, Content = "TOOL_RESULT:\n" + resultJson });
-        }
-
-        private static object ParseProtocolData(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value)) return null;
-            if (value.Length > MaxProtocolDataChars)
-            {
-                return new
-                {
-                    truncated = true,
-                    originalChars = value.Length,
-                    preview = value.Substring(0, MaxProtocolDataChars)
-                };
-            }
-            try { return JToken.Parse(value); }
-            catch (JsonException) { return value; }
-        }
-
-        private static string BoundText(string value, int maxChars)
-        {
-            value = value ?? string.Empty;
-            return value.Length <= maxChars ? value : value.Substring(0, maxChars) + "…";
-        }
-
-        private static string NormalizeToolResultRole(string role)
-        {
-            if (string.Equals(role, "developer", StringComparison.OrdinalIgnoreCase)) return "developer";
-            if (string.Equals(role, "user", StringComparison.OrdinalIgnoreCase)) return "user";
-            return "tool";
-        }
-
         private static void RememberPendingTask(ChatSession session, string taskText, string lastQuestion, string kind)
         {
             if (session == null || string.IsNullOrWhiteSpace(taskText))
@@ -778,42 +595,6 @@ namespace RNAssistant.Office.Services
             return observation;
         }
 
-        private OfficeSnapshot CaptureOfficeSnapshot(AppSettings settings, string taskText)
-        {
-            var snapshot = new OfficeSnapshot
-            {
-                Host = _adapter.HostName,
-                DocumentTitle = SafeRead(() => _adapter.DocumentTitle)
-            };
-
-            var contextProvider = _adapter as IOfficeContextProvider;
-            if (contextProvider != null)
-            {
-                try
-                {
-                    var context = contextProvider.GetOfficeContext();
-                    if (context != null)
-                    {
-                        snapshot.Host = FirstNonEmpty(context.Host, snapshot.Host);
-                        snapshot.DocumentTitle = FirstNonEmpty(context.DocumentTitle, snapshot.DocumentTitle);
-                        snapshot.ContainerName = context.ContainerName;
-                        snapshot.SelectionAddress = context.SelectionAddress;
-                        snapshot.SelectionText = context.SelectionText;
-                    }
-                }
-                catch
-                {
-                }
-            }
-
-            var vba = CaptureVbaSnapshot(settings, taskText);
-            if (!string.IsNullOrWhiteSpace(vba))
-            {
-                snapshot.SnapshotText = FirstNonEmpty(snapshot.SnapshotText, string.Empty) + "\n\nCurrent VBA project snapshot:\n" + vba;
-            }
-            return snapshot;
-        }
-
         private static string LatestUserRequest(ChatSession session, string fallback)
         {
             if (session != null && session.Messages != null)
@@ -838,7 +619,7 @@ namespace RNAssistant.Office.Services
             builder.AppendLine(prompt ?? string.Empty);
             builder.AppendLine("Confirmed tool:");
             builder.AppendLine("toolId: " + (command == null ? string.Empty : command.ToolId));
-            builder.AppendLine("arguments: " + TrimDiagnosticText(
+            builder.AppendLine("arguments: " + AgentText.Truncate(
                 JsonConvert.SerializeObject(command == null ? null : command.Arguments),
                 2000));
 
@@ -846,10 +627,10 @@ namespace RNAssistant.Office.Services
             if (activity != null)
             {
                 builder.AppendLine("status: " + (activity.ExecutionStatus ?? activity.Status ?? string.Empty));
-                builder.AppendLine("result: " + TrimDiagnosticText(activity.ResultMessage, 1200));
+                builder.AppendLine("result: " + AgentText.Truncate(activity.ResultMessage, 1200));
                 if (!string.IsNullOrWhiteSpace(activity.DataJson))
                 {
-                    builder.AppendLine("data: " + TrimDiagnosticText(activity.DataJson, 2000));
+                    builder.AppendLine("data: " + AgentText.Truncate(activity.DataJson, 2000));
                 }
             }
             return builder.ToString().Trim();
@@ -916,266 +697,6 @@ namespace RNAssistant.Office.Services
             return messages;
         }
 
-        private static string SafeRead(Func<string> read)
-        {
-            try
-            {
-                return read == null ? string.Empty : read() ?? string.Empty;
-            }
-            catch
-            {
-                return string.Empty;
-            }
-        }
-
-        private static string FirstNonEmpty(params string[] values)
-        {
-            foreach (var value in values ?? new string[0])
-            {
-                if (!string.IsNullOrWhiteSpace(value))
-                {
-                    return value;
-                }
-            }
-            return string.Empty;
-        }
-
-        private static string RecordPlannerFailure(
-            ChatSession session,
-            LlmCompletionResult completion,
-            string rawText,
-            AgentPlannerParseResult parseResult,
-            string title)
-        {
-            var assistantText = "Planner response is invalid: " +
-                (parseResult == null ? "unknown" : parseResult.ErrorCode + ". " + parseResult.ErrorMessage);
-            if (session != null)
-            {
-                session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, completion, new ChatActivity
-                {
-                    Kind = "diagnostic",
-                    Title = title,
-                    Subtitle = "strict_json",
-                    Status = "failed",
-                    ExecutionStatus = parseResult == null ? "unknown" : parseResult.ErrorCode,
-                    ResultMessage = "Модель вернула некорректный формат плана: " + (parseResult == null ? "unknown" : parseResult.ErrorCode) + ".",
-                    DataJson = JsonConvert.SerializeObject(new
-                    {
-                        errorCode = parseResult == null ? "unknown" : parseResult.ErrorCode,
-                        errorMessage = parseResult == null ? string.Empty : parseResult.ErrorMessage,
-                        responsePreview = TrimDiagnosticText(rawText, 1200)
-                    })
-                }));
-            }
-            return assistantText;
-        }
-
-        private static string RecordMissingTools(
-            ChatSession session,
-            RoutedTask route,
-            ToolCatalogSlice slice)
-        {
-            var host = route == null ? string.Empty : route.App;
-            var assistantText = "Нет доступного локального инструмента для этого этапа задачи.";
-            if (session != null)
-            {
-                session.Messages.Add(new ChatMessage
-                {
-                    Role = "assistant",
-                    Content = assistantText,
-                    Activity = new ChatActivity
-                    {
-                        Kind = "diagnostic",
-                        Title = "Tool routing",
-                        Subtitle = route == null ? string.Empty : route.TaskType + " / " + route.Phase,
-                        Status = "failed",
-                        ExecutionStatus = "no_available_tools",
-                        ResultMessage = "host=" + host + "; reason=" + (route == null ? string.Empty : route.DecisionReason),
-                        DataJson = BuildRoutingDiagnosticsJson(route, slice)
-                    }
-                });
-            }
-            return assistantText;
-        }
-
-        private static ChatActivity BuildRoutingActivity(RoutedTask route, ToolCatalogSlice slice)
-        {
-            return new ChatActivity
-            {
-                Kind = "diagnostic",
-                Title = BuildTaskProgressMessage(route, false).TrimEnd('.'),
-                Subtitle = route == null ? string.Empty : route.Mode + " · " + route.TaskType,
-                Status = "completed",
-                ExecutionStatus = "routed",
-                ResultMessage = route == null
-                    ? string.Empty
-                    : "phase=" + route.Phase + "; reason=" + route.DecisionReason + "; tools=" + (slice == null ? 0 : slice.Tools.Count),
-                DataJson = BuildRoutingDiagnosticsJson(route, slice)
-            };
-        }
-
-        private static string BuildTaskProgressMessage(RoutedTask route, bool active)
-        {
-            if (route == null)
-            {
-                return active ? "Анализирую задачу..." : "Проверяю доступные действия.";
-            }
-
-            if (!active)
-            {
-                if (string.Equals(route.TaskType, "vba", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(route.TaskType, "macro_execution", StringComparison.OrdinalIgnoreCase))
-                {
-                    return "Проверяю доступные операции VBA.";
-                }
-                if (string.Equals(route.TaskType, "chart", StringComparison.OrdinalIgnoreCase))
-                {
-                    return "Проверяю доступные операции с графиками.";
-                }
-                return "Проверяю доступные действия для текущего документа.";
-            }
-
-            if (string.Equals(route.Phase, AgentPhases.Verification, StringComparison.OrdinalIgnoreCase))
-            {
-                return "Проверяю результат внесенных изменений...";
-            }
-            if (string.Equals(route.Phase, AgentPhases.ReadOnly, StringComparison.OrdinalIgnoreCase))
-            {
-                if (string.Equals(route.TaskType, "chart", StringComparison.OrdinalIgnoreCase))
-                {
-                    return "Изучаю существующие графики и их параметры...";
-                }
-                if (string.Equals(route.TaskType, "vba", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(route.TaskType, "macro_execution", StringComparison.OrdinalIgnoreCase))
-                {
-                    return "Изучаю VBA-проект и доступные модули...";
-                }
-                return "Изучаю содержимое текущего документа...";
-            }
-            if (string.Equals(route.TaskType, "chart", StringComparison.OrdinalIgnoreCase))
-            {
-                return "Подготавливаю изменения графика...";
-            }
-            if (string.Equals(route.TaskType, "vba", StringComparison.OrdinalIgnoreCase))
-            {
-                return "Подготавливаю VBA-код и параметры модуля...";
-            }
-            if (string.Equals(route.TaskType, "formatting", StringComparison.OrdinalIgnoreCase))
-            {
-                return "Подготавливаю форматирование документа...";
-            }
-            if (string.Equals(route.TaskType, "tool_authoring", StringComparison.OrdinalIgnoreCase))
-            {
-                return "Подготавливаю описание нового инструмента...";
-            }
-            return "Подготавливаю изменение текущего документа...";
-        }
-
-        private static string FriendlyToolAction(ToolCommand command)
-        {
-            if (command == null)
-            {
-                return string.Empty;
-            }
-            if (!string.IsNullOrWhiteSpace(command.Description))
-            {
-                return command.Description.Trim().TrimEnd('.');
-            }
-
-            switch ((command.ToolId ?? string.Empty).ToLowerInvariant())
-            {
-                case "excel.list_charts": return "проверяю список графиков";
-                case "excel.get_chart": return "читаю параметры графика";
-                case "excel.add_chart": return "создаю график";
-                case "excel.update_chart": return "изменяю график";
-                case "excel.delete_chart": return "удаляю график";
-                case "excel.vba_read_project": return "читаю VBA-проект";
-                case "excel.vba_read_module": return "читаю VBA-модуль";
-                case "excel.insert_vba_module": return "создаю VBA-модуль";
-                case "excel.vba_replace_module": return "обновляю VBA-модуль";
-                case "excel.run_macro": return "запускаю макрос";
-                default: return command.ToolId;
-            }
-        }
-
-        private static string BuildRoutingDiagnosticsJson(RoutedTask route, ToolCatalogSlice slice)
-        {
-            var exclusions = slice == null || slice.Excluded == null
-                ? new List<ToolExclusion>()
-                : slice.Excluded;
-            return JsonConvert.SerializeObject(new
-            {
-                route = route == null ? null : new
-                {
-                    app = route.App,
-                    mode = route.Mode,
-                    taskType = route.TaskType,
-                    phase = route.Phase,
-                    riskAllowed = route.RiskAllowed,
-                    requiresTool = route.RequiresTool,
-                    requiresInspection = route.RequiresInspection,
-                    reason = route.DecisionReason
-                },
-                selectedTools = slice == null
-                    ? new string[0]
-                    : slice.Tools.Select(tool => tool.Id).ToArray(),
-                selectedToolDetails = slice == null
-                    ? new object[0]
-                    : slice.Tools.Select(tool => new
-                    {
-                        toolId = tool.Id,
-                        mutatesDocument = tool.MutatesDocument,
-                        mutatesLocalState = tool.MutatesLocalState,
-                        agentCanRun = tool.AgentCanRun,
-                        requiresConfirmation = tool.RequiresConfirmation,
-                        riskLevel = tool.RiskLevel
-                    }).ToArray(),
-                excludedCounts = exclusions
-                    .GroupBy(item => item.Reason ?? "unknown", StringComparer.OrdinalIgnoreCase)
-                    .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase),
-                excludedTools = exclusions.Take(40).Select(item => new
-                {
-                    toolId = item.ToolId,
-                    reason = item.Reason,
-                    detail = item.Detail
-                }).ToArray()
-            });
-        }
-
-        private static string TrimDiagnosticText(string value, int maxChars)
-        {
-            value = value ?? string.Empty;
-            return value.Length <= maxChars ? value : value.Substring(0, maxChars) + "\n[truncated]";
-        }
-
-        private string CaptureVbaSnapshot(AppSettings settings, string taskText)
-        {
-            settings = settings ?? new AppSettings();
-            if (!settings.IncludeVbaContext && !LooksLikeVbaTask(taskText))
-            {
-                return string.Empty;
-            }
-
-            try
-            {
-                return _adapter.GetVbaSnapshot(Math.Max(1000, settings.VbaContextCharLimit));
-            }
-            catch (Exception ex)
-            {
-                return "VBA project snapshot could not be read: " + ex.Message;
-            }
-        }
-
-        private static bool LooksLikeVbaTask(string text)
-        {
-            var value = (text ?? string.Empty).ToLowerInvariant();
-            return value.IndexOf("vba", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                value.IndexOf("macro", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                value.IndexOf("макрос", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                value.IndexOf("макро", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                value.IndexOf("visual basic", StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
         private static string PromptText(AppSettings settings, Func<AgentPromptSettings, string> selector)
         {
             var defaults = new AgentPromptSettings();
@@ -1217,20 +738,6 @@ namespace RNAssistant.Office.Services
             catch (JsonException)
             {
             }
-        }
-
-        private static ChatActivity CreateRunningActivity(ToolCommand command, string status, string kind)
-        {
-            return new ChatActivity
-            {
-                Kind = string.IsNullOrWhiteSpace(kind) ? "tool" : kind,
-                Title = command == null ? "Действие" : FriendlyToolAction(command),
-                Subtitle = command == null ? string.Empty : command.ToolId,
-                Status = status,
-                ExecutionStatus = status,
-                ToolId = command == null ? string.Empty : command.ToolId,
-                ArgumentsJson = command == null ? null : JsonConvert.SerializeObject(command.Arguments, Formatting.Indented)
-            };
         }
 
         private static void ReportProgress(Action<string, string, ChatActivity> progress, string phase, string message)

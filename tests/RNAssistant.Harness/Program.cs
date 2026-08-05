@@ -74,6 +74,7 @@ namespace RNAssistant.Harness
                 Test("modes: plain chat omits planner and activities", PlainChatOmitsPlannerAndActivities),
                 Test("modes: plain chat repairs thought-only json", PlainChatRepairsThoughtOnlyJson),
                 Test("modes: plain chat extracts answer without thought", PlainChatExtractsAnswerWithoutThought),
+                Test("modes: offline agent keeps request options", OfflineAgentKeepsRequestOptions),
                 Test("models: attachment routing is request scoped", AttachmentRoutingIsRequestScoped),
                 Test("models: attachment routing covers pdf and mixed media", AttachmentRoutingCoversPdfAndMixedMedia),
                 Test("context: deleted message absent from rebuilt prompt", DeletedMessageIsAbsentFromRebuiltContext),

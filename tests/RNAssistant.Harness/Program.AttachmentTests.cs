@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using Newtonsoft.Json;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
@@ -44,12 +43,9 @@ namespace RNAssistant.Harness
                 Kind = "image",
                 Size = bytes.Length
             };
-            var client = new LlmClient(delegate { return "key"; }, delegate { return bytes; });
-            var method = typeof(LlmClient).GetMethod("ToApiMessages", BindingFlags.Instance | BindingFlags.NonPublic);
-            var payload = method.Invoke(client, new object[]
-            {
-                new[] { new ChatMessage { Role = "user", Content = "Что на фото?", Attachments = new List<ChatAttachment> { attachment } } }
-            });
+            var payload = new LlmMessageBuilder(delegate { return bytes; }).Build(
+                new[] { new ChatMessage { Role = "user", Content = "Что на фото?", Attachments = new List<ChatAttachment> { attachment } } },
+                null).Messages;
             var json = JsonConvert.SerializeObject(payload);
             AssertTrue(json.IndexOf("\"type\":\"image_url\"", StringComparison.Ordinal) >= 0, "image content part");
             AssertTrue(json.IndexOf("data:image/jpeg;base64,", StringComparison.Ordinal) >= 0, "image data uri");
@@ -66,12 +62,9 @@ namespace RNAssistant.Harness
                 AssertEqual("audio", attachment.Kind, "wav detected by signature");
                 AssertEqual("audio/wav", attachment.ContentType, "wav content type normalized");
 
-                var client = new LlmClient(delegate { return "key"; }, delegate { return wav; });
-                var method = typeof(LlmClient).GetMethod("ToApiMessages", BindingFlags.Instance | BindingFlags.NonPublic);
-                var payload = method.Invoke(client, new object[]
-                {
-                    new[] { new ChatMessage { Role = "user", Content = "Что в записи?", Attachments = new List<ChatAttachment> { attachment } } }
-                });
+                var payload = new LlmMessageBuilder(delegate { return wav; }).Build(
+                    new[] { new ChatMessage { Role = "user", Content = "Что в записи?", Attachments = new List<ChatAttachment> { attachment } } },
+                    null).Messages;
                 var json = JsonConvert.SerializeObject(payload);
                 AssertContains(json, "\"type\":\"input_audio\"", "audio content part");
                 AssertContains(json, "\"format\":\"wav\"", "audio format");
@@ -159,8 +152,7 @@ namespace RNAssistant.Harness
                 PageTextLengths = new List<int> { 0 },
                 ExtractedText = "[PDF page 1]"
             };
-            var client = new LlmClient(
-                delegate { return "key"; },
+            var builder = new LlmMessageBuilder(
                 null,
                 delegate { return attachment.ExtractedText; },
                 delegate
@@ -175,11 +167,9 @@ namespace RNAssistant.Harness
                         }
                     };
                 });
-            var method = typeof(LlmClient).GetMethod("ToApiMessages", BindingFlags.Instance | BindingFlags.NonPublic);
-            var payload = method.Invoke(client, new object[]
-            {
-                new[] { new ChatMessage { Role = "user", Content = "read", Attachments = new List<ChatAttachment> { attachment } } }
-            });
+            var payload = builder.Build(
+                new[] { new ChatMessage { Role = "user", Content = "read", Attachments = new List<ChatAttachment> { attachment } } },
+                null).Messages;
             AssertContains(JsonConvert.SerializeObject(payload), "\"type\":\"image_url\"", "pdf page image content");
         }
 

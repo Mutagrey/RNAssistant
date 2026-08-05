@@ -4,7 +4,6 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 
@@ -32,7 +31,7 @@ namespace RNAssistant.Office.Services
             AppSettings settings,
             string userText,
             string assistantText,
-            Func<AppSettings, IEnumerable<ChatMessage>, CancellationToken, Task<LlmCompletionResult>> completeAsync,
+            LlmCompletionDelegate completeAsync,
             CancellationToken cancellationToken)
         {
             if (settings == null || completeAsync == null)
@@ -56,7 +55,7 @@ namespace RNAssistant.Office.Services
                     new ChatMessage { Role = "user", Content = instruction + "\n\n" + request }
                 };
 
-            var completion = await completeAsync(CreateTitleSettings(settings), messages, cancellationToken).ConfigureAwait(false);
+            var completion = await completeAsync(CreateTitleSettings(settings), messages, null, null, cancellationToken).ConfigureAwait(false);
             var title = CleanLlmTitle(completion == null ? null : completion.Content);
             return string.IsNullOrWhiteSpace(title)
                 ? BuildFallback(assistantText, userText)
@@ -124,8 +123,7 @@ namespace RNAssistant.Office.Services
 
         private static AppSettings CreateTitleSettings(AppSettings source)
         {
-            var settings = JsonConvert.DeserializeObject<AppSettings>(
-                JsonConvert.SerializeObject(source)) ?? new AppSettings();
+            var settings = source.Clone();
             settings.MaxTokens = 32;
             settings.RequestTimeoutSeconds = Math.Max(
                 30,

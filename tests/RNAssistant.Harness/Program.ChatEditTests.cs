@@ -144,6 +144,7 @@ namespace RNAssistant.Harness
                 delegate(
                     AppSettings settings,
                     IEnumerable<ChatMessage> messages,
+                    LlmRequestOptions requestOptions,
                     Action<LlmStreamUpdate> streamProgress,
                     CancellationToken cancellationToken)
                 {

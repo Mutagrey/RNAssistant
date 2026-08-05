@@ -74,9 +74,9 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Fail("Prompt settings store is read-only.");
             }
 
-            var source = runtimeSettings ?? _loadSettings();
+            var source = runtimeSettings ?? _loadSettings() ?? new AppSettings();
             var settings = dryRun
-                ? JsonConvert.DeserializeObject<AppSettings>(JsonConvert.SerializeObject(source)) ?? new AppSettings()
+                ? source.Clone()
                 : source;
             settings.AgentPrompts = settings.AgentPrompts ?? new AgentPromptSettings();
 

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Newtonsoft.Json;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 
@@ -44,7 +43,7 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             IReadOnlyList<ChatAttachment> attachments)
         {
-            var settings = CloneSettings(source ?? new AppSettings());
+            var settings = (source ?? new AppSettings()).Clone();
             var baseModel = session == null || string.IsNullOrWhiteSpace(session.Model)
                 ? settings.Model
                 : session.Model.Trim();
@@ -153,23 +152,5 @@ namespace RNAssistant.Office.Services
                 .Distinct(StringComparer.OrdinalIgnoreCase);
         }
 
-        private static AppSettings CloneSettings(AppSettings source)
-        {
-            var clone = JsonConvert.DeserializeObject<AppSettings>(JsonConvert.SerializeObject(source)) ?? new AppSettings();
-            clone.CustomHeaders = new Dictionary<string, string>(
-                clone.CustomHeaders ?? new Dictionary<string, string>(),
-                StringComparer.OrdinalIgnoreCase);
-            clone.ModelImageSupportOverrides = new Dictionary<string, bool?>(
-                clone.ModelImageSupportOverrides ?? new Dictionary<string, bool?>(),
-                StringComparer.OrdinalIgnoreCase);
-            clone.ModelAudioSupportOverrides = new Dictionary<string, bool?>(
-                clone.ModelAudioSupportOverrides ?? new Dictionary<string, bool?>(),
-                StringComparer.OrdinalIgnoreCase);
-            clone.ModelCapabilities = new Dictionary<string, ModelCapabilitySettings>(
-                clone.ModelCapabilities ?? new Dictionary<string, ModelCapabilitySettings>(),
-                StringComparer.OrdinalIgnoreCase);
-            clone.AttachmentModelPriority = clone.AttachmentModelPriority ?? new List<string>();
-            return clone;
-        }
     }
 }

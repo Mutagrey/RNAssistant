@@ -33,7 +33,7 @@ namespace RNAssistant.Harness
                 "data: " + new JObject { ["choices"] = new JArray(new JObject { ["delta"] = new JObject { ["content"] = decision.Substring(split) } }), ["usage"] = new JObject { ["prompt_tokens"] = 10, ["completion_tokens"] = 5, ["total_tokens"] = 15, ["completion_tokens_details"] = new JObject { ["reasoning_tokens"] = 2 } } }.ToString(Formatting.None) + "\\n\\n" +
                 "data: [DONE]\\n\\n";
 
-            var result = LlmClient.ParseStreamingResponse(sse.Replace("\\n", "\n"));
+            var result = LlmResponseParser.ParseStreamingResponse(sse.Replace("\\n", "\n"));
 
             AssertTrue(new AgentPlannerResponseParser().Parse(result.Content).Success, "stream strict planner JSON");
             AssertEqual("Check range. Use tool.", result.ReasoningContent, "stream reasoning");
@@ -49,7 +49,7 @@ namespace RNAssistant.Harness
                 "data: {\"choices\":[{\"delta\":{\"content\":\" range.</thi\"}}]}\n\n" +
                 "data: " + new JObject { ["choices"] = new JArray(new JObject { ["delta"] = new JObject { ["content"] = "nk>" + decision } }), ["usage"] = new JObject { ["output_tokens_details"] = new JObject { ["reasoning_tokens"] = 7 } } }.ToString(Formatting.None) + "\n\n" +
                 "data: [DONE]\n\n";
-            var thinkResult = LlmClient.ParseStreamingResponse(thinkStream, updates.Add);
+            var thinkResult = LlmResponseParser.ParseStreamingResponse(thinkStream, updates.Add);
             AssertEqual("Inspect range.", thinkResult.ReasoningContent, "split think stream reasoning");
             AssertTrue(new AgentPlannerResponseParser().Parse(thinkResult.Content).Success, "split think stream planner JSON");
             AssertEqual("Inspect range.", string.Concat(updates.Select(item => item.ReasoningDelta)), "think reasoning progress");
@@ -59,7 +59,7 @@ namespace RNAssistant.Harness
             updates.Clear();
             using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(thinkStream)))
             {
-                var sniffedResult = LlmClient.ReadStreamingOrJsonResponseAsync(
+                var sniffedResult = LlmResponseParser.ReadStreamingOrJsonResponseAsync(
                     stream,
                     updates.Add,
                     CancellationToken.None).GetAwaiter().GetResult();
@@ -72,16 +72,17 @@ namespace RNAssistant.Harness
             using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(
                 "{\"choices\":[{\"message\":{\"content\":\"ordinary json\"}}]}")))
             {
-                var jsonResult = LlmClient.ReadStreamingOrJsonResponseAsync(
+                var jsonResult = LlmResponseParser.ReadStreamingOrJsonResponseAsync(
                     stream,
                     updates.Add,
                     CancellationToken.None).GetAwaiter().GetResult();
                 AssertEqual("ordinary json", jsonResult.Content, "stream request accepts ordinary json fallback");
-                AssertEqual(0, updates.Count, "ordinary json fallback has no false stream progress");
+                AssertEqual(1, updates.Count, "ordinary json fallback reports completion only");
+                AssertTrue(updates[0].Completed, "ordinary json fallback completion progress");
             }
 
             updates.Clear();
-            var duplicateResult = LlmClient.ParseStreamingResponse(
+            var duplicateResult = LlmResponseParser.ParseStreamingResponse(
                 "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"same\",\"content\":\"<think>same</think>Done\"}}]}\n\ndata: [DONE]\n\n",
                 updates.Add);
             AssertEqual("same", duplicateResult.ReasoningContent, "stream metadata reasoning priority");
@@ -101,7 +102,7 @@ namespace RNAssistant.Harness
                     }
                 }
             };
-            var oversizedStream = LlmClient.ParseStreamingResponse(
+            var oversizedStream = LlmResponseParser.ParseStreamingResponse(
                 "data: " + oversizedChunk.ToString(Formatting.None) + "\n\ndata: [DONE]\n\n");
             AssertEqual(100000, oversizedStream.ReasoningContent.Length, "stream reasoning storage limit");
             AssertTrue(oversizedStream.ReasoningTruncated, "stream reasoning truncation flag");
@@ -111,27 +112,27 @@ namespace RNAssistant.Harness
         private static void LlmReasoningMetadataIsSeparated()
         {
             var decision = FinalBlock("ok");
-            var result = LlmClient.ParseStreamingResponse(
+            var result = LlmResponseParser.ParseStreamingResponse(
                 "data: " + new JObject { ["choices"] = new JArray(new JObject { ["delta"] = new JObject { ["reasoning_content"] = "check facts", ["content"] = decision } }) }.ToString(Formatting.None) + "\n\ndata: [DONE]\n\n");
             AssertEqual("check facts", result.ReasoningContent, "reasoning metadata");
             AssertTrue(new AgentPlannerResponseParser().Parse(result.Content).Success, "decision content");
 
-            var embeddedThink = LlmClient.ParseCompletionResponse(
+            var embeddedThink = LlmResponseParser.ParseCompletionResponse(
                 new JObject { ["choices"] = new JArray(new JObject { ["message"] = new JObject { ["reasoning_content"] = "provider reasoning", ["content"] = "\n<think>duplicate</think>" + decision } }) }.ToString(Formatting.None));
             AssertEqual("provider reasoning", embeddedThink.ReasoningContent, "provider reasoning preserved");
             AssertTrue(new AgentPlannerResponseParser().Parse(embeddedThink.Content).Success, "duplicate think removed from planner content");
 
-            var thinkOnly = LlmClient.ParseCompletionResponse(
+            var thinkOnly = LlmResponseParser.ParseCompletionResponse(
                 "{\"choices\":[{\"message\":{\"content\":\" <think>local reasoning</think>Answer\"}}],\"usage\":{\"reasoning_tokens\":4}}");
             AssertEqual("local reasoning", thinkOnly.ReasoningContent, "leading think extracted");
             AssertEqual("Answer", thinkOnly.Content, "answer remains after think");
             AssertEqual(4, thinkOnly.ReasoningTokens.Value, "root reasoning token alias");
 
-            var literalThink = LlmClient.ParseCompletionResponse(
+            var literalThink = LlmResponseParser.ParseCompletionResponse(
                 "{\"choices\":[{\"message\":{\"content\":\"Answer with <think>literal</think> markup\"}}]}");
             AssertEqual("Answer with <think>literal</think> markup", literalThink.Content, "non-leading think preserved");
 
-            var unclosedThink = LlmClient.ParseCompletionResponse(
+            var unclosedThink = LlmResponseParser.ParseCompletionResponse(
                 "{\"choices\":[{\"message\":{\"content\":\"<think>unfinished reasoning\"}}]}");
             AssertEqual("unfinished reasoning", unclosedThink.ReasoningContent, "unclosed think treated as reasoning");
             AssertEqual(string.Empty, unclosedThink.Content, "unclosed think has no final content");
@@ -149,7 +150,7 @@ namespace RNAssistant.Harness
                     }
                 }
             };
-            var truncated = LlmClient.ParseCompletionResponse(oversized.ToString(Formatting.None));
+            var truncated = LlmResponseParser.ParseCompletionResponse(oversized.ToString(Formatting.None));
             AssertEqual(100000, truncated.ReasoningContent.Length, "reasoning storage limit");
             AssertTrue(truncated.ReasoningTruncated, "reasoning truncation flag");
             AssertEqual("ok", truncated.Content, "content survives reasoning truncation");
@@ -183,7 +184,7 @@ namespace RNAssistant.Harness
             };
             try
             {
-                LlmClient.ParseCompletionResponse(response.ToString(Formatting.None));
+                LlmResponseParser.ParseCompletionResponse(response.ToString(Formatting.None));
                 throw new InvalidOperationException("content parts were accepted");
             }
             catch (InvalidOperationException ex)
@@ -215,7 +216,7 @@ namespace RNAssistant.Harness
                     }
                 }
             };
-            var nativeCall = LlmClient.ParseCompletionResponse(nativeCallResponse.ToString(Formatting.None));
+            var nativeCall = LlmResponseParser.ParseCompletionResponse(nativeCallResponse.ToString(Formatting.None));
             AssertEqual("empty_response", new AgentPlannerResponseParser().Parse(nativeCall.Content).ErrorCode, "text parser does not infer native calls");
         }
 
@@ -231,6 +232,7 @@ namespace RNAssistant.Harness
                     delegate(
                         AppSettings settings,
                         IEnumerable<ChatMessage> messages,
+                        LlmRequestOptions requestOptions,
                         Action<LlmStreamUpdate> streamProgress,
                         CancellationToken cancellationToken)
                     {
@@ -269,7 +271,7 @@ namespace RNAssistant.Harness
         {
             try
             {
-                LlmClient.ParseCompletionResponse("{\"error\":{\"message\":\"model unavailable\"}}");
+                LlmResponseParser.ParseCompletionResponse("{\"error\":{\"message\":\"model unavailable\"}}");
                 throw new InvalidOperationException("missing message response was accepted");
             }
             catch (InvalidOperationException ex)
@@ -280,7 +282,7 @@ namespace RNAssistant.Harness
 
             try
             {
-                LlmClient.ParseCompletionResponse("not-json");
+                LlmResponseParser.ParseCompletionResponse("not-json");
                 throw new InvalidOperationException("invalid JSON response was accepted");
             }
             catch (InvalidOperationException ex)
@@ -290,7 +292,7 @@ namespace RNAssistant.Harness
 
             try
             {
-                LlmClient.ParseStreamingResponse("data: not-json\n\n");
+                LlmResponseParser.ParseStreamingResponse("data: not-json\n\n");
                 throw new InvalidOperationException("invalid stream chunk was accepted");
             }
             catch (InvalidOperationException ex)
@@ -307,7 +309,7 @@ namespace RNAssistant.Harness
                 var service = new ChatCompletionService(
                     adapter,
                     executor,
-                    delegate(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
+                    delegate(AppSettings settings, IEnumerable<ChatMessage> messages, LlmRequestOptions requestOptions, Action<LlmStreamUpdate> streamProgress, CancellationToken cancellationToken)
                     {
                         captured = new List<ChatMessage>(messages);
                         return Task.FromResult(new LlmCompletionResult
@@ -371,7 +373,7 @@ namespace RNAssistant.Harness
                 var service = new ChatCompletionService(
                     adapter,
                     executor,
-                    delegate(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
+                    delegate(AppSettings settings, IEnumerable<ChatMessage> messages, LlmRequestOptions requestOptions, Action<LlmStreamUpdate> streamProgress, CancellationToken cancellationToken)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
                         capturedMessages = new List<ChatMessage>(messages ?? new ChatMessage[0]);
@@ -495,7 +497,7 @@ namespace RNAssistant.Harness
                 new AppSettings(),
                 "Нужно сделать отчет по продажам.",
                 "Отчет по продажам создан и сохранен.",
-                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
+                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, LlmRequestOptions requestOptions, Action<LlmStreamUpdate> streamProgress, CancellationToken cancellationToken)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     requestedMessages = new List<ChatMessage>(messages ?? new ChatMessage[0]);

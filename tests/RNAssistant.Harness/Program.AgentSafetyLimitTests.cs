@@ -276,7 +276,7 @@ namespace RNAssistant.Harness
                 var service = new ChatCompletionService(
                     adapter,
                     executor,
-                    delegate(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
+                    delegate(AppSettings settings, IEnumerable<ChatMessage> messages, LlmRequestOptions requestOptions, Action<LlmStreamUpdate> streamProgress, CancellationToken cancellationToken)
                     {
                         calls += 1;
                         return Task.FromResult<LlmCompletionResult>(null);

@@ -11,10 +11,10 @@ namespace RNAssistant.Office.Services
 {
     internal sealed class AgentPlannerCompletionRunner
     {
-        private readonly ChatCompletionService.AgentCompletionDelegate _completeAsync;
+        private readonly LlmCompletionDelegate _completeAsync;
         private readonly AgentPlannerResponseParser _parser;
 
-        public AgentPlannerCompletionRunner(ChatCompletionService.AgentCompletionDelegate completeAsync)
+        public AgentPlannerCompletionRunner(LlmCompletionDelegate completeAsync)
         {
             _completeAsync = completeAsync;
             _parser = new AgentPlannerResponseParser();
