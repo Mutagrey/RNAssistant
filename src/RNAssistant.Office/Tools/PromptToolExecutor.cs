@@ -29,7 +29,7 @@ namespace RNAssistant.Office.Tools
                 "common.prompts_save",
                 "Common",
                 "Mutates settings: Update RNAssistant agent prompt templates after the user asks to edit or improve RNAssistant prompts.",
-                "{\"systemPrompt\":\"\",\"chatSystemPrompt\":\"\",\"systemPromptRole\":\"user|system\",\"toolProtocolPrompt\":\"\",\"toolRoutingPrompt\":\"\",\"forceToolUsePrompt\":\"\",\"repairMalformedToolBlockPrompt\":\"\",\"afterToolResultsPrompt\":\"\",\"verifyMutationPrompt\":\"\",\"confirmedToolContinuationPrompt\":\"\"}",
+                "{\"systemPrompt\":\"\",\"chatSystemPrompt\":\"\",\"systemPromptRole\":\"developer|system|user\",\"toolProtocolPrompt\":\"\",\"toolRoutingPrompt\":\"\",\"forceToolUsePrompt\":\"\",\"repairMalformedToolBlockPrompt\":\"\",\"afterToolResultsPrompt\":\"\",\"verifyMutationPrompt\":\"\",\"confirmedToolContinuationPrompt\":\"\"}",
                 mutatesLocalState: true,
                 requiresConfirmation: true,
                 riskLevel: 1,
@@ -125,9 +125,9 @@ namespace RNAssistant.Office.Tools
 
         private static string NormalizePromptRole(string value)
         {
-            return string.Equals(value, "system", StringComparison.OrdinalIgnoreCase)
-                ? "system"
-                : "user";
+            if (string.Equals(value, "system", StringComparison.OrdinalIgnoreCase)) return "system";
+            if (string.Equals(value, "user", StringComparison.OrdinalIgnoreCase)) return "user";
+            return "developer";
         }
 
     }

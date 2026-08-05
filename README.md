@@ -166,7 +166,6 @@ Runtime data is stored under:
 - `tools` - central editable executable tool library.
 - `skills` - markdown guidance files used by the agent when choosing an approach.
 - `chats` - per-document chat session folders; each chat stores its own context attachments.
-- `contexts` - legacy context folder; current runtime does not migrate old context files.
 
 Settings has `Clear Chats/Data` for development resets. It clears chats, chat context, VBA backups and WebView user data, while keeping settings, saved API key and custom tools and skills.
 
@@ -175,7 +174,7 @@ Word, Excel and PowerPoint documents are identified by a custom document propert
 ## Tool Protocol
 
 The API is OpenAI-compatible chat completions: `/v1/chat/completions`.
-Endpoint compatibility details are in `docs/model-endpoint-compatibility.md`.
+Endpoint compatibility details are in `docs/model-endpoint-compatibility.md`; the full wire/runtime contract is in `docs/agent-decision-protocol.md`.
 
 Each chat stores an explicit execution mode:
 
@@ -183,35 +182,36 @@ Each chat stores an explicit execution mode:
 - `Auto` deterministically chooses Chat or Agent before the model request.
 - `Agent` uses the local planner/tool loop. HTML workspace mode always uses Agent.
 
-Editable Chat/Agent instructions use the `user` role by default for compatibility with endpoints that constrain long `system` messages. The Prompts settings page can switch the role to `system`.
+Editable Chat/Agent instructions use `developer` by default. The Prompts settings page can switch the role to `system` or `user`.
 
-Native tool calling is not required. In Agent mode, the model is a controlled planner and must return exactly one JSON object, without markdown or prose:
+In Agent mode the model returns one `AgentDecision v1` object. One model turn contains at most one tool call:
 
 ```json
 {
-  "kind": "tool_plan",
-  "intent": "read",
-  "message": null,
-  "steps": [
-    {
-      "toolId": "excel.read_range",
-      "arguments": { "address": "A1:D20" },
-      "reason": "Need table values before editing."
-    }
-  ],
-  "expectedOutcome": "Read selected table data."
+  "protocolVersion": 1,
+  "kind": "tool",
+  "decisionSummary": "Read the table before editing.",
+  "goal": null,
+  "plan": null,
+  "tool": {
+    "toolId": "excel.read_range",
+    "arguments": { "address": "A1:D20" }
+  },
+  "message": null
 }
 ```
 
-Final/clarifying answers use the same envelope with `kind` set to `final`, `clarify`, or `cannot_do`; `steps` may be an empty array, `null`, or omitted. Only `tool_plan` requires a non-empty `steps` array. The runtime routes the user request, slices the tool catalog, validates the planner response, gates risk/confirmation, executes tools, normalizes observations, and runs deterministic verification for mutations.
+The other decisions are `plan`, `clarify`, `final`, and `cannot_complete`. The response is exactly one raw object: Markdown fences, surrounding prose, alternate envelopes and multiple calls are rejected. `decisionSummary` is a short observable action summary, not chain-of-thought; provider reasoning is stored separately when present.
 
-The controlled agent loop accepts a strict planner JSON object in assistant text. A single clean `json` code fence is unwrapped for weak-model compatibility; prose around JSON, other fence types, legacy envelopes, content-part arrays, native `tool_calls`, and `function_call` are rejected. One bounded repair request is made for malformed output.
+Settings provides three API modes: strict `json_schema` by default, `json_object + prompt`, and OpenAI-compatible `native_tool_calls + json_schema`. The first mode falls back to `json_object` only before any tool has executed. Tool results use `role: tool` by default with a matching assistant `tool_calls` entry and `tool_call_id`; endpoints without tool-history support can receive the normalized result as `developer` or `user` instead.
+
+The runtime routes the request, slices the tool catalog, validates the decision and arguments against formal JSON Schema, gates risk/confirmation, executes locally, normalizes observations, and runs deterministic verification for mutations. Custom tools without a formal object JSON Schema are rejected.
 
 Routing happens before Office context capture. General questions receive an empty tool catalog and do not read the active document. Document-dependent requests use explicit read tools; mutations inspect first only when the route marks the target as unknown or risky.
 
 In Agent mode, tools are available only when selected by the deterministic router and current phase. Level 2/3 or confirmation-required actions pause for user confirmation unless `Auto-confirm tool actions` is enabled. Confirmed tools can continue the same run.
-If a route requires a tool but filtering leaves no available tool, the runtime records a local diagnostic before calling the model.
-Agent plan activity stores routing diagnostics: route reason, selected tool ids, exclusion counts, and bounded per-tool exclusion details. Tool selection keeps mutation and inspection capabilities balanced; `Tools in one planner prompt` controls the bounded catalog size.
+If a route requires a tool but filtering leaves no available tool, the runtime records a local diagnostic without calling the model.
+Decision activities store routing diagnostics: route reason, selected tool ids, exclusion counts, and bounded per-tool exclusion details. Tool selection keeps mutation and inspection capabilities balanced; `Tools in one planner prompt` controls the bounded catalog size.
 Pipeline safety is resolved recursively before execution. Nested document/local mutations, risk, confirmation requirements, invalid references, and cycles cannot be hidden by incorrect top-level metadata.
 After a document mutation, only a new verification observation can complete the route; an earlier inspection does not count as verification.
 
@@ -238,11 +238,13 @@ Each tool is a folder with editable files:
 tools/<host>/<tool-name>/
   tool.json
   pipeline.json
-  code.vba
+  src/
+    EntryModule.bas
+    SupportingClass.cls
   README.md
 ```
 
-`tool.json` contains metadata shown to the LLM and the task pane. `pipeline.json` can call existing built-in tools in sequence. `code.vba` is kept as editable executor/source code for VBA-backed tools.
+`tool.json` contains metadata shown to the LLM and the task pane. `pipeline.json` can call existing built-in tools in sequence. VBA packages keep each standard/class component in `src/*.bas` or `src/*.cls`; their complete contract is documented in `docs/vba-tool-packages.md`.
 Tools marked `requiresConfirmation` require manual Run or the `Auto-confirm tool actions` setting.
 Tool and skill updates are written per item and atomically; unrelated hosts, unrecognized entries, and additional user files are not removed.
 
@@ -265,10 +267,9 @@ Each pipeline step must set `toolId`; step `id` values must be unique. `id` is o
 
 The Tools tab can run a selected tool with ad hoc JSON arguments. `Dry Run` resolves the planned calls without changing the Office document. `Run` is treated as explicit user confirmation.
 
-For Excel, Word, and PowerPoint, `executor: "vba"` inserts `code.vba` through the current host `insert_vba_module`; if the run arguments include `macroName`, it then calls the current host `run_macro`.
-Agent-generated executable code should be VBA for the current Office host.
+For Excel, Word, and PowerPoint, `executor: "vba"` uses a strict comment manifest and a `Public Function ... As String` entry point with typed positional arguments. A global package is injected for one run and cleaned in `finally`; explicit persistent installation is allowed only in macro-enabled documents. RNAssistant also discovers valid document-local tools through the VBA project object model. Both paths require Trust Access to the VBA project object model.
 
-Agent mode can also use `common.tools_list`, `common.tools_read`, `common.tools_validate`, `common.tools_save`, and `common.tools_delete` to manage custom tools. Save/delete requires confirmation unless auto-confirm is enabled. Pipeline tools are validated before save; VBA tools must include code. Built-in and controller tool ids are reserved and cannot be shadowed by custom tools.
+Agent mode can also use `common.tools_list`, `common.tools_read`, `common.tools_validate`, `common.tools_save`, and `common.tools_delete` to manage custom tools. Save/delete requires confirmation unless auto-confirm is enabled. Pipeline and VBA packages are validated before save. Built-in and controller tool ids are reserved and cannot be shadowed by custom tools. VBA authoring rules are available to the model through `common.vba_tool_authoring`.
 
 ## Skill Library
 
@@ -309,13 +310,13 @@ In chat, ask for the desired Office action in normal language. For example:
 
 `Создай новый лист Sales Demo, сгенерируй таблицу продаж по месяцам и построй линейный график.`
 
-The model responds with the strict planner JSON envelope. The runtime may execute ordered `toolId` calls such as `excel.add_sheet`, `excel.write_table`, and `excel.add_chart` only after router slicing, validation, risk gating, and confirmation checks. Recoverable tool failures are recorded as observations and the planner can choose a corrected next step.
+The model responds with one AgentDecision v1 per turn. The runtime may execute tools such as `excel.add_sheet`, `excel.write_table`, and `excel.add_chart` sequentially after router slicing, schema validation, risk gating, and confirmation checks. Recoverable failures are recorded as observations so the model can choose a corrected next action.
 
 Use the Tools tab to create or edit reusable tools:
 
 - `New Tool` creates an editable custom tool.
 - `Pipeline JSON` defines ordered calls to existing tools.
-- `VBA / executor code` stores executable VBA source for `executor: "vba"`.
+- `VBA components` edits the `.bas`/`.cls` sources of an `executor: "vba"` package.
 - `Dry Run` previews execution without changing the document.
 - `Run` executes the selected tool and counts as explicit user confirmation.
 - `Edit in Chat` sends the selected tool definition and code to the LLM for improvement.

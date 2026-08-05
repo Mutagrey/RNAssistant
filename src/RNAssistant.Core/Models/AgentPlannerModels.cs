@@ -3,22 +3,19 @@ using System.Collections.Generic;
 
 namespace RNAssistant.Core.Models
 {
-    public static class AgentResponseKinds
+    public static class AgentDecisionProtocol
     {
-        public const string ToolPlan = "tool_plan";
-        public const string Final = "final";
-        public const string Clarify = "clarify";
-        public const string CannotDo = "cannot_do";
+        public const int Version = 1;
+        public const string SchemaName = "rnassistant_agent_decision_v1";
     }
 
-    public static class AgentIntents
+    public static class AgentResponseKinds
     {
-        public const string Read = "read";
-        public const string Analyze = "analyze";
-        public const string Mutate = "mutate";
-        public const string Verify = "verify";
-        public const string Answer = "answer";
+        public const string Plan = "plan";
+        public const string Tool = "tool";
         public const string Clarify = "clarify";
+        public const string Final = "final";
+        public const string CannotComplete = "cannot_complete";
     }
 
     public static class AgentPhases
@@ -31,16 +28,26 @@ namespace RNAssistant.Core.Models
 
     public sealed class AgentPlannerResponse
     {
+        public int ProtocolVersion { get; set; }
         public string Kind { get; set; }
-        public string Intent { get; set; }
+        public string DecisionSummary { get; set; }
+        public string Goal { get; set; }
+        public List<AgentPlanStep> Plan { get; set; }
+        public AgentPlannerStep Tool { get; set; }
         public string Message { get; set; }
-        public List<AgentPlannerStep> Steps { get; set; }
-        public string ExpectedOutcome { get; set; }
 
         public AgentPlannerResponse()
         {
-            Steps = new List<AgentPlannerStep>();
+            ProtocolVersion = AgentDecisionProtocol.Version;
+            Plan = new List<AgentPlanStep>();
         }
+    }
+
+    public sealed class AgentPlanStep
+    {
+        public string Id { get; set; }
+        public string Title { get; set; }
+        public string Status { get; set; }
     }
 
     public sealed class AgentPlannerStep
@@ -48,6 +55,7 @@ namespace RNAssistant.Core.Models
         public string ToolId { get; set; }
         public Dictionary<string, object> Arguments { get; set; }
         public string Reason { get; set; }
+        public string ToolCallId { get; set; }
 
         public AgentPlannerStep()
         {
@@ -68,19 +76,12 @@ namespace RNAssistant.Core.Models
 
         public static AgentPlannerParseResult Ok(AgentPlannerResponse response)
         {
-            return new AgentPlannerParseResult
-            {
-                Response = response
-            };
+            return new AgentPlannerParseResult { Response = response };
         }
 
         public static AgentPlannerParseResult Fail(string code, string message)
         {
-            return new AgentPlannerParseResult
-            {
-                ErrorCode = code,
-                ErrorMessage = message
-            };
+            return new AgentPlannerParseResult { ErrorCode = code, ErrorMessage = message };
         }
     }
 }

@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Tools
 {
@@ -28,8 +29,8 @@ namespace RNAssistant.Office.Tools
 
             yield return ControllerToolDefinition.Create("common.tools_list", "Common", "Read-only: List custom executable RNAssistant tools visible to the current Office host.", "{}");
             yield return ControllerToolDefinition.Create("common.tools_read", "Common", "Read-only: Read one custom RNAssistant tool by id, including metadata, README, pipeline, and VBA code.", "{\"id\":\"excel.my_tool\"}");
-            yield return ControllerToolDefinition.Create("common.tools_validate", "Common", "Read-only: Validate a custom RNAssistant pipeline or VBA tool payload without saving it.", "{\"id\":\"excel.my_tool\",\"host\":\"Excel\",\"name\":\"My tool\",\"description\":\"What it does\",\"argumentSchemaJson\":\"{}\",\"executor\":\"pipeline\",\"pipelineJson\":\"{\\\"steps\\\":[{\\\"toolId\\\":\\\"excel.list_sheets\\\",\\\"arguments\\\":{}}]}\",\"code\":\"\",\"readme\":\"markdown\",\"enabled\":true,\"requiresConfirmation\":true,\"mutatesDocument\":true,\"mutatesLocalState\":false,\"agentCanRun\":false,\"riskLevel\":2}");
-            yield return ControllerToolDefinition.Create("common.tools_save", "Common", "Mutates settings: Create or update a custom RNAssistant pipeline or VBA tool.", "{\"id\":\"excel.my_tool\",\"host\":\"Excel\",\"name\":\"My tool\",\"description\":\"What it does\",\"argumentSchemaJson\":\"{}\",\"executor\":\"pipeline\",\"pipelineJson\":\"{\\\"steps\\\":[{\\\"toolId\\\":\\\"excel.list_sheets\\\",\\\"arguments\\\":{}}]}\",\"code\":\"\",\"readme\":\"markdown\",\"enabled\":true,\"requiresConfirmation\":true,\"mutatesDocument\":true,\"mutatesLocalState\":false,\"agentCanRun\":false,\"riskLevel\":2}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
+            yield return ControllerToolDefinition.Create("common.tools_validate", "Common", "Read-only: Validate a custom RNAssistant pipeline or manifest-based VBA package without saving it.", "{\"id\":\"excel.my_tool\",\"host\":\"Excel\",\"name\":\"My tool\",\"description\":\"What it does\",\"argumentSchemaJson\":\"{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{},\\\"required\\\":[],\\\"additionalProperties\\\":false}\",\"executor\":\"pipeline\",\"pipelineJson\":\"{\\\"steps\\\":[{\\\"toolId\\\":\\\"excel.list_sheets\\\",\\\"arguments\\\":{}}]}\",\"code\":\"\",\"componentsJson\":\"[]\",\"readme\":\"markdown\",\"enabled\":true,\"requiresConfirmation\":true,\"mutatesDocument\":true,\"mutatesLocalState\":false,\"agentCanRun\":false,\"riskLevel\":2}");
+            yield return ControllerToolDefinition.Create("common.tools_save", "Common", "Mutates settings: Create or update a custom RNAssistant pipeline or manifest-based VBA package.", "{\"id\":\"excel.my_tool\",\"host\":\"Excel\",\"name\":\"My tool\",\"description\":\"What it does\",\"argumentSchemaJson\":\"{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{},\\\"required\\\":[],\\\"additionalProperties\\\":false}\",\"executor\":\"pipeline\",\"pipelineJson\":\"{\\\"steps\\\":[{\\\"toolId\\\":\\\"excel.list_sheets\\\",\\\"arguments\\\":{}}]}\",\"code\":\"\",\"componentsJson\":\"[]\",\"readme\":\"markdown\",\"enabled\":true,\"requiresConfirmation\":true,\"mutatesDocument\":true,\"mutatesLocalState\":false,\"agentCanRun\":false,\"riskLevel\":2}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
             yield return ControllerToolDefinition.Create("common.tools_delete", "Common", "Mutates settings: Delete a custom RNAssistant tool by id.", "{\"id\":\"excel.my_tool\"}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
         }
 
@@ -83,8 +84,7 @@ namespace RNAssistant.Office.Tools
                 agentCanRun = t.AgentCanRun,
                 riskLevel = t.RiskLevel,
                 capabilityStatus = t.CapabilityStatus,
-                limitations = t.Limitations,
-                replacementToolId = t.ReplacementToolId
+                limitations = t.Limitations
             }).ToArray();
             return ToolResult.Ok("Custom tools listed.", JsonConvert.SerializeObject(tools));
         }
@@ -169,7 +169,7 @@ namespace RNAssistant.Office.Tools
                 Host = ToolArgumentReader.String(command.Arguments, "host", DefaultHostFromId(id)),
                 Name = ToolArgumentReader.String(command.Arguments, "name", id),
                 Description = ToolArgumentReader.String(command.Arguments, "description", string.Empty),
-                ArgumentSchemaJson = ToolArgumentReader.String(command.Arguments, "argumentSchemaJson", ToolArgumentReader.String(command.Arguments, "schema", "{}")),
+                ArgumentSchemaJson = ToolArgumentReader.String(command.Arguments, "argumentSchemaJson", ToolArgumentReader.String(command.Arguments, "schema", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}")),
                 Executor = ToolArgumentReader.String(command.Arguments, "executor", "pipeline"),
                 PipelineJson = ToolArgumentReader.String(command.Arguments, "pipelineJson", ToolArgumentReader.String(command.Arguments, "pipeline", string.Empty)),
                 Code = ToolArgumentReader.String(command.Arguments, "code", string.Empty),
@@ -184,12 +184,30 @@ namespace RNAssistant.Office.Tools
                 UseWhen = ToolArgumentReader.String(command.Arguments, "useWhen", string.Empty),
                 DoNotUseWhen = ToolArgumentReader.String(command.Arguments, "doNotUseWhen", string.Empty),
                 ExamplesJson = ToolArgumentReader.String(command.Arguments, "examplesJson", string.Empty),
-                PreconditionsJson = ToolArgumentReader.String(command.Arguments, "preconditionsJson", string.Empty),
                 VerifyJson = ToolArgumentReader.String(command.Arguments, "verifyJson", string.Empty),
                 CapabilityStatus = ToolArgumentReader.String(command.Arguments, "capabilityStatus", "available"),
                 Limitations = ToolArgumentReader.String(command.Arguments, "limitations", string.Empty),
-                ReplacementToolId = ToolArgumentReader.String(command.Arguments, "replacementToolId", string.Empty)
+                Components = ReadComponents(ToolArgumentReader.String(command.Arguments, "componentsJson", "[]"))
             };
+        }
+
+        private static List<VbaToolComponent> ReadComponents(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return new List<VbaToolComponent>();
+            try
+            {
+                return JArray.Parse(json).OfType<JObject>().Select(component => new VbaToolComponent
+                {
+                    Name = (string)component["name"],
+                    Type = (string)component["type"],
+                    FileName = (string)component["fileName"],
+                    Code = (string)component["code"] ?? string.Empty
+                }).ToList();
+            }
+            catch (JsonException)
+            {
+                return new List<VbaToolComponent>();
+            }
         }
 
         private static int ReadInt(ToolCommand command, string name, int fallback)
@@ -231,16 +249,11 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Fail("Tool executor must be pipeline or vba.");
             }
 
-            try
+            JObject normalizedSchema;
+            string schemaError;
+            if (!ToolSchemaSupport.TryNormalize(tool, out normalizedSchema, out schemaError))
             {
-                if (!(JToken.Parse(string.IsNullOrWhiteSpace(tool.ArgumentSchemaJson) ? "{}" : tool.ArgumentSchemaJson) is JObject))
-                {
-                    return ToolResult.Fail("argumentSchemaJson must be a JSON object.");
-                }
-            }
-            catch (JsonException ex)
-            {
-                return ToolResult.Fail("Invalid argumentSchemaJson: " + ex.Message);
+                return ToolResult.Fail(schemaError, null, "invalid_tool_schema", false);
             }
 
             if (executor == "pipeline")
@@ -256,6 +269,71 @@ namespace RNAssistant.Office.Tools
             if (executor == "vba" && string.IsNullOrWhiteSpace(tool.Code))
             {
                 return ToolResult.Fail("VBA tool requires code.");
+            }
+
+            if (executor == "vba")
+            {
+                var manifest = new VbaToolManifestParser().Parse(tool.Code);
+                if (!manifest.Success)
+                {
+                    return ToolResult.Fail(manifest.ErrorMessage, null, manifest.ErrorCode, false);
+                }
+                if (!string.Equals(tool.Id, manifest.Tool.Id, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(tool.Host, manifest.Tool.Host, StringComparison.OrdinalIgnoreCase))
+                {
+                    return ToolResult.Fail("tool.json id/host must match the VBA manifest.", null, "vba_manifest_metadata_mismatch", false);
+                }
+                tool.Name = manifest.Tool.Name;
+                tool.Description = manifest.Tool.Description;
+                tool.ArgumentSchemaJson = manifest.Tool.ArgumentSchemaJson;
+                tool.EntryPoint = manifest.Tool.EntryPoint;
+                tool.PackageVersion = manifest.Tool.PackageVersion;
+                tool.ArgumentOrder = manifest.Tool.ArgumentOrder;
+                tool.MutatesDocument = manifest.Tool.MutatesDocument;
+                tool.AgentCanRun = manifest.Tool.AgentCanRun;
+                tool.RequiresConfirmation = manifest.Tool.RequiresConfirmation;
+                tool.RiskLevel = manifest.Tool.RiskLevel;
+                if (tool.Components == null || tool.Components.Count == 0)
+                {
+                    tool.Components = manifest.Tool.Components;
+                }
+                var declared = new HashSet<string>(manifest.Tool.Components.Select(component => component.Name), StringComparer.OrdinalIgnoreCase);
+                var components = (tool.Components ?? new List<VbaToolComponent>()).Where(component => component != null).ToList();
+                var duplicate = components.Where(component => !string.IsNullOrWhiteSpace(component.Name))
+                    .GroupBy(component => component.Name, StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault(group => group.Count() > 1);
+                if (duplicate != null)
+                {
+                    return ToolResult.Fail("VBA package contains a duplicate component: " + duplicate.Key, null, "vba_component_duplicate", false);
+                }
+                var invalid = components.FirstOrDefault(component =>
+                    !VbaToolManifestParser.ValidIdentifier(component.Name) ||
+                    (!string.Equals(component.Type, "StdModule", StringComparison.OrdinalIgnoreCase) &&
+                     !string.Equals(component.Type, "ClassModule", StringComparison.OrdinalIgnoreCase)));
+                if (invalid != null)
+                {
+                    return ToolResult.Fail("VBA package component name/type is invalid: " + (invalid.Name ?? string.Empty), null, "vba_component_invalid", false);
+                }
+                var unexpected = components.FirstOrDefault(component => !declared.Contains(component.Name));
+                if (unexpected != null)
+                {
+                    return ToolResult.Fail("VBA package contains an undeclared component: " + unexpected.Name, null, "vba_component_undeclared", false);
+                }
+                var entryName = manifest.Tool.Components[0].Name;
+                var entry = components.FirstOrDefault(component => string.Equals(component.Name, entryName, StringComparison.OrdinalIgnoreCase));
+                if (entry != null && !string.Equals(entry.Type, "StdModule", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ToolResult.Fail("VBA entry component must be a StdModule: " + entryName, null, "vba_entry_component_type", false);
+                }
+                var supplied = new HashSet<string>(components.Where(component => !string.IsNullOrWhiteSpace(component.Code)).Select(component => component.Name), StringComparer.OrdinalIgnoreCase)
+                {
+                    entryName
+                };
+                var missing = declared.FirstOrDefault(name => !supplied.Contains(name));
+                if (!string.IsNullOrWhiteSpace(missing))
+                {
+                    return ToolResult.Fail("VBA package source is missing declared component: " + missing, null, "vba_component_missing", false);
+                }
             }
 
             return ToolResult.Ok("Tool definition is valid.");

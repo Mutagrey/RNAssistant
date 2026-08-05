@@ -83,6 +83,21 @@ namespace RNAssistant.Office.Tools
                 : validation;
         }
 
+        public ToolResult InstallVbaTool(ToolDefinition tool, bool dryRun)
+        {
+            return _vbaExecutor.InstallCustomTool(tool, false, dryRun);
+        }
+
+        public ToolResult RemoveVbaTool(ToolDefinition tool)
+        {
+            return _vbaExecutor.RemoveCustomTool(tool);
+        }
+
+        public string GetVbaInstallationStatus(ToolDefinition tool)
+        {
+            return _vbaExecutor.GetInstallationStatus(tool);
+        }
+
         private ToolResult ExecuteCommandSafely(ToolCommand command, ToolExecutionContext context, int depth, bool dryRun, bool manualRun, CancellationToken cancellationToken)
         {
             try
@@ -121,6 +136,16 @@ namespace RNAssistant.Office.Tools
             if (!tool.Enabled)
             {
                 return DisabledTool(command.ToolId, context.Tools);
+            }
+            if (!string.IsNullOrWhiteSpace(tool.CapabilityStatus) &&
+                !string.Equals(tool.CapabilityStatus, "available", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(tool.CapabilityStatus, "partial", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Fail(
+                    "Tool is unavailable: " + command.ToolId + ". " + (tool.Limitations ?? tool.CapabilityStatus),
+                    null,
+                    "tool_capability_unavailable",
+                    false);
             }
 
             var customTool = tool != null && !tool.BuiltIn ? tool : null;
@@ -297,7 +322,8 @@ namespace RNAssistant.Office.Tools
         {
             return !string.IsNullOrWhiteSpace(id) &&
                 (_adapterTools.Any(tool => tool != null && string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase)) ||
-                 _controllerExecutors.ContainsKey(id));
+                 _controllerExecutors.ContainsKey(id) ||
+                 _vbaExecutor.IsInternalToolId(id));
         }
 
         private static ToolResult ValidateAuthoredToolId(ToolCommand command, ToolExecutionContext context)

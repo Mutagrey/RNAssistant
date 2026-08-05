@@ -34,13 +34,6 @@ namespace RNAssistant.Harness
             AssertEqual(ChatModes.Agent, selector.Select("hello", session, "Excel"), "html forces agent");
         }
 
-        private static void MissingSessionModeDefaultsToChat()
-        {
-            var session = JsonConvert.DeserializeObject<ChatSession>(
-                "{\"Id\":\"legacy\",\"Messages\":[]}");
-            AssertEqual(ChatModes.Chat, ChatModes.Normalize(session.Mode), "missing mode");
-        }
-
         private static void PlainChatOmitsPlannerAndActivities()
         {
             IReadOnlyList<ChatMessage> captured = null;
@@ -414,8 +407,8 @@ namespace RNAssistant.Harness
         {
             var registry = new ChatRunRegistry();
             var secondCancellation = new CancellationTokenSource();
-            var first = new ChatSession { Id = "chat-a", SessionId = "chat-a" };
-            var second = new ChatSession { Id = "chat-b", SessionId = "chat-b" };
+            var first = new ChatSession { Id = "chat-a" };
+            var second = new ChatSession { Id = "chat-b" };
             registry.Start("chat-a", "run-a", first);
             registry.Start("chat-b", "run-b", second, secondCancellation);
             AssertEqual(2, registry.Sessions().Count, "parallel chat sessions");

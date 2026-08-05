@@ -35,10 +35,11 @@ namespace RNAssistant.Office.Services
                 obj.GetValue("reasoning", StringComparison.OrdinalIgnoreCase) != null;
             var kind = obj.GetValue("kind", StringComparison.OrdinalIgnoreCase);
             var hasPlannerKind = kind != null &&
-                (string.Equals(kind.ToString(), "tool_plan", StringComparison.OrdinalIgnoreCase) ||
+                (string.Equals(kind.ToString(), "tool", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(kind.ToString(), "plan", StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(kind.ToString(), "final", StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(kind.ToString(), "clarify", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(kind.ToString(), "cannot_do", StringComparison.OrdinalIgnoreCase));
+                 string.Equals(kind.ToString(), "cannot_complete", StringComparison.OrdinalIgnoreCase));
             if (!hasInternalField && !hasPlannerKind)
             {
                 return false;

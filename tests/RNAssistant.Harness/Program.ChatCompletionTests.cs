@@ -24,11 +24,13 @@ namespace RNAssistant.Harness
     {
         private static void LlmStreamingResponseIsAggregated()
         {
+            var decision = FinalBlock("ok");
+            var split = decision.Length / 2;
             var sse =
                 "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"Check range. \"}}]}\\n\\n" +
                 "data: {\"choices\":[{\"delta\":{\"reasoning\":\"Use tool.\"}}]}\\n\\n" +
-                "data: {\"choices\":[{\"delta\":{\"content\":\"{\\\"kind\\\":\\\"final\\\",\\\"intent\\\":\\\"answer\\\",\"}}]}\\n\\n" +
-                "data: {\"choices\":[{\"delta\":{\"content\":\"\\\"message\\\":\\\"ok\\\",\\\"steps\\\":[]}\"}}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15,\"completion_tokens_details\":{\"reasoning_tokens\":2}}}\\n\\n" +
+                "data: " + new JObject { ["choices"] = new JArray(new JObject { ["delta"] = new JObject { ["content"] = decision.Substring(0, split) } }) }.ToString(Formatting.None) + "\\n\\n" +
+                "data: " + new JObject { ["choices"] = new JArray(new JObject { ["delta"] = new JObject { ["content"] = decision.Substring(split) } }), ["usage"] = new JObject { ["prompt_tokens"] = 10, ["completion_tokens"] = 5, ["total_tokens"] = 15, ["completion_tokens_details"] = new JObject { ["reasoning_tokens"] = 2 } } }.ToString(Formatting.None) + "\\n\\n" +
                 "data: [DONE]\\n\\n";
 
             var result = LlmClient.ParseStreamingResponse(sse.Replace("\\n", "\n"));
@@ -45,7 +47,7 @@ namespace RNAssistant.Harness
                 "data: {\"choices\":[{\"delta\":{\"content\":\"  <thi\"}}]}\n\n" +
                 "data: {\"choices\":[{\"delta\":{\"content\":\"nk>Inspect\"}}]}\n\n" +
                 "data: {\"choices\":[{\"delta\":{\"content\":\" range.</thi\"}}]}\n\n" +
-                "data: {\"choices\":[{\"delta\":{\"content\":\"nk>{\\\"kind\\\":\\\"final\\\",\\\"intent\\\":\\\"answer\\\",\\\"message\\\":\\\"ok\\\",\\\"steps\\\":[]}\"}}],\"usage\":{\"output_tokens_details\":{\"reasoning_tokens\":7}}}\n\n" +
+                "data: " + new JObject { ["choices"] = new JArray(new JObject { ["delta"] = new JObject { ["content"] = "nk>" + decision } }), ["usage"] = new JObject { ["output_tokens_details"] = new JObject { ["reasoning_tokens"] = 7 } } }.ToString(Formatting.None) + "\n\n" +
                 "data: [DONE]\n\n";
             var thinkResult = LlmClient.ParseStreamingResponse(thinkStream, updates.Add);
             AssertEqual("Inspect range.", thinkResult.ReasoningContent, "split think stream reasoning");
@@ -108,13 +110,14 @@ namespace RNAssistant.Harness
 
         private static void LlmReasoningMetadataIsSeparated()
         {
+            var decision = FinalBlock("ok");
             var result = LlmClient.ParseStreamingResponse(
-                "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"check facts\",\"content\":\"{\\\"kind\\\":\\\"final\\\",\\\"intent\\\":\\\"answer\\\",\\\"message\\\":\\\"ok\\\",\\\"steps\\\":[]}\"}}]}\n\ndata: [DONE]\n\n");
+                "data: " + new JObject { ["choices"] = new JArray(new JObject { ["delta"] = new JObject { ["reasoning_content"] = "check facts", ["content"] = decision } }) }.ToString(Formatting.None) + "\n\ndata: [DONE]\n\n");
             AssertEqual("check facts", result.ReasoningContent, "reasoning metadata");
-            AssertTrue(result.Content.StartsWith("{\"kind\":\"final\"", StringComparison.Ordinal), "planner content");
+            AssertTrue(new AgentPlannerResponseParser().Parse(result.Content).Success, "decision content");
 
             var embeddedThink = LlmClient.ParseCompletionResponse(
-                "{\"choices\":[{\"message\":{\"reasoning_content\":\"provider reasoning\",\"content\":\"\\n<think>duplicate</think>{\\\"kind\\\":\\\"final\\\",\\\"intent\\\":\\\"answer\\\",\\\"message\\\":\\\"ok\\\",\\\"steps\\\":[]}\"}}]}");
+                new JObject { ["choices"] = new JArray(new JObject { ["message"] = new JObject { ["reasoning_content"] = "provider reasoning", ["content"] = "\n<think>duplicate</think>" + decision } }) }.ToString(Formatting.None));
             AssertEqual("provider reasoning", embeddedThink.ReasoningContent, "provider reasoning preserved");
             AssertTrue(new AgentPlannerResponseParser().Parse(embeddedThink.Content).Success, "duplicate think removed from planner content");
 
@@ -213,7 +216,7 @@ namespace RNAssistant.Harness
                 }
             };
             var nativeCall = LlmClient.ParseCompletionResponse(nativeCallResponse.ToString(Formatting.None));
-            AssertEqual("empty_response", new AgentPlannerResponseParser().Parse(nativeCall.Content).ErrorCode, "native tool calls ignored");
+            AssertEqual("empty_response", new AgentPlannerResponseParser().Parse(nativeCall.Content).ErrorCode, "text parser does not infer native calls");
         }
 
         private static void PlainChatForwardsReasoningProgress()
@@ -424,7 +427,7 @@ namespace RNAssistant.Harness
                     "hello world",
                     session,
                     context,
-                    new AppSettings { ContextCharLimit = 8000 },
+                    new AppSettings(),
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -452,7 +455,7 @@ namespace RNAssistant.Harness
                     "Analyze this workbook.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000, IncludeVbaContext = true },
+                    new AppSettings { IncludeVbaContext = true },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -475,7 +478,7 @@ namespace RNAssistant.Harness
                     "Review the VBA macro before changing it.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000, IncludeVbaContext = false },
+                    new AppSettings { IncludeVbaContext = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -489,7 +492,7 @@ namespace RNAssistant.Harness
         {
             var requestedMessages = new List<ChatMessage>();
             var title = ChatTitleBuilder.GenerateLlmTitleAsync(
-                new AppSettings { ContextCharLimit = 8000 },
+                new AppSettings(),
                 "Нужно сделать отчет по продажам.",
                 "Отчет по продажам создан и сохранен.",
                 delegate(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
@@ -537,7 +540,7 @@ namespace RNAssistant.Harness
                     adapter.DocumentKey,
                     adapter.DocumentTitle,
                     draftTitle);
-                var sessionId = ChatStore.GetSessionId(session);
+                var sessionId = session.Id;
                 sessions.SetActiveSession(session);
 
                 using (runs.Start(sessionId, "run-title", session))

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
+using RNAssistant.Core.Llm;
 
 namespace RNAssistant.Core.Models
 {
@@ -21,6 +23,9 @@ namespace RNAssistant.Core.Models
         public string Id { get; set; }
         public string Role { get; set; }
         public string Content { get; set; }
+        public string ToolCallId { get; set; }
+        public string ToolName { get; set; }
+        public List<LlmToolCall> ToolCalls { get; set; }
         public List<ChatAttachment> Attachments { get; set; }
         public ChatActivity Activity { get; set; }
         public int? PromptTokens { get; set; }
@@ -39,6 +44,7 @@ namespace RNAssistant.Core.Models
             Id = Guid.NewGuid().ToString("N");
             CreatedUtc = DateTime.UtcNow;
             Attachments = new List<ChatAttachment>();
+            ToolCalls = new List<LlmToolCall>();
         }
     }
 
@@ -96,8 +102,11 @@ namespace RNAssistant.Core.Models
 
     public sealed class ChatSession
     {
+        public const int CurrentFormatVersion = 1;
+
+        [JsonProperty(Required = Required.Always)]
+        public int FormatVersion { get; set; }
         public string Id { get; set; }
-        public string SessionId { get; set; }
         public string Host { get; set; }
         public string DocumentKey { get; set; }
         public string DocumentTitle { get; set; }
@@ -116,8 +125,8 @@ namespace RNAssistant.Core.Models
 
         public ChatSession()
         {
+            FormatVersion = CurrentFormatVersion;
             Id = Guid.NewGuid().ToString("N");
-            SessionId = Id;
             CreatedUtc = DateTime.UtcNow;
             UpdatedUtc = DateTime.UtcNow;
             Context = new DocumentContext();

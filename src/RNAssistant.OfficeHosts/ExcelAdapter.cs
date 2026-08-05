@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Tools;
@@ -414,6 +415,10 @@ namespace RNAssistant.OfficeHosts
                         return InsertVbaModule(command);
                     case "excel.run_macro":
                         return RunMacro(command);
+                    case "excel.vba_install_package_internal":
+                        return VbaProjectSupport.InstallPackage(RequireWorkbook(), ToolArgumentReader.String(command.Arguments, "componentsJson", "[]"), ToolArgumentReader.String(command.Arguments, "marker", string.Empty));
+                    case "excel.vba_remove_package_internal":
+                        return VbaProjectSupport.RemovePackage(RequireWorkbook(), ToolArgumentReader.String(command.Arguments, "expectedComponentsJson", "{}"), ToolArgumentReader.String(command.Arguments, "expectedMarker", string.Empty));
                     default:
                         return ToolResult.Fail("Unsupported Excel tool: " + command.ToolId);
                 }
@@ -1166,8 +1171,8 @@ namespace RNAssistant.OfficeHosts
                 return ToolResult.Fail("No macroName provided.");
             }
 
-            _application.Run(macroName);
-            return ToolResult.Ok("Macro ran: " + macroName);
+            var output = VbaProjectSupport.RunStringFunction(_application, macroName, ToolArgumentReader.String(command.Arguments, "argumentsJson", "[]"));
+            return ToolResult.Ok("Macro ran: " + macroName, JsonConvert.SerializeObject(new { output = output }));
         }
 
         private Excel.Workbook ActiveWorkbook()
@@ -1433,7 +1438,7 @@ namespace RNAssistant.OfficeHosts
 
         private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0)
         {
-            return new ToolDefinition { Id = id, Host = "Excel", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel };
+            return new ToolDefinition { Id = id, Host = "Excel", Name = id, Description = description, ArgumentSchemaJson = ToolSchemaSupport.FromPropertySamples(schema), BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel };
         }
 
         private static List<List<object>> RangeToRows(Excel.Range range)

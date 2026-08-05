@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Tools;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Storage
@@ -40,8 +42,16 @@ namespace RNAssistant.Core.Storage
                 tool.ArgumentSchemaJson = string.IsNullOrWhiteSpace(tool.ArgumentSchemaJson) ? "{}" : tool.ArgumentSchemaJson;
                 tool.StoragePath = directory;
                 tool.PipelineJson = ReadOptional(Path.Combine(directory, "pipeline.json"), tool.PipelineJson);
-                tool.Code = ReadOptional(Path.Combine(directory, "code.vba"), tool.Code);
+                LoadVbaSources(directory, tool);
                 tool.Readme = ReadOptional(Path.Combine(directory, "README.md"), tool.Readme);
+                JObject schema;
+                string schemaError;
+                if (!ToolSchemaSupport.TryNormalize(tool, out schema, out schemaError) ||
+                    string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(tool.Code))
+                {
+                    continue;
+                }
+                tool.ArgumentSchemaJson = schema.ToString(Formatting.None);
                 result.Add(tool);
             }
 
@@ -132,13 +142,27 @@ namespace RNAssistant.Core.Storage
             var directory = ToolDirectory(tool);
             Directory.CreateDirectory(directory);
 
+            if (string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase) &&
+                (tool.Components == null || tool.Components.Count == 0) &&
+                !string.IsNullOrWhiteSpace(tool.Code))
+            {
+                var parsedManifest = new VbaToolManifestParser().Parse(tool.Code);
+                if (parsedManifest.Success)
+                {
+                    tool.EntryPoint = parsedManifest.Tool.EntryPoint;
+                    tool.PackageVersion = parsedManifest.Tool.PackageVersion;
+                    tool.ArgumentOrder = parsedManifest.Tool.ArgumentOrder;
+                    tool.Components = parsedManifest.Tool.Components;
+                }
+            }
+
             var metadata = new ToolDefinition
             {
                 Id = tool.Id,
                 Host = string.IsNullOrWhiteSpace(tool.Host) ? "Common" : tool.Host,
                 Name = string.IsNullOrWhiteSpace(tool.Name) ? tool.Id : tool.Name,
                 Description = tool.Description ?? string.Empty,
-                ArgumentSchemaJson = string.IsNullOrWhiteSpace(tool.ArgumentSchemaJson) ? "{}" : tool.ArgumentSchemaJson,
+                ArgumentSchemaJson = tool.ArgumentSchemaJson,
                 Executor = string.IsNullOrWhiteSpace(tool.Executor) ? "pipeline" : tool.Executor,
                 RequiresConfirmation = tool.RequiresConfirmation,
                 MutatesDocument = tool.MutatesDocument,
@@ -150,16 +174,25 @@ namespace RNAssistant.Core.Storage
                 UseWhen = tool.UseWhen,
                 DoNotUseWhen = tool.DoNotUseWhen,
                 ExamplesJson = tool.ExamplesJson,
-                PreconditionsJson = tool.PreconditionsJson,
                 VerifyJson = tool.VerifyJson,
                 CapabilityStatus = string.IsNullOrWhiteSpace(tool.CapabilityStatus) ? "available" : tool.CapabilityStatus,
                 Limitations = tool.Limitations,
-                ReplacementToolId = tool.ReplacementToolId
+                PackageVersion = tool.PackageVersion,
+                EntryPoint = tool.EntryPoint,
+                ArgumentOrder = new List<string>(tool.ArgumentOrder ?? new List<string>()),
+                Components = (tool.Components ?? new List<VbaToolComponent>()).Select(component => new VbaToolComponent
+                {
+                    Name = component.Name,
+                    Type = component.Type,
+                    FileName = SourceFileName(component),
+                    CodeSha256 = string.IsNullOrWhiteSpace(component.CodeSha256) ? VbaToolManifestParser.CodeSha256(component.Code) : component.CodeSha256
+                }).ToList(),
+                Scope = "global"
             };
 
             _json.Save(Path.Combine(directory, "tool.json"), metadata);
             WriteOptional(Path.Combine(directory, "pipeline.json"), tool.PipelineJson);
-            WriteOptional(Path.Combine(directory, "code.vba"), tool.Code);
+            WriteVbaSources(directory, tool);
             WriteOptional(Path.Combine(directory, "README.md"), tool.Readme);
         }
 
@@ -196,6 +229,84 @@ namespace RNAssistant.Core.Storage
             }
 
             StorageFileSystem.WriteAllTextAtomic(path, value);
+        }
+
+        private static void LoadVbaSources(string directory, ToolDefinition tool)
+        {
+            tool.Components = tool.Components ?? new List<VbaToolComponent>();
+            var sourceDirectory = Path.Combine(directory, "src");
+            foreach (var component in tool.Components)
+            {
+                if (component == null || !VbaToolManifestParser.ValidIdentifier(component.Name)) continue;
+                component.FileName = SourceFileName(component);
+                var path = Path.Combine(sourceDirectory, component.FileName);
+                component.Code = ReadOptional(path, component.Code);
+                component.CodeSha256 = VbaToolManifestParser.CodeSha256(component.Code);
+            }
+            var entry = tool.Components.FirstOrDefault(component => component != null &&
+                string.Equals(component.Type, "StdModule", StringComparison.OrdinalIgnoreCase) &&
+                (component.Code ?? string.Empty).IndexOf("<RNAssistantTool>", StringComparison.Ordinal) >= 0);
+            if (entry != null)
+            {
+                tool.Code = entry.Code;
+            }
+            else
+            {
+                tool.Code = string.Empty;
+            }
+        }
+
+        private static void WriteVbaSources(string directory, ToolDefinition tool)
+        {
+            if (!string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
+            {
+                StorageFileSystem.TryDeleteDirectory(Path.Combine(directory, "src"));
+                return;
+            }
+
+            if ((tool.Components == null || tool.Components.Count == 0) && !string.IsNullOrWhiteSpace(tool.Code))
+            {
+                var parsed = new VbaToolManifestParser().Parse(tool.Code);
+                if (parsed.Success)
+                {
+                    tool.EntryPoint = parsed.Tool.EntryPoint;
+                    tool.PackageVersion = parsed.Tool.PackageVersion;
+                    tool.ArgumentOrder = parsed.Tool.ArgumentOrder;
+                    tool.Components = parsed.Tool.Components;
+                }
+            }
+            var sourceDirectory = Path.Combine(directory, "src");
+            if (tool.Components != null && tool.Components.Any(component => component != null && !string.IsNullOrWhiteSpace(component.Code)))
+            {
+                Directory.CreateDirectory(sourceDirectory);
+                foreach (var component in tool.Components)
+                {
+                    if (component == null || string.IsNullOrWhiteSpace(component.Code) || !VbaToolManifestParser.ValidIdentifier(component.Name)) continue;
+                    component.FileName = SourceFileName(component);
+                    StorageFileSystem.WriteAllTextAtomic(Path.Combine(sourceDirectory, component.FileName), component.Code);
+                }
+                var expectedFiles = new HashSet<string>(tool.Components
+                    .Where(component => component != null && !string.IsNullOrWhiteSpace(component.Code))
+                    .Select(SourceFileName), StringComparer.OrdinalIgnoreCase);
+                foreach (var existing in Directory.GetFiles(sourceDirectory))
+                {
+                    var extension = Path.GetExtension(existing);
+                    if ((string.Equals(extension, ".bas", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(extension, ".cls", StringComparison.OrdinalIgnoreCase)) &&
+                        !expectedFiles.Contains(Path.GetFileName(existing)))
+                    {
+                        File.Delete(existing);
+                    }
+                }
+                return;
+            }
+            StorageFileSystem.TryDeleteDirectory(sourceDirectory);
+        }
+
+        private static string SourceFileName(VbaToolComponent component)
+        {
+            var extension = string.Equals(component == null ? null : component.Type, "ClassModule", StringComparison.OrdinalIgnoreCase) ? ".cls" : ".bas";
+            return (component == null ? "Module1" : component.Name) + extension;
         }
 
         private static string HostFolder(string host)

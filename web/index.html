@@ -201,12 +201,23 @@
                 <label class="checkline"><input type="checkbox" id="toolConfirmInput"> Требует подтверждения</label>
               </div>
               <label class="wide">Описание<textarea id="toolDescriptionInput" rows="3" placeholder="Описание для модели"></textarea></label>
+              <div class="setting-note wide" id="toolPackageMeta"></div>
               <div class="tool-form-section">Контракт и запуск</div>
-              <label>JSON-схема аргументов<textarea id="toolSchemaInput" rows="4" placeholder="{&quot;address&quot;:&quot;A1:D20&quot;}"></textarea></label>
+              <label>JSON-схема аргументов<textarea id="toolSchemaInput" rows="4" placeholder="{&quot;type&quot;:&quot;object&quot;,&quot;properties&quot;:{},&quot;required&quot;:[],&quot;additionalProperties&quot;:false}"></textarea></label>
               <label>Аргументы запуска JSON<textarea id="toolRunArgsInput" rows="4" spellcheck="false" placeholder="{&quot;address&quot;:&quot;A1:D20&quot;}"></textarea></label>
               <div class="tool-form-section">Исполнение</div>
               <label>Pipeline JSON<textarea id="toolPipelineInput" rows="10" spellcheck="false" placeholder="{&quot;version&quot;:1,&quot;steps&quot;:[{&quot;id&quot;:&quot;read&quot;,&quot;toolId&quot;:&quot;excel.read_range&quot;,&quot;arguments&quot;:{&quot;address&quot;:&quot;{{args.address}}&quot;}}]}"></textarea></label>
-              <label>VBA / код исполнителя<textarea id="toolCodeInput" rows="10" spellcheck="false" placeholder="Опциональный код VBA-модуля"></textarea></label>
+              <div class="vba-package-editor wide">
+                <label>Компонент<select id="toolComponentSelect"></select></label>
+                <div class="tool-form-flags">
+                  <button class="secondary" id="addToolModuleButton" type="button">+ Module</button>
+                  <button class="secondary" id="addToolClassButton" type="button">+ Class</button>
+                  <button class="secondary danger-soft" id="deleteToolComponentButton" type="button">Удалить компонент</button>
+                </div>
+                <label>Имя компонента<input id="toolComponentNameInput" maxlength="40" placeholder="RNA_MyTool"></label>
+                <label>Тип<select id="toolComponentTypeInput"><option value="StdModule">Standard module</option><option value="ClassModule">Class module</option></select></label>
+                <label class="wide">VBA source<textarea id="toolCodeInput" rows="14" spellcheck="false" placeholder="Option Explicit"></textarea></label>
+              </div>
               <label class="wide">README / заметки<textarea id="toolReadmeInput" rows="5" spellcheck="false" placeholder="Заметки по использованию и реализации"></textarea></label>
             </div>
             <pre class="json-box tool-run-output" id="toolRunOutput"></pre>
@@ -218,6 +229,10 @@
               <div class="action-group">
                 <button class="secondary" id="copyToolContextButton" type="button">Добавить в контекст</button>
                 <button class="secondary" id="askToolBuilderButton" type="button">Обсудить</button>
+              </div>
+              <div class="action-group" id="vbaPackageActions">
+                <button class="secondary" id="installVbaToolButton" type="button">Установить в документ</button>
+                <button class="secondary danger-soft" id="uninstallVbaToolButton" type="button">Удалить из документа</button>
               </div>
               <div class="action-group action-group-end">
                 <button class="accent-soft" id="saveToolsButton" type="button">Сохранить</button>
@@ -473,6 +488,8 @@
                 <p>Управляет выполнением инструментов и поведением при ошибках.</p>
               </div>
               <div class="form-grid">
+                <label><span>Формат Agent API</span><select id="agentResponseModeInput"><option value="json_schema">json_schema — по умолчанию</option><option value="json_object">json_object + prompt</option><option value="native_tool_calls">native tool_calls + json_schema</option></select></label>
+                <label><span>Роль результата tool</span><select id="toolResultRoleInput"><option value="tool">tool — по умолчанию</option><option value="developer">developer</option><option value="user">user</option></select></label>
                 <label class="checkline"><input id="autoRunToolsInput" type="checkbox"><span>Автозапуск инструментов</span></label>
                 <label class="checkline"><input id="autoConfirmToolsInput" type="checkbox"><span>Автоподтверждение действий</span></label>
                 <label class="checkline"><input id="autoRetryToolsInput" type="checkbox"><span>Авторемонт ошибок инструментов</span></label>
@@ -484,8 +501,6 @@
                 <label><span>Макс. итераций агента</span><input id="maxAgentIterationsInput" type="number" min="1" max="50"></label>
                 <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1" max="200"></label>
                 <label><span>Tools в одном planner prompt</span><input id="maxAgentToolsPerRequestInput" type="number" min="8" max="64"></label>
-                <label><span>Действий в planner batch</span><input id="maxAgentPlanStepsInput" type="number" min="1" max="8"></label>
-                <label><span>Read-only действий в batch</span><input id="maxAgentReadOnlyPlanStepsInput" type="number" min="1" max="16"></label>
                 <label><span>VBA-контекст, символы</span><input id="vbaContextLimitInput" type="number" min="1000" max="200000"></label>
               </div>
             </section>
@@ -511,8 +526,9 @@
                 <label>
                   <span>Роль инструкций</span>
                   <select id="systemPromptRoleInput">
-                    <option value="user">user — по умолчанию</option>
+                    <option value="developer">developer — по умолчанию</option>
                     <option value="system">system</option>
+                    <option value="user">user</option>
                   </select>
                 </label>
                 <button class="secondary" id="resetAllPromptsButton" type="button" title="Вернуть встроенные значения всех промптов">Сбросить все промпты</button>

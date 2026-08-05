@@ -41,11 +41,13 @@ namespace RNAssistant.Harness
                         "OBSERVATIONS",
                         "excel.write_table succeeded")
                     .Add(
-                        AgentBlock(
-                            Command("excel.list_sheets"),
-                            Command("excel.list_charts")),
+                        AgentBlock(Command("excel.list_sheets")),
                         "OBSERVATIONS",
                         "excel.add_chart succeeded")
+                    .Add(
+                        AgentBlock(Command("excel.list_charts")),
+                        "OBSERVATIONS",
+                        "excel.list_sheets")
                     .Add(
                         "Verified report table and chart.",
                         "Month",
@@ -59,7 +61,7 @@ namespace RNAssistant.Harness
                     "Создай отчет продаж с таблицей и диаграммой.",
                     session,
                     context,
-                    new AppSettings { ContextCharLimit = 12000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null,
                     null,
@@ -110,7 +112,7 @@ namespace RNAssistant.Harness
                     "Review current workbook.",
                     NewSession(adapter),
                     context,
-                    new AppSettings { ContextCharLimit = 12000 },
+                    new AppSettings(),
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null,
                     null,
@@ -178,7 +180,7 @@ namespace RNAssistant.Harness
                     .Add(
                         AgentBlock(Command("word.vba_read_module", "moduleName", "Module1")),
                         "user confirmed",
-                        "verify",
+                        "verification_phase",
                         "Confirmed tool:",
                         "word.vba_replace_module",
                         "status: completed")
@@ -187,7 +189,7 @@ namespace RNAssistant.Harness
                         "ChangedMacro");
                 var service = llm.CreateService(adapter, executor);
                 var session = NewSession(adapter);
-                var settings = new AppSettings { AutoConfirmToolActions = false, ContextCharLimit = 12000, RequireVerificationForMutations = true };
+                var settings = new AppSettings { AutoConfirmToolActions = false, RequireVerificationForMutations = true };
                 settings.ModelCapabilities[settings.Model] = new ModelCapabilitySettings { SupportsImages = true };
                 settings.AttachmentModelPriority.Add(settings.Model);
                 var attachments = new[] { new ChatAttachment { Kind = "image", FileName = "evidence.png" } };
@@ -215,6 +217,7 @@ namespace RNAssistant.Harness
                 AgentTranscript.AddLocalResultMessage(session, pendingCommand, manualResult);
                 var continued = service.ContinueAfterToolAsync(
                     pendingCommand,
+                    manualResult,
                     session,
                     NewContext(adapter),
                     settings,
@@ -225,6 +228,17 @@ namespace RNAssistant.Harness
                 AssertEqual("Confirmed and verified.", continued.AssistantText, "continued assistant text");
                 AssertContains(adapter.GetVbaModuleCode("Module1"), "ChangedMacro", "module changed after confirmation");
                 AssertTrue(adapter.Executed.Any(c => string.Equals(c.ToolId, "word.vba_read_module", StringComparison.OrdinalIgnoreCase)), "verification read executed");
+                var confirmationCall = llm.Calls.First(call => call.Any(message =>
+                    string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase) &&
+                    (message.Content ?? string.Empty).IndexOf("\"toolId\":\"word.vba_replace_module\"", StringComparison.OrdinalIgnoreCase) >= 0));
+                var confirmedToolMessage = confirmationCall.First(message =>
+                    string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase) &&
+                    (message.Content ?? string.Empty).IndexOf("\"toolId\":\"word.vba_replace_module\"", StringComparison.OrdinalIgnoreCase) >= 0);
+                var confirmedAssistantCall = confirmationCall.First(message =>
+                    message.ToolCalls != null &&
+                    message.ToolCalls.Any(call => string.Equals(call.Id, confirmedToolMessage.ToolCallId, StringComparison.Ordinal)));
+                AssertEqual(confirmedAssistantCall.ToolCalls[0].Id, confirmedToolMessage.ToolCallId, "confirmed tool result keeps matching call id");
+                AssertEqual(pendingCommand.ToolApiName, confirmedAssistantCall.ToolCalls[0].Name, "confirmed tool result keeps API function name");
                 AssertTrue(
                     llm.Calls.All(call => call.Sum(message => message.Attachments.Count(item => item.FileName == "evidence.png")) == 1),
                     "original media retained for every iteration and confirmation continuation");
@@ -233,7 +247,13 @@ namespace RNAssistant.Harness
 
         private static ToolCommand CloneCommandForTest(ToolCommand command)
         {
-            var clone = new ToolCommand { ToolId = command == null ? string.Empty : command.ToolId, Description = command == null ? string.Empty : command.Description };
+            var clone = new ToolCommand
+            {
+                ToolId = command == null ? string.Empty : command.ToolId,
+                Description = command == null ? string.Empty : command.Description,
+                ToolCallId = command == null ? string.Empty : command.ToolCallId,
+                ToolApiName = command == null ? string.Empty : command.ToolApiName
+            };
             foreach (var pair in command == null ? new Dictionary<string, object>() : command.Arguments)
             {
                 clone.Arguments[pair.Key] = pair.Value;

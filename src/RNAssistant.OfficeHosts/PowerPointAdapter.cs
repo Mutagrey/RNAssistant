@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PowerPoint = Microsoft.Office.Interop.PowerPoint;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Tools;
@@ -406,6 +407,10 @@ namespace RNAssistant.OfficeHosts
                         return InsertVbaModule(command);
                     case "powerpoint.run_macro":
                         return RunMacro(command);
+                    case "powerpoint.vba_install_package_internal":
+                        return VbaProjectSupport.InstallPackage(RequirePresentation(), ToolArgumentReader.String(command.Arguments, "componentsJson", "[]"), ToolArgumentReader.String(command.Arguments, "marker", string.Empty));
+                    case "powerpoint.vba_remove_package_internal":
+                        return VbaProjectSupport.RemovePackage(RequirePresentation(), ToolArgumentReader.String(command.Arguments, "expectedComponentsJson", "{}"), ToolArgumentReader.String(command.Arguments, "expectedMarker", string.Empty));
                     default:
                         return ToolResult.Fail("Unsupported PowerPoint tool: " + command.ToolId);
                 }
@@ -742,8 +747,8 @@ namespace RNAssistant.OfficeHosts
                 return ToolResult.Fail("No macroName provided.");
             }
 
-            _application.Run(macroName);
-            return ToolResult.Ok("Macro ran: " + macroName);
+            var output = VbaProjectSupport.RunStringFunction(_application, macroName, ToolArgumentReader.String(command.Arguments, "argumentsJson", "[]"));
+            return ToolResult.Ok("Macro ran: " + macroName, JsonConvert.SerializeObject(new { output = output }));
         }
 
         private string ReadSlidesText(PowerPoint.Presentation presentation, int maxSlides)
@@ -1112,7 +1117,7 @@ namespace RNAssistant.OfficeHosts
 
         private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0)
         {
-            return new ToolDefinition { Id = id, Host = "PowerPoint", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel };
+            return new ToolDefinition { Id = id, Host = "PowerPoint", Name = id, Description = description, ArgumentSchemaJson = ToolSchemaSupport.FromPropertySamples(schema), BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel };
         }
 
         private static string Trim(string text, int maxChars)

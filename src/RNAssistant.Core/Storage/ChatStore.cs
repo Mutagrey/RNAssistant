@@ -32,7 +32,7 @@ namespace RNAssistant.Core.Storage
 
             if (IsPersisted(session))
             {
-                SaveActiveSessionId(host, documentKey, GetSessionId(session));
+                SaveActiveSessionId(host, documentKey, session.Id);
             }
             return session;
         }
@@ -41,7 +41,7 @@ namespace RNAssistant.Core.Storage
         {
             var session = CreateTransient(host, documentKey, documentTitle, title);
             Save(session);
-            SaveActiveSessionId(host, documentKey, GetSessionId(session));
+            SaveActiveSessionId(host, documentKey, session.Id);
             return session;
         }
 
@@ -67,7 +67,7 @@ namespace RNAssistant.Core.Storage
             }
 
             var session = _json.Load(GetSessionPath(host, documentKey, sessionId), (ChatSession)null);
-            if (session == null)
+            if (!IsSupported(session))
             {
                 return null;
             }
@@ -84,14 +84,14 @@ namespace RNAssistant.Core.Storage
             }
 
             return List().FirstOrDefault(s =>
-                string.Equals(GetSessionId(s), sessionId, StringComparison.OrdinalIgnoreCase));
+                string.Equals(s.Id, sessionId, StringComparison.OrdinalIgnoreCase));
         }
 
         public void Save(ChatSession session)
         {
             NormalizeSession(session, session == null ? null : session.Host, session == null ? null : session.DocumentKey, session == null ? null : session.DocumentTitle);
             session.UpdatedUtc = DateTime.UtcNow;
-            _json.Save(GetSessionPath(session.Host, session.DocumentKey, GetSessionId(session)), session);
+            _json.Save(GetSessionPath(session.Host, session.DocumentKey, session.Id), session);
         }
 
         public ChatSession Move(ChatSession session, string host, string documentKey, string documentTitle)
@@ -101,20 +101,20 @@ namespace RNAssistant.Core.Storage
                 return null;
             }
 
-            var oldPath = GetSessionPath(session.Host, session.DocumentKey, GetSessionId(session));
+            var oldPath = GetSessionPath(session.Host, session.DocumentKey, session.Id);
             session.Host = host;
             session.DocumentKey = documentKey;
             session.DocumentTitle = documentTitle;
             NormalizeSession(session, host, documentKey, documentTitle);
             Save(session);
 
-            var newPath = GetSessionPath(session.Host, session.DocumentKey, GetSessionId(session));
+            var newPath = GetSessionPath(session.Host, session.DocumentKey, session.Id);
             if (!string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase) && File.Exists(oldPath))
             {
                 File.Delete(oldPath);
             }
 
-            SaveActiveSessionId(host, documentKey, GetSessionId(session));
+            SaveActiveSessionId(host, documentKey, session.Id);
             return session;
         }
 
@@ -182,7 +182,7 @@ namespace RNAssistant.Core.Storage
         public bool IsPersisted(ChatSession session)
         {
             return session != null &&
-                File.Exists(GetSessionPath(session.Host, session.DocumentKey, GetSessionId(session)));
+                File.Exists(GetSessionPath(session.Host, session.DocumentKey, session.Id));
         }
 
         public IReadOnlyList<ChatSession> List()
@@ -197,7 +197,7 @@ namespace RNAssistant.Core.Storage
             {
                 sessions.AddRange(SafeGetFiles(directory)
                     .Select(p => _json.Load(p, (ChatSession)null))
-                    .Where(s => s != null)
+                    .Where(IsSupported)
                     .Select(s =>
                     {
                         NormalizeSession(s, s.Host, s.DocumentKey, s.DocumentTitle);
@@ -220,7 +220,7 @@ namespace RNAssistant.Core.Storage
 
             return SafeGetFiles(directory)
                 .Select(p => _json.Load(p, (ChatSession)null))
-                .Where(s => s != null)
+                .Where(IsSupported)
                 .Select(s =>
                 {
                     NormalizeSession(s, host, documentKey, documentTitle);
@@ -255,21 +255,6 @@ namespace RNAssistant.Core.Storage
             File.WriteAllText(path, sessionId ?? string.Empty);
         }
 
-        public static string GetSessionId(ChatSession session)
-        {
-            if (session == null)
-            {
-                return string.Empty;
-            }
-
-            if (!string.IsNullOrWhiteSpace(session.SessionId))
-            {
-                return session.SessionId;
-            }
-
-            return string.IsNullOrWhiteSpace(session.Id) ? string.Empty : session.Id;
-        }
-
         private static void NormalizeSession(ChatSession session, string host, string documentKey, string documentTitle)
         {
             if (session == null)
@@ -277,14 +262,11 @@ namespace RNAssistant.Core.Storage
                 return;
             }
 
-            var id = GetSessionId(session);
-            if (string.IsNullOrWhiteSpace(id))
+            session.FormatVersion = ChatSession.CurrentFormatVersion;
+            if (string.IsNullOrWhiteSpace(session.Id))
             {
-                id = Guid.NewGuid().ToString("N");
+                session.Id = Guid.NewGuid().ToString("N");
             }
-
-            session.Id = id;
-            session.SessionId = id;
             if (string.IsNullOrWhiteSpace(session.Host))
             {
                 session.Host = host ?? string.Empty;
@@ -371,6 +353,11 @@ namespace RNAssistant.Core.Storage
             {
                 session.Context.Notes = new List<ContextNote>();
             }
+        }
+
+        private static bool IsSupported(ChatSession session)
+        {
+            return session != null && session.FormatVersion == ChatSession.CurrentFormatVersion;
         }
 
         private string GetDocumentDirectory(string host, string documentKey)

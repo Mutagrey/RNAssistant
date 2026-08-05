@@ -85,7 +85,7 @@ namespace RNAssistant.Office
         {
             return new HtmlWorkspaceResponse
             {
-                ActiveChatId = ChatStore.GetSessionId(session),
+                ActiveChatId = session.Id,
                 Workspace = session == null ? new HtmlWorkspace() : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace)
             };
         }

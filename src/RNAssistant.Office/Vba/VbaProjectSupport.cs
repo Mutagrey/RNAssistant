@@ -1,9 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.IO;
+using System.Linq;
 using System.Text;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office
 {
@@ -181,6 +185,226 @@ namespace RNAssistant.Office
                 }
                 throw;
             }
+        }
+
+        public static string RunStringFunction(object applicationObject, string macroName, string argumentsJson)
+        {
+            if (applicationObject == null) throw new InvalidOperationException("Office application is not available.");
+            var array = JArray.Parse(string.IsNullOrWhiteSpace(argumentsJson) ? "[]" : argumentsJson);
+            if (array.Count > 30) throw new InvalidOperationException("VBA tool entry functions support at most 30 positional arguments.");
+            var invokeArguments = new object[array.Count + 1];
+            invokeArguments[0] = macroName;
+            for (var index = 0; index < array.Count; index++)
+            {
+                var item = array[index];
+                invokeArguments[index + 1] = item.Type == JTokenType.Integer
+                    ? (object)item.Value<int>()
+                    : item.Type == JTokenType.Float
+                        ? item.Value<double>()
+                        : item.Type == JTokenType.Boolean
+                            ? item.Value<bool>()
+                            : (object)((string)item ?? string.Empty);
+            }
+            var output = applicationObject.GetType().InvokeMember(
+                "Run",
+                BindingFlags.InvokeMethod,
+                null,
+                applicationObject,
+                invokeArguments);
+            return Convert.ToString(output);
+        }
+
+        public static ToolResult InstallPackage(object documentObject, string componentsJson, string marker)
+        {
+            JArray payload;
+            try { payload = JArray.Parse(string.IsNullOrWhiteSpace(componentsJson) ? "[]" : componentsJson); }
+            catch (JsonException ex) { return ToolResult.Fail("Invalid VBA package components: " + ex.Message, null, "vba_package_invalid", false); }
+            var components = payload.OfType<JObject>().Select(item => new VbaToolComponent
+            {
+                Name = (string)item["name"],
+                Type = (string)item["type"],
+                Code = (string)item["code"] ?? string.Empty
+            }).ToList();
+            if (components.Count == 0) return ToolResult.Fail("VBA package has no components.", null, "vba_package_empty", false);
+            if (components.Any(component => !VbaToolManifestParser.ValidIdentifier(component.Name) ||
+                (!string.Equals(component.Type, "StdModule", StringComparison.OrdinalIgnoreCase) && !string.Equals(component.Type, "ClassModule", StringComparison.OrdinalIgnoreCase))))
+            {
+                return ToolResult.Fail("VBA package supports only valid StdModule and ClassModule components.", null, "vba_component_invalid", false);
+            }
+            var duplicate = components.GroupBy(component => component.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault(group => group.Count() > 1);
+            if (duplicate != null)
+            {
+                return ToolResult.Fail("VBA package contains a duplicate component: " + duplicate.Key, null, "vba_component_duplicate", false);
+            }
+
+            dynamic vbProject = GetVbaProject(documentObject);
+            var tempDirectory = Path.Combine(Path.GetTempPath(), "RNAssistant-Vba-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDirectory);
+            var backups = new List<string>();
+            var installedNames = new List<string>();
+            try
+            {
+                foreach (var component in components)
+                {
+                    dynamic existing = FindComponent(vbProject, component.Name);
+                    if (existing != null)
+                    {
+                        var backupPath = Path.Combine(tempDirectory, "backup_" + component.Name + ComponentExtension((int)existing.Type));
+                        existing.Export(backupPath);
+                        backups.Add(backupPath);
+                        vbProject.VBComponents.Remove(existing);
+                    }
+
+                    var importPath = Path.Combine(tempDirectory, component.Name + (string.Equals(component.Type, "ClassModule", StringComparison.OrdinalIgnoreCase) ? ".cls" : ".bas"));
+                    File.WriteAllText(importPath, PrepareImportSource(component, marker), new UTF8Encoding(false));
+                    dynamic imported = vbProject.VBComponents.Import(importPath);
+                    var importedName = (string)imported.Name;
+                    installedNames.Add(importedName);
+                    if (!string.Equals(importedName, component.Name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        imported.Name = component.Name;
+                        installedNames[installedNames.Count - 1] = component.Name;
+                    }
+                }
+                return ToolResult.Ok("VBA package installed.", JsonConvert.SerializeObject(new
+                {
+                    components = components.Select(component => new
+                    {
+                        name = component.Name,
+                        type = component.Type,
+                        codeSha256 = VbaToolManifestParser.CodeSha256(component.Code)
+                    }).ToArray()
+                }));
+            }
+            catch (Exception ex)
+            {
+                Exception rollbackError = null;
+                try
+                {
+                    foreach (var name in installedNames)
+                    {
+                        dynamic installed = FindComponent(vbProject, name);
+                        if (installed != null) vbProject.VBComponents.Remove(installed);
+                    }
+                    foreach (var backup in backups) vbProject.VBComponents.Import(backup);
+                }
+                catch (Exception rollback) { rollbackError = rollback; }
+                return ToolResult.Fail(
+                    "VBA package installation failed" + (rollbackError == null ? ". " : " and rollback failed: " + rollbackError.Message + ". ") + ex.Message,
+                    null,
+                    rollbackError == null ? "vba_package_install_failed" : "vba_package_rollback_failed",
+                    false);
+            }
+            finally
+            {
+                try { Directory.Delete(tempDirectory, true); }
+                catch { }
+            }
+        }
+
+        public static ToolResult RemovePackage(object documentObject, string expectedComponentsJson, string expectedMarker)
+        {
+            JObject expected;
+            try { expected = JObject.Parse(string.IsNullOrWhiteSpace(expectedComponentsJson) ? "{}" : expectedComponentsJson); }
+            catch (JsonException ex) { return ToolResult.Fail("Invalid expected component hashes: " + ex.Message, null, "vba_package_invalid", false); }
+            dynamic vbProject = GetVbaProject(documentObject);
+            foreach (var property in expected.Properties())
+            {
+                dynamic component = FindComponent(vbProject, property.Name);
+                if (component == null) continue;
+                var code = ReadComponentCode(component);
+                if (string.IsNullOrWhiteSpace(expectedMarker) || code.IndexOf(expectedMarker, StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    return ToolResult.Fail("VBA component is not owned by this RNAssistant package and was not removed: " + property.Name, null, "vba_component_not_owned", false);
+                }
+                var actual = VbaToolManifestParser.CodeSha256(code);
+                if (!string.Equals(actual, (string)property.Value, StringComparison.OrdinalIgnoreCase))
+                {
+                    return ToolResult.Fail("VBA component changed after installation and was not removed: " + property.Name, JsonConvert.SerializeObject(new { component = property.Name, expected = (string)property.Value, actual = actual }), "vba_component_modified", false);
+                }
+            }
+            var tempDirectory = Path.Combine(Path.GetTempPath(), "RNAssistant-Vba-Remove-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDirectory);
+            var backups = new List<string>();
+            var removed = new List<string>();
+            try
+            {
+                foreach (var property in expected.Properties())
+                {
+                    dynamic component = FindComponent(vbProject, property.Name);
+                    if (component == null) continue;
+                    var backupPath = Path.Combine(tempDirectory, "backup_" + property.Name + ComponentExtension((int)component.Type));
+                    component.Export(backupPath);
+                    backups.Add(backupPath);
+                }
+                foreach (var property in expected.Properties())
+                {
+                    dynamic component = FindComponent(vbProject, property.Name);
+                    if (component == null) continue;
+                    vbProject.VBComponents.Remove(component);
+                    removed.Add(property.Name);
+                }
+                return ToolResult.Ok("VBA package components removed.", JsonConvert.SerializeObject(new { components = removed }));
+            }
+            catch (Exception ex)
+            {
+                Exception rollbackError = null;
+                try
+                {
+                    foreach (var backup in backups)
+                    {
+                        var name = Path.GetFileNameWithoutExtension(backup).Substring("backup_".Length);
+                        if (FindComponent(vbProject, name) == null) vbProject.VBComponents.Import(backup);
+                    }
+                }
+                catch (Exception rollback) { rollbackError = rollback; }
+                return ToolResult.Fail(
+                    "VBA package removal failed" + (rollbackError == null ? ". " : " and rollback failed: " + rollbackError.Message + ". ") + ex.Message,
+                    null,
+                    rollbackError == null ? "vba_package_remove_failed" : "vba_package_rollback_failed",
+                    false);
+            }
+            finally
+            {
+                try { Directory.Delete(tempDirectory, true); }
+                catch { }
+            }
+        }
+
+        private static string PrepareImportSource(VbaToolComponent component, string marker)
+        {
+            var code = VbaToolManifestParser.NormalizeCode(component.Code);
+            var markerLine = string.IsNullOrWhiteSpace(marker) ? string.Empty : "' " + marker.Trim() + Environment.NewLine;
+            if (string.Equals(component.Type, "ClassModule", StringComparison.OrdinalIgnoreCase))
+            {
+                if (code.StartsWith("VERSION ", StringComparison.OrdinalIgnoreCase)) return InsertMarkerAfterAttributes(code, markerLine);
+                return "VERSION 1.0 CLASS\r\nBEGIN\r\n  MultiUse = -1\r\nEND\r\n" +
+                    "Attribute VB_Name = \"" + component.Name + "\"\r\n" +
+                    "Attribute VB_GlobalNameSpace = False\r\nAttribute VB_Creatable = False\r\n" +
+                    "Attribute VB_PredeclaredId = False\r\nAttribute VB_Exposed = False\r\n" + markerLine + code;
+            }
+            if (code.StartsWith("Attribute VB_Name", StringComparison.OrdinalIgnoreCase)) return InsertMarkerAfterAttributes(code, markerLine);
+            return "Attribute VB_Name = \"" + component.Name + "\"\r\n" + markerLine + code;
+        }
+
+        private static string InsertMarkerAfterAttributes(string code, string marker)
+        {
+            if (string.IsNullOrEmpty(marker)) return code;
+            var lines = code.Replace("\r\n", "\n").Split('\n').ToList();
+            var index = 0;
+            while (index < lines.Count &&
+                (lines[index].StartsWith("VERSION ", StringComparison.OrdinalIgnoreCase) ||
+                 lines[index].StartsWith("BEGIN", StringComparison.OrdinalIgnoreCase) ||
+                 lines[index].StartsWith("END", StringComparison.OrdinalIgnoreCase) ||
+                 lines[index].TrimStart().StartsWith("MultiUse", StringComparison.OrdinalIgnoreCase) ||
+                 lines[index].StartsWith("Attribute ", StringComparison.OrdinalIgnoreCase))) index++;
+            lines.Insert(index, marker.TrimEnd('\r', '\n'));
+            return string.Join("\r\n", lines.ToArray());
+        }
+
+        private static string ComponentExtension(int type)
+        {
+            return type == 2 ? ".cls" : ".bas";
         }
 
         private static object FindComponent(object vbProjectObject, string moduleName)

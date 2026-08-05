@@ -29,7 +29,7 @@ namespace RNAssistant.Office
         {
             PendingAgentTool pending;
             var session = ResolvePendingAgentTool(pendingId, chatId, out pending);
-            var sessionId = ChatStore.GetSessionId(session);
+            var sessionId = session.Id;
             runId = string.IsNullOrWhiteSpace(runId) ? Guid.NewGuid().ToString("N") : runId;
             var runCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             ChatRunLease runLease;
@@ -97,13 +97,14 @@ namespace RNAssistant.Office
                         runCancellation.Token);
                     UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
                     pendingResolved = true;
-                    if (result.Success && settings.AutoContinueAfterConfirmation != false)
+                    if (result.Success && settings.AutoContinueAfterConfirmation)
                     {
                         tools = _toolCatalog.GetVisibleTools().Where(tool => tool.Enabled).ToList();
                         var context = LoadContext(session);
                         var skills = _skillCatalog.SelectRelevantSkills("continue confirmed agent task", context, 5);
                         await _chatCompletionService.ContinueAfterToolAsync(
                             CloneCommand(pending.Command),
+                            result,
                             session,
                             context,
                             settings,
@@ -181,7 +182,7 @@ namespace RNAssistant.Office
             var pending = new PendingAgentTool
             {
                 PendingId = pendingId,
-                SessionId = ChatStore.GetSessionId(session),
+                SessionId = session.Id,
                 Command = CloneCommand(command),
                 Attachments = new List<ChatAttachment>(LatestUserAttachments(session))
             };
@@ -290,7 +291,9 @@ namespace RNAssistant.Office
             var clone = new ToolCommand
             {
                 ToolId = command == null ? string.Empty : command.ToolId,
-                Description = command == null ? string.Empty : command.Description
+                Description = command == null ? string.Empty : command.Description,
+                ToolCallId = command == null ? string.Empty : command.ToolCallId,
+                ToolApiName = command == null ? string.Empty : command.ToolApiName
             };
 
             if (command != null && command.Arguments != null)
@@ -335,7 +338,7 @@ namespace RNAssistant.Office
                 return new PendingAgentTool
                 {
                     PendingId = pendingId,
-                    SessionId = ChatStore.GetSessionId(session),
+                    SessionId = session.Id,
                     Command = CommandFromActivity(activity),
                     Attachments = UserAttachmentsForRun(session, message.RunId)
                 };

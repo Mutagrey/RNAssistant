@@ -43,7 +43,7 @@ namespace RNAssistant.Harness
                     "Привет",
                     NewSession(adapter),
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000 },
+                    new AppSettings { AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -64,7 +64,7 @@ namespace RNAssistant.Harness
                     "Что такое таблица?",
                     NewSession(adapter),
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000 },
+                    new AppSettings(),
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -92,7 +92,7 @@ namespace RNAssistant.Harness
                     "Build a sales report.",
                     NewSession(adapter),
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -110,7 +110,7 @@ namespace RNAssistant.Harness
                     "Clearly explain address notation.",
                     NewSession(adapter),
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000 },
+                    new AppSettings(),
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -135,7 +135,7 @@ namespace RNAssistant.Harness
                     "Что в текущей таблице?",
                     NewSession(adapter),
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000 },
+                    new AppSettings(),
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -212,7 +212,7 @@ namespace RNAssistant.Harness
                         scenario.UserText,
                         session,
                         context,
-                        new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                        new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false },
                         new List<ToolDefinition>(adapter.GetBuiltInTools()),
                         null).GetAwaiter().GetResult();
 
@@ -224,7 +224,7 @@ namespace RNAssistant.Harness
                         AssertEqual(scenario.ExpectedTools[toolIndex], adapter.Executed[toolIndex].ToolId, scenario.Host + " tool " + toolIndex);
                     }
                     AssertTrue(ContainsMessage(calls[0], "User-added context"), scenario.Host + " context prompt");
-                    AssertTrue(ContainsMessage(session.Messages, "Agent plan"), scenario.Host + " plan recorded");
+                    AssertTrue(ContainsMessage(session.Messages, "Run " + scenario.ExpectedTools[0]), scenario.Host + " tool decision recorded");
                     AssertTrue(ContainsMessage(session.Messages, "Agent step"), scenario.Host + " result recorded");
                 });
             }
@@ -286,7 +286,7 @@ namespace RNAssistant.Harness
                     "Create a new sheet named Report.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     new[] { attachment },
                     null).GetAwaiter().GetResult();
@@ -319,13 +319,13 @@ namespace RNAssistant.Harness
                     "Create a new sheet named Report.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("Done.", result.AssistantText, "assistant text");
                 AssertEqual(3, calls.Count, "llm call count");
-                AssertTrue(ContainsMessage(calls[1], "previous RNAssistant planner output was invalid"), "repair prompt");
+                AssertTrue(ContainsMessage(calls[1], "previous AgentDecision or native tool selection was semantically invalid"), "repair prompt");
                 AssertTrue(ContainsMessage(calls[1], "Create a new sheet named Report."), "repair keeps original request");
                 AssertTrue(ContainsMessage(calls[1], "excel.add_sheet"), "repair keeps available tools");
                 AssertEqual(1, adapter.Executed.Count, "adapter execution count");
@@ -351,12 +351,12 @@ namespace RNAssistant.Harness
                     "Create a new sheet named Report.",
                     NewSession(adapter),
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
                 AssertEqual(4, calls.Count, "repair then correction call count");
-                AssertTrue(ContainsMessage(calls[1], "previous RNAssistant planner output was invalid"), "format repair requested");
+                AssertTrue(ContainsMessage(calls[1], "previous AgentDecision or native tool selection was semantically invalid"), "format repair requested");
                 AssertTrue(ContainsMessage(calls[2], "requires Office tool use"), "tool correction requested after repair");
                 AssertEqual(1, adapter.Executed.Count, "tool executed after repair and correction");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "corrected tool id");
@@ -382,7 +382,7 @@ namespace RNAssistant.Harness
                     "Create a new sheet named Report.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -409,14 +409,14 @@ namespace RNAssistant.Harness
                     "Create a new sheet named Report.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
                 AssertEqual(0, adapter.Executed.Count, "repeated final executes no tools");
                 AssertContains(result.AssistantText, "Не удалось подобрать безопасное действие", "localized required tool quality error");
                 AssertEqual("Действие Office не определено", session.Messages.Last().Activity.Title, "quality diagnostic");
-                AssertEqual("required_tool_plan", session.Messages.Last().Activity.ExecutionStatus, "quality diagnostic code");
+                AssertEqual("required_tool_decision", session.Messages.Last().Activity.ExecutionStatus, "quality diagnostic code");
             });
         }
 
@@ -433,7 +433,7 @@ namespace RNAssistant.Harness
                     AgentBlock(Command("excel.add_sheet", "name", "Report")),
                     "Done.");
                 var session = NewSession(adapter);
-                var settings = new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false };
+                var settings = new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false };
                 settings.AgentPrompts.ForceToolUsePrompt = "CUSTOM_FORCE_TOOL_PROMPT";
 
                 var result = service.ExecuteAsync(
@@ -451,12 +451,6 @@ namespace RNAssistant.Harness
 
         private static void AgentTranscriptCreatesActivityTree()
         {
-            var plan = AgentTranscript.CreateAgentPlanActivity(new[] { Command("excel.add_sheet", "name", "Report") });
-            AssertEqual("plan", plan.Kind, "plan kind");
-            AssertEqual(1, plan.Children.Count, "plan child count");
-            AssertEqual("excel.add_sheet", plan.Children[0].ToolId, "plan child tool");
-            AssertContains(plan.Children[0].ArgumentsJson, "Report", "plan child args");
-
             var command = new ToolCommand { ToolId = "excel.make_report" };
             command.Arguments["sheet"] = "Report";
             var result = ToolResult.Ok(

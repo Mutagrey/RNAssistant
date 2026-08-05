@@ -61,57 +61,6 @@ namespace RNAssistant.Office
             };
         }
 
-        public static string CreateAgentPlanMessage(IReadOnlyList<ToolCommand> commands)
-        {
-            var builder = new StringBuilder();
-            builder.AppendLine("### Agent plan");
-            if (commands == null || commands.Count == 0)
-            {
-                builder.AppendLine("No executable steps were returned.");
-                return builder.ToString();
-            }
-
-            for (var i = 0; i < commands.Count; i++)
-            {
-                var command = commands[i];
-                var title = command == null || string.IsNullOrWhiteSpace(command.Description)
-                    ? (command == null ? "Tool step" : command.ToolId)
-                    : command.Description;
-                builder.AppendLine((i + 1) + ". " + title + " (`" + (command == null ? string.Empty : command.ToolId) + "`)");
-            }
-
-            return builder.ToString();
-        }
-
-        public static ChatActivity CreateAgentPlanActivity(IReadOnlyList<ToolCommand> commands)
-        {
-            var activity = new ChatActivity
-            {
-                Kind = "plan",
-                Title = "Agent plan",
-                Subtitle = commands == null ? "No executable steps" : commands.Count + " step(s)",
-                Status = commands == null || commands.Count == 0 ? "failed" : "planned"
-            };
-
-            foreach (var command in commands ?? new ToolCommand[0])
-            {
-                var title = command == null || string.IsNullOrWhiteSpace(command.Description)
-                    ? (command == null ? "Tool step" : command.ToolId)
-                    : command.Description;
-                activity.Children.Add(new ChatActivity
-                {
-                    Kind = "tool",
-                    Title = title,
-                    Subtitle = command == null ? string.Empty : command.ToolId,
-                    Status = "planned",
-                    ToolId = command == null ? string.Empty : command.ToolId,
-                    ArgumentsJson = command == null ? null : JsonConvert.SerializeObject(command.Arguments, Formatting.Indented)
-                });
-            }
-
-            return activity;
-        }
-
         public static ChatActivity CreateToolActivity(ToolCommand command, ToolResult result, string kind)
         {
             var success = result != null && result.Success;

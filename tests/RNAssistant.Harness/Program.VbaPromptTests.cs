@@ -120,17 +120,25 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void VbaCustomMacroFailureIsPartial()
+        private static void VbaCustomMacroFailureCleansSession()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
+                var code =
+                    "Option Explicit\n" +
+                    "' <RNAssistantTool>\n" +
+                    "' {\"protocolVersion\":1,\"id\":\"excel.custom_vba\",\"name\":\"Custom VBA\",\"description\":\"Test tool\",\"host\":\"Excel\",\"packageVersion\":\"1.0.0\",\"entryPoint\":\"Main\",\"components\":[\"RNA_CustomVba\"],\"argumentOrder\":[\"value\"],\"parameters\":{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}},\"required\":[\"value\"],\"additionalProperties\":false},\"mutatesDocument\":true,\"agentCanRun\":false,\"requiresConfirmation\":true}\n" +
+                    "' </RNAssistantTool>\n" +
+                    "Public Function Main(ByVal value As String) As String\n" +
+                    "    Main = value\n" +
+                    "End Function";
                 var tool = new ToolDefinition
                 {
                     Id = "excel.custom_vba",
                     Host = "Excel",
                     Name = "Custom VBA",
                     Executor = "vba",
-                    Code = "Sub Main()\nEnd Sub",
+                    Code = code,
                     Enabled = true,
                     BuiltIn = false,
                     MutatesDocument = true,
@@ -138,16 +146,16 @@ namespace RNAssistant.Harness
                     RiskLevel = 3
                 };
                 adapter.QueueResult("excel.run_macro", ToolResult.Fail("macro failed", null, "macro_failed", true));
-                var command = Command(tool.Id, "moduleName", "CustomModule", "macroName", "CustomModule.Main");
+                var command = Command(tool.Id, "value", "test");
                 var tools = adapter.GetBuiltInTools().Concat(new[] { tool }).ToList();
 
                 var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
 
                 AssertTrue(!result.Success, "custom macro result");
-                AssertEqual("partial_failure", result.Status, "custom macro partial status");
-                AssertEqual(false, result.Retryable, "custom macro retryable");
-                AssertContains(adapter.GetVbaModuleCode("CustomModule"), "Sub Main", "custom module remains inserted");
-                AssertTrue(result.Verification != null, "partial result verification metadata");
+                AssertEqual("failed", result.Status, "custom macro failure status");
+                AssertEqual(true, result.Retryable, "custom macro retryable");
+                AssertEqual(string.Empty, adapter.GetVbaModuleCode("RNA_CustomVba"), "temporary module cleaned after failure");
+                AssertContains(result.DataJson, "sessionInstalled", "session lifecycle recorded");
             });
         }
 

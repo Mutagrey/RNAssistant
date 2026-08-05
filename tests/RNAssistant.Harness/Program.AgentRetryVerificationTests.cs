@@ -40,7 +40,7 @@ namespace RNAssistant.Harness
                     "Write a report table.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -77,7 +77,7 @@ namespace RNAssistant.Harness
                     "Write a report table.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -106,7 +106,7 @@ namespace RNAssistant.Harness
                     "Create a report sheet.",
                     NewSession(adapter),
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -136,7 +136,7 @@ namespace RNAssistant.Harness
                     "Оформи текущую таблицу красиво.",
                     NewSession(adapter),
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -166,7 +166,7 @@ namespace RNAssistant.Harness
                     "Create a report sheet.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = true },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = true },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 

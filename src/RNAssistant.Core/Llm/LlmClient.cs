@@ -17,6 +17,7 @@ namespace RNAssistant.Core.Llm
     public sealed class LlmCompletionResult
     {
         public string Content { get; set; }
+        public List<LlmToolCall> ToolCalls { get; set; }
         public string ReasoningContent { get; set; }
         public int? ReasoningTokens { get; set; }
         public bool ReasoningTruncated { get; set; }
@@ -67,12 +68,22 @@ namespace RNAssistant.Core.Llm
 
         public async Task<LlmCompletionResult> CompleteAsync(AppSettings settings, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken = default(CancellationToken))
         {
-            return await CompleteAsync(settings, messages, null, cancellationToken).ConfigureAwait(false);
+            return await CompleteAsync(settings, messages, null, null, cancellationToken).ConfigureAwait(false);
         }
 
         public async Task<LlmCompletionResult> CompleteAsync(
             AppSettings settings,
             IEnumerable<ChatMessage> messages,
+            Action<LlmStreamUpdate> streamProgress,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            return await CompleteAsync(settings, messages, null, streamProgress, cancellationToken).ConfigureAwait(false);
+        }
+
+        public async Task<LlmCompletionResult> CompleteAsync(
+            AppSettings settings,
+            IEnumerable<ChatMessage> messages,
+            LlmRequestOptions requestOptions,
             Action<LlmStreamUpdate> streamProgress,
             CancellationToken cancellationToken = default(CancellationToken))
         {
@@ -141,18 +152,8 @@ namespace RNAssistant.Core.Llm
                     throw new InvalidOperationException("LLM request has no messages.");
                 }
 
-                var body = new
-                {
-                    model = settings.Model,
-                    messages = apiMessages,
-                    max_tokens = ModelContextBudget.EffectiveOutputTokens(settings, apiBuild.EstimatedPromptTokens, settings.Model),
-                    temperature = settings.Temperature,
-                    top_p = settings.TopP,
-                    stream = settings.StreamResponses,
-                    stream_options = settings.StreamResponses ? new { include_usage = true } : null
-                };
-
-                var json = JsonConvert.SerializeObject(body, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
+                var body = BuildRequestBody(settings, apiMessages, apiBuild.EstimatedPromptTokens, requestOptions);
+                var json = body.ToString(Formatting.None);
                 var diagnostics = CreateDiagnostics(requestUri, settings, apiMessages.Count, !string.IsNullOrWhiteSpace(apiKey));
                 try
                 {
@@ -383,6 +384,7 @@ namespace RNAssistant.Core.Llm
             private readonly StringBuilder _embeddedReasoning = new StringBuilder();
             private readonly Action<LlmStreamUpdate> _progress;
             private readonly ThinkStreamSplitter _thinkSplitter;
+            private readonly IDictionary<int, StreamingToolCallState> _toolCalls = new SortedDictionary<int, StreamingToolCallState>();
             private JObject _usage;
             private bool _reasoningTruncated;
             private bool _embeddedReasoningTruncated;
@@ -426,6 +428,22 @@ namespace RNAssistant.Core.Llm
                 {
                     AddReasoning(reasoning);
                 }
+
+                var toolCalls = delta["tool_calls"] as JArray;
+                if (toolCalls != null)
+                {
+                    foreach (var token in toolCalls.OfType<JObject>())
+                    {
+                        var index = token["index"] == null ? 0 : token["index"].Value<int>();
+                        StreamingToolCallState call;
+                        if (!_toolCalls.TryGetValue(index, out call))
+                        {
+                            call = new StreamingToolCallState();
+                            _toolCalls[index] = call;
+                        }
+                        call.Add(token);
+                    }
+                }
             }
 
             public LlmCompletionResult ToResult()
@@ -437,6 +455,10 @@ namespace RNAssistant.Core.Llm
                     ["content"] = _content.ToString(),
                     ["reasoning_content"] = reasoning
                 };
+                if (_toolCalls.Count > 0)
+                {
+                    message["tool_calls"] = new JArray(_toolCalls.Values.Select(call => call.ToJson()));
+                }
                 var result = BuildCompletionResult(message, _usage);
                 result.ReasoningTruncated = _reasoning.Length > 0
                     ? _reasoningTruncated
@@ -495,6 +517,39 @@ namespace RNAssistant.Core.Llm
                     truncated = true;
                 }
                 return stored;
+            }
+        }
+
+        private sealed class StreamingToolCallState
+        {
+            private readonly StringBuilder _name = new StringBuilder();
+            private readonly StringBuilder _arguments = new StringBuilder();
+            private string _id;
+            private string _type;
+
+            public void Add(JObject token)
+            {
+                if (token == null) return;
+                if (token["id"] != null) _id = (string)token["id"];
+                if (token["type"] != null) _type = (string)token["type"];
+                var function = token["function"] as JObject;
+                if (function == null) return;
+                if (function["name"] != null) _name.Append((string)function["name"]);
+                if (function["arguments"] != null) _arguments.Append((string)function["arguments"]);
+            }
+
+            public JObject ToJson()
+            {
+                return new JObject
+                {
+                    ["id"] = _id,
+                    ["type"] = string.IsNullOrWhiteSpace(_type) ? "function" : _type,
+                    ["function"] = new JObject
+                    {
+                        ["name"] = _name.ToString(),
+                        ["arguments"] = _arguments.Length == 0 ? "{}" : _arguments.ToString()
+                    }
+                };
             }
         }
 
@@ -808,6 +863,7 @@ namespace RNAssistant.Core.Llm
             return new LlmCompletionResult
             {
                 Content = content,
+                ToolCalls = ReadToolCalls(message),
                 ReasoningContent = providerReasoning.Length > 0 ? providerReasoning : embeddedReasoning,
                 ReasoningTokens = ReadReasoningTokens(usage),
                 ReasoningTruncated = providerReasoning.Length > 0
@@ -818,6 +874,25 @@ namespace RNAssistant.Core.Llm
                 TotalTokens = totalTokens,
                 UsageJson = usage == null ? null : usage.ToString(Formatting.None)
             };
+        }
+
+        private static List<LlmToolCall> ReadToolCalls(JObject message)
+        {
+            var result = new List<LlmToolCall>();
+            var calls = message == null ? null : message["tool_calls"] as JArray;
+            foreach (var token in calls == null ? new JObject[0] : calls.OfType<JObject>())
+            {
+                var function = token["function"] as JObject;
+                if (function == null) continue;
+                result.Add(new LlmToolCall
+                {
+                    Id = (string)token["id"],
+                    Type = (string)token["type"] ?? "function",
+                    Name = (string)function["name"],
+                    ArgumentsJson = (string)function["arguments"] ?? "{}"
+                });
+            }
+            return result;
         }
 
         private static string ExtractLeadingThink(string content, out string reasoning, out bool truncated)
@@ -927,6 +1002,46 @@ namespace RNAssistant.Core.Llm
                     continue;
                 }
 
+                if (message.ToolCalls != null && message.ToolCalls.Count > 0)
+                {
+                    build.Messages.Add(new JObject
+                    {
+                        ["role"] = message.Role,
+                        ["content"] = string.IsNullOrEmpty(message.Content) ? null : message.Content,
+                        ["tool_calls"] = new JArray(message.ToolCalls.Select(call => new JObject
+                        {
+                            ["id"] = call.Id,
+                            ["type"] = string.IsNullOrWhiteSpace(call.Type) ? "function" : call.Type,
+                            ["function"] = new JObject
+                            {
+                                ["name"] = call.Name,
+                                ["arguments"] = string.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson
+                            }
+                        }))
+                    });
+                    build.EstimatedPromptTokens += 12 + ModelContextBudget.EstimateTextTokens(message.Content) +
+                        message.ToolCalls.Sum(call => ModelContextBudget.EstimateTextTokens(call.Name) + ModelContextBudget.EstimateTextTokens(call.ArgumentsJson));
+                    continue;
+                }
+
+                if (string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (string.IsNullOrWhiteSpace(message.ToolCallId))
+                    {
+                        throw new InvalidOperationException("A role=tool message requires ToolCallId.");
+                    }
+                    var toolMessage = new JObject
+                    {
+                        ["role"] = "tool",
+                        ["tool_call_id"] = message.ToolCallId,
+                        ["content"] = message.Content ?? string.Empty
+                    };
+                    if (!string.IsNullOrWhiteSpace(message.ToolName)) toolMessage["name"] = message.ToolName;
+                    build.Messages.Add(toolMessage);
+                    build.EstimatedPromptTokens += 6 + ModelContextBudget.EstimateTextTokens(message.Content);
+                    continue;
+                }
+
                 var attachments = message.Attachments ?? new List<ChatAttachment>();
                 var text = AppendExtractedText(message.Content ?? string.Empty, attachments, ref remainingAttachmentTokens);
                 var imageParts = new List<ModelImagePart>();
@@ -1003,6 +1118,61 @@ namespace RNAssistant.Core.Llm
             }
 
             return build;
+        }
+
+        internal static JObject BuildRequestBody(AppSettings settings, IList<object> apiMessages, int estimatedPromptTokens, LlmRequestOptions requestOptions)
+        {
+            settings = settings ?? new AppSettings();
+            var body = new JObject
+            {
+                ["model"] = settings.Model,
+                ["messages"] = JArray.FromObject(apiMessages ?? new object[0]),
+                ["max_tokens"] = ModelContextBudget.EffectiveOutputTokens(settings, estimatedPromptTokens, settings.Model),
+                ["temperature"] = settings.Temperature,
+                ["top_p"] = settings.TopP,
+                ["stream"] = settings.StreamResponses
+            };
+            if (settings.StreamResponses) body["stream_options"] = new JObject { ["include_usage"] = true };
+
+            requestOptions = requestOptions ?? new LlmRequestOptions();
+            if (string.Equals(requestOptions.ResponseFormat, LlmResponseFormats.JsonObject, StringComparison.OrdinalIgnoreCase))
+            {
+                body["response_format"] = new JObject { ["type"] = "json_object" };
+            }
+            else if (string.Equals(requestOptions.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.OrdinalIgnoreCase))
+            {
+                JObject schema;
+                try { schema = JObject.Parse(requestOptions.ResponseSchemaJson ?? string.Empty); }
+                catch (JsonException ex) { throw new InvalidOperationException("Response JSON Schema is invalid: " + ex.Message, ex); }
+                body["response_format"] = new JObject
+                {
+                    ["type"] = "json_schema",
+                    ["json_schema"] = new JObject
+                    {
+                        ["name"] = string.IsNullOrWhiteSpace(requestOptions.ResponseSchemaName) ? "response" : requestOptions.ResponseSchemaName,
+                        ["strict"] = true,
+                        ["schema"] = schema
+                    }
+                };
+            }
+
+            if (requestOptions.NativeTools && requestOptions.Tools != null && requestOptions.Tools.Count > 0)
+            {
+                body["tools"] = new JArray(requestOptions.Tools.Select(tool => new JObject
+                {
+                    ["type"] = "function",
+                    ["function"] = new JObject
+                    {
+                        ["name"] = tool.ApiName,
+                        ["description"] = tool.Description ?? string.Empty,
+                        ["parameters"] = JObject.Parse(tool.ParametersSchemaJson ?? "{}"),
+                        ["strict"] = true
+                    }
+                }));
+                body["tool_choice"] = "auto";
+                body["parallel_tool_calls"] = false;
+            }
+            return body;
         }
 
         private static string AudioFormat(ChatAttachment attachment)

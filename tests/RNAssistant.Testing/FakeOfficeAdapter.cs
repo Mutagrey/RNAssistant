@@ -4,6 +4,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
 
@@ -235,6 +236,11 @@ namespace RNAssistant.Harness
             };
         }
 
+        public void SetDocumentTitle(string title)
+        {
+            _documentTitle = title ?? string.Empty;
+        }
+
         public string GetVbaModuleCode(string moduleName)
         {
             FakeVbaModule module;
@@ -292,7 +298,11 @@ namespace RNAssistant.Harness
 
             if ((command.ToolId ?? string.Empty).EndsWith(".vba_read_project", StringComparison.OrdinalIgnoreCase))
             {
-                return ToolResult.Ok("read " + command.ToolId, GetVbaSnapshot(30000));
+                return ToolResult.Ok("read " + command.ToolId, JsonConvert.SerializeObject(new
+                {
+                    title = DocumentTitle,
+                    modules = _vbaModules.Values.Select(module => new { name = module.Name, type = module.Type, code = module.Code }).ToArray()
+                }));
             }
 
             if ((command.ToolId ?? string.Empty).EndsWith(".vba_read_module", StringComparison.OrdinalIgnoreCase))
@@ -322,7 +332,37 @@ namespace RNAssistant.Harness
             if ((command.ToolId ?? string.Empty).EndsWith(".run_macro", StringComparison.OrdinalIgnoreCase))
             {
                 RanMacros.Add(Argument(command, "macroName", string.Empty));
-                return ToolResult.Ok("ran " + command.ToolId);
+                return ToolResult.Ok("ran " + command.ToolId, JsonConvert.SerializeObject(new { output = "fake-vba-result" }));
+            }
+
+            if ((command.ToolId ?? string.Empty).EndsWith(".vba_install_package_internal", StringComparison.OrdinalIgnoreCase))
+            {
+                var marker = Argument(command, "marker", string.Empty);
+                foreach (var component in JArray.Parse(Argument(command, "componentsJson", "[]")).OfType<JObject>())
+                {
+                    SetVbaModule((string)component["name"], "' " + marker + "\n" + ((string)component["code"] ?? string.Empty), (string)component["type"] ?? "StdModule");
+                }
+                return ToolResult.Ok("fake VBA package installed");
+            }
+
+            if ((command.ToolId ?? string.Empty).EndsWith(".vba_remove_package_internal", StringComparison.OrdinalIgnoreCase))
+            {
+                var expected = JObject.Parse(Argument(command, "expectedComponentsJson", "{}"));
+                var expectedMarker = Argument(command, "expectedMarker", string.Empty);
+                foreach (var property in expected.Properties())
+                {
+                    FakeVbaModule module;
+                    if (_vbaModules.TryGetValue(property.Name, out module) && module.Code.IndexOf(expectedMarker, StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        return ToolResult.Fail("not owned", null, "vba_component_not_owned", false);
+                    }
+                    if (_vbaModules.TryGetValue(property.Name, out module) && !string.Equals(VbaToolManifestParser.CodeSha256(module.Code), (string)property.Value, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return ToolResult.Fail("modified", null, "vba_component_modified", false);
+                    }
+                }
+                foreach (var property in expected.Properties()) _vbaModules.Remove(property.Name);
+                return ToolResult.Ok("fake VBA package removed");
             }
 
             if (FailUnknownSkills && !IsKnownTool(command.ToolId))
@@ -1136,7 +1176,7 @@ namespace RNAssistant.Harness
                 Host = host,
                 Name = id,
                 Description = (mutatesDocument ? "Mutates document: " : "Read-only: ") + id,
-                ArgumentSchemaJson = "{}",
+                ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":true}",
                 Enabled = true,
                 BuiltIn = true,
                 RequiresConfirmation = requiresConfirmation,
@@ -1185,11 +1225,9 @@ namespace RNAssistant.Harness
                 UseWhen = tool.UseWhen,
                 DoNotUseWhen = tool.DoNotUseWhen,
                 ExamplesJson = tool.ExamplesJson,
-                PreconditionsJson = tool.PreconditionsJson,
                 VerifyJson = tool.VerifyJson,
                 CapabilityStatus = tool.CapabilityStatus,
-                Limitations = tool.Limitations,
-                ReplacementToolId = tool.ReplacementToolId
+                Limitations = tool.Limitations
             };
         }
 

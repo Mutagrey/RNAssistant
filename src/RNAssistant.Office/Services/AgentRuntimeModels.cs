@@ -95,5 +95,14 @@ namespace RNAssistant.Office.Services
         public bool FormatRepairUsed { get; set; }
         public bool ToolCorrectionUsed { get; set; }
         public bool PendingVerification { get; set; }
+        public bool PlanDeclared { get; set; }
+        public string ResponseMode { get; set; }
+        public string WorkingGoal { get; set; }
+        public List<AgentPlanStep> Plan { get; set; }
+
+        public AgentRunState()
+        {
+            Plan = new List<AgentPlanStep>();
+        }
     }
 }

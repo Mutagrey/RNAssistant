@@ -21,14 +21,15 @@ namespace RNAssistant.Office.Services
             var instruction = string.IsNullOrWhiteSpace(settings.ChatSystemPrompt)
                 ? new AppSettings().ChatSystemPrompt
                 : settings.ChatSystemPrompt.Trim();
-            if (string.Equals(settings.SystemPromptRole, "system", StringComparison.OrdinalIgnoreCase))
+            var instructionRole = NormalizeInstructionRole(settings.SystemPromptRole);
+            if (!string.Equals(instructionRole, "user", StringComparison.Ordinal))
             {
-                messages.Add(new ChatMessage { Role = "system", Content = instruction });
+                messages.Add(new ChatMessage { Role = instructionRole, Content = instruction });
             }
 
             var budget = ModelContextBudget.InputBudgetTokens(settings);
             var currentText = BuildCurrentText(userText, context, Math.Max(256, budget / 3));
-            if (!string.Equals(settings.SystemPromptRole, "system", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(instructionRole, "user", StringComparison.Ordinal))
             {
                 currentText = instruction + "\n\n" + currentText;
             }
@@ -48,6 +49,13 @@ namespace RNAssistant.Office.Services
                 session,
                 settings);
             return messages;
+        }
+
+        private static string NormalizeInstructionRole(string role)
+        {
+            if (string.Equals(role, "system", StringComparison.OrdinalIgnoreCase)) return "system";
+            if (string.Equals(role, "developer", StringComparison.OrdinalIgnoreCase)) return "developer";
+            return "user";
         }
 
         private static string BuildCurrentText(string userText, DocumentContext context, int contextBudgetTokens)

@@ -85,6 +85,9 @@ namespace RNAssistant.Core.Storage
                 settings.ChatSystemPrompt = defaults.ChatSystemPrompt;
             }
             settings.SystemPromptRole = NormalizePromptRole(settings.SystemPromptRole, defaults.SystemPromptRole);
+            settings.ToolResultRole = NormalizeToolResultRole(settings.ToolResultRole, defaults.ToolResultRole);
+            settings.AgentResponseMode = NormalizeResponseMode(settings.AgentResponseMode, defaults.AgentResponseMode, true);
+            settings.AgentResponseFallbackMode = NormalizeResponseMode(settings.AgentResponseFallbackMode, defaults.AgentResponseFallbackMode, false);
             NormalizeAgentPrompts(settings);
             if (settings.MaxTokens <= 0)
             {
@@ -106,10 +109,6 @@ namespace RNAssistant.Core.Storage
             {
                 settings.RequestTimeoutSeconds = 30;
             }
-            if (settings.ContextCharLimit <= 0)
-            {
-                settings.ContextCharLimit = defaults.ContextCharLimit;
-            }
             if (settings.ContextWindowOverrideTokens < 0)
             {
                 settings.ContextWindowOverrideTokens = 0;
@@ -117,34 +116,6 @@ namespace RNAssistant.Core.Storage
             if (settings.ContextWindowOverrideTokens > 4000000)
             {
                 settings.ContextWindowOverrideTokens = 4000000;
-            }
-            if (!settings.AutoRunToolCalls.HasValue)
-            {
-                settings.AutoRunToolCalls = defaults.AutoRunToolCalls;
-            }
-            if (!settings.AutoRetryToolErrors.HasValue)
-            {
-                settings.AutoRetryToolErrors = defaults.AutoRetryToolErrors;
-            }
-            if (!settings.SmartChatTitles.HasValue)
-            {
-                settings.SmartChatTitles = defaults.SmartChatTitles;
-            }
-            if (!settings.RequireVerificationForMutations.HasValue)
-            {
-                settings.RequireVerificationForMutations = defaults.RequireVerificationForMutations;
-            }
-            if (!settings.AutoContinueAfterConfirmation.HasValue)
-            {
-                settings.AutoContinueAfterConfirmation = defaults.AutoContinueAfterConfirmation;
-            }
-            if (!settings.AllowAgentToolAuthoring.HasValue)
-            {
-                settings.AllowAgentToolAuthoring = defaults.AllowAgentToolAuthoring;
-            }
-            if (!settings.AutoCompressContext.HasValue)
-            {
-                settings.AutoCompressContext = defaults.AutoCompressContext;
             }
             if (settings.VbaContextCharLimit <= 0)
             {
@@ -179,16 +150,6 @@ namespace RNAssistant.Core.Storage
                 settings.MaxAgentToolsPerRequest = defaults.MaxAgentToolsPerRequest;
             }
             settings.MaxAgentToolsPerRequest = Math.Max(8, Math.Min(64, settings.MaxAgentToolsPerRequest));
-            if (settings.MaxAgentPlanSteps <= 0)
-            {
-                settings.MaxAgentPlanSteps = defaults.MaxAgentPlanSteps;
-            }
-            settings.MaxAgentPlanSteps = Math.Max(1, Math.Min(8, settings.MaxAgentPlanSteps));
-            if (settings.MaxAgentReadOnlyPlanSteps <= 0)
-            {
-                settings.MaxAgentReadOnlyPlanSteps = defaults.MaxAgentReadOnlyPlanSteps;
-            }
-            settings.MaxAgentReadOnlyPlanSteps = Math.Max(1, Math.Min(16, settings.MaxAgentReadOnlyPlanSteps));
             return settings;
         }
 
@@ -215,9 +176,29 @@ namespace RNAssistant.Core.Storage
             {
                 return fallback;
             }
-            return string.Equals(value, "system", StringComparison.OrdinalIgnoreCase)
-                ? "system"
-                : "user";
+            if (string.Equals(value, "system", StringComparison.OrdinalIgnoreCase)) return "system";
+            if (string.Equals(value, "developer", StringComparison.OrdinalIgnoreCase)) return "developer";
+            return "user";
+        }
+
+        private static string NormalizeToolResultRole(string value, string fallback)
+        {
+            value = string.IsNullOrWhiteSpace(value) ? fallback : value;
+            if (string.Equals(value, "developer", StringComparison.OrdinalIgnoreCase)) return "developer";
+            if (string.Equals(value, "user", StringComparison.OrdinalIgnoreCase)) return "user";
+            return "tool";
+        }
+
+        private static string NormalizeResponseMode(string value, string fallback, bool allowNative)
+        {
+            value = string.IsNullOrWhiteSpace(value) ? fallback : value;
+            if (allowNative && string.Equals(value, AgentResponseModes.NativeToolCalls, StringComparison.OrdinalIgnoreCase))
+            {
+                return AgentResponseModes.NativeToolCalls;
+            }
+            return string.Equals(value, AgentResponseModes.JsonObject, StringComparison.OrdinalIgnoreCase)
+                ? AgentResponseModes.JsonObject
+                : AgentResponseModes.JsonSchema;
         }
 
         private static string DefaultIfBlank(string value, string fallback)

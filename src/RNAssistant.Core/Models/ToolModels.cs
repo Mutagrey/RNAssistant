@@ -25,26 +25,45 @@ namespace RNAssistant.Core.Models
         public string UseWhen { get; set; }
         public string DoNotUseWhen { get; set; }
         public string ExamplesJson { get; set; }
-        public string PreconditionsJson { get; set; }
         public string VerifyJson { get; set; }
         public string CapabilityStatus { get; set; }
         public string Limitations { get; set; }
-        public string ReplacementToolId { get; set; }
+        public string PackageVersion { get; set; }
+        public string EntryPoint { get; set; }
+        public List<string> ArgumentOrder { get; set; }
+        public List<VbaToolComponent> Components { get; set; }
+        public string Scope { get; set; }
+        public string InstallationStatus { get; set; }
 
         public ToolDefinition()
         {
             Enabled = true;
             Executor = "builtin";
-            ArgumentSchemaJson = "{}";
+            ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}";
             AgentCanRun = true;
             CapabilityStatus = "available";
+            PackageVersion = "1.0.0";
+            ArgumentOrder = new List<string>();
+            Components = new List<VbaToolComponent>();
+            Scope = "global";
         }
+    }
+
+    public sealed class VbaToolComponent
+    {
+        public string Name { get; set; }
+        public string Type { get; set; }
+        public string FileName { get; set; }
+        public string Code { get; set; }
+        public string CodeSha256 { get; set; }
     }
 
     public sealed class ToolCommand
     {
         public string ToolId { get; set; }
         public string Description { get; set; }
+        public string ToolCallId { get; set; }
+        public string ToolApiName { get; set; }
         public Dictionary<string, object> Arguments { get; set; }
 
         public ToolCommand()

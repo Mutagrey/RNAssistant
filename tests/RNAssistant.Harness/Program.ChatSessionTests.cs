@@ -41,7 +41,7 @@ namespace RNAssistant.Harness
                 });
                 store.Save(session);
 
-                var loaded = store.Load("Word", "doc-key", ChatStore.GetSessionId(session));
+                var loaded = store.Load("Word", "doc-key", session.Id);
                 AssertTrue(loaded != null, "loaded session");
                 AssertEqual("First", loaded.Title, "title");
                 AssertEqual(1, loaded.Messages.Count, "message count");
@@ -50,8 +50,8 @@ namespace RNAssistant.Harness
 
                 var sessions = store.List("Word", "doc-key", "Doc");
                 AssertEqual(1, sessions.Count, "document session count");
-                AssertEqual(ChatStore.GetSessionId(session), ChatStore.GetSessionId(sessions[0]), "session id");
-                AssertEqual(ChatStore.GetSessionId(session), store.LoadActiveSessionId("Word", "doc-key"), "active id");
+                AssertEqual(session.Id, sessions[0].Id, "session id");
+                AssertEqual(session.Id, store.LoadActiveSessionId("Word", "doc-key"), "active id");
             });
         }
 
@@ -63,11 +63,12 @@ namespace RNAssistant.Harness
                 var documentDirectory = Path.Combine(paths.ChatDirectory, AppDataPaths.SafeFileName("Excel|book"));
                 Directory.CreateDirectory(documentDirectory);
                 File.WriteAllText(Path.Combine(documentDirectory, "broken.json"), "{ broken");
+                File.WriteAllText(Path.Combine(documentDirectory, "unsupported.json"), "{\"Id\":\"unsupported\",\"Host\":\"Excel\",\"DocumentKey\":\"book\"}");
 
                 var session = store.Create("Excel", "book", "Book", "Good");
                 var sessions = store.List("Excel", "book", "Book");
                 AssertEqual(1, sessions.Count, "document session count");
-                AssertEqual(ChatStore.GetSessionId(session), ChatStore.GetSessionId(sessions[0]), "session id");
+                AssertEqual(session.Id, sessions[0].Id, "session id");
 
                 var allSessions = store.List();
                 AssertEqual(1, allSessions.Count, "global session count");
@@ -103,7 +104,7 @@ namespace RNAssistant.Harness
                 adapter.DocumentKeyValue = "saved-doc";
                 var migrated = service.LoadSession(null);
 
-                AssertEqual(ChatStore.GetSessionId(session), ChatStore.GetSessionId(migrated), "migrated session id");
+                AssertEqual(session.Id, migrated.Id, "migrated session id");
                 AssertEqual("saved-doc", migrated.DocumentKey, "migrated document key");
                 AssertEqual(1, migrated.Messages.Count, "migrated message count");
                 AssertEqual(0, store.List("Excel", "doc", "Harness.xlsx").Count, "old document sessions");
@@ -119,7 +120,7 @@ namespace RNAssistant.Harness
                 var store = new ChatStore(paths);
                 var service = new ChatSessionService(adapter, store);
                 var oldSession = service.LoadSession(null);
-                var oldId = ChatStore.GetSessionId(oldSession);
+                var oldId = oldSession.Id;
                 oldSession.Messages.Add(new ChatMessage { Role = "user", Content = "old doc" });
                 store.Save(oldSession);
 
@@ -128,7 +129,7 @@ namespace RNAssistant.Harness
 
                 var current = service.LoadSession(oldId, true);
 
-                AssertTrue(!string.Equals(oldId, ChatStore.GetSessionId(current), StringComparison.OrdinalIgnoreCase), "fallback created current session");
+                AssertTrue(!string.Equals(oldId, current.Id, StringComparison.OrdinalIgnoreCase), "fallback created current session");
                 AssertEqual("other-doc", current.DocumentKey, "fallback document key");
                 AssertEqual(0, current.Messages.Count, "fallback message count");
                 AssertEqual(1, store.List("Excel", "doc", "Harness.xlsx").Count, "old document preserved");
@@ -145,9 +146,9 @@ namespace RNAssistant.Harness
                 var service = new ChatSessionService(adapter, store);
                 var archived = store.Create("Word", "archived-doc", "Archive.docx", "Archive chat");
 
-                var loaded = service.LoadAddressedSession(ChatStore.GetSessionId(archived));
+                var loaded = service.LoadAddressedSession(archived.Id);
 
-                AssertEqual(ChatStore.GetSessionId(archived), ChatStore.GetSessionId(loaded), "addressed session id");
+                AssertEqual(archived.Id, loaded.Id, "addressed session id");
                 AssertEqual("Word", loaded.Host, "addressed host");
                 AssertEqual("archived-doc", loaded.DocumentKey, "addressed document key");
             });
@@ -162,8 +163,8 @@ namespace RNAssistant.Harness
                 var service = new ChatSessionService(adapter, store);
                 var first = store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "First");
                 var second = store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "Second");
-                var removedId = ChatStore.GetSessionId(first);
-                var activeId = ChatStore.GetSessionId(second);
+                var removedId = first.Id;
+                var activeId = second.Id;
                 service.SetActiveSession(second);
 
                 AssertTrue(store.Delete(adapter.HostName, adapter.DocumentKey, removedId), "deleted addressed chat");
@@ -178,7 +179,7 @@ namespace RNAssistant.Harness
                 }
 
                 AssertTrue(threw, "missing addressed chat rejected");
-                AssertEqual(activeId, ChatStore.GetSessionId(service.GetActiveSession()), "active chat preserved");
+                AssertEqual(activeId, service.GetActiveSession().Id, "active chat preserved");
             });
         }
 
@@ -193,14 +194,14 @@ namespace RNAssistant.Harness
                 var first = service.LoadSession(null);
                 var second = service.CreateChat("Another draft");
 
-                AssertTrue(!string.Equals(ChatStore.GetSessionId(first), ChatStore.GetSessionId(second), StringComparison.OrdinalIgnoreCase), "new draft id");
+                AssertTrue(!string.Equals(first.Id, second.Id, StringComparison.OrdinalIgnoreCase), "new draft id");
                 AssertEqual(ChatModes.Auto, first.Mode, "initial draft defaults to auto mode");
                 AssertEqual(ChatModes.Auto, second.Mode, "new draft defaults to auto mode");
                 AssertEqual(0, store.List(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle).Count, "empty drafts not persisted");
                 AssertTrue(!store.IsPersisted(second), "active draft remains in memory");
-                AssertEqual(ChatStore.GetSessionId(second), ChatStore.GetSessionId(service.GetActiveSession()), "active draft survives list refresh");
+                AssertEqual(second.Id, service.GetActiveSession().Id, "active draft survives list refresh");
 
-                var draftSummaries = service.GetChatSummaries(ChatStore.GetSessionId(second));
+                var draftSummaries = service.GetChatSummaries(second.Id);
                 AssertEqual(1, draftSummaries.Count, "active transient draft is visible in chat tree");
                 AssertEqual(ChatModes.Auto, draftSummaries[0].Mode, "visible transient draft keeps auto mode");
 
@@ -231,8 +232,8 @@ namespace RNAssistant.Harness
                 store.Save(first);
                 service.NotifySaved(first);
 
-                AssertEqual(ChatStore.GetSessionId(second), ChatStore.GetSessionId(service.GetActiveSession()), "background save does not select chat");
-                AssertEqual(ChatStore.GetSessionId(second), store.LoadActiveSessionId(adapter.HostName, adapter.DocumentKey), "stored active chat remains selected");
+                AssertEqual(second.Id, service.GetActiveSession().Id, "background save does not select chat");
+                AssertEqual(second.Id, store.LoadActiveSessionId(adapter.HostName, adapter.DocumentKey), "stored active chat remains selected");
             });
         }
 
@@ -255,7 +256,7 @@ namespace RNAssistant.Harness
 
                 new ChatSessionService(adapter, store).ReconcileInterruptedRuns("new-runtime");
 
-                var recovered = store.Load(ChatStore.GetSessionId(session));
+                var recovered = store.Load(session.Id);
                 AssertEqual("cancelled", recovered.LastRun.Status, "interrupted run status");
                 AssertTrue(recovered.Messages.Any(message =>
                     message.Activity != null && message.Activity.ExecutionStatus == "application_restarted"),

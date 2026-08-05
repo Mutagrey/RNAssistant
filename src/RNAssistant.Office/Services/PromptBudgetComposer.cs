@@ -32,7 +32,7 @@ namespace RNAssistant.Office.Services
             var candidates = history.Select(CloneConversationMessage).ToList();
             var estimates = candidates.Select(candidate => EstimateMessages(new[] { candidate })).ToList();
             var needsCompression = estimates.Sum() > available;
-            var compressionEnabled = settings == null || settings.AutoCompressContext != false;
+            var compressionEnabled = settings == null || settings.AutoCompressContext;
             var summaryBudget = needsCompression && compressionEnabled && available >= 256
                 ? Math.Min(1024, Math.Max(128, available / 5))
                 : 0;

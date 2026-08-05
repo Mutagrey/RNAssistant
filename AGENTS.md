@@ -29,19 +29,24 @@ RNAssistant - локальный VSTO/WebView2 ассистент для Office,
 
 ## Tool/Agent Protocol
 
-- Runtime protocol остается text-first: в Agent mode модель должна возвращать один raw planner JSON object (`tool_plan`, `final`, `clarify`, `cannot_do`) без markdown и внешнего текста. Parser совместимо принимает один чистый `json` code fence без текста вокруг.
-- Fences, legacy envelopes, native `tool_calls` и `function_call` не поддерживаются. Выполнение не должно зависеть от remote API tools.
+- Семантический runtime protocol — AgentDecision v1: один raw JSON object с обязательными полями `protocolVersion`, `kind`, `decisionSummary`, `goal`, `plan`, `tool`, `message`. Kind: `plan`, `tool`, `clarify`, `final`, `cannot_complete`.
+- Один model turn может выбрать ровно один внешний tool. Fences, surrounding prose, alternate envelopes, `function_call` и parallel tool calls не поддерживаются.
+- Transport modes: `json_schema` по умолчанию, `json_object`, `native_tool_calls`. Fallback `json_schema -> json_object` допустим только до первого выполненного tool. Office tools всегда выполняются локально.
+- Роль инструкций выбирается из `developer` (default), `system`, `user`. Роль результата выбирается независимо: `tool` (default с matching assistant `tool_calls`/`tool_call_id`), `developer`, `user`.
+- `decisionSummary` и видимый plan не являются chain-of-thought. Provider reasoning хранится отдельно и не смешивается с протоколом или replay history.
+- Custom tools обязаны иметь formal object JSON Schema. Другие формы отклоняются без миграции.
 - Built-in Office mutation tools могут исполняться в Agent mode, кроме VBA mutation tools.
 - Custom tools с `requiresConfirmation` и VBA mutation tools требуют подтверждения, если `AutoConfirmToolActions` выключен.
-- Tool safety metadata живет в `SkillDefinition`: `MutatesDocument`, `AgentCanRun`, `RequiresConfirmation`. Не добавляй новые hardcoded suffix lists в executor.
+- Tool safety metadata живет в `ToolDefinition`: `MutatesDocument`, `AgentCanRun`, `RequiresConfirmation`. Не добавляй новые hardcoded suffix lists в executor.
 - Pipeline tools не должны обращаться напрямую к Office adapters: они вызывают existing tool ids через `OfficeToolExecutor`.
+- VBA package rules зафиксированы в `docs/vba-tool-packages.md`; model-facing правила — во встроенном skill `common.vba_tool_authoring`.
 
 ## Контекст и чаты
 
 - Контекст принадлежит активному chat session, не глобальному документу.
-- Legacy chat/context files не мигрируются автоматически. Если формат не читается, runtime должен пропустить файл и создать новый session/context.
+- Неподдерживаемые chat/context files не мигрируются. Runtime пропускает их и создает новый session/context.
 - Document identity migration должна сохранять чаты при смене пути/первом сохранении документа.
-- Runtime reset может очищать chats, contexts, VBA backups и WebView user data; settings, API key и custom tools не удалять без отдельного явного действия.
+- Runtime reset может очищать chats, VBA backups и WebView user data; settings, API key и custom tools не удалять без отдельного явного действия.
 
 ## Definition of Done
 

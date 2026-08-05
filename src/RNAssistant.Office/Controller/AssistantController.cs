@@ -82,10 +82,13 @@ namespace RNAssistant.Office
                 (settings, attachment) => ModelAttachmentService.ReadForModel(_attachmentStore, settings, attachment));
             if (completeAsync == null)
             {
+                ChatCompletionService.AgentCompletionDelegate agentCompletion =
+                    (settings, messages, requestOptions, streamProgress, cancellationToken) =>
+                        _llmClient.CompleteAsync(settings, messages, requestOptions, streamProgress, cancellationToken);
                 ChatCompletionService.CompletionDelegate streamingCompletion =
                     (settings, messages, streamProgress, cancellationToken) =>
                         _llmClient.CompleteAsync(settings, messages, streamProgress, cancellationToken);
-                _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, streamingCompletion);
+                _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, agentCompletion);
                 _offlineChatService = new OfflineChatService(_toolExecutor, streamingCompletion);
                 _plainChatService = new PlainChatService(streamingCompletion);
             }
@@ -109,7 +112,7 @@ namespace RNAssistant.Office
         public InitResponse Initialize()
         {
             var session = LoadSession(null);
-            var activeId = ChatStore.GetSessionId(session);
+            var activeId = session.Id;
             var context = LoadContext(session);
             var settings = _settingsService.Load();
             return new InitResponse
@@ -289,7 +292,7 @@ namespace RNAssistant.Office
             var host = session.Host;
             var documentKey = session.DocumentKey;
             var documentTitle = session.DocumentTitle;
-            var sessionId = ChatStore.GetSessionId(session);
+            var sessionId = session.Id;
             Task.Run(async delegate
             {
                 var title = string.Empty;
@@ -372,7 +375,7 @@ namespace RNAssistant.Office
         {
             settings = settings ?? _settingsService.Load();
             session = session ?? LoadAddressedSession(null);
-            var sessionId = ChatStore.GetSessionId(session);
+            var sessionId = session.Id;
             runId = string.IsNullOrWhiteSpace(runId) ? Guid.NewGuid().ToString("N") : runId;
 
             var runCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -396,7 +399,7 @@ namespace RNAssistant.Office
                 var documentContext = LoadContext(session);
                 var skills = _skillCatalog.SelectRelevantSkills(text, documentContext, 5);
                 var titleUserSeed = ChatTitleBuilder.ResolveUserSeed(session, text);
-                var shouldGenerateLlmTitle = settings.SmartChatTitles != false && ChatTitleBuilder.ShouldAssign(session);
+                var shouldGenerateLlmTitle = settings.SmartChatTitles && ChatTitleBuilder.ShouldAssign(session);
                 var provisionalTitle = ChatTitleBuilder.ShouldAssign(session)
                     ? ChatTitleBuilder.BuildDraftTitle(titleUserSeed)
                     : string.Empty;
@@ -562,7 +565,7 @@ namespace RNAssistant.Office
 
         private SendChatResponse CreateSendChatResponse(ChatSession session, AppSettings settings, ChatCompletionResult completion)
         {
-            var activeId = ChatStore.GetSessionId(session);
+            var activeId = session.Id;
             return new SendChatResponse
             {
                 Message = completion == null ? string.Empty : completion.AssistantText,
@@ -684,7 +687,8 @@ namespace RNAssistant.Office
 
         public IReadOnlyList<ToolDefinition> SaveTools(IEnumerable<ToolDefinition> tools)
         {
-            var customTools = (tools ?? new ToolDefinition[0]).Where(s => s != null && !s.BuiltIn).ToList();
+            var customTools = (tools ?? new ToolDefinition[0]).Where(s =>
+                s != null && !s.BuiltIn && !string.Equals(s.Scope, "document", StringComparison.OrdinalIgnoreCase)).ToList();
             foreach (var tool in customTools)
             {
                 var validation = _toolExecutor.ValidateToolDefinition(tool);
@@ -695,6 +699,26 @@ namespace RNAssistant.Office
             }
             _toolStore.Save(customTools, _adapter.HostName);
             return GetTools();
+        }
+
+        public VbaToolPackageResponse InstallVbaTool(string id, bool dryRun)
+        {
+            var tool = _toolStore.Load().FirstOrDefault(item => item != null &&
+                string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.Executor, "vba", StringComparison.OrdinalIgnoreCase));
+            if (tool == null) throw new InvalidOperationException("Global VBA tool not found: " + id);
+            var result = _toolExecutor.InstallVbaTool(tool, dryRun);
+            return new VbaToolPackageResponse { Result = result, Tools = GetTools() };
+        }
+
+        public VbaToolPackageResponse UninstallVbaTool(string id)
+        {
+            var tool = _toolStore.Load().FirstOrDefault(item => item != null &&
+                string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.Executor, "vba", StringComparison.OrdinalIgnoreCase));
+            if (tool == null) throw new InvalidOperationException("Global VBA tool not found: " + id);
+            var result = _toolExecutor.RemoveVbaTool(tool);
+            return new VbaToolPackageResponse { Result = result, Tools = GetTools() };
         }
 
         public IReadOnlyList<SkillDefinition> GetSkills()

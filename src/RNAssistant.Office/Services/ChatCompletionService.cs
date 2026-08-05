@@ -23,6 +23,12 @@ namespace RNAssistant.Office.Services
             IEnumerable<ChatMessage> messages,
             Action<LlmStreamUpdate> streamProgress,
             CancellationToken cancellationToken);
+        public delegate Task<LlmCompletionResult> AgentCompletionDelegate(
+            AppSettings settings,
+            IEnumerable<ChatMessage> messages,
+            LlmRequestOptions requestOptions,
+            Action<LlmStreamUpdate> streamProgress,
+            CancellationToken cancellationToken);
 
         private readonly AgentRunService _agentRunService;
 
@@ -38,6 +44,14 @@ namespace RNAssistant.Office.Services
             IOfficeApplicationAdapter adapter,
             OfficeToolExecutor toolExecutor,
             CompletionDelegate completeAsync)
+        {
+            _agentRunService = new AgentRunService(adapter, toolExecutor, completeAsync);
+        }
+
+        public ChatCompletionService(
+            IOfficeApplicationAdapter adapter,
+            OfficeToolExecutor toolExecutor,
+            AgentCompletionDelegate completeAsync)
         {
             _agentRunService = new AgentRunService(adapter, toolExecutor, completeAsync);
         }
@@ -95,6 +109,7 @@ namespace RNAssistant.Office.Services
         {
             return ContinueAfterToolAsync(
                 confirmedCommand,
+                null,
                 session,
                 documentContext,
                 settings,
@@ -108,6 +123,7 @@ namespace RNAssistant.Office.Services
 
         public Task<ChatCompletionResult> ContinueAfterToolAsync(
             ToolCommand confirmedCommand,
+            ToolResult confirmedResult,
             ChatSession session,
             DocumentContext documentContext,
             AppSettings settings,
@@ -123,7 +139,7 @@ namespace RNAssistant.Office.Services
             {
                 progress("routing", routing.ProgressMessage, null);
             }
-            return _agentRunService.ContinueAfterToolAsync(confirmedCommand, session, documentContext, routing.Settings, tools, attachments, progress, pendingToolRegistrar, skills, cancellationToken);
+            return _agentRunService.ContinueAfterToolAsync(confirmedCommand, confirmedResult, session, documentContext, routing.Settings, tools, attachments, progress, pendingToolRegistrar, skills, cancellationToken);
         }
 
         public bool CommandMutates(ToolCommand command, IReadOnlyList<ToolDefinition> tools)

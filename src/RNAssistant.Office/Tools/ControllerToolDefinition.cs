@@ -1,4 +1,5 @@
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Tools
 {
@@ -22,7 +23,7 @@ namespace RNAssistant.Office.Tools
                 Host = host,
                 Name = name ?? id,
                 Description = description,
-                ArgumentSchemaJson = schema,
+                ArgumentSchemaJson = ToolSchemaSupport.FromPropertySamples(schema),
                 BuiltIn = true,
                 Enabled = true,
                 MutatesDocument = mutatesDocument,

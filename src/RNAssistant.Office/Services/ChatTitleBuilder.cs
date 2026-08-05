@@ -44,10 +44,11 @@ namespace RNAssistant.Office.Services
             var request =
                 "Запрос пользователя:\n" + Clip(CleanSource(userText), 1400) +
                 "\n\nОтвет ассистента:\n" + Clip(CleanSource(assistantText), 1800);
-            var messages = string.Equals(PromptRole(settings), "system", StringComparison.Ordinal)
+            var promptRole = PromptRole(settings);
+            var messages = !string.Equals(promptRole, "user", StringComparison.Ordinal)
                 ? new[]
                 {
-                    new ChatMessage { Role = "system", Content = instruction },
+                    new ChatMessage { Role = promptRole, Content = instruction },
                     new ChatMessage { Role = "user", Content = request }
                 }
                 : new[]
@@ -137,10 +138,9 @@ namespace RNAssistant.Office.Services
 
         private static string PromptRole(AppSettings settings)
         {
-            return settings != null &&
-                string.Equals(settings.SystemPromptRole, "system", StringComparison.OrdinalIgnoreCase)
-                ? "system"
-                : "user";
+            if (settings != null && string.Equals(settings.SystemPromptRole, "system", StringComparison.OrdinalIgnoreCase)) return "system";
+            if (settings != null && string.Equals(settings.SystemPromptRole, "developer", StringComparison.OrdinalIgnoreCase)) return "developer";
+            return "user";
         }
 
         private static string CleanLlmTitle(string text)

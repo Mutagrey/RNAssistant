@@ -18,7 +18,6 @@ namespace RNAssistant.Office.Services
                 Host = context.Host,
                 DocumentKey = context.DocumentKey,
                 Title = context.Title,
-                Summary = context.Summary,
                 UpdatedUtc = context.UpdatedUtc,
                 Notes = context.Notes == null ? null : context.Notes.Select(CloneContextNote).ToList()
             };

@@ -29,7 +29,6 @@ namespace RNAssistant.Harness
                 Host = "Excel",
                 DocumentKey = "doc",
                 Title = "Harness.xlsx",
-                Summary = "Pinned summary",
                 UpdatedUtc = new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc)
             };
             context.Notes.Add(new ContextNote
@@ -49,7 +48,6 @@ namespace RNAssistant.Harness
             var clonedContext = ChatCloneService.CloneContext(context);
             AssertTrue(!object.ReferenceEquals(context, clonedContext), "context cloned");
             AssertTrue(!object.ReferenceEquals(context.Notes[0], clonedContext.Notes[0]), "context note cloned");
-            AssertEqual("Pinned summary", clonedContext.Summary, "context summary");
             AssertEqual("Original note", clonedContext.Notes[0].Text, "context note text");
             context.Notes[0].Text = "Changed";
             AssertEqual("Original note", clonedContext.Notes[0].Text, "context clone independent");

@@ -172,79 +172,23 @@ namespace RNAssistant.Office.Services
                 UseWhen = tool.UseWhen,
                 DoNotUseWhen = tool.DoNotUseWhen,
                 ExamplesJson = tool.ExamplesJson,
-                PreconditionsJson = tool.PreconditionsJson,
                 VerifyJson = tool.VerifyJson,
                 CapabilityStatus = tool.CapabilityStatus,
                 Limitations = tool.Limitations,
-                ReplacementToolId = tool.ReplacementToolId
+                PackageVersion = tool.PackageVersion,
+                EntryPoint = tool.EntryPoint,
+                ArgumentOrder = new List<string>(tool.ArgumentOrder ?? new List<string>()),
+                Components = (tool.Components ?? new List<VbaToolComponent>()).Select(component => new VbaToolComponent
+                {
+                    Name = component.Name,
+                    Type = component.Type,
+                    FileName = component.FileName,
+                    Code = component.Code,
+                    CodeSha256 = component.CodeSha256
+                }).ToList(),
+                Scope = tool.Scope,
+                InstallationStatus = tool.InstallationStatus
             };
-        }
-    }
-
-    internal static class PlannerBatchPolicy
-    {
-        public static string Validate(
-            IReadOnlyList<ToolCommand> commands,
-            IReadOnlyList<ToolDefinition> tools,
-            RoutedTask route,
-            AppSettings settings)
-        {
-            if (commands == null || commands.Count <= 1)
-            {
-                return null;
-            }
-
-            settings = settings ?? new AppSettings();
-            var selectedTools = commands
-                .Select(command => AgentToolCatalogResolver.Find(tools, command == null ? null : command.ToolId))
-                .Where(tool => tool != null)
-                .ToList();
-
-            if (selectedTools.Count != commands.Count)
-            {
-                return "Planner batch contains an unresolved tool.";
-            }
-
-            if (selectedTools.Any(tool => tool.MutatesDocument))
-            {
-                return "Document mutation plans may contain exactly one action.";
-            }
-
-            if (IsVbaRouteOrTool(route, selectedTools))
-            {
-                return "VBA plans may contain exactly one action.";
-            }
-
-            var pureReadOnly = selectedTools.All(tool =>
-                !tool.MutatesDocument &&
-                !tool.MutatesLocalState &&
-                !tool.RequiresConfirmation);
-            var limit = pureReadOnly
-                ? Math.Max(1, settings.MaxAgentReadOnlyPlanSteps)
-                : Math.Max(1, settings.MaxAgentPlanSteps);
-            if (commands.Count > limit)
-            {
-                return pureReadOnly
-                    ? "Read-only planner batch exceeds the configured limit of " + limit + " actions."
-                    : "Planner batch exceeds the configured limit of " + limit + " actions.";
-            }
-
-            return null;
-        }
-
-        private static bool IsVbaRouteOrTool(RoutedTask route, IEnumerable<ToolDefinition> tools)
-        {
-            if (route != null &&
-                (string.Equals(route.TaskType, "vba", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(route.TaskType, "macro_execution", StringComparison.OrdinalIgnoreCase)))
-            {
-                return true;
-            }
-
-            return (tools ?? new ToolDefinition[0]).Any(tool =>
-                tool != null &&
-                ((tool.Id ?? string.Empty).IndexOf("vba", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                 string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase)));
         }
     }
 

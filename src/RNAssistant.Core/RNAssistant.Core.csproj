@@ -88,9 +88,13 @@
     <Compile Include="Models\ToolModels.cs" />
     <Compile Include="Models\VbaModels.cs" />
     <Compile Include="Llm\LlmClient.cs" />
+    <Compile Include="Llm\LlmRequestModels.cs" />
     <Compile Include="Llm\ModelContextBudget.cs" />
     <Compile Include="Llm\ContextUsageEstimator.cs" />
     <Compile Include="Tools\ToolArgumentNormalizer.cs" />
+    <Compile Include="Tools\ToolSchemaSupport.cs" />
+    <Compile Include="Tools\AgentDecisionSchemaBuilder.cs" />
+    <Compile Include="Tools\VbaToolManifestParser.cs" />
     <Compile Include="Tools\AgentPlannerResponseParser.cs" />
     <Compile Include="Services\ContextNormalizer.cs" />
     <Compile Include="Services\ChartArtifactBuilder.cs" />

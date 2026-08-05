@@ -425,42 +425,4 @@ namespace RNAssistant.Office.Services
         }
     }
 
-    internal sealed class RecipeExpander
-    {
-        public IEnumerable<ToolCommand> Expand(ToolCommand recipe, IReadOnlyList<AgentObservation> observations)
-        {
-            if (recipe == null || !string.Equals(recipe.ToolId, "recipe.excel.make_table_pretty", StringComparison.OrdinalIgnoreCase))
-            {
-                yield return recipe;
-                yield break;
-            }
-
-            var range = FindRange(observations);
-            var format = new ToolCommand { ToolId = "excel.format_range", Description = "Apply clean table formatting" };
-            format.Arguments["sheet"] = "active";
-            format.Arguments["address"] = string.IsNullOrWhiteSpace(range) ? "used_range" : range;
-            format.Arguments["bold"] = true;
-            format.Arguments["horizontalAlignment"] = "center";
-            yield return format;
-
-            var autofit = new ToolCommand { ToolId = "excel.autofit", Description = "Autofit formatted table" };
-            autofit.Arguments["sheet"] = "active";
-            autofit.Arguments["address"] = string.IsNullOrWhiteSpace(range) ? string.Empty : range;
-            yield return autofit;
-        }
-
-        private static string FindRange(IEnumerable<AgentObservation> observations)
-        {
-            foreach (var observation in observations ?? new AgentObservation[0])
-            {
-                var text = (observation == null ? string.Empty : observation.Summary + " " + observation.FactsJson) ?? string.Empty;
-                var match = System.Text.RegularExpressions.Regex.Match(text, "[A-Z]{1,3}[0-9]+:[A-Z]{1,3}[0-9]+");
-                if (match.Success)
-                {
-                    return match.Value;
-                }
-            }
-            return null;
-        }
-    }
 }

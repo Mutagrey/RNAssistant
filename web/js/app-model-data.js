@@ -53,8 +53,8 @@ function normalizeModelCatalog(payload) {
 
   rawModels.forEach(function (item) {
     var value = String(modelField(item, "Value", "value", "value", item.id || item.Id || "") || "").trim();
-    var legacyTitle = modelField(item, "Title", "title", "title", value);
-    var title = String(modelField(item, "DisplayName", "display_name", "displayName", legacyTitle) || value).trim();
+    var fallbackTitle = modelField(item, "Title", "title", "title", value);
+    var title = String(modelField(item, "DisplayName", "display_name", "displayName", fallbackTitle) || value).trim();
     if (!value || seen[value.toLowerCase()]) {
       return;
     }

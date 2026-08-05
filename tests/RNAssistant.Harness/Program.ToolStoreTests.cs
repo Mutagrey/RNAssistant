@@ -38,6 +38,7 @@ namespace RNAssistant.Harness
                     Id = "excel.invalid",
                     Host = "Excel",
                     Executor = "pipeline",
+                    ArgumentSchemaJson = EmptyFormalToolSchema,
                     PipelineJson = "{\"steps\":[]}",
                     Enabled = true
                 };
@@ -52,7 +53,7 @@ namespace RNAssistant.Harness
                     Host = "Excel",
                     Name = "Safe report",
                     Description = "Create report.",
-                    ArgumentSchemaJson = "{\"sheet\":\"Report\"}",
+                    ArgumentSchemaJson = SheetFormalToolSchema,
                     Executor = "pipeline",
                     PipelineJson = "{\"steps\":[{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}]}",
                     Enabled = true,
@@ -86,7 +87,7 @@ namespace RNAssistant.Harness
                     "host", "Excel",
                     "name", "Agent report",
                     "description", "Create an agent report.",
-                    "argumentSchemaJson", "{\"sheet\":\"Report\"}",
+                    "argumentSchemaJson", SheetFormalToolSchema,
                     "executor", "pipeline",
                     "pipelineJson", "{\"steps\":[{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}]}",
                     "enabled", true,
@@ -129,7 +130,7 @@ namespace RNAssistant.Harness
                     "host", "Excel",
                     "name", "Custom chart",
                     "description", "Create the requested chart.",
-                    "argumentSchemaJson", "{}",
+                    "argumentSchemaJson", EmptyFormalToolSchema,
                     "executor", "pipeline",
                     "pipelineJson", "{\"steps\":[{\"toolId\":\"excel.add_chart\",\"arguments\":{\"sheet\":\"Data\",\"sourceRange\":\"A1:B4\",\"chartName\":\"Generated\",\"title\":\"Generated\"}}]}",
                     "enabled", true,
@@ -211,7 +212,8 @@ namespace RNAssistant.Harness
 
                 AssertTrue(result.Success, "built-in executes despite custom collision");
                 AssertTrue(adapter.HasSheet("Protected"), "built-in add sheet was executed");
-                AssertEqual(1, adapter.Executed.Count, "shadow pipeline was not executed");
+                AssertEqual(1, adapter.Executed.Count(item => string.Equals(item.ToolId, "excel.add_sheet", StringComparison.OrdinalIgnoreCase)), "built-in add sheet executed once");
+                AssertEqual(0, adapter.Executed.Count(item => string.Equals(item.ToolId, "excel.list_sheets", StringComparison.OrdinalIgnoreCase)), "shadow pipeline was not executed");
 
                 var save = new ToolCommand { ToolId = "common.tools_save" };
                 save.Arguments["id"] = shadow.Id;
@@ -403,7 +405,7 @@ namespace RNAssistant.Harness
                 command.Arguments["host"] = "Excel";
                 command.Arguments["name"] = "Generated report";
                 command.Arguments["description"] = "Create a generated report sheet.";
-                command.Arguments["argumentSchemaJson"] = "{\"sheet\":\"Report\"}";
+                command.Arguments["argumentSchemaJson"] = SheetFormalToolSchema;
                 command.Arguments["executor"] = "pipeline";
                 command.Arguments["pipelineJson"] = "{\"steps\":[{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}]}";
                 command.Arguments["enabled"] = "true";

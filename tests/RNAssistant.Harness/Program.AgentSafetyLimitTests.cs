@@ -39,12 +39,12 @@ namespace RNAssistant.Harness
                     "Replace a VBA module.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { AutoConfirmToolActions = false, ContextCharLimit = 8000 },
+                    new AppSettings { AutoConfirmToolActions = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null,
                     delegate(ChatSession pendingSession, ToolCommand pendingCommand, ToolResult pendingResult)
                     {
-                        AssertEqual(ChatStore.GetSessionId(session), ChatStore.GetSessionId(pendingSession), "pending session id");
+                        AssertEqual(session.Id, pendingSession.Id, "pending session id");
                         AssertEqual("word.vba_replace_module", pendingCommand.ToolId, "pending tool id");
                         pendingIds.Add("pending-1");
                         return "pending-1";
@@ -76,7 +76,7 @@ namespace RNAssistant.Harness
                     "Replace VBA and then insert text.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { AutoConfirmToolActions = false, ContextCharLimit = 8000 },
+                    new AppSettings { AutoConfirmToolActions = false },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null,
                     delegate(ChatSession pendingSession, ToolCommand pendingCommand, ToolResult pendingResult)
@@ -113,7 +113,7 @@ namespace RNAssistant.Harness
                     "List sheets repeatedly.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000, MaxAgentIterations = 3 },
+                    new AppSettings { MaxAgentIterations = 3 },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -131,16 +131,15 @@ namespace RNAssistant.Harness
                     adapter,
                     executor,
                     null,
-                    AgentBlock(
-                        Command("excel.get_context"),
-                        Command("excel.get_selection")));
+                    AgentBlock(Command("excel.get_context")),
+                    AgentBlock(Command("excel.get_selection")));
                 var session = NewSession(adapter);
 
                 var result = service.ExecuteAsync(
                     "Inspect workbook repeatedly.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000, MaxAgentToolSteps = 1 },
+                    new AppSettings { MaxAgentToolSteps = 1 },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -150,92 +149,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void PlannerBatchAllowsBoundedReadOnlyActions()
-        {
-            var commands = new List<ToolCommand>
-            {
-                Command("excel.get_context"),
-                Command("excel.get_selection")
-            };
-            var tools = new List<ToolDefinition>
-            {
-                new ToolDefinition { Id = "excel.get_context", BuiltIn = true, AgentCanRun = true },
-                new ToolDefinition { Id = "excel.get_selection", BuiltIn = true, AgentCanRun = true }
-            };
-            var error = PlannerBatchPolicy.Validate(
-                commands,
-                tools,
-                new RoutedTask { TaskType = "read" },
-                new AppSettings { MaxAgentPlanSteps = 1, MaxAgentReadOnlyPlanSteps = 2 });
-
-            AssertEqual(null, error, "bounded read-only batch");
-        }
-
-        private static void PlannerBatchRejectsExcessReadOnlyActions()
-        {
-            var commands = new List<ToolCommand>
-            {
-                Command("excel.get_context"),
-                Command("excel.get_selection"),
-                Command("excel.list_sheets")
-            };
-            var tools = commands.Select(command => new ToolDefinition
-            {
-                Id = command.ToolId,
-                BuiltIn = true,
-                AgentCanRun = true
-            }).ToList();
-            var error = PlannerBatchPolicy.Validate(
-                commands,
-                tools,
-                new RoutedTask { TaskType = "read" },
-                new AppSettings { MaxAgentReadOnlyPlanSteps = 2 });
-
-            AssertContains(error, "limit of 2", "read-only batch limit");
-        }
-
-        private static void PlannerBatchRejectsMultipleMutationsAndVbaActions()
-        {
-            var mutationCommands = new List<ToolCommand>
-            {
-                Command("excel.write_range"),
-                Command("excel.add_sheet")
-            };
-            var mutationTools = mutationCommands.Select(command => new ToolDefinition
-            {
-                Id = command.ToolId,
-                BuiltIn = true,
-                AgentCanRun = true,
-                MutatesDocument = true
-            }).ToList();
-            var mutationError = PlannerBatchPolicy.Validate(
-                mutationCommands,
-                mutationTools,
-                new RoutedTask { TaskType = "content" },
-                new AppSettings { MaxAgentPlanSteps = 8, MaxAgentReadOnlyPlanSteps = 16 });
-
-            var vbaCommands = new List<ToolCommand>
-            {
-                Command("excel.vba_read_project"),
-                Command("excel.vba_read_module")
-            };
-            var vbaTools = vbaCommands.Select(command => new ToolDefinition
-            {
-                Id = command.ToolId,
-                BuiltIn = true,
-                AgentCanRun = true
-            }).ToList();
-            var vbaError = PlannerBatchPolicy.Validate(
-                vbaCommands,
-                vbaTools,
-                new RoutedTask { TaskType = "vba" },
-                new AppSettings { MaxAgentPlanSteps = 8, MaxAgentReadOnlyPlanSteps = 16 });
-
-            AssertContains(mutationError, "exactly one action", "mutation batch rejected");
-            AssertContains(vbaError, "exactly one action", "vba batch rejected");
-        }
-
-        private static void RejectedMutationBatchIsReplanned()
+        private static void MultipleToolCallsAreRejectedAndReplanned()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -257,8 +171,8 @@ namespace RNAssistant.Harness
                     new AppSettings
                     {
                         AutoConfirmToolActions = true,
-                        ContextCharLimit = 8000,
-                        RequireVerificationForMutations = false
+                        RequireVerificationForMutations = false,
+                        AgentResponseFallbackMode = AgentResponseModes.JsonSchema
                     },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
@@ -266,7 +180,8 @@ namespace RNAssistant.Harness
                 AssertEqual("Done.", result.AssistantText, "replanned final answer");
                 AssertEqual(1, adapter.Executed.Count, "only corrected action executed");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "corrected action");
-                AssertContains(FlattenMessages(calls[1]), "Document mutation plans may contain exactly one action", "batch rejection observation");
+                AssertContains(FlattenMessages(calls[1]), "Validation error: unexpected_field", "multiple-call decision rejected");
+                AssertContains(FlattenMessages(calls[1]), "exactly one tool object", "repair enforces one call");
             });
         }
 
@@ -282,13 +197,13 @@ namespace RNAssistant.Harness
                     "Insert text into the document.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { AutoRunToolCalls = false, AutoConfirmToolActions = true, ContextCharLimit = 8000 },
+                    new AppSettings { AutoRunToolCalls = false, AutoConfirmToolActions = true },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
                 AssertEqual(0, adapter.Executed.Count, "adapter execution count");
                 AssertContains(JsonConvert.SerializeObject(result.ToolResults), "Auto tool execution is disabled", "auto-run result");
-                AssertTrue(ContainsMessage(session.Messages, "Agent plan"), "plan recorded");
+                AssertTrue(ContainsMessage(session.Messages, "Run word.insert_text"), "tool decision recorded");
                 AssertTrue(ContainsMessage(session.Messages, "waiting"), "waiting recorded");
             });
         }
@@ -312,7 +227,7 @@ namespace RNAssistant.Harness
                     "Summarize the presentation.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000 },
+                    new AppSettings { AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -340,7 +255,7 @@ namespace RNAssistant.Harness
                     "Summarize the presentation.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000 },
+                    new AppSettings { AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
@@ -372,7 +287,7 @@ namespace RNAssistant.Harness
                     "Hello.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000 },
+                    new AppSettings { AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 

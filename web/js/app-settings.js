@@ -20,7 +20,12 @@ function renderSettings() {
   $("baseUrlInput").value = s.BaseUrl || s.baseUrl || "";
   $("modelsConfigUrlInput").value = s.ModelsConfigUrl || s.modelsConfigUrl || "";
   $("modelInput").value = s.Model || s.model || "";
-  $("systemPromptRoleInput").value = (s.SystemPromptRole || s.systemPromptRole || "user").toLowerCase() === "system" ? "system" : "user";
+  var instructionRole = String(s.SystemPromptRole || s.systemPromptRole || "developer").toLowerCase();
+  $("systemPromptRoleInput").value = instructionRole === "system" || instructionRole === "user" ? instructionRole : "developer";
+  var responseMode = String(s.AgentResponseMode || s.agentResponseMode || "json_schema").toLowerCase();
+  $("agentResponseModeInput").value = responseMode === "native_tool_calls" || responseMode === "json_object" ? responseMode : "json_schema";
+  var toolResultRole = String(s.ToolResultRole || s.toolResultRole || "tool").toLowerCase();
+  $("toolResultRoleInput").value = toolResultRole === "developer" || toolResultRole === "user" ? toolResultRole : "tool";
   $("maxTokensInput").value = s.MaxTokens || s.maxTokens || 2048;
   $("requestTimeoutInput").value = s.RequestTimeoutSeconds || s.requestTimeoutSeconds || 300;
   $("temperatureInput").value = s.Temperature || s.temperature || 0.2;
@@ -40,8 +45,6 @@ function renderSettings() {
   $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || 8;
   $("maxAgentToolStepsInput").value = s.MaxAgentToolSteps || s.maxAgentToolSteps || 40;
   $("maxAgentToolsPerRequestInput").value = s.MaxAgentToolsPerRequest || s.maxAgentToolsPerRequest || 24;
-  $("maxAgentPlanStepsInput").value = s.MaxAgentPlanSteps || s.maxAgentPlanSteps || 1;
-  $("maxAgentReadOnlyPlanStepsInput").value = s.MaxAgentReadOnlyPlanSteps || s.maxAgentReadOnlyPlanSteps || 4;
   $("vbaContextLimitInput").value = s.VbaContextCharLimit || s.vbaContextCharLimit || 30000;
   if (typeof renderPromptSettings === "function") {
     renderPromptSettings(s);
@@ -64,6 +67,9 @@ function readSettings() {
     BaseUrl: $("baseUrlInput").value.trim(),
     ModelsConfigUrl: $("modelsConfigUrlInput").value.trim(),
     Model: $("modelInput").value.trim(),
+    AgentResponseMode: $("agentResponseModeInput").value,
+    AgentResponseFallbackMode: "json_object",
+    ToolResultRole: $("toolResultRoleInput").value,
     MaxTokens: Number($("maxTokensInput").value || 2048),
     RequestTimeoutSeconds: Number($("requestTimeoutInput").value || 300),
     Temperature: Number($("temperatureInput").value || 0.2),
@@ -83,12 +89,10 @@ function readSettings() {
     MaxAgentIterations: Number($("maxAgentIterationsInput").value || 8),
     MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || 40),
     MaxAgentToolsPerRequest: Number($("maxAgentToolsPerRequestInput").value || 24),
-    MaxAgentPlanSteps: Number($("maxAgentPlanStepsInput").value || 1),
-    MaxAgentReadOnlyPlanSteps: Number($("maxAgentReadOnlyPlanStepsInput").value || 4),
     VbaContextCharLimit: Number($("vbaContextLimitInput").value || 30000),
     SystemPrompt: promptSettings.SystemPrompt,
     ChatSystemPrompt: promptSettings.ChatSystemPrompt,
-    SystemPromptRole: $("systemPromptRoleInput").value === "system" ? "system" : "user",
+    SystemPromptRole: $("systemPromptRoleInput").value,
     AgentPrompts: promptSettings.AgentPrompts,
     ModelImageSupportOverrides: modelImageSupportOverrides(),
     ModelAudioSupportOverrides: modelAudioSupportOverrides(),

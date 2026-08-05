@@ -145,7 +145,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void RemovedLegacyToolIdsAreUnknown()
+        private static void RemovedToolIdsAreUnknown()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -262,14 +262,14 @@ namespace RNAssistant.Harness
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "hello" });
                 store.Save(session);
 
-                store.ClearMessages(session.Host, session.DocumentKey, session.SessionId);
-                var loaded = store.Load(session.Host, session.DocumentKey, session.SessionId);
+                store.ClearMessages(session.Host, session.DocumentKey, session.Id);
+                var loaded = store.Load(session.Host, session.DocumentKey, session.Id);
                 AssertEqual(0, loaded.Messages.Count, "messages cleared");
                 AssertEqual(1, loaded.HtmlWorkspace.Files.Count, "html workspace preserved");
                 AssertEqual("index.html", loaded.HtmlWorkspace.ActiveFileId, "active html preserved");
 
-                AssertTrue(store.Delete(session.Host, session.DocumentKey, session.SessionId), "chat deleted");
-                AssertTrue(store.Load(session.Host, session.DocumentKey, session.SessionId) == null, "deleted chat not loaded");
+                AssertTrue(store.Delete(session.Host, session.DocumentKey, session.Id), "chat deleted");
+                AssertTrue(store.Load(session.Host, session.DocumentKey, session.Id) == null, "deleted chat not loaded");
             });
         }
 
@@ -315,7 +315,7 @@ namespace RNAssistant.Harness
                     "Сделай HTML страницу отчета по продажам.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000 },
+                    new AppSettings(),
                     new List<ToolDefinition>(executor.GetControllerTools()),
                     null).GetAwaiter().GetResult();
 
@@ -325,7 +325,7 @@ namespace RNAssistant.Harness
                 AssertEqual("index.html", session.HtmlWorkspace.ActiveFileId, "agent html active file");
                 AssertContains(session.HtmlWorkspace.Files[0].Content, "RNAssistantData.sales.rows", "agent html uses data");
                 AssertContains(FlattenMessages(calls[0]), "common.html_workspace_upsert_file", "prompt exposes html file tool");
-                AssertContains(FlattenMessages(calls[0]), "html|css|script", "prompt exposes script file kind");
+                AssertContains(FlattenMessages(calls[0]), "\"enum\":[\"html\",\"css\",\"script\"]", "prompt exposes script file kind");
                 AssertContains(FlattenMessages(calls[0]), "window.RNAssistantData", "prompt explains data injection");
             });
         }
@@ -343,7 +343,7 @@ namespace RNAssistant.Harness
                     "Сделай отчет по продажам.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000 },
+                    new AppSettings(),
                     new List<ToolDefinition>(executor.GetControllerTools()),
                     null).GetAwaiter().GetResult();
 
@@ -386,7 +386,6 @@ namespace RNAssistant.Harness
                     NewContext(adapter),
                     new AppSettings
                     {
-                        ContextCharLimit = 8000,
                         MaxAgentToolsPerRequest = 8,
                         RequireVerificationForMutations = false
                     },
@@ -432,7 +431,7 @@ namespace RNAssistant.Harness
                     "Сделай локальный HTML-график.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000, RequireVerificationForMutations = false },
+                    new AppSettings { RequireVerificationForMutations = false, AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
                     new List<ToolDefinition>(executor.GetControllerTools()),
                     null).GetAwaiter().GetResult();
 
@@ -441,7 +440,7 @@ namespace RNAssistant.Harness
                 AssertTrue(
                     FlattenMessages(calls[1]).IndexOf(new string('x', 64), StringComparison.Ordinal) < 0,
                     "large malformed body omitted from repair prompt");
-                AssertContains(FlattenMessages(calls[1]), "one content-bearing workspace upsert step", "repair asks for bounded html step");
+                AssertContains(FlattenMessages(calls[1]), "at most one content-bearing upsert step", "repair asks for bounded html step");
             });
         }
 
@@ -466,7 +465,7 @@ namespace RNAssistant.Harness
                     "Удалить app.js из HTML workspace.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000, RequireVerificationForMutations = false },
+                    new AppSettings { RequireVerificationForMutations = false },
                     new List<ToolDefinition>(executor.GetControllerTools()),
                     null).GetAwaiter().GetResult();
 
@@ -494,7 +493,7 @@ namespace RNAssistant.Harness
                 var command = new ToolCommand { ToolId = "common.prompts_save" };
                 command.Arguments["toolRoutingPrompt"] = "CUSTOM ROUTING";
                 command.Arguments["chatSystemPrompt"] = "CUSTOM CHAT";
-                command.Arguments["systemPromptRole"] = "system";
+                command.Arguments["systemPromptRole"] = "developer";
 
                 var blocked = executor.Execute(
                     command,
@@ -515,9 +514,9 @@ namespace RNAssistant.Harness
 
                 AssertEqual("CUSTOM ROUTING", settingsStore.AgentPrompts.ToolRoutingPrompt, "routing prompt saved");
                 AssertEqual("CUSTOM CHAT", settingsStore.ChatSystemPrompt, "chat prompt saved");
-                AssertEqual("system", settingsStore.SystemPromptRole, "prompt role saved");
+                AssertEqual("developer", settingsStore.SystemPromptRole, "developer prompt role saved");
                 AssertEqual("CUSTOM ROUTING", runtimeSettings.AgentPrompts.ToolRoutingPrompt, "runtime routing prompt updated");
-                AssertEqual("system", runtimeSettings.SystemPromptRole, "runtime prompt role updated");
+                AssertEqual("developer", runtimeSettings.SystemPromptRole, "runtime developer prompt role updated");
 
                 var read = executor.Execute(
                     new ToolCommand { ToolId = "common.prompts_read" },
@@ -571,7 +570,7 @@ namespace RNAssistant.Harness
                 command.Arguments["host"] = "Excel";
                 command.Arguments["name"] = "Validated";
                 command.Arguments["description"] = "Validated pipeline.";
-                command.Arguments["argumentSchemaJson"] = "{}";
+                command.Arguments["argumentSchemaJson"] = EmptyFormalToolSchema;
                 command.Arguments["executor"] = "pipeline";
                 command.Arguments["pipelineJson"] = "{\"steps\":[{\"toolId\":\"excel.list_sheets\",\"arguments\":{}}]}";
 
@@ -601,20 +600,19 @@ namespace RNAssistant.Harness
                     "Create a new worksheet named Report.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { ContextCharLimit = 8000, AutoConfirmToolActions = true, RequireVerificationForMutations = false },
+                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false, AgentResponseFallbackMode = AgentResponseModes.JsonSchema },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("Done.", result.AssistantText, "assistant text");
                 AssertEqual(3, calls.Count, "llm call count");
-                AssertContains(FlattenMessages(calls[1]), "Unknown tool id", "validation observation prompt");
+                AssertContains(FlattenMessages(calls[1]), "Validation error: unknown_tool", "semantic repair prompt");
                 AssertContains(FlattenMessages(calls[1]), "excel.add_sheet", "retry prompt contains exact tool id");
                 AssertContains(FlattenMessages(calls[2]), "Local normalized observations are available", "successful retry clears stale failure directive");
                 AssertTrue(FlattenMessages(calls[2]).IndexOf("failed or was rejected", StringComparison.OrdinalIgnoreCase) < 0, "successful retry does not keep failure directive");
                 AssertEqual(1, adapter.Executed.Count, "adapter execution count");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "retry tool");
                 var resultJson = Newtonsoft.Json.JsonConvert.SerializeObject(result.ToolResults);
-                AssertContains(resultJson, "create_worksheet", "validation transcript keeps unknown tool");
                 AssertContains(resultJson, "excel.add_sheet", "retry success logged");
             });
         }

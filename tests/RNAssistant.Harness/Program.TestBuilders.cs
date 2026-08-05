@@ -22,6 +22,9 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private const string EmptyFormalToolSchema = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}";
+        private const string SheetFormalToolSchema = "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"}},\"required\":[\"sheet\"],\"additionalProperties\":false}";
+
         private static ToolDefinition CustomTool(string host, string id)
         {
             return new ToolDefinition
@@ -30,6 +33,7 @@ namespace RNAssistant.Harness
                 Host = host,
                 Name = id,
                 Executor = "pipeline",
+                ArgumentSchemaJson = EmptyFormalToolSchema,
                 Enabled = true,
                 BuiltIn = false,
                 PipelineJson = "{\"steps\":[]}"
@@ -163,29 +167,32 @@ namespace RNAssistant.Harness
 
         private static string AgentBlock(params ToolCommand[] commands)
         {
-            return JsonConvert.SerializeObject(new
+            var selected = (commands ?? new ToolCommand[0]).FirstOrDefault();
+            var result = new JObject
             {
-                kind = "tool_plan",
-                intent = "mutate",
-                message = (string)null,
-                steps = (commands ?? new ToolCommand[0]).Select(command => new
-                {
-                    toolId = command.ToolId,
-                    arguments = command.Arguments,
-                    reason = "test step"
-                }).ToArray(),
-                expectedOutcome = "Execute test steps."
-            });
+                ["protocolVersion"] = 1,
+                ["kind"] = "tool",
+                ["decisionSummary"] = selected == null ? "No tool selected." : "Run " + selected.ToolId,
+                ["goal"] = null,
+                ["plan"] = null,
+                ["tool"] = selected == null ? null : JObject.FromObject(new { toolId = selected.ToolId, arguments = selected.Arguments }),
+                ["message"] = null
+            };
+            if (commands != null && commands.Length > 1) result["extraCalls"] = new JArray(commands.Skip(1).Select(command => command.ToolId));
+            return result.ToString(Formatting.None);
         }
 
         private static string FinalBlock(string message)
         {
             return JsonConvert.SerializeObject(new
             {
+                protocolVersion = 1,
                 kind = "final",
-                intent = "answer",
-                message = message ?? string.Empty,
-                steps = new object[0]
+                decisionSummary = "Return the final answer.",
+                goal = (string)null,
+                plan = (object)null,
+                tool = (object)null,
+                message = message ?? string.Empty
             });
         }
 

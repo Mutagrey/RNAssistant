@@ -429,11 +429,6 @@ namespace RNAssistant.Office.Services
                 slice.Tools.Add(tool);
             }
 
-            foreach (var recipe in Recipes(route))
-            {
-                slice.Tools.Add(recipe);
-            }
-
             var ordered = slice.Tools
                 .GroupBy(t => t.Id, StringComparer.OrdinalIgnoreCase)
                 .Select(group => group.First())
@@ -567,7 +562,7 @@ namespace RNAssistant.Office.Services
             }
             if (route.TaskType == "formatting")
             {
-                return ContainsAny(id, "context", "selection", "summary", "read", "profile", "format", "autofit", "recipe.");
+                return ContainsAny(id, "context", "selection", "summary", "read", "profile", "format", "autofit");
             }
             if (route.TaskType == "html")
             {
@@ -579,7 +574,7 @@ namespace RNAssistant.Office.Services
             }
             if (route.TaskType == "chart")
             {
-                return ContainsAny(id, "context", "selection", "summary", "read", "profile", "chart", "recipe.");
+                return ContainsAny(id, "context", "selection", "summary", "read", "profile", "chart");
             }
             if (route.TaskType == "mail_search")
             {
@@ -623,7 +618,7 @@ namespace RNAssistant.Office.Services
             {
                 return 0;
             }
-            if (route.TaskType == "formatting" && ContainsAny(id, "format", "autofit", "recipe."))
+            if (route.TaskType == "formatting" && ContainsAny(id, "format", "autofit"))
             {
                 return string.Equals(route.Phase, AgentPhases.Mutation, StringComparison.OrdinalIgnoreCase) ? 0 : 20;
             }
@@ -646,31 +641,6 @@ namespace RNAssistant.Office.Services
                 return 10;
             }
             return 30;
-        }
-
-        private static IEnumerable<ToolDefinition> Recipes(RoutedTask route)
-        {
-            if (route == null || route.App == null)
-            {
-                yield break;
-            }
-            if (string.Equals(route.App, "Excel", StringComparison.OrdinalIgnoreCase) && route.TaskType == "formatting" && !string.Equals(route.Phase, AgentPhases.ReadOnly, StringComparison.OrdinalIgnoreCase))
-            {
-                yield return new ToolDefinition
-                {
-                    Id = "recipe.excel.make_table_pretty",
-                    Host = "Excel",
-                    Name = "Make active table pretty",
-                    Description = "High-level recipe: inspect active sheet, format detected used range as a clean table, autofit, and verify.",
-                    ArgumentSchemaJson = "{\"target\":\"active_sheet\"}",
-                    BuiltIn = true,
-                    Enabled = true,
-                    MutatesDocument = true,
-                    AgentCanRun = true,
-                    RiskLevel = 1,
-                    UseWhen = "User asks to make the active Excel table pretty or clean."
-                };
-            }
         }
 
         private static bool ContainsAny(string value, params string[] terms)
@@ -708,15 +678,17 @@ namespace RNAssistant.Office.Services
             var messages = new List<ChatMessage>();
             var instruction = BuildInstructionPrompt(settings);
             var plannerContext = BuildPlannerContext(userText, snapshot, route, tools, observations, context, skills, settings);
-            var systemRole = string.Equals(PromptRole(settings), "system", StringComparison.Ordinal);
-            if (systemRole)
+            var instructionRole = PromptRole(settings);
+            var separateInstruction = string.Equals(instructionRole, "system", StringComparison.Ordinal) ||
+                string.Equals(instructionRole, "developer", StringComparison.Ordinal);
+            if (separateInstruction)
             {
-                messages.Add(new ChatMessage { Role = "system", Content = instruction });
+                messages.Add(new ChatMessage { Role = instructionRole, Content = instruction });
             }
             var current = new ChatMessage
             {
                 Role = "user",
-                Content = systemRole ? plannerContext : instruction + "\n\n" + plannerContext
+                Content = separateInstruction ? plannerContext : instruction + "\n\n" + plannerContext
             };
             messages.Add(current);
 
@@ -741,16 +713,23 @@ namespace RNAssistant.Office.Services
                 {
                     settings.SystemPrompt,
                     prompts.ToolProtocolPrompt,
-                    prompts.ToolRoutingPrompt
+                    prompts.ToolRoutingPrompt,
+                    TransportPrompt(settings)
                 }.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim()));
+        }
+
+        private static string TransportPrompt(AppSettings settings)
+        {
+            return settings != null && string.Equals(settings.AgentResponseMode, AgentResponseModes.NativeToolCalls, StringComparison.OrdinalIgnoreCase)
+                ? "TRANSPORT OVERRIDE: For an Office action, emit exactly one native API function call and no kind=tool content. Use AgentDecision JSON content only for plan, clarify, final, or cannot_complete."
+                : "TRANSPORT OVERRIDE: Do not emit API tool_calls. Select an Office action only through one AgentDecision kind=tool object.";
         }
 
         private static string PromptRole(AppSettings settings)
         {
-            return settings != null &&
-                string.Equals(settings.SystemPromptRole, "system", StringComparison.OrdinalIgnoreCase)
-                ? "system"
-                : "user";
+            if (settings != null && string.Equals(settings.SystemPromptRole, "system", StringComparison.OrdinalIgnoreCase)) return "system";
+            if (settings != null && string.Equals(settings.SystemPromptRole, "developer", StringComparison.OrdinalIgnoreCase)) return "developer";
+            return "user";
         }
 
         private static string BuildPlannerContext(string userText, OfficeSnapshot snapshot, RoutedTask route, ToolCatalogSlice tools, IEnumerable<AgentObservation> observations, DocumentContext context, IEnumerable<SkillDefinition> skills, AppSettings settings)
@@ -767,9 +746,8 @@ namespace RNAssistant.Office.Services
             builder.AppendLine("phase: " + (route == null ? string.Empty : route.Phase));
             builder.AppendLine("requiresTool: " + (route != null && route.RequiresTool ? "true" : "false"));
             builder.AppendLine("requiresInspection: " + (route != null && route.RequiresInspection ? "true" : "false"));
-            builder.AppendLine("maxPlanActions: " + Math.Max(1, settings == null ? 1 : settings.MaxAgentPlanSteps));
-            builder.AppendLine("maxReadOnlyPlanActions: " + Math.Max(1, settings == null ? 4 : settings.MaxAgentReadOnlyPlanSteps));
-            builder.AppendLine("Document mutation and VBA plans must contain exactly one action. A multi-action batch is allowed only for independent read-only tools that do not require confirmation.");
+            builder.AppendLine("Return exactly one tool call per model turn. A visible kind=plan decision describes complex work but never executes tools.");
+            builder.AppendLine("responseMode: " + (settings == null ? AgentResponseModes.JsonSchema : settings.AgentResponseMode));
             if (route != null && string.Equals(route.TaskType, "html", StringComparison.OrdinalIgnoreCase))
             {
                 builder.AppendLine("HTML MODE IS ENABLED FOR THIS CHAT.");
@@ -852,9 +830,9 @@ namespace RNAssistant.Office.Services
                 var latestObservation = observationList.LastOrDefault();
                 if (latestObservation != null && !string.Equals(latestObservation.Status, "success", StringComparison.OrdinalIgnoreCase))
                 {
-                    builder.AppendLine("A local tool call failed or was rejected. Use the error observation to return a corrected tool_plan, or cannot_do if it cannot be corrected.");
+                    builder.AppendLine("A local tool call failed or was rejected. Use the error observation to return one corrected kind=tool decision, or cannot_complete if it cannot be corrected.");
                 }
-                else if (observationList.Any(o => o.Mutation) && (settings == null || settings.RequireVerificationForMutations != false))
+                else if (observationList.Any(o => o.Mutation) && (settings == null || settings.RequireVerificationForMutations))
                 {
                     builder.AppendLine(promptSettings.VerifyMutationPrompt);
                 }
@@ -1043,7 +1021,7 @@ namespace RNAssistant.Office.Services
                 return PlannerValidationResult.Fail("Target must be inspected before mutation. Use a read/context tool first.");
             }
 
-            var command = new ToolCommand { ToolId = step.ToolId, Description = step.Reason };
+            var command = new ToolCommand { ToolId = step.ToolId, Description = step.Reason, ToolCallId = step.ToolCallId };
             foreach (var pair in step.Arguments ?? new Dictionary<string, object>())
             {
                 command.Arguments[pair.Key] = pair.Value;

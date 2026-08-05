@@ -162,7 +162,8 @@ namespace RNAssistant.Harness
 
             AssertContains(prompt, "RELEVANT_SKILLS", "skills section");
             AssertContains(prompt, "AVAILABLE_TOOLS", "tools section");
-            AssertContains(prompt, "\"toolId\":\"exact tool id from AVAILABLE_TOOLS\"", "tool id protocol");
+            AssertContains(prompt, "Use only exact tool ids from AVAILABLE_TOOLS", "tool id protocol");
+            AssertContains(prompt, "exactly one tool call per model turn", "single tool call protocol");
             AssertContains(prompt, "Skills are guidance documents only", "skill guidance boundary");
         }
 
@@ -201,7 +202,7 @@ namespace RNAssistant.Harness
             AssertContains(prompt, "CUSTOM_TOOL_PROTOCOL", "custom tool protocol prompt");
             AssertContains(prompt, "CUSTOM_TOOL_ROUTING", "custom tool routing prompt");
             AssertTrue(prompt.IndexOf("Required tool response format", StringComparison.OrdinalIgnoreCase) < 0, "default protocol replaced");
-            AssertEqual("user", messages[0].Role, "default instruction role");
+            AssertEqual("developer", messages[0].Role, "default instruction role");
 
             settings.SystemPromptRole = "system";
             AssertEqual("system", BuildPlannerMessages(settings, new ToolDefinition[0], new SkillDefinition[0])[0].Role, "system instruction role");

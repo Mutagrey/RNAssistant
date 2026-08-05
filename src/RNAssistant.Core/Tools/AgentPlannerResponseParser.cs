@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Tools
@@ -9,270 +12,172 @@ namespace RNAssistant.Core.Tools
     {
         public AgentPlannerParseResult Parse(string text)
         {
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                return AgentPlannerParseResult.Fail("empty_response", "Planner response is empty.");
-            }
+            return Parse(text, null);
+        }
 
-            var trimmed = UnwrapJsonFence(text);
+        public AgentPlannerParseResult Parse(string text, IEnumerable<ToolDefinition> tools)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return AgentPlannerParseResult.Fail("empty_response", "Agent decision is empty.");
+            var trimmed = text.TrimStart('\uFEFF').Trim();
             if (!trimmed.StartsWith("{", StringComparison.Ordinal) || !trimmed.EndsWith("}", StringComparison.Ordinal))
             {
-                return AgentPlannerParseResult.Fail("not_json_object", "Planner response must be exactly one JSON object, optionally wrapped in one JSON code fence.");
+                return AgentPlannerParseResult.Fail("not_json_object", "Agent decision must be exactly one JSON object.");
             }
 
             JObject obj;
-            try
-            {
-                obj = JObject.Parse(trimmed);
-            }
-            catch (JsonException ex)
-            {
-                return AgentPlannerParseResult.Fail("invalid_json", ex.Message);
-            }
+            try { obj = JObject.Parse(trimmed); }
+            catch (JsonException ex) { return AgentPlannerParseResult.Fail("invalid_json", ex.Message); }
 
-            foreach (var property in obj.Properties())
+            var allowed = new HashSet<string>(new[] { "protocolVersion", "kind", "decisionSummary", "goal", "plan", "tool", "message" }, StringComparer.Ordinal);
+            var extra = obj.Properties().FirstOrDefault(property => !allowed.Contains(property.Name));
+            if (extra != null) return AgentPlannerParseResult.Fail("unexpected_field", "Agent decision contains unsupported field: " + extra.Name);
+
+            if (obj["protocolVersion"] == null || obj["protocolVersion"].Type != JTokenType.Integer || obj["protocolVersion"].Value<int>() != AgentDecisionProtocol.Version)
             {
-                if (!IsAllowedRootProperty(property.Name))
-                {
-                    return AgentPlannerParseResult.Fail("unexpected_field", "Planner response contains unsupported field: " + property.Name);
-                }
+                return AgentPlannerParseResult.Fail("invalid_protocol_version", "protocolVersion must be 1.");
             }
-            if (!IsStringProperty(obj, "kind", false))
-            {
-                return AgentPlannerParseResult.Fail("invalid_kind", "Planner response kind must be a string.");
-            }
-            if (!IsStringProperty(obj, "intent", true))
-            {
-                return AgentPlannerParseResult.Fail("invalid_intent", "Planner response intent must be a string or null.");
-            }
-            if (!IsStringProperty(obj, "message", true))
-            {
-                return AgentPlannerParseResult.Fail("invalid_message", "Planner response message must be a string or null.");
-            }
-            if (!IsStringProperty(obj, "expectedOutcome", true))
-            {
-                return AgentPlannerParseResult.Fail("invalid_expected_outcome", "Planner response expectedOutcome must be a string or null.");
-            }
+            var kind = ReadString(obj["kind"]);
+            if (!KnownKind(kind)) return AgentPlannerParseResult.Fail("invalid_kind", "Agent decision kind is invalid.");
+            var summary = ReadString(obj["decisionSummary"]);
+            if (string.IsNullOrWhiteSpace(summary)) return AgentPlannerParseResult.Fail("missing_decision_summary", "decisionSummary is required.");
+            var missing = allowed.FirstOrDefault(field => obj[field] == null);
+            if (missing != null) return AgentPlannerParseResult.Fail("missing_field", "Agent decision is missing required field: " + missing);
 
             var response = new AgentPlannerResponse
             {
-                Kind = ReadString(obj, "kind"),
-                Intent = ReadString(obj, "intent"),
-                Message = ReadString(obj, "message"),
-                ExpectedOutcome = ReadString(obj, "expectedOutcome")
+                ProtocolVersion = AgentDecisionProtocol.Version,
+                Kind = kind,
+                DecisionSummary = summary,
+                Goal = ReadString(obj["goal"]),
+                Message = ReadString(obj["message"])
             };
 
-            if (!IsKnownKind(response.Kind))
+            if (string.Equals(kind, AgentResponseKinds.Plan, StringComparison.OrdinalIgnoreCase))
             {
-                return AgentPlannerParseResult.Fail("invalid_kind", "Planner response kind is invalid.");
-            }
-
-            if (string.IsNullOrWhiteSpace(response.Intent))
-            {
-                response.Intent = DefaultIntent(response.Kind);
-            }
-            else if (!IsKnownIntent(response.Intent))
-            {
-                return AgentPlannerParseResult.Fail("invalid_intent", "Planner response intent is invalid.");
-            }
-
-            var stepsToken = obj["steps"];
-            var isToolPlan = string.Equals(response.Kind, AgentResponseKinds.ToolPlan, StringComparison.OrdinalIgnoreCase);
-            if ((stepsToken == null || stepsToken.Type == JTokenType.Null) && isToolPlan)
-            {
-                return AgentPlannerParseResult.Fail("missing_steps", "Planner response requires a steps array.");
-            }
-            var steps = stepsToken == null || stepsToken.Type == JTokenType.Null
-                ? new JArray()
-                : stepsToken as JArray;
-            if (steps == null)
-            {
-                return AgentPlannerParseResult.Fail("invalid_steps", "Planner response steps must be an array.");
-            }
-            foreach (var stepToken in steps)
-            {
-                var stepObject = stepToken as JObject;
-                if (stepObject == null)
+                if (!IsNull(obj["tool"]) || !IsNull(obj["message"]))
                 {
-                    return AgentPlannerParseResult.Fail("invalid_step", "Each planner step must be an object.");
+                    return AgentPlannerParseResult.Fail("invalid_plan", "plan requires tool and message to be null.");
                 }
-                foreach (var property in stepObject.Properties())
+                var plan = obj["plan"] as JArray;
+                if (string.IsNullOrWhiteSpace(response.Goal) || plan == null || plan.Count == 0)
                 {
-                    if (!IsAllowedStepProperty(property.Name))
+                    return AgentPlannerParseResult.Fail("invalid_plan", "plan requires a goal and at least one step.");
+                }
+                var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var token in plan)
+                {
+                    var step = token as JObject;
+                    if (step == null || step.Properties().Any(property => property.Name != "id" && property.Name != "title"))
                     {
-                        return AgentPlannerParseResult.Fail("unexpected_step_field", "Planner step contains unsupported field: " + property.Name);
+                        return AgentPlannerParseResult.Fail("invalid_plan_step", "Each plan step may contain only id and title.");
                     }
-                }
-                if (!IsStringProperty(stepObject, "toolId", false))
-                {
-                    return AgentPlannerParseResult.Fail("missing_tool_id", "Each planner step requires a string toolId.");
-                }
-                if (!IsStringProperty(stepObject, "reason", true))
-                {
-                    return AgentPlannerParseResult.Fail("invalid_reason", "Planner step reason must be a string or null.");
-                }
-
-                var step = new AgentPlannerStep
-                {
-                    ToolId = ReadString(stepObject, "toolId"),
-                    Reason = ReadString(stepObject, "reason")
-                };
-                if (string.IsNullOrWhiteSpace(step.ToolId))
-                {
-                    return AgentPlannerParseResult.Fail("missing_tool_id", "Each planner step requires toolId.");
-                }
-
-                var arguments = stepObject["arguments"];
-                if (arguments != null && arguments.Type != JTokenType.Null)
-                {
-                    var argObject = arguments as JObject;
-                    if (argObject == null)
+                    var id = ReadString(step["id"]);
+                    var title = ReadString(step["title"]);
+                    if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(title) || !ids.Add(id))
                     {
-                        return AgentPlannerParseResult.Fail("invalid_arguments", "Step arguments must be an object.");
+                        return AgentPlannerParseResult.Fail("invalid_plan_step", "Plan step id/title must be non-empty and ids must be unique.");
                     }
-
-                    foreach (var property in argObject.Properties())
-                    {
-                        step.Arguments[property.Name] = ToObjectValue(property.Value);
-                    }
+                    response.Plan.Add(new AgentPlanStep { Id = id, Title = title, Status = "pending" });
                 }
-
-                response.Steps.Add(step);
+                return AgentPlannerParseResult.Ok(response);
             }
 
-            if (isToolPlan && response.Steps.Count == 0)
+            if (string.Equals(kind, AgentResponseKinds.Tool, StringComparison.OrdinalIgnoreCase))
             {
-                return AgentPlannerParseResult.Fail("missing_steps", "tool_plan response requires at least one step.");
+                if (!IsNull(obj["goal"]) || !IsNull(obj["plan"]) || !IsNull(obj["message"]))
+                {
+                    return AgentPlannerParseResult.Fail("invalid_tool", "tool requires goal, plan, and message to be null.");
+                }
+                var toolObject = obj["tool"] as JObject;
+                if (toolObject == null || toolObject.Properties().Any(property => property.Name != "toolId" && property.Name != "arguments"))
+                {
+                    return AgentPlannerParseResult.Fail("invalid_tool", "tool decision requires a tool object with toolId and arguments.");
+                }
+                var toolId = ReadString(toolObject["toolId"]);
+                var arguments = toolObject["arguments"] as JObject;
+                if (string.IsNullOrWhiteSpace(toolId) || arguments == null)
+                {
+                    return AgentPlannerParseResult.Fail("invalid_tool", "toolId and arguments object are required.");
+                }
+                var definition = (tools ?? new ToolDefinition[0]).FirstOrDefault(tool => tool != null && string.Equals(tool.Id, toolId, StringComparison.OrdinalIgnoreCase));
+                if (tools != null && definition == null) return AgentPlannerParseResult.Fail("unknown_tool", "Tool is not in the current tool slice: " + toolId);
+                if (definition != null)
+                {
+                    JObject schema;
+                    string schemaError;
+                    if (!ToolSchemaSupport.TryNormalize(definition, out schema, out schemaError)) return AgentPlannerParseResult.Fail("invalid_tool_schema", schemaError);
+                    string argumentError;
+                    if (!ToolSchemaSupport.ValidateArguments(arguments, schema, true, out argumentError)) return AgentPlannerParseResult.Fail("invalid_arguments", argumentError);
+                }
+                var step = new AgentPlannerStep { ToolId = toolId, Reason = summary };
+                ToolArgumentNormalizer.AddProperties(arguments, step.Arguments);
+                response.Tool = step;
+                return AgentPlannerParseResult.Ok(response);
             }
 
-            if (!isToolPlan && response.Steps.Count > 0)
+            if (!IsNull(obj["goal"]) || !IsNull(obj["plan"]) || !IsNull(obj["tool"]))
             {
-                return AgentPlannerParseResult.Fail("unexpected_steps", "Only tool_plan responses may include steps.");
+                return AgentPlannerParseResult.Fail("invalid_terminal", kind + " requires goal, plan, and tool to be null.");
             }
-
-            if (!isToolPlan &&
-                string.IsNullOrWhiteSpace(response.Message))
+            if (string.IsNullOrWhiteSpace(response.Message))
             {
-                return AgentPlannerParseResult.Fail("missing_message", response.Kind + " response requires message.");
+                return AgentPlannerParseResult.Fail("missing_message", kind + " requires message.");
             }
-
             return AgentPlannerParseResult.Ok(response);
         }
 
-        private static bool IsAllowedRootProperty(string name)
+        public AgentPlannerParseResult ParseNative(LlmCompletionResult completion, IEnumerable<ToolDefinition> tools, IEnumerable<LlmToolDefinition> apiTools)
         {
-            return string.Equals(name, "kind", StringComparison.Ordinal) ||
-                string.Equals(name, "intent", StringComparison.Ordinal) ||
-                string.Equals(name, "message", StringComparison.Ordinal) ||
-                string.Equals(name, "steps", StringComparison.Ordinal) ||
-                string.Equals(name, "expectedOutcome", StringComparison.Ordinal);
+            var calls = completion == null ? null : completion.ToolCalls;
+            if (calls == null || calls.Count == 0)
+            {
+                var contentDecision = Parse(completion == null ? null : completion.Content, tools);
+                return contentDecision.Success && string.Equals(contentDecision.Response.Kind, AgentResponseKinds.Tool, StringComparison.OrdinalIgnoreCase)
+                    ? AgentPlannerParseResult.Fail("native_tool_call_required", "native_tool_calls mode requires an API function call for tool actions.")
+                    : contentDecision;
+            }
+            if (calls.Count != 1) return AgentPlannerParseResult.Fail("multiple_tool_calls", "Exactly one native tool call is allowed per model turn.");
+            var call = calls[0];
+            var toolId = ToolSchemaSupport.ResolveToolId(call.Name, apiTools);
+            if (string.IsNullOrWhiteSpace(toolId)) return AgentPlannerParseResult.Fail("unknown_tool", "Native tool call name is not in the current tool slice: " + call.Name);
+            JObject arguments;
+            try { arguments = JObject.Parse(string.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson); }
+            catch (JsonException ex) { return AgentPlannerParseResult.Fail("invalid_arguments", ex.Message); }
+            var synthetic = new JObject
+            {
+                ["protocolVersion"] = AgentDecisionProtocol.Version,
+                ["kind"] = AgentResponseKinds.Tool,
+                ["decisionSummary"] = "Call " + toolId,
+                ["goal"] = null,
+                ["plan"] = null,
+                ["tool"] = new JObject { ["toolId"] = toolId, ["arguments"] = arguments },
+                ["message"] = null
+            };
+            var parsed = Parse(synthetic.ToString(Formatting.None), tools);
+            if (parsed.Success)
+            {
+                parsed.Response.Tool.ToolCallId = call.Id;
+            }
+            return parsed;
         }
 
-        private static bool IsAllowedStepProperty(string name)
+        private static bool KnownKind(string kind)
         {
-            return string.Equals(name, "toolId", StringComparison.Ordinal) ||
-                string.Equals(name, "arguments", StringComparison.Ordinal) ||
-                string.Equals(name, "reason", StringComparison.Ordinal);
-        }
-
-        private static bool IsStringProperty(JObject obj, string name, bool allowNullOrMissing)
-        {
-            var token = obj == null ? null : obj[name];
-            if (token == null || token.Type == JTokenType.Null)
-            {
-                return allowNullOrMissing;
-            }
-            return token.Type == JTokenType.String;
-        }
-
-        private static string UnwrapJsonFence(string text)
-        {
-            var value = (text ?? string.Empty).TrimStart('\uFEFF').Trim();
-            if (!value.StartsWith("```", StringComparison.Ordinal) ||
-                !value.EndsWith("```", StringComparison.Ordinal))
-            {
-                return value;
-            }
-
-            var newline = value.IndexOf('\n');
-            if (newline < 0)
-            {
-                return value;
-            }
-
-            var language = value.Substring(3, newline - 3).Trim();
-            if (language.Length > 0 && !string.Equals(language, "json", StringComparison.OrdinalIgnoreCase))
-            {
-                return value;
-            }
-
-            return value.Substring(newline + 1, value.Length - newline - 4).Trim();
-        }
-
-        private static string ReadString(JObject obj, string name)
-        {
-            var token = obj == null ? null : obj[name];
-            if (token == null || token.Type == JTokenType.Null)
-            {
-                return null;
-            }
-            return token.Type == JTokenType.String ? token.Value<string>() : token.ToString(Formatting.None);
-        }
-
-        private static bool IsKnownKind(string kind)
-        {
-            return string.Equals(kind, AgentResponseKinds.ToolPlan, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(kind, AgentResponseKinds.Final, StringComparison.OrdinalIgnoreCase) ||
+            return string.Equals(kind, AgentResponseKinds.Plan, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(kind, AgentResponseKinds.Tool, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(kind, AgentResponseKinds.Clarify, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(kind, AgentResponseKinds.CannotDo, StringComparison.OrdinalIgnoreCase);
+                string.Equals(kind, AgentResponseKinds.Final, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(kind, AgentResponseKinds.CannotComplete, StringComparison.OrdinalIgnoreCase);
         }
 
-        private static bool IsKnownIntent(string intent)
+        private static string ReadString(JToken token)
         {
-            return string.Equals(intent, AgentIntents.Read, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(intent, AgentIntents.Analyze, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(intent, AgentIntents.Mutate, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(intent, AgentIntents.Verify, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(intent, AgentIntents.Answer, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(intent, AgentIntents.Clarify, StringComparison.OrdinalIgnoreCase);
+            return token == null || token.Type == JTokenType.Null ? null : token.Type == JTokenType.String ? token.Value<string>() : null;
         }
 
-        private static string DefaultIntent(string kind)
+        private static bool IsNull(JToken token)
         {
-            if (string.Equals(kind, AgentResponseKinds.Final, StringComparison.OrdinalIgnoreCase))
-            {
-                return AgentIntents.Answer;
-            }
-            if (string.Equals(kind, AgentResponseKinds.Clarify, StringComparison.OrdinalIgnoreCase))
-            {
-                return AgentIntents.Clarify;
-            }
-            return AgentIntents.Read;
-        }
-
-        private static object ToObjectValue(JToken token)
-        {
-            if (token == null || token.Type == JTokenType.Null)
-            {
-                return null;
-            }
-            if (token.Type == JTokenType.Integer)
-            {
-                return token.Value<long>();
-            }
-            if (token.Type == JTokenType.Float)
-            {
-                return token.Value<double>();
-            }
-            if (token.Type == JTokenType.Boolean)
-            {
-                return token.Value<bool>();
-            }
-            if (token.Type == JTokenType.String)
-            {
-                return token.Value<string>();
-            }
-            return token.ToString(Formatting.None);
+            return token != null && token.Type == JTokenType.Null;
         }
     }
 }

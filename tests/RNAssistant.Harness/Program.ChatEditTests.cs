@@ -26,7 +26,7 @@ namespace RNAssistant.Harness
                     DocumentTitle = "Edit.xlsx",
                     Title = "Edit test"
                 };
-                var sessionId = ChatStore.GetSessionId(session);
+                var sessionId = session.Id;
                 var pendingRemoved = false;
                 var pendingCancelled = false;
                 var service = new ChatHistoryEditService(
@@ -162,7 +162,7 @@ namespace RNAssistant.Harness
                 edited.Content,
                 session,
                 new DocumentContext(),
-                new AppSettings { ContextCharLimit = 8000 },
+                new AppSettings(),
                 edited.Attachments,
                 null,
                 CancellationToken.None,
@@ -304,7 +304,7 @@ namespace RNAssistant.Harness
         {
             try
             {
-                service.RewriteUserMessage(session, ChatStore.GetSessionId(session), messageId, index, text);
+                service.RewriteUserMessage(session, session.Id, messageId, index, text);
                 throw new InvalidOperationException(name + " unexpectedly succeeded");
             }
             catch (InvalidOperationException ex)

@@ -493,3 +493,17 @@
 .tool-editor .CodeMirror-scroll {
   max-width: 100%;
 }
+.vba-package-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.vba-package-editor .wide {
+  grid-column: 1 / -1;
+}
+
+#toolPackageMeta:empty,
+#vbaPackageActions[hidden] {
+  display: none;
+}

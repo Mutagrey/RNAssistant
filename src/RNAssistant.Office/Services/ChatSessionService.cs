@@ -225,7 +225,7 @@ namespace RNAssistant.Office.Services
                 return;
             }
 
-            _activeSessionId = ChatStore.GetSessionId(session);
+            _activeSessionId = session.Id;
             _activeSession = session;
             _activeHost = session.Host;
             _activeDocumentKey = session.DocumentKey;
@@ -240,7 +240,7 @@ namespace RNAssistant.Office.Services
         public void NotifySaved(ChatSession session)
         {
             if (session == null ||
-                !string.Equals(ChatStore.GetSessionId(session), _activeSessionId, StringComparison.OrdinalIgnoreCase))
+                !string.Equals(session.Id, _activeSessionId, StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
@@ -326,9 +326,9 @@ namespace RNAssistant.Office.Services
             var sessions = _chatStore.List().ToList();
             foreach (var running in RunSessionsProvider == null ? new ChatSession[0] : RunSessionsProvider())
             {
-                var runningId = ChatStore.GetSessionId(running);
+                var runningId = running.Id;
                 var storedIndex = sessions.FindIndex(item =>
-                    string.Equals(ChatStore.GetSessionId(item), runningId, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(item.Id, runningId, StringComparison.OrdinalIgnoreCase));
                 if (storedIndex >= 0)
                 {
                     sessions[storedIndex] = running;
@@ -339,8 +339,8 @@ namespace RNAssistant.Office.Services
                 }
             }
             if (_activeSession != null && !_activeSessionPersisted &&
-                string.Equals(ChatStore.GetSessionId(_activeSession), activeId, StringComparison.OrdinalIgnoreCase) &&
-                sessions.All(item => !string.Equals(ChatStore.GetSessionId(item), activeId, StringComparison.OrdinalIgnoreCase)))
+                string.Equals(_activeSession.Id, activeId, StringComparison.OrdinalIgnoreCase) &&
+                sessions.All(item => !string.Equals(item.Id, activeId, StringComparison.OrdinalIgnoreCase)))
             {
                 sessions.Insert(0, _activeSession);
             }
@@ -350,7 +350,7 @@ namespace RNAssistant.Office.Services
 
         private ChatSessionSummary ToSummary(ChatSession session)
         {
-            var id = ChatStore.GetSessionId(session);
+            var id = session.Id;
             var run = RunStateProvider == null ? null : RunStateProvider(id);
             return new ChatSessionSummary
             {

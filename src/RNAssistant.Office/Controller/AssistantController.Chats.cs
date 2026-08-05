@@ -44,7 +44,7 @@ namespace RNAssistant.Office
                 var removedMessage = session.Messages[targetIndex];
                 session.Messages.RemoveAt(targetIndex);
                 _attachmentStore.DeleteMessage(removedMessage);
-                RemovePendingAgentToolsForSession(ChatStore.GetSessionId(session));
+                RemovePendingAgentToolsForSession(session.Id);
                 CancelPendingActivities(session, "Pending action cancelled because chat history changed.");
                 SaveSessionChanges(session);
             }
@@ -89,7 +89,7 @@ namespace RNAssistant.Office
                     : ChatCloneService.CloneMessages(sourceMessages.Take(targetIndex + 1));
                 foreach (var message in fork.Messages)
                 {
-                    _attachmentStore.CloneMessageAttachments(ChatStore.GetSessionId(fork), message);
+                    _attachmentStore.CloneMessageAttachments(fork.Id, message);
                 }
                 NormalizeContext(fork.Context, fork);
                 SaveSessionChanges(fork);
@@ -110,7 +110,7 @@ namespace RNAssistant.Office
             string runId = null)
         {
             var session = LoadAddressedSession(chatId);
-            var sessionId = ChatStore.GetSessionId(session);
+            var sessionId = session.Id;
             return await ExecuteChatTurnAsync(
                 session,
                 _settingsService.Load(),
@@ -241,7 +241,7 @@ namespace RNAssistant.Office
         {
             var session = LoadSession(chatId);
             session.Mode = ChatModes.Normalize(mode);
-            RemovePendingAgentToolsForSession(ChatStore.GetSessionId(session));
+            RemovePendingAgentToolsForSession(session.Id);
             CancelPendingActivities(session, "Pending action cancelled because chat mode changed.");
             SaveSessionChanges(session);
             return ChatState(session);
@@ -260,7 +260,7 @@ namespace RNAssistant.Office
             var session = LoadSession(chatId);
             using (ReserveChatOperation(session))
             {
-                var sessionId = ChatStore.GetSessionId(session);
+                var sessionId = session.Id;
                 _attachmentStore.DeleteSession(sessionId);
                 RemovePendingAgentToolsForSession(sessionId);
                 session.Messages.Clear();
@@ -279,7 +279,7 @@ namespace RNAssistant.Office
             ChatSession next;
             using (ReserveChatOperation(current))
             {
-                var sessionId = ChatStore.GetSessionId(current);
+                var sessionId = current.Id;
                 _attachmentStore.DeleteSession(sessionId);
                 RemovePendingAgentToolsForSession(sessionId);
                 next = _chatSessions.DeleteAndSelectNext(sessionId);
@@ -302,8 +302,8 @@ namespace RNAssistant.Office
             var sessions = _chatStore.List(host, documentKey, string.Empty);
             foreach (var session in sessions)
             {
-                _attachmentStore.DeleteSession(ChatStore.GetSessionId(session));
-                RemovePendingAgentToolsForSession(ChatStore.GetSessionId(session));
+                _attachmentStore.DeleteSession(session.Id);
+                RemovePendingAgentToolsForSession(session.Id);
             }
 
             _chatStore.DeleteDocument(host, documentKey);
@@ -328,13 +328,13 @@ namespace RNAssistant.Office
 
         private ChatRunLease ReserveChatOperation(ChatSession session)
         {
-            var sessionId = ChatStore.GetSessionId(session);
+            var sessionId = session.Id;
             return _chatRuns.Start(sessionId, Guid.NewGuid().ToString("N"), session);
         }
 
         private ChatStateResponse ChatState(ChatSession session)
         {
-            var activeId = ChatStore.GetSessionId(session);
+            var activeId = session.Id;
             return new ChatStateResponse
             {
                 ActiveChatId = activeId,

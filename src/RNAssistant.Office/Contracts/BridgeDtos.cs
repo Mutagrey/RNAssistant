@@ -324,6 +324,15 @@ namespace RNAssistant.Office.Contracts
         public List<ToolDefinition> Tools { get; set; }
     }
 
+    public sealed class VbaToolPackagePayload
+    {
+        [JsonProperty("id")]
+        public string Id { get; set; }
+
+        [JsonProperty("dryRun")]
+        public bool DryRun { get; set; }
+    }
+
     public sealed class SaveSkillsPayload
     {
         [JsonProperty("skills")]
@@ -469,6 +478,15 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("backups")]
         public IReadOnlyList<VbaModuleBackup> Backups { get; set; }
+    }
+
+    public sealed class VbaToolPackageResponse
+    {
+        [JsonProperty("result")]
+        public ToolResult Result { get; set; }
+
+        [JsonProperty("tools")]
+        public IReadOnlyList<ToolDefinition> Tools { get; set; }
     }
 
     public sealed class HtmlWorkspaceResponse

@@ -8,7 +8,6 @@ namespace RNAssistant.Core.Models
         public string Host { get; set; }
         public string DocumentKey { get; set; }
         public string Title { get; set; }
-        public string Summary { get; set; }
         public DateTime UpdatedUtc { get; set; }
         public List<ContextNote> Notes { get; set; }
 

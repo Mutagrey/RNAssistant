@@ -41,8 +41,8 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 
 ## Current Code Zones
 
-- `src/RNAssistant.Core/Llm`: API client, SSE/reasoning parsing, model capability budgeting, prompt composition and context usage estimates.
-- `src/RNAssistant.Core/Tools`: strict planner JSON parsing and tool argument normalization.
+- `src/RNAssistant.Core/Llm`: API client, request/response transport models, `json_object`/`json_schema`/native tool-call payloads, SSE/reasoning parsing, model capability budgeting, prompt composition and context usage estimates.
+- `src/RNAssistant.Core/Tools`: strict AgentDecision parsing, dynamic response schema, formal tool-schema validation and VBA manifest parsing.
 - `src/RNAssistant.Office/Services/BuiltInSkillProvider.cs`: common built-in markdown skills; host adapters provide application-specific skills through `IOfficeBuiltInSkillProvider`.
 - `src/RNAssistant.Core/Services`: Office-agnostic model services such as context normalization.
 - `src/RNAssistant.Core/Storage`: JSON file storage under `%AppData%/RNAssistant`.
@@ -58,27 +58,29 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - `src/RNAssistant.Office/Services/ChatRunRegistry.cs`: in-memory per-chat run ownership, live status/current action, and cancellation addressed by chat/run id; switching the selected chat never transfers or cancels a run. A lightweight persisted marker converts abandoned runs to `cancelled` after an application restart.
 - `src/RNAssistant.Office/Services/HtmlNetworkService.cs`: permission-gated HTTP(S) transport for sandboxed HTML workspace previews.
 - `src/RNAssistant.Office/Services/AgentRunService.cs`: controlled planner loop, route/slice/validate/execute flow, normalized observations, deterministic mutation verification, VBA context capture, and confirmation resume continuation.
-- `src/RNAssistant.Office/Services/AgentPlannerCompletionRunner.cs`: planner completion streaming, strict JSON parsing, and the single bounded format-repair attempt.
+- `src/RNAssistant.Office/Services/AgentPlannerCompletionRunner.cs`: response-mode selection, pre-execution `json_schema` fallback, planner completion streaming, native/text parsing, and one bounded format-repair attempt.
 - `src/RNAssistant.Office/Services/AgentPlannerRuntime.cs`: deterministic router, tool catalog slicer, planner prompt context, action validation, and observation normalization.
 - `src/RNAssistant.Office/Services/AgentRuntimeModels.cs`: route, observation, catalog slice, and run-state models.
 - `src/RNAssistant.Office/Services/AgentExecutionRuntime.cs`: effective tool catalog resolution and phase transitions.
-- `src/RNAssistant.Office/Services/AgentVerificationRuntime.cs`: deterministic verification selection and recipe expansion.
-- `src/RNAssistant.Office/Tools`: tool execution, one shared pipeline parser, controller-tool definitions/dispatch, tool/skill CRUD tools, and VBA patch/backup workflow.
+- `src/RNAssistant.Office/Services/AgentVerificationRuntime.cs`: deterministic verification selection and result validation.
+- `src/RNAssistant.Office/Tools`: tool execution, one shared pipeline parser, controller-tool definitions/dispatch, tool/skill CRUD tools, VBA package lifecycle and VBA patch/backup workflow.
 - `src/RNAssistant.OfficeHosts`: shared Excel/Word/PowerPoint/Outlook COM adapters and desktop target descriptors.
 - `src/RNAssistant.Desktop`: standalone WinForms shell, explicit Office target picker, manual foreground attach, single-instance JSON pipe activation, and ROT-based adapter creation with hwnd validation.
 - `src/RNAssistant.NativeHostCli`: thin C++/CLI exported-DLL host for VBA; owns
   only modeless window lifecycle, owner/positioning and managed assembly loading.
-- `src/RNAssistant.*AddIn`: VSTO compatibility wiring; no host adapter ownership.
+- `src/RNAssistant.*AddIn`: VSTO host wiring; no host adapter ownership.
 - `wrappers/native`: VBA source modules for Office-native launchers.
 - `web`: static HTML/CSS/JS task pane. `web/js/app-core.js` owns state and WebView bridge wiring; `app-settings.js`, `app-tools.js`, `app-skills.js`, `app-vba.js`, `app-context.js`, and `app-chat.js` own their feature flows; `app-utils.js` owns pure browser helpers; `app.js` is boot plus shared rendering helpers.
 
 ## Non-Negotiable Boundaries
 
-- Agent mode accepts one strict planner JSON object in assistant text. The parser may unwrap one clean `json` code fence, but rejects surrounding prose, other fence types, legacy envelopes, arrays, native `tool_calls`, and `function_call`.
-- Editable Chat/Agent instructions use the `user` role by default. This is intentional compatibility behavior for OpenAI-compatible endpoints that impose tighter length or handling limits on `system` messages; Settings may explicitly switch the role to `system`.
+- Agent mode uses AgentDecision v1. Each turn is exactly one raw JSON object or one native OpenAI `tool_call`; one turn can select only one external tool. Fences, surrounding prose, alternate envelopes, arrays, `function_call`, and parallel tool calls are rejected.
+- Agent API mode is explicit: `json_schema` by default, `json_object`, or `native_tool_calls`. Strict-schema fallback to `json_object` is permitted only before the first executed tool and persists for the rest of that run.
+- Editable Chat/Agent instructions use `developer` by default; Settings may choose `system` or `user`. Tool observations use `role: tool` by default with a matching assistant `tool_calls`/`tool_call_id` pair, or `developer`/`user` for endpoints that cannot replay tool history.
+- `decisionSummary`, visible goals/plans, normalized observations and deterministic verification are observable harness state. They must not contain or require chain-of-thought. Provider reasoning remains separate transport metadata.
 - Chat mode is a plain completion path with its own `ChatSystemPrompt`, without planner/tool prompts. Thought/reasoning JSON in content is never persisted: a user-facing field is extracted or one bounded repair is requested. Auto mode chooses Chat or Agent before the model request; the selected mode is persisted per chat.
 - Model reasoning is transport metadata (`reasoning_content`, `reasoning`, or one leading `<think>...</think>` block), stored and rendered separately; it is never mixed into planner JSON or replayed as chat history. Think tags elsewhere in ordinary content are preserved literally.
-- Context limits are token budgets resolved from the active model capability catalog. The legacy character limit is read only for settings compatibility.
+- Context limits are token budgets resolved from the active model capability catalog.
 - Chat and planner context are rebuilt from the active session for every request. They use reference-deduplicated notes plus recent user/assistant messages and their attachments; agent activity, diagnostics, and reasoning metadata are never replayed.
 - Chat and Agent share `PromptBudgetComposer` for chronological history selection and attachment accounting. Once a recent message exceeds the remaining budget, older history is not reintroduced.
 - Deterministic verification uses the narrowest available read tool and has a 15-second runtime timeout. A timeout ends the run with a diagnostic instead of starting another COM operation against a potentially blocked Office host.
@@ -97,7 +99,8 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - Host adapters may implement `IOfficeDocumentCatalog`; typed bridge responses merge its open-document list with persisted chat summaries, and document activation is dispatched by stable document key.
 - Unsaved Office documents use the same custom document identity as saved files when custom properties are available; display names such as `Book1` are never storage keys.
 - New chat sessions remain transient until they contain a completed user/assistant exchange. Empty drafts are not written to the chat store, and document-history deletion removes every stored chat for that document without deleting the Office file.
-- JSON metadata writes use same-directory atomic replacement. Tool/skill saves reconcile only managed entries in scope and preserve broken or unrecognized entries and extra user files.
+- JSON metadata writes use same-directory atomic replacement. Tool/skill saves reconcile only managed entries in scope and preserve broken or unrecognized entries and extra user files. Custom tool arguments require formal object JSON Schema; invalid definitions are skipped.
+- Global VBA tools are versioned packages with `tool.json` plus `src/*.bas`/`src/*.cls`. Document-local manifests are discovered through VBProject. Temporary injection is automatic and cleaned in `finally`; persistent install requires a macro-enabled document and ownership/hash checks. See `docs/vba-tool-packages.md`.
 - Desktop COM automation must enter host adapters through `DispatchedOfficeApplicationAdapter`/`OfficeStaDispatcher`; VSTO task panes already run inside their Office host process and remain Windows-validation-only.
 - Desktop target selection uses `Auto follow` by default. `Manual` mode pins the selected working target; Excel task panes refresh on workbook activate/open/close events.
 - The Desktop target registry stores only lightweight descriptors, not long-lived Office COM objects.
@@ -124,17 +127,17 @@ Pass a category or name fragment for a focused run, for example `-- modes`, `-- 
 
 Current coverage:
 
-- parser fixtures: strict planner JSON object, one clean `json` fence, and rejection of noisy/alternate fences, legacy envelopes, arrays, native `tool_calls`, and malformed JSON;
+- AgentDecision v1 parser/schema fixtures, exact-field and one-tool enforcement, native tool-call parsing, all response-format request bodies, selectable tool-result roles, matching call ids, and persistent pre-execution schema fallback;
 - chat/tool/skill/VBA store fixtures using temp directories, including broken files being skipped;
 - chat session lifecycle fixtures, including document-key migration;
 - pipeline dry-run and execution fixtures with fake `IOfficeApplicationAdapter`;
 - pipeline failure diagnostics, cycle/missing-reference rejection, recursive risk/confirmation gates, and non-retryable partial-execution reporting;
-- agent runtime guards for strict planner repair, sliced tools, waiting confirmations, stopped batches, max iterations, max tool steps, fail-closed mutation verification/recovery, and VBA context prompt inclusion;
+- agent runtime guards for strict decision repair, sliced tools, waiting confirmations, max iterations, max tool steps, fail-closed mutation verification/recovery, and VBA context prompt inclusion;
 - model-quality fixtures that catch final answers when Office tool use is required;
 - markdown skill store/catalog/prompt separation, prompt body limiting, and agent skill-save confirmation;
 - agent custom tool save/read confirmation and validation;
 - metadata-driven mutation safety gates;
-- VBA replace/patch/restore flows with fail-closed rollback backups, code-hash verification, bounded line patches, and atomic module-write recovery using fake Office/VBProject objects;
+- VBA replace/patch/restore flows plus manifest/schema/signature validation, `.bas`/`.cls` package storage, document discovery, typed positional execution, session cleanup, persistent ownership and export-normalized hashes using fake Office/VBProject objects;
 - tool catalog service merge/filter behavior;
 - prompt message trimming, context usage estimates, and basic no-network chat completion flow;
 - explicit Chat/Auto/Agent routing, plain-chat prompt isolation, rebuilt history after deletion, and empty-tool preflight diagnostics;
