@@ -57,6 +57,8 @@ namespace RNAssistant.Harness
                 Id = "message-1",
                 Role = "assistant",
                 Content = "Done",
+                DecisionSummary = "Finishing",
+                Goal = "Prepare report",
                 ExcludeFromModelContext = true,
                 ToolCallId = "call-1",
                 ToolName = "excel_write_table",
@@ -93,6 +95,8 @@ namespace RNAssistant.Harness
             AssertTrue(!object.ReferenceEquals(sourceMessage, clonedMessages[0]), "message cloned");
             AssertEqual("message-1", clonedMessages[0].Id, "message id");
             AssertEqual("assistant", clonedMessages[0].Role, "message role");
+            AssertEqual("Finishing", clonedMessages[0].DecisionSummary, "decision summary cloned");
+            AssertEqual("Prepare report", clonedMessages[0].Goal, "goal cloned");
             AssertTrue(clonedMessages[0].ExcludeFromModelContext, "message context exclusion");
             AssertEqual("call-1", clonedMessages[0].ToolCallId, "tool call id");
             AssertEqual("excel_write_table", clonedMessages[0].ToolCalls[0].Name, "tool call name");
@@ -381,6 +385,22 @@ namespace RNAssistant.Harness
             AssertEqual(true, controller.LastSettings.ModelAudioSupportOverrides["gpt-audio"].Value, "model audio override");
             AssertEqual("gpt-test", controller.LastSettings.AttachmentModelPriority[0], "attachment model priority");
             AssertEqual("secret", controller.LastApiKey, "api key");
+        }
+
+        private static void BridgeRunsModelCompatibilityTest()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
+            var responseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"compat1\",\"type\":\"testModelCompatibility\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
+                .GetAwaiter()
+                .GetResult();
+
+            var response = JObject.Parse(responseJson);
+            AssertTrue(response["ok"].Value<bool>(), "compatibility bridge response ok");
+            AssertTrue(response["payload"]["compatible"].Value<bool>(), "compatibility result forwarded");
+            AssertEqual("user_role", response["payload"]["checks"][0]["id"].Value<string>(), "typed compatibility check forwarded");
         }
 
         private static void BridgeUsesTypedDocumentPayload()

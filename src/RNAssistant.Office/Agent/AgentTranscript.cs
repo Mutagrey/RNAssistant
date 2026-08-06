@@ -31,7 +31,12 @@ namespace RNAssistant.Office
             };
         }
 
-        public static ChatMessage CreateAssistantMessage(string content, LlmCompletionResult completion, ChatActivity activity = null)
+        public static ChatMessage CreateAssistantMessage(
+            string content,
+            LlmCompletionResult completion,
+            ChatActivity activity = null,
+            string decisionSummary = null,
+            string goal = null)
         {
             var reasoning = completion == null ? null : completion.ReasoningContent;
             var transcriptReasoningTruncated = !string.IsNullOrEmpty(reasoning) && reasoning.Length > MaxTranscriptReasoningChars;
@@ -39,6 +44,8 @@ namespace RNAssistant.Office
             {
                 Role = "assistant",
                 Content = content ?? string.Empty,
+                DecisionSummary = decisionSummary,
+                Goal = goal,
                 ExcludeFromModelContext = activity != null,
                 Activity = activity,
                 PromptTokens = completion == null ? null : completion.PromptTokens,

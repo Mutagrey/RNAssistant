@@ -24,7 +24,9 @@ namespace RNAssistant.Office.Services
                 var message = AgentTranscript.CreateAssistantMessage(
                     "Невалидный ответ модели исключён из контекста; запрос повторён.",
                     rejected.Completion,
-                    activity);
+                    activity,
+                    rejected.ParseResult == null ? null : rejected.ParseResult.RecoveredDecisionSummary,
+                    rejected.ParseResult == null ? null : rejected.ParseResult.RecoveredGoal);
                 message.ExcludeFromModelContext = true;
                 session.Messages.Add(message);
             }
@@ -39,18 +41,23 @@ namespace RNAssistant.Office.Services
                 rejected.RecoveryAction,
                 "json_object_fallback",
                 StringComparison.OrdinalIgnoreCase);
+            var recoveredSummary = parseResult == null ? null : parseResult.RecoveredDecisionSummary;
             return new ChatActivity
             {
                 Kind = "diagnostic",
-                Title = "Некорректный ответ модели",
+                Title = string.IsNullOrWhiteSpace(recoveredSummary)
+                    ? "Некорректный ответ модели"
+                    : TruncateLine(recoveredSummary, 240),
                 Subtitle = fallback
-                    ? "json_schema → json_object"
-                    : (rejected == null ? string.Empty : rejected.ResponseMode + " · повтор " + rejected.RetryNumber + "/" + rejected.RetryLimit),
+                    ? "Некорректный формат · json_schema → json_object"
+                    : "Некорректный формат · " + (rejected == null ? string.Empty : rejected.ResponseMode + " · повтор " + rejected.RetryNumber + "/" + rejected.RetryLimit),
                 Status = "completed",
                 ExecutionStatus = fallback ? "format_rejected_fallback" : "format_rejected_retry",
                 ErrorCode = parseResult == null ? "unknown" : parseResult.ErrorCode,
                 Retryable = true,
-                ResultMessage = "Ответ отклонён как невалидный AgentDecision и не добавлен в model context. Runtime повторил запрос.",
+                ResultMessage = "Ответ не выполнен из-за формата" +
+                    (parseResult == null ? "." : ": " + parseResult.ErrorCode + ".") +
+                    " Runtime повторил запрос; текст решения показан только для диагностики.",
                 DataJson = JsonConvert.SerializeObject(new
                 {
                     recoveryAction = rejected == null ? string.Empty : rejected.RecoveryAction,
@@ -83,7 +90,9 @@ namespace RNAssistant.Office.Services
                 {
                     Kind = "diagnostic",
                     Title = title,
-                    Subtitle = "strict_json",
+                    Subtitle = string.IsNullOrWhiteSpace(parseResult == null ? null : parseResult.RecoveredDecisionSummary)
+                        ? "strict_json"
+                        : TruncateLine(parseResult.RecoveredDecisionSummary, 240),
                     Status = "failed",
                     ExecutionStatus = parseResult == null ? "unknown" : parseResult.ErrorCode,
                     ResultMessage = "Модель вернула некорректный формат плана: " + (parseResult == null ? "unknown" : parseResult.ErrorCode) + ".",
@@ -95,7 +104,9 @@ namespace RNAssistant.Office.Services
                         responseTruncated = storedText.Length < (rawText ?? string.Empty).Length,
                         response = storedText
                     })
-                }));
+                },
+                    parseResult == null ? null : parseResult.RecoveredDecisionSummary,
+                    parseResult == null ? null : parseResult.RecoveredGoal));
             }
             return assistantText;
         }
@@ -106,6 +117,12 @@ namespace RNAssistant.Office.Services
             return value.Length <= MaxRejectedResponseChars
                 ? value
                 : value.Substring(0, MaxRejectedResponseChars);
+        }
+
+        private static string TruncateLine(string value, int maxChars)
+        {
+            value = (value ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ').Trim();
+            return value.Length <= maxChars ? value : value.Substring(0, maxChars) + "…";
         }
 
         public static string RecordMissingTools(

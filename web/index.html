@@ -27,7 +27,7 @@
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=custom-reasoning-20260806-1">
-  <link rel="stylesheet" href="css/app-workspace.css?v=chatui-20260630-1">
+  <link rel="stylesheet" href="css/app-workspace.css?v=agent-protocol-20260806-1">
   <link rel="stylesheet" href="css/app-tools.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-prompts.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-vba.css?v=chatui-20260622-7">
@@ -36,7 +36,7 @@
   <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260702-2">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=chatui-20260702-2">
   <link rel="stylesheet" href="css/app-responsive.css?v=message-edit-20260806-1">
-  <link rel="stylesheet" href="css/app-agent.css?v=plan-pill-20260806-1">
+  <link rel="stylesheet" href="css/app-agent.css?v=agent-protocol-20260806-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=agent-transcript-20260805-3">
   <link rel="stylesheet" href="css/app-theme.css?v=message-edit-20260806-1">
 </head>
@@ -545,6 +545,16 @@
                 <label><span>VBA-контекст, символы</span><input id="vbaContextLimitInput" type="number" min="1000" max="200000"></label>
               </div>
               <div class="setting-note">json_schema и json_object передают AgentDecision через content; native_tool_calls передаёт действия через OpenAI tools API. Роль tool создаёт matching assistant tool_calls/tool_call_id. Fallback разрешён только до первого выполненного tool.</div>
+              <section class="model-compatibility-panel" aria-labelledby="modelCompatibilityTitle">
+                <div class="model-compatibility-head">
+                  <div>
+                    <h3 id="modelCompatibilityTitle">Проверка совместимости</h3>
+                    <p>Тестирует роли, JSON-форматы и tool history без запуска Office-инструментов. Перед тестом текущие настройки сохраняются.</p>
+                  </div>
+                  <button class="secondary" id="testModelCompatibilityButton" type="button">Запустить тест</button>
+                </div>
+                <div class="model-compatibility-results" id="modelCompatibilityResults" aria-live="polite"></div>
+              </section>
             </section>
 
             <section class="settings-page" data-settings-page="interface">
@@ -694,11 +704,11 @@
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
   <script src="js/app-core.js?v=message-edit-20260806-1"></script>
-  <script src="js/app-utils.js?v=chatui-20260620-1"></script>
+  <script src="js/app-utils.js?v=agent-protocol-20260806-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
   <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js?v=custom-reasoning-20260806-1"></script>
+  <script src="js/app-settings.js?v=agent-protocol-20260806-1"></script>
   <script src="js/app-prompts.js?v=format-recovery-20260805-1"></script>
   <script src="js/app-model-data.js?v=reasoning-transport-20260805-1"></script>
   <script src="js/app-model-render.js?v=message-edit-20260806-1"></script>
@@ -715,8 +725,8 @@
   <script src="js/app-agent-model.js?v=agent-transcript-20260805-2"></script>
   <script src="js/app-chart-artifacts.js?v=chatui-20260622-2"></script>
   <script src="js/app-html-artifacts.js?v=chatui-20260702-2"></script>
-  <script src="js/app-agent.js?v=compact-plan-20260806-2"></script>
-  <script src="js/app-messages.js?v=message-edit-20260806-1"></script>
+  <script src="js/app-agent.js?v=agent-protocol-20260806-1"></script>
+  <script src="js/app-messages.js?v=agent-protocol-20260806-1"></script>
   <script src="js/app-reasoning.js?v=reasoning-20260805-1"></script>
   <script src="js/app-attachments.js?v=mediarouting-20260722-1"></script>
   <script src="js/app-chat.js?v=message-edit-20260806-1"></script>

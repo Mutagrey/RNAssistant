@@ -179,6 +179,107 @@
   line-height: 1.4;
 }
 
+.model-compatibility-panel {
+  display: grid;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--secondary-bg);
+}
+
+.model-compatibility-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.model-compatibility-head h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: var(--title-font-weight);
+}
+
+.model-compatibility-head p {
+  max-width: 620px;
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.model-compatibility-results:empty {
+  display: none;
+}
+
+.model-compatibility-summary {
+  padding: 7px 9px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+.model-compatibility-summary.passed {
+  background: rgba(22, 163, 74, .09);
+  color: #166534;
+}
+
+.model-compatibility-summary.failed {
+  background: rgba(220, 38, 38, .08);
+  color: #991b1b;
+}
+
+.model-compatibility-meta {
+  margin: 6px 0;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.model-compatibility-list {
+  display: grid;
+  gap: 5px;
+}
+
+.model-compatibility-check {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 7px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.model-compatibility-check.optional.failed {
+  opacity: .72;
+}
+
+.model-compatibility-mark {
+  font-weight: 700;
+}
+
+.model-compatibility-check.passed .model-compatibility-mark {
+  color: #15803d;
+}
+
+.model-compatibility-check.failed .model-compatibility-mark {
+  color: #b42318;
+}
+
+.model-compatibility-check-title {
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: var(--label-font-weight);
+}
+
+.model-compatibility-check-message {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10.5px;
+  overflow-wrap: anywhere;
+}
+
 .stack {
   display: grid;
   gap: 10px;

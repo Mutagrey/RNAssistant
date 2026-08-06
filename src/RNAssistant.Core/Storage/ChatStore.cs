@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Storage
@@ -66,7 +68,7 @@ namespace RNAssistant.Core.Storage
                 return null;
             }
 
-            var session = _json.Load(GetSessionPath(host, documentKey, sessionId), (ChatSession)null);
+            var session = LoadSession(GetSessionPath(host, documentKey, sessionId));
             if (!IsSupported(session))
             {
                 return null;
@@ -196,7 +198,7 @@ namespace RNAssistant.Core.Storage
             foreach (var directory in SafeGetDirectories(_paths.ChatDirectory))
             {
                 sessions.AddRange(SafeGetFiles(directory)
-                    .Select(p => _json.Load(p, (ChatSession)null))
+                    .Select(LoadSession)
                     .Where(IsSupported)
                     .Select(s =>
                     {
@@ -219,7 +221,7 @@ namespace RNAssistant.Core.Storage
             }
 
             return SafeGetFiles(directory)
-                .Select(p => _json.Load(p, (ChatSession)null))
+                .Select(LoadSession)
                 .Where(IsSupported)
                 .Select(s =>
                 {
@@ -358,6 +360,40 @@ namespace RNAssistant.Core.Storage
         private static bool IsSupported(ChatSession session)
         {
             return session != null && session.FormatVersion == ChatSession.CurrentFormatVersion;
+        }
+
+        private static ChatSession LoadSession(string path)
+        {
+            try
+            {
+                if (!File.Exists(path))
+                {
+                    return null;
+                }
+
+                var root = JObject.Parse(File.ReadAllText(path));
+                var formatVersion = root.GetValue("FormatVersion", StringComparison.OrdinalIgnoreCase);
+                if (formatVersion == null ||
+                    formatVersion.Type != JTokenType.Integer ||
+                    !string.Equals(formatVersion.ToString(), ChatSession.CurrentFormatVersion.ToString(), StringComparison.Ordinal))
+                {
+                    return null;
+                }
+
+                return root.ToObject<ChatSession>();
+            }
+            catch (IOException)
+            {
+                return null;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return null;
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
         }
 
         private string GetDocumentDirectory(string host, string documentKey)

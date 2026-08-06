@@ -68,6 +68,8 @@ namespace RNAssistant.Core.Models
         public AgentPlannerResponse Response { get; set; }
         public string ErrorCode { get; set; }
         public string ErrorMessage { get; set; }
+        public string RecoveredDecisionSummary { get; set; }
+        public string RecoveredGoal { get; set; }
 
         public bool Success
         {

@@ -1,4 +1,5 @@
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -100,6 +101,7 @@ namespace RNAssistant.Core.Storage
                 }
             }
             NormalizeAgentPrompts(settings);
+            AgentPromptMigration.Apply(settings, defaults);
             if (settings.MaxTokens <= 0)
             {
                 settings.MaxTokens = defaults.MaxTokens;

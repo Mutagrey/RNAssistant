@@ -2,6 +2,8 @@
 
 RNAssistant uses an OpenAI-compatible Chat Completions endpoint. Chat mode expects ordinary assistant text. Agent mode supports three explicit request profiles while all Office actions still execute locally. The complete decision and tool-result contract is in `docs/agent-decision-protocol.md`.
 
+Settings → Agent → «Запустить тест» sends safe, non-Office probes with the real AgentDecision schema and reports support for `user`, `system`, `developer`, tool-result history, `json_object`, `json_schema`, and native tool calls.
+
 ## Required Base Transport
 
 - `POST /v1/chat/completions`, or a `BaseUrl` that already ends with `/chat/completions`.
@@ -19,13 +21,13 @@ RNAssistant independently budgets prompt and output tokens so `messages + respon
 | `json_object` | `response_format: {type:"json_object"}` and reliable prompt following | Exactly one AgentDecision v1 object in `message.content`; local semantic/schema validation remains strict. |
 | `native_tool_calls` | OpenAI `tools`, strict function schemas, `tool_choice`, `parallel_tool_calls:false`, and `json_schema` for non-tool decisions | Either one `message.tool_calls[]` entry or one terminal/plan AgentDecision v1 object in content. |
 
-The canonical AgentDecision fields are `protocolVersion`, `kind`, `decisionSummary`, `goal`, `plan`, `tool`, and `message`. Every field is present; inactive fields are JSON `null`. Markdown fences, prose around JSON, content arrays as planner output, alternate envelopes, `function_call`, and multiple/parallel tool calls are rejected.
+The canonical AgentDecision fields are `protocolVersion`, `kind`, `decisionSummary`, `goal`, `plan`, `tool`, and `message`; canonical output includes inactive fields as JSON `null`. The local parser also normalizes harmless omissions, common plan-title/tool aliases, advisory goal/plan fields, and one legacy reply/single-call envelope. Markdown fences, prose around JSON, content arrays as planner output, unknown root fields, conflicting actions, legacy `function_call`, and multiple/parallel tool calls are rejected. Every normalized tool is still validated against the current local tool slice and argument schema.
 
 If an endpoint explicitly rejects `json_schema` before any tool execution and fallback is enabled, RNAssistant retries via `json_object` and keeps that mode for the rest of the run. Timeouts, network failures, rate limits and server errors are propagated without changing the protocol or duplicating the request. It does not switch after a tool has run and does not auto-fallback from `native_tool_calls`, because replay could duplicate a mutation.
 
 ## Tool Result History
 
-The default result role is `tool`. RNAssistant sends an assistant message with one `tool_calls` entry, followed by a `role: tool` message whose `tool_call_id` exactly matches it. This pair is generated even when the model selected the tool through AgentDecision JSON rather than native calling.
+The default result role is `tool`. RNAssistant sends an assistant message with one `tool_calls` entry and string `content` (an empty string when there is no visible text), followed by a `role: tool` message whose `tool_call_id` exactly matches it. `content` is never serialized as JSON `null`, which keeps replay compatible with strict OpenAI-compatible validators. This pair is generated even when the model selected the tool through AgentDecision JSON rather than native calling.
 
 Endpoints that reject tool-call history can use `developer` or `user` result role. In that mode RNAssistant sends `TOOL_RESULT:` plus the same normalized JSON envelope as ordinary content. Instruction role is independently selectable as `developer` (default), `system`, or `user`.
 

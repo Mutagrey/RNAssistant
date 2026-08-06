@@ -155,10 +155,11 @@ namespace RNAssistant.Core.Llm
 
             var low = 0;
             var high = text.Length;
+            var characters = text.ToCharArray();
             while (low < high)
             {
                 var middle = low + (high - low + 1) / 2;
-                var tokens = Math.Max(1, (int)Math.Ceiling(Encoding.UTF8.GetByteCount(text, 0, middle) / 3.0));
+                var tokens = Math.Max(1, (int)Math.Ceiling(Encoding.UTF8.GetByteCount(characters, 0, middle) / 3.0));
                 if (tokens <= maxTokens) low = middle;
                 else high = middle - 1;
             }

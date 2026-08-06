@@ -325,7 +325,7 @@ namespace RNAssistant.Harness
 
                 AssertEqual("Done.", result.AssistantText, "assistant text");
                 AssertEqual(3, calls.Count, "llm call count");
-                AssertTrue(ContainsMessage(calls[1], "previous response was not a valid AgentDecision v1 decision"), "repair prompt");
+                AssertTrue(ContainsMessage(calls[1], "Correct only the reported AgentDecision v1 validation error"), "repair prompt");
                 AssertTrue(!ContainsMessage(calls[1], "```rnassistant-agent"), "malformed response omitted from repair context");
                 AssertTrue(ContainsMessage(calls[1], "Create a new sheet named Report."), "repair keeps original request");
                 AssertTrue(ContainsMessage(calls[1], "excel.add_sheet"), "repair keeps available tools");
@@ -410,7 +410,7 @@ namespace RNAssistant.Harness
                     null).GetAwaiter().GetResult();
 
                 AssertEqual(4, calls.Count, "repair then correction call count");
-                AssertTrue(ContainsMessage(calls[1], "previous response was not a valid AgentDecision v1 decision"), "format repair requested");
+                AssertTrue(ContainsMessage(calls[1], "Correct only the reported AgentDecision v1 validation error"), "format repair requested");
                 AssertTrue(ContainsMessage(calls[2], "requires a local Office tool"), "tool correction requested after repair");
                 AssertEqual(1, adapter.Executed.Count, "tool executed after repair and correction");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "corrected tool id");
@@ -560,6 +560,81 @@ namespace RNAssistant.Harness
             AssertTrue(!object.ReferenceEquals(plan, snapshot), "progress uses plan snapshot");
             AgentPlanStateService.ApplyLatestResult(session, ToolResult.Cancelled("cancelled"), false);
             AssertEqual("cancelled", plan.Children[1].Status, "cancelled current step");
+
+            var revised = new AgentPlannerResponse
+            {
+                Kind = AgentResponseKinds.Plan,
+                Goal = "Подготовить и опубликовать отчёт",
+                DecisionSummary = "Обновляю оставшиеся шаги."
+            };
+            revised.Plan.Add(new AgentPlanStep { Id = "inspect", Title = "Проверить данные повторно", Status = "pending" });
+            revised.Plan.Add(new AgentPlanStep { Id = "publish", Title = "Опубликовать отчёт", Status = "pending" });
+            bool updatedExisting;
+            AgentPlanStateService.ApplyDecision(session, state, revised, out updatedExisting);
+            AssertTrue(updatedExisting, "repeated plan updates existing activity");
+            AssertEqual(2, state.Plan.Count, "unfinished steps replaced by revised plan");
+            AssertEqual("completed", state.Plan[0].Status, "completed stable id preserved");
+            AssertEqual("pending", state.Plan[1].Status, "new step pending");
+            AssertEqual("Подготовить и опубликовать отчёт", plan.Title, "goal updated visibly");
+
+            AgentPlanStateService.ApplyTerminalDecision(state, AgentResponseKinds.Final);
+            AssertEqual("completed", plan.Status, "terminal final keeps completed plan visible");
+            AssertTrue(plan.Children.All(child => child.Status == "completed"), "remaining plan steps completed on final");
+
+            var noPlanState = new AgentRunState();
+            AssertTrue(AgentPlanStateService.BeginCurrent(session, noPlanState) == null, "fresh tool-only turn does not restore previous plan");
+            AssertTrue(noPlanState.PlanActivity == null, "previous plan stays isolated from tool-only turn");
+
+            var freshState = new AgentRunState();
+            var unrelated = new AgentPlannerResponse
+            {
+                Kind = AgentResponseKinds.Plan,
+                Goal = "Новая независимая задача",
+                DecisionSummary = "Строю новый план."
+            };
+            unrelated.Plan.Add(new AgentPlanStep { Id = "new_step", Title = "Новый шаг", Status = "pending" });
+            AgentPlanStateService.ApplyDecision(session, freshState, unrelated, out updatedExisting);
+            AssertTrue(!updatedExisting, "fresh turn does not revise previous completed plan");
+            AssertTrue(!object.ReferenceEquals(plan, freshState.PlanActivity), "fresh turn owns a separate plan activity");
+            AssertEqual("Новая независимая задача", freshState.PlanActivity.Title, "fresh plan goal is isolated");
+        }
+
+        private static void ChatRepeatedPlanRevisesRemainingWork()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var firstPlan = "{\"protocolVersion\":1,\"kind\":\"plan\",\"decisionSummary\":\"Сначала прочитаю книгу.\"," +
+                    "\"goal\":\"Проверить текущую книгу\",\"plan\":[{\"id\":\"inspect\",\"title\":\"Прочитать книгу\"}],\"tool\":null,\"message\":null}";
+                var revisedPlan = "{\"kind\":\"plan\",\"decisionSummary\":\"Уточняю план после анализа.\"," +
+                    "\"goal\":\"Проверить и описать текущую книгу\",\"plan\":[{\"id\":\"inspect\",\"action\":\"Прочитать книгу\",\"expected\":\"контекст\"},{\"id\":\"finish\",\"action\":\"Подготовить вывод\"}]}";
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    null,
+                    RawResponse(firstPlan),
+                    RawResponse(revisedPlan),
+                    AgentBlock(Command("excel.get_context")),
+                    FinalBlock("Книга проверена."));
+                var session = NewSession(adapter);
+
+                var result = service.ExecuteAsync(
+                    "Проверь текущую книгу.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { FallbackToJsonObject = false },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Книга проверена.", result.AssistantText, "replanned run final response");
+                AssertEqual(1, adapter.Executed.Count, "replanned run executes intended tool once");
+                var plans = session.Messages.Where(message => message.Activity != null && message.Activity.Kind == "plan").ToList();
+                AssertEqual(1, plans.Count, "canonical plan activity is not duplicated");
+                AssertEqual("Проверить и описать текущую книгу", plans[0].Activity.Title, "latest goal remains visible");
+                AssertEqual("completed", plans[0].Activity.Status, "plan remains completed after final");
+                AssertTrue(session.Messages.Any(message => message.Activity != null && message.Activity.ExecutionStatus == "plan_updated"), "plan update is visible in transcript");
+                AssertEqual("Проверить и описать текущую книгу", session.Messages.Last().Goal, "final message retains goal");
+                AssertTrue(!session.Messages.Any(message => message.Activity != null && message.Activity.ExecutionStatus == "repeated_plan"), "repeated plan no longer fails run");
+            });
         }
     }
 }

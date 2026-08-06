@@ -191,6 +191,72 @@ function readSettings() {
   };
 }
 
+async function persistSettingsFromForm() {
+  var apiKey = $("apiKeyInput").value;
+  var nextSettings = readSettings();
+  var response = await send("saveSettings", { settings: nextSettings, apiKey: apiKey || null });
+  state.settings = response.settings || response.Settings || nextSettings;
+  $("apiKeyInput").value = "";
+  renderSettings();
+  updateEstimatedContextUsage();
+  renderContextMeter();
+  return state.settings;
+}
+
+function compatibilityValue(source, pascal, camel, fallback) {
+  source = source || {};
+  return source[pascal] !== undefined ? source[pascal] : (source[camel] !== undefined ? source[camel] : fallback);
+}
+
+function renderModelCompatibilityResult(result) {
+  var root = $("modelCompatibilityResults");
+  if (!root) return;
+  root.replaceChildren();
+
+  var compatible = !!compatibilityValue(result, "Compatible", "compatible", false);
+  var summary = document.createElement("div");
+  summary.className = "model-compatibility-summary " + (compatible ? "passed" : "failed");
+  summary.textContent = compatibilityValue(result, "Summary", "summary", compatible ? "Совместимо." : "Есть несовместимости.");
+  root.appendChild(summary);
+
+  var meta = document.createElement("div");
+  meta.className = "model-compatibility-meta";
+  meta.textContent = [
+    compatibilityValue(result, "Model", "model", ""),
+    compatibilityValue(result, "ResponseMode", "responseMode", ""),
+    "instruction: " + compatibilityValue(result, "InstructionRole", "instructionRole", ""),
+    "tool result: " + compatibilityValue(result, "ToolResultRole", "toolResultRole", "")
+  ].filter(Boolean).join(" · ");
+  root.appendChild(meta);
+
+  var list = document.createElement("div");
+  list.className = "model-compatibility-list";
+  (compatibilityValue(result, "Checks", "checks", []) || []).forEach(function (check) {
+    var passed = !!compatibilityValue(check, "Passed", "passed", false);
+    var required = !!compatibilityValue(check, "Required", "required", false);
+    var row = document.createElement("div");
+    row.className = "model-compatibility-check " + (passed ? "passed" : "failed") + (required ? " required" : " optional");
+
+    var mark = document.createElement("span");
+    mark.className = "model-compatibility-mark";
+    mark.textContent = passed ? "✓" : "×";
+    row.appendChild(mark);
+
+    var copy = document.createElement("div");
+    var title = document.createElement("div");
+    title.className = "model-compatibility-check-title";
+    title.textContent = compatibilityValue(check, "Title", "title", "Проверка") + (required ? " · используется сейчас" : " · необязательно");
+    copy.appendChild(title);
+    var message = document.createElement("div");
+    message.className = "model-compatibility-check-message";
+    message.textContent = compatibilityValue(check, "Message", "message", "") + " · " + Number(compatibilityValue(check, "DurationMs", "durationMs", 0) || 0) + " мс";
+    copy.appendChild(message);
+    row.appendChild(copy);
+    list.appendChild(row);
+  });
+  root.appendChild(list);
+}
+
 function bindSettingsActions() {
   Array.prototype.slice.call(document.querySelectorAll(".settings-nav-button")).forEach(function (button) {
     button.addEventListener("click", function () {
@@ -233,20 +299,32 @@ function bindSettingsActions() {
     var button = $("saveSettingsButton");
     try {
       button.disabled = true;
-      var apiKey = $("apiKeyInput").value;
-      var nextSettings = readSettings();
-      var response = await send("saveSettings", { settings: nextSettings, apiKey: apiKey || null });
-      state.settings = response.settings || response.Settings || nextSettings;
-      $("apiKeyInput").value = "";
-      renderSettings();
-      updateEstimatedContextUsage();
-      renderContextMeter();
+      await persistSettingsFromForm();
       await loadModelCatalog(false);
       log("Настройки сохранены.");
     } catch (error) {
       settingsDirty = true;
       updateSettingsSaveButton();
       log(error.message);
+    }
+  });
+  $("testModelCompatibilityButton").addEventListener("click", async function () {
+    var button = $("testModelCompatibilityButton");
+    var root = $("modelCompatibilityResults");
+    try {
+      button.disabled = true;
+      button.textContent = "Проверяю…";
+      root.textContent = "Выполняются безопасные запросы к endpoint…";
+      await persistSettingsFromForm();
+      var response = await send("testModelCompatibility", {});
+      renderModelCompatibilityResult(response);
+      log("Проверка совместимости модели завершена.");
+    } catch (error) {
+      root.textContent = "Тест не выполнен: " + error.message;
+      log(error.message);
+    } finally {
+      button.disabled = false;
+      button.textContent = "Запустить тест";
     }
   });
   $("clearRuntimeDataButton").addEventListener("click", clearRuntimeData);

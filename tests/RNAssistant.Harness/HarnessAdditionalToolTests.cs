@@ -440,7 +440,7 @@ namespace RNAssistant.Harness
                 AssertTrue(
                     FlattenMessages(calls[1]).IndexOf(new string('x', 64), StringComparison.Ordinal) < 0,
                     "large malformed body omitted from repair prompt");
-                AssertContains(FlattenMessages(calls[1]), "previous response was not a valid AgentDecision v1 decision", "repair requests a valid decision");
+                AssertContains(FlattenMessages(calls[1]), "Correct only the reported AgentDecision v1 validation error", "repair requests a valid decision");
             });
         }
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -64,14 +65,34 @@ namespace RNAssistant.Harness
                 Directory.CreateDirectory(documentDirectory);
                 File.WriteAllText(Path.Combine(documentDirectory, "broken.json"), "{ broken");
                 File.WriteAllText(Path.Combine(documentDirectory, "unsupported.json"), "{\"Id\":\"unsupported\",\"Host\":\"Excel\",\"DocumentKey\":\"book\"}");
+                File.WriteAllText(Path.Combine(documentDirectory, "future.json"), "{\"FormatVersion\":2,\"Messages\":{\"invalid\":true}}");
 
                 var session = store.Create("Excel", "book", "Book", "Good");
-                var sessions = store.List("Excel", "book", "Book");
+                var serializationExceptions = 0;
+                EventHandler<FirstChanceExceptionEventArgs> handler = delegate(object sender, FirstChanceExceptionEventArgs args)
+                {
+                    if (args.Exception is JsonSerializationException)
+                    {
+                        serializationExceptions++;
+                    }
+                };
+                AppDomain.CurrentDomain.FirstChanceException += handler;
+                IReadOnlyList<ChatSession> sessions;
+                IReadOnlyList<ChatSession> allSessions;
+                try
+                {
+                    sessions = store.List("Excel", "book", "Book");
+                    allSessions = store.List();
+                }
+                finally
+                {
+                    AppDomain.CurrentDomain.FirstChanceException -= handler;
+                }
+
                 AssertEqual(1, sessions.Count, "document session count");
                 AssertEqual(session.Id, sessions[0].Id, "session id");
-
-                var allSessions = store.List();
                 AssertEqual(1, allSessions.Count, "global session count");
+                AssertEqual(0, serializationExceptions, "unsupported chat files are skipped before deserialization");
             });
         }
 

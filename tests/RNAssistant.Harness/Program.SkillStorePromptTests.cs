@@ -207,6 +207,49 @@ namespace RNAssistant.Harness
             AssertEqual("system", BuildPlannerMessages(settings, new ToolDefinition[0], new SkillDefinition[0])[0].Role, "system instruction role");
         }
 
+        private static void PromptMigrationUpgradesKnownProtocolDefaults()
+        {
+            var defaults = new AppSettings();
+            AssertContains(defaults.SystemPrompt, "{\"toolId\":\"<exact id from AVAILABLE_TOOLS>\",\"arguments\":{}}", "default tool envelope");
+            AssertContains(defaults.AgentPrompts.RepairDecisionPrompt, "Canonical plan items", "repair explains canonical plan shape");
+            AssertContains(defaults.AgentPrompts.RepairDecisionPrompt, "native function call", "repair preserves native transport");
+
+            var legacy = new AppSettings
+            {
+                SystemPrompt = "You are RNAssistant Office Action Planner. Follow the planner protocol exactly and never expose internal reasoning."
+            };
+            legacy.AgentPrompts.RepairDecisionPrompt = "The previous response was not a valid AgentDecision v1 decision for the active transport. Return exactly one corrected decision and no surrounding text.";
+            legacy.AgentPrompts.ForceToolUsePrompt = "The current route requires a local Office tool before completion. Select exactly one available tool using the active transport, or return cannot_complete and name the missing capability.";
+            legacy.AgentPrompts.PlanContinuationPrompt = "Continue the declared plan with the next single AgentDecision. Follow the visible steps in order, use one external tool per step, and do not repeat the plan.";
+
+            AgentPromptMigration.Apply(legacy, defaults);
+
+            AssertEqual(defaults.SystemPrompt, legacy.SystemPrompt, "legacy system prompt upgraded");
+            AssertEqual(defaults.AgentPrompts.RepairDecisionPrompt, legacy.AgentPrompts.RepairDecisionPrompt, "legacy repair prompt upgraded");
+            AssertEqual(defaults.AgentPrompts.ForceToolUsePrompt, legacy.AgentPrompts.ForceToolUsePrompt, "legacy force-tool prompt upgraded");
+            AssertEqual(defaults.AgentPrompts.PlanContinuationPrompt, legacy.AgentPrompts.PlanContinuationPrompt, "legacy single-plan prompt upgraded");
+
+            var previousDefault = new AppSettings
+            {
+                SystemPrompt = "CUSTOM_HEAD\nFor json_schema or json_object, select an action with kind=tool and one tool object.\nCUSTOM_TAIL"
+            };
+            AgentPromptMigration.Apply(previousDefault, defaults);
+            AssertContains(previousDefault.SystemPrompt, "toolId", "previous prompt receives exact tool field");
+            AssertContains(previousDefault.SystemPrompt, "arguments", "previous prompt receives exact arguments field");
+            AssertContains(previousDefault.SystemPrompt, "CUSTOM_TAIL", "surrounding custom prompt preserved");
+
+            var obsoleteCustom = new AppSettings
+            {
+                SystemPrompt = "CUSTOM_HEAD\n```rnassistant-agent\n{\"kind\":\"tool_plan\"}\n```"
+            };
+            AgentPromptMigration.Apply(obsoleteCustom, defaults);
+            AssertEqual(defaults.SystemPrompt, obsoleteCustom.SystemPrompt, "obsolete custom protocol upgraded");
+
+            var custom = new AppSettings { SystemPrompt = "CUSTOM_AGENT_MAIN" };
+            AgentPromptMigration.Apply(custom, defaults);
+            AssertEqual("CUSTOM_AGENT_MAIN", custom.SystemPrompt, "custom system prompt preserved");
+        }
+
         private static void PromptSettingsApplyOnNextRequest()
         {
             WithTempPaths(delegate(AppDataPaths paths)

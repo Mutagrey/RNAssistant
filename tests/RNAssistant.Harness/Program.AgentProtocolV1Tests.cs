@@ -178,6 +178,7 @@ namespace RNAssistant.Harness
             var json = JArray.FromObject(serialized);
 
             AssertEqual("assistant", (string)json.SelectToken("[0].role"), "assistant tool-call role");
+            AssertEqual(string.Empty, (string)json.SelectToken("[0].content"), "assistant tool-call content is a string");
             AssertEqual("call_1", (string)json.SelectToken("[0].tool_calls[0].id"), "assistant tool-call id");
             AssertEqual("tool", (string)json.SelectToken("[1].role"), "tool result role");
             AssertEqual("call_1", (string)json.SelectToken("[1].tool_call_id"), "tool result call id");

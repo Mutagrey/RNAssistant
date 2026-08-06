@@ -257,7 +257,13 @@ function agentDecisionText(item) {
   var activity = item.activity || {};
   var explicit = activity.__decisionMessage || activityValue(activity, "DecisionMessage", "decisionMessage", "");
   if (explicit) return String(explicit).trim();
-  if ((activityKind(activity) === "plan" || activityStatus(activity) === "planned") && item.message) {
+  if (activityKind(activity) === "plan") {
+    var latestPlanSummary = activityValue(activity, "Subtitle", "subtitle", "");
+    if (latestPlanSummary) return String(latestPlanSummary).trim();
+  }
+  var persistedSummary = item.message ? messageDecisionSummary(item.message).trim() : "";
+  if (persistedSummary) return persistedSummary;
+  if ((activityKind(activity) === "plan" || activityKind(activity) === "tool" || activityStatus(activity) === "planned") && item.message) {
     return messageContent(item.message).trim();
   }
   return "";
@@ -439,13 +445,16 @@ function agentPlanInfo(plan) {
     if (status === "completed") completed += 1;
     if (!current && (status === "running" || status === "waiting")) current = step;
   });
+  if (steps.length && completed === steps.length) {
+    current = null;
+  }
   if (!current) {
-    current = steps.filter(function (step) {
+    current = completed === steps.length ? null : (steps.filter(function (step) {
       return normalizePlanStepStatus(activityStatus(step)) === "pending";
     })[0] || steps.filter(function (step) {
       var status = normalizePlanStepStatus(activityStatus(step));
       return status === "failed" || status === "cancelled";
-    })[0] || (steps.length ? steps[steps.length - 1] : null);
+    })[0] || (steps.length ? steps[steps.length - 1] : null));
   }
   return { steps: steps, completed: completed, total: steps.length, current: current };
 }
@@ -455,9 +464,12 @@ function planStatusMark(status) {
   return marks[normalizePlanStepStatus(status)] || "";
 }
 
-function renderAgentPlanSteps(plan) {
+function renderAgentPlanSteps(plan, includeGoal) {
   var list = document.createElement("ol");
   list.className = "agent-plan-list";
+  if (includeGoal) {
+    list.appendChild(renderAgentPlanGoal(plan, "li"));
+  }
   activityChildren(plan).forEach(function (step) {
     var status = normalizePlanStepStatus(activityStatus(step));
     var row = document.createElement("li");
@@ -475,6 +487,18 @@ function renderAgentPlanSteps(plan) {
     list.appendChild(row);
   });
   return list;
+}
+
+function renderAgentPlanGoal(plan, tagName) {
+  var goal = document.createElement(tagName || "div");
+  goal.className = "agent-plan-goal";
+  var label = document.createElement("span");
+  label.textContent = "Цель";
+  goal.appendChild(label);
+  var value = document.createElement("strong");
+  value.textContent = activityTitle(plan);
+  goal.appendChild(value);
+  return goal;
 }
 
 function appendAgentRunPlan(parent, plan) {
@@ -496,6 +520,7 @@ function appendAgentRunPlan(parent, plan) {
   caret.textContent = "›";
   summary.appendChild(caret);
   details.appendChild(summary);
+  details.appendChild(renderAgentPlanGoal(plan));
   details.appendChild(renderAgentPlanSteps(plan));
   parent.appendChild(details);
 }
@@ -632,14 +657,26 @@ function renderAgentPlanDock() {
   caret.textContent = "›";
   summary.appendChild(caret);
   details.appendChild(summary);
-  details.appendChild(renderAgentPlanSteps(plan));
+  details.appendChild(renderAgentPlanSteps(plan, true));
   dock.replaceChildren(details);
   dock.classList.remove("hidden");
 }
 
-function appendAgentFinalAnswer(parent, finalMessage) {
+function appendAgentFinalAnswer(parent, finalMessage, hasVisiblePlan) {
   if (!finalMessage || !messageContent(finalMessage.message).trim()) {
     return;
+  }
+
+  var summaryText = messageDecisionSummary(finalMessage.message).trim();
+  if (summaryText && summaryText !== messageContent(finalMessage.message).trim()) {
+    appendAgentDecisionMessage(parent, summaryText);
+  }
+  var goalText = messageGoal(finalMessage.message).trim();
+  if (goalText && !hasVisiblePlan) {
+    var goal = document.createElement("div");
+    goal.className = "agent-message-goal";
+    goal.textContent = "Цель: " + goalText;
+    parent.appendChild(goal);
   }
 
   var answer = document.createElement("div");
@@ -679,12 +716,14 @@ function agentActionCountLabel(count) {
   return "Выполнено " + count + " " + word;
 }
 
-function buildAgentRunTranscript(items, timeline, stats, includePlan) {
+function buildAgentRunTranscript(items, timeline, stats, includePlan, includePlanDecision) {
   var transcript = document.createElement("div");
   transcript.className = "agent-run-transcript";
   var planItem = findAgentPlanItem(items);
   if (planItem) {
-    appendAgentDecisionMessage(transcript, agentDecisionText(planItem));
+    if (includePlanDecision !== false) {
+      appendAgentDecisionMessage(transcript, agentDecisionText(planItem));
+    }
     if (includePlan) {
       appendAgentRunPlan(transcript, planItem.activity);
     }
@@ -739,13 +778,19 @@ function renderAgentRunArticle(run) {
   var body = document.createElement("div");
   body.className = "agent-run-wrap";
   var dockCurrentPlan = !finalMessage && (!!currentActiveSend() || !!pendingAgentApprovalActivity());
-  var transcript = buildAgentRunTranscript(items, timeline, stats, !dockCurrentPlan);
+  var planItem = findAgentPlanItem(items);
+  var persistentPlan = !!finalMessage && !run.live && !!planItem;
+  var transcript = buildAgentRunTranscript(items, timeline, stats, !dockCurrentPlan && !persistentPlan, !persistentPlan);
   if (finalMessage && !run.live) {
+    if (persistentPlan) {
+      appendAgentDecisionMessage(body, agentDecisionText(planItem));
+      appendAgentRunPlan(body, planItem.activity);
+    }
     appendCollapsedAgentRun(body, transcript, timeline, stats);
   } else {
     body.appendChild(transcript);
   }
-  appendAgentFinalAnswer(body, finalMessage);
+  appendAgentFinalAnswer(body, finalMessage, persistentPlan);
   node.appendChild(body);
 
   if (!run.live) {

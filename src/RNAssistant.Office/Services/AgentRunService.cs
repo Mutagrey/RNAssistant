@@ -240,31 +240,37 @@ namespace RNAssistant.Office.Services
                     break;
                 }
                 var response = parsed.Response;
+                if (!string.IsNullOrWhiteSpace(response.Goal))
+                {
+                    state.WorkingGoal = response.Goal;
+                }
                 if (string.Equals(response.Kind, AgentResponseKinds.Plan, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (state.PlanDeclared)
-                    {
-                        assistantText = "Модель повторно вернула план вместо следующего решения.";
-                        session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, completion, new ChatActivity
-                        {
-                            Kind = "diagnostic",
-                            Title = "Повторный plan decision",
-                            Status = "failed",
-                            ExecutionStatus = "repeated_plan",
-                            ResultMessage = assistantText
-                        }));
-                        break;
-                    }
-                    state.PlanDeclared = true;
-                    state.WorkingGoal = response.Goal;
-                    state.Plan = response.Plan ?? new List<AgentPlanStep>();
-                    var visiblePlan = CreateDecisionPlanActivity(response);
-                    state.PlanActivity = visiblePlan;
-                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(response.DecisionSummary, completion, visiblePlan));
+                    bool updatedExisting;
+                    var visiblePlan = AgentPlanStateService.ApplyDecision(session, state, response, out updatedExisting);
+                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(
+                        response.DecisionSummary,
+                        completion,
+                        updatedExisting ? AgentPlanStateService.CreateUpdateActivity(response, visiblePlan) : visiblePlan,
+                        response.DecisionSummary,
+                        state.WorkingGoal));
                     ReportProgress(progress, "plan", response.DecisionSummary, visiblePlan);
                     protocolMessages.Add(new ChatMessage { Role = "assistant", Content = plannerText });
                     protocolMessages.Add(new ChatMessage { Role = "user", Content = PromptText(settings, p => p.PlanContinuationPrompt) });
                     continue;
+                }
+
+                if (response.Plan != null && response.Plan.Count > 0)
+                {
+                    bool updatedExisting;
+                    var visiblePlan = AgentPlanStateService.ApplyDecision(session, state, response, out updatedExisting);
+                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(
+                        response.DecisionSummary,
+                        null,
+                        updatedExisting ? AgentPlanStateService.CreateUpdateActivity(response, visiblePlan) : visiblePlan,
+                        response.DecisionSummary,
+                        state.WorkingGoal));
+                    ReportProgress(progress, "plan", response.DecisionSummary, visiblePlan);
                 }
 
                 if (!string.Equals(response.Kind, AgentResponseKinds.Tool, StringComparison.OrdinalIgnoreCase))
@@ -320,7 +326,13 @@ namespace RNAssistant.Office.Services
                     {
                         assistantText = response.Message ?? string.Empty;
                         UpdatePendingTask(session, taskText, response);
-                        session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, completion));
+                        ReportPlanProgress(progress, AgentPlanStateService.ApplyTerminalDecision(state, response.Kind));
+                        session.Messages.Add(AgentTranscript.CreateAssistantMessage(
+                            assistantText,
+                            completion,
+                            null,
+                            response.DecisionSummary,
+                            state.WorkingGoal));
                         break;
                     }
                 }
@@ -354,7 +366,12 @@ namespace RNAssistant.Office.Services
                 var command = validation.Command;
                 var plannedActivity = AgentRunPresentation.CreateRunningActivity(command, "planned", "tool");
                 plannedActivity.DataJson = routingDiagnosticsJson;
-                session.Messages.Add(AgentTranscript.CreateAssistantMessage(response.DecisionSummary, completion, plannedActivity));
+                session.Messages.Add(AgentTranscript.CreateAssistantMessage(
+                    response.DecisionSummary,
+                    completion,
+                    plannedActivity,
+                    response.DecisionSummary,
+                    state.WorkingGoal));
                 ReportProgress(progress, "plan", response.DecisionSummary, plannedActivity);
 
                 var stopped = false;
@@ -547,36 +564,6 @@ namespace RNAssistant.Office.Services
             {
                 session.PendingAgentTask = null;
             }
-        }
-
-        private static ChatActivity CreateDecisionPlanActivity(AgentPlannerResponse response)
-        {
-            var activity = new ChatActivity
-            {
-                Kind = "plan",
-                Title = string.IsNullOrWhiteSpace(response == null ? null : response.Goal) ? "Рабочий план" : response.Goal,
-                Subtitle = response == null ? string.Empty : response.DecisionSummary,
-                Status = "planned",
-                DataJson = JsonConvert.SerializeObject(new
-                {
-                    protocolVersion = AgentDecisionProtocol.Version,
-                    goal = response == null ? null : response.Goal,
-                    plan = response == null ? null : response.Plan
-                })
-            };
-            foreach (var step in response == null
-                ? (IEnumerable<AgentPlanStep>)new AgentPlanStep[0]
-                : response.Plan ?? new List<AgentPlanStep>())
-            {
-                activity.Children.Add(new ChatActivity
-                {
-                    Kind = "plan_step",
-                    Title = step.Title,
-                    Subtitle = step.Id,
-                    Status = string.IsNullOrWhiteSpace(step.Status) ? "pending" : step.Status
-                });
-            }
-            return activity;
         }
 
         private static void RememberPendingTask(ChatSession session, string taskText, string lastQuestion, string kind)

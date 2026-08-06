@@ -22,6 +22,8 @@ namespace RNAssistant.Core.Models
         public string Id { get; set; }
         public string Role { get; set; }
         public string Content { get; set; }
+        public string DecisionSummary { get; set; }
+        public string Goal { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool ExcludeFromModelContext { get; set; }
         public string ToolCallId { get; set; }

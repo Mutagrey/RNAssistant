@@ -62,6 +62,7 @@
   <ItemGroup>
     <Compile Include="Contracts\BridgeDtos.cs" />
     <Compile Include="Controller\AssistantController.cs" />
+    <Compile Include="Controller\AssistantController.Compatibility.cs" />
     <Compile Include="Controller\AssistantController.Agent.cs" />
     <Compile Include="Controller\AssistantController.Chats.cs" />
     <Compile Include="Controller\AssistantController.Context.cs" />
@@ -101,6 +102,7 @@
     <Compile Include="Services\ModelAttachmentService.cs" />
     <Compile Include="Services\AttachmentModelRoutingService.cs" />
     <Compile Include="Services\ModelCapabilityService.cs" />
+    <Compile Include="Services\ModelCompatibilityService.cs" />
     <Compile Include="Services\ChatTitleBuilder.cs" />
     <Compile Include="Services\ChatSessionService.cs" />
     <Compile Include="Services\ChatRunRegistry.cs" />

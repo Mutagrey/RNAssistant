@@ -40,8 +40,8 @@ namespace RNAssistant.Core.Tools
                 ["type"] = "object",
                 ["properties"] = new JObject
                 {
-                    ["id"] = new JObject { ["type"] = "string" },
-                    ["title"] = new JObject { ["type"] = "string" }
+                    ["id"] = new JObject { ["type"] = "string", ["description"] = "Stable short step id reused when a revised plan keeps this step." },
+                    ["title"] = new JObject { ["type"] = "string", ["description"] = "Visible action title. Do not use action or expected fields." }
                 },
                 ["required"] = new JArray("id", "title"),
                 ["additionalProperties"] = false
@@ -59,11 +59,11 @@ namespace RNAssistant.Core.Tools
                             ? new JArray(AgentResponseKinds.Plan, AgentResponseKinds.Tool, AgentResponseKinds.Clarify, AgentResponseKinds.Final, AgentResponseKinds.CannotComplete)
                             : new JArray(AgentResponseKinds.Plan, AgentResponseKinds.Clarify, AgentResponseKinds.Final, AgentResponseKinds.CannotComplete)
                     },
-                    ["decisionSummary"] = new JObject { ["type"] = "string" },
-                    ["goal"] = NullableString(),
+                    ["decisionSummary"] = new JObject { ["type"] = "string", ["description"] = "Short visible progress statement, not hidden reasoning." },
+                    ["goal"] = NullableString("Visible user outcome for a plan or revised plan."),
                     ["plan"] = new JObject { ["anyOf"] = new JArray(new JObject { ["type"] = "array", ["items"] = planItem }, new JObject { ["type"] = "null" }) },
                     ["tool"] = new JObject { ["anyOf"] = toolOptions },
-                    ["message"] = NullableString()
+                    ["message"] = NullableString("User-facing terminal answer or clarification question.")
                 },
                 ["required"] = new JArray("protocolVersion", "kind", "decisionSummary", "goal", "plan", "tool", "message"),
                 ["additionalProperties"] = false
@@ -71,9 +71,11 @@ namespace RNAssistant.Core.Tools
             return schemaRoot.ToString(Formatting.None);
         }
 
-        private static JObject NullableString()
+        private static JObject NullableString(string description = null)
         {
-            return new JObject { ["type"] = new JArray("string", "null") };
+            var schema = new JObject { ["type"] = new JArray("string", "null") };
+            if (!string.IsNullOrWhiteSpace(description)) schema["description"] = description;
+            return schema;
         }
     }
 }

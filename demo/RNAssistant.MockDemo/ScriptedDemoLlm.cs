@@ -24,81 +24,52 @@ namespace RNAssistant.MockDemo
         {
             cancellationToken.ThrowIfCancellationRequested();
             var model = NormalizeModel(settings == null ? null : settings.Model);
-            var prompt = Flatten(messages);
+            var plannerContext = PlannerContext(messages);
             var lastUser = LastUserMessage(messages);
-            var plannerRequest = ExtractPlannerRequest(prompt);
-            var htmlModeEnabled = Contains(prompt, "HTML MODE IS ENABLED");
+            var plannerRequest = ExtractPlannerRequest(plannerContext);
+            var htmlModeEnabled = Contains(plannerContext, "HTML MODE IS ENABLED");
             var isHtmlTask = htmlModeEnabled || LooksLikeHtmlTask(plannerRequest);
             var isHtmlEdit = LooksLikeHtmlEdit(plannerRequest);
+            var observations = ExtractObservations(plannerContext);
+            var repair = IsRepairRequest(lastUser);
             string content;
 
-            if (Contains(lastUser, "A local tool call failed") ||
-                Contains(lastUser, "Unknown tool id") ||
-                Contains(lastUser, "Use only these exact available tool ids") ||
-                Contains(lastUser, "previous RNAssistant planner output was invalid"))
-            {
-                content = AgentBlock(isHtmlTask ? HtmlCommands(isHtmlEdit, false) : InitialCommands(_host, false));
-            }
-            else if (Contains(lastUser, "requires Office tool use before a final answer"))
-            {
-                content = AgentBlock(isHtmlTask ? HtmlCommands(isHtmlEdit, false) : InitialCommands(_host, false));
-            }
-            else if (Contains(lastUser, "verify the result") ||
-                Contains(lastUser, "Before the final answer, verify"))
-            {
-                content = AgentBlock(VerificationCommands(_host));
-            }
-            else if (Contains(lastUser, "If the task is complete, answer the user normally"))
-            {
-                content = FinalBlock(isHtmlTask ? HtmlFinalAnswer(isHtmlEdit) : FinalAnswer(_host));
-            }
-            else if (Contains(lastUser, "Local normalized observations are available") ||
-                Contains(lastUser, "Local deterministic verification observations are available"))
-            {
-                content = FinalBlock(isHtmlTask ? HtmlFinalAnswer(isHtmlEdit) : FinalAnswer(_host));
-            }
-            else if (isHtmlTask)
-            {
-                if (string.Equals(model, "mock-glm5", StringComparison.OrdinalIgnoreCase))
-                {
-                    content = AgentBlock(HtmlCommands(isHtmlEdit, true));
-                }
-                else if (string.Equals(model, "mock-qwen80b", StringComparison.OrdinalIgnoreCase))
-                {
-                    content = "Понял HTML задачу. Обновлю workspace через локальные tools.\n\n" +
-                        AgentBlock(HtmlCommands(isHtmlEdit, false)) +
-                        "\nПосле выполнения можно открыть вкладку HTML.";
-                }
-                else if (string.Equals(model, "mock-deepseek", StringComparison.OrdinalIgnoreCase))
-                {
-                    content = "{steps:[{toolId:'common.html_workspace_save_file', arguments:{path:'../bad.html'}}";
-                }
-                else
-                {
-                    content = AgentBlock(HtmlCommands(isHtmlEdit, false));
-                }
-            }
-            else if (!LooksLikeOfficeAction(plannerRequest))
+            if (!isHtmlTask && !LooksLikeOfficeAction(plannerRequest))
             {
                 content = FinalBlock(ProseAnswer(plannerRequest));
             }
-            else if (string.Equals(model, "mock-glm5", StringComparison.OrdinalIgnoreCase))
-            {
-                content = AgentBlock(InitialCommands(_host, true));
-            }
-            else if (string.Equals(model, "mock-qwen80b", StringComparison.OrdinalIgnoreCase))
-            {
-                content = "Понял задачу. Сначала выполню локальные действия, затем проверю результат.\n\n" +
-                    AgentBlock(InitialCommands(_host, false)) +
-                    "\nПосле выполнения нужна проверка.";
-            }
-            else if (string.Equals(model, "mock-deepseek", StringComparison.OrdinalIgnoreCase))
-            {
-                content = "{steps:[{toolId:'" + FirstToolId(_host) + "', arguments:{}}";
-            }
             else
             {
-                content = AgentBlock(InitialCommands(_host, false));
+                var commands = (isHtmlTask
+                    ? HtmlCommands(isHtmlEdit, false)
+                    : InitialCommands(_host, false)).ToList();
+                var next = NextPendingCommand(commands, observations);
+                var firstTurn = string.Equals(observations, "none", StringComparison.OrdinalIgnoreCase);
+
+                if (!repair && firstTurn && string.Equals(model, "mock-glm5", StringComparison.OrdinalIgnoreCase))
+                {
+                    content = AgentBlock(isHtmlTask
+                        ? HtmlCommands(isHtmlEdit, true).First()
+                        : InitialCommands(_host, true).First());
+                }
+                else if (!repair && firstTurn && string.Equals(model, "mock-qwen80b", StringComparison.OrdinalIgnoreCase))
+                {
+                    content = "Понял задачу. Выполню следующее локальное действие.\n\n" +
+                        AgentBlock(next) +
+                        "\nПосле выполнения проверю результат.";
+                }
+                else if (!repair && firstTurn && string.Equals(model, "mock-deepseek", StringComparison.OrdinalIgnoreCase))
+                {
+                    content = "{\"protocolVersion\":1,\"kind\":\"tool\",\"decisionSummary\":\"Начинаю действие\",\"goal\":null,\"plan\":null,\"tool\":{";
+                }
+                else if (next != null)
+                {
+                    content = AgentBlock(next);
+                }
+                else
+                {
+                    content = FinalBlock(isHtmlTask ? HtmlFinalAnswer(isHtmlEdit) : FinalAnswer(_host));
+                }
             }
 
             return Task.FromResult(new LlmCompletionResult
@@ -229,35 +200,6 @@ namespace RNAssistant.MockDemo
             };
         }
 
-        private static IEnumerable<DemoCommand> VerificationCommands(string host)
-        {
-            if (IsHost(host, "Word"))
-            {
-                return new[] { Cmd("word.read_document") };
-            }
-
-            if (IsHost(host, "PowerPoint"))
-            {
-                return new[] { Cmd("powerpoint.read_slides") };
-            }
-
-            if (IsHost(host, "Outlook"))
-            {
-                return new[] { Cmd("outlook.read_selection") };
-            }
-
-            return new[]
-            {
-                Cmd("excel.read_range", "sheet", "Demo Report", "range", "A1:B4"),
-                Cmd("excel.list_charts")
-            };
-        }
-
-        private static string FirstToolId(string host)
-        {
-            return InitialCommands(host, false).First().ToolId;
-        }
-
         private static string FinalAnswer(string host)
         {
             if (IsHost(host, "Word"))
@@ -295,20 +237,22 @@ namespace RNAssistant.MockDemo
                 : "Готово: создал HTML workspace с `index.html`, `styles.css`, `app.js` и data source `sales`; результат доступен во вкладке HTML.";
         }
 
-        private static string AgentBlock(IEnumerable<DemoCommand> commands)
+        private static string AgentBlock(DemoCommand command)
         {
+            command = command ?? new DemoCommand { ToolId = "missing.tool" };
             return JsonConvert.SerializeObject(new
             {
-                kind = "tool_plan",
-                intent = "mutate",
-                message = (string)null,
-                steps = (commands ?? new DemoCommand[0]).Select(command => new
+                protocolVersion = 1,
+                kind = "tool",
+                decisionSummary = "Выполняю следующий шаг: " + command.ToolId + ".",
+                goal = (string)null,
+                plan = (object)null,
+                tool = new
                 {
                     toolId = command.ToolId,
-                    arguments = command.Arguments,
-                    reason = "mock demo step"
-                }).ToArray(),
-                expectedOutcome = "Execute mock demo steps."
+                    arguments = command.Arguments
+                },
+                message = (string)null
             });
         }
 
@@ -316,11 +260,37 @@ namespace RNAssistant.MockDemo
         {
             return JsonConvert.SerializeObject(new
             {
+                protocolVersion = 1,
                 kind = "final",
-                intent = "answer",
-                message = message ?? string.Empty,
-                steps = new object[0]
+                decisionSummary = "Задача завершена.",
+                goal = (string)null,
+                plan = (object)null,
+                tool = (object)null,
+                message = message ?? string.Empty
             });
+        }
+
+        private static DemoCommand NextPendingCommand(IEnumerable<DemoCommand> commands, string observations)
+        {
+            return (commands ?? new DemoCommand[0]).FirstOrDefault(command => !CommandWasObserved(command, observations));
+        }
+
+        private static bool CommandWasObserved(DemoCommand command, string observations)
+        {
+            if (command == null || string.IsNullOrWhiteSpace(command.ToolId))
+            {
+                return false;
+            }
+
+            if (!string.Equals(command.ToolId, "common.html_workspace_upsert_file", StringComparison.OrdinalIgnoreCase))
+            {
+                return Contains(observations, command.ToolId + " succeeded");
+            }
+
+            object pathValue;
+            command.Arguments.TryGetValue("path", out pathValue);
+            var path = Convert.ToString(pathValue) ?? string.Empty;
+            return Contains(observations, "HTML workspace file saved: " + path);
         }
 
         private static DemoCommand Cmd(string toolId, params object[] keyValues)
@@ -334,29 +304,14 @@ namespace RNAssistant.MockDemo
             return command;
         }
 
-        private static bool HasVerificationResult(string prompt, string host)
+        private static string PlannerContext(IEnumerable<ChatMessage> messages)
         {
-            if (IsHost(host, "Word"))
-            {
-                return Contains(prompt, "word.read_document");
-            }
-
-            if (IsHost(host, "PowerPoint"))
-            {
-                return Contains(prompt, "powerpoint.read_slides");
-            }
-
-            if (IsHost(host, "Outlook"))
-            {
-                return Contains(prompt, "outlook.read_selection") && Contains(prompt, "drafted reply");
-            }
-
-            return Contains(prompt, "excel.read_range") && Contains(prompt, "excel.list_charts");
-        }
-
-        private static string Flatten(IEnumerable<ChatMessage> messages)
-        {
-            return string.Join("\n", (messages ?? new ChatMessage[0]).Select(m => (m == null ? string.Empty : m.Role + "\n" + m.Content)).ToArray());
+            return (messages ?? new ChatMessage[0])
+                .Where(message => message != null &&
+                    Contains(message.Content, "USER_REQUEST:") &&
+                    Contains(message.Content, "OBSERVATIONS:"))
+                .Select(message => message.Content ?? string.Empty)
+                .LastOrDefault() ?? string.Empty;
         }
 
         private static string LastUserMessage(IEnumerable<ChatMessage> messages)
@@ -384,6 +339,34 @@ namespace RNAssistant.MockDemo
                 end = value.Length;
             }
             return value.Substring(start, end - start).Trim();
+        }
+
+        private static string ExtractObservations(string text)
+        {
+            var value = text ?? string.Empty;
+            var marker = "OBSERVATIONS:";
+            var start = value.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (start < 0)
+            {
+                return "none";
+            }
+
+            start += marker.Length;
+            var end = value.IndexOf("\n\nRELEVANT_SKILLS:", start, StringComparison.OrdinalIgnoreCase);
+            if (end < 0)
+            {
+                end = value.Length;
+            }
+            var observations = value.Substring(start, end - start).Trim();
+            return string.IsNullOrWhiteSpace(observations) ? "none" : observations;
+        }
+
+        private static bool IsRepairRequest(string text)
+        {
+            return Contains(text, "Validation error:") ||
+                Contains(text, "previous response was not a valid AgentDecision") ||
+                Contains(text, "previous RNAssistant planner output was invalid") ||
+                Contains(text, "Use only these exact available tool ids");
         }
 
         private static string LastNonEmptyLine(string value)
@@ -420,58 +403,6 @@ namespace RNAssistant.MockDemo
         {
             var value = (text ?? string.Empty).ToLowerInvariant();
             return Regex.IsMatch(value, "(html|веб|web|page|страниц|dashboard|лендинг|script|скрипт|js)");
-        }
-
-        private static bool IsAgentMetaPrompt(string text)
-        {
-            return Contains(text, "A local tool call failed") ||
-                Contains(text, "Unknown tool id") ||
-                Contains(text, "Use only these exact available tool ids") ||
-                Contains(text, "requires Office tool use before a final answer") ||
-                Contains(text, "verify the result") ||
-                Contains(text, "Before the final answer, verify") ||
-                Contains(text, "If the task is complete, answer the user normally") ||
-                Contains(text, "Local normalized observations are available") ||
-                Contains(text, "Local deterministic verification observations are available");
-        }
-
-        private static bool LooksLikeHtmlConversation(string text)
-        {
-            var value = (text ?? string.Empty).ToLowerInvariant();
-            return Contains(value, "sales html dashboard") ||
-                Contains(value, "data-script-ready") ||
-                ConversationHasHtmlUserRequest(text, false);
-        }
-
-        private static bool LooksLikeHtmlEditConversation(string text)
-        {
-            var value = (text ?? string.Empty).ToLowerInvariant();
-            return Contains(value, "updated sales html dashboard") ||
-                ConversationHasHtmlUserRequest(text, true);
-        }
-
-        private static bool ConversationHasHtmlUserRequest(string text, bool requireEdit)
-        {
-            var lines = (text ?? string.Empty).Split('\n');
-            for (var i = 0; i + 1 < lines.Length; i++)
-            {
-                if (!string.Equals((lines[i] ?? string.Empty).Trim(), "user", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                var content = lines[i + 1] ?? string.Empty;
-                if (IsAgentMetaPrompt(content))
-                {
-                    continue;
-                }
-                if (requireEdit ? LooksLikeHtmlEdit(content) : LooksLikeHtmlTask(content))
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         private static bool LooksLikeHtmlEdit(string text)

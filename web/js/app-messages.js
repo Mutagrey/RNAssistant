@@ -265,6 +265,22 @@ function renderMessageArticle(message, index) {
     node.appendChild(attachmentBox);
   }
 
+  var decisionSummary = messageDecisionSummary(message).trim();
+  if (decisionSummary && decisionSummary !== messageContent(message).trim()) {
+    var decision = document.createElement("div");
+    decision.className = "agent-decision-message markdown";
+    decision.innerHTML = markdown(decisionSummary);
+    node.appendChild(decision);
+    enhanceMarkdown(decision);
+  }
+  var goalText = messageGoal(message).trim();
+  if (goalText) {
+    var goal = document.createElement("div");
+    goal.className = "agent-message-goal";
+    goal.textContent = "Цель: " + goalText;
+    node.appendChild(goal);
+  }
+
   var body = document.createElement("div");
   body.className = "markdown";
   body.innerHTML = markdown(messageContent(message));

@@ -477,6 +477,54 @@ namespace RNAssistant.Office.Contracts
         public JToken Catalog { get; set; }
     }
 
+    public sealed class ModelCompatibilityResponse
+    {
+        [JsonProperty("compatible")]
+        public bool Compatible { get; set; }
+
+        [JsonProperty("endpoint")]
+        public string Endpoint { get; set; }
+
+        [JsonProperty("model")]
+        public string Model { get; set; }
+
+        [JsonProperty("responseMode")]
+        public string ResponseMode { get; set; }
+
+        [JsonProperty("instructionRole")]
+        public string InstructionRole { get; set; }
+
+        [JsonProperty("toolResultRole")]
+        public string ToolResultRole { get; set; }
+
+        [JsonProperty("summary")]
+        public string Summary { get; set; }
+
+        [JsonProperty("checks")]
+        public IReadOnlyList<ModelCompatibilityCheckDto> Checks { get; set; }
+    }
+
+    public sealed class ModelCompatibilityCheckDto
+    {
+        [JsonProperty("id")]
+        public string Id { get; set; }
+
+        [JsonProperty("title")]
+        public string Title { get; set; }
+
+        [JsonProperty("passed")]
+        public bool Passed { get; set; }
+
+        [JsonProperty("required")]
+        public bool Required { get; set; }
+
+        [JsonProperty("durationMs")]
+        public long DurationMs { get; set; }
+
+        [JsonProperty("message")]
+        public string Message { get; set; }
+    }
+
     public sealed class VbaProjectResponse
     {
         [JsonProperty("result")]

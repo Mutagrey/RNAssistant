@@ -103,6 +103,7 @@
     <Compile Include="Tools\AgentPlannerResponseParser.cs" />
     <Compile Include="Services\ContextNormalizer.cs" />
     <Compile Include="Services\ChartArtifactBuilder.cs" />
+    <Compile Include="Services\AgentPromptMigration.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
     <Compile Include="Storage\AttachmentStore.cs" />
     <Compile Include="Storage\ChatStore.cs" />

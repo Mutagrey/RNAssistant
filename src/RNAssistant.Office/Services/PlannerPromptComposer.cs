@@ -105,7 +105,7 @@ namespace RNAssistant.Office.Services
             builder.AppendLine("phase: " + (route == null ? string.Empty : route.Phase));
             builder.AppendLine("requiresTool: " + (route != null && route.RequiresTool ? "true" : "false"));
             builder.AppendLine("requiresInspection: " + (route != null && route.RequiresInspection ? "true" : "false"));
-            builder.AppendLine("Return exactly one tool call per model turn. decisionSummary is displayed as a normal chat message immediately before the selected action: briefly state established progress and the next action without exposing internal reasoning. For a visible kind=plan, keep steps ordered and observable, including expected inspection, mutation, and verification actions; the runtime advances one visible step per executed tool.");
+            builder.AppendLine("Return at most one tool call per model turn. decisionSummary is shown in chat: state established progress and the next action without hidden reasoning. Canonical plan items contain only id and title. A revised kind=plan is allowed when observations change the remaining work; reuse stable ids for unchanged steps.");
             builder.AppendLine("responseMode: " + RequestResponseMode(requestOptions, settings));
             if (route != null && string.Equals(route.TaskType, "html", StringComparison.OrdinalIgnoreCase))
             {

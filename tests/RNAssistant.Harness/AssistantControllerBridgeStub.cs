@@ -107,6 +107,20 @@ namespace RNAssistant.Office
             return GetSettings();
         }
 
+        public Task<ModelCompatibilityResponse> TestModelCompatibilityAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new ModelCompatibilityResponse
+            {
+                Compatible = true,
+                Model = "harness-model",
+                Checks = new[]
+                {
+                    new ModelCompatibilityCheckDto { Id = "user_role", Title = "Роль user", Passed = true, Required = true }
+                }
+            });
+        }
+
         public InitResponse ClearRuntimeData() { return Initialize(); }
         public IReadOnlyList<ToolDefinition> GetTools() { return new ToolDefinition[0]; }
         public IReadOnlyList<ToolDefinition> SaveTools(IEnumerable<ToolDefinition> tools)

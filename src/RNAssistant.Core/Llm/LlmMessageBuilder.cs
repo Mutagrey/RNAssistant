@@ -58,7 +58,7 @@ namespace RNAssistant.Core.Llm
                     build.Messages.Add(new JObject
                     {
                         ["role"] = message.Role,
-                        ["content"] = string.IsNullOrEmpty(message.Content) ? null : message.Content,
+                        ["content"] = message.Content ?? string.Empty,
                         ["tool_calls"] = new JArray(message.ToolCalls.Select(call => new JObject
                         {
                             ["id"] = call.Id,

@@ -198,6 +198,9 @@ namespace RNAssistant.Office.WebView
                             saveSettings.Settings ?? new AppSettings(),
                             saveSettings.ApiKey);
                         break;
+                    case "testModelCompatibility":
+                        responsePayload = await _controller.TestModelCompatibilityAsync(cancellationToken).ConfigureAwait(false);
+                        break;
                     case "clearRuntimeData":
                         responsePayload = WithBridgeToken(_controller.ClearRuntimeData());
                         break;
@@ -381,7 +384,8 @@ namespace RNAssistant.Office.WebView
             if (string.IsNullOrWhiteSpace(id) ||
                 (!string.Equals(type, "sendChat", StringComparison.OrdinalIgnoreCase) &&
                  !string.Equals(type, "runTool", StringComparison.OrdinalIgnoreCase) &&
-                 !string.Equals(type, "htmlFetch", StringComparison.OrdinalIgnoreCase)))
+                 !string.Equals(type, "htmlFetch", StringComparison.OrdinalIgnoreCase) &&
+                 !string.Equals(type, "testModelCompatibility", StringComparison.OrdinalIgnoreCase)))
             {
                 return null;
             }

@@ -54,10 +54,61 @@ namespace RNAssistant.Harness
         private static void PlannerRejectsInvalidIntentAndSteps()
         {
             var parser = new AgentPlannerResponseParser();
-            AssertEqual("invalid_protocol_version", parser.Parse("{\"kind\":\"final\"}").ErrorCode, "version required");
-            AssertEqual("missing_decision_summary", parser.Parse("{\"protocolVersion\":1,\"kind\":\"final\",\"message\":\"Done.\"}").ErrorCode, "summary required");
+            AssertEqual("invalid_protocol_version", parser.Parse("{\"protocolVersion\":2,\"kind\":\"final\",\"message\":\"Done.\"}").ErrorCode, "wrong version rejected");
+            AssertEqual("invalid_kind", parser.Parse("{\"protocolVersion\":1,\"kind\":\"dance\",\"message\":\"Done.\"}").ErrorCode, "unknown kind rejected");
             AssertEqual("invalid_tool", parser.Parse("{\"protocolVersion\":1,\"kind\":\"tool\",\"decisionSummary\":\"read\",\"goal\":null,\"plan\":null,\"tool\":{\"toolId\":\"excel.read_range\",\"arguments\":[]},\"message\":null}").ErrorCode, "arguments object required");
             AssertEqual("unexpected_field", parser.Parse("{\"protocolVersion\":1,\"kind\":\"final\",\"decisionSummary\":\"x\",\"message\":\"Done.\",\"USER_REQUEST\":\"echo\"}").ErrorCode, "unexpected root field");
+        }
+
+        private static void PlannerNormalizesSafeModelVariants()
+        {
+            var parser = new AgentPlannerResponseParser();
+
+            var missingInactive = parser.Parse("{\"kind\":\"final\",\"decisionSummary\":\"Готово.\"}");
+            AssertTrue(missingInactive.Success, "missing inactive fields accepted");
+            AssertEqual("Готово.", missingInactive.Response.Message, "terminal message recovered from summary");
+
+            var photographedPlan = parser.Parse(
+                "{\"protocolVersion\":1,\"kind\":\"plan\",\"decisionSummary\":\"Создам игру.\",\"plan\":[" +
+                "{\"id\":\"step1\",\"action\":\"Создать HTML\",\"expected\":\"index.html\"}," +
+                "{\"action\":\"Добавить стили\",\"status\":\"pending\"}],\"tool\":null}");
+            AssertTrue(photographedPlan.Success, "action/expected plan variant accepted");
+            AssertEqual("Создам игру.", photographedPlan.Response.Goal, "missing plan goal recovered");
+            AssertEqual("Создать HTML", photographedPlan.Response.Plan[0].Title, "action becomes plan title");
+            AssertEqual("step_2", photographedPlan.Response.Plan[1].Id, "missing step id generated");
+
+            var photographedTool = parser.Parse(
+                "{\"kind\":\"tool\",\"decisionSummary\":\"Создаю HTML.\",\"goal\":\"Создать Тетрис\"," +
+                "\"tool\":{\"id\":\"common.html_workspace_upsert_file\",\"args\":{\"path\":\"index.html\"}}}",
+                new[]
+                {
+                    new ToolDefinition
+                    {
+                        Id = "common.html_workspace_upsert_file",
+                        ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"],\"additionalProperties\":false}"
+                    }
+                });
+            AssertTrue(photographedTool.Success, "tool goal and id/args aliases accepted");
+            AssertEqual("Создать Тетрис", photographedTool.Response.Goal, "advisory tool goal retained");
+            AssertEqual("common.html_workspace_upsert_file", photographedTool.Response.Tool.ToolId, "tool id alias normalized");
+
+            var replyAction = parser.Parse("{\"decisionSummary\":\"Отвечаю.\",\"action\":{\"type\":\"reply\",\"content\":\"Привет!\"}}");
+            AssertTrue(replyAction.Success, "safe reply action envelope accepted");
+            AssertEqual(AgentResponseKinds.Final, replyAction.Response.Kind, "reply action becomes final");
+            AssertEqual("Привет!", replyAction.Response.Message, "reply content retained");
+
+            var openAiCall = parser.Parse(
+                "{\"decisionSummary\":\"Читаю книгу.\",\"tool_calls\":[{\"id\":\"call_123\",\"type\":\"function\",\"function\":{\"name\":\"excel.get_context\",\"arguments\":\"{}\"}}]}",
+                new[] { new ToolDefinition { Id = "excel.get_context", ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}" } });
+            AssertTrue(openAiCall.Success, "single OpenAI-style tool_calls envelope accepted");
+            AssertEqual("excel.get_context", openAiCall.Response.Tool.ToolId, "function name wins over tool call id");
+
+            AssertEqual("multiple_tool_calls", parser.Parse(
+                "{\"decisionSummary\":\"x\",\"toolCalls\":[{\"id\":\"one\",\"args\":{}},{\"id\":\"two\",\"args\":{}}]}").ErrorCode,
+                "parallel compatibility calls still rejected");
+            AssertEqual("conflicting_envelope", parser.Parse(
+                "{\"kind\":\"tool\",\"decisionSummary\":\"x\",\"action\":{\"type\":\"reply\",\"content\":\"Не выполнять tool\"}}").ErrorCode,
+                "conflicting compatibility envelope rejected");
         }
 
         private static void ModelQualityRequiresToolRejectsFinal()

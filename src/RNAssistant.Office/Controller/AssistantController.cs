@@ -35,6 +35,7 @@ namespace RNAssistant.Office
         private readonly OfflineChatService _offlineChatService;
         private readonly ContextService _contextService;
         private readonly LlmClient _llmClient;
+        private readonly LlmCompletionDelegate _llmCompletion;
         private readonly object _syncRoot;
         private readonly Dictionary<string, PendingAgentTool> _pendingAgentTools;
         private readonly ChatRunRegistry _chatRuns;
@@ -81,24 +82,21 @@ namespace RNAssistant.Office
                 (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars),
                 (settings, attachment, maxImages, cancellationToken) =>
                     ModelAttachmentService.ReadForModel(_attachmentStore, settings, attachment, maxImages, cancellationToken));
+            LlmCompletionDelegate completion;
             if (completeAsync == null)
             {
-                LlmCompletionDelegate completion =
-                    (settings, messages, requestOptions, streamProgress, cancellationToken) =>
-                        _llmClient.CompleteAsync(settings, messages, requestOptions, streamProgress, cancellationToken);
-                _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, completion);
-                _offlineChatService = new OfflineChatService(_toolExecutor, completion);
-                _plainChatService = new PlainChatService(completion);
+                completion = (settings, messages, requestOptions, streamProgress, cancellationToken) =>
+                    _llmClient.CompleteAsync(settings, messages, requestOptions, streamProgress, cancellationToken);
             }
             else
             {
-                LlmCompletionDelegate completion =
-                    (settings, messages, requestOptions, streamProgress, cancellationToken) =>
-                        completeAsync(settings, messages, cancellationToken);
-                _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, completion);
-                _offlineChatService = new OfflineChatService(_toolExecutor, completion);
-                _plainChatService = new PlainChatService(completion);
+                completion = (settings, messages, requestOptions, streamProgress, cancellationToken) =>
+                    completeAsync(settings, messages, cancellationToken);
             }
+            _llmCompletion = completion;
+            _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, completion);
+            _offlineChatService = new OfflineChatService(_toolExecutor, completion);
+            _plainChatService = new PlainChatService(completion);
             _contextService = new ContextService(_adapter);
             _chatModeSelector = new ChatExecutionModeSelector();
             _syncRoot = new object();

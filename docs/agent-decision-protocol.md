@@ -9,7 +9,7 @@ RNAssistant использует локальный agent harness поверх O
 3. Catalog slicer выбирает ограниченный набор доступных tools. В prompt попадают только их id, описание, safety metadata и JSON Schema аргументов.
 4. Runtime собирает сообщения из инструкции, запроса, актуального chat context, выбранных skills, route и нормализованных observations.
 5. Модель возвращает одно решение `AgentDecision v1` либо один native `tool_call`.
-6. Runtime строго проверяет решение, tool id и аргументы, применяет confirmation/safety policy и вызывает локальный `OfficeToolExecutor`.
+6. Runtime нормализует только безопасные вариации формы, затем строго проверяет выбранное действие, один tool, tool id и аргументы, применяет confirmation/safety policy и вызывает локальный `OfficeToolExecutor`.
 7. Результат нормализуется и добавляется в рабочий контекст. Следующий запрос решает, нужен ли ещё один tool, уточнение или финальный ответ.
 8. После мутации runtime запускает отдельную read-only verification. Старое наблюдение не считается проверкой нового изменения.
 
@@ -17,7 +17,7 @@ RNAssistant использует локальный agent harness поверх O
 
 ## Формат решения
 
-Ответ содержит ровно один JSON object без Markdown, code fence и внешнего текста. Все семь полей обязательны; неактивные поля равны `null`.
+Канонический ответ содержит ровно один JSON object без Markdown, code fence и внешнего текста. Рекомендуется всегда передавать семь полей; неактивные поля равны `null`.
 
 ```json
 {
@@ -39,7 +39,7 @@ RNAssistant использует локальный agent harness поверх O
 
 Поддерживаются пять `kind`:
 
-- `plan` — один необязательный видимый план сложной задачи. Требует `goal` и непустой `plan`; `tool` и `message` равны `null`. План сам ничего не исполняет, после него модель должна вернуть следующее решение.
+- `plan` — видимый план сложной задачи. Требует непустой `plan`; `goal` рекомендуется. План сам ничего не исполняет, после него модель должна вернуть следующее решение.
 - `tool` — ровно один вызов. Требует `tool.toolId` и object `tool.arguments`; `goal`, `plan` и `message` равны `null`.
 - `clarify` — требуется ответ пользователя. Только `message` содержит вопрос.
 - `final` — задача завершена. Только `message` содержит пользовательский ответ.
@@ -65,7 +65,20 @@ RNAssistant использует локальный agent harness поверх O
 
 `decisionSummary` — видимое сообщение модели перед выбранным действием, а не chain-of-thought. Для tool turn оно кратко фиксирует уже подтвержденный результат и следующее действие. В `native_tool_calls` тот же текст передается через assistant content и сохраняется runtime как `decisionSummary`. Детальные рассуждения не входят в протокол. Если provider отдельно возвращает `reasoning_content`, runtime показывает его как необязательные transport metadata и не смешивает с JSON решения.
 
-Для сложной задачи `kind=plan` возвращается не более одного раза. Его шаги — короткие упорядоченные наблюдаемые действия (включая ожидаемые чтение, изменение и проверку), а их runtime-статусы `pending`, `running`, `waiting`, `completed`, `failed`, `cancelled` принадлежат локальному harness и не задаются последующими ответами модели.
+Шаги плана в канонической форме содержат только `id` и `title`. Если новые observations меняют оставшуюся работу, модель может снова вернуть `kind=plan`: runtime сохраняет выполненные шаги с теми же стабильными id и заменяет незавершённую часть. Статусы `pending`, `running`, `waiting`, `completed`, `failed`, `cancelled` принадлежат локальному harness. Цель и завершённый план остаются видны в transcript после финального ответа.
+
+## Совместимая нормализация
+
+Локальный parser не делает произвольный «ремонт JSON», но принимает безопасные отклонения слабых моделей:
+
+- отсутствующие неактивные поля и `protocolVersion` (подставляется v1);
+- отсутствующий `decisionSummary`, если его можно безопасно сформировать из terminal message, goal или tool id;
+- плановые `action`/`description`/`text` как алиасы `title`, `expected` и model status как неисполняемые metadata, строковые шаги и сгенерированные id;
+- `id`/`name` и `args` как алиасы внутри единственного tool object;
+- advisory `goal`/`plan` вместе с tool или terminal decision;
+- одиночный legacy `action: {type: "reply", content: "..."}` и одиночный `toolCalls`; псевдо-tool `answer` преобразуется только в terminal text.
+
+Surrounding prose, fences, неизвестные root-поля, конфликтующие действия и несколько/parallel tools по-прежнему отклоняются. Любой нормализованный tool всё равно обязан существовать в текущем slice и пройти formal JSON Schema аргументов. Поэтому совместимость не расширяет полномочия модели и не обходит local safety policy.
 
 ## Режимы API
 
@@ -77,11 +90,11 @@ RNAssistant использует локальный agent harness поверх O
 
 При ошибке `json_schema` до первого выполненного tool runtime один раз переключает текущий run на `json_object`. После начала выполнения fallback запрещён: повтор запроса в другом режиме может дублировать мутацию. Для `native_tool_calls` автоматического fallback нет, потому что неизвестно, принял ли endpoint вызов и как он сериализует историю.
 
-Даже Structured Outputs не заменяет локальную проверку. Runtime повторно проверяет точный набор полей, семантику `kind`, наличие tool в текущем slice и аргументы по его schema.
+Даже Structured Outputs не заменяет локальную проверку. Runtime проверяет семантику `kind`, единственность действия, наличие tool в текущем slice и аргументы по его schema.
 
-`json_object` не использует ручной поиск JSON в тексте: весь `message.content` обязан быть одним object. Локальный parser нужен только для строгой проверки протокола и аргументов; fences, префиксы, alternate envelopes и частичный JSON не восстанавливаются.
+`json_object` не использует ручной поиск JSON в тексте: весь `message.content` обязан быть одним object. Fences, префиксы и частичный JSON не восстанавливаются; внутри целого object применяется только описанная выше совместимая нормализация.
 
-Если content или native tool call не проходит parser, runtime повторяет текущий model turn до `MaxAgentFormatRetries` раз (по умолчанию 2, допустимо 1–5). Каждый retry строится заново из исходного чистого prompt и одного `RepairDecisionPrompt` с кодом validation error. Отклонённый raw-ответ намеренно не добавляется ни как `assistant`, ни в следующий retry/replay. Он сохраняется только как раскрываемая diagnostic activity с `ExcludeFromModelContext=true`, поэтому пользователь видит ошибку и raw response, но модель не получает этот мусор на следующих turn. После исчерпания лимита последний ответ сохраняется как terminal diagnostic и run останавливается без выполнения непроверенного действия.
+Если content или native tool call не проходит parser, runtime повторяет текущий model turn до `MaxAgentFormatRetries` раз (по умолчанию 2, допустимо 1–5). Каждый retry строится заново из исходного чистого prompt и одного `RepairDecisionPrompt` с кодом validation error. Отклонённый raw-ответ не попадает в replay. Из него отдельно извлекаются только безопасные `decisionSummary` и `goal`: они видны пользователю в diagnostic activity, но не выполняются и не добавляются в model context. После исчерпания лимита последний ответ сохраняется как terminal diagnostic и run останавливается без выполнения непроверенного действия.
 
 ## Роли сообщений
 
@@ -93,6 +106,8 @@ RNAssistant использует локальный agent harness поверх O
 - `developer` или `user` — runtime добавляет `TOOL_RESULT:` и нормализованный JSON обычным сообщением выбранной роли. Это fallback для endpoint, который понимает JSON output, но не принимает tool-call history.
 
 Та же пара/роль используется после ручного confirmation; подтверждённый результат не деградирует в отдельный неструктурированный prompt.
+
+Кнопка «Запустить тест» в Settings → Agent сохраняет текущие настройки и без Office-мутаций проверяет `user`, `system`, `developer`, выбранную роль результата tool, `json_object`, `json_schema` и сочетание native tools + schema. Общий статус учитывает обязательными только режимы текущей конфигурации; остальные проверки показывают доступные варианты endpoint.
 
 В `json_schema`/`json_object` режиме assistant `tool_calls` для обратной передачи формируется локально из уже проверенного `kind=tool`. В native режиме сохраняются имя и аргументы ответа endpoint, а отсутствующий или нестабильный call id нормализуется так, чтобы assistant call и `role: tool` всегда совпадали.
 
@@ -124,7 +139,7 @@ RNAssistant использует локальный agent harness поверх O
 
 `ROUTE`, `CURRENT_OFFICE_CONTEXT`, `AVAILABLE_TOOLS`, `OBSERVATIONS` и `RELEVANT_SKILLS` — динамические данные runtime, а не скрытые prompt-шаблоны. Их формат не редактируется как инструкция.
 
-Промпты редактируются во вкладке Prompts. Агент может вызвать `common.prompts_read`, `common.prompts_read_defaults` и подтверждаемый `common.prompts_save`. Встроенный `common.prompt_authoring` требует сохранять поля AgentDecision, one-tool invariant, confirmation и verification. Skills и tools изменяются через отдельные CRUD tools; встроенные id нельзя перекрыть custom-объектом.
+Промпты редактируются во вкладке Prompts. Агент может вызвать `common.prompts_read`, `common.prompts_read_defaults` и подтверждаемый `common.prompts_save`. Встроенный `common.prompt_authoring` требует сохранять поля AgentDecision, one-tool invariant, confirmation и verification. При загрузке известные устаревшие defaults и prompts с несовместимыми маркерами `rnassistant-agent`, `rnassistant-skill`, `tool_plan` или `cannot_do` обновляются до текущего протокола; остальные пользовательские prompts сохраняются. Skills и tools изменяются через отдельные CRUD tools; встроенные id нельзя перекрыть custom-объектом.
 
 ## Сборка и бюджет контекста
 

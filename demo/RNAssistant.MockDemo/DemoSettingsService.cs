@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
 {
@@ -77,6 +78,7 @@ namespace RNAssistant.Core.Storage
             {
                 settings.AgentPrompts = new AgentPromptSettings();
             }
+            AgentPromptMigration.Apply(settings, defaults);
 
             if (settings.MaxTokens <= 0)
             {
@@ -93,32 +95,8 @@ namespace RNAssistant.Core.Storage
                 settings.RequestTimeoutSeconds = 30;
             }
 
-            if (settings.ContextCharLimit <= 0)
-            {
-                settings.ContextCharLimit = defaults.ContextCharLimit;
-            }
-
-            if (!settings.AutoRunToolCalls.HasValue)
-            {
-                settings.AutoRunToolCalls = true;
-            }
-
-            if (!settings.AutoRetryToolErrors.HasValue)
-            {
-                settings.AutoRetryToolErrors = true;
-            }
-
             settings.AutoConfirmToolActions = true;
             settings.SmartChatTitles = false;
-            if (!settings.RequireVerificationForMutations.HasValue)
-            {
-                settings.RequireVerificationForMutations = true;
-            }
-
-            if (!settings.AutoContinueAfterConfirmation.HasValue)
-            {
-                settings.AutoContinueAfterConfirmation = true;
-            }
 
             if (settings.VbaContextCharLimit <= 0)
             {

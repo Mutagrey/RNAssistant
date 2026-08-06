@@ -16,6 +16,14 @@
     return objectValue(message, "Content", "content", "") || "";
   };
 
+  window.messageDecisionSummary = function (message) {
+    return objectValue(message, "DecisionSummary", "decisionSummary", "") || "";
+  };
+
+  window.messageGoal = function (message) {
+    return objectValue(message, "Goal", "goal", "") || "";
+  };
+
   window.messageAttachments = function (message) {
     return objectValue(message, "Attachments", "attachments", []) || [];
   };

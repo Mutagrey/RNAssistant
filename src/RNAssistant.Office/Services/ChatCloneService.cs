@@ -59,6 +59,8 @@ namespace RNAssistant.Office.Services
                 Id = message.Id,
                 Role = message.Role,
                 Content = message.Content,
+                DecisionSummary = message.DecisionSummary,
+                Goal = message.Goal,
                 ExcludeFromModelContext = message.ExcludeFromModelContext,
                 ToolCallId = message.ToolCallId,
                 ToolName = message.ToolName,
