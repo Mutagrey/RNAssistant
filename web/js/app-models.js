@@ -19,7 +19,7 @@ async function loadModelCatalog(useFormSettings) {
 
 async function saveChatModelSelection(value) {
   value = String(value || "").trim();
-  if (state.reasoningSaving) {
+  if (!state.activeChatId || state.reasoningSaving || hasActiveMessageEdit() || !!currentActiveSend()) {
     return false;
   }
   if (value === activeChatModel()) {
@@ -51,7 +51,7 @@ async function saveChatModelSelection(value) {
 }
 
 async function saveChatReasoningSelection(enabled) {
-  if (!state.activeChatId || state.modelSaving || state.reasoningSaving || !!currentActiveSend()) {
+  if (!state.activeChatId || state.modelSaving || state.reasoningSaving || hasActiveMessageEdit() || !!currentActiveSend()) {
     return false;
   }
   state.reasoningSaving = true;

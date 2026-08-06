@@ -618,14 +618,6 @@ function renderAgentPlanDock() {
 
   var summary = document.createElement("summary");
   summary.className = "agent-plan-card-summary";
-  var mark = document.createElement("span");
-  mark.className = "agent-plan-card-mark";
-  mark.setAttribute("aria-hidden", "true");
-  mark.textContent = "☷";
-  summary.appendChild(mark);
-  var heading = document.createElement("strong");
-  heading.textContent = "План";
-  summary.appendChild(heading);
   var count = document.createElement("span");
   count.className = "agent-plan-card-count";
   count.textContent = info.completed + " из " + info.total;

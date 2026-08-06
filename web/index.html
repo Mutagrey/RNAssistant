@@ -21,12 +21,12 @@
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
   <link rel="stylesheet" href="css/app.css?v=scrollbar-hover-20260723-1">
-  <link rel="stylesheet" href="css/app-chat.css?v=chat-title-weight-20260723-1">
+  <link rel="stylesheet" href="css/app-chat.css?v=message-edit-20260806-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=chatui-20260622-1">
-  <link rel="stylesheet" href="css/app-composer.css?v=compact-runtime-20260805-3">
+  <link rel="stylesheet" href="css/app-composer.css?v=message-edit-20260806-1">
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
-  <link rel="stylesheet" href="css/app-models.css?v=mediarouting-20260722-1">
+  <link rel="stylesheet" href="css/app-models.css?v=custom-reasoning-20260806-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=chatui-20260630-1">
   <link rel="stylesheet" href="css/app-tools.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-prompts.css?v=sidebar-polish-20260723-1">
@@ -35,10 +35,10 @@
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260702-2">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=chatui-20260702-2">
-  <link rel="stylesheet" href="css/app-responsive.css?v=compact-runtime-20260805-2">
-  <link rel="stylesheet" href="css/app-agent.css?v=compact-runtime-20260805-2">
+  <link rel="stylesheet" href="css/app-responsive.css?v=message-edit-20260806-1">
+  <link rel="stylesheet" href="css/app-agent.css?v=plan-pill-20260806-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=agent-transcript-20260805-3">
-  <link rel="stylesheet" href="css/app-theme.css?v=full-theme-20260805-1">
+  <link rel="stylesheet" href="css/app-theme.css?v=message-edit-20260806-1">
 </head>
 <body>
   <div class="shell">
@@ -98,6 +98,12 @@
         <div class="agent-plan-dock hidden" id="agentPlanDock" aria-live="polite"></div>
         <div class="agent-approval-dock hidden" id="agentApprovalDock" aria-live="polite"></div>
         <form class="composer" id="chatForm">
+          <div class="composer-edit-bar hidden" id="messageEditBar" aria-hidden="true">
+            <span>Редактирование сообщения</span>
+            <button type="button" class="composer-edit-cancel" id="cancelMessageEditButton" title="Отменить редактирование" aria-label="Отменить редактирование">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+          </div>
           <div class="composer-input-wrap">
             <textarea id="chatInput" rows="2" placeholder="Спросите про текущий документ..."></textarea>
             <button type="button" class="icon-button composer-clear-button" id="clearInputButton" title="Очистить ввод" aria-label="Очистить ввод" hidden>
@@ -183,7 +189,8 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M8.4 14.7A6 6 0 1 1 15.6 14.7c-.9.7-1.4 1.6-1.6 2.3h-4c-.2-.7-.7-1.6-1.6-2.3Z"/><path d="M12 1V0"/><path d="m4.9 4.9-.8-.8"/><path d="m19.9 4.1-.8.8"/></svg>
               </button>
               <button type="submit" class="composer-send-button" id="sendButton" title="Отправить" aria-label="Отправить">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.75a1 1 0 0 1 .7.29l5.25 5.25a1 1 0 1 1-1.41 1.42L13 8.16V18a1 1 0 1 1-2 0V8.16l-3.54 3.55a1 1 0 0 1-1.41-1.42l5.25-5.25a1 1 0 0 1 .7-.29Z"/></svg>
+                <svg class="composer-send-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.75a1 1 0 0 1 .7.29l5.25 5.25a1 1 0 1 1-1.41 1.42L13 8.16V18a1 1 0 1 1-2 0V8.16l-3.54 3.55a1 1 0 0 1-1.41-1.42l5.25-5.25a1 1 0 0 1 .7-.29Z"/></svg>
+                <svg class="composer-save-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6.5 12.5 3.5 3.5 7.5-8"/></svg>
               </button>
               <button type="button" class="composer-stop-button hidden" id="stopButton" title="Остановить" aria-label="Остановить">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
@@ -480,7 +487,8 @@
               <div class="form-grid two-columns">
                 <label><span>Модель по умолчанию</span><select id="modelSelect"></select></label>
                 <label><span>ID модели вручную</span><input id="modelInput" autocomplete="off" placeholder="Если модели нет в каталоге"></label>
-                <label class="wide"><span>Параметр reasoning API</span><select id="reasoningRequestModeInput"><option value="auto">Авто — стандарт OpenAI reasoning_effort</option><option value="reasoning_effort">reasoning_effort: medium / none</option><option value="enable_thinking">enable_thinking: true / false</option><option value="chat_template_kwargs">chat_template_kwargs.enable_thinking</option><option value="reasoning_enabled">reasoning.enabled: true / false</option></select><small>Для QwenCloud выберите enable_thinking, для vLLM — chat_template_kwargs, для OpenRouter — reasoning.enabled. Каталог модели может переопределить режим.</small></label>
+                <label class="wide"><span>Параметр reasoning API</span><select id="reasoningRequestModeInput"><option value="auto">Авто — стандарт OpenAI reasoning_effort</option><option value="reasoning_effort">reasoning_effort: medium / none</option><option value="enable_thinking">enable_thinking: true / false</option><option value="chat_template_kwargs">chat_template_kwargs.enable_thinking</option><option value="reasoning_enabled">reasoning.enabled: true / false</option><option value="custom_json">Кастомный JSON в теле запроса</option></select><small>Для QwenCloud выберите enable_thinking, для vLLM — chat_template_kwargs, для OpenRouter — reasoning.enabled. Каталог модели может переопределить режим.</small></label>
+                <label class="wide hidden" id="reasoningCustomJsonField"><span>Кастомный reasoning JSON</span><textarea class="reasoning-json-input" id="reasoningCustomJsonInput" rows="5" spellcheck="false" placeholder='{"reasoning":{"effort":"high"}}'></textarea><small>JSON-объект добавляется на верхний уровень тела запроса только при включённой лампочке reasoning. Системные поля model, messages, tools и response_format переопределять нельзя.</small></label>
                 <div class="model-info wide" id="modelInfo"></div>
                 <section class="model-capability-section wide" aria-labelledby="modelCapabilityTitle">
                   <div class="model-capability-heading">
@@ -685,16 +693,16 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=reasoning-toggle-20260805-1"></script>
+  <script src="js/app-core.js?v=message-edit-20260806-1"></script>
   <script src="js/app-utils.js?v=chatui-20260620-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
   <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js?v=reasoning-transport-20260805-2"></script>
+  <script src="js/app-settings.js?v=custom-reasoning-20260806-1"></script>
   <script src="js/app-prompts.js?v=format-recovery-20260805-1"></script>
   <script src="js/app-model-data.js?v=reasoning-transport-20260805-1"></script>
-  <script src="js/app-model-render.js?v=rich-model-picker-20260805-1"></script>
-  <script src="js/app-models.js?v=reasoning-toggle-20260805-1"></script>
+  <script src="js/app-model-render.js?v=message-edit-20260806-1"></script>
+  <script src="js/app-models.js?v=message-edit-20260806-1"></script>
   <script src="js/app-context-data.js"></script>
   <script src="js/app-chat-state.js?v=format-recovery-20260805-1"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
@@ -707,12 +715,12 @@
   <script src="js/app-agent-model.js?v=agent-transcript-20260805-2"></script>
   <script src="js/app-chart-artifacts.js?v=chatui-20260622-2"></script>
   <script src="js/app-html-artifacts.js?v=chatui-20260702-2"></script>
-  <script src="js/app-agent.js?v=compact-plan-20260805-1"></script>
-  <script src="js/app-messages.js?v=agent-transcript-20260805-3"></script>
+  <script src="js/app-agent.js?v=compact-plan-20260806-2"></script>
+  <script src="js/app-messages.js?v=message-edit-20260806-1"></script>
   <script src="js/app-reasoning.js?v=reasoning-20260805-1"></script>
   <script src="js/app-attachments.js?v=mediarouting-20260722-1"></script>
-  <script src="js/app-chat.js?v=rich-composer-picker-20260805-1"></script>
-  <script src="js/app-chat-edit.js?v=chat-edit-20260723-1"></script>
+  <script src="js/app-chat.js?v=message-edit-20260806-1"></script>
+  <script src="js/app-chat-edit.js?v=message-edit-20260806-1"></script>
   <script src="js/app.js?v=topbar-removal-20260723-1"></script>
 </body>
 </html>

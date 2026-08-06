@@ -393,7 +393,7 @@ function renderChatModePicker() {
   label.textContent = active.title;
   icon.textContent = active.icon;
   icon.dataset.mode = active.value;
-  var disabled = !!currentActiveSend() || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
+  var disabled = !!currentActiveSend() || hasActiveMessageEdit() || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
   if (typeof setComposerPickerDisabled === "function") setComposerPickerDisabled(picker, disabled);
 
   menu.replaceChildren();
@@ -439,7 +439,7 @@ function renderChatModePicker() {
 
 function renderSendControls() {
   var activeSend = currentActiveSend();
-  var hasInlineEdit = hasActiveMessageEdit();
+  var isEditing = hasActiveMessageEdit();
   var isSending = !!activeSend;
   var isCanceling = isSending && !!activeSend.canceling;
   var sendButton = $("sendButton");
@@ -448,10 +448,26 @@ function renderSendControls() {
   var clearButton = $("clearInputButton");
   var modelSelect = $("chatModelSelect");
   var modeSelect = $("chatModeSelect");
+  var form = $("chatForm");
+  var editBar = $("messageEditBar");
+  var cancelEditButton = $("cancelMessageEditButton");
   var currentDocumentAvailable = typeof activeChatUsesCurrentDocument !== "function" || activeChatUsesCurrentDocument();
+
+  if (form) {
+    form.classList.toggle("is-message-editing", isEditing);
+  }
+  if (editBar) {
+    editBar.classList.toggle("hidden", !isEditing);
+    editBar.setAttribute("aria-hidden", isEditing ? "false" : "true");
+  }
+  if (cancelEditButton) {
+    cancelEditButton.disabled = !isEditing || state.editingBusy || isSending;
+  }
 
   if (sendButton) {
     sendButton.classList.toggle("hidden", isSending);
+    sendButton.title = isEditing ? "Сохранить изменения" : "Отправить";
+    sendButton.setAttribute("aria-label", sendButton.title);
   }
   if (stopButton) {
     stopButton.classList.toggle("hidden", !isSending);
@@ -461,18 +477,20 @@ function renderSendControls() {
   }
   if (input) {
     input.readOnly = isSending || state.reasoningSaving || state.bridgeUnavailable;
-    input.placeholder = state.bridgeUnavailable
-      ? "Откройте RNAssistant внутри Office, чтобы начать чат..."
-      : (currentDocumentAvailable ? "Спросите про текущий документ..." : "Обсудите сохранённый контекст...");
+    input.placeholder = isEditing
+      ? "Измените сообщение..."
+      : (state.bridgeUnavailable
+        ? "Откройте RNAssistant внутри Office, чтобы начать чат..."
+        : (currentDocumentAvailable ? "Спросите про текущий документ..." : "Обсудите сохранённый контекст..."));
   }
   if (clearButton) {
-    clearButton.disabled = isSending;
+    clearButton.disabled = isSending || state.editingBusy;
   }
   if (modelSelect) {
-    modelSelect.disabled = isSending || state.modelCatalog.loading || state.modelSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
+    modelSelect.disabled = isSending || isEditing || state.modelCatalog.loading || state.modelSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
   }
   if (modeSelect) {
-    modeSelect.disabled = isSending || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
+    modeSelect.disabled = isSending || isEditing || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
   }
   renderChatModePicker();
   if (typeof renderChatModelPicker === "function") {
@@ -482,20 +500,20 @@ function renderSendControls() {
     renderReasoningToggle();
   }
   if ($("addSelectionContextButton")) {
-    $("addSelectionContextButton").disabled = isSending || state.bridgeUnavailable || !currentDocumentAvailable;
+    $("addSelectionContextButton").disabled = isSending || isEditing || state.bridgeUnavailable || !currentDocumentAvailable;
   }
   if ($("toggleVbaContextButton")) {
-    $("toggleVbaContextButton").disabled = isSending || state.bridgeUnavailable || !currentDocumentAvailable;
+    $("toggleVbaContextButton").disabled = isSending || isEditing || state.bridgeUnavailable || !currentDocumentAvailable;
   }
   if ($("toggleHtmlModeButton")) {
-    $("toggleHtmlModeButton").disabled = isSending || state.bridgeUnavailable || !state.activeChatId;
+    $("toggleHtmlModeButton").disabled = isSending || isEditing || state.bridgeUnavailable || !state.activeChatId;
   }
   if ($("attachFileButton")) {
-    $("attachFileButton").disabled = isSending || state.bridgeUnavailable || !state.activeChatId;
+    $("attachFileButton").disabled = isSending || isEditing || state.bridgeUnavailable || !state.activeChatId;
   }
   var optionsMenu = $("composerOptionsMenu");
   if (optionsMenu) {
-    var optionsDisabled = isSending || state.bridgeUnavailable || !state.activeChatId;
+    var optionsDisabled = isSending || isEditing || state.bridgeUnavailable || !state.activeChatId;
     optionsMenu.classList.toggle("is-disabled", optionsDisabled);
     if (optionsDisabled) {
       optionsMenu.open = false;
@@ -519,6 +537,10 @@ function updateComposerInputState() {
   var hasText = !!(input && input.value.trim());
   var hasAttachments = !!(state.draftAttachments && state.draftAttachments.length);
 
+  if (hasActiveMessageEdit() && input) {
+    state.editingText = input.value;
+  }
+
   if (form) {
     form.classList.toggle("has-input", hasText || hasAttachments);
   }
@@ -535,14 +557,15 @@ function updateSendButtonAvailability(hasContent) {
     return;
   }
 
+  var editingTarget = hasActiveMessageEdit() ? findEditingMessage() : null;
+  var canSaveEdit = !!editingTarget && canSaveMessageEdit(editingTarget.message, editingTarget.index);
   sendButton.disabled =
     !!currentActiveSend() ||
     state.modelSaving ||
     state.reasoningSaving ||
     state.bridgeUnavailable ||
     !state.activeChatId ||
-    hasActiveMessageEdit() ||
-    !hasContent;
+    (hasActiveMessageEdit() ? !canSaveEdit : !hasContent);
 }
 
 function resizeChatInput() {
@@ -651,10 +674,16 @@ async function sendChat(text, attachments) {
 }
 
 async function submitChatInput() {
-  if (currentActiveSend() || state.modelSaving || state.reasoningSaving || hasActiveMessageEdit()) {
-    if (hasActiveMessageEdit()) {
-      focusInlineMessageEditor();
+  if (hasActiveMessageEdit()) {
+    if (!currentActiveSend() && !state.modelSaving && !state.reasoningSaving) {
+      state.editingText = $("chatInput").value;
+      saveMessageEdit();
+    } else {
+      focusMessageEditComposer();
     }
+    return;
+  }
+  if (currentActiveSend() || state.modelSaving || state.reasoningSaving) {
     return;
   }
 
@@ -828,7 +857,7 @@ async function runQuickAction(action) {
 }
 
 async function toggleChatHtmlMode() {
-  if (!state.activeChatId || state.bridgeUnavailable || currentActiveSend()) {
+  if (!state.activeChatId || state.bridgeUnavailable || currentActiveSend() || hasActiveMessageEdit()) {
     return;
   }
 
@@ -847,7 +876,7 @@ async function toggleChatHtmlMode() {
 }
 
 async function saveChatMode(mode) {
-  if (!state.activeChatId || state.bridgeUnavailable || currentActiveSend()) {
+  if (!state.activeChatId || state.bridgeUnavailable || currentActiveSend() || hasActiveMessageEdit()) {
     return;
   }
   try {
@@ -962,9 +991,15 @@ function bindChatActions() {
   $("clearChatButton").addEventListener("click", clearChat);
   $("stopButton").addEventListener("click", stopActiveSend);
   $("clearInputButton").addEventListener("click", function () { setChatInputText("", true); });
+  $("cancelMessageEditButton").addEventListener("click", cancelMessageEdit);
   $("chatInput").addEventListener("input", updateComposerInputState);
   window.addEventListener("resize", resizeChatInput);
   $("chatInput").addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && hasActiveMessageEdit() && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      event.preventDefault();
+      cancelMessageEdit();
+      return;
+    }
     if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
       event.preventDefault();
       submitChatInput();

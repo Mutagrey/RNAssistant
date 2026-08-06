@@ -144,7 +144,7 @@ function renderChatModelPicker() {
   label.textContent = (effectiveModel && effectiveModel.title) || effectiveValue || "Модель";
   picker.title = effectiveValue ? "Модель чата: " + effectiveValue : "Модель чата не выбрана";
   var disabled = state.modelCatalog.loading || state.modelSaving || state.reasoningSaving ||
-    !!currentActiveSend() || state.bridgeUnavailable || !state.activeChatId;
+    !!currentActiveSend() || hasActiveMessageEdit() || state.bridgeUnavailable || !state.activeChatId;
   setComposerPickerDisabled(picker, disabled);
 
   menu.replaceChildren();
@@ -379,7 +379,7 @@ function renderReasoningToggle() {
   var support = effectiveModelSupportsReasoning(model);
   var active = !!state.activeChatReasoning && support !== false;
   var disabled = !!currentActiveSend() || state.modelSaving || state.reasoningSaving ||
-    state.bridgeUnavailable || !state.activeChatId || support === false;
+    hasActiveMessageEdit() || state.bridgeUnavailable || !state.activeChatId || support === false;
 
   button.classList.toggle("active", active);
   button.classList.toggle("is-unknown", support === null);

@@ -13,6 +13,7 @@ namespace RNAssistant.Core.Llm
 {
     public sealed class LlmClient
     {
+        private const int MaxReasoningCustomJsonChars = 32768;
         private readonly Func<string> _apiKeyProvider;
         private readonly LlmMessageBuilder _messageBuilder;
 
@@ -419,6 +420,12 @@ namespace RNAssistant.Core.Llm
                 : configuredMode);
             var enabled = requestOptions.ReasoningEnabled.Value;
 
+            if (string.Equals(mode, ReasoningRequestModes.CustomJson, StringComparison.Ordinal))
+            {
+                AppendCustomReasoningRequest(body, settings.ReasoningCustomJson, enabled);
+                return;
+            }
+
             if (string.Equals(mode, ReasoningRequestModes.EnableThinking, StringComparison.Ordinal))
             {
                 body["enable_thinking"] = enabled;
@@ -438,6 +445,58 @@ namespace RNAssistant.Core.Llm
             if (enabled || reasoningSupport == true)
             {
                 body["reasoning_effort"] = enabled ? "medium" : "none";
+            }
+        }
+
+        private static void AppendCustomReasoningRequest(JObject body, string customJson, bool enabled)
+        {
+            if (!enabled || string.IsNullOrWhiteSpace(customJson))
+            {
+                return;
+            }
+            if (customJson.Length > MaxReasoningCustomJsonChars)
+            {
+                throw new InvalidOperationException("Custom reasoning JSON is too large. Maximum size is " + MaxReasoningCustomJsonChars + " characters.");
+            }
+
+            JObject customBody;
+            try
+            {
+                customBody = JObject.Parse(customJson);
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidOperationException("Custom reasoning JSON must be a valid JSON object: " + ex.Message, ex);
+            }
+
+            foreach (var property in customBody.Properties())
+            {
+                if (IsReservedRequestField(property.Name))
+                {
+                    throw new InvalidOperationException("Custom reasoning JSON cannot override the reserved request field '" + property.Name + "'.");
+                }
+                body[property.Name] = property.Value.DeepClone();
+            }
+        }
+
+        private static bool IsReservedRequestField(string name)
+        {
+            switch ((name ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "model":
+                case "messages":
+                case "max_tokens":
+                case "temperature":
+                case "top_p":
+                case "stream":
+                case "stream_options":
+                case "response_format":
+                case "tools":
+                case "tool_choice":
+                case "parallel_tool_calls":
+                    return true;
+                default:
+                    return false;
             }
         }
 

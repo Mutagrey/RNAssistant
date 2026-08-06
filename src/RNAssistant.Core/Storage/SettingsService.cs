@@ -88,6 +88,9 @@ namespace RNAssistant.Core.Storage
             settings.ToolResultRole = NormalizeToolResultRole(settings.ToolResultRole, defaults.ToolResultRole);
             settings.AgentResponseMode = NormalizeResponseMode(settings.AgentResponseMode, defaults.AgentResponseMode);
             settings.ReasoningRequestMode = ReasoningRequestModes.Normalize(settings.ReasoningRequestMode);
+            settings.ReasoningCustomJson = string.IsNullOrWhiteSpace(settings.ReasoningCustomJson)
+                ? defaults.ReasoningCustomJson
+                : settings.ReasoningCustomJson.Trim();
             settings.UiTheme = UiThemes.Normalize(settings.UiTheme);
             foreach (var capability in settings.ModelCapabilities.Values)
             {

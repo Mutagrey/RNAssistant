@@ -365,7 +365,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"uiTheme\":\"dark\",\"systemPromptRole\":\"system\",\"maxAgentFormatRetries\":4,\"modelImageSupportOverrides\":{\"gpt-test\":true},\"modelAudioSupportOverrides\":{\"gpt-audio\":true},\"attachmentModelPriority\":[\"gpt-test\",\"gpt-audio\"]},\"apiKey\":\"secret\"}}")
+                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"uiTheme\":\"dark\",\"reasoningRequestMode\":\"custom_json\",\"reasoningCustomJson\":\"{\\\"thinking\\\":{\\\"budget\\\":4096}}\",\"systemPromptRole\":\"system\",\"maxAgentFormatRetries\":4,\"modelImageSupportOverrides\":{\"gpt-test\":true},\"modelAudioSupportOverrides\":{\"gpt-audio\":true},\"attachmentModelPriority\":[\"gpt-test\",\"gpt-audio\"]},\"apiKey\":\"secret\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -373,6 +373,8 @@ namespace RNAssistant.Harness
             AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
             AssertEqual("gpt-test", controller.LastSettings.Model, "settings model");
             AssertEqual(UiThemes.Dark, controller.LastSettings.UiTheme, "settings theme");
+            AssertEqual(ReasoningRequestModes.CustomJson, controller.LastSettings.ReasoningRequestMode, "settings custom reasoning mode");
+            AssertContains(controller.LastSettings.ReasoningCustomJson, "budget", "settings custom reasoning json");
             AssertEqual("system", controller.LastSettings.SystemPromptRole, "system prompt role");
             AssertEqual(4, controller.LastSettings.MaxAgentFormatRetries, "format retry limit");
             AssertEqual(true, controller.LastSettings.ModelImageSupportOverrides["gpt-test"].Value, "model image override");

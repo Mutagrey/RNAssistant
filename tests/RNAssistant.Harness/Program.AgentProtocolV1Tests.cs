@@ -79,6 +79,42 @@ namespace RNAssistant.Harness
             var reasoningEnabledBody = LlmClient.BuildRequestBody(settings, messages, 10, new LlmRequestOptions { ReasoningEnabled = false });
             AssertEqual(false, (bool)reasoningEnabledBody.SelectToken("reasoning.enabled"), "reasoning toggle supports reasoning enabled object");
 
+            settings.ReasoningRequestMode = ReasoningRequestModes.CustomJson;
+            settings.ReasoningCustomJson = "{\"reasoning\":{\"effort\":\"high\",\"summary\":\"auto\"},\"provider_flag\":true}";
+            var customReasoningBody = LlmClient.BuildRequestBody(settings, messages, 10, new LlmRequestOptions { ReasoningEnabled = true });
+            AssertEqual("high", (string)customReasoningBody.SelectToken("reasoning.effort"), "custom reasoning json merges nested object");
+            AssertEqual("auto", (string)customReasoningBody.SelectToken("reasoning.summary"), "custom reasoning json preserves values");
+            AssertEqual(true, (bool)customReasoningBody["provider_flag"], "custom reasoning json merges top-level fields");
+            var customReasoningDisabledBody = LlmClient.BuildRequestBody(settings, messages, 10, new LlmRequestOptions { ReasoningEnabled = false });
+            AssertTrue(customReasoningDisabledBody["reasoning"] == null && customReasoningDisabledBody["provider_flag"] == null, "custom reasoning json omitted when toggle is off");
+
+            var invalidCustomRejected = false;
+            settings.ReasoningCustomJson = "{invalid}";
+            try
+            {
+                LlmClient.BuildRequestBody(settings, messages, 10, new LlmRequestOptions { ReasoningEnabled = true });
+            }
+            catch (InvalidOperationException ex)
+            {
+                invalidCustomRejected = true;
+                AssertContains(ex.Message, "valid JSON object", "custom reasoning invalid json diagnostic");
+            }
+            AssertTrue(invalidCustomRejected, "custom reasoning rejects invalid json");
+
+            var reservedCustomRejected = false;
+            settings.ReasoningCustomJson = "{\"model\":\"other-model\"}";
+            try
+            {
+                LlmClient.BuildRequestBody(settings, messages, 10, new LlmRequestOptions { ReasoningEnabled = true });
+            }
+            catch (InvalidOperationException ex)
+            {
+                reservedCustomRejected = true;
+                AssertContains(ex.Message, "reserved request field", "custom reasoning reserved field diagnostic");
+            }
+            AssertTrue(reservedCustomRejected, "custom reasoning protects request fields");
+            settings.ReasoningCustomJson = "{}";
+
             settings.ModelCapabilities["test-model"].ReasoningRequestMode = ReasoningRequestModes.EnableThinking;
             var modelOverrideBody = LlmClient.BuildRequestBody(settings, messages, 10, new LlmRequestOptions { ReasoningEnabled = true });
             AssertEqual(true, (bool)modelOverrideBody["enable_thinking"], "model reasoning request mode overrides global setting");

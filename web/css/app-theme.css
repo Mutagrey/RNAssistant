@@ -343,8 +343,6 @@ html[data-theme="dark"] .chat-sidebar {
 }
 
 html[data-theme="dark"] .chat-search,
-html[data-theme="dark"] .message-inline-editor,
-html[data-theme="dark"] .message-inline-textarea,
 html[data-theme="dark"] .chat-empty-mark,
 html[data-theme="dark"] .chat-empty-suggestion {
   border-color: var(--line);
@@ -375,12 +373,6 @@ html[data-theme="dark"] .chat-document-actions {
 html[data-theme="dark"] .offline-notice {
   background: #191d23;
   color: var(--muted);
-}
-
-html[data-theme="dark"] .message.is-editing {
-  border-color: #34517f;
-  background: linear-gradient(180deg, #171c24 0%, #172033 100%);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, .24);
 }
 
 html[data-theme="dark"] .message-attachment,

@@ -21,8 +21,7 @@
   }
 
   .message.user .markdown,
-  .message.user .message-footer,
-  .message-inline-editor {
+  .message.user .message-footer {
     max-width: 92%;
   }
 
@@ -221,7 +220,6 @@
 
   .message.user .markdown,
   .message.user .message-footer,
-  .message-inline-editor,
   .message.assistant .markdown,
   .message.assistant .message-footer {
     max-width: 96%;

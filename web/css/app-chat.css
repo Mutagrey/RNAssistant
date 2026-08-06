@@ -552,14 +552,6 @@
   padding-top: 0;
 }
 
-.message.is-editing {
-  padding: 10px 12px 12px;
-  border: 1px solid #d7e4f8;
-  border-radius: 20px;
-  background: linear-gradient(180deg, #fbfdff 0%, #f4f8ff 100%);
-  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.08);
-}
-
 .message.user {
   display: flex;
   flex-direction: column;
@@ -709,8 +701,7 @@
 }
 
 .message:hover .message-footer,
-.message:focus-within .message-footer,
-.message.is-editing .message-footer {
+.message:focus-within .message-footer {
   opacity: 1;
   transform: translateY(0);
 }
@@ -775,59 +766,6 @@
 .message.failed .message-action:hover {
   background: transparent;
   color: #8a1f14;
-}
-
-.message-inline-editor {
-  width: 92%;
-  align-self: flex-end;
-  padding: 10px;
-  border: 1px solid #d7e3f4;
-  border-radius: 16px;
-  background: #fff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 8px 18px rgba(15, 23, 42, 0.05);
-}
-
-.message-inline-editor.is-busy {
-  opacity: 0.84;
-}
-
-.message-inline-textarea {
-  width: 100%;
-  min-height: 88px;
-  max-height: 240px;
-  border: 1px solid #d5dfed;
-  border-radius: 12px;
-  padding: 9px 10px;
-  background: #fbfdff;
-  color: var(--text);
-  line-height: 1.5;
-  resize: none;
-}
-
-.message-inline-textarea:focus {
-  border-color: var(--accent);
-  outline: 2px solid var(--focus-ring-tight);
-  outline-offset: 0;
-}
-
-.message-inline-note {
-  margin-top: 8px;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.message-inline-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.message-inline-actions button {
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: 10px;
 }
 
 .chat-scroll-button {

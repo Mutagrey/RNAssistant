@@ -17,6 +17,7 @@ namespace RNAssistant.Core.Models
         public const string EnableThinking = "enable_thinking";
         public const string ChatTemplateKwargs = "chat_template_kwargs";
         public const string ReasoningEnabled = "reasoning_enabled";
+        public const string CustomJson = "custom_json";
 
         public static string Normalize(string value)
         {
@@ -27,6 +28,7 @@ namespace RNAssistant.Core.Models
                 string.Equals(value, "chat_template_kwargs.enable_thinking", StringComparison.OrdinalIgnoreCase)) return ChatTemplateKwargs;
             if (string.Equals(value, ReasoningEnabled, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(value, "reasoning.enabled", StringComparison.OrdinalIgnoreCase)) return ReasoningEnabled;
+            if (string.Equals(value, CustomJson, StringComparison.OrdinalIgnoreCase)) return CustomJson;
             return Auto;
         }
 
@@ -95,6 +97,7 @@ namespace RNAssistant.Core.Models
         public string ToolResultRole { get; set; }
         public string AgentResponseMode { get; set; }
         public string ReasoningRequestMode { get; set; }
+        public string ReasoningCustomJson { get; set; }
         public bool FallbackToJsonObject { get; set; }
         public int MaxTokens { get; set; }
         public int RequestTimeoutSeconds { get; set; }
@@ -144,6 +147,7 @@ namespace RNAssistant.Core.Models
             ToolResultRole = "tool";
             AgentResponseMode = AgentResponseModes.JsonSchema;
             ReasoningRequestMode = ReasoningRequestModes.Auto;
+            ReasoningCustomJson = "{}";
             FallbackToJsonObject = true;
             MaxTokens = 2048;
             RequestTimeoutSeconds = 300;

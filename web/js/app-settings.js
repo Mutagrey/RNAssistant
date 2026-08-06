@@ -35,6 +35,56 @@ function applyUiTheme(settings, persist) {
   return theme;
 }
 
+function updateReasoningCustomJsonVisibility() {
+  var field = $("reasoningCustomJsonField");
+  if (!field) {
+    return;
+  }
+  var visible = $("reasoningRequestModeInput").value === "custom_json";
+  field.classList.toggle("hidden", !visible);
+  field.setAttribute("aria-hidden", visible ? "false" : "true");
+}
+
+function readReasoningCustomJson(mode) {
+  var text = $("reasoningCustomJsonInput").value.trim();
+  if (!text) {
+    return "{}";
+  }
+  if (mode !== "custom_json") {
+    return text;
+  }
+
+  var value;
+  try {
+    value = JSON.parse(text);
+  } catch (error) {
+    throw new Error("Кастомный reasoning JSON содержит ошибку: " + error.message);
+  }
+  if (!value || Array.isArray(value) || typeof value !== "object") {
+    throw new Error("Кастомный reasoning JSON должен быть JSON-объектом.");
+  }
+
+  var reserved = {
+    model: true,
+    messages: true,
+    max_tokens: true,
+    temperature: true,
+    top_p: true,
+    stream: true,
+    stream_options: true,
+    response_format: true,
+    tools: true,
+    tool_choice: true,
+    parallel_tool_calls: true
+  };
+  Object.keys(value).forEach(function (key) {
+    if (reserved[String(key).toLowerCase()]) {
+      throw new Error("Кастомный reasoning JSON не может переопределять системное поле " + key + ".");
+    }
+  });
+  return JSON.stringify(value, null, 2);
+}
+
 function renderSettings() {
   var s = state.settings || {};
   applyUiFontScale(s);
@@ -47,8 +97,10 @@ function renderSettings() {
   var responseMode = String(s.AgentResponseMode || s.agentResponseMode || "json_schema").toLowerCase();
   $("agentResponseModeInput").value = responseMode === "native_tool_calls" || responseMode === "json_object" ? responseMode : "json_schema";
   var reasoningRequestMode = String(s.ReasoningRequestMode || s.reasoningRequestMode || "auto").toLowerCase();
-  var reasoningModes = ["auto", "reasoning_effort", "enable_thinking", "chat_template_kwargs", "reasoning_enabled"];
+  var reasoningModes = ["auto", "reasoning_effort", "enable_thinking", "chat_template_kwargs", "reasoning_enabled", "custom_json"];
   $("reasoningRequestModeInput").value = reasoningModes.indexOf(reasoningRequestMode) >= 0 ? reasoningRequestMode : "auto";
+  $("reasoningCustomJsonInput").value = s.ReasoningCustomJson || s.reasoningCustomJson || "{}";
+  updateReasoningCustomJsonVisibility();
   $("fallbackJsonObjectInput").checked = (s.FallbackToJsonObject !== false && s.fallbackToJsonObject !== false);
   var toolResultRole = String(s.ToolResultRole || s.toolResultRole || "tool").toLowerCase();
   $("toolResultRoleInput").value = toolResultRole === "developer" || toolResultRole === "user" ? toolResultRole : "tool";
@@ -93,12 +145,15 @@ function readSettings() {
   var promptSettings = typeof readPromptSettings === "function"
     ? readPromptSettings()
     : { SystemPrompt: "", ChatSystemPrompt: "", AgentPrompts: {} };
+  var reasoningRequestMode = $("reasoningRequestModeInput").value;
+  var reasoningCustomJson = readReasoningCustomJson(reasoningRequestMode);
   return {
     BaseUrl: $("baseUrlInput").value.trim(),
     ModelsConfigUrl: $("modelsConfigUrlInput").value.trim(),
     Model: $("modelInput").value.trim(),
     AgentResponseMode: $("agentResponseModeInput").value,
-    ReasoningRequestMode: $("reasoningRequestModeInput").value,
+    ReasoningRequestMode: reasoningRequestMode,
+    ReasoningCustomJson: reasoningCustomJson,
     FallbackToJsonObject: $("fallbackJsonObjectInput").checked,
     ToolResultRole: $("toolResultRoleInput").value,
     MaxTokens: Number($("maxTokensInput").value || 2048),
@@ -153,6 +208,8 @@ function bindSettingsActions() {
   $("uiFontScaleInput").addEventListener("input", function () {
     applyUiFontScale({ UiFontScale: Number($("uiFontScaleInput").value || 100) / 100 });
   });
+
+  $("reasoningRequestModeInput").addEventListener("change", updateReasoningCustomJsonVisibility);
 
   Array.prototype.slice.call(document.querySelectorAll('input[name="uiTheme"]')).forEach(function (input) {
     input.addEventListener("change", function () {
