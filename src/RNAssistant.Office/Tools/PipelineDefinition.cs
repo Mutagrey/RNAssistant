@@ -24,6 +24,8 @@ namespace RNAssistant.Office.Tools
 
     internal static class PipelineDefinitionParser
     {
+        private const int MaxSteps = 50;
+
         public static bool TryParse(string ownerId, string json, out PipelineDefinition definition, out string error)
         {
             definition = null;
@@ -43,6 +45,11 @@ namespace RNAssistant.Office.Tools
             if (tokens == null || tokens.Count == 0)
             {
                 error = "Pipeline has no steps; at least one step is required: " + (ownerId ?? string.Empty);
+                return false;
+            }
+            if (tokens.Count > MaxSteps)
+            {
+                error = "Pipeline exceeds the maximum of " + MaxSteps + " steps: " + (ownerId ?? string.Empty);
                 return false;
             }
 

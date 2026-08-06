@@ -189,7 +189,7 @@ namespace RNAssistant.OfficeHosts
                 Skill("word.read_document", "Read-only: Read current document text.", "{\"maxChars\":12000}"),
                 Skill("word.read_selection", "Read-only: Read current selection text.", "{}"),
                 Skill("word.read_range", "Read-only: Read document text by character range.", "{\"start\":0,\"end\":1000,\"maxChars\":12000}"),
-                Skill("word.find_text", "Read-only: Find text occurrences in the document.", "{\"query\":\"text\",\"matchCase\":false,\"maxResults\":50}"),
+                Skill("word.find_text", "Read-only: Find literal or regexp text across Word stories and return stable coordinates/hash.", "{\"query\":\"text\",\"scope\":\"main\",\"mode\":\"literal\",\"matchCase\":false,\"wholeWord\":false,\"maxResults\":50,\"contextChars\":80}"),
                 Skill("word.read_headings", "Read-only: List paragraphs that use heading styles.", "{\"maxResults\":100}"),
                 Skill("word.read_tables", "Read-only: Read text from document tables.", "{\"maxTables\":20,\"maxRows\":50}"),
                 Skill("word.list_comments", "Read-only: List document comments.", "{}"),
@@ -197,7 +197,7 @@ namespace RNAssistant.OfficeHosts
                 Skill("word.insert_text", "Mutates document: Insert text at the current cursor position.", "{\"text\":\"Text to insert\"}", true, true, 2),
                 Skill("word.insert_paragraph", "Mutates document: Insert a paragraph at selection, start, or end.", "{\"text\":\"Paragraph text\",\"location\":\"selection\"}", true, true, 2),
                 Skill("word.replace_selection", "Mutates document: Replace selected text.", "{\"text\":\"Replacement text\"}", true, true, 2),
-                Skill("word.replace_text", "Mutates document: Replace document text using Word find/replace.", "{\"find\":\"old text\",\"replace\":\"new text\",\"replaceAll\":true,\"matchCase\":false}", true, true, 2),
+                Skill("word.replace_text", "Mutates document: Replace literal or regexp text after a matching search preview.", "{\"find\":\"old text\",\"replace\":\"new text\",\"scope\":\"main\",\"mode\":\"literal\",\"replaceAll\":true,\"matchCase\":false,\"wholeWord\":false,\"expectedMatches\":1,\"expectedScopeSha256\":\"\",\"maxReplacements\":500}", true, false, 2, true),
                 Skill("word.apply_style", "Mutates document: Apply a named Word style to selection or document.", "{\"style\":\"Heading 1\",\"target\":\"selection\"}", true, true, 1),
                 Skill("word.format_selection", "Mutates document: Apply basic font formatting to the current selection.", "{\"bold\":true,\"italic\":false,\"underline\":false,\"fontSize\":12,\"fontName\":\"\"}", true, true, 1),
                 Skill("word.add_table", "Mutates document: Insert a table at selection, start, or end.", "{\"rows\":2,\"columns\":2,\"values\":[[\"Header\",\"Value\"],[\"A\",\"1\"]],\"location\":\"selection\"}", true, true, 2),
@@ -365,6 +365,10 @@ namespace RNAssistant.OfficeHosts
                         return VbaProjectSupport.InstallPackage(RequireDocument(), ToolArgumentReader.String(command.Arguments, "componentsJson", "[]"), ToolArgumentReader.String(command.Arguments, "marker", string.Empty));
                     case "word.vba_remove_package_internal":
                         return VbaProjectSupport.RemovePackage(RequireDocument(), ToolArgumentReader.String(command.Arguments, "expectedComponentsJson", "{}"), ToolArgumentReader.String(command.Arguments, "expectedMarker", string.Empty));
+                    case "word.vba_create_module_internal":
+                        return VbaProjectSupport.CreateModule(RequireDocument(), ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty), ToolArgumentReader.String(command.Arguments, "componentType", "StdModule"), ToolArgumentReader.String(command.Arguments, "code", string.Empty));
+                    case "word.vba_delete_module_internal":
+                        return VbaProjectSupport.DeleteModule(RequireDocument(), ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty));
                     default:
                         return ToolResult.Fail("Unsupported Word tool: " + command.ToolId);
                 }
@@ -407,30 +411,33 @@ namespace RNAssistant.OfficeHosts
                 return ToolResult.Fail("query is required.");
             }
 
-            var matchCase = ToolArgumentReader.Boolean(command.Arguments, "matchCase", false);
+            var scope = ToolArgumentReader.String(command.Arguments, "scope", "main");
             var maxResults = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxResults", 50)));
-            var docText = RequireDocument().Range().Text ?? string.Empty;
-            var comparison = matchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+            var contextChars = Math.Max(0, Math.Min(1000, ToolArgumentReader.Int32(command.Arguments, "contextChars", 80)));
             var matches = new List<object>();
-            var index = 0;
-            while (matches.Count < maxResults && index < docText.Length)
+            var hash = new System.Text.StringBuilder();
+            var total = 0;
+            try
             {
-                index = docText.IndexOf(query, index, comparison);
-                if (index < 0)
+                foreach (var story in SearchRanges(scope))
                 {
-                    break;
+                    var text = story.Range.Text ?? string.Empty;
+                    hash.Append(story.Kind).Append('\n').Append(story.Range.Start).Append(':').Append(story.Range.End).Append('\n').Append(text).Append('\n');
+                    var found = TextPatternEngine.Find(text, query, PatternOptions(command), Math.Max(1, maxResults - matches.Count), contextChars);
+                    total += found.MatchCount;
+                    foreach (var match in found.Matches)
+                    {
+                        if (matches.Count >= maxResults) break;
+                        matches.Add(new { story = story.Kind, start = story.Range.Start + match.Index, end = story.Range.Start + match.Index + match.Length, preview = match.Preview });
+                    }
                 }
-
-                matches.Add(new
-                {
-                    start = index,
-                    end = index + query.Length,
-                    preview = PreviewAround(docText, index, query.Length)
-                });
-                index += Math.Max(1, query.Length);
+                var scopeHash = TextPatternEngine.Sha256(hash.ToString());
+                return ToolResult.Ok("Text matches found: " + total, JsonConvert.SerializeObject(new { query = query, scope = scope, matchCount = total, returnedCount = matches.Count, truncated = total > matches.Count, scopeSha256 = scopeHash, contentSha256 = scopeHash, matches = matches }));
             }
-
-            return ToolResult.Ok("Text matches found: " + matches.Count, JsonConvert.SerializeObject(matches));
+            catch (TextPatternException ex)
+            {
+                return ToolResult.Fail(ex.Message, null, ex.ErrorCode, false);
+            }
         }
 
         private ToolResult ReadHeadings(ToolCommand command)
@@ -546,23 +553,95 @@ namespace RNAssistant.OfficeHosts
             }
 
             var replace = ToolArgumentReader.String(command.Arguments, "replace", string.Empty);
+            var scope = ToolArgumentReader.String(command.Arguments, "scope", "main");
             var replaceAll = ToolArgumentReader.Boolean(command.Arguments, "replaceAll", true);
-            var matchCase = ToolArgumentReader.Boolean(command.Arguments, "matchCase", false);
-            var doc = RequireDocument();
-            var finder = doc.Content.Find;
-            finder.ClearFormatting();
-            finder.Replacement.ClearFormatting();
-            finder.Text = find;
-            finder.Replacement.Text = replace;
-            finder.MatchCase = matchCase;
-            finder.Execute(
-                FindText: find,
-                MatchCase: matchCase,
-                Wrap: Word.WdFindWrap.wdFindContinue,
-                ReplaceWith: replace,
-                Replace: replaceAll ? Word.WdReplace.wdReplaceAll : Word.WdReplace.wdReplaceOne);
-            return ToolResult.Ok("Text replaced.");
+            var expectedMatches = ToolArgumentReader.Int32(command.Arguments, "expectedMatches", -1);
+            var expectedHash = ToolArgumentReader.String(command.Arguments, "expectedScopeSha256", string.Empty);
+            var maxReplacements = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxReplacements", 500)));
+            if (expectedMatches < 0 || string.IsNullOrWhiteSpace(expectedHash)) return ToolResult.Fail("expectedMatches and expectedScopeSha256 from word.find_text are required.", null, "search_precondition_required", true);
+            var ranges = new List<WordSearchRange>(SearchRanges(scope));
+            var hash = new System.Text.StringBuilder();
+            var plans = new List<WordReplacementPlan>();
+            try
+            {
+                foreach (var story in ranges)
+                {
+                    var text = story.Range.Text ?? string.Empty;
+                    hash.Append(story.Kind).Append('\n').Append(story.Range.Start).Append(':').Append(story.Range.End).Append('\n').Append(text).Append('\n');
+                    var edits = TextPatternEngine.PlanReplacements(text, find, replace, PatternOptions(command), replaceAll, maxReplacements);
+                    if (edits.Count > 0) plans.Add(new WordReplacementPlan { Story = story, Edits = edits });
+                    if (!replaceAll && edits.Count > 0) break;
+                }
+                var total = 0;
+                foreach (var plan in plans) total += plan.Edits.Count;
+                if (!string.Equals(expectedHash, TextPatternEngine.Sha256(hash.ToString()), StringComparison.OrdinalIgnoreCase) || total != expectedMatches)
+                    return ToolResult.Fail("Word search scope changed after preview.", null, "stale_search_scope", true);
+                if (total > maxReplacements) return ToolResult.Fail("Replacement count exceeds maxReplacements=" + maxReplacements + ".", null, "replacement_limit_exceeded", false);
+                for (var p = plans.Count - 1; p >= 0; p--)
+                {
+                    var plan = plans[p];
+                    for (var e = plan.Edits.Count - 1; e >= 0; e--)
+                    {
+                        var edit = plan.Edits[e];
+                        var target = plan.Story.Range.Duplicate;
+                        target.SetRange(plan.Story.Range.Start + edit.Index, plan.Story.Range.Start + edit.Index + edit.Length);
+                        target.Text = edit.Text;
+                    }
+                }
+                var verify = new ToolCommand { ToolId = "word.find_text" };
+                verify.Arguments["query"] = find; verify.Arguments["scope"] = scope;
+                verify.Arguments["mode"] = ToolArgumentReader.String(command.Arguments, "mode", "literal");
+                verify.Arguments["matchCase"] = ToolArgumentReader.Boolean(command.Arguments, "matchCase", false);
+                verify.Arguments["wholeWord"] = ToolArgumentReader.Boolean(command.Arguments, "wholeWord", false);
+                verify.Arguments["maxResults"] = 500; verify.Arguments["contextChars"] = 80;
+                var post = FindText(verify);
+                if (!post.Success) return post;
+                var postHash = Convert.ToString(JObject.Parse(post.DataJson ?? "{}")["scopeSha256"]);
+                var result = ToolResult.Ok("Word replacements completed: " + total + ".", JsonConvert.SerializeObject(new { replacements = total, scopeSha256 = postHash }));
+                result.Verification = new ToolVerification { ToolId = "word.find_text", ExpectedContentSha256 = postHash };
+                foreach (var pair in verify.Arguments) result.Verification.Arguments[pair.Key] = pair.Value;
+                return result;
+            }
+            catch (TextPatternException ex)
+            {
+                return ToolResult.Fail(ex.Message, null, ex.ErrorCode, false);
+            }
         }
+
+        private TextPatternOptions PatternOptions(ToolCommand command)
+        {
+            return new TextPatternOptions { Mode = ToolArgumentReader.String(command.Arguments, "mode", "literal"), MatchCase = ToolArgumentReader.Boolean(command.Arguments, "matchCase", false), WholeWord = ToolArgumentReader.Boolean(command.Arguments, "wholeWord", false) };
+        }
+
+        private IEnumerable<WordSearchRange> SearchRanges(string scope)
+        {
+            var doc = RequireDocument();
+            if (string.Equals(scope, "selection", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return new WordSearchRange { Kind = "selection", Range = ResolveSelectionRange(doc).Duplicate };
+                yield break;
+            }
+            if (!string.Equals(scope, "all", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return new WordSearchRange { Kind = "main", Range = doc.Content.Duplicate };
+                yield break;
+            }
+            foreach (Word.WdStoryType type in Enum.GetValues(typeof(Word.WdStoryType)))
+            {
+                Word.Range range;
+                try { range = doc.StoryRanges[type]; }
+                catch { continue; }
+                while (range != null)
+                {
+                    yield return new WordSearchRange { Kind = type.ToString(), Range = range.Duplicate };
+                    try { range = range.NextStoryRange; }
+                    catch { range = null; }
+                }
+            }
+        }
+
+        private sealed class WordSearchRange { public string Kind { get; set; } public Word.Range Range { get; set; } }
+        private sealed class WordReplacementPlan { public WordSearchRange Story { get; set; } public List<TextPatternReplacement> Edits { get; set; } }
 
         private ToolResult ApplyStyle(ToolCommand command)
         {
@@ -954,9 +1033,9 @@ namespace RNAssistant.OfficeHosts
                 && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
-        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0)
+        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool requiresConfirmation = false)
         {
-            return new ToolDefinition { Id = id, Host = "Word", Name = id, Description = description, ArgumentSchemaJson = ToolSchemaSupport.FromPropertySamples(schema), BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel };
+            return new ToolDefinition { Id = id, Host = "Word", Name = id, Description = description, ArgumentSchemaJson = ToolSchemaSupport.FromPropertySamples(schema), BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, RequiresConfirmation = requiresConfirmation };
         }
 
         private static string Trim(string text, int maxChars)

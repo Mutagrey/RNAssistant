@@ -365,6 +365,20 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("fake VBA package removed");
             }
 
+            if ((command.ToolId ?? string.Empty).EndsWith(".vba_create_module_internal", StringComparison.OrdinalIgnoreCase))
+            {
+                var name = Argument(command, "moduleName", "Module1");
+                if (_vbaModules.ContainsKey(name)) return ToolResult.Fail("VBA module already exists: " + name, null, "vba_module_exists", false);
+                SetVbaModule(name, Argument(command, "code", string.Empty), Argument(command, "componentType", "StdModule"));
+                return ToolResult.Ok("fake VBA module created");
+            }
+
+            if ((command.ToolId ?? string.Empty).EndsWith(".vba_delete_module_internal", StringComparison.OrdinalIgnoreCase))
+            {
+                _vbaModules.Remove(Argument(command, "moduleName", "Module1"));
+                return ToolResult.Ok("fake VBA module deleted");
+            }
+
             if (FailUnknownSkills && !IsKnownTool(command.ToolId))
             {
                 return ToolResult.Fail("Unsupported " + HostName + " tool: " + command.ToolId);

@@ -69,7 +69,7 @@ namespace RNAssistant.Office.Services
                     Attachments = attachments == null ? new List<ChatAttachment>() : new List<ChatAttachment>(attachments)
                 });
             }
-            return RunLoopAsync(taskText, false, session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, null, null, cancellationToken);
+            return RunLoopAsync(taskText, false, session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, null, null, null, cancellationToken);
         }
 
         public Task<ChatCompletionResult> ContinueAfterToolAsync(
@@ -91,7 +91,7 @@ namespace RNAssistant.Office.Services
                 AgentProtocolHistory.AppendToolExchange(initialProtocolMessages, null, confirmedCommand, confirmedResult, settings);
             }
             var taskText = LatestUserRequest(session, confirmedCommand == null ? string.Empty : confirmedCommand.ToolId);
-            return RunLoopAsync(taskText, CommandMutates(confirmedCommand, tools), session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, initialProtocolMessages, confirmedResult, cancellationToken);
+            return RunLoopAsync(taskText, CommandMutates(confirmedCommand, tools), session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, initialProtocolMessages, confirmedCommand, confirmedResult, cancellationToken);
         }
 
         private static bool CommandMutates(ToolCommand command, IReadOnlyList<ToolDefinition> tools)
@@ -118,6 +118,7 @@ namespace RNAssistant.Office.Services
             ChatCompletionService.PendingToolRegistrar pendingToolRegistrar,
             IReadOnlyList<SkillDefinition> skills,
             IReadOnlyList<ChatMessage> initialProtocolMessages,
+            ToolCommand initialCommand,
             ToolResult initialPlanResult,
             CancellationToken cancellationToken)
         {
@@ -147,10 +148,25 @@ namespace RNAssistant.Office.Services
             var maxIterations = Math.Max(1, settings.MaxAgentIterations);
             var maxToolSteps = Math.Max(1, settings.MaxAgentToolSteps);
             var allTools = _toolCatalogResolver.Resolve(tools);
-            var state = new AgentRunState { PendingVerification = initialVerificationRequired };
+            var state = new AgentRunState
+            {
+                PendingVerification = initialVerificationRequired,
+                TotalToolSteps = initialPlanResult == null ? 0 : Math.Max(0, initialPlanResult.ToolStepsConsumed)
+            };
             var routingDiagnosticsJson = string.Empty;
             var protocolMessages = new List<ChatMessage>(initialProtocolMessages ?? new ChatMessage[0]);
             var llmRunCache = new LlmRunCache();
+            if (initialCommand != null && initialPlanResult != null)
+            {
+                var initialTool = AgentToolCatalogResolver.Find(allTools, initialCommand.ToolId);
+                var initialObservation = _observationNormalizer.Normalize(initialCommand, initialTool, initialPlanResult,
+                    initialTool != null && (initialTool.MutatesDocument || initialTool.MutatesLocalState)
+                        ? AgentObservationPurposes.Mutation
+                        : AgentObservationPurposes.Inspection);
+                observations.Add(initialObservation);
+                resultLog.Add(AgentTranscript.DescribeResult(initialCommand, initialPlanResult));
+                AgentPhaseController.Advance(route, observations, state.PendingVerification);
+            }
             if (initialPlanResult != null && AgentPlanStateService.Restore(session, state) != null)
             {
                 ReportPlanProgress(progress, state.PlanActivity);
@@ -379,8 +395,9 @@ namespace RNAssistant.Office.Services
                         : "Ожидаю ручного запуска: " + AgentRunPresentation.FriendlyToolAction(command) + ".",
                     AgentRunPresentation.CreateRunningActivity(command, settings.AutoRunToolCalls ? "running" : "waiting", "tool"));
                 var result = settings.AutoRunToolCalls
-                    ? _toolExecutor.Execute(command, allTools, settings, false, false, session, cancellationToken)
+                    ? _toolExecutor.Execute(command, allTools, settings, false, false, session, Math.Max(1, maxToolSteps - state.TotalToolSteps + 1), cancellationToken)
                     : ToolResult.SkippedAutoRun("Auto tool execution is disabled: " + command.ToolId);
+                state.TotalToolSteps += Math.Max(0, (result == null ? 0 : result.ToolStepsConsumed) - 1);
                 var retryingToolError = !result.Success && settings.AutoRetryToolErrors && AgentTranscript.CanRetryToolError(result);
                 ReportPlanProgress(progress, AgentPlanStateService.ApplyResult(session, state, result, retryingToolError));
                 AgentProtocolHistory.AppendToolExchange(protocolMessages, plannerAttempt, command, result, settings);
@@ -458,8 +475,9 @@ namespace RNAssistant.Office.Services
                         ReportProgress(progress, "verifying", "Проверяю результат через " + verify.ToolId, AgentRunPresentation.CreateRunningActivity(verify, "running", "verification"));
                         var verifyExecution = await _verificationExecutor.ExecuteAsync(
                             verify.ToolId,
-                            () => _toolExecutor.Execute(verify, allTools, settings, false, false, session, CancellationToken.None),
+                            () => _toolExecutor.Execute(verify, allTools, settings, false, false, session, Math.Max(1, maxToolSteps - state.TotalToolSteps + 1), CancellationToken.None),
                             cancellationToken).ConfigureAwait(false);
+                        state.TotalToolSteps += Math.Max(0, (verifyExecution.Result == null ? 0 : verifyExecution.Result.ToolStepsConsumed) - 1);
                         var verifyResult = VerificationResultValidator.Validate(command, verify, verifyExecution.Result);
                         var retryingVerification = !verifyResult.Success && !verifyExecution.TimedOut && settings.AutoRetryToolErrors;
                         ReportPlanProgress(progress, AgentPlanStateService.ApplyResult(session, state, verifyResult, retryingVerification));

@@ -126,6 +126,18 @@ namespace RNAssistant.Office.Services
                 return route;
             }
 
+            if (AgentText.ContainsAny(value, "замени", "замена", "найди и замени", "регулярн") || ContainsAnyToken(value, "replace", "regexp", "regex"))
+            {
+                route.RequiresTool = true;
+                route.RiskAllowed = 0;
+                route.Phase = AgentPhases.ReadOnly;
+                route.Mode = "mutate_text_replace";
+                route.TaskType = "text_replace";
+                route.RequiresInspection = true;
+                route.DecisionReason = "search_before_replace";
+                return route;
+            }
+
             if (AgentText.ContainsAny(value, "сделай", "создай", "создать", "построй", "сгенерируй", "заполни", "вставь", "замени", "измени", "добавь", "напиши") ||
                 ContainsAnyToken(value, "create", "make", "add", "insert", "replace", "update", "write", "generate", "build", "draft"))
             {
@@ -171,7 +183,8 @@ namespace RNAssistant.Office.Services
                     ContainsAnyToken(value, "summarize", "summarise", "summary", "analyze", "review")
                     ? "analyze"
                     : "read";
-                route.TaskType = AgentText.ContainsAny(value, "mail", "email", "письм") ? "mail_search" : "read";
+                route.TaskType = AgentText.ContainsAny(value, "mail", "email", "письм") ? "mail_search" :
+                    AgentText.ContainsAny(value, "найди", "поиск") || ContainsAnyToken(value, "search", "find", "regexp", "regex") ? "text_search" : "read";
                 route.Phase = AgentPhases.ReadOnly;
                 route.RiskAllowed = 0;
                 route.RequiresInspection = false;

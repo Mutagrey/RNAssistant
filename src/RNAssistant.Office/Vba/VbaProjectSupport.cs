@@ -14,6 +14,7 @@ namespace RNAssistant.Office
     public static class VbaProjectSupport
     {
         private const int StdModuleType = 1;
+        private const int ClassModuleType = 2;
 
         public static object GetVbaProject(object documentObject)
         {
@@ -153,16 +154,27 @@ namespace RNAssistant.Office
 
         public static ToolResult InsertModule(object documentObject, string moduleName, string code)
         {
+            return CreateModule(documentObject, moduleName, "StdModule", code);
+        }
+
+        public static ToolResult CreateModule(object documentObject, string moduleName, string componentType, string code)
+        {
+            if (!VbaToolManifestParser.ValidIdentifier(moduleName)) return ToolResult.Fail("Invalid VBA module name.", null, "vba_module_name_invalid", false);
             if (string.IsNullOrWhiteSpace(code))
             {
                 return ToolResult.Fail("No VBA code provided.");
             }
 
+            var type = string.Equals(componentType, "ClassModule", StringComparison.OrdinalIgnoreCase) ? ClassModuleType :
+                string.Equals(componentType, "StdModule", StringComparison.OrdinalIgnoreCase) ? StdModuleType : 0;
+            if (type == 0) return ToolResult.Fail("Only StdModule and ClassModule can be created.", null, "vba_component_type_read_only", false);
+
             dynamic vbProject = GetVbaProject(documentObject);
+            if (FindComponent(vbProject, moduleName) != null) return ToolResult.Fail("VBA module already exists: " + moduleName, null, "vba_module_exists", false);
             dynamic component = null;
             try
             {
-                component = vbProject.VBComponents.Add(StdModuleType);
+                component = vbProject.VBComponents.Add(type);
                 component.Name = moduleName;
                 component.CodeModule.AddFromString(code);
                 return ToolResult.Ok("Inserted VBA module: " + moduleName, JsonConvert.SerializeObject(new
@@ -185,6 +197,18 @@ namespace RNAssistant.Office
                 }
                 throw;
             }
+        }
+
+        public static ToolResult DeleteModule(object documentObject, string moduleName)
+        {
+            dynamic vbProject = GetVbaProject(documentObject);
+            dynamic component = FindComponent(vbProject, moduleName);
+            if (component == null) return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
+            var type = (int)component.Type;
+            if (type != StdModuleType && type != ClassModuleType)
+                return ToolResult.Fail("Document modules and UserForms are read/search/patch only and cannot be deleted.", null, "vba_component_type_read_only", false);
+            vbProject.VBComponents.Remove(component);
+            return ToolResult.Ok("VBA module deleted: " + moduleName, JsonConvert.SerializeObject(new { moduleName = moduleName, type = ComponentTypeName(type) }));
         }
 
         public static string RunStringFunction(object applicationObject, string macroName, string argumentsJson)

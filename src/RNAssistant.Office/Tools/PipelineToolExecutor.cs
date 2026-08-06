@@ -5,6 +5,7 @@ using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Tools
 {
@@ -59,9 +60,24 @@ namespace RNAssistant.Office.Tools
 
         private static object ResolvePipelineValue(JToken token, IDictionary<string, object> inputArgs, IDictionary<string, ToolResult> stepResults)
         {
+            if (token == null || token.Type == JTokenType.Null) return null;
+            if (token.Type != JTokenType.String)
+            {
+                return ToolArgumentNormalizer.NormalizeToken(token);
+            }
             var value = token.Type == JTokenType.String
                 ? token.Value<string>()
                 : token.ToString(Formatting.None);
+
+            var whole = Regex.Match(value ?? string.Empty, "^\\{\\{\\s*([^}]+)\\s*\\}\\}$");
+            if (whole.Success)
+            {
+                object resolved;
+                if (TryResolvePlaceholder(whole.Groups[1].Value.Trim(), inputArgs, stepResults, out resolved))
+                {
+                    return resolved;
+                }
+            }
 
             return ReplacePlaceholders(value, inputArgs, stepResults);
         }
@@ -76,39 +92,29 @@ namespace RNAssistant.Office.Tools
             return Regex.Replace(value, "\\{\\{\\s*([^}]+)\\s*\\}\\}", match =>
             {
                 var key = match.Groups[1].Value.Trim();
-                if (key.StartsWith("args.", StringComparison.OrdinalIgnoreCase))
-                {
-                    object arg;
-                    return inputArgs != null && inputArgs.TryGetValue(key.Substring(5), out arg) && arg != null
-                        ? Convert.ToString(arg)
-                        : string.Empty;
-                }
-
-                if (key.StartsWith("steps.", StringComparison.OrdinalIgnoreCase))
-                {
-                    var parts = key.Split('.');
-                    ToolResult step;
-                    if (parts.Length >= 3 && stepResults != null && stepResults.TryGetValue(parts[1], out step))
-                    {
-                        if (string.Equals(parts[2], "message", StringComparison.OrdinalIgnoreCase))
-                        {
-                            return step.Message ?? string.Empty;
-                        }
-
-                        if (string.Equals(parts[2], "dataJson", StringComparison.OrdinalIgnoreCase))
-                        {
-                            return step.DataJson ?? string.Empty;
-                        }
-
-                        if (string.Equals(parts[2], "success", StringComparison.OrdinalIgnoreCase))
-                        {
-                            return step.Success ? "true" : "false";
-                        }
-                    }
-                }
-
-                return match.Value;
+                object resolved;
+                return TryResolvePlaceholder(key, inputArgs, stepResults, out resolved)
+                    ? Convert.ToString(resolved)
+                    : match.Value;
             });
+        }
+
+        private static bool TryResolvePlaceholder(string key, IDictionary<string, object> inputArgs, IDictionary<string, ToolResult> stepResults, out object value)
+        {
+            value = null;
+            if (key.StartsWith("args.", StringComparison.OrdinalIgnoreCase))
+            {
+                return inputArgs != null && inputArgs.TryGetValue(key.Substring(5), out value);
+            }
+            if (!key.StartsWith("steps.", StringComparison.OrdinalIgnoreCase)) return false;
+            var parts = key.Split('.');
+            ToolResult step;
+            if (parts.Length < 3 || stepResults == null || !stepResults.TryGetValue(parts[1], out step)) return false;
+            if (string.Equals(parts[2], "message", StringComparison.OrdinalIgnoreCase)) value = step.Message ?? string.Empty;
+            else if (string.Equals(parts[2], "dataJson", StringComparison.OrdinalIgnoreCase)) value = step.DataJson ?? string.Empty;
+            else if (string.Equals(parts[2], "success", StringComparison.OrdinalIgnoreCase)) value = step.Success;
+            else return false;
+            return true;
         }
     }
 }

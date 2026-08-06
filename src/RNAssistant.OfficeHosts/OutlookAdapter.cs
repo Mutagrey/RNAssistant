@@ -113,7 +113,7 @@ namespace RNAssistant.OfficeHosts
                 Skill("outlook.read_current_mail", "Read-only: Read selected or open mail.", "{\"maxChars\":12000}"),
                 Skill("outlook.read_selection", "Read-only: Read selected email metadata and body.", "{\"maxChars\":12000}"),
                 Skill("outlook.read_mail_by_entry_id", "Read-only: Read one mail item by EntryID.", "{\"entryId\":\"\",\"maxChars\":12000}"),
-                Skill("outlook.search_mail", "Read-only: Search recent mail in the current folder by text.", "{\"query\":\"text\",\"maxItems\":100,\"maxBodyChars\":1000}"),
+                Skill("outlook.search_mail", "Read-only: Search recent mail fields with literal or regexp matching and return field coordinates.", "{\"query\":\"text\",\"mode\":\"literal\",\"matchCase\":false,\"wholeWord\":false,\"fields\":\"subject,sender,body\",\"maxItems\":100,\"maxResults\":50,\"maxBodyChars\":1000,\"contextChars\":80}"),
                 Skill("outlook.list_attachments", "Read-only: List attachments for selected mail or EntryID.", "{\"entryId\":\"\"}"),
                 Skill("outlook.create_mail_draft", "Mutates document: Create and display a new mail draft without sending it.", "{\"to\":\"person@example.com\",\"cc\":\"\",\"bcc\":\"\",\"subject\":\"Subject\",\"body\":\"Body\"}", true, true, 1),
                 Skill("outlook.create_reply_draft", "Mutates document: Create and display a reply draft for selected mail.", "{\"body\":\"Reply body\"}", true, true, 1),
@@ -296,31 +296,42 @@ namespace RNAssistant.OfficeHosts
             }
 
             var maxItems = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxItems", 100)));
+            var maxResults = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxResults", 50)));
             var maxBodyChars = ToolArgumentReader.Int32(command.Arguments, "maxBodyChars", 1000);
+            var contextChars = Math.Max(0, Math.Min(1000, ToolArgumentReader.Int32(command.Arguments, "contextChars", 80)));
+            var requestedFields = new HashSet<string>((ToolArgumentReader.String(command.Arguments, "fields", "subject,sender,body") ?? string.Empty).Split(','), StringComparer.OrdinalIgnoreCase);
+            var options = new TextPatternOptions { Mode = ToolArgumentReader.String(command.Arguments, "mode", "literal"), MatchCase = ToolArgumentReader.Boolean(command.Arguments, "matchCase", false), WholeWord = ToolArgumentReader.Boolean(command.Arguments, "wholeWord", false) };
             var matches = new List<object>();
+            var total = 0;
             var items = folder.Items;
             items.Sort("[ReceivedTime]", true);
-            for (var i = 1; i <= items.Count && matches.Count < maxItems; i++)
+            try
             {
-                var mail = items[i] as Outlook.MailItem;
-                if (mail == null)
+                for (var i = 1; i <= items.Count && i <= maxItems; i++)
                 {
-                    continue;
+                    var mail = items[i] as Outlook.MailItem;
+                    if (mail == null) continue;
+                    var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        { "subject", mail.Subject ?? string.Empty },
+                        { "sender", (mail.SenderName ?? string.Empty) + " <" + (mail.SenderEmailAddress ?? string.Empty) + ">" },
+                        { "body", mail.Body ?? string.Empty }
+                    };
+                    foreach (var field in fields)
+                    {
+                        if (!requestedFields.Contains(field.Key)) continue;
+                        var found = TextPatternEngine.Find(field.Value, query, options, Math.Max(1, maxResults - matches.Count), contextChars);
+                        total += found.MatchCount;
+                        foreach (var match in found.Matches)
+                        {
+                            if (matches.Count >= maxResults) break;
+                            matches.Add(new { entryId = mail.EntryID, subject = mail.Subject, received = mail.ReceivedTime, field = field.Key, start = match.Index, end = match.Index + match.Length, preview = match.Preview, body = Trim(mail.Body, maxBodyChars) });
+                        }
+                    }
                 }
-
-                var haystack = (mail.Subject ?? string.Empty) + "\n" +
-                    (mail.SenderName ?? string.Empty) + "\n" +
-                    (mail.SenderEmailAddress ?? string.Empty) + "\n" +
-                    (mail.Body ?? string.Empty);
-                if (haystack.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0)
-                {
-                    continue;
-                }
-
-                matches.Add(MailPayload(mail, maxBodyChars));
+                return ToolResult.Ok("Mail search matches: " + total, JsonConvert.SerializeObject(new { folder = folder.FolderPath, matchCount = total, returnedCount = matches.Count, truncated = total > matches.Count, matches = matches }));
             }
-
-            return ToolResult.Ok("Mail search matches: " + matches.Count, JsonConvert.SerializeObject(new { folder = folder.FolderPath, messages = matches }));
+            catch (TextPatternException ex) { return ToolResult.Fail(ex.Message, null, ex.ErrorCode, false); }
         }
 
         private ToolResult ListAttachments(ToolCommand command)

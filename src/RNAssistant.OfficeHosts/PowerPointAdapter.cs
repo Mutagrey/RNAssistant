@@ -206,12 +206,14 @@ namespace RNAssistant.OfficeHosts
                 Skill("powerpoint.read_slide", "Read-only: Read text and notes from one slide.", "{\"slideIndex\":1}"),
                 Skill("powerpoint.list_slides", "Read-only: List slide titles and text previews.", "{}"),
                 Skill("powerpoint.list_shapes", "Read-only: List shapes on one slide.", "{\"slideIndex\":1}"),
+                Skill("powerpoint.search_text", "Read-only: Find literal or regexp text in slide shapes and notes with stable coordinates/hash.", "{\"query\":\"text\",\"scope\":\"deck\",\"slideIndex\":0,\"includeNotes\":true,\"mode\":\"literal\",\"matchCase\":false,\"wholeWord\":false,\"maxResults\":50,\"contextChars\":80}"),
                 Skill("powerpoint.read_speaker_notes", "Read-only: Read speaker notes from slides.", "{\"slideIndex\":0,\"maxSlides\":20}"),
                 Skill("powerpoint.add_slide", "Mutates document: Add a text slide.", "{\"title\":\"Slide title\",\"body\":\"Slide body\"}", true, true, 1),
                 Skill("powerpoint.replace_selection_text", "Mutates document: Replace text in the selected shape.", "{\"text\":\"Replacement text\"}", true, true, 2),
                 Skill("powerpoint.set_speaker_notes", "Mutates document: Set speaker notes for one slide.", "{\"slideIndex\":1,\"notes\":\"Speaker notes\"}", true, true, 1),
                 Skill("powerpoint.add_text_box", "Mutates document: Add a text box to a slide.", "{\"slideIndex\":1,\"text\":\"Text\",\"left\":60,\"top\":120,\"width\":480,\"height\":120,\"fontSize\":18}", true, true, 1),
                 Skill("powerpoint.set_shape_text", "Mutates document: Set text for a named shape or selected shape.", "{\"slideIndex\":1,\"shapeName\":\"Title 1\",\"text\":\"Replacement text\"}", true, true, 2),
+                Skill("powerpoint.replace_text", "Mutates document: Replace literal or regexp text after a matching search preview.", "{\"find\":\"old\",\"replace\":\"new\",\"scope\":\"deck\",\"slideIndex\":0,\"includeNotes\":true,\"mode\":\"literal\",\"matchCase\":false,\"wholeWord\":false,\"replaceAll\":true,\"expectedMatches\":1,\"expectedScopeSha256\":\"\",\"maxReplacements\":500}", true, false, 2, true),
                 Skill("powerpoint.add_picture", "Mutates document: Add a local picture file to a slide.", "{\"slideIndex\":1,\"path\":\"C:\\\\Temp\\\\image.png\",\"left\":60,\"top\":120,\"width\":320,\"height\":180}", true, true, 1),
                 Skill("powerpoint.add_table", "Mutates document: Add a table to a slide.", "{\"slideIndex\":1,\"rows\":2,\"columns\":2,\"values\":[[\"Header\",\"Value\"],[\"A\",\"1\"]],\"left\":60,\"top\":120,\"width\":520,\"height\":160}", true, true, 1),
                 Skill("powerpoint.duplicate_slide", "Mutates document: Duplicate one slide.", "{\"slideIndex\":1}", true, true, 1),
@@ -377,6 +379,8 @@ namespace RNAssistant.OfficeHosts
                         return ListSlides();
                     case "powerpoint.list_shapes":
                         return ListShapes(command);
+                    case "powerpoint.search_text":
+                        return SearchText(command);
                     case "powerpoint.read_speaker_notes":
                         return ReadSpeakerNotes(command);
                     case "powerpoint.add_slide":
@@ -389,6 +393,8 @@ namespace RNAssistant.OfficeHosts
                         return AddTextBox(command);
                     case "powerpoint.set_shape_text":
                         return SetShapeText(command);
+                    case "powerpoint.replace_text":
+                        return ReplaceText(command);
                     case "powerpoint.add_picture":
                         return AddPicture(command);
                     case "powerpoint.add_table":
@@ -411,6 +417,10 @@ namespace RNAssistant.OfficeHosts
                         return VbaProjectSupport.InstallPackage(RequirePresentation(), ToolArgumentReader.String(command.Arguments, "componentsJson", "[]"), ToolArgumentReader.String(command.Arguments, "marker", string.Empty));
                     case "powerpoint.vba_remove_package_internal":
                         return VbaProjectSupport.RemovePackage(RequirePresentation(), ToolArgumentReader.String(command.Arguments, "expectedComponentsJson", "{}"), ToolArgumentReader.String(command.Arguments, "expectedMarker", string.Empty));
+                    case "powerpoint.vba_create_module_internal":
+                        return VbaProjectSupport.CreateModule(RequirePresentation(), ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty), ToolArgumentReader.String(command.Arguments, "componentType", "StdModule"), ToolArgumentReader.String(command.Arguments, "code", string.Empty));
+                    case "powerpoint.vba_delete_module_internal":
+                        return VbaProjectSupport.DeleteModule(RequirePresentation(), ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty));
                     default:
                         return ToolResult.Fail("Unsupported PowerPoint tool: " + command.ToolId);
                 }
@@ -522,6 +532,129 @@ namespace RNAssistant.OfficeHosts
 
             return ToolResult.Ok("Shapes listed: " + shapes.Count, JsonConvert.SerializeObject(shapes));
         }
+
+        private ToolResult SearchText(ToolCommand command)
+        {
+            var query = ToolArgumentReader.String(command.Arguments, "query", string.Empty);
+            if (string.IsNullOrWhiteSpace(query)) return ToolResult.Fail("query is required.");
+            var maxResults = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxResults", 50)));
+            var contextChars = Math.Max(0, Math.Min(1000, ToolArgumentReader.Int32(command.Arguments, "contextChars", 80)));
+            var matches = new List<object>();
+            var hash = new StringBuilder();
+            var total = 0;
+            try
+            {
+                foreach (var target in TextTargets(command))
+                {
+                    var text = ShapeText(target.Shape);
+                    hash.Append(target.SlideIndex).Append(':').Append(target.Kind).Append(':').Append(target.Shape.Name).Append('\n').Append(text).Append('\n');
+                    var found = TextPatternEngine.Find(text, query, PatternOptions(command), Math.Max(1, maxResults - matches.Count), contextChars);
+                    total += found.MatchCount;
+                    foreach (var match in found.Matches)
+                    {
+                        if (matches.Count >= maxResults) break;
+                        matches.Add(new { slideIndex = target.SlideIndex, shapeName = target.Shape.Name, kind = target.Kind, start = match.Index, end = match.Index + match.Length, preview = match.Preview });
+                    }
+                }
+                var scopeHash = TextPatternEngine.Sha256(hash.ToString());
+                return ToolResult.Ok("PowerPoint text matches found: " + total, JsonConvert.SerializeObject(new { matchCount = total, returnedCount = matches.Count, truncated = total > matches.Count, scopeSha256 = scopeHash, contentSha256 = scopeHash, matches = matches }));
+            }
+            catch (TextPatternException ex) { return ToolResult.Fail(ex.Message, null, ex.ErrorCode, false); }
+        }
+
+        private ToolResult ReplaceText(ToolCommand command)
+        {
+            var find = ToolArgumentReader.String(command.Arguments, "find", string.Empty);
+            if (string.IsNullOrWhiteSpace(find)) return ToolResult.Fail("find is required.");
+            var replacement = ToolArgumentReader.String(command.Arguments, "replace", string.Empty);
+            var expectedMatches = ToolArgumentReader.Int32(command.Arguments, "expectedMatches", -1);
+            var expectedHash = ToolArgumentReader.String(command.Arguments, "expectedScopeSha256", string.Empty);
+            var replaceAll = ToolArgumentReader.Boolean(command.Arguments, "replaceAll", true);
+            var maxReplacements = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxReplacements", 500)));
+            if (expectedMatches < 0 || string.IsNullOrWhiteSpace(expectedHash)) return ToolResult.Fail("expectedMatches and expectedScopeSha256 from powerpoint.search_text are required.", null, "search_precondition_required", true);
+            var targets = new List<PptTextTarget>(TextTargets(command));
+            var hash = new StringBuilder();
+            var plans = new List<PptReplacementPlan>();
+            try
+            {
+                foreach (var target in targets)
+                {
+                    var text = ShapeText(target.Shape);
+                    hash.Append(target.SlideIndex).Append(':').Append(target.Kind).Append(':').Append(target.Shape.Name).Append('\n').Append(text).Append('\n');
+                    var edits = TextPatternEngine.PlanReplacements(text, find, replacement, PatternOptions(command), replaceAll, maxReplacements);
+                    if (edits.Count > 0) plans.Add(new PptReplacementPlan { Target = target, Edits = edits });
+                    if (!replaceAll && edits.Count > 0) break;
+                }
+                var total = 0;
+                foreach (var plan in plans) total += plan.Edits.Count;
+                if (!string.Equals(expectedHash, TextPatternEngine.Sha256(hash.ToString()), StringComparison.OrdinalIgnoreCase) || total != expectedMatches)
+                    return ToolResult.Fail("PowerPoint search scope changed after preview.", null, "stale_search_scope", true);
+                if (total > maxReplacements) return ToolResult.Fail("Replacement count exceeds maxReplacements=" + maxReplacements + ".", null, "replacement_limit_exceeded", false);
+                for (var p = plans.Count - 1; p >= 0; p--)
+                {
+                    var plan = plans[p];
+                    for (var e = plan.Edits.Count - 1; e >= 0; e--)
+                    {
+                        var edit = plan.Edits[e];
+                        plan.Target.Shape.TextFrame.TextRange.Characters(edit.Index + 1, edit.Length).Text = edit.Text;
+                    }
+                }
+                var verify = SearchCommand(command, find);
+                var post = SearchText(verify);
+                if (!post.Success) return post;
+                var postHash = Convert.ToString(JObject.Parse(post.DataJson ?? "{}")["scopeSha256"]);
+                var result = ToolResult.Ok("PowerPoint replacements completed: " + total + ".", JsonConvert.SerializeObject(new { replacements = total, scopeSha256 = postHash }));
+                result.Verification = new ToolVerification { ToolId = "powerpoint.search_text", ExpectedContentSha256 = postHash };
+                foreach (var pair in verify.Arguments) result.Verification.Arguments[pair.Key] = pair.Value;
+                return result;
+            }
+            catch (TextPatternException ex) { return ToolResult.Fail(ex.Message, null, ex.ErrorCode, false); }
+        }
+
+        private ToolCommand SearchCommand(ToolCommand source, string query)
+        {
+            var command = new ToolCommand { ToolId = "powerpoint.search_text" };
+            command.Arguments["query"] = query;
+            foreach (var name in new[] { "scope", "slideIndex", "includeNotes", "mode", "matchCase", "wholeWord" })
+                if (source.Arguments.ContainsKey(name)) command.Arguments[name] = source.Arguments[name];
+            command.Arguments["maxResults"] = 500; command.Arguments["contextChars"] = 80;
+            return command;
+        }
+
+        private TextPatternOptions PatternOptions(ToolCommand command)
+        {
+            return new TextPatternOptions { Mode = ToolArgumentReader.String(command.Arguments, "mode", "literal"), MatchCase = ToolArgumentReader.Boolean(command.Arguments, "matchCase", false), WholeWord = ToolArgumentReader.Boolean(command.Arguments, "wholeWord", false) };
+        }
+
+        private IEnumerable<PptTextTarget> TextTargets(ToolCommand command)
+        {
+            var presentation = RequirePresentation();
+            var scope = ToolArgumentReader.String(command.Arguments, "scope", "deck");
+            var slideIndex = ToolArgumentReader.Int32(command.Arguments, "slideIndex", 0);
+            var includeNotes = ToolArgumentReader.Boolean(command.Arguments, "includeNotes", true);
+            if (string.Equals(scope, "selection", StringComparison.OrdinalIgnoreCase))
+            {
+                var activeSlide = TryGetActiveSlide();
+                var slide = ResolveSlide(slideIndex <= 0 ? (activeSlide == null ? 1 : activeSlide.SlideIndex) : slideIndex);
+                var shape = ResolveSelectedShape(slide);
+                if (shape != null) yield return new PptTextTarget { SlideIndex = slide.SlideIndex, Kind = "shape", Shape = shape };
+                yield break;
+            }
+            foreach (PowerPoint.Slide slide in presentation.Slides)
+            {
+                if ((string.Equals(scope, "slide", StringComparison.OrdinalIgnoreCase) || slideIndex > 0) && slide.SlideIndex != slideIndex) continue;
+                foreach (PowerPoint.Shape shape in slide.Shapes)
+                    if (!string.IsNullOrEmpty(ShapeText(shape))) yield return new PptTextTarget { SlideIndex = slide.SlideIndex, Kind = "shape", Shape = shape };
+                if (includeNotes)
+                {
+                    foreach (PowerPoint.Shape shape in slide.NotesPage.Shapes)
+                        if (!string.IsNullOrEmpty(ShapeText(shape))) yield return new PptTextTarget { SlideIndex = slide.SlideIndex, Kind = "notes", Shape = shape };
+                }
+            }
+        }
+
+        private sealed class PptTextTarget { public int SlideIndex { get; set; } public string Kind { get; set; } public PowerPoint.Shape Shape { get; set; } }
+        private sealed class PptReplacementPlan { public PptTextTarget Target { get; set; } public List<TextPatternReplacement> Edits { get; set; } }
 
         private ToolResult ReadSpeakerNotes(ToolCommand command)
         {
@@ -1115,9 +1248,9 @@ namespace RNAssistant.OfficeHosts
                 && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
-        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0)
+        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool requiresConfirmation = false)
         {
-            return new ToolDefinition { Id = id, Host = "PowerPoint", Name = id, Description = description, ArgumentSchemaJson = ToolSchemaSupport.FromPropertySamples(schema), BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel };
+            return new ToolDefinition { Id = id, Host = "PowerPoint", Name = id, Description = description, ArgumentSchemaJson = ToolSchemaSupport.FromPropertySamples(schema), BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, RequiresConfirmation = requiresConfirmation };
         }
 
         private static string Trim(string text, int maxChars)

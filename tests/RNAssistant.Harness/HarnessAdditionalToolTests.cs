@@ -325,7 +325,7 @@ namespace RNAssistant.Harness
                 AssertEqual("index.html", session.HtmlWorkspace.ActiveFileId, "agent html active file");
                 AssertContains(session.HtmlWorkspace.Files[0].Content, "RNAssistantData.sales.rows", "agent html uses data");
                 AssertContains(FlattenMessages(calls[0]), "common.html_workspace_upsert_file", "prompt exposes html file tool");
-                AssertContains(FlattenMessages(calls[0]), "\"enum\":[\"html\",\"css\",\"script\"]", "prompt exposes script file kind");
+                AssertContains(FlattenMessages(calls[0]), "\"enum\":[\"html\",\"css\",\"script\",\"js\"]", "prompt exposes script file kind");
                 AssertContains(FlattenMessages(calls[0]), "window.RNAssistantData", "prompt explains data injection");
             });
         }

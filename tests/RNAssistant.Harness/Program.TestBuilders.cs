@@ -104,6 +104,7 @@ namespace RNAssistant.Harness
                     Executor = "pipeline",
                     Enabled = true,
                     RequiresConfirmation = requiresConfirmation,
+                    ArgumentSchemaJson = SheetFormalToolSchema,
                     PipelineJson = "{" +
                         "\"steps\":[" +
                         "{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}," +
@@ -124,6 +125,7 @@ namespace RNAssistant.Harness
                     Name = "Chain report",
                     Executor = "pipeline",
                     Enabled = true,
+                    ArgumentSchemaJson = EmptyFormalToolSchema,
                     PipelineJson = "{" +
                         "\"steps\":[" +
                         "{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}," +
@@ -144,6 +146,7 @@ namespace RNAssistant.Harness
                     Name = "Full report",
                     Executor = "pipeline",
                     Enabled = true,
+                    ArgumentSchemaJson = SheetFormalToolSchema,
                     PipelineJson = "{" +
                         "\"steps\":[" +
                         "{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}," +

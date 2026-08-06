@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Tools
 {
@@ -66,8 +68,16 @@ namespace RNAssistant.Office.Tools
 
         public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, bool dryRun, bool manualRun, ChatSession session, CancellationToken cancellationToken = default(CancellationToken))
         {
-            var context = new ToolExecutionContext(KnownTools(skills), settings ?? new AppSettings(), session);
-            return ExecuteCommandSafely(command, context, 0, dryRun, manualRun, cancellationToken);
+            return Execute(command, skills, settings, dryRun, manualRun, session, settings == null ? 40 : settings.MaxAgentToolSteps, cancellationToken);
+        }
+
+        public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, bool dryRun, bool manualRun, ChatSession session, int maxExecutionSteps, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            var context = new ToolExecutionContext(KnownTools(skills), settings ?? new AppSettings(), session, maxExecutionSteps);
+            var initialSteps = context.RemainingSteps;
+            var result = ExecuteCommandSafely(command, context, 0, dryRun, manualRun, cancellationToken);
+            if (result != null) result.ToolStepsConsumed = initialSteps - context.RemainingSteps;
+            return result;
         }
 
         public string VbaToolId(string suffix)
@@ -148,6 +158,17 @@ namespace RNAssistant.Office.Tools
                     false);
             }
 
+            // Host adapters own validation for their legacy built-ins. Their schemas were
+            // historically descriptive samples, so enforcing them here would be a breaking
+            // change. Authored tools and controller tools always use formal schemas.
+            var enforceFormalSchema = _controllerExecutors.ContainsKey(tool.Id ?? string.Empty) ||
+                (!tool.BuiltIn && string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase));
+            var argumentValidation = enforceFormalSchema ? ValidateCommandArguments(command, tool) : null;
+            if (argumentValidation != null)
+            {
+                return argumentValidation;
+            }
+
             var customTool = tool != null && !tool.BuiltIn ? tool : null;
             var safety = context.Safety(tool);
             if (!safety.Valid)
@@ -166,6 +187,11 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.WaitingConfirmation("Tool requires confirmation before execution: " + command.ToolId);
             }
 
+            if (!context.TryConsumeStep())
+            {
+                return ToolResult.Fail("Tool execution budget exceeded (including nested pipeline steps).", null, "tool_step_limit_exceeded", false);
+            }
+
             if (tool.MutatesDocument && !dryRun)
             {
                 var gate = MutationGate(context.Session);
@@ -181,6 +207,69 @@ namespace RNAssistant.Office.Tools
             }
 
             return ExecuteResolvedCommand(command, context, depth, dryRun, manualRun, cancellationToken, customTool);
+        }
+
+        private static ToolResult ValidateCommandArguments(ToolCommand command, ToolDefinition tool)
+        {
+            JObject schema;
+            string schemaError;
+            if (!ToolSchemaSupport.TryNormalize(tool, out schema, out schemaError))
+            {
+                return ToolResult.Fail(schemaError, null, "invalid_tool_schema", false);
+            }
+
+            JObject arguments;
+            try
+            {
+                arguments = JObject.FromObject(command.Arguments ?? new Dictionary<string, object>());
+                CoerceStructuredStrings(arguments, schema);
+            }
+            catch (JsonException ex)
+            {
+                return ToolResult.Fail("Tool arguments are invalid: " + ex.Message, null, "invalid_arguments", true);
+            }
+
+            string argumentError;
+            if (!ToolSchemaSupport.ValidateArguments(arguments, schema, true, out argumentError))
+            {
+                return ToolResult.Fail(argumentError, null, "invalid_arguments", true);
+            }
+
+            command.Arguments.Clear();
+            ToolArgumentNormalizer.AddProperties(arguments, command.Arguments);
+            return null;
+        }
+
+        private static void CoerceStructuredStrings(JObject arguments, JObject schema)
+        {
+            var properties = schema == null ? null : schema["properties"] as JObject;
+            if (arguments == null || properties == null) return;
+            foreach (var property in properties.Properties())
+            {
+                var value = arguments[property.Name];
+                var propertySchema = property.Value as JObject;
+                if (value == null || value.Type != JTokenType.String || propertySchema == null) continue;
+                var type = Convert.ToString(propertySchema["type"]);
+                if (!string.Equals(type, "array", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(type, "object", StringComparison.OrdinalIgnoreCase))
+                {
+                    var raw = value.Value<string>();
+                    bool boolean;
+                    long integer;
+                    double number;
+                    if (string.Equals(type, "boolean", StringComparison.OrdinalIgnoreCase) && bool.TryParse(raw, out boolean)) arguments[property.Name] = boolean;
+                    else if (string.Equals(type, "integer", StringComparison.OrdinalIgnoreCase) && long.TryParse(raw, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out integer)) arguments[property.Name] = integer;
+                    else if (string.Equals(type, "number", StringComparison.OrdinalIgnoreCase) && double.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out number)) arguments[property.Name] = number;
+                    continue;
+                }
+                try
+                {
+                    arguments[property.Name] = JToken.Parse(value.Value<string>());
+                }
+                catch (JsonException)
+                {
+                }
+            }
         }
 
         private ToolResult ExecuteResolvedCommand(ToolCommand command, ToolExecutionContext context, int depth, bool dryRun, bool manualRun, CancellationToken cancellationToken, ToolDefinition customTool)
@@ -399,7 +488,7 @@ namespace RNAssistant.Office.Tools
             private readonly IDictionary<string, ToolDefinition> _toolsById;
             private readonly IDictionary<string, ToolSafetyProfile> _safetyById;
 
-            public ToolExecutionContext(IReadOnlyList<ToolDefinition> tools, AppSettings settings, ChatSession session)
+            public ToolExecutionContext(IReadOnlyList<ToolDefinition> tools, AppSettings settings, ChatSession session, int maxExecutionSteps)
             {
                 Tools = tools ?? new ToolDefinition[0];
                 Settings = settings;
@@ -408,6 +497,7 @@ namespace RNAssistant.Office.Tools
                     .Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))
                     .ToDictionary(tool => tool.Id, StringComparer.OrdinalIgnoreCase);
                 _safetyById = new Dictionary<string, ToolSafetyProfile>(StringComparer.OrdinalIgnoreCase);
+                RemainingSteps = Math.Max(1, maxExecutionSteps);
             }
 
             public IReadOnlyList<ToolDefinition> Tools { get; private set; }
@@ -415,6 +505,15 @@ namespace RNAssistant.Office.Tools
             public AppSettings Settings { get; private set; }
 
             public ChatSession Session { get; private set; }
+
+            public int RemainingSteps { get; private set; }
+
+            public bool TryConsumeStep()
+            {
+                if (RemainingSteps <= 0) return false;
+                RemainingSteps -= 1;
+                return true;
+            }
 
             public ToolDefinition Find(string toolId)
             {

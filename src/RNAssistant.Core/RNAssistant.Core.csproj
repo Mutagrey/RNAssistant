@@ -97,6 +97,7 @@
     <Compile Include="Llm\ContextUsageEstimator.cs" />
     <Compile Include="Tools\ToolArgumentNormalizer.cs" />
     <Compile Include="Tools\ToolSchemaSupport.cs" />
+    <Compile Include="Tools\TextPatternEngine.cs" />
     <Compile Include="Tools\AgentDecisionSchemaBuilder.cs" />
     <Compile Include="Tools\VbaToolManifestParser.cs" />
     <Compile Include="Tools\AgentPlannerResponseParser.cs" />

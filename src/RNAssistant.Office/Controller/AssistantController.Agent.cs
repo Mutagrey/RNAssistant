@@ -103,7 +103,11 @@ namespace RNAssistant.Office
                     {
                         tools = _toolCatalog.GetVisibleTools().Where(tool => tool.Enabled).ToList();
                         var context = LoadContext(session);
-                        var skills = _skillCatalog.SelectRelevantSkills("continue confirmed agent task", context, 5);
+                        var latestUser = LatestUserMessage(session);
+                        var skillRequest = session.PendingAgentTask != null && !string.IsNullOrWhiteSpace(session.PendingAgentTask.Request)
+                            ? session.PendingAgentTask.Request
+                            : latestUser == null ? "continue confirmed agent task" : latestUser.Content;
+                        var skills = _skillCatalog.SelectRelevantSkills(skillRequest, context, 5);
                         await _chatCompletionService.ContinueAfterToolAsync(
                             CloneCommand(pending.Command),
                             result,

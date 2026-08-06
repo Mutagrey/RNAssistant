@@ -81,6 +81,7 @@ namespace RNAssistant.Core.Models
         public string Description { get; set; }
         public string ToolCallId { get; set; }
         public string ToolApiName { get; set; }
+        public ToolVerification VerificationExpectation { get; set; }
         public Dictionary<string, object> Arguments { get; set; }
 
         public ToolCommand()
@@ -94,6 +95,8 @@ namespace RNAssistant.Core.Models
         public string ToolId { get; set; }
         public Dictionary<string, object> Arguments { get; set; }
         public string ExpectedCodeSha256 { get; set; }
+        public string ExpectedContentSha256 { get; set; }
+        public string ExpectedErrorCode { get; set; }
 
         public ToolVerification()
         {
@@ -111,6 +114,7 @@ namespace RNAssistant.Core.Models
         public string Message { get; set; }
         public string DataJson { get; set; }
         public ToolVerification Verification { get; set; }
+        public int ToolStepsConsumed { get; set; }
 
         public static ToolResult Ok(string message, string dataJson = null)
         {

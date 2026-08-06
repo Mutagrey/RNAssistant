@@ -184,7 +184,7 @@ namespace RNAssistant.Office.Services
         {
             return tool != null && AgentText.ContainsAny(
                 (tool.Id ?? string.Empty) + " " + (tool.UseWhen ?? string.Empty),
-                "context", "selection", "summary", "read", "profile", "list", "search", "inspect", "get_");
+                "context", "selection", "summary", "read", "profile", "list", "search", "find", "inspect", "get_");
         }
 
         private static ToolExclusion Exclude(ToolDefinition tool, string reason, string detail)
@@ -250,6 +250,14 @@ namespace RNAssistant.Office.Services
             {
                 return AgentText.ContainsAny(id, "context", "read", "search", "mail", "attachment", "collect");
             }
+            if (route.TaskType == "text_search")
+            {
+                return AgentText.ContainsAny(id, "context", "selection", "read", "search", "find");
+            }
+            if (route.TaskType == "text_replace")
+            {
+                return AgentText.ContainsAny(id, "context", "selection", "read", "search", "find", "replace");
+            }
             if (route.TaskType == "vba")
             {
                 return AgentText.ContainsAny(id, "vba", "macro", "context");
@@ -306,7 +314,7 @@ namespace RNAssistant.Office.Services
                     ? 0
                     : 20;
             }
-            if (!tool.MutatesDocument && AgentText.ContainsAny(id, "context", "selection", "summary", "read", "profile", "list", "search"))
+            if (!tool.MutatesDocument && AgentText.ContainsAny(id, "context", "selection", "summary", "read", "profile", "list", "search", "find"))
             {
                 return 10;
             }

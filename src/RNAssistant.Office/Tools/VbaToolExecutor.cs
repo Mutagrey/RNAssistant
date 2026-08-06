@@ -32,9 +32,13 @@ namespace RNAssistant.Office.Tools
             }
 
             yield return ControllerToolDefinition.Create(ToolId("vba_list_backups"), _adapter.HostName, "Read-only: List RNAssistant VBA rollback backups for the current document.", "{}");
-            yield return ControllerToolDefinition.Create(ToolId("vba_restore_backup"), _adapter.HostName, "Mutates document: Restore a VBA module from a backupId or from the latest backup for moduleName.", "{\"backupId\":\"\",\"moduleName\":\"Module1\"}", mutatesDocument: true, agentCanRun: false, riskLevel: 3);
-            yield return ControllerToolDefinition.Create(ToolId("vba_replace_text"), _adapter.HostName, "Mutates document: Replace an exact text fragment inside one VBA module and create a rollback backup.", "{\"moduleName\":\"Module1\",\"find\":\"old code\",\"replace\":\"new code\"}", mutatesDocument: true, agentCanRun: false, riskLevel: 3);
-            yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), _adapter.HostName, "Mutates document: Apply structured VBA code patches and create a rollback backup.", "{\"moduleName\":\"Module1\",\"patch\":[{\"op\":\"replace\",\"find\":\"old\",\"text\":\"new\"},{\"op\":\"replaceLines\",\"startLine\":10,\"deleteCount\":2,\"text\":\"new code\"}]}", mutatesDocument: true, agentCanRun: false, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_list_modules"), _adapter.HostName, "Read-only: List VBA components with type, line count, and code hash.", "{}");
+            yield return ControllerToolDefinition.Create(ToolId("vba_search_code"), _adapter.HostName, "Read-only: Search literal or regexp patterns across VBA component code.", "{\"query\":\"pattern\",\"moduleName\":\"\",\"mode\":\"literal\",\"matchCase\":false,\"wholeWord\":false,\"maxResults\":100,\"contextChars\":80}");
+            yield return ControllerToolDefinition.Create(ToolId("vba_restore_backup"), _adapter.HostName, "Mutates document: Restore a VBA module from a backupId or from the latest backup for moduleName.", "{\"backupId\":\"\",\"moduleName\":\"Module1\"}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_replace_text"), _adapter.HostName, "Mutates document: Replace an exact text fragment inside one VBA module and create a rollback backup.", "{\"moduleName\":\"Module1\",\"find\":\"old code\",\"replace\":\"new code\"}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), _adapter.HostName, "Mutates document: Apply structured literal/regexp/line VBA patches and create a rollback backup.", "{\"moduleName\":\"Module1\",\"patch\":[{\"op\":\"regexReplace\",\"pattern\":\"old(.*)\",\"text\":\"new$1\",\"replaceAll\":true},{\"op\":\"replaceLines\",\"startLine\":10,\"deleteCount\":2,\"text\":\"new code\"}]}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_create_module"), _adapter.HostName, "Mutates document: Create a StdModule or ClassModule. Document modules and UserForms cannot be created.", "{\"moduleName\":\"Module1\",\"componentType\":\"StdModule\",\"code\":\"Option Explicit\"}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_delete_module"), _adapter.HostName, "Mutates document: Delete a StdModule or ClassModule after hash validation and backup. Document modules and UserForms cannot be deleted.", "{\"moduleName\":\"Module1\",\"expectedCodeSha256\":\"\"}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
         }
 
         public string ToolId(string suffix)
@@ -57,6 +61,9 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Ok("VBA backups listed.", JsonConvert.SerializeObject(_vbaBackupStore.List(_adapter.HostName, _adapter.DocumentKey)));
             }
 
+            if (string.Equals(command.ToolId, ToolId("vba_list_modules"), StringComparison.OrdinalIgnoreCase)) return ListModules();
+            if (string.Equals(command.ToolId, ToolId("vba_search_code"), StringComparison.OrdinalIgnoreCase)) return SearchCode(command);
+
             if (string.Equals(command.ToolId, ToolId("vba_restore_backup"), StringComparison.OrdinalIgnoreCase))
             {
                 return RestoreVbaBackup(command, dryRun, cancellationToken);
@@ -71,6 +78,9 @@ namespace RNAssistant.Office.Tools
             {
                 return ApplyVbaPatch(command, dryRun, cancellationToken);
             }
+
+            if (string.Equals(command.ToolId, ToolId("vba_create_module"), StringComparison.OrdinalIgnoreCase)) return CreateModule(command, dryRun);
+            if (string.Equals(command.ToolId, ToolId("vba_delete_module"), StringComparison.OrdinalIgnoreCase)) return DeleteModule(command, dryRun);
 
             return ToolResult.Fail("Unknown VBA controller tool: " + command.ToolId);
         }
@@ -247,6 +257,105 @@ namespace RNAssistant.Office.Tools
                 return backupError;
             }
             return null;
+        }
+
+        private ToolResult ListModules()
+        {
+            var read = new ToolCommand { ToolId = ToolId("vba_read_project") };
+            read.Arguments["maxChars"] = 1000000;
+            var result = _adapter.ExecuteTool(read);
+            if (result == null || !result.Success) return result ?? ToolResult.Fail("VBA project returned no result.");
+            try
+            {
+                var data = JObject.Parse(result.DataJson ?? "{}");
+                var modules = new JArray();
+                foreach (var module in (data["modules"] as JArray ?? new JArray()).OfType<JObject>())
+                {
+                    var code = (string)module["code"] ?? string.Empty;
+                    modules.Add(new JObject
+                    {
+                        ["name"] = module["name"], ["type"] = module["type"], ["lineCount"] = module["lineCount"],
+                        ["codeSha256"] = CodeSha256(code)
+                    });
+                }
+                return ToolResult.Ok("VBA modules listed: " + modules.Count + ".", JsonConvert.SerializeObject(new { modules = modules }));
+            }
+            catch (JsonException ex) { return ToolResult.Fail("Could not parse VBA project: " + ex.Message, null, "vba_read_invalid", true); }
+        }
+
+        private ToolResult SearchCode(ToolCommand command)
+        {
+            var query = ToolArgumentReader.String(command.Arguments, "query", string.Empty);
+            if (string.IsNullOrWhiteSpace(query)) return ToolResult.Fail("query is required.");
+            var moduleFilter = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
+            var maxResults = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxResults", 100)));
+            var contextChars = Math.Max(0, Math.Min(1000, ToolArgumentReader.Int32(command.Arguments, "contextChars", 80)));
+            var read = new ToolCommand { ToolId = ToolId("vba_read_project") };
+            read.Arguments["maxChars"] = 1000000;
+            var project = _adapter.ExecuteTool(read);
+            if (project == null || !project.Success) return project ?? ToolResult.Fail("VBA project returned no result.");
+            try
+            {
+                var rows = new List<object>();
+                var total = 0;
+                foreach (var module in (JObject.Parse(project.DataJson ?? "{}")["modules"] as JArray ?? new JArray()).OfType<JObject>())
+                {
+                    var name = (string)module["name"] ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(moduleFilter) && !string.Equals(name, moduleFilter, StringComparison.OrdinalIgnoreCase)) continue;
+                    var code = (string)module["code"] ?? string.Empty;
+                    var found = TextPatternEngine.Find(code, query, new TextPatternOptions { Mode = ToolArgumentReader.String(command.Arguments, "mode", "literal"), MatchCase = ToolArgumentReader.Boolean(command.Arguments, "matchCase", false), WholeWord = ToolArgumentReader.Boolean(command.Arguments, "wholeWord", false) }, Math.Max(1, maxResults - rows.Count), contextChars);
+                    total += found.MatchCount;
+                    foreach (var match in found.Matches)
+                    {
+                        if (rows.Count >= maxResults) break;
+                        var line = 1;
+                        for (var i = 0; i < match.Index && i < code.Length; i++) if (code[i] == '\n') line++;
+                        rows.Add(new { moduleName = name, componentType = (string)module["type"], line = line, start = match.Index, end = match.Index + match.Length, preview = match.Preview, codeSha256 = CodeSha256(code) });
+                    }
+                }
+                return ToolResult.Ok("VBA code matches: " + total + ".", JsonConvert.SerializeObject(new { matchCount = total, returnedCount = rows.Count, truncated = total > rows.Count, matches = rows }));
+            }
+            catch (TextPatternException ex) { return ToolResult.Fail(ex.Message, null, ex.ErrorCode, false); }
+            catch (JsonException ex) { return ToolResult.Fail("Could not parse VBA project: " + ex.Message, null, "vba_read_invalid", true); }
+        }
+
+        private ToolResult CreateModule(ToolCommand command, bool dryRun)
+        {
+            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
+            var componentType = ToolArgumentReader.String(command.Arguments, "componentType", "StdModule");
+            var code = ToolArgumentReader.String(command.Arguments, "code", string.Empty);
+            if (dryRun) return ToolResult.Ok("Dry run: would create VBA " + componentType + " " + moduleName + ".");
+            var create = new ToolCommand { ToolId = ToolId("vba_create_module_internal") };
+            create.Arguments["moduleName"] = moduleName; create.Arguments["componentType"] = componentType; create.Arguments["code"] = code;
+            var result = _adapter.ExecuteTool(create);
+            if (result != null && result.Success) result.Verification = CreateVerification(moduleName, code);
+            return result;
+        }
+
+        private ToolResult DeleteModule(ToolCommand command, bool dryRun)
+        {
+            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
+            var expectedHash = ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", string.Empty);
+            VbaModuleState module;
+            ToolResult error;
+            if (!TryReadVbaModule(moduleName, 1000000, out module, out error)) return error;
+            if (!string.Equals(module.ComponentType, "StdModule", StringComparison.OrdinalIgnoreCase) && !string.Equals(module.ComponentType, "ClassModule", StringComparison.OrdinalIgnoreCase))
+                return ToolResult.Fail("Document modules and UserForms are read/search/patch only and cannot be deleted.", null, "vba_component_type_read_only", false);
+            var currentHash = CodeSha256(module.Code);
+            if (string.IsNullOrWhiteSpace(expectedHash) || !string.Equals(expectedHash, currentHash, StringComparison.OrdinalIgnoreCase))
+                return ToolResult.Fail("VBA module hash is missing or stale. Call vba_list_modules or vba_search_code first.", JsonConvert.SerializeObject(new { moduleName = moduleName, actualCodeSha256 = currentHash }), "stale_vba_module", true);
+            if (dryRun) return ToolResult.Ok("Dry run: would delete VBA module " + moduleName + ".");
+            ToolResult backupError;
+            if (!TrySaveBackup(moduleName, module, "delete", out backupError)) return backupError;
+            var delete = new ToolCommand { ToolId = ToolId("vba_delete_module_internal") };
+            delete.Arguments["moduleName"] = moduleName;
+            var result = _adapter.ExecuteTool(delete);
+            if (result != null && result.Success)
+            {
+                result.Verification = new ToolVerification { ToolId = ToolId("vba_read_module"), ExpectedErrorCode = "vba_module_not_found" };
+                result.Verification.Arguments["moduleName"] = moduleName;
+            }
+            return result;
         }
 
         private ToolResult RestoreVbaBackup(ToolCommand command, bool dryRun, CancellationToken cancellationToken)
@@ -723,6 +832,23 @@ namespace RNAssistant.Office.Tools
                     return ReplaceAtMatch(current, find, find + text, out updated);
                 case "replacelines":
                     return ReplaceLines(current, operation, text, out updated);
+                case "regexreplace":
+                    var pattern = (string)(operation["pattern"] ?? operation["find"]);
+                    if (string.IsNullOrEmpty(pattern)) return ToolResult.Fail("regexReplace requires pattern.", null, "vba_patch_invalid", true);
+                    try
+                    {
+                        var planned = TextPatternEngine.Replace(
+                            current,
+                            pattern,
+                            text,
+                            new TextPatternOptions { Mode = "regex", MatchCase = (bool?)(operation["matchCase"]) ?? true, WholeWord = (bool?)(operation["wholeWord"]) ?? false },
+                            (bool?)(operation["replaceAll"]) ?? true,
+                            Math.Max(1, Math.Min(10000, (int?)(operation["maxReplacements"]) ?? 500)));
+                        if (planned.MatchCount == 0) return ToolResult.Fail("Patch regexp was not found.");
+                        updated = planned.Text;
+                        return ToolResult.Ok("Regexp replaced " + planned.MatchCount + " occurrence(s).");
+                    }
+                    catch (TextPatternException ex) { return ToolResult.Fail(ex.Message, null, ex.ErrorCode, false); }
                 default:
                     return ToolResult.Fail("Unsupported patch op: " + op);
             }

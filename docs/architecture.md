@@ -102,6 +102,9 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - Unsaved Office documents use the same custom document identity as saved files when custom properties are available; display names such as `Book1` are never storage keys.
 - New chat sessions remain transient until they contain a completed user/assistant exchange. Empty drafts are not written to the chat store, and document-history deletion removes every stored chat for that document without deleting the Office file.
 - JSON metadata writes use same-directory atomic replacement. Tool/skill saves reconcile only managed entries in scope and preserve broken or unrecognized entries and extra user files. Custom tool arguments require formal object JSON Schema; invalid definitions are skipped.
+- Formal schemas are also enforced immediately before controller/custom-pipeline execution, including manual runs and nested pipeline steps. Legacy host built-ins keep adapter-owned validation for backward compatibility. Exact whole-value pipeline placeholders preserve JSON primitive/array/object types.
+- Literal/regexp matching is centralized in Core `TextPatternEngine` with bounded patterns/results/replacements and a regex timeout. Excel, Word, PowerPoint, and Outlook search results expose stable coordinates; replace tools require a matching search preview (`expectedMatches` + `expectedScopeSha256`) and deterministic post-write hash verification.
+- A pipeline may declare at most 50 steps, nest at most eight levels, and shares the configured execution-step budget with every nested command in its execution graph.
 - Global VBA tools are versioned packages with `tool.json` plus `src/*.bas`/`src/*.cls`. Document-local manifests are discovered through VBProject. Temporary injection is automatic and cleaned in `finally`; persistent install requires a macro-enabled document and ownership/hash checks. See `docs/vba-tool-packages.md`.
 - Desktop COM automation must enter host adapters through `DispatchedOfficeApplicationAdapter`/`OfficeStaDispatcher`; VSTO task panes already run inside their Office host process and remain Windows-validation-only.
 - Desktop target selection uses `Auto follow` by default. `Manual` mode pins the selected working target; Excel task panes refresh on workbook activate/open/close events.
@@ -139,7 +142,8 @@ Current coverage:
 - markdown skill store/catalog/prompt separation, prompt body limiting, and agent skill-save confirmation;
 - agent custom tool save/read confirmation and validation;
 - metadata-driven mutation safety gates;
-- VBA replace/patch/restore flows plus manifest/schema/signature validation, `.bas`/`.cls` package storage, document discovery, typed positional execution, session cleanup, persistent ownership and export-normalized hashes using fake Office/VBProject objects;
+- regexp search/replace and bounded replacement fixtures, execution-time schema checks, and nested pipeline budget enforcement;
+- VBA list/search/create/delete plus literal/regexp patch/restore flows, manifest/schema/signature validation, `.bas`/`.cls` package storage, document discovery, typed positional execution, session cleanup, persistent ownership and export-normalized hashes using fake Office/VBProject objects;
 - tool catalog service merge/filter behavior;
 - prompt message trimming, context usage estimates, and basic no-network chat completion flow;
 - explicit Agent/Chat selection with Agent defaults, plain-chat prompt isolation, rebuilt history after deletion, and empty-tool preflight diagnostics;

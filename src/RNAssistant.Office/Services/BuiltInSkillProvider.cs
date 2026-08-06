@@ -17,6 +17,18 @@ namespace RNAssistant.Office.Services
                     new[] { "planning", "agent", "tools", "план", "задача" },
                     "# Task Planning\n\nUse this skill when the user asks RNAssistant to act on Office content.\n\n- Decide whether the task needs document inspection, mutation, or only prose.\n- Use existing tools exactly by id; never invent tool ids.\n- Prefer small steps with clear arguments.\n- If data is missing, inspect the document or ask a concise question.\n- Stop after the local tool result is sufficient and answer normally."),
                 Skill(
+                    "common.text_search_replace",
+                    "Text search and replace",
+                    "Find and safely replace literal or regexp text in Office content.",
+                    new[] { "search", "find", "replace", "regexp", "regex", "поиск", "замена", "регулярн" },
+                    "# Text Search and Replace\n\n- Use the host search tool before replacement and preserve its exact scope, options, matchCount, and scopeSha256.\n- Prefer literal mode unless the user needs a pattern. Use regexp capture groups only in regexp mode.\n- Keep scope as narrow as practical and review returned coordinates/previews.\n- Pass expectedMatches and expectedScopeSha256 to replacement; never guess them.\n- Regexp and bulk replacement require confirmation. If the scope changed, search again instead of bypassing the stale-scope error.\n- Verify the returned content hash after mutation."),
+                Skill(
+                    "common.vba_code_editing",
+                    "VBA code editing",
+                    "Inspect, search, patch, create, and delete VBA components safely.",
+                    new[] { "vba", "code", "patch", "regexp", "module", "макрос", "модуль" },
+                    "# VBA Code Editing\n\n- Start with vba_list_modules or vba_search_code, then read the exact target module.\n- Prefer structured vba_apply_patch over replacing the whole module. regexReplace supports bounded regexp changes and capture groups.\n- Every mutation creates a backup and requires confirmation; verify the code hash afterward.\n- Create/delete is limited to StdModule and ClassModule. Document modules and UserForms are read/search/patch only.\n- For delete, pass the current codeSha256 from list/search and never bypass a stale hash."),
+                Skill(
                     "common.tool_authoring",
                     "Tool authoring",
                     "Design reusable pipeline or VBA tools safely.",

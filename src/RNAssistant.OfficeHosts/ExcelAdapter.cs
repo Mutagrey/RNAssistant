@@ -201,13 +201,14 @@ namespace RNAssistant.OfficeHosts
                 Skill("excel.read_range", "Read-only: Read worksheet values from an A1 range.", "{\"sheet\":\"\",\"address\":\"A1:D20\"}"),
                 Skill("excel.read_formula_range", "Read-only: Read formulas from an A1 range.", "{\"sheet\":\"\",\"address\":\"A1:D20\"}"),
                 Skill("excel.profile_range", "Read-only: Profile a range or selection for dimensions, blanks, formulas, headers, and numeric columns.", "{\"sheet\":\"\",\"address\":\"\"}"),
-                Skill("excel.find_cells", "Read-only: Find cells whose value or formula contains query text.", "{\"sheet\":\"\",\"query\":\"text\",\"lookIn\":\"values\",\"maxResults\":50}"),
+                Skill("excel.find_cells", "Read-only: Find literal or regexp matches in cell values or formulas and return stable scope coordinates/hash.", "{\"sheet\":\"\",\"address\":\"\",\"scope\":\"workbook\",\"query\":\"text\",\"mode\":\"literal\",\"matchCase\":false,\"wholeWord\":false,\"lookIn\":\"values\",\"maxResults\":50,\"contextChars\":80}"),
                 Skill("excel.create_chat_chart", "Read-only: Create an interactive chart artifact in chat from a selection or range.", "{\"sheet\":\"\",\"address\":\"\",\"chartType\":\"auto\",\"title\":\"Chart title\"}"),
                 Skill("excel.list_charts", "Read-only: List chart objects in the workbook or one sheet.", "{\"sheet\":\"\"}"),
                 Skill("excel.get_chart", "Read-only: Read one worksheet chart, including its title, axes, series, position, and size.", "{\"sheet\":\"\",\"chartName\":\"Chart 1\"}"),
                 Skill("excel.list_tables", "Read-only: List Excel tables in the workbook or one sheet.", "{\"sheet\":\"\"}"),
                 Skill("excel.list_names", "Read-only: List workbook defined names.", "{}"),
                 Skill("excel.list_shapes", "Read-only: List shapes in the workbook or one sheet.", "{\"sheet\":\"\"}"),
+                Skill("excel.replace_cells", "Mutates document: Replace literal or regexp matches in scoped text constants or formulas after a matching search preview.", "{\"sheet\":\"\",\"address\":\"\",\"scope\":\"range\",\"find\":\"old\",\"replace\":\"new\",\"mode\":\"literal\",\"matchCase\":false,\"wholeWord\":false,\"lookIn\":\"values\",\"replaceAll\":true,\"expectedMatches\":1,\"expectedScopeSha256\":\"\",\"maxReplacements\":500}", true, false, 2, true),
                 Skill("excel.write_range", "Mutates document: Write one scalar value to a worksheet range.", "{\"sheet\":\"\",\"address\":\"A1\",\"value\":\"text\"}", true, true, 2),
                 Skill("excel.write_table", "Mutates document: Write a 2D JSON array to a worksheet starting at a cell.", "{\"sheet\":\"\",\"startAddress\":\"A1\",\"values\":[[\"Header\",\"Value\"],[\"A\",1]]}", true, true, 2),
                 Skill("excel.set_formula", "Mutates document: Write one formula to a worksheet range.", "{\"sheet\":\"\",\"address\":\"B2\",\"formula\":\"=SUM(A1:A10)\"}", true, true, 2),
@@ -365,6 +366,8 @@ namespace RNAssistant.OfficeHosts
                         return ProfileRange(command);
                     case "excel.find_cells":
                         return FindCells(command);
+                    case "excel.replace_cells":
+                        return ReplaceCells(command);
                     case "excel.create_chat_chart":
                         return CreateChatChart(command);
                     case "excel.list_charts":
@@ -419,6 +422,10 @@ namespace RNAssistant.OfficeHosts
                         return VbaProjectSupport.InstallPackage(RequireWorkbook(), ToolArgumentReader.String(command.Arguments, "componentsJson", "[]"), ToolArgumentReader.String(command.Arguments, "marker", string.Empty));
                     case "excel.vba_remove_package_internal":
                         return VbaProjectSupport.RemovePackage(RequireWorkbook(), ToolArgumentReader.String(command.Arguments, "expectedComponentsJson", "{}"), ToolArgumentReader.String(command.Arguments, "expectedMarker", string.Empty));
+                    case "excel.vba_create_module_internal":
+                        return VbaProjectSupport.CreateModule(RequireWorkbook(), ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty), ToolArgumentReader.String(command.Arguments, "componentType", "StdModule"), ToolArgumentReader.String(command.Arguments, "code", string.Empty));
+                    case "excel.vba_delete_module_internal":
+                        return VbaProjectSupport.DeleteModule(RequireWorkbook(), ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty));
                     default:
                         return ToolResult.Fail("Unsupported Excel tool: " + command.ToolId);
                 }
@@ -577,48 +584,156 @@ namespace RNAssistant.OfficeHosts
         private ToolResult FindCells(ToolCommand command)
         {
             var sheetFilter = ToolArgumentReader.String(command.Arguments, "sheet", string.Empty);
+            var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
+            var scope = ToolArgumentReader.String(command.Arguments, "scope", string.IsNullOrWhiteSpace(sheetFilter) ? "workbook" : "sheet");
             var query = ToolArgumentReader.String(command.Arguments, "query", string.Empty);
             var lookIn = ToolArgumentReader.String(command.Arguments, "lookIn", "values");
             var maxResults = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxResults", 50)));
+            var contextChars = Math.Max(0, Math.Min(1000, ToolArgumentReader.Int32(command.Arguments, "contextChars", 80)));
             if (string.IsNullOrWhiteSpace(query))
             {
                 return ToolResult.Fail("query is required.");
             }
 
-            var workbook = RequireWorkbook();
+            var options = PatternOptions(command);
             var matches = new List<object>();
-            foreach (Excel.Worksheet sheet in workbook.Worksheets)
+            var hashBuilder = new StringBuilder();
+            var total = 0;
+            try
             {
-                if (!string.IsNullOrWhiteSpace(sheetFilter) &&
-                    !string.Equals(sheet.Name, sheetFilter, StringComparison.OrdinalIgnoreCase))
+                foreach (var item in SearchRanges(scope, sheetFilter, address))
                 {
-                    continue;
-                }
-
-                foreach (Excel.Range cell in sheet.UsedRange.Cells)
-                {
-                    var value = string.Equals(lookIn, "formulas", StringComparison.OrdinalIgnoreCase)
-                        ? Convert.ToString(cell.Formula)
-                        : Convert.ToString(cell.Value2);
-                    if (value != null && value.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
+                    foreach (Excel.Range cell in item.Range.Cells)
                     {
-                        matches.Add(new
+                        var value = Convert.ToString(cell.Value2) ?? string.Empty;
+                        var formula = Convert.ToString(cell.Formula) ?? string.Empty;
+                        hashBuilder.Append(item.Sheet.Name).Append('!').Append(cell.Address[false, false]).Append('\n').Append(value).Append('\n').Append(formula).Append('\n');
+                        var fields = string.Equals(lookIn, "both", StringComparison.OrdinalIgnoreCase)
+                            ? new[] { new { Name = "value", Text = value }, new { Name = "formula", Text = formula } }
+                            : new[] { new { Name = string.Equals(lookIn, "formulas", StringComparison.OrdinalIgnoreCase) ? "formula" : "value", Text = string.Equals(lookIn, "formulas", StringComparison.OrdinalIgnoreCase) ? formula : value } };
+                        foreach (var field in fields)
                         {
-                            sheet = sheet.Name,
-                            address = cell.Address[false, false],
-                            value = Convert.ToString(cell.Value2),
-                            formula = Convert.ToString(cell.Formula)
-                        });
-                        if (matches.Count >= maxResults)
-                        {
-                            return ToolResult.Ok("Cells found: " + matches.Count, JsonConvert.SerializeObject(matches));
+                            var found = TextPatternEngine.Find(field.Text, query, options, Math.Max(1, maxResults - matches.Count), contextChars);
+                            total += found.MatchCount;
+                            foreach (var match in found.Matches)
+                            {
+                                if (matches.Count >= maxResults) break;
+                                matches.Add(new { sheet = item.Sheet.Name, address = cell.Address[false, false], field = field.Name, start = match.Index, end = match.Index + match.Length, value = value, formula = formula, preview = match.Preview });
+                            }
                         }
                     }
                 }
+                var scopeHash = TextPatternEngine.Sha256(hashBuilder.ToString());
+                return ToolResult.Ok("Cells found: " + total, JsonConvert.SerializeObject(new { query = query, mode = options.Mode, scope = scope, matchCount = total, returnedCount = matches.Count, truncated = total > matches.Count, scopeSha256 = scopeHash, contentSha256 = scopeHash, matches = matches }));
             }
-
-            return ToolResult.Ok("Cells found: " + matches.Count, JsonConvert.SerializeObject(matches));
+            catch (TextPatternException ex)
+            {
+                return ToolResult.Fail(ex.Message, null, ex.ErrorCode, false);
+            }
         }
+
+        private ToolResult ReplaceCells(ToolCommand command)
+        {
+            var scope = ToolArgumentReader.String(command.Arguments, "scope", "range");
+            var sheet = ToolArgumentReader.String(command.Arguments, "sheet", string.Empty);
+            var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
+            var find = ToolArgumentReader.String(command.Arguments, "find", string.Empty);
+            var replacement = ToolArgumentReader.String(command.Arguments, "replace", string.Empty);
+            var lookIn = ToolArgumentReader.String(command.Arguments, "lookIn", "values");
+            if (string.Equals(lookIn, "both", StringComparison.OrdinalIgnoreCase)) return ToolResult.Fail("replace_cells lookIn must be values or formulas.", null, "invalid_arguments", false);
+            var expectedMatches = ToolArgumentReader.Int32(command.Arguments, "expectedMatches", -1);
+            var expectedHash = ToolArgumentReader.String(command.Arguments, "expectedScopeSha256", string.Empty);
+            var replaceAll = ToolArgumentReader.Boolean(command.Arguments, "replaceAll", true);
+            var maxReplacements = Math.Max(1, Math.Min(10000, ToolArgumentReader.Int32(command.Arguments, "maxReplacements", 500)));
+            if (expectedMatches < 0 || string.IsNullOrWhiteSpace(expectedHash)) return ToolResult.Fail("expectedMatches and expectedScopeSha256 from excel.find_cells are required.", null, "search_precondition_required", true);
+
+            var options = PatternOptions(command);
+            var targets = new List<ExcelCellReplacement>();
+            var hashBuilder = new StringBuilder();
+            try
+            {
+                foreach (var item in SearchRanges(scope, sheet, address))
+                {
+                    foreach (Excel.Range cell in item.Range.Cells)
+                    {
+                        var value = Convert.ToString(cell.Value2) ?? string.Empty;
+                        var formula = Convert.ToString(cell.Formula) ?? string.Empty;
+                        hashBuilder.Append(item.Sheet.Name).Append('!').Append(cell.Address[false, false]).Append('\n').Append(value).Append('\n').Append(formula).Append('\n');
+                        if (string.Equals(lookIn, "values", StringComparison.OrdinalIgnoreCase) && Convert.ToBoolean(cell.HasFormula)) continue;
+                        var current = string.Equals(lookIn, "formulas", StringComparison.OrdinalIgnoreCase) ? formula : value;
+                        var replaced = TextPatternEngine.Replace(current, find, replacement, options, replaceAll, maxReplacements);
+                        if (replaced.MatchCount > 0) targets.Add(new ExcelCellReplacement { Cell = cell, Formula = string.Equals(lookIn, "formulas", StringComparison.OrdinalIgnoreCase), Text = replaced.Text, Count = replaced.MatchCount });
+                    }
+                }
+                var currentHash = TextPatternEngine.Sha256(hashBuilder.ToString());
+                var total = targets.Sum(target => target.Count);
+                if (!string.Equals(expectedHash, currentHash, StringComparison.OrdinalIgnoreCase)) return ToolResult.Fail("Excel search scope changed after preview.", null, "stale_search_scope", true);
+                if (total != expectedMatches) return ToolResult.Fail("Excel match count changed after preview: expected " + expectedMatches + " but found " + total + ".", null, "stale_search_scope", true);
+                if (total > maxReplacements) return ToolResult.Fail("Replacement count exceeds maxReplacements=" + maxReplacements + ".", null, "replacement_limit_exceeded", false);
+                foreach (var target in targets)
+                {
+                    if (target.Formula) target.Cell.Formula = target.Text;
+                    else target.Cell.Value2 = target.Text;
+                }
+
+                var verifyCommand = new ToolCommand { ToolId = "excel.find_cells" };
+                verifyCommand.Arguments["query"] = find;
+                foreach (var name in new[] { "sheet", "address", "scope", "mode", "matchCase", "wholeWord", "lookIn" })
+                    if (command.Arguments.ContainsKey(name)) verifyCommand.Arguments[name] = command.Arguments[name];
+                verifyCommand.Arguments["maxResults"] = 500;
+                verifyCommand.Arguments["contextChars"] = 80;
+                var post = FindCells(verifyCommand);
+                if (!post.Success) return post;
+                var postJson = JObject.Parse(post.DataJson ?? "{}");
+                var postHash = (string)postJson["scopeSha256"];
+                var result = ToolResult.Ok("Excel replacements completed: " + total + ".", JsonConvert.SerializeObject(new { replacements = total, scopeSha256 = postHash }));
+                result.Verification = new ToolVerification { ToolId = "excel.find_cells", ExpectedContentSha256 = postHash };
+                foreach (var pair in verifyCommand.Arguments) result.Verification.Arguments[pair.Key] = pair.Value;
+                return result;
+            }
+            catch (TextPatternException ex)
+            {
+                return ToolResult.Fail(ex.Message, null, ex.ErrorCode, false);
+            }
+        }
+
+        private TextPatternOptions PatternOptions(ToolCommand command)
+        {
+            return new TextPatternOptions
+            {
+                Mode = ToolArgumentReader.String(command.Arguments, "mode", "literal"),
+                MatchCase = ToolArgumentReader.Boolean(command.Arguments, "matchCase", false),
+                WholeWord = ToolArgumentReader.Boolean(command.Arguments, "wholeWord", false)
+            };
+        }
+
+        private IEnumerable<ExcelSearchRange> SearchRanges(string scope, string sheetName, string address)
+        {
+            var workbook = RequireWorkbook();
+            if (string.Equals(scope, "selection", StringComparison.OrdinalIgnoreCase))
+            {
+                var selected = ResolveSelectionRange(workbook);
+                if (selected == null) throw new InvalidOperationException("No Excel range is selected.");
+                yield return new ExcelSearchRange { Sheet = (Excel.Worksheet)selected.Worksheet, Range = selected };
+                yield break;
+            }
+            if (string.Equals(scope, "range", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(address)) throw new InvalidOperationException("address is required for range scope.");
+                var rangeSheet = ResolveSheet(sheetName);
+                yield return new ExcelSearchRange { Sheet = rangeSheet, Range = rangeSheet.Range[address] };
+                yield break;
+            }
+            foreach (Excel.Worksheet candidate in workbook.Worksheets)
+            {
+                if (!string.IsNullOrWhiteSpace(sheetName) && !string.Equals(candidate.Name, sheetName, StringComparison.OrdinalIgnoreCase)) continue;
+                yield return new ExcelSearchRange { Sheet = candidate, Range = candidate.UsedRange };
+                if (string.Equals(scope, "sheet", StringComparison.OrdinalIgnoreCase)) yield break;
+            }
+        }
+
+        private sealed class ExcelSearchRange { public Excel.Worksheet Sheet { get; set; } public Excel.Range Range { get; set; } }
+        private sealed class ExcelCellReplacement { public Excel.Range Cell { get; set; } public bool Formula { get; set; } public string Text { get; set; } public int Count { get; set; } }
 
         private ToolResult ListCharts(ToolCommand command)
         {
@@ -1436,9 +1551,9 @@ namespace RNAssistant.OfficeHosts
                 && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
-        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0)
+        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool requiresConfirmation = false)
         {
-            return new ToolDefinition { Id = id, Host = "Excel", Name = id, Description = description, ArgumentSchemaJson = ToolSchemaSupport.FromPropertySamples(schema), BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel };
+            return new ToolDefinition { Id = id, Host = "Excel", Name = id, Description = description, ArgumentSchemaJson = ToolSchemaSupport.FromPropertySamples(schema), BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, RequiresConfirmation = requiresConfirmation };
         }
 
         private static List<List<object>> RangeToRows(Excel.Range range)

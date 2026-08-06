@@ -47,7 +47,10 @@ namespace RNAssistant.Office.Services
                 var verify = CopyArgs(new ToolCommand { ToolId = vbaReadToolId, Description = "Deterministic VBA verification" }, command, "moduleName");
                 if (command.Arguments.ContainsKey("code"))
                 {
-                    verify.Arguments["__expectedCodeSha256"] = VbaToolExecutor.CodeSha256(Convert.ToString(command.Arguments["code"]));
+                    verify.VerificationExpectation = new ToolVerification
+                    {
+                        ExpectedCodeSha256 = VbaToolExecutor.CodeSha256(Convert.ToString(command.Arguments["code"]))
+                    };
                 }
                 yield return verify;
                 yield break;
@@ -133,10 +136,7 @@ namespace RNAssistant.Office.Services
             {
                 command.Arguments[pair.Key] = pair.Value;
             }
-            if (!string.IsNullOrWhiteSpace(spec.ExpectedCodeSha256))
-            {
-                command.Arguments["__expectedCodeSha256"] = spec.ExpectedCodeSha256;
-            }
+            command.VerificationExpectation = spec;
             return command;
         }
 
@@ -251,13 +251,35 @@ namespace RNAssistant.Office.Services
     {
         public static ToolResult Validate(ToolCommand mutation, ToolCommand verification, ToolResult result)
         {
-            if (mutation == null || verification == null || result == null || !result.Success)
+            if (mutation == null || verification == null || result == null)
+            {
+                return result;
+            }
+
+            var expectation = verification.VerificationExpectation;
+            if (expectation != null && !string.IsNullOrWhiteSpace(expectation.ExpectedErrorCode))
+            {
+                return !result.Success && string.Equals(result.ErrorCode, expectation.ExpectedErrorCode, StringComparison.OrdinalIgnoreCase)
+                    ? ToolResult.Ok("Verification confirmed expected state: " + expectation.ExpectedErrorCode + ".", result.DataJson)
+                    : ToolResult.Fail("Verification expected error " + expectation.ExpectedErrorCode + " but received " + (result.ErrorCode ?? result.Status) + ".", result.DataJson, "verification_expected_error_mismatch", true);
+            }
+            if (!result.Success)
             {
                 return result;
             }
 
             try
             {
+                if (expectation != null && !string.IsNullOrWhiteSpace(expectation.ExpectedContentSha256))
+                {
+                    var payload = JObject.Parse(result.DataJson ?? "{}");
+                    var actualContentHash = (string)payload["contentSha256"];
+                    if (!string.Equals(expectation.ExpectedContentSha256, actualContentHash, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return ToolResult.Fail("Content verification failed: content hash does not match the expected post-mutation state.", result.DataJson, "content_verification_mismatch", true);
+                    }
+                }
+
                 if (string.Equals(verification.ToolId, "excel.get_chart", StringComparison.OrdinalIgnoreCase))
                 {
                     var actual = JObject.Parse(result.DataJson ?? "{}");
@@ -281,7 +303,7 @@ namespace RNAssistant.Office.Services
                 if (Contains(verification.ToolId, "vba_read_module"))
                 {
                     var actual = JObject.Parse(result.DataJson ?? "{}");
-                    var expectedHash = Argument(verification, "__expectedCodeSha256");
+                    var expectedHash = expectation == null ? string.Empty : expectation.ExpectedCodeSha256;
                     if (string.IsNullOrWhiteSpace(expectedHash) && mutation.Arguments.ContainsKey("code"))
                     {
                         expectedHash = VbaToolExecutor.CodeSha256(Argument(mutation, "code"));
