@@ -29,6 +29,8 @@ namespace RNAssistant.Office.Services
 
             var budget = ModelContextBudget.InputBudgetTokens(settings);
             var currentText = BuildCurrentText(userText, context, Math.Max(256, budget / 3));
+            var artifactIndex = ChatArtifactService.BuildPromptIndex(session, Math.Max(256, Math.Min(2000, budget / 10)));
+            if (!string.IsNullOrWhiteSpace(artifactIndex)) currentText += "\n\n" + artifactIndex;
             if (string.Equals(instructionRole, "user", StringComparison.Ordinal))
             {
                 currentText = instruction + "\n\n" + currentText;

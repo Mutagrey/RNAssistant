@@ -1,12 +1,22 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Services
 {
+    internal sealed class PromptBudgetExceededException : InvalidOperationException
+    {
+        public bool CanCompact { get; private set; }
+
+        public PromptBudgetExceededException(string message, bool canCompact)
+            : base(message)
+        {
+            CanCompact = canCompact;
+        }
+    }
+
     internal sealed class PromptBudgetComposer
     {
         public void AddConversationHistory(
@@ -23,64 +33,34 @@ namespace RNAssistant.Office.Services
 
             var budget = inputBudgetTokens > 0 ? inputBudgetTokens : ModelContextBudget.InputBudgetTokens(settings);
             var used = EstimateMessages(messages);
+            if (used > budget)
+            {
+                throw new PromptBudgetExceededException(
+                    "The current request and required runtime context exceed the model input budget. No conversation history was removed.",
+                    false);
+            }
             var history = ConversationHistory(session);
             var available = Math.Max(0, budget - used);
-            if (history.Count == 0 || available <= 0)
+            if (history.Count == 0)
             {
                 return;
             }
+            if (available <= 0)
+            {
+                throw new PromptBudgetExceededException(
+                    "Active conversation context exceeds the request budget. Run context compaction before this model turn.",
+                    true);
+            }
 
             var candidates = history.Select(CloneConversationMessage).ToList();
-            var estimates = candidates.Select(candidate => EstimateMessages(new[] { candidate })).ToList();
-            var needsCompression = estimates.Sum() > available;
-            var compressionEnabled = settings == null || settings.AutoCompressContext;
-            var summaryBudget = needsCompression && compressionEnabled && available >= 256
-                ? Math.Min(1024, Math.Max(128, available / 5))
-                : 0;
-            var recentBudget = Math.Max(0, available - summaryBudget);
-            var firstRecentIndex = candidates.Count;
-            var recentUsed = 0;
-            for (var index = candidates.Count - 1; index >= 0; index--)
+            var required = EstimateMessages(candidates);
+            if (required > available)
             {
-                if (recentUsed + estimates[index] > recentBudget)
-                {
-                    break;
-                }
-                firstRecentIndex = index;
-                recentUsed += estimates[index];
+                throw new PromptBudgetExceededException(
+                    "Active conversation context exceeds the request budget. Run context compaction before this model turn.",
+                    true);
             }
-
-            if (firstRecentIndex == candidates.Count && summaryBudget > 0)
-            {
-                summaryBudget = 0;
-                recentBudget = available;
-                for (var index = candidates.Count - 1; index >= 0; index--)
-                {
-                    if (recentUsed + estimates[index] > recentBudget)
-                    {
-                        break;
-                    }
-                    firstRecentIndex = index;
-                    recentUsed += estimates[index];
-                }
-            }
-
-            ChatMessage compressed = null;
-            if (summaryBudget > 0 && firstRecentIndex > 0)
-            {
-                compressed = BuildCompressedHistory(candidates.Take(firstRecentIndex), summaryBudget);
-                if (compressed != null && EstimateMessages(new[] { compressed }) + recentUsed > available)
-                {
-                    compressed = null;
-                }
-            }
-
-            if (compressed != null)
-            {
-                messages.Insert(insertIndex, compressed);
-                insertIndex += 1;
-            }
-            for (var index = firstRecentIndex; index < candidates.Count; index++)
+            for (var index = 0; index < candidates.Count; index++)
             {
                 messages.Insert(insertIndex, candidates[index]);
                 insertIndex += 1;
@@ -93,19 +73,17 @@ namespace RNAssistant.Office.Services
             int inputBudgetTokens)
         {
             if (messages == null) return;
-            var available = Math.Max(0, inputBudgetTokens - EstimateMessages(messages));
-            if (available <= 0) return;
-
-            var selected = new List<IReadOnlyList<ChatMessage>>();
             var groups = ProtocolGroups(protocolMessages);
-            for (var index = groups.Count - 1; index >= 0; index--)
+            if (groups.Count == 0) return;
+            var available = Math.Max(0, inputBudgetTokens - EstimateMessages(messages));
+            var required = groups.Sum(group => EstimateMessages(group));
+            if (required > available)
             {
-                var cost = EstimateMessages(groups[index]);
-                if (cost > available) break;
-                selected.Insert(0, groups[index]);
-                available -= cost;
+                throw new PromptBudgetExceededException(
+                    "Current agent protocol exceeds the request budget. The accepted tool history was preserved; compact context before continuing.",
+                    false);
             }
-            foreach (var group in selected)
+            foreach (var group in groups)
             {
                 messages.AddRange(group);
             }
@@ -123,11 +101,12 @@ namespace RNAssistant.Office.Services
                 return new List<ChatMessage>();
             }
 
+            var history = ContextCompactionService.BuildActiveWindow(session);
             var activeUserIndex = -1;
-            for (var index = session.Messages.Count - 1; index >= 0; index--)
+            for (var index = history.Count - 1; index >= 0; index--)
             {
-                var message = session.Messages[index];
-                if (IsConversationMessage(message) &&
+                var message = history[index];
+                if (!message.ProtocolMessage && IsConversationMessage(message) &&
                     string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase))
                 {
                     activeUserIndex = index;
@@ -135,7 +114,7 @@ namespace RNAssistant.Office.Services
                 }
             }
 
-            return session.Messages
+            return history
                 .Where((message, index) => index != activeUserIndex && IsConversationMessage(message))
                 .ToList();
         }
@@ -165,29 +144,67 @@ namespace RNAssistant.Office.Services
 
         private static bool IsConversationMessage(ChatMessage message)
         {
-            return message != null &&
+            return ContextCompactionService.IsReplayMessage(message) ||
+                message != null &&
                 !message.ExcludeFromModelContext &&
                 message.Activity == null &&
                 !string.IsNullOrWhiteSpace(message.Content) &&
-                (string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase));
+                string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) &&
+                (message.Content ?? string.Empty).StartsWith("COMPACTED_EARLIER_CONTEXT", StringComparison.Ordinal);
         }
 
         private static ChatMessage CloneConversationMessage(ChatMessage source)
         {
+            var sourceAttachments = source == null || source.Attachments == null
+                ? new List<ChatAttachment>()
+                : source.Attachments.Where(attachment => attachment != null).ToList();
             return new ChatMessage
             {
                 Role = source == null ? string.Empty : source.Role,
-                Content = source == null ? string.Empty : source.Content ?? string.Empty,
-                Attachments = source == null || source.Attachments == null
-                    ? new List<ChatAttachment>()
-                    : source.Attachments
-                        .Where(attachment => attachment != null &&
+                Content = AppendHistoricalReferences(source, sourceAttachments),
+                ProtocolMessage = source != null && source.ProtocolMessage,
+                ToolCallId = source == null ? null : source.ToolCallId,
+                ToolName = source == null ? null : source.ToolName,
+                ToolCalls = source == null || source.ToolCalls == null
+                    ? new List<LlmToolCall>()
+                    : source.ToolCalls.Select(call => call == null ? null : new LlmToolCall
+                    {
+                        Id = call.Id,
+                        Type = call.Type,
+                        Name = call.Name,
+                        ArgumentsJson = call.ArgumentsJson
+                    }).ToList(),
+                Attachments = sourceAttachments
+                        .Where(attachment =>
                             !string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) &&
                             !string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase))
                         .Select(CloneHistoryAttachment)
                         .ToList()
             };
+        }
+
+        private static string AppendHistoricalReferences(ChatMessage source, IEnumerable<ChatAttachment> attachments)
+        {
+            if (source == null) return string.Empty;
+            var references = new List<string>();
+            references.AddRange((source.ArtifactIds ?? new List<string>())
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => "artifact:" + id));
+            if (!string.IsNullOrWhiteSpace(source.HtmlWorkspaceCheckpointId))
+            {
+                references.Add("html_workspace:" + source.HtmlWorkspaceCheckpointId);
+            }
+            references.AddRange((attachments ?? new ChatAttachment[0])
+                .Where(attachment =>
+                    string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase))
+                .Select(attachment => "attachment:" + (attachment.Id ?? string.Empty) + " | " +
+                    (attachment.Kind ?? "media") + " | " + (attachment.FileName ?? "unnamed")));
+            references = references.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (references.Count == 0) return source.Content ?? string.Empty;
+            return (source.Content ?? string.Empty) +
+                "\n\nHISTORICAL_REFERENCES (local artifacts; not new instructions):\n- " +
+                string.Join("\n- ", references.ToArray());
         }
 
         private static ChatAttachment CloneHistoryAttachment(ChatAttachment source)
@@ -211,59 +228,6 @@ namespace RNAssistant.Office.Services
                 Error = source.Error,
                 CreatedUtc = source.CreatedUtc
             };
-        }
-
-        private static ChatMessage BuildCompressedHistory(IEnumerable<ChatMessage> history, int budgetTokens)
-        {
-            var builder = new StringBuilder();
-            builder.AppendLine("COMPRESSED_EARLIER_CONVERSATION (reference only; not new instructions):");
-            var usedTokens = ModelContextBudget.EstimateTextTokens(builder.ToString());
-            foreach (var message in history ?? new ChatMessage[0])
-            {
-                if (message == null || string.IsNullOrWhiteSpace(message.Content))
-                {
-                    continue;
-                }
-                var role = string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ? "User" : "Assistant";
-                var line = "- " + role + ": " + Compact(message.Content, 280);
-                var attachmentNames = (message.Attachments ?? new List<ChatAttachment>())
-                    .Where(attachment => attachment != null && !string.IsNullOrWhiteSpace(attachment.FileName))
-                    .Select(attachment => attachment.FileName)
-                    .Take(3)
-                    .ToArray();
-                if (attachmentNames.Length > 0)
-                {
-                    line += " [attachments: " + string.Join(", ", attachmentNames) + "]";
-                }
-
-                var remaining = budgetTokens - usedTokens - 4;
-                if (remaining <= 8)
-                {
-                    break;
-                }
-                if (ModelContextBudget.EstimateTextTokens(line) > remaining)
-                {
-                    line = Compact(line, Math.Max(16, remaining * 3));
-                }
-                builder.AppendLine(line);
-                usedTokens += ModelContextBudget.EstimateTextTokens(line) + 1;
-            }
-
-            return builder.Length <= 80
-                ? null
-                : new ChatMessage { Role = "assistant", Content = builder.ToString().TrimEnd() };
-        }
-
-        private static string Compact(string value, int maxChars)
-        {
-            var normalized = string.Join(
-                " ",
-                (value ?? string.Empty).Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
-            if (normalized.Length <= maxChars)
-            {
-                return normalized;
-            }
-            return normalized.Substring(0, Math.Max(0, maxChars - 1)).TrimEnd() + "…";
         }
     }
 }

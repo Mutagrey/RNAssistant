@@ -161,8 +161,6 @@ function applyEditedMessagePreview(target, text) {
   state.liveActivity = null;
   state.liveAgentRun = null;
   state.liveStreamContent = null;
-  state.htmlWorkspace = { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [] };
-  state.htmlWorkspaceDirty = false;
   updateEstimatedContextUsage();
   renderMessages();
   renderContextMeter();

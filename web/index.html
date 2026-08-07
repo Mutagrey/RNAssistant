@@ -34,6 +34,7 @@
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260702-2">
+  <link rel="stylesheet" href="css/app-artifacts.css?v=context-20260807-1">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=chatui-20260702-2">
   <link rel="stylesheet" href="css/app-responsive.css?v=message-edit-20260806-1">
   <link rel="stylesheet" href="css/app-agent.css?v=agent-protocol-20260806-1">
@@ -80,6 +81,9 @@
             <span id="activeChatSubtitle"></span>
           </div>
           <div class="chatbar-actions">
+            <button type="button" class="icon-button chatbar-icon-button" id="compactContextButton" title="Сжать ранний контекст" aria-label="Сжать ранний контекст" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5"/><path d="m3 3 6 6"/><path d="M16 21h5v-5"/><path d="m21 21-6-6"/></svg>
+            </button>
             <button type="button" class="icon-button chatbar-icon-button" id="clearChatButton" title="Очистить чат" aria-label="Очистить чат" hidden>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>
             </button>
@@ -536,7 +540,7 @@
                 <label class="checkline"><input id="requireVerificationInput" type="checkbox"><span>Проверять результат мутаций</span></label>
                 <label class="checkline"><input id="autoContinueAfterConfirmationInput" type="checkbox"><span>Продолжать после подтверждения</span></label>
                 <label class="checkline"><input id="allowAgentToolAuthoringInput" type="checkbox"><span>Создавать missing tool по ходу задачи</span></label>
-                <label class="checkline"><input id="autoCompressContextInput" type="checkbox"><span>Сжимать старую историю при нехватке контекста</span></label>
+                <label class="checkline"><input id="autoCompressContextInput" type="checkbox"><span>Создавать summary при заполнении контекста</span></label>
                 <label class="checkline"><input id="includeVbaContextInput" type="checkbox"><span>Включать VBA-контекст автоматически</span></label>
                 <label><span>Макс. итераций агента</span><input id="maxAgentIterationsInput" type="number" min="1" max="50"></label>
                 <label><span>Повторов при ошибке формата</span><input id="maxAgentFormatRetriesInput" type="number" min="1" max="5"></label>
@@ -703,18 +707,18 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=message-edit-20260806-1"></script>
-  <script src="js/app-utils.js?v=agent-protocol-20260806-1"></script>
+  <script src="js/app-core.js?v=runtime-20260807-1"></script>
+  <script src="js/app-utils.js?v=runtime-20260807-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
   <script src="js/app-markdown.js"></script>
   <script src="js/app-settings.js?v=agent-protocol-20260806-1"></script>
-  <script src="js/app-prompts.js?v=format-recovery-20260805-1"></script>
+  <script src="js/app-prompts.js?v=runtime-20260807-1"></script>
   <script src="js/app-model-data.js?v=reasoning-transport-20260805-1"></script>
   <script src="js/app-model-render.js?v=message-edit-20260806-1"></script>
   <script src="js/app-models.js?v=message-edit-20260806-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=format-recovery-20260805-1"></script>
+  <script src="js/app-chat-state.js?v=runtime-20260807-1"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
   <script src="js/app-tools.js?v=chatui-20260622-4"></script>
   <script src="js/app-skills.js?v=chatui-20260622-4"></script>
@@ -722,15 +726,16 @@
   <script src="js/app-html-workspace.js?v=chatui-20260703-2"></script>
   <script src="js/app-context.js?v=chatui-20260622-1"></script>
   <script src="js/app-agent-data.js?v=chatui-20260622-1"></script>
-  <script src="js/app-agent-model.js?v=agent-transcript-20260805-2"></script>
+  <script src="js/app-agent-model.js?v=runtime-20260807-1"></script>
   <script src="js/app-chart-artifacts.js?v=chatui-20260622-2"></script>
   <script src="js/app-html-artifacts.js?v=chatui-20260702-2"></script>
-  <script src="js/app-agent.js?v=agent-protocol-20260806-1"></script>
-  <script src="js/app-messages.js?v=agent-protocol-20260806-1"></script>
+  <script src="js/app-artifacts.js?v=context-20260807-1"></script>
+  <script src="js/app-agent.js?v=runtime-20260807-1"></script>
+  <script src="js/app-messages.js?v=runtime-20260807-1"></script>
   <script src="js/app-reasoning.js?v=reasoning-20260805-1"></script>
   <script src="js/app-attachments.js?v=mediarouting-20260722-1"></script>
-  <script src="js/app-chat.js?v=message-edit-20260806-1"></script>
-  <script src="js/app-chat-edit.js?v=message-edit-20260806-1"></script>
+  <script src="js/app-chat.js?v=runtime-20260807-1"></script>
+  <script src="js/app-chat-edit.js?v=runtime-20260807-1"></script>
   <script src="js/app.js?v=topbar-removal-20260723-1"></script>
 </body>
 </html>

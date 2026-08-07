@@ -164,6 +164,22 @@ async function clearChat() {
   }
 }
 
+async function compactChatContext() {
+  if (!state.activeChatId || currentActiveSend()) return;
+  var previousCheckpointId = state.activeContextCheckpointId || "";
+  setActivity("compacting", "Сжимаю ранний контекст...");
+  try {
+    applyChatState(await send("compactChatContext", { chatId: state.activeChatId }));
+    log(state.activeContextCheckpointId && state.activeContextCheckpointId !== previousCheckpointId
+      ? "Ранний контекст сжат; полная история сохранена."
+      : "Контекст пока не требует сжатия.");
+  } catch (error) {
+    log(error.detail || error.message);
+  } finally {
+    clearActivity();
+  }
+}
+
 async function deleteChat(chatIdValue) {
   var targetChatId = typeof chatIdValue === "string" ? chatIdValue : state.activeChatId;
   if (!targetChatId ||
@@ -248,6 +264,9 @@ function applyInitState(init) {
   state.chats = init.chats || [];
   state.documents = init.documents || init.Documents || [];
   state.messages = init.messages || [];
+  state.artifacts = init.artifacts || init.Artifacts || [];
+  state.activeContextCheckpointId = init.activeContextCheckpointId || init.ActiveContextCheckpointId || "";
+  state.activeHtmlArtifactId = init.activeHtmlArtifactId || init.ActiveHtmlArtifactId || "";
   $("toolsPath").textContent = state.toolsPath ? "Хранилище: " + state.toolsPath : "";
   $("skillsPath").textContent = state.skillsPath ? "Хранилище: " + state.skillsPath : "";
   renderSettings();
@@ -283,6 +302,9 @@ function applyBridgeUnavailableState(error) {
   state.activeChatHtmlMode = false;
   state.activeChatReasoning = false;
   state.messages = [];
+  state.artifacts = [];
+  state.activeContextCheckpointId = "";
+  state.activeHtmlArtifactId = "";
   state.tools = [];
   state.skills = [];
   state.vba = { modules: [], backups: [], selectedModule: "" };
@@ -989,6 +1011,7 @@ function bindChatActions() {
     }
   });
   $("clearChatButton").addEventListener("click", clearChat);
+  $("compactContextButton").addEventListener("click", compactChatContext);
   $("stopButton").addEventListener("click", stopActiveSend);
   $("clearInputButton").addEventListener("click", function () { setChatInputText("", true); });
   $("cancelMessageEditButton").addEventListener("click", cancelMessageEdit);

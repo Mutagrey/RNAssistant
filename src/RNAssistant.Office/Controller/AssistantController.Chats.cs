@@ -16,6 +16,26 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
+        public async Task<ChatStateResponse> CompactChatContextAsync(
+            string chatId = null,
+            Action<string, string, ChatActivity> progress = null,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            var session = LoadAddressedSession(chatId);
+            using (ReserveChatOperation(session))
+            {
+                await _contextCompactionService.EnsureWithinBudgetAsync(
+                    session,
+                    _settingsService.Load(),
+                    string.Empty,
+                    true,
+                    progress,
+                    cancellationToken).ConfigureAwait(false);
+                SaveSessionChanges(session);
+            }
+            return ChatState(session);
+        }
+
         public ChatStateResponse DeleteMessage(string id, int index, string chatId = null)
         {
             var session = LoadSession(chatId);
@@ -46,6 +66,9 @@ namespace RNAssistant.Office
                 _attachmentStore.DeleteMessage(removedMessage);
                 RemovePendingAgentToolsForSession(session.Id);
                 CancelPendingActivities(session, "Pending action cancelled because chat history changed.");
+                session.ContextCheckpoints = new List<ContextCheckpoint>();
+                session.ActiveContextCheckpointId = null;
+                ChatArtifactService.PruneUnreachable(session);
                 SaveSessionChanges(session);
             }
 
@@ -83,15 +106,29 @@ namespace RNAssistant.Office
                 fork.Mode = ChatModes.Normalize(source.Mode);
                 fork.HtmlModeEnabled = source.HtmlModeEnabled;
                 fork.ReasoningEnabled = source.ReasoningEnabled;
+                fork.ActiveSkillIds = new List<string>(source.ActiveSkillIds ?? new List<string>());
                 fork.Context = ChatCloneService.CloneContext(LoadContext(source)) ?? CreateEmptyContext();
-                fork.HtmlWorkspace = ChatCloneService.CloneWorkspaceForFork(source.HtmlWorkspace);
                 fork.Messages = targetIndex < 0
                     ? new List<ChatMessage>()
                     : ChatCloneService.CloneMessages(sourceMessages.Take(targetIndex + 1));
+                fork.Artifacts = ChatCloneService.CloneArtifactsForMessages(source.Artifacts, fork.Messages);
+                fork.ContextCheckpoints = ChatCloneService.CloneContextCheckpoints(source.ContextCheckpoints, fork.Messages);
+                fork.ActiveContextCheckpointId = fork.ContextCheckpoints.OrderByDescending(checkpoint => checkpoint.CreatedUtc).Select(checkpoint => checkpoint.Id).FirstOrDefault();
+                var workspaceCheckpoint = HtmlWorkspaceArtifactService.CheckpointAtOrBefore(fork.Messages, fork.Messages.Count - 1);
+                if (!string.IsNullOrWhiteSpace(workspaceCheckpoint) && HtmlWorkspaceArtifactService.Restore(fork, workspaceCheckpoint))
+                {
+                    fork.ActiveHtmlArtifactId = workspaceCheckpoint;
+                }
+                else
+                {
+                    fork.HtmlWorkspace = ChatCloneService.CloneWorkspaceForFork(source.HtmlWorkspace);
+                    HtmlWorkspaceArtifactService.CaptureCurrent(fork, "Forked HTML workspace");
+                }
                 foreach (var message in fork.Messages)
                 {
                     _attachmentStore.CloneMessageAttachments(fork.Id, message);
                 }
+                ChatArtifactService.LinkMessageArtifacts(fork, 0);
                 NormalizeContext(fork.Context, fork);
                 SaveSessionChanges(fork);
                 _chatSessions.SetActiveSession(fork);
@@ -275,6 +312,11 @@ namespace RNAssistant.Office
                 session.Messages.Clear();
                 session.Context = CreateEmptyContext();
                 session.HtmlWorkspace = new HtmlWorkspace();
+                session.Artifacts = new List<ChatArtifact>();
+                session.ContextCheckpoints = new List<ContextCheckpoint>();
+                session.ActiveContextCheckpointId = null;
+                session.ActiveHtmlArtifactId = null;
+                session.ActiveSkillIds = new List<string>();
                 NormalizeContext(session.Context, session);
                 SaveSessionChanges(session);
             }
@@ -355,6 +397,9 @@ namespace RNAssistant.Office
                 Documents = ListOpenDocuments(),
                 Context = session == null ? CreateEmptyContext() : LoadContext(session),
                 Messages = session == null ? new List<ChatMessage>() : session.Messages,
+                Artifacts = ChatArtifactDto.From(session == null ? null : session.Artifacts),
+                ActiveContextCheckpointId = session == null ? string.Empty : session.ActiveContextCheckpointId,
+                ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId,
                 ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load()),
                 HtmlWorkspace = session == null ? new HtmlWorkspace() : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace)
             };

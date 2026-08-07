@@ -31,6 +31,7 @@ namespace RNAssistant.Office
         private readonly ChatHistoryEditService _chatHistoryEditService;
         private readonly ChatCompletionService _chatCompletionService;
         private readonly PlainChatService _plainChatService;
+        private readonly ContextCompactionService _contextCompactionService;
         private readonly ChatExecutionModeSelector _chatModeSelector;
         private readonly OfflineChatService _offlineChatService;
         private readonly ContextService _contextService;
@@ -94,9 +95,12 @@ namespace RNAssistant.Office
                     completeAsync(settings, messages, cancellationToken);
             }
             _llmCompletion = completion;
-            _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, completion);
-            _offlineChatService = new OfflineChatService(_toolExecutor, completion);
-            _plainChatService = new PlainChatService(completion);
+            _contextCompactionService = new ContextCompactionService(
+                completion,
+                (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars));
+            _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, completion, _contextCompactionService);
+            _offlineChatService = new OfflineChatService(_toolExecutor, completion, _contextCompactionService);
+            _plainChatService = new PlainChatService(completion, _contextCompactionService);
             _contextService = new ContextService(_adapter);
             _chatModeSelector = new ChatExecutionModeSelector();
             _syncRoot = new object();
@@ -132,6 +136,9 @@ namespace RNAssistant.Office
                 SkillsPath = _paths.SkillsDirectory,
                 Context = context,
                 Messages = session.Messages,
+                Artifacts = ChatArtifactDto.From(session.Artifacts),
+                ActiveContextCheckpointId = session.ActiveContextCheckpointId,
+                ActiveHtmlArtifactId = session.ActiveHtmlArtifactId,
                 ContextUsage = ContextUsageEstimator.FromSession(session, settings),
                 HtmlWorkspace = session == null ? new HtmlWorkspace() : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace),
                 QuickAction = DequeueQuickAction()
@@ -217,8 +224,7 @@ namespace RNAssistant.Office
                     Text = text ?? string.Empty,
                     Attachments = attachments,
                     AppendUserMessage = true,
-                    CommitUserAttachments = true,
-                    ConsumeContext = true
+                    CommitUserAttachments = true
                 },
                 null,
                 progress,
@@ -357,7 +363,6 @@ namespace RNAssistant.Office
             public IReadOnlyList<ChatAttachment> Attachments { get; set; }
             public bool AppendUserMessage { get; set; }
             public bool CommitUserAttachments { get; set; }
-            public bool ConsumeContext { get; set; }
         }
 
         private async Task<SendChatResponse> ExecuteChatTurnAsync(
@@ -393,8 +398,10 @@ namespace RNAssistant.Office
                 input = input ?? new ChatTurnInput();
                 var text = input.Text ?? string.Empty;
                 var attachments = input.Attachments ?? new ChatAttachment[0];
+                HtmlWorkspaceArtifactService.CaptureCurrent(session, "Before chat turn");
                 var documentContext = LoadContext(session);
-                var skills = _skillCatalog.SelectRelevantSkills(text, documentContext, 5);
+                var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
+                SkillResolver.ActivateExplicitMentions(session, text, skills);
                 var titleUserSeed = ChatTitleBuilder.ResolveUserSeed(session, text);
                 var shouldGenerateLlmTitle = settings.SmartChatTitles && ChatTitleBuilder.ShouldAssign(session);
                 var provisionalTitle = ChatTitleBuilder.ShouldAssign(session)
@@ -448,6 +455,35 @@ namespace RNAssistant.Office
                 ChatCompletionResult completion;
                 try
                 {
+                    try
+                    {
+                        await _contextCompactionService.EnsureWithinBudgetAsync(
+                            session,
+                            settings,
+                            text,
+                            false,
+                            runProgress,
+                            runCancellation.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception compactionError)
+                    {
+                        var activity = new ChatActivity
+                        {
+                            Kind = "compaction",
+                            Title = "Не удалось сжать контекст",
+                            Subtitle = "Полная история сохранена",
+                            Status = "failed",
+                            ExecutionStatus = "compaction_failed",
+                            ResultMessage = compactionError.Message
+                        };
+                        session.Messages.Add(AgentTranscript.CreateAssistantMessage(
+                            "Не удалось обновить сжатый контекст; продолжаю с сохранённой историей.", null, activity));
+                        runProgress("compaction_failed", activity.ResultMessage, activity);
+                    }
                     var executionMode = _chatModeSelector.Select(text, session);
                     if (executionMode == ChatModes.Chat)
                     {
@@ -516,6 +552,8 @@ namespace RNAssistant.Office
                     {
                         _attachmentStore.Commit(sessionId, LatestUserMessage(session));
                     }
+                    HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
+                    ChatArtifactService.LinkMessageArtifacts(session, firstRunMessageIndex);
                     SaveSessionChanges(session);
                     throw;
                 }
@@ -525,22 +563,14 @@ namespace RNAssistant.Office
                     ChatTitleBuilder.ApplyFallback(session, text, completion.AssistantText);
                 }
 
-                if (input.ConsumeContext)
-                {
-                    session.Context = CreateEmptyContext();
-                    NormalizeContext(session.Context, session);
-                    if (completion != null)
-                    {
-                        completion.ContextUsage = ContextUsageEstimator.FromSession(session, settings);
-                    }
-                }
-
                 ReportProgress(runProgress, "saving", "Saving chat history...");
                 if (input.CommitUserAttachments)
                 {
                     _attachmentStore.Commit(sessionId, LatestUserMessage(session));
                 }
+                HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
                 AnnotateRunMessages(session, firstRunMessageIndex, runId);
+                ChatArtifactService.LinkMessageArtifacts(session, firstRunMessageIndex);
                 session.LastRun = null;
                 SaveSessionChanges(session);
                 runLease.Dispose();
@@ -582,6 +612,9 @@ namespace RNAssistant.Office
                 Documents = ListOpenDocuments(),
                 Context = session == null ? CreateEmptyContext() : LoadContext(session),
                 Messages = session == null ? new List<ChatMessage>() : session.Messages,
+                Artifacts = ChatArtifactDto.From(session == null ? null : session.Artifacts),
+                ActiveContextCheckpointId = session == null ? string.Empty : session.ActiveContextCheckpointId,
+                ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId,
                 ContextUsage = completion == null
                     ? ContextUsageEstimator.FromSession(session, settings)
                     : completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings),
@@ -623,7 +656,10 @@ namespace RNAssistant.Office
                 ActiveChatHtmlMode = active != null && active.HtmlModeEnabled,
                 ActiveChatReasoning = active != null && active.ReasoningEnabled,
                 Chats = chats,
-                Documents = ListOpenDocuments()
+                Documents = ListOpenDocuments(),
+                Artifacts = ChatArtifactDto.From(active == null ? null : active.Artifacts),
+                ActiveContextCheckpointId = active == null ? string.Empty : active.ActiveContextCheckpointId,
+                ActiveHtmlArtifactId = active == null ? string.Empty : active.ActiveHtmlArtifactId
             };
         }
 
@@ -754,7 +790,8 @@ namespace RNAssistant.Office
 
             ReportProgress(progress, dryRun ? "checking" : "executing", (dryRun ? "Проверяю tool: " : "Исполняю tool: ") + toolId);
             var result = _toolExecutor.Execute(command, tools, settings, dryRun, true, session, cancellationToken);
-            if (!dryRun && IsHtmlWorkspaceTool(toolId))
+            if (!dryRun && (IsHtmlWorkspaceTool(toolId) ||
+                string.Equals(toolId, "common.skills_load", StringComparison.OrdinalIgnoreCase)))
             {
                 SaveSessionChanges(session);
             }

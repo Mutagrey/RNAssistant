@@ -61,19 +61,33 @@ namespace RNAssistant.Office.Tools
             return _controllerTools;
         }
 
-        public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, bool dryRun, bool manualRun, CancellationToken cancellationToken = default(CancellationToken))
+        public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, CancellationToken cancellationToken = default(CancellationToken))
         {
-            return Execute(command, skills, settings, dryRun, manualRun, null, cancellationToken);
+            return Execute(command, tools, settings, dryRun, manualRun, null, cancellationToken);
         }
 
-        public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, bool dryRun, bool manualRun, ChatSession session, CancellationToken cancellationToken = default(CancellationToken))
+        public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, ChatSession session, CancellationToken cancellationToken = default(CancellationToken))
         {
-            return Execute(command, skills, settings, dryRun, manualRun, session, settings == null ? 40 : settings.MaxAgentToolSteps, cancellationToken);
+            return Execute(command, tools, settings, dryRun, manualRun, session, settings == null ? 40 : settings.MaxAgentToolSteps, cancellationToken);
         }
 
-        public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> skills, AppSettings settings, bool dryRun, bool manualRun, ChatSession session, int maxExecutionSteps, CancellationToken cancellationToken = default(CancellationToken))
+        public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, ChatSession session, int maxExecutionSteps, CancellationToken cancellationToken = default(CancellationToken))
         {
-            var context = new ToolExecutionContext(KnownTools(skills), settings ?? new AppSettings(), session, maxExecutionSteps);
+            return Execute(command, tools, settings, dryRun, manualRun, session, maxExecutionSteps, null, cancellationToken);
+        }
+
+        public ToolResult Execute(
+            ToolCommand command,
+            IReadOnlyList<ToolDefinition> tools,
+            AppSettings settings,
+            bool dryRun,
+            bool manualRun,
+            ChatSession session,
+            int maxExecutionSteps,
+            IReadOnlyList<SkillDefinition> skillCatalog,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            var context = new ToolExecutionContext(KnownTools(tools), settings ?? new AppSettings(), session, maxExecutionSteps, skillCatalog);
             var initialSteps = context.RemainingSteps;
             var result = ExecuteCommandSafely(command, context, 0, dryRun, manualRun, cancellationToken);
             if (result != null) result.ToolStepsConsumed = initialSteps - context.RemainingSteps;
@@ -366,7 +380,7 @@ namespace RNAssistant.Office.Tools
                 case ControllerExecutorKind.Vba:
                     return _vbaExecutor.ExecuteControllerTool(command, dryRun, cancellationToken);
                 case ControllerExecutorKind.Skill:
-                    return _skillExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun);
+                    return _skillExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun, context.Session, context.SkillCatalog);
                 case ControllerExecutorKind.ToolAuthoring:
                     return _toolAuthoringExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun);
                 case ControllerExecutorKind.Prompt:
@@ -488,11 +502,17 @@ namespace RNAssistant.Office.Tools
             private readonly IDictionary<string, ToolDefinition> _toolsById;
             private readonly IDictionary<string, ToolSafetyProfile> _safetyById;
 
-            public ToolExecutionContext(IReadOnlyList<ToolDefinition> tools, AppSettings settings, ChatSession session, int maxExecutionSteps)
+            public ToolExecutionContext(
+                IReadOnlyList<ToolDefinition> tools,
+                AppSettings settings,
+                ChatSession session,
+                int maxExecutionSteps,
+                IReadOnlyList<SkillDefinition> skillCatalog)
             {
                 Tools = tools ?? new ToolDefinition[0];
                 Settings = settings;
                 Session = session;
+                SkillCatalog = skillCatalog;
                 _toolsById = Tools
                     .Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))
                     .ToDictionary(tool => tool.Id, StringComparer.OrdinalIgnoreCase);
@@ -505,6 +525,8 @@ namespace RNAssistant.Office.Tools
             public AppSettings Settings { get; private set; }
 
             public ChatSession Session { get; private set; }
+
+            public IReadOnlyList<SkillDefinition> SkillCatalog { get; private set; }
 
             public int RemainingSteps { get; private set; }
 

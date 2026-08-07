@@ -34,14 +34,26 @@ namespace RNAssistant.Office.Services
             var instructionRole = NormalizeInstructionRole(settings.SystemPromptRole);
             var toolResultRole = NormalizeToolResultRole(settings.ToolResultRole);
             var checks = new List<ModelCompatibilityCheckDto>();
-
-            checks.Add(await ProbeTextRoleAsync(settings, "user", "user_role", "Роль user", true, cancellationToken).ConfigureAwait(false));
-            checks.Add(await ProbeTextRoleAsync(settings, "system", "system_role", "Инструкция system", instructionRole == "system", cancellationToken).ConfigureAwait(false));
-            checks.Add(await ProbeTextRoleAsync(settings, "developer", "developer_role", "Инструкция developer", instructionRole == "developer", cancellationToken).ConfigureAwait(false));
-            checks.Add(await ProbeJsonAsync(settings, false, responseMode == AgentResponseModes.JsonObject, cancellationToken).ConfigureAwait(false));
-            checks.Add(await ProbeJsonAsync(settings, true, responseMode != AgentResponseModes.JsonObject, cancellationToken).ConfigureAwait(false));
-            checks.Add(await ProbeToolResultRoleAsync(settings, toolResultRole, true, cancellationToken).ConfigureAwait(false));
-            checks.Add(await ProbeNativeToolAsync(settings, responseMode == AgentResponseModes.NativeToolCalls, cancellationToken).ConfigureAwait(false));
+            using (var totalCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+            {
+                totalCancellation.CancelAfter(TimeSpan.FromSeconds(120));
+                try
+                {
+                    var token = totalCancellation.Token;
+                    checks.Add(await ProbeTextRoleAsync(settings, "user", "user_role", "Роль user", true, token).ConfigureAwait(false));
+                    checks.Add(await ProbeTextRoleAsync(settings, "system", "system_role", "Инструкция system", instructionRole == "system", token).ConfigureAwait(false));
+                    checks.Add(await ProbeTextRoleAsync(settings, "developer", "developer_role", "Инструкция developer", instructionRole == "developer", token).ConfigureAwait(false));
+                    checks.Add(await ProbeJsonAsync(settings, false, responseMode == AgentResponseModes.JsonObject, token).ConfigureAwait(false));
+                    checks.Add(await ProbeJsonAsync(settings, true, responseMode != AgentResponseModes.JsonObject, token).ConfigureAwait(false));
+                    checks.Add(await ProbeToolResultRoleAsync(settings, toolResultRole, true, token).ConfigureAwait(false));
+                    checks.Add(await ProbeNativeToolAsync(settings, responseMode == AgentResponseModes.NativeToolCalls, token).ConfigureAwait(false));
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    checks.Add(Check("compatibility_total_timeout", "Общий лимит проверки", true, false, 120000,
+                        "Проверка остановлена после общего лимита 120 с."));
+                }
+            }
 
             var compatible = checks.All(check => !check.Required || check.Passed);
             return new ModelCompatibilityResponse

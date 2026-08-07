@@ -1,0 +1,55 @@
+.chat-artifact-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.chat-artifact-card {
+  border: 1px solid var(--border, #d7dbe2);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  padding: 9px 10px;
+}
+
+.chat-artifact-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-artifact-badge {
+  border-radius: 999px;
+  background: rgba(37, 99, 235, .1);
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+}
+
+.chat-artifact-title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-artifact-meta {
+  color: var(--muted, #687386);
+  font-size: 11px;
+}
+
+.artifact-plan-list {
+  margin: 8px 0 0 24px;
+  padding: 0;
+  color: var(--muted, #4b5563);
+}
+
+.chat-artifact-action {
+  margin-top: 8px;
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+  padding: 0;
+}

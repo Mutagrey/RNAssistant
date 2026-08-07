@@ -492,6 +492,7 @@ namespace RNAssistant.Harness
                     value => settingsStore = value);
                 var command = new ToolCommand { ToolId = "common.prompts_save" };
                 command.Arguments["repairDecisionPrompt"] = "CUSTOM REPAIR";
+                command.Arguments["contextCompactionPrompt"] = "CUSTOM COMPACTION";
                 command.Arguments["chatSystemPrompt"] = "CUSTOM CHAT";
                 command.Arguments["systemPromptRole"] = "developer";
 
@@ -513,6 +514,7 @@ namespace RNAssistant.Harness
                 AssertTrue(saved.Success, "prompt save succeeds");
 
                 AssertEqual("CUSTOM REPAIR", settingsStore.AgentPrompts.RepairDecisionPrompt, "repair prompt saved");
+                AssertEqual("CUSTOM COMPACTION", settingsStore.AgentPrompts.ContextCompactionPrompt, "compaction prompt saved");
                 AssertEqual("CUSTOM CHAT", settingsStore.ChatSystemPrompt, "chat prompt saved");
                 AssertEqual("developer", settingsStore.SystemPromptRole, "developer prompt role saved");
                 AssertEqual("CUSTOM REPAIR", runtimeSettings.AgentPrompts.RepairDecisionPrompt, "runtime repair prompt updated");
@@ -526,6 +528,7 @@ namespace RNAssistant.Harness
                     false);
                 AssertTrue(read.Success, "prompt read succeeds");
                 AssertContains(read.DataJson, "CUSTOM REPAIR", "prompt read data");
+                AssertContains(read.DataJson, "CUSTOM COMPACTION", "compaction prompt read data");
             });
         }
 
@@ -634,8 +637,13 @@ namespace RNAssistant.Harness
         private static List<ChatMessage> BuildPlannerMessages(
             AppSettings settings,
             IEnumerable<ToolDefinition> tools,
-            IEnumerable<SkillDefinition> skills)
+            IEnumerable<SkillDefinition> skills,
+            IEnumerable<string> activeSkillIds = null)
         {
+            var session = new ChatSession
+            {
+                ActiveSkillIds = new List<string>(activeSkillIds ?? new string[0])
+            };
             return new PlannerPromptComposer().BuildMessages(
                 "Test request",
                 new OfficeSnapshot { Host = "Excel" },
@@ -652,7 +660,9 @@ namespace RNAssistant.Harness
                 new AgentObservation[0],
                 new DocumentContext(),
                 skills ?? new SkillDefinition[0],
-                settings ?? new AppSettings());
+                settings ?? new AppSettings(),
+                session,
+                null);
         }
 
         private static void ConfirmationMatrixCoversDryAndManualRuns()

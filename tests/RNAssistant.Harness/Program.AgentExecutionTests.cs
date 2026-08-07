@@ -226,6 +226,15 @@ namespace RNAssistant.Harness
                     AssertTrue(ContainsMessage(calls[0], "User-added context"), scenario.Host + " context prompt");
                     AssertTrue(ContainsMessage(session.Messages, "Run " + scenario.ExpectedTools[0]), scenario.Host + " tool decision recorded");
                     AssertTrue(ContainsMessage(session.Messages, "Agent step"), scenario.Host + " result recorded");
+                    var protocol = session.Messages.Where(message => message != null && message.ProtocolMessage).ToList();
+                    AssertEqual(scenario.ExpectedTools.Length * 2, protocol.Count, scenario.Host + " persisted protocol pair count");
+                    foreach (var toolResult in protocol.Where(message => string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        AssertTrue(protocol.Any(message =>
+                            string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) &&
+                            message.ToolCalls.Any(call => string.Equals(call.Id, toolResult.ToolCallId, StringComparison.Ordinal))),
+                            scenario.Host + " tool result has matching assistant tool call");
+                    }
                 });
             }
         }
@@ -578,8 +587,10 @@ namespace RNAssistant.Harness
             AssertEqual("Подготовить и опубликовать отчёт", plan.Title, "goal updated visibly");
 
             AgentPlanStateService.ApplyTerminalDecision(state, AgentResponseKinds.Final);
-            AssertEqual("completed", plan.Status, "terminal final keeps completed plan visible");
-            AssertTrue(plan.Children.All(child => child.Status == "completed"), "remaining plan steps completed on final");
+            AssertEqual("incomplete", plan.Status, "terminal final does not invent completion evidence");
+            AssertEqual("completed", plan.Children[0].Status, "verified completed step stays completed");
+            AssertEqual("pending", plan.Children[1].Status, "unexecuted step remains pending on final");
+            AssertEqual("terminal_with_pending_steps", plan.ExecutionStatus, "incomplete terminal plan is explicit");
 
             var noPlanState = new AgentRunState();
             AssertTrue(AgentPlanStateService.BeginCurrent(session, noPlanState) == null, "fresh tool-only turn does not restore previous plan");
@@ -630,7 +641,9 @@ namespace RNAssistant.Harness
                 var plans = session.Messages.Where(message => message.Activity != null && message.Activity.Kind == "plan").ToList();
                 AssertEqual(1, plans.Count, "canonical plan activity is not duplicated");
                 AssertEqual("Проверить и описать текущую книгу", plans[0].Activity.Title, "latest goal remains visible");
-                AssertEqual("completed", plans[0].Activity.Status, "plan remains completed after final");
+                AssertEqual("incomplete", plans[0].Activity.Status, "final answer does not auto-complete remaining prose step");
+                AssertEqual("completed", plans[0].Activity.Children[0].Status, "executed step remains completed");
+                AssertEqual("pending", plans[0].Activity.Children[1].Status, "remaining plan step stays pending");
                 AssertTrue(session.Messages.Any(message => message.Activity != null && message.Activity.ExecutionStatus == "plan_updated"), "plan update is visible in transcript");
                 AssertEqual("Проверить и описать текущую книгу", session.Messages.Last().Goal, "final message retains goal");
                 AssertTrue(!session.Messages.Any(message => message.Activity != null && message.Activity.ExecutionStatus == "repeated_plan"), "repeated plan no longer fails run");

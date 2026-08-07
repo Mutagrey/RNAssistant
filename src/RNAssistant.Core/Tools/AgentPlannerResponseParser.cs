@@ -297,16 +297,65 @@ namespace RNAssistant.Core.Tools
                 return false;
             }
 
+            var allowed = new HashSet<string>(new[]
+            {
+                "toolId", "id", "name", "arguments", "args", "function", "type"
+            }, StringComparer.OrdinalIgnoreCase);
+            var extra = tool.Properties().FirstOrDefault(property => !allowed.Contains(property.Name));
+            if (extra != null)
+            {
+                error = "Tool object contains unsupported field: " + extra.Name;
+                return false;
+            }
+
             var function = tool["function"] as JObject;
-            toolId = FirstNonEmpty(
+            if (tool["function"] != null && function == null)
+            {
+                error = "tool function must be an object when provided.";
+                return false;
+            }
+            if (function != null)
+            {
+                var functionExtra = function.Properties().FirstOrDefault(property =>
+                    !string.Equals(property.Name, "name", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(property.Name, "arguments", StringComparison.OrdinalIgnoreCase));
+                if (functionExtra != null)
+                {
+                    error = "Tool function contains unsupported field: " + functionExtra.Name;
+                    return false;
+                }
+            }
+
+            var names = new[]
+            {
                 ReadString(tool["toolId"]),
                 ReadString(tool["name"]),
-                ReadString(function == null ? null : function["name"]),
-                ReadString(tool["id"]));
-            var argumentsToken = FirstToken(
+                ReadString(function == null ? null : function["name"])
+            }.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim()).ToList();
+            if (names.Count == 0 && function == null)
+            {
+                var idAlias = ReadString(tool["id"]);
+                if (!string.IsNullOrWhiteSpace(idAlias)) names.Add(idAlias.Trim());
+            }
+            if (names.Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
+            {
+                error = "Tool id aliases conflict.";
+                return false;
+            }
+            toolId = names.FirstOrDefault();
+
+            var argumentCandidates = new[]
+            {
                 tool["arguments"],
                 tool["args"],
-                function == null ? null : function["arguments"]);
+                function == null ? null : function["arguments"]
+            }.Where(value => !IsAbsentOrNull(value)).ToList();
+            var argumentsToken = argumentCandidates.FirstOrDefault();
+            if (argumentCandidates.Skip(1).Any(value => !JToken.DeepEquals(argumentsToken, value)))
+            {
+                error = "Tool argument aliases conflict.";
+                return false;
+            }
             if (argumentsToken != null && argumentsToken.Type == JTokenType.String)
             {
                 try { argumentsToken = JObject.Parse(argumentsToken.Value<string>() ?? "{}"); }
@@ -324,14 +373,6 @@ namespace RNAssistant.Core.Tools
                 return false;
             }
 
-            var metadata = new HashSet<string>(new[]
-            {
-                "toolId", "id", "name", "arguments", "args", "function", "type"
-            }, StringComparer.OrdinalIgnoreCase);
-            foreach (var property in tool.Properties().Where(property => !metadata.Contains(property.Name)).ToList())
-            {
-                if (arguments[property.Name] == null) arguments[property.Name] = property.Value.DeepClone();
-            }
             if (string.IsNullOrWhiteSpace(toolId))
             {
                 error = "toolId (or compatibility alias id/name) is required.";
@@ -344,8 +385,16 @@ namespace RNAssistant.Core.Tools
         {
             errorCode = null;
             error = null;
-            MoveAlias(obj, "protocolVersion", "protocol_version");
-            MoveAlias(obj, "decisionSummary", "decision_summary");
+            if (!MoveAlias(obj, "protocolVersion", "protocol_version", out error))
+            {
+                errorCode = "conflicting_alias";
+                return false;
+            }
+            if (!MoveAlias(obj, "decisionSummary", "decision_summary", out error))
+            {
+                errorCode = "conflicting_alias";
+                return false;
+            }
 
             var action = obj["action"] as JObject;
             if (action != null)
@@ -484,11 +533,18 @@ namespace RNAssistant.Core.Tools
             return result;
         }
 
-        private static void MoveAlias(JObject obj, string canonical, string alias)
+        private static bool MoveAlias(JObject obj, string canonical, string alias, out string error)
         {
-            if (obj == null || obj[canonical] != null || obj[alias] == null) return;
-            obj[canonical] = obj[alias];
+            error = null;
+            if (obj == null || obj[alias] == null) return true;
+            if (obj[canonical] != null && !JToken.DeepEquals(obj[canonical], obj[alias]))
+            {
+                error = canonical + " conflicts with compatibility alias " + alias + ".";
+                return false;
+            }
+            if (obj[canonical] == null) obj[canonical] = obj[alias];
             obj.Remove(alias);
+            return true;
         }
 
         private static void FillIfMissing(JObject obj, string name, string value)

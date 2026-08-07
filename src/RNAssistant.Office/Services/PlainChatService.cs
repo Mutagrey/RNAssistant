@@ -12,11 +12,13 @@ namespace RNAssistant.Office.Services
     {
         private readonly LlmCompletionDelegate _completeAsync;
         private readonly ChatContextWindowBuilder _contextBuilder;
+        private readonly ContextCompactionService _contextCompactionService;
 
-        public PlainChatService(LlmCompletionDelegate completeAsync)
+        public PlainChatService(LlmCompletionDelegate completeAsync, ContextCompactionService contextCompactionService = null)
         {
             _completeAsync = completeAsync;
             _contextBuilder = new ChatContextWindowBuilder();
+            _contextCompactionService = contextCompactionService;
         }
 
         public async Task<ChatCompletionResult> ExecuteAsync(
@@ -41,12 +43,32 @@ namespace RNAssistant.Office.Services
                 {
                     Role = "user",
                     Content = text ?? string.Empty,
+                    HtmlWorkspaceCheckpointId = session.ActiveHtmlArtifactId,
                     Attachments = attachments == null
                         ? new List<ChatAttachment>()
                         : new List<ChatAttachment>(attachments)
                 });
             }
-            var messages = _contextBuilder.BuildPlainMessages(text, session, context, settings, attachments);
+            List<ChatMessage> messages;
+            try
+            {
+                messages = _contextBuilder.BuildPlainMessages(text, session, context, settings, attachments);
+            }
+            catch (PromptBudgetExceededException ex) when (
+                ex.CanCompact &&
+                settings.AutoCompressContext &&
+                _contextCompactionService != null)
+            {
+                var checkpoint = await _contextCompactionService.EnsureWithinBudgetAsync(
+                    session,
+                    settings,
+                    string.Empty,
+                    true,
+                    progress,
+                    cancellationToken).ConfigureAwait(false);
+                if (checkpoint == null) throw;
+                messages = _contextBuilder.BuildPlainMessages(text, session, context, settings, attachments);
+            }
             Report(progress, "thinking", "Модель готовит ответ...");
             var completion = await CompleteBufferedAsync(settings, messages, session, progress, cancellationToken).ConfigureAwait(false);
             if (completion == null)

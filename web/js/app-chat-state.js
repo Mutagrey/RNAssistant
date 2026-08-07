@@ -27,7 +27,7 @@ function renderChatSessions() {
   $("activeChatTitle").textContent = activeChat ? chatTitle(activeChat) : "Новый чат";
   var subtitle = [];
   if (state.activeChatId) {
-    subtitle.push(formatChatMessageCount((state.messages || []).length));
+    subtitle.push(formatChatMessageCount((state.messages || []).filter(function (message) { return !messageProtocolMessage(message); }).length));
   }
   if (activeChat) {
     subtitle = subtitle.concat([chatDocumentTitle(activeChat), chatHost(activeChat)].filter(Boolean));
@@ -38,9 +38,16 @@ function renderChatSessions() {
 
   var hasActive = !!state.activeChatId;
   var hasMessages = !!(state.messages && state.messages.length);
+  var compactableMessages = (state.messages || []).filter(function (message) {
+    return !messageActivity(message);
+  }).length;
   $("newChatButton").disabled = !!state.bridgeUnavailable;
   $("clearChatButton").disabled = !hasActive || !hasMessages || !!currentActiveSend();
   $("clearChatButton").hidden = !hasActive || !hasMessages;
+  if ($("compactContextButton")) {
+    $("compactContextButton").disabled = !hasActive || compactableMessages < 3 || !!currentActiveSend();
+    $("compactContextButton").hidden = !hasActive || compactableMessages < 3;
+  }
   if ($("chatModeSelect")) {
     $("chatModeSelect").value = state.activeChatMode || "agent";
   }
@@ -100,6 +107,15 @@ function applyChatState(response) {
     state.liveActivity = null;
     state.liveStreamContent = null;
     state.messages = response.messages || response.Messages || [];
+  }
+  if (response.artifacts !== undefined || response.Artifacts !== undefined) {
+    state.artifacts = response.artifacts || response.Artifacts || [];
+  }
+  if (response.activeContextCheckpointId !== undefined || response.ActiveContextCheckpointId !== undefined) {
+    state.activeContextCheckpointId = response.activeContextCheckpointId || response.ActiveContextCheckpointId || "";
+  }
+  if (response.activeHtmlArtifactId !== undefined || response.ActiveHtmlArtifactId !== undefined) {
+    state.activeHtmlArtifactId = response.activeHtmlArtifactId || response.ActiveHtmlArtifactId || "";
   }
   if (response.contextUsage || response.ContextUsage) {
     state.contextUsage = response.contextUsage || response.ContextUsage || {};

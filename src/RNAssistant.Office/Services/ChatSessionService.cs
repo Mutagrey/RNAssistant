@@ -369,7 +369,7 @@ namespace RNAssistant.Office.Services
                 HtmlDataSourceCount = session.HtmlWorkspace == null || session.HtmlWorkspace.DataSources == null ? 0 : session.HtmlWorkspace.DataSources.Count,
                 CreatedUtc = session.CreatedUtc,
                 UpdatedUtc = session.UpdatedUtc,
-                MessageCount = session.Messages == null ? 0 : session.Messages.Count,
+                MessageCount = session.Messages == null ? 0 : session.Messages.Count(message => message != null && !message.ProtocolMessage),
                 IsCurrentDocument = IsCurrentDocument(session),
                 RunId = run == null ? (session.LastRun == null ? null : session.LastRun.RunId) : run.RunId,
                 RunStatus = run == null ? (session.LastRun == null ? null : session.LastRun.Status) : run.Status,

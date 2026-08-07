@@ -202,7 +202,9 @@ namespace RNAssistant.Core.Storage
             foreach (var attachment in message.Attachments)
             {
                 var source = AbsolutePath(attachment.RelativePath);
-                var cloneId = Guid.NewGuid().ToString("N");
+                var cloneId = string.IsNullOrWhiteSpace(attachment.Id)
+                    ? Guid.NewGuid().ToString("N")
+                    : attachment.Id;
                 attachment.Id = cloneId;
                 if (!File.Exists(source))
                 {

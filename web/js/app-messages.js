@@ -227,6 +227,7 @@ function renderActivityArticle(message, index, activity, options) {
       });
       node.appendChild(attachmentBox);
     }
+    appendMessageArtifactCards(node, message);
   }
 
   var body = document.createElement("div");
@@ -264,6 +265,7 @@ function renderMessageArticle(message, index) {
     });
     node.appendChild(attachmentBox);
   }
+  appendMessageArtifactCards(node, message);
 
   var decisionSummary = messageDecisionSummary(message).trim();
   if (decisionSummary && decisionSummary !== messageContent(message).trim()) {
@@ -395,7 +397,8 @@ function renderMessages(options) {
 
   renderedMessagesChatId = state.activeChatId;
   box.innerHTML = "";
-  if (!state.messages.length && !state.liveStreamContent && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
+  var visibleMessages = (state.messages || []).filter(function (message) { return !messageProtocolMessage(message); });
+  if (!visibleMessages.length && !state.liveStreamContent && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
     box.appendChild(renderChatEmptyState());
     renderAgentPlanDock();
     renderAgentApprovalDock();
@@ -404,6 +407,9 @@ function renderMessages(options) {
   }
 
   for (var index = 0; index < state.messages.length; index += 1) {
+    if (messageProtocolMessage(state.messages[index])) {
+      continue;
+    }
     if (canCollectAgentRunAt(index)) {
       var run = collectAgentRun(index);
       box.appendChild(renderAgentRunArticle(run));

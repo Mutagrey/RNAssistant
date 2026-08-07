@@ -81,13 +81,37 @@ namespace RNAssistant.Office.Services
             {
                 var status = NormalizeStepStatus(step.Status);
                 if (status == "completed" || status == "failed" || status == "cancelled") continue;
-                if (final) step.Status = "completed";
+                if (final && status == "running") step.Status = "pending";
                 else if (cancelled) step.Status = "cancelled";
                 else if (status == "running") step.Status = "waiting";
             }
             SyncActivitySteps(state);
             UpdatePlanActivity(state);
+            if (final && HasUnfinishedSteps(state))
+            {
+                state.PlanActivity.Status = "incomplete";
+                state.PlanActivity.ExecutionStatus = "terminal_with_pending_steps";
+            }
             return state.PlanActivity;
+        }
+
+        public static bool HasUnfinishedSteps(AgentRunState state)
+        {
+            return state != null && (state.Plan ?? new List<AgentPlanStep>()).Any(step => step != null &&
+                !string.Equals(NormalizeStepStatus(step.Status), "completed", StringComparison.OrdinalIgnoreCase));
+        }
+
+        public static string Fingerprint(AgentPlannerResponse response)
+        {
+            if (response == null) return string.Empty;
+            return string.Join("|", new[]
+            {
+                response.Goal ?? string.Empty,
+                string.Join(";", (response.Plan ?? new List<AgentPlanStep>())
+                    .Where(step => step != null)
+                    .Select(step => (step.Id ?? string.Empty).Trim() + ":" + (step.Title ?? string.Empty).Trim())
+                    .ToArray())
+            }).ToLowerInvariant();
         }
 
         public static ChatActivity Restore(ChatSession session, AgentRunState state)

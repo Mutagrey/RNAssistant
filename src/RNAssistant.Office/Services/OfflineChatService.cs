@@ -12,13 +12,23 @@ namespace RNAssistant.Office.Services
     {
         private readonly OfficeToolExecutor _toolExecutor;
         private readonly LlmCompletionDelegate _completeAsync;
+        private readonly ContextCompactionService _contextCompactionService;
 
         public OfflineChatService(
             OfficeToolExecutor toolExecutor,
             LlmCompletionDelegate completeAsync)
+            : this(toolExecutor, completeAsync, null)
+        {
+        }
+
+        internal OfflineChatService(
+            OfficeToolExecutor toolExecutor,
+            LlmCompletionDelegate completeAsync,
+            ContextCompactionService contextCompactionService)
         {
             _toolExecutor = toolExecutor;
             _completeAsync = completeAsync;
+            _contextCompactionService = contextCompactionService;
         }
 
         public Task<ChatCompletionResult> ExecuteAsync(
@@ -35,7 +45,7 @@ namespace RNAssistant.Office.Services
             bool appendUserMessage = true)
         {
             var adapter = new ClosedDocumentAdapter(session);
-            var runner = new AgentRunService(adapter, _toolExecutor, _completeAsync, false);
+            var runner = new AgentRunService(adapter, _toolExecutor, _completeAsync, false, _contextCompactionService);
             var service = new ChatCompletionService(runner);
             return service.ExecuteAsync(text, session, context, settings, tools, attachments, progress, pendingToolRegistrar, skills, cancellationToken, appendUserMessage);
         }

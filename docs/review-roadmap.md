@@ -5,8 +5,9 @@
 - The experimental parallel runtime, shadow/canary paths, evidence/telemetry layers, reducers, and their fixtures are removed.
 - Agent mode has one contract: AgentDecision v1 with at most one external tool per model turn.
 - Chat sessions expose only Agent and Chat; Agent is the default and the old automatic mode is removed.
-- Model-facing instructions are consolidated into one main Agent prompt, one Chat prompt and three bounded runtime transitions plus chat-title generation; all are editable in Settings and through confirmed prompt tools.
-- Context accounting includes protocol replay, attachments, response schema and native tool schemas; oversized tool catalogs are reduced before the request.
+- Model-facing instructions have an immutable minimal runtime contract, one editable Agent prompt, one Chat prompt, bounded recovery/plan transitions, a structured compaction prompt and chat-title generation. Editable fields are available in Settings and through confirmed prompt tools.
+- Context accounting uses the persisted accepted protocol, model-generated checkpoints plus an exact raw tail, attachments, response schema and native tool schemas; raw transcript messages are not deleted by compaction.
+- Skills use progressive disclosure through `SKILL_INDEX`, `common.skills_load`, dependency/conflict validation and capability-scoped tools. Plans, attachments, compaction and HTML revisions share the chat artifact registry.
 - Alternate planner envelopes, batch-step wrappers, example-object custom schemas, single-file VBA packages, duplicate chat ids, and the separate context directory are unsupported.
 - Tools execute through `OfficeToolExecutor`; pipelines cannot call Office adapters directly.
 - VBA tools use only manifest-based packages with `src/*.bas` and `src/*.cls`.

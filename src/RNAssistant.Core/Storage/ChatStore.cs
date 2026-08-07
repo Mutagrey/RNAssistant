@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Storage
@@ -297,12 +298,34 @@ namespace RNAssistant.Core.Storage
             {
                 session.Messages = new List<ChatMessage>();
             }
+            session.Messages = session.Messages.Where(message => message != null).ToList();
             foreach (var message in session.Messages.Where(m => m != null))
             {
+                if (string.IsNullOrWhiteSpace(message.Id))
+                {
+                    message.Id = Guid.NewGuid().ToString("N");
+                }
+                if (message.CreatedUtc == default(DateTime))
+                {
+                    message.CreatedUtc = session.CreatedUtc;
+                }
+                if (message.ArtifactIds == null)
+                {
+                    message.ArtifactIds = new List<string>();
+                }
+                message.ArtifactIds = message.ArtifactIds
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (message.ToolCalls == null)
+                {
+                    message.ToolCalls = new List<LlmToolCall>();
+                }
                 if (message.Attachments == null)
                 {
                     message.Attachments = new List<ChatAttachment>();
                 }
+                message.Attachments = message.Attachments.Where(attachment => attachment != null).ToList();
                 foreach (var attachment in message.Attachments.Where(a => a != null))
                 {
                     if (attachment.PageTextLengths == null)
@@ -355,11 +378,66 @@ namespace RNAssistant.Core.Storage
             {
                 session.Context.Notes = new List<ContextNote>();
             }
+            if (session.ContextCheckpoints == null)
+            {
+                session.ContextCheckpoints = new List<ContextCheckpoint>();
+            }
+            foreach (var checkpoint in session.ContextCheckpoints.Where(item => item != null))
+            {
+                if (string.IsNullOrWhiteSpace(checkpoint.Id)) checkpoint.Id = Guid.NewGuid().ToString("N");
+                if (checkpoint.CreatedUtc == default(DateTime)) checkpoint.CreatedUtc = session.UpdatedUtc;
+            }
+            session.ContextCheckpoints = session.ContextCheckpoints
+                .Where(item => item != null)
+                .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.OrderByDescending(item => item.CreatedUtc).First())
+                .ToList();
+            if (session.Artifacts == null)
+            {
+                session.Artifacts = new List<ChatArtifact>();
+            }
+            foreach (var artifact in session.Artifacts.Where(item => item != null))
+            {
+                if (string.IsNullOrWhiteSpace(artifact.Id)) artifact.Id = Guid.NewGuid().ToString("N");
+                if (artifact.Revision <= 0) artifact.Revision = 1;
+                if (artifact.CreatedUtc == default(DateTime)) artifact.CreatedUtc = session.UpdatedUtc;
+                if (artifact.RelatedArtifactIds == null) artifact.RelatedArtifactIds = new List<string>();
+            }
+            session.Artifacts = session.Artifacts
+                .Where(item => item != null)
+                .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.OrderByDescending(item => item.CreatedUtc).First())
+                .ToList();
+            if (session.ActiveSkillIds == null)
+            {
+                session.ActiveSkillIds = new List<string>();
+            }
+            session.ActiveSkillIds = session.ActiveSkillIds
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var messageIds = new HashSet<string>(session.Messages.Where(item => item != null).Select(item => item.Id), StringComparer.OrdinalIgnoreCase);
+            var activeCheckpoint = session.ContextCheckpoints.FirstOrDefault(item =>
+                string.Equals(item.Id, session.ActiveContextCheckpointId, StringComparison.OrdinalIgnoreCase));
+            if (activeCheckpoint == null || !messageIds.Contains(activeCheckpoint.ThroughMessageId))
+            {
+                session.ActiveContextCheckpointId = null;
+            }
+            var activeHtml = session.Artifacts.FirstOrDefault(item =>
+                string.Equals(item.Id, session.ActiveHtmlArtifactId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase));
+            if (activeHtml == null)
+            {
+                session.ActiveHtmlArtifactId = null;
+            }
         }
 
         private static bool IsSupported(ChatSession session)
         {
-            return session != null && session.FormatVersion == ChatSession.CurrentFormatVersion;
+            return session != null &&
+                session.FormatVersion >= 1 &&
+                session.FormatVersion <= ChatSession.CurrentFormatVersion;
         }
 
         private static ChatSession LoadSession(string path)
@@ -373,9 +451,12 @@ namespace RNAssistant.Core.Storage
 
                 var root = JObject.Parse(File.ReadAllText(path));
                 var formatVersion = root.GetValue("FormatVersion", StringComparison.OrdinalIgnoreCase);
+                int version;
                 if (formatVersion == null ||
                     formatVersion.Type != JTokenType.Integer ||
-                    !string.Equals(formatVersion.ToString(), ChatSession.CurrentFormatVersion.ToString(), StringComparison.Ordinal))
+                    !int.TryParse(formatVersion.ToString(), out version) ||
+                    version < 1 ||
+                    version > ChatSession.CurrentFormatVersion)
                 {
                     return null;
                 }

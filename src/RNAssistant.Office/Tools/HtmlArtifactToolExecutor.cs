@@ -4,6 +4,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.Tools
 {
@@ -241,6 +242,8 @@ namespace RNAssistant.Office.Tools
                 session.HtmlWorkspace.ActiveFileId = file.Id;
             }
 
+            HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML: " + normalizedPath);
+
             return file;
         }
 
@@ -275,6 +278,7 @@ namespace RNAssistant.Office.Tools
             data.Json = json ?? "{}";
             data.UpdatedUtc = now;
             session.HtmlWorkspace.UpdatedUtc = now;
+            HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML data: " + normalizedName);
             return data;
         }
 
@@ -299,6 +303,7 @@ namespace RNAssistant.Office.Tools
 
             session.HtmlWorkspace.ActiveFileId = file.Id;
             session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
+            HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML active file: " + file.Path);
             return file;
         }
 
@@ -310,6 +315,7 @@ namespace RNAssistant.Office.Tools
             session.HtmlWorkspace.Files.Remove(file);
             session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
             NormalizeWorkspace(session.HtmlWorkspace);
+            HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML deleted: " + file.Path);
             return file;
         }
 
@@ -321,6 +327,7 @@ namespace RNAssistant.Office.Tools
             session.HtmlWorkspace.DataSources.Remove(data);
             session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
             NormalizeWorkspace(session.HtmlWorkspace);
+            HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML data deleted: " + data.Name);
             return data;
         }
 
@@ -345,6 +352,7 @@ namespace RNAssistant.Office.Tools
             session.HtmlWorkspace.History.RemoveAll(h => h != null && string.Equals(h.Id, snapshot.Id, StringComparison.OrdinalIgnoreCase));
             session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
             NormalizeWorkspace(session.HtmlWorkspace);
+            HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML workspace restored");
             return snapshot;
         }
 
@@ -369,6 +377,7 @@ namespace RNAssistant.Office.Tools
             session.HtmlWorkspace.RedoHistory.RemoveAll(h => h != null && string.Equals(h.Id, snapshot.Id, StringComparison.OrdinalIgnoreCase));
             session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
             NormalizeWorkspace(session.HtmlWorkspace);
+            HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML workspace redone");
             return snapshot;
         }
 

@@ -59,6 +59,9 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - `src/RNAssistant.Office/Services/HtmlNetworkService.cs`: permission-gated HTTP(S) transport for sandboxed HTML workspace previews.
 - `src/RNAssistant.Office/Services/AgentRunService.cs`: controlled planner loop and route/slice/validate/execute/verify orchestration.
 - `src/RNAssistant.Office/Services/AgentPlannerCompletionRunner.cs`: response-mode selection, pre-execution `json_schema` fallback, planner completion streaming, native/text parsing, and one bounded format-repair attempt.
+- `src/RNAssistant.Office/Services/ContextCompactionService.cs`: model-generated, schema-validated context checkpoints. The source transcript is retained; only the replay window changes.
+- `src/RNAssistant.Office/Services/SkillResolver.cs`: progressive skill activation, dependency/conflict validation, and capability-based tool visibility.
+- `src/RNAssistant.Office/Services/ChatArtifactService.cs` and `HtmlWorkspaceArtifactService.cs`: generic chat artifacts plus immutable HTML workspace revisions used by edit/fork recovery.
 - `OfficeIntentRouter`, `ToolCatalogSlicer`, `PlannerPromptComposer`, `AgentActionValidator`, and `ObservationNormalizer` each own one planner responsibility.
 - `AgentProtocolHistory`, `AgentRunPresentation`, and `OfficeSnapshotReader` own protocol replay, observable run UI/diagnostics, and Office context capture respectively.
 - `src/RNAssistant.Office/Services/AgentRuntimeModels.cs`: route, observation, catalog slice, and run-state models.
@@ -71,7 +74,7 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
   only modeless window lifecycle, owner/positioning and managed assembly loading.
 - `src/RNAssistant.*AddIn`: VSTO host wiring; no host adapter ownership.
 - `wrappers/native`: VBA source modules for Office-native launchers.
-- `web`: static HTML/CSS/JS task pane. `web/js/app-core.js` owns state and WebView bridge wiring; `app-settings.js`, `app-tools.js`, `app-skills.js`, `app-vba.js`, `app-context.js`, and `app-chat.js` own their feature flows; `app-utils.js` owns pure browser helpers; `app.js` is boot plus shared rendering helpers.
+- `web`: static HTML/CSS/JS task pane. `web/js/app-core.js` owns state and WebView bridge wiring; `app-settings.js`, `app-tools.js`, `app-skills.js`, `app-vba.js`, `app-context.js`, `app-chat.js`, and `app-artifacts.js` own their feature flows; `app-utils.js` owns pure browser helpers; `app.js` is boot plus shared rendering helpers.
 
 ## Non-Negotiable Boundaries
 
@@ -82,17 +85,21 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - There are only two persisted chat modes: `Agent` (default) and `Chat`. Agent can answer without tools when routing does not require Office state. Chat is a transparent plain completion path with its own `ChatSystemPrompt`; it performs no JSON/thought-envelope repair, while provider reasoning remains separate metadata. HTML and pending agent continuations force Agent.
 - Model reasoning is transport metadata (`reasoning_content`, `reasoning`, or one leading `<think>...</think>` block), stored and rendered separately; it is never mixed into planner JSON or replayed as chat history. Think tags elsewhere in ordinary content are preserved literally. The per-chat preference remains outside AgentDecision v1 and maps through the configured request transport: `reasoning_effort`, `enable_thinking`, `chat_template_kwargs.enable_thinking`, `reasoning.enabled`, or a validated `custom_json` object merged into non-reserved request fields while the toggle is enabled; model catalog metadata may override the global transport.
 - Context limits are token budgets resolved from the active model capability catalog or an explicit override. Message/media estimates, response schema and native tool schemas all reduce the available request/output budget.
-- Chat and planner context are rebuilt from the active session for every request. They use reference-deduplicated notes plus recent user/assistant messages and their attachments; agent activity, diagnostics, and reasoning metadata are never replayed.
-- Chat and Agent share `PromptBudgetComposer` for chronological history selection and attachment accounting. Once a recent message exceeds the remaining budget, older history is not reintroduced.
+- The persisted transcript is append-only during normal work. Accepted tool exchanges are persisted as protocol messages, including a matching assistant `tool_calls` + `role: tool` pair by default. Agent activity, rejected responses, diagnostics and provider reasoning remain outside replay.
+- Context is never reduced to a fixed number of recent actions. At 80% of the input budget, `ContextCompactionService` asks the configured model for a strict structured checkpoint and keeps an exact raw tail targeting 55%. The compaction request includes bounded extracted text from referenced text/PDF attachments. The source messages remain stored. Edit/delete invalidates stale checkpoints; a fork copies the reachable checkpoint and artifacts.
+- `PromptBudgetComposer` replays exactly the active checkpoint plus its contiguous raw tail. If that state still cannot fit, it fails explicitly instead of silently dropping or locally paraphrasing messages.
+- If exact prompt assembly discovers additional host/tool-schema overhead after preflight, Chat/Agent may perform one model-compaction retry before the first affected model turn; Office tools are not repeated.
 - Deterministic verification uses the narrowest available read tool and has a 15-second runtime timeout. A timeout ends the run with a diagnostic instead of starting another COM operation against a potentially blocked Office host.
 - Text/PDF attachments are normalized locally. PDF text uses PdfPig; vision-capable models may also receive selected PDF pages rendered by the host-neutral Office service. Raw PDF files are not sent through the OpenAI-compatible chat payload.
 - Attachment text, bytes and rendered PDF pages may be cached only for one logical agent run; the cache is released with the run and never becomes chat state.
 - Routing precedes Office context capture. General-answer routes expose no tools and do not read document content; document-dependent state is obtained through explicit read tools.
-- Tools are executable actions described by `ToolDefinition`; skills are markdown guidance described by `SkillDefinition`.
+- Tools are executable actions described by `ToolDefinition`; skills are scoped markdown guidance described by `SkillDefinition`. Every Agent request includes a compact `SKILL_INDEX`, while full bodies are included only for `ACTIVE_SKILLS`.
+- `common.skills_load` is an always-visible control action, including in a full mutation slice. It activates exact skill ids, resolves dependencies, rejects cycles/conflicts, and then exposes only tool capabilities owned by active skills. A custom skill cannot self-declare built-in trust or gate built-in tools; runtime safety and confirmation rules cannot be overridden by a skill.
 - Tool safety belongs to `ToolDefinition` metadata: `MutatesDocument`, `MutatesLocalState`, `AgentCanRun`, `RequiresConfirmation`, risk/capability fields, and verification metadata. Pipeline effective safety recursively includes nested steps and fails closed for missing tools, malformed definitions, duplicate step ids, and cycles. Built-in/controller ids take precedence over custom definitions.
 - Agent runs are bounded by settings for max iterations and max tool steps; confirmed pending tools may resume the same run. Document mutation remains pending until a new verification observation succeeds.
 - Different chats may run LLM work concurrently. A chat accepts only one active run, and document mutations are serialized by host/document identity. Saving a background run never changes the selected chat.
 - A required-tool route accepts `final` only after its route phase reaches `final_phase`; inspection alone cannot complete a pending mutation. Format repair and required-tool correction have separate one-shot guards.
+- A terminal model answer does not mark unfinished plan steps complete. Repeated identical plans receive one explicit continuation correction; a third identical plan stops as `repeated_plan_no_progress` while preserving the visible plan.
 - Tool slices record explicit exclusion reasons, balance mutation/inspection capabilities, and fit both prompt and API schema representations into a bounded share of context. The per-request tool limit is configurable from 8 to 64.
 - Controller coordinates request flow; it should not contain pipeline execution, VBA patch logic, or JS rendering logic.
 - Office host adapters expose executable capabilities through `ToolDefinition` and `ExecuteTool`; they should not know chat/session/storage details.
@@ -101,6 +108,7 @@ managed assemblies. Это обязательно: внутри Office `AppDomai
 - Host adapters may implement `IOfficeDocumentCatalog`; typed bridge responses merge its open-document list with persisted chat summaries, and document activation is dispatched by stable document key.
 - Unsaved Office documents use the same custom document identity as saved files when custom properties are available; display names such as `Book1` are never storage keys.
 - New chat sessions remain transient until they contain a completed user/assistant exchange. Empty drafts are not written to the chat store, and document-history deletion removes every stored chat for that document without deleting the Office file.
+- Plans, compaction checkpoints, attachments and HTML workspace revisions are represented by `ChatArtifact`. Model requests receive a bounded metadata-only `CHAT_ARTIFACT_INDEX`; bridge DTOs expose bounded metadata/cards, while complete HTML snapshot bodies remain local. Editing a turn restores its exact HTML checkpoint, and forking from a message copies only reachable artifacts and their revision parents while attachment ids remain stable and files are copied into the fork.
 - JSON metadata writes use same-directory atomic replacement. Tool/skill saves reconcile only managed entries in scope and preserve broken or unrecognized entries and extra user files. Custom tool arguments require formal object JSON Schema; invalid definitions are skipped.
 - Formal schemas are also enforced immediately before controller/custom-pipeline execution, including manual runs and nested pipeline steps. Legacy host built-ins keep adapter-owned validation for backward compatibility. Exact whole-value pipeline placeholders preserve JSON primitive/array/object types.
 - Literal/regexp matching is centralized in Core `TextPatternEngine` with bounded patterns/results/replacements and a regex timeout. Excel, Word, PowerPoint, and Outlook search results expose stable coordinates; replace tools require a matching search preview (`expectedMatches` + `expectedScopeSha256`) and deterministic post-write hash verification.
@@ -139,17 +147,17 @@ Current coverage:
 - pipeline failure diagnostics, cycle/missing-reference rejection, recursive risk/confirmation gates, and non-retryable partial-execution reporting;
 - agent runtime guards for strict decision repair, sliced tools, waiting confirmations, max iterations, max tool steps, fail-closed mutation verification/recovery, and VBA context prompt inclusion;
 - model-quality fixtures that catch final answers when Office tool use is required;
-- markdown skill store/catalog/prompt separation, prompt body limiting, and agent skill-save confirmation;
+- markdown skill store/catalog/prompt separation, progressive loading, dependency/conflict checks, capability-scoped tools, prompt body limiting, and agent skill-save confirmation;
 - agent custom tool save/read confirmation and validation;
 - metadata-driven mutation safety gates;
 - regexp search/replace and bounded replacement fixtures, execution-time schema checks, and nested pipeline budget enforcement;
 - VBA list/search/create/delete plus literal/regexp patch/restore flows, manifest/schema/signature validation, `.bas`/`.cls` package storage, document discovery, typed positional execution, session cleanup, persistent ownership and export-normalized hashes using fake Office/VBProject objects;
 - tool catalog service merge/filter behavior;
-- prompt message trimming, context usage estimates, and basic no-network chat completion flow;
+- persistent protocol replay, model-generated context checkpoints without transcript deletion, budget overflow guards, and basic no-network chat completion flow;
 - explicit Agent/Chat selection with Agent defaults, plain-chat prompt isolation, rebuilt history after deletion, and empty-tool preflight diagnostics;
 - balanced tool slicing with exclusion diagnostics, prompt-budget boundaries, and strict parser boundary corpus;
 - Core context normalization/upsert/trim behavior;
-- typed bridge settings/context/VBA/tool/chat payload parsing, agent pending-tool status, and progress envelope with streamed content deltas;
+- typed bridge settings/context/VBA/tool/chat/artifact payload parsing, manual context compaction, agent pending-tool status, and progress envelope with streamed content deltas;
 - no Office COM dependency.
 
 Next harness coverage:

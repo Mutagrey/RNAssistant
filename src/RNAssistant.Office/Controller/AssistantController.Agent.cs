@@ -107,7 +107,8 @@ namespace RNAssistant.Office
                         var skillRequest = session.PendingAgentTask != null && !string.IsNullOrWhiteSpace(session.PendingAgentTask.Request)
                             ? session.PendingAgentTask.Request
                             : latestUser == null ? "continue confirmed agent task" : latestUser.Content;
-                        var skills = _skillCatalog.SelectRelevantSkills(skillRequest, context, 5);
+                        var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
+                        SkillResolver.ActivateExplicitMentions(session, skillRequest, skills);
                         await _chatCompletionService.ContinueAfterToolAsync(
                             CloneCommand(pending.Command),
                             result,
@@ -121,8 +122,20 @@ namespace RNAssistant.Office
                             skills,
                             runCancellation.Token).ConfigureAwait(false);
                     }
+                    else
+                    {
+                        AgentProtocolHistory.AppendToolExchange(
+                            new List<ChatMessage>(),
+                            session,
+                            null,
+                            CloneCommand(pending.Command),
+                            result,
+                            settings);
+                    }
 
                     AnnotateRunMessages(session, firstRunMessageIndex, runId);
+                    HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
+                    ChatArtifactService.LinkMessageArtifacts(session, 0);
                     session.LastRun = null;
                     SaveSessionChanges(session);
                 }
@@ -148,6 +161,8 @@ namespace RNAssistant.Office
                         session.LastRun.CurrentAction = ex.Message;
                     }
                     AnnotateRunMessages(session, firstRunMessageIndex, runId);
+                    HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
+                    ChatArtifactService.LinkMessageArtifacts(session, 0);
                     SaveSessionChanges(session);
                     throw;
                 }
@@ -183,6 +198,15 @@ namespace RNAssistant.Office
                 result.PendingId = pending.PendingId;
                 UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
                 AgentPlanStateService.ApplyLatestResult(session, result, false);
+                var protocolStart = session.Messages.Count;
+                AgentProtocolHistory.AppendToolExchange(
+                    new List<ChatMessage>(),
+                    session,
+                    null,
+                    CloneCommand(pending.Command),
+                    result,
+                    _settingsService.Load());
+                AnnotateRunMessages(session, protocolStart, "cancel_" + Guid.NewGuid().ToString("N"));
                 SaveSessionChanges(session);
             }
             return ChatState(session);
@@ -465,6 +489,7 @@ namespace RNAssistant.Office
                     if (message != null)
                     {
                         message.Content = BuildResolvedToolContent(replacement);
+                        message.HtmlWorkspaceCheckpointId = session.ActiveHtmlArtifactId;
                     }
                     return;
                 }

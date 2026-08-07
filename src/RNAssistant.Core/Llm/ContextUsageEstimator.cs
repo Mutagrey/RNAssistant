@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Llm
@@ -57,14 +58,31 @@ namespace RNAssistant.Core.Llm
             var count = 0;
             if (session != null && session.Messages != null)
             {
-                foreach (var message in session.Messages)
+                var startIndex = 0;
+                var checkpoint = session.ContextCheckpoints == null || string.IsNullOrWhiteSpace(session.ActiveContextCheckpointId)
+                    ? null
+                    : session.ContextCheckpoints.FirstOrDefault(item => item != null &&
+                        string.Equals(item.Id, session.ActiveContextCheckpointId, StringComparison.OrdinalIgnoreCase));
+                if (checkpoint != null)
                 {
-                    if (message == null ||
-                        message.ExcludeFromModelContext ||
-                        message.Activity != null ||
-                        string.IsNullOrWhiteSpace(message.Content) ||
+                    usedChars += (checkpoint.SummaryMarkdown ?? string.Empty).Length;
+                    usedTokens += ModelContextBudget.EstimateTextTokens(checkpoint.SummaryMarkdown);
+                    count += 1;
+                    var throughIndex = session.Messages.FindIndex(message => message != null &&
+                        string.Equals(message.Id, checkpoint.ThroughMessageId, StringComparison.OrdinalIgnoreCase));
+                    if (throughIndex >= 0) startIndex = throughIndex + 1;
+                }
+                foreach (var message in session.Messages.Skip(startIndex))
+                {
+                    var protocolTool = message != null && message.ProtocolMessage &&
+                        (string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(message.Role, "developer", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase));
+                    if (message == null || message.ExcludeFromModelContext || message.Activity != null ||
+                        !protocolTool && (string.IsNullOrWhiteSpace(message.Content) ||
                         (!string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) &&
-                         !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase)))
+                         !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))))
                     {
                         continue;
                     }
@@ -73,6 +91,18 @@ namespace RNAssistant.Core.Llm
                     usedTokens += 4 +
                         ModelContextBudget.EstimateTextTokens(message.Role) +
                         ModelContextBudget.EstimateTextTokens(message.Content);
+                    if (message.ToolCalls != null && message.ToolCalls.Count > 0)
+                    {
+                        usedTokens += 8 + message.ToolCalls.Sum(call => call == null ? 0 :
+                            4 + ModelContextBudget.EstimateTextTokens(call.Id) +
+                            ModelContextBudget.EstimateTextTokens(call.Name) +
+                            ModelContextBudget.EstimateTextTokens(call.ArgumentsJson));
+                    }
+                    if (string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase))
+                    {
+                        usedTokens += 2 + ModelContextBudget.EstimateTextTokens(message.ToolCallId) +
+                            ModelContextBudget.EstimateTextTokens(message.ToolName);
+                    }
                     foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
                     {
                         if (attachment == null)

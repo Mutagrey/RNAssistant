@@ -28,7 +28,7 @@ namespace RNAssistant.Office.Tools
             yield return ControllerToolDefinition.Create(
                 "common.prompts_save",
                 "Common",
-                "Mutates settings: Update RNAssistant Agent, Chat, recovery, or title prompts after the user asks to edit them.",
+                "Mutates settings: Update RNAssistant Agent, Chat, recovery, compaction, or title prompts after the user asks to edit them.",
                 "{\"type\":\"object\",\"properties\":{" +
                     "\"systemPrompt\":{\"type\":\"string\"}," +
                     "\"chatSystemPrompt\":{\"type\":\"string\"}," +
@@ -36,6 +36,7 @@ namespace RNAssistant.Office.Tools
                     "\"forceToolUsePrompt\":{\"type\":\"string\"}," +
                     "\"repairDecisionPrompt\":{\"type\":\"string\"}," +
                     "\"planContinuationPrompt\":{\"type\":\"string\"}," +
+                    "\"contextCompactionPrompt\":{\"type\":\"string\"}," +
                     "\"chatTitlePrompt\":{\"type\":\"string\"}}," +
                     "\"required\":[],\"additionalProperties\":false}",
                 mutatesLocalState: true,
@@ -94,6 +95,7 @@ namespace RNAssistant.Office.Tools
             ApplyIfPresent(command, "forceToolUsePrompt", value => settings.AgentPrompts.ForceToolUsePrompt = value);
             ApplyIfPresent(command, "repairDecisionPrompt", value => settings.AgentPrompts.RepairDecisionPrompt = value);
             ApplyIfPresent(command, "planContinuationPrompt", value => settings.AgentPrompts.PlanContinuationPrompt = value);
+            ApplyIfPresent(command, "contextCompactionPrompt", value => settings.AgentPrompts.ContextCompactionPrompt = value);
             ApplyIfPresent(command, "chatTitlePrompt", value => settings.AgentPrompts.ChatTitlePrompt = value);
 
             if (dryRun)

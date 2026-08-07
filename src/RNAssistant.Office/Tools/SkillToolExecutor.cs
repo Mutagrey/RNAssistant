@@ -2,77 +2,114 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Services;
-using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Tools
 {
     internal sealed class SkillToolExecutor
     {
-        private readonly IOfficeApplicationAdapter _adapter;
         private readonly SkillStore _skillStore;
+        private readonly SkillCatalogService _skillCatalog;
 
         public SkillToolExecutor(IOfficeApplicationAdapter adapter, SkillStore skillStore)
         {
-            _adapter = adapter;
             _skillStore = skillStore;
+            _skillCatalog = new SkillCatalogService(adapter, skillStore);
         }
 
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
+            var load = ControllerToolDefinition.Create(
+                "common.skills_load",
+                "Common",
+                "Control: Activate the smallest set of relevant skill instructions before planning or using task tools. Use exact ids from SKILL_INDEX. This changes only the current chat's active guidance.",
+                "{\"type\":\"object\",\"properties\":{\"ids\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"minItems\":1},\"mode\":{\"type\":\"string\",\"enum\":[\"replace\",\"add\"]}},\"required\":[\"ids\"],\"additionalProperties\":false}");
+            load.UseWhen = "A SKILL_INDEX entry clearly applies and its full instructions are not listed in ACTIVE_SKILLS.";
+            load.DoNotUseWhen = "The required skill is already active, or no indexed skill is relevant.";
+            yield return load;
             yield return ControllerToolDefinition.Create("common.skills_list", "Common", "Read-only: List markdown skills visible to the current Office host.", "{}");
             yield return ControllerToolDefinition.Create("common.skills_read", "Common", "Read-only: Read one markdown skill by id.", "{\"id\":\"common.skill_authoring\"}");
-            yield return ControllerToolDefinition.Create("common.skills_save", "Common", "Mutates settings: Create or update a markdown skill SKILL.md file.", "{\"id\":\"common.my_skill\",\"host\":\"Common\",\"name\":\"My skill\",\"description\":\"When to use it\",\"tags\":\"tag1, tag2\",\"bodyMarkdown\":\"# My skill\\n...\",\"enabled\":true}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
+            yield return ControllerToolDefinition.Create("common.skills_save", "Common", "Mutates settings: Create or update a versioned markdown skill with discovery, dependency, conflict, and tool-capability metadata.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"host\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"version\":{\"type\":\"string\"},\"tags\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"appliesTo\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"requires\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"conflicts\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"toolCapabilities\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"resources\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"bodyMarkdown\":{\"type\":\"string\"},\"enabled\":{\"type\":\"boolean\"}},\"required\":[\"id\",\"description\",\"bodyMarkdown\"],\"additionalProperties\":false}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
             yield return ControllerToolDefinition.Create("common.skills_delete", "Common", "Mutates settings: Delete a custom markdown skill by id.", "{\"id\":\"common.my_skill\"}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
         }
 
-        public ToolResult ExecuteControllerTool(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)
+        public ToolResult ExecuteControllerTool(
+            ToolCommand command,
+            AppSettings settings,
+            bool dryRun,
+            bool manualRun,
+            ChatSession session,
+            IReadOnlyList<SkillDefinition> runtimeSkills = null)
         {
             if (string.Equals(command.ToolId, "common.skills_list", StringComparison.OrdinalIgnoreCase))
             {
-                return ListSkills();
+                return ListSkills(runtimeSkills);
+            }
+
+            if (string.Equals(command.ToolId, "common.skills_load", StringComparison.OrdinalIgnoreCase))
+            {
+                var ids = SkillResolver.ReadIds(command.Arguments);
+                if (ids.Count == 0) return ToolResult.Fail("At least one skill id is required.", null, "missing_skill_ids", false);
+                var mode = ToolArgumentReader.String(command.Arguments, "mode", "replace");
+                var visibleSkills = VisibleSkills(runtimeSkills);
+                var resolution = dryRun
+                    ? SkillResolver.Resolve(visibleSkills, ids)
+                    : SkillResolver.Activate(session, visibleSkills, ids, mode);
+                return resolution.Success
+                    ? ToolResult.Ok("Skills resolved: " + string.Join(", ", resolution.Skills.Select(skill => skill.Id).ToArray()), JsonConvert.SerializeObject(new
+                    {
+                        ids = resolution.Skills.Select(skill => skill.Id).ToArray(),
+                        mode = string.Equals(mode, "add", StringComparison.OrdinalIgnoreCase) ? "add" : "replace"
+                    }))
+                    : ToolResult.Fail(resolution.Error, null, "invalid_skill_selection", false);
             }
 
             if (string.Equals(command.ToolId, "common.skills_read", StringComparison.OrdinalIgnoreCase))
             {
-                return ReadSkill(command);
+                return ReadSkill(command, runtimeSkills);
             }
 
             if (string.Equals(command.ToolId, "common.skills_save", StringComparison.OrdinalIgnoreCase))
             {
-                return SaveSkill(command, settings, dryRun, manualRun);
+                return SaveSkill(command, settings, dryRun, manualRun, runtimeSkills);
             }
 
             if (string.Equals(command.ToolId, "common.skills_delete", StringComparison.OrdinalIgnoreCase))
             {
-                return DeleteSkill(command, settings, dryRun, manualRun);
+                return DeleteSkill(command, settings, dryRun, manualRun, runtimeSkills);
             }
 
             return ToolResult.Fail("Unknown skill controller tool: " + command.ToolId);
         }
 
-        private ToolResult ListSkills()
+        private ToolResult ListSkills(IReadOnlyList<SkillDefinition> runtimeSkills)
         {
-            var skills = VisibleSkills().Select(s => new
+            var skills = VisibleSkills(runtimeSkills).Select(s => new
             {
                 id = s.Id,
                 host = s.Host,
                 name = s.Name,
                 description = s.Description,
+                version = s.Version,
                 tags = s.Tags,
+                appliesTo = s.AppliesTo,
+                requires = s.Requires,
+                conflicts = s.Conflicts,
+                toolCapabilities = s.ToolCapabilities,
+                resources = s.Resources,
+                trustLevel = s.BuiltIn ? "built_in" : "custom",
                 builtIn = s.BuiltIn,
                 enabled = s.Enabled
             }).ToArray();
             return ToolResult.Ok("Skills listed.", JsonConvert.SerializeObject(skills));
         }
 
-        private ToolResult ReadSkill(ToolCommand command)
+        private ToolResult ReadSkill(ToolCommand command, IReadOnlyList<SkillDefinition> runtimeSkills)
         {
             var id = ToolArgumentReader.String(command.Arguments, "id", string.Empty);
-            var skill = VisibleSkills().FirstOrDefault(s => string.Equals(s.Id, id, StringComparison.OrdinalIgnoreCase));
+            var skill = VisibleSkills(runtimeSkills).FirstOrDefault(s => string.Equals(s.Id, id, StringComparison.OrdinalIgnoreCase));
             if (skill == null)
             {
                 return ToolResult.Fail("Skill not found: " + id);
@@ -81,9 +118,10 @@ namespace RNAssistant.Office.Tools
             return ToolResult.Ok("Skill read: " + skill.Id, JsonConvert.SerializeObject(skill));
         }
 
-        private ToolResult SaveSkill(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)
+        private ToolResult SaveSkill(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun, IReadOnlyList<SkillDefinition> runtimeSkills)
         {
             var skill = ReadSkillDefinition(command);
+            var visibleSkills = VisibleSkills(runtimeSkills);
             if (string.IsNullOrWhiteSpace(skill.Id))
             {
                 return ToolResult.Fail("Skill id is required.");
@@ -93,10 +131,15 @@ namespace RNAssistant.Office.Tools
             {
                 return ToolResult.Fail("Skill bodyMarkdown is required.");
             }
-            if (BuiltInSkillProvider.GetSkills(_adapter).Any(item =>
-                item != null && string.Equals(item.Id, skill.Id, StringComparison.OrdinalIgnoreCase)))
+            if (visibleSkills.Any(item => item.BuiltIn &&
+                string.Equals(item.Id, skill.Id, StringComparison.OrdinalIgnoreCase)))
             {
                 return ToolResult.Fail("Built-in skill id is reserved: " + skill.Id, null, "reserved_skill_id", false);
+            }
+            string validationError;
+            if (!SkillResolver.ValidateDefinition(visibleSkills, skill, out validationError))
+            {
+                return ToolResult.Fail(validationError, null, "invalid_skill_definition", false);
             }
             if (!dryRun && !manualRun && !(settings ?? new AppSettings()).AutoConfirmToolActions)
             {
@@ -112,17 +155,29 @@ namespace RNAssistant.Office.Tools
             return ToolResult.Ok("Skill saved: " + skill.Id, JsonConvert.SerializeObject(saved ?? skill));
         }
 
-        private ToolResult DeleteSkill(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)
+        private ToolResult DeleteSkill(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun, IReadOnlyList<SkillDefinition> runtimeSkills)
         {
             var id = ToolArgumentReader.String(command.Arguments, "id", string.Empty);
+            var visibleSkills = VisibleSkills(runtimeSkills);
             if (string.IsNullOrWhiteSpace(id))
             {
                 return ToolResult.Fail("Skill id is required.");
             }
 
-            if (VisibleSkills().Any(s => s.BuiltIn && string.Equals(s.Id, id, StringComparison.OrdinalIgnoreCase)))
+            if (visibleSkills.Any(s => s.BuiltIn && string.Equals(s.Id, id, StringComparison.OrdinalIgnoreCase)))
             {
                 return ToolResult.Fail("Built-in skills cannot be deleted: " + id);
+            }
+            var dependent = visibleSkills.FirstOrDefault(skill => skill != null &&
+                !string.Equals(skill.Id, id, StringComparison.OrdinalIgnoreCase) &&
+                (skill.Requires ?? new List<string>()).Any(required => string.Equals(required, id, StringComparison.OrdinalIgnoreCase)));
+            if (dependent != null)
+            {
+                return ToolResult.Fail(
+                    "Skill cannot be deleted because it is required by " + dependent.Id + ".",
+                    null,
+                    "skill_in_use",
+                    false);
             }
 
             if (!dryRun && !manualRun && !(settings ?? new AppSettings()).AutoConfirmToolActions)
@@ -148,38 +203,28 @@ namespace RNAssistant.Office.Tools
                 Host = ToolArgumentReader.String(command.Arguments, "host", "Common"),
                 Name = ToolArgumentReader.String(command.Arguments, "name", ToolArgumentReader.String(command.Arguments, "id", string.Empty)),
                 Description = ToolArgumentReader.String(command.Arguments, "description", string.Empty),
-                Tags = ReadTags(command),
+                Version = ToolArgumentReader.String(command.Arguments, "version", "1.0.0"),
+                Tags = ReadStringList(command, "tags"),
+                AppliesTo = ReadStringList(command, "appliesTo"),
+                Requires = ReadStringList(command, "requires"),
+                Conflicts = ReadStringList(command, "conflicts"),
+                ToolCapabilities = ReadStringList(command, "toolCapabilities"),
+                Resources = ReadStringList(command, "resources"),
+                TrustLevel = "custom",
                 BodyMarkdown = ToolArgumentReader.String(command.Arguments, "bodyMarkdown", string.Empty),
                 Enabled = ReadBool(command, "enabled", true),
                 BuiltIn = false
             };
         }
 
-        private static List<string> ReadTags(ToolCommand command)
+        private static List<string> ReadStringList(ToolCommand command, string name)
         {
-            var raw = ToolArgumentReader.String(command.Arguments, "tags", string.Empty);
-            if (string.IsNullOrWhiteSpace(raw))
+            object value;
+            if (command != null && command.Arguments != null && command.Arguments.TryGetValue(name, out value))
             {
-                return new List<string>();
+                return SkillResolver.ReadIds(new Dictionary<string, object> { { "ids", value } });
             }
-
-            try
-            {
-                var token = JToken.Parse(raw);
-                var array = token as JArray;
-                if (array != null)
-                {
-                    return array.Select(t => Convert.ToString(t)).Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
-                }
-            }
-            catch (JsonException)
-            {
-            }
-
-            return raw.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(t => t.Trim())
-                .Where(t => !string.IsNullOrWhiteSpace(t))
-                .ToList();
+            return new List<string>();
         }
 
         private static bool ReadBool(ToolCommand command, string name, bool fallback)
@@ -189,28 +234,9 @@ namespace RNAssistant.Office.Tools
             return bool.TryParse(raw, out value) ? value : fallback;
         }
 
-        private IEnumerable<SkillDefinition> VisibleSkills()
+        private IReadOnlyList<SkillDefinition> VisibleSkills(IReadOnlyList<SkillDefinition> runtimeSkills = null)
         {
-            var result = new Dictionary<string, SkillDefinition>(StringComparer.OrdinalIgnoreCase);
-            foreach (var skill in BuiltInSkillProvider.GetSkills(_adapter).Where(IsVisible))
-            {
-                result[skill.Id] = skill;
-            }
-
-            foreach (var skill in _skillStore.Load().Where(IsVisible))
-            {
-                if (!result.ContainsKey(skill.Id)) result[skill.Id] = skill;
-            }
-
-            return result.Values.OrderBy(s => s.Host).ThenBy(s => s.Id);
+            return runtimeSkills ?? _skillCatalog.GetVisibleSkills();
         }
-
-        private bool IsVisible(SkillDefinition skill)
-        {
-            return skill != null &&
-                (string.Equals(skill.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(skill.Host, "Common", StringComparison.OrdinalIgnoreCase));
-        }
-
     }
 }

@@ -420,7 +420,7 @@ namespace RNAssistant.Harness
             AssertEqual(1, settings.HtmlNetworkAllowedOrigins.Count, "origin persisted once");
         }
 
-        private static void PromptBudgetKeepsContiguousRecentHistory()
+        private static void PromptBudgetFailsClosedWithoutCompaction()
         {
             var builder = new ChatContextWindowBuilder();
             var session = new ChatSession();
@@ -430,25 +430,69 @@ namespace RNAssistant.Harness
             session.Messages.Add(new ChatMessage { Role = "assistant", Content = "RECENT_AFTER_LARGE" });
             session.Messages.Add(new ChatMessage { Role = "user", Content = "current" });
 
-            var prompt = builder.BuildPlainMessages(
-                "current",
-                session,
-                new DocumentContext(),
-                new AppSettings
-                {
-                    SystemPromptRole = "system",
-                    ContextWindowOverrideTokens = 4096,
-                    MaxTokens = 2048,
-                    AutoCompressContext = false
-                },
-                null);
-            var text = FlattenMessages(prompt);
-            AssertContains(text, "current", "current request retained");
-            AssertContains(text, "RECENT_AFTER_LARGE", "newest fitting history retained");
-            AssertTrue(text.IndexOf("OLD_SMALL_SENTINEL", StringComparison.Ordinal) < 0, "history remains contiguous after overflow");
+            var failedClosed = false;
+            try
+            {
+                builder.BuildPlainMessages(
+                    "current",
+                    session,
+                    new DocumentContext(),
+                    new AppSettings
+                    {
+                        SystemPromptRole = "system",
+                        ContextWindowOverrideTokens = 4096,
+                        MaxTokens = 2048,
+                        AutoCompressContext = false
+                    },
+                    null);
+            }
+            catch (InvalidOperationException ex)
+            {
+                failedClosed = ex.Message.IndexOf("context compaction", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            AssertTrue(failedClosed, "oversized raw history is never silently trimmed");
+            AssertEqual(5, session.Messages.Count, "raw transcript remains intact");
+            AssertContains(session.Messages[0].Content, "OLD_SMALL_SENTINEL", "oldest message remains stored");
+
+            var protocolFailedClosed = false;
+            try
+            {
+                new PromptBudgetComposer().AddProtocolHistory(
+                    new List<ChatMessage> { new ChatMessage { Role = "system", Content = "root" } },
+                    new List<ChatMessage>
+                    {
+                        new ChatMessage { Role = "assistant", Content = "tool call", ToolCalls = new List<LlmToolCall> { new LlmToolCall { Id = "call_budget", Name = "test.read", ArgumentsJson = "{}" } } },
+                        new ChatMessage { Role = "tool", ToolCallId = "call_budget", Content = new string('r', 4000) }
+                    },
+                    64);
+            }
+            catch (InvalidOperationException ex)
+            {
+                protocolFailedClosed = ex.Message.IndexOf("preserved", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            AssertTrue(protocolFailedClosed, "current tool protocol is never silently trimmed");
+
+            var requiredPromptFailedClosed = false;
+            var stored = new ChatSession();
+            stored.Messages.Add(new ChatMessage { Role = "user", Content = "STORED_HISTORY" });
+            try
+            {
+                new PromptBudgetComposer().AddConversationHistory(
+                    new List<ChatMessage> { new ChatMessage { Role = "user", Content = new string('q', 4000) } },
+                    0,
+                    stored,
+                    new AppSettings(),
+                    64);
+            }
+            catch (InvalidOperationException ex)
+            {
+                requiredPromptFailedClosed = ex.Message.IndexOf("No conversation history was removed", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            AssertTrue(requiredPromptFailedClosed, "oversized required prompt fails before history can disappear");
+            AssertEqual("STORED_HISTORY", stored.Messages[0].Content, "stored history remains unchanged after required prompt overflow");
         }
 
-        private static void PromptBudgetCompressesEarlierHistory()
+        private static void PromptBudgetUsesCheckpointAndExactTail()
         {
             var builder = new ChatContextWindowBuilder();
             var session = new ChatSession();
@@ -465,14 +509,129 @@ namespace RNAssistant.Harness
                 AutoCompressContext = true
             };
 
+            var checkpoint = new ContextCheckpoint
+            {
+                ThroughMessageId = session.Messages[2].Id,
+                SummaryMarkdown = "OLD_SMALL_SENTINEL preserved in model-generated summary.",
+                SummaryJson = "{\"summary\":\"OLD_SMALL_SENTINEL preserved\"}"
+            };
+            session.ContextCheckpoints.Add(checkpoint);
+            session.ActiveContextCheckpointId = checkpoint.Id;
+
             var prompt = builder.BuildPlainMessages("current", session, new DocumentContext(), settings, null);
             var text = FlattenMessages(prompt);
-            AssertContains(text, "COMPRESSED_EARLIER_CONVERSATION", "compressed history marker");
+            AssertContains(text, "COMPACTED_EARLIER_CONTEXT", "checkpoint marker");
             AssertContains(text, "OLD_SMALL_SENTINEL", "older history retained compactly");
             AssertContains(text, "RECENT_AFTER_LARGE", "recent history retained verbatim");
+            AssertTrue(text.IndexOf(new string('x', 12000), StringComparison.Ordinal) < 0, "raw compacted prefix is not replayed");
             AssertTrue(
                 new PromptBudgetComposer().EstimateMessages(prompt) <= ModelContextBudget.InputBudgetTokens(settings),
-                "compressed prompt remains within budget");
+                "checkpoint prompt remains within budget");
+        }
+
+        private static void ContextCompactionCreatesDurableCheckpoint()
+        {
+            var session = new ChatSession();
+            var firstMessage = new ChatMessage { Role = "user", Content = "ORIGINAL_GOAL" };
+            firstMessage.Attachments.Add(new ChatAttachment
+            {
+                Id = "memory-file",
+                FileName = "memory.txt",
+                Kind = "text",
+                ExtractedText = "ATTACHMENT_FACT",
+                ExtractedCharCount = 15
+            });
+            session.Messages.Add(firstMessage);
+            session.Messages.Add(new ChatMessage { Role = "assistant", Content = "First answer" });
+            session.Messages.Add(new ChatMessage { Role = "user", Content = "Second request" });
+            session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Second answer" });
+            session.Messages.Add(new ChatMessage { Role = "user", Content = "LATEST_REQUEST" });
+            session.ActiveSkillIds.Add("common.test_memory");
+            var referencedArtifact = new ChatArtifact { Kind = ChatArtifactKinds.Markdown, Title = "Memory artifact" };
+            session.Artifacts.Add(referencedArtifact);
+            session.Messages[0].ArtifactIds.Add(referencedArtifact.Id);
+            var originalCount = session.Messages.Count;
+            var summaryJson = "{\"summary\":\"Continue ORIGINAL_GOAL\",\"goals\":[\"ORIGINAL_GOAL\"],\"requirements\":[],\"decisions\":[],\"verifiedFacts\":[],\"completedActions\":[],\"pendingWork\":[\"LATEST_REQUEST\"],\"blockers\":[],\"stableReferences\":[],\"activeSkills\":[],\"artifactReferences\":[],\"warnings\":[]}";
+            List<ChatMessage> compactionRequest = null;
+            var compactionCalls = 0;
+            var service = new ContextCompactionService((settings, messages, options, progress, cancellationToken) =>
+            {
+                compactionRequest = messages == null ? null : messages.ToList();
+                compactionCalls += 1;
+                return Task.FromResult(new LlmCompletionResult
+                {
+                    Content = compactionCalls == 1 ? summaryJson.TrimEnd('}') + ",\"unexpected\":true}" : summaryJson
+                });
+            });
+
+            var checkpoint = service.EnsureWithinBudgetAsync(
+                session,
+                new AppSettings { ContextWindowOverrideTokens = 4096, MaxTokens = 2048 },
+                string.Empty,
+                true,
+                null,
+                CancellationToken.None).GetAwaiter().GetResult();
+
+            AssertTrue(checkpoint != null, "checkpoint created");
+            AssertEqual(2, compactionCalls, "invalid compaction receives one strict retry");
+            AssertEqual(originalCount + 1, session.Messages.Count, "full transcript plus visible compaction event retained");
+            AssertEqual("ORIGINAL_GOAL", session.Messages[0].Content, "raw first message retained");
+            AssertEqual(checkpoint.Id, session.ActiveContextCheckpointId, "checkpoint activated");
+            AssertTrue(session.Artifacts.Any(artifact => artifact.Kind == ChatArtifactKinds.Compaction), "compaction artifact registered");
+            AssertContains(FlattenMessages(compactionRequest), "common.test_memory", "active skills supplied to compactor");
+            AssertContains(FlattenMessages(compactionRequest), referencedArtifact.Id, "artifact reference supplied to compactor");
+            AssertContains(FlattenMessages(compactionRequest), "ATTACHMENT_FACT", "text attachment facts supplied to compactor");
+            var active = FlattenMessages(ContextCompactionService.BuildActiveWindow(session));
+            AssertContains(active, "Continue ORIGINAL_GOAL", "summary enters active context");
+            AssertContains(active, "LATEST_REQUEST", "recent raw tail remains");
+            AssertTrue(active.IndexOf("First answer", StringComparison.Ordinal) < 0, "compacted prefix leaves active replay");
+        }
+
+        private static void PromptOverflowRetriesAfterModelCompaction()
+        {
+            var session = new ChatSession();
+            session.Messages.Add(new ChatMessage
+            {
+                Role = "user",
+                Content = "RAW_HISTORY_RETAINED " + new string('x', 9000)
+            });
+            var compactionCalls = 0;
+            var chatCalls = 0;
+            var summaryJson = "{\"summary\":\"Earlier request retained compactly.\",\"goals\":[],\"requirements\":[],\"decisions\":[],\"verifiedFacts\":[],\"completedActions\":[],\"pendingWork\":[],\"blockers\":[],\"stableReferences\":[],\"activeSkills\":[],\"artifactReferences\":[],\"warnings\":[]}";
+            LlmCompletionDelegate completion = (requestSettings, messages, options, progress, cancellationToken) =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (string.Equals(options == null ? null : options.ResponseSchemaName, "rnassistant_context_compaction", StringComparison.Ordinal))
+                {
+                    compactionCalls += 1;
+                    return Task.FromResult(new LlmCompletionResult { Content = summaryJson });
+                }
+                chatCalls += 1;
+                return Task.FromResult(new LlmCompletionResult { Content = "Готово после compact." });
+            };
+            var compactor = new ContextCompactionService(completion);
+            var service = new PlainChatService(completion, compactor);
+            var settings = new AppSettings
+            {
+                AutoCompressContext = true,
+                ContextWindowOverrideTokens = 4096,
+                MaxTokens = 1024
+            };
+
+            var result = service.ExecuteAsync(
+                "CURRENT_REQUEST",
+                session,
+                new DocumentContext(),
+                settings,
+                null,
+                null,
+                CancellationToken.None).GetAwaiter().GetResult();
+
+            AssertEqual(1, compactionCalls, "overflow invokes one model compaction retry");
+            AssertEqual(1, chatCalls, "main chat completion runs once after compaction");
+            AssertContains(result.AssistantText, "после compact", "main answer returned");
+            AssertContains(session.Messages[0].Content, "RAW_HISTORY_RETAINED", "raw history remains stored");
+            AssertTrue(ContextCompactionService.ActiveCheckpoint(session) != null, "retry activates durable checkpoint");
         }
 
         private static void ModelCatalogUsesExplicitUrlAndStandardDataShape()

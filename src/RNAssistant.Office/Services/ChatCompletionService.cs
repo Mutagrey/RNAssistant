@@ -24,8 +24,17 @@ namespace RNAssistant.Office.Services
             IOfficeApplicationAdapter adapter,
             OfficeToolExecutor toolExecutor,
             LlmCompletionDelegate completeAsync)
+            : this(adapter, toolExecutor, completeAsync, null)
         {
-            _agentRunService = new AgentRunService(adapter, toolExecutor, completeAsync);
+        }
+
+        internal ChatCompletionService(
+            IOfficeApplicationAdapter adapter,
+            OfficeToolExecutor toolExecutor,
+            LlmCompletionDelegate completeAsync,
+            ContextCompactionService contextCompactionService)
+        {
+            _agentRunService = new AgentRunService(adapter, toolExecutor, completeAsync, true, contextCompactionService);
         }
 
         internal ChatCompletionService(AgentRunService agentRunService)

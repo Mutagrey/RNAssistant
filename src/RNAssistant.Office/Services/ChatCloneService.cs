@@ -31,6 +31,33 @@ namespace RNAssistant.Office.Services
                 : messages.Select(CloneMessage).ToList();
         }
 
+        public static List<ContextCheckpoint> CloneContextCheckpoints(IEnumerable<ContextCheckpoint> checkpoints, IEnumerable<ChatMessage> messages)
+        {
+            var messageIds = new HashSet<string>((messages ?? new ChatMessage[0]).Where(message => message != null).Select(message => message.Id), System.StringComparer.OrdinalIgnoreCase);
+            return (checkpoints ?? new ContextCheckpoint[0])
+                .Where(checkpoint => checkpoint != null && messageIds.Contains(checkpoint.ThroughMessageId))
+                .Select(checkpoint => new ContextCheckpoint
+                {
+                    Id = checkpoint.Id,
+                    ThroughMessageId = checkpoint.ThroughMessageId,
+                    SummaryJson = checkpoint.SummaryJson,
+                    SummaryMarkdown = checkpoint.SummaryMarkdown,
+                    Model = checkpoint.Model,
+                    PromptVersion = checkpoint.PromptVersion,
+                    SourceMessageCount = checkpoint.SourceMessageCount,
+                    SourceTokens = checkpoint.SourceTokens,
+                    SummaryTokens = checkpoint.SummaryTokens,
+                    CreatedUtc = checkpoint.CreatedUtc
+                }).ToList();
+        }
+
+        public static List<ChatArtifact> CloneArtifactsForMessages(IEnumerable<ChatArtifact> artifacts, IEnumerable<ChatMessage> messages)
+        {
+            return ChatArtifactService.ReachableForMessages(artifacts, messages)
+                .Select(CloneArtifact)
+                .ToList();
+        }
+
         public static HtmlWorkspace CloneWorkspaceForFork(HtmlWorkspace workspace)
         {
             if (workspace == null)
@@ -62,6 +89,7 @@ namespace RNAssistant.Office.Services
                 DecisionSummary = message.DecisionSummary,
                 Goal = message.Goal,
                 ExcludeFromModelContext = message.ExcludeFromModelContext,
+                ProtocolMessage = message.ProtocolMessage,
                 ToolCallId = message.ToolCallId,
                 ToolName = message.ToolName,
                 ToolCalls = message.ToolCalls == null
@@ -70,6 +98,8 @@ namespace RNAssistant.Office.Services
                 Attachments = message.Attachments == null
                     ? new List<ChatAttachment>()
                     : message.Attachments.Select(CloneAttachment).ToList(),
+                ArtifactIds = message.ArtifactIds == null ? new List<string>() : new List<string>(message.ArtifactIds),
+                HtmlWorkspaceCheckpointId = message.HtmlWorkspaceCheckpointId,
                 Activity = CloneActivity(message.Activity),
                 PromptTokens = message.PromptTokens,
                 CompletionTokens = message.CompletionTokens,
@@ -81,6 +111,27 @@ namespace RNAssistant.Office.Services
                 RunId = message.RunId,
                 Sequence = message.Sequence,
                 CreatedUtc = message.CreatedUtc
+            };
+        }
+
+        private static ChatArtifact CloneArtifact(ChatArtifact artifact)
+        {
+            return new ChatArtifact
+            {
+                Id = artifact.Id,
+                Kind = artifact.Kind,
+                Title = artifact.Title,
+                MimeType = artifact.MimeType,
+                SourceMessageId = artifact.SourceMessageId,
+                RunId = artifact.RunId,
+                Revision = artifact.Revision,
+                ParentArtifactId = artifact.ParentArtifactId,
+                RelativePath = artifact.RelativePath,
+                InlineText = artifact.InlineText,
+                ModelContextPolicy = artifact.ModelContextPolicy,
+                MetadataJson = artifact.MetadataJson,
+                RelatedArtifactIds = artifact.RelatedArtifactIds == null ? new List<string>() : new List<string>(artifact.RelatedArtifactIds),
+                CreatedUtc = artifact.CreatedUtc
             };
         }
 

@@ -327,6 +327,9 @@ function agentRunStats(items) {
   if (counts.planned) {
     parts.push(counts.planned + " planned");
   }
+  if (counts.incomplete) {
+    parts.push(counts.incomplete + " incomplete");
+  }
   if (elapsed) {
     parts.push("elapsed " + elapsed);
   }
@@ -342,7 +345,7 @@ function agentRunStats(items) {
     current: current,
     counts: counts,
     elapsed: elapsed,
-    status: counts.failed ? "failed" : (counts.running ? "running" : (counts.waiting ? "waiting" : (counts.cancelled ? "cancelled" : (counts.planned && counts.planned === counts.total ? "planned" : "completed"))))
+    status: counts.failed ? "failed" : (counts.running ? "running" : (counts.waiting ? "waiting" : (counts.incomplete ? "incomplete" : (counts.cancelled ? "cancelled" : (counts.planned && counts.planned === counts.total ? "planned" : "completed")))))
   };
 }
 
@@ -358,7 +361,7 @@ function isAgentRunContinuation(message) {
 
 function canCollectAgentRunAt(index) {
   var message = state.messages[index];
-  if (!message || messageRole(message) !== "assistant" || !messageActivity(message)) {
+  if (!message || messageProtocolMessage(message) || messageRole(message) !== "assistant" || !messageActivity(message)) {
     return false;
   }
   if (isAgentRunStart(message)) {
@@ -389,13 +392,22 @@ function collectAgentRun(startIndex) {
   var items = [{ message: state.messages[startIndex], index: startIndex, activity: messageActivity(state.messages[startIndex]) }];
   var runId = messageRunId(state.messages[startIndex]);
   var index = startIndex + 1;
-  while (index < state.messages.length &&
-      (runId ? (messageRunId(state.messages[index]) === runId && !!messageActivity(state.messages[index])) : isAgentRunContinuation(state.messages[index]))) {
-    items.push({ message: state.messages[index], index: index, activity: messageActivity(state.messages[index]) });
+  while (index < state.messages.length) {
+    var candidate = state.messages[index];
+    if (messageProtocolMessage(candidate) && (!runId || messageRunId(candidate) === runId)) {
+      index += 1;
+      continue;
+    }
+    if (!(runId ? (messageRunId(candidate) === runId && !!messageActivity(candidate)) : isAgentRunContinuation(candidate))) {
+      break;
+    }
+    items.push({ message: candidate, index: index, activity: messageActivity(candidate) });
     index += 1;
   }
 
   var finalMessage = null;
+  while (index < state.messages.length && messageProtocolMessage(state.messages[index]) &&
+      (!runId || messageRunId(state.messages[index]) === runId)) index += 1;
   if (index < state.messages.length && isAgentRunFinalMessage(state.messages[index]) &&
       (!runId || messageRunId(state.messages[index]) === runId)) {
     finalMessage = { message: state.messages[index], index: index };

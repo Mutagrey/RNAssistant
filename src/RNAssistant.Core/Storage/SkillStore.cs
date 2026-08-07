@@ -179,7 +179,16 @@ namespace RNAssistant.Core.Storage
                 skill.Host = FirstNonEmpty(Value(header, "host"), "Common");
                 skill.Name = Value(header, "name");
                 skill.Description = Value(header, "description");
+                skill.Version = FirstNonEmpty(Value(header, "version"), "1.0.0");
                 skill.Tags = ParseTags(Value(header, "tags"));
+                skill.AppliesTo = ParseTags(Value(header, "appliesTo"));
+                skill.Requires = ParseTags(Value(header, "requires"));
+                skill.Conflicts = ParseTags(Value(header, "conflicts"));
+                skill.ToolCapabilities = ParseTags(Value(header, "toolCapabilities"));
+                skill.Resources = ParseTags(Value(header, "resources"));
+                // Files under the user skill store are never trusted as built-ins,
+                // regardless of self-declared frontmatter.
+                skill.TrustLevel = "custom";
                 bool enabled;
                 skill.Enabled = !bool.TryParse(Value(header, "enabled"), out enabled) || enabled;
             }
@@ -204,7 +213,14 @@ namespace RNAssistant.Core.Storage
             builder.AppendLine("host: " + FirstNonEmpty(skill.Host, "Common"));
             builder.AppendLine("name: " + FirstNonEmpty(skill.Name, skill.Id));
             builder.AppendLine("description: " + (skill.Description ?? string.Empty).Replace("\r", " ").Replace("\n", " "));
+            builder.AppendLine("version: " + FirstNonEmpty(skill.Version, "1.0.0"));
             builder.AppendLine("tags: " + string.Join(", ", (skill.Tags ?? new List<string>()).Where(t => !string.IsNullOrWhiteSpace(t)).ToArray()));
+            builder.AppendLine("appliesTo: " + Join(skill.AppliesTo));
+            builder.AppendLine("requires: " + Join(skill.Requires));
+            builder.AppendLine("conflicts: " + Join(skill.Conflicts));
+            builder.AppendLine("toolCapabilities: " + Join(skill.ToolCapabilities));
+            builder.AppendLine("resources: " + Join(skill.Resources));
+            builder.AppendLine("trustLevel: " + (skill.BuiltIn ? "built_in" : "custom"));
             builder.AppendLine("enabled: " + (skill.Enabled != false ? "true" : "false"));
             builder.AppendLine("---");
             builder.AppendLine();
@@ -220,6 +236,11 @@ namespace RNAssistant.Core.Storage
                 .Where(t => !string.IsNullOrWhiteSpace(t))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
+        }
+
+        private static string Join(IEnumerable<string> values)
+        {
+            return string.Join(", ", (values ?? new string[0]).Where(value => !string.IsNullOrWhiteSpace(value)).ToArray());
         }
 
         private static string Value(IDictionary<string, string> values, string key)

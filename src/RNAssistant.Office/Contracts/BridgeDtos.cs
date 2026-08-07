@@ -567,6 +567,54 @@ namespace RNAssistant.Office.Contracts
         public bool Launched { get; set; }
     }
 
+    public sealed class ChatArtifactDto
+    {
+        [JsonProperty("id")] public string Id { get; set; }
+        [JsonProperty("kind")] public string Kind { get; set; }
+        [JsonProperty("title")] public string Title { get; set; }
+        [JsonProperty("mimeType")] public string MimeType { get; set; }
+        [JsonProperty("sourceMessageId")] public string SourceMessageId { get; set; }
+        [JsonProperty("runId")] public string RunId { get; set; }
+        [JsonProperty("revision")] public int Revision { get; set; }
+        [JsonProperty("parentArtifactId")] public string ParentArtifactId { get; set; }
+        [JsonProperty("relativePath")] public string RelativePath { get; set; }
+        [JsonProperty("inlineText")] public string InlineText { get; set; }
+        [JsonProperty("inlineTruncated")] public bool InlineTruncated { get; set; }
+        [JsonProperty("metadataJson")] public string MetadataJson { get; set; }
+        [JsonProperty("relatedArtifactIds")] public IReadOnlyList<string> RelatedArtifactIds { get; set; }
+        [JsonProperty("createdUtc")] public System.DateTime CreatedUtc { get; set; }
+
+        public static IReadOnlyList<ChatArtifactDto> From(IEnumerable<ChatArtifact> artifacts)
+        {
+            var result = new List<ChatArtifactDto>();
+            foreach (var artifact in artifacts ?? new ChatArtifact[0])
+            {
+                if (artifact == null) continue;
+                var inline = artifact.InlineText ?? string.Empty;
+                var includeInline = !string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, System.StringComparison.OrdinalIgnoreCase);
+                var bounded = includeInline && inline.Length > 24000 ? inline.Substring(0, 24000) : includeInline ? inline : null;
+                result.Add(new ChatArtifactDto
+                {
+                    Id = artifact.Id,
+                    Kind = artifact.Kind,
+                    Title = artifact.Title,
+                    MimeType = artifact.MimeType,
+                    SourceMessageId = artifact.SourceMessageId,
+                    RunId = artifact.RunId,
+                    Revision = artifact.Revision,
+                    ParentArtifactId = artifact.ParentArtifactId,
+                    RelativePath = artifact.RelativePath,
+                    InlineText = bounded,
+                    InlineTruncated = includeInline && bounded != null && bounded.Length < inline.Length,
+                    MetadataJson = artifact.MetadataJson,
+                    RelatedArtifactIds = artifact.RelatedArtifactIds ?? new List<string>(),
+                    CreatedUtc = artifact.CreatedUtc
+                });
+            }
+            return result;
+        }
+    }
+
     public class ChatStateResponse
     {
         [JsonProperty("activeChatId")]
@@ -595,6 +643,15 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("messages")]
         public IReadOnlyList<ChatMessage> Messages { get; set; }
+
+        [JsonProperty("artifacts")]
+        public IReadOnlyList<ChatArtifactDto> Artifacts { get; set; }
+
+        [JsonProperty("activeContextCheckpointId")]
+        public string ActiveContextCheckpointId { get; set; }
+
+        [JsonProperty("activeHtmlArtifactId")]
+        public string ActiveHtmlArtifactId { get; set; }
 
         [JsonProperty("contextUsage")]
         public object ContextUsage { get; set; }
@@ -661,6 +718,15 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("messages")]
         public IReadOnlyList<ChatMessage> Messages { get; set; }
+
+        [JsonProperty("artifacts")]
+        public IReadOnlyList<ChatArtifactDto> Artifacts { get; set; }
+
+        [JsonProperty("activeContextCheckpointId")]
+        public string ActiveContextCheckpointId { get; set; }
+
+        [JsonProperty("activeHtmlArtifactId")]
+        public string ActiveHtmlArtifactId { get; set; }
 
         [JsonProperty("contextUsage")]
         public object ContextUsage { get; set; }

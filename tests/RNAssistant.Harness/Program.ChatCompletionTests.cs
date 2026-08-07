@@ -418,6 +418,8 @@ namespace RNAssistant.Harness
                 AssertEqual(1, captured.Sum(message => message.Attachments.Count(item => item.FileName == "old.txt")), "old attachment retained in history");
                 AssertEqual(0, captured.Sum(message => message.Attachments.Count(item => item.FileName == "old.png")), "old image omitted from history");
                 AssertEqual(0, captured.Sum(message => message.Attachments.Count(item => item.FileName == "old.wav")), "old audio omitted from history");
+                AssertContains(FlattenMessages(captured), "old.png", "old image remains as a durable artifact reference");
+                AssertContains(FlattenMessages(captured), "old.wav", "old audio remains as a durable artifact reference");
                 AssertEqual(1, captured.Sum(message => message.Attachments.Count(item => item.FileName == "current.txt")), "current attachment included once");
             });
         }

@@ -26,10 +26,14 @@ namespace RNAssistant.Core.Models
         public string Goal { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool ExcludeFromModelContext { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool ProtocolMessage { get; set; }
         public string ToolCallId { get; set; }
         public string ToolName { get; set; }
         public List<LlmToolCall> ToolCalls { get; set; }
         public List<ChatAttachment> Attachments { get; set; }
+        public List<string> ArtifactIds { get; set; }
+        public string HtmlWorkspaceCheckpointId { get; set; }
         public ChatActivity Activity { get; set; }
         public int? PromptTokens { get; set; }
         public int? CompletionTokens { get; set; }
@@ -48,6 +52,7 @@ namespace RNAssistant.Core.Models
             CreatedUtc = DateTime.UtcNow;
             Attachments = new List<ChatAttachment>();
             ToolCalls = new List<LlmToolCall>();
+            ArtifactIds = new List<string>();
         }
     }
 
@@ -105,7 +110,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class ChatSession
     {
-        public const int CurrentFormatVersion = 1;
+        public const int CurrentFormatVersion = 2;
 
         [JsonProperty(Required = Required.Always)]
         public int FormatVersion { get; set; }
@@ -126,6 +131,11 @@ namespace RNAssistant.Core.Models
         public ChatRunRecord LastRun { get; set; }
         public HtmlWorkspace HtmlWorkspace { get; set; }
         public List<ChatMessage> Messages { get; set; }
+        public List<ContextCheckpoint> ContextCheckpoints { get; set; }
+        public string ActiveContextCheckpointId { get; set; }
+        public List<ChatArtifact> Artifacts { get; set; }
+        public List<string> ActiveSkillIds { get; set; }
+        public string ActiveHtmlArtifactId { get; set; }
 
         public ChatSession()
         {
@@ -136,7 +146,33 @@ namespace RNAssistant.Core.Models
             Context = new DocumentContext();
             HtmlWorkspace = new HtmlWorkspace();
             Messages = new List<ChatMessage>();
+            ContextCheckpoints = new List<ContextCheckpoint>();
+            Artifacts = new List<ChatArtifact>();
+            ActiveSkillIds = new List<string>();
             Mode = ChatModes.Agent;
+        }
+    }
+
+    public sealed class ContextCheckpoint
+    {
+        public const string CurrentPromptVersion = "context-compaction-v1";
+
+        public string Id { get; set; }
+        public string ThroughMessageId { get; set; }
+        public string SummaryJson { get; set; }
+        public string SummaryMarkdown { get; set; }
+        public string Model { get; set; }
+        public string PromptVersion { get; set; }
+        public int SourceMessageCount { get; set; }
+        public int SourceTokens { get; set; }
+        public int SummaryTokens { get; set; }
+        public DateTime CreatedUtc { get; set; }
+
+        public ContextCheckpoint()
+        {
+            Id = Guid.NewGuid().ToString("N");
+            PromptVersion = CurrentPromptVersion;
+            CreatedUtc = DateTime.UtcNow;
         }
     }
 

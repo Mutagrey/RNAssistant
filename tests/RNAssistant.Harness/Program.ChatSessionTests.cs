@@ -31,8 +31,11 @@ namespace RNAssistant.Harness
                 var session = store.Create("Word", "doc-key", "Doc", "First");
                 session.Messages.Add(new ChatMessage
                 {
+                    Id = null,
                     Role = "user",
                     Content = "hello",
+                    ToolCalls = null,
+                    ArtifactIds = new List<string> { "artifact-a", "artifact-a", "" },
                     Activity = new ChatActivity
                     {
                         Kind = "notice",
@@ -40,6 +43,9 @@ namespace RNAssistant.Harness
                         Status = "completed"
                     }
                 });
+                session.ContextCheckpoints.Add(new ContextCheckpoint { Id = null, ThroughMessageId = session.Messages[0].Id });
+                session.Artifacts.Add(new ChatArtifact { Id = null, Kind = ChatArtifactKinds.Markdown, RelatedArtifactIds = null });
+                session.ActiveSkillIds = new List<string> { " common.skill ", "COMMON.SKILL" };
                 store.Save(session);
 
                 var loaded = store.Load("Word", "doc-key", session.Id);
@@ -48,6 +54,12 @@ namespace RNAssistant.Harness
                 AssertEqual(1, loaded.Messages.Count, "message count");
                 AssertEqual("hello", loaded.Messages[0].Content, "message content");
                 AssertEqual("Stored activity", loaded.Messages[0].Activity.Title, "message activity title");
+                AssertTrue(!string.IsNullOrWhiteSpace(loaded.Messages[0].Id), "missing message id normalized");
+                AssertTrue(loaded.Messages[0].ToolCalls != null, "null tool calls normalized");
+                AssertEqual(1, loaded.Messages[0].ArtifactIds.Count, "artifact refs deduplicated");
+                AssertTrue(!string.IsNullOrWhiteSpace(loaded.Artifacts[0].Id), "missing artifact id normalized");
+                AssertTrue(loaded.Artifacts[0].RelatedArtifactIds != null, "artifact relations normalized");
+                AssertEqual(1, loaded.ActiveSkillIds.Count, "active skills normalized");
 
                 var sessions = store.List("Word", "doc-key", "Doc");
                 AssertEqual(1, sessions.Count, "document session count");
@@ -65,7 +77,7 @@ namespace RNAssistant.Harness
                 Directory.CreateDirectory(documentDirectory);
                 File.WriteAllText(Path.Combine(documentDirectory, "broken.json"), "{ broken");
                 File.WriteAllText(Path.Combine(documentDirectory, "unsupported.json"), "{\"Id\":\"unsupported\",\"Host\":\"Excel\",\"DocumentKey\":\"book\"}");
-                File.WriteAllText(Path.Combine(documentDirectory, "future.json"), "{\"FormatVersion\":2,\"Messages\":{\"invalid\":true}}");
+                File.WriteAllText(Path.Combine(documentDirectory, "future.json"), "{\"FormatVersion\":" + (ChatSession.CurrentFormatVersion + 1) + ",\"Messages\":{\"invalid\":true}}");
 
                 var session = store.Create("Excel", "book", "Book", "Good");
                 var serializationExceptions = 0;

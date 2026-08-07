@@ -77,6 +77,7 @@
     <Compile Include="Vba\VbaProjectSupport.cs" />
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />
     <Compile Include="Services\ChatCloneService.cs" />
+    <Compile Include="Services\ChatArtifactService.cs" />
     <Compile Include="Services\ChatHistoryEditService.cs" />
     <Compile Include="Services\AgentRunService.cs" />
     <Compile Include="Services\AgentPlanStateService.cs" />
@@ -94,6 +95,7 @@
     <Compile Include="Services\AgentVerificationRuntime.cs" />
     <Compile Include="Services\ChatCompletionService.cs" />
     <Compile Include="Services\ChatContextWindowBuilder.cs" />
+    <Compile Include="Services\ContextCompactionService.cs" />
     <Compile Include="Services\ChatExecutionModeSelector.cs" />
     <Compile Include="Services\PlainChatService.cs" />
     <Compile Include="Services\PromptBudgetComposer.cs" />
@@ -107,10 +109,12 @@
     <Compile Include="Services\ChatSessionService.cs" />
     <Compile Include="Services\ChatRunRegistry.cs" />
     <Compile Include="Services\HtmlNetworkService.cs" />
+    <Compile Include="Services\HtmlWorkspaceArtifactService.cs" />
     <Compile Include="Services\DocumentOpenService.cs" />
     <Compile Include="Services\ContextService.cs" />
     <Compile Include="Services\BuiltInSkillProvider.cs" />
     <Compile Include="Services\SkillCatalogService.cs" />
+    <Compile Include="Services\SkillResolver.cs" />
     <Compile Include="Services\ToolCatalogService.cs" />
     <Compile Include="Tools\ToolArgumentReader.cs" />
     <Compile Include="Tools\ToolIdSuggester.cs" />

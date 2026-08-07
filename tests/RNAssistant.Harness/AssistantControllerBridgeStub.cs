@@ -69,6 +69,13 @@ namespace RNAssistant.Office
             return state;
         }
         public ChatStateResponse ClearChat(string chatId) { return ChatState(null, chatId); }
+        public Task<ChatStateResponse> CompactChatContextAsync(string chatId = null, Action<string, string, ChatActivity> progress = null, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            LastChatId = chatId;
+            if (progress != null) progress("compacted", "Context compacted", new ChatActivity { Kind = "compaction", Title = "Context compacted", Status = "completed" });
+            return Task.FromResult(ChatState(null, chatId));
+        }
         public ChatStateResponse DeleteChat(string chatId) { return ChatState(null, chatId); }
         public bool CancelChatRun(string chatId, string runId) { LastChatId = chatId; return !string.IsNullOrWhiteSpace(runId); }
         public ChatStateResponse DeleteMessage(string id, int index, string chatId = null) { return ChatState(id, chatId); }

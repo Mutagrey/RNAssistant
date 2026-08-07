@@ -183,6 +183,7 @@ namespace RNAssistant.Core.Storage
             settings.AgentPrompts.RepairDecisionPrompt = DefaultIfBlank(settings.AgentPrompts.RepairDecisionPrompt, defaults.RepairDecisionPrompt);
             settings.AgentPrompts.PlanContinuationPrompt = DefaultIfBlank(settings.AgentPrompts.PlanContinuationPrompt, defaults.PlanContinuationPrompt);
             settings.AgentPrompts.ChatTitlePrompt = DefaultIfBlank(settings.AgentPrompts.ChatTitlePrompt, defaults.ChatTitlePrompt);
+            settings.AgentPrompts.ContextCompactionPrompt = DefaultIfBlank(settings.AgentPrompts.ContextCompactionPrompt, defaults.ContextCompactionPrompt);
         }
 
         private static string NormalizePromptRole(string value, string fallback)

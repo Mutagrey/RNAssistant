@@ -6,14 +6,15 @@ RNAssistant использует локальный agent harness поверх O
 
 1. Chat session хранит явный режим `Agent` или `Chat`; новый chat создаётся в `Agent`. HTML workspace и продолжение незавершённой agent-задачи всегда используют Agent.
 2. В Agent mode детерминированный router определяет тип задачи, риск и необходимость чтения/мутации. Agent способен дать обычный ответ без tools, если route не требует действия Office.
-3. Catalog slicer выбирает ограниченный набор доступных tools. В prompt попадают только их id, описание, safety metadata и JSON Schema аргументов.
-4. Runtime собирает сообщения из инструкции, запроса, актуального chat context, выбранных skills, route и нормализованных observations.
-5. Модель возвращает одно решение `AgentDecision v1` либо один native `tool_call`.
-6. Runtime нормализует только безопасные вариации формы, затем строго проверяет выбранное действие, один tool, tool id и аргументы, применяет confirmation/safety policy и вызывает локальный `OfficeToolExecutor`.
-7. Результат нормализуется и добавляется в рабочий контекст. Следующий запрос решает, нужен ли ещё один tool, уточнение или финальный ответ.
-8. После мутации runtime запускает отдельную read-only verification. Старое наблюдение не считается проверкой нового изменения.
+3. Runtime всегда показывает компактный `SKILL_INDEX`. Если подходящий skill ещё не активирован, модель вызывает `common.skills_load`; resolver добавляет зависимости и отклоняет неизвестные ids, циклы и конфликты.
+4. Catalog slicer выбирает ограниченный набор tools после skill-фильтра. В prompt попадают только id, описание, safety metadata и JSON Schema аргументов.
+5. Runtime собирает сообщения из неизменяемого контракта harness, редактируемой инструкции, environment pack, сохранённой истории/checkpoint, запроса, активных skills, route и нормализованных observations.
+6. Модель возвращает одно решение `AgentDecision v1` либо один native `tool_call`.
+7. Runtime нормализует только безопасные вариации формы, затем строго проверяет выбранное действие, один tool, tool id и аргументы, применяет confirmation/safety policy и вызывает локальный `OfficeToolExecutor`.
+8. Результат нормализуется, сохраняется в transcript и добавляется в рабочий контекст. Следующий запрос решает, нужен ли ещё один tool, уточнение или финальный ответ.
+9. После мутации runtime запускает отдельную read-only verification. Старое наблюдение не считается проверкой нового изменения.
 
-История протокола живёт только внутри текущего run. В постоянную chat history не возвращаются скрытые route diagnostics, полный prompt и provider reasoning.
+Принятые tool exchanges сохраняются в chat session как скрытые protocol messages и доступны после перезапуска. В постоянную replay history не возвращаются route diagnostics, отклонённые ответы, полный собранный prompt, UI activity и provider reasoning.
 
 ## Формат решения
 
@@ -65,7 +66,7 @@ RNAssistant использует локальный agent harness поверх O
 
 `decisionSummary` — видимое сообщение модели перед выбранным действием, а не chain-of-thought. Для tool turn оно кратко фиксирует уже подтвержденный результат и следующее действие. В `native_tool_calls` тот же текст передается через assistant content и сохраняется runtime как `decisionSummary`. Детальные рассуждения не входят в протокол. Если provider отдельно возвращает `reasoning_content`, runtime показывает его как необязательные transport metadata и не смешивает с JSON решения.
 
-Шаги плана в канонической форме содержат только `id` и `title`. Если новые observations меняют оставшуюся работу, модель может снова вернуть `kind=plan`: runtime сохраняет выполненные шаги с теми же стабильными id и заменяет незавершённую часть. Статусы `pending`, `running`, `waiting`, `completed`, `failed`, `cancelled` принадлежат локальному harness. Цель и завершённый план остаются видны в transcript после финального ответа.
+Шаги плана в канонической форме содержат только `id` и `title`. Если новые observations меняют оставшуюся работу, модель может снова вернуть `kind=plan`: runtime сохраняет выполненные шаги с теми же стабильными id и заменяет незавершённую часть. Статусы `pending`, `running`, `waiting`, `completed`, `failed`, `cancelled`, `incomplete` принадлежат локальному harness. `final` не завершает pending/running шаги без подтверждающих действий. Один повтор идентичного плана получает усиленный continuation prompt; следующий повтор останавливает run без потери исходного плана.
 
 ## Совместимая нормализация
 
@@ -128,26 +129,55 @@ Surrounding prose, fences, неизвестные root-поля, конфлик�
 
 Крупное `data` ограничивается в replay-контексте. Вместо полного payload runtime передаёт `{truncated, originalChars, preview}`; для планирования остаётся отдельное bounded observation. Полный локальный ToolResult при этом не изменяется.
 
-## Prompt ownership
+## Prompt ownership и progressive skills
 
-Все изменяемые model-facing инструкции находятся в Settings:
+Prompt состоит из слоёв с разным владельцем:
 
-- `SystemPrompt` — единственный главный prompt Agent: AgentDecision, transports, контекст, tools, skills и правила self-improvement;
+```text
+immutable runtime contract + editable SystemPrompt
+        + deterministic ENVIRONMENT_PACK/ROUTE
+        + active checkpoint/raw transcript tail
+        + SKILL_INDEX + ACTIVE_SKILLS + filtered AVAILABLE_TOOLS
+        + current request/observations
+    -> model: one AgentDecision
+    -> local parser/schema/safety/confirmation
+    -> local tool
+    -> persisted protocol result
+    -> next model turn
+```
+
+- immutable runtime contract — минимальные инварианты AgentDecision, безопасности, приоритета данных и разделения skill/tool; пользовательский skill не может его заменить;
+- `SystemPrompt` — редактируемая главная инструкция поведения Agent;
 - `ChatSystemPrompt` — обычный текстовый Chat без tools;
 - `ForceToolUsePrompt`, `RepairDecisionPrompt`, `PlanContinuationPrompt` — короткие переходы runtime;
+- `ContextCompactionPrompt` — критерии структурированного summary раннего transcript;
 - `ChatTitlePrompt` — отдельная инструкция генератора названий.
 
-`ROUTE`, `CURRENT_OFFICE_CONTEXT`, `AVAILABLE_TOOLS`, `OBSERVATIONS` и `RELEVANT_SKILLS` — динамические данные runtime, а не скрытые prompt-шаблоны. Их формат не редактируется как инструкция.
+`ENVIRONMENT_PACK`, `ROUTE`, `CURRENT_OFFICE_CONTEXT`, `CHAT_ARTIFACT_INDEX`, `AVAILABLE_TOOLS`, `OBSERVATIONS`, `SKILL_INDEX` и `ACTIVE_SKILLS` — динамические данные runtime, а не скрытые prompt-шаблоны. Host pack определяется кодом по Excel/Word/PowerPoint/Outlook. Artifact index содержит только ограниченные metadata и стабильные локальные ссылки, без тела HTML snapshots. Skill index содержит metadata всех видимых skills; полные markdown bodies попадают только после активации точного id через `common.skills_load` или явного упоминания id пользователем.
+
+Skill metadata включает `version`, `appliesTo`, `requires`, `conflicts`, `toolCapabilities`, `resources` и `trustLevel`. Resolver строит dependency closure, отклоняет циклы/конфликты и скрывает skill-owned tools до активации владельца. Добавление skill проверяется вместе с уже активным набором; обязательную зависимость нельзя удалить или отключить, пока на неё ссылается другой skill. `common.skill_authoring` при создании исполняемого расширения дополнительно активирует `common.tool_authoring`; сохранение нового skill всё равно проходит общую валидацию и подтверждение.
 
 Промпты редактируются во вкладке Prompts. Агент может вызвать `common.prompts_read`, `common.prompts_read_defaults` и подтверждаемый `common.prompts_save`. Встроенный `common.prompt_authoring` требует сохранять поля AgentDecision, one-tool invariant, confirmation и verification. При загрузке известные устаревшие defaults и prompts с несовместимыми маркерами `rnassistant-agent`, `rnassistant-skill`, `tool_plan` или `cannot_do` обновляются до текущего протокола; остальные пользовательские prompts сохраняются. Skills и tools изменяются через отдельные CRUD tools; встроенные id нельзя перекрыть custom-объектом.
 
 ## Сборка и бюджет контекста
 
-Agent request собирается заново на каждом model turn в таком порядке: instruction role; непрерывный хвост обычной user/assistant chat history; текущий `USER_REQUEST` и динамические секции; ограниченный run-local protocol replay. Activity, diagnostics, сообщения с `ExcludeFromModelContext=true` и provider reasoning в replay не входят. Tool exchange передаётся парой assistant `tool_calls` + `role: tool` либо выбранной обычной ролью. Нормализованные `OBSERVATIONS` дополнительно дают модели компактное состояние текущего run.
+Agent request собирается заново на каждом model turn в таком порядке: immutable runtime contract + редактируемая instruction role; активный context checkpoint и непрерывный raw tail; текущий `USER_REQUEST` и динамические секции; protocol replay текущего run. Activity, diagnostics, сообщения с `ExcludeFromModelContext=true` и provider reasoning в replay не входят. Сохранённый tool exchange передаётся парой assistant `tool_calls` + `role: tool` либо выбранной обычной ролью. Нормализованные `OBSERVATIONS` дополнительно дают модели компактное состояние текущего run.
 
 Окно берётся из ручного override, capability активной модели или консервативного default `32768`. Runtime резервирует 2% окна (минимум 1024, максимум 16384) и запрошенный output. В оценку запроса входят сообщения, вложения, `response_format` schema и native tool schemas. Tool catalog уменьшается, если его prompt/API-представления занимают больше половины input budget; минимум один необходимый tool сохраняется.
 
-История выбирается только назад от самых новых сообщений: если очередное сообщение не помещается, более старые не возвращаются. При включённом compression ранний хвост заменяется локальным bounded summary. Notes дедуплицируются по reference, skill bodies, observations, tool results и extracted attachment text ограничиваются. Бинарные image/audio отправляются только для текущего turn и не считаются частью будущей истории. При наличии provider `usage.prompt_tokens` UI показывает фактическое значение последнего запроса; до запроса и после перезагрузки показывает оценку сохранённой history/context без ещё неизвестных route и tool schemas.
+Нормальная история не ограничивается числом сообщений и не удаляется после turn. При прогнозе 80% input budget harness сам запускает отдельный model call `context-compaction-v1` со строгой JSON Schema: summary, цели, требования, решения, проверенные факты, выполненные действия, pending work, blockers, стабильные ссылки, skills, artifacts и warnings. Для текстовых/PDF-вложений compactor получает ограниченные бюджетом выдержки извлечённого текста. Checkpoint заменяет только раннюю часть replay; исходные сообщения остаются в session, а непрерывный raw tail целится примерно в 55% budget. Есть ручная команда «Сжать контекст».
+
+Summary не считается фактическим состоянием Office-документа: изменяемые данные по-прежнему подтверждаются read tools. При редактировании/удалении старого сообщения checkpoints инвалидируются. Если checkpoint + raw tail или обязательная часть текущего prompt не помещаются, запрос завершается явной ошибкой вместо скрытой обрезки. Notes дедуплицируются по reference; skill bodies, observations, tool results и extracted attachment text ограничиваются. Бинарные image/audio отправляются только для текущего turn, а в последующих turns остаются их стабильные локальные artifact references.
+
+Если точная сборка prompt поздно обнаружила дополнительный расход host pack или tool schemas, Chat/Agent делает не более одного model-compaction retry для этого turn. Это повторяет только сборку контекста, а не уже выполненные Office tools; если обязательный текущий prompt всё равно не помещается, runtime останавливается явно.
+
+При наличии provider `usage.prompt_tokens` UI показывает фактическое значение последнего запроса; до запроса и после перезагрузки показывает оценку активного checkpoint + raw tail без ещё неизвестных route и tool schemas.
+
+## Артефакты и fork
+
+Plan, compaction, attachment/image/file и HTML workspace представлены единым `ChatArtifact` с source message, revision/parent relations и model-context policy. UI получает bounded DTO и показывает артефакты карточками; полное содержимое HTML snapshots через bridge не отправляется.
+
+Каждая HTML-мутация создаёт immutable snapshot. Сообщение хранит точный `HtmlWorkspaceCheckpointId`, поэтому edit восстанавливает состояние на этом ходе, а fork от сообщения переносит prefix transcript, доступный checkpoint, вложения и только достижимые artifacts вместе с их parent chain. Attachment id сохраняется, но файл копируется в каталог нового chat и artifact path обновляется. Это исключает ситуацию, когда созданный HTML исчезает, fork ссылается на файл исходного чата или получает состояние из будущего.
 
 Оценка намеренно provider-neutral: UTF-8 text примерно `bytes/3`, image — 4096 tokens, audio — `bytes/512`, extracted text — консервативно `chars/2`. Она не заменяет tokenizer конкретной модели. Если обязательные текущие данные всё равно переполняют окно, runtime уменьшает output, а при полном переполнении завершает запрос ошибкой вместо скрытого удаления текущей инструкции или запроса пользователя.
 

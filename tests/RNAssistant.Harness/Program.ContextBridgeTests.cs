@@ -12,6 +12,7 @@ using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 using RNAssistant.Office.WebView;
@@ -60,6 +61,9 @@ namespace RNAssistant.Harness
                 DecisionSummary = "Finishing",
                 Goal = "Prepare report",
                 ExcludeFromModelContext = true,
+                ProtocolMessage = true,
+                ArtifactIds = new List<string> { "plan-1" },
+                HtmlWorkspaceCheckpointId = "html-2",
                 ToolCallId = "call-1",
                 ToolName = "excel_write_table",
                 ToolCalls = new List<LlmToolCall>
@@ -98,6 +102,9 @@ namespace RNAssistant.Harness
             AssertEqual("Finishing", clonedMessages[0].DecisionSummary, "decision summary cloned");
             AssertEqual("Prepare report", clonedMessages[0].Goal, "goal cloned");
             AssertTrue(clonedMessages[0].ExcludeFromModelContext, "message context exclusion");
+            AssertTrue(clonedMessages[0].ProtocolMessage, "protocol marker cloned");
+            AssertEqual("plan-1", clonedMessages[0].ArtifactIds[0], "artifact reference cloned");
+            AssertEqual("html-2", clonedMessages[0].HtmlWorkspaceCheckpointId, "html checkpoint cloned");
             AssertEqual("call-1", clonedMessages[0].ToolCallId, "tool call id");
             AssertEqual("excel_write_table", clonedMessages[0].ToolCalls[0].Name, "tool call name");
             AssertTrue(!object.ReferenceEquals(sourceMessage.ToolCalls[0], clonedMessages[0].ToolCalls[0]), "tool call cloned");
@@ -115,6 +122,65 @@ namespace RNAssistant.Harness
             sourceMessage.Activity.Title = "Changed activity";
             AssertEqual("Done", clonedMessages[0].Content, "message clone independent");
             AssertEqual("Write table", clonedMessages[0].Activity.Title, "activity clone independent");
+
+            var artifacts = new[]
+            {
+                new ChatArtifact { Id = "plan-1", Kind = ChatArtifactKinds.Plan, Title = "Plan", InlineText = "{}", RelatedArtifactIds = new List<string> { "related" } },
+                new ChatArtifact { Id = "html-1", Kind = ChatArtifactKinds.HtmlWorkspace, Title = "HTML v1", InlineText = "large-v1" },
+                new ChatArtifact { Id = "html-2", Kind = ChatArtifactKinds.HtmlWorkspace, Title = "HTML v2", ParentArtifactId = "html-1", InlineText = "large-v2" },
+                new ChatArtifact { Id = "related", Kind = ChatArtifactKinds.Markdown, Title = "Related" },
+                new ChatArtifact { Id = "unused", Kind = ChatArtifactKinds.File, Title = "Unused" }
+            };
+            var clonedArtifacts = ChatCloneService.CloneArtifactsForMessages(artifacts, clonedMessages);
+            AssertEqual(4, clonedArtifacts.Count, "fork clones referenced artifacts, relations, and html parent chain only");
+            AssertTrue(clonedArtifacts.Any(artifact => artifact.Id == "html-1"), "html parent revision retained");
+            AssertTrue(clonedArtifacts.Any(artifact => artifact.Id == "related"), "related artifact retained");
+            AssertTrue(!clonedArtifacts.Any(artifact => artifact.Id == "unused"), "unreachable artifact omitted from fork");
+            var dto = ChatArtifactDto.From(artifacts);
+            AssertTrue(string.IsNullOrEmpty(dto.First(item => item.Id == "html-2").InlineText), "bridge omits heavyweight html snapshot body");
+            AssertEqual("{}", dto.First(item => item.Id == "plan-1").InlineText, "bridge includes bounded plan payload");
+            var artifactPrompt = ChatArtifactService.BuildPromptIndex(new ChatSession
+            {
+                Artifacts = artifacts.ToList(),
+                ActiveHtmlArtifactId = "html-2"
+            }, 1000);
+            AssertContains(artifactPrompt, "CHAT_ARTIFACT_INDEX", "prompt exposes artifact metadata index");
+            AssertContains(artifactPrompt, "html-2", "prompt exposes active html artifact reference");
+            AssertTrue(artifactPrompt.IndexOf("large-v2", StringComparison.Ordinal) < 0, "prompt does not inline html snapshot bodies");
+        }
+
+        private static void ForkedAttachmentArtifactTracksCopiedFile()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var store = new AttachmentStore(paths);
+                var source = new ChatSession();
+                var message = new ChatMessage { Role = "user", Content = "Use attachment" };
+                var attachment = store.Import(
+                    "notes.txt",
+                    "text/plain",
+                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("fork data")));
+                message.Attachments.Add(attachment);
+                source.Messages.Add(message);
+                store.Commit(source.Id, message);
+                ChatArtifactService.LinkMessageArtifacts(source, 0);
+
+                var fork = new ChatSession
+                {
+                    Messages = ChatCloneService.CloneMessages(source.Messages)
+                };
+                fork.Artifacts = ChatCloneService.CloneArtifactsForMessages(source.Artifacts, fork.Messages);
+                var sourcePath = fork.Messages[0].Attachments[0].RelativePath;
+                store.CloneMessageAttachments(fork.Id, fork.Messages[0]);
+                ChatArtifactService.LinkMessageArtifacts(fork, 0);
+
+                var clonedAttachment = fork.Messages[0].Attachments[0];
+                var clonedArtifact = fork.Artifacts.Single(item => item.Id == "attachment_" + clonedAttachment.Id);
+                AssertEqual(attachment.Id, clonedAttachment.Id, "fork preserves stable attachment id");
+                AssertTrue(!string.Equals(sourcePath, clonedAttachment.RelativePath, StringComparison.OrdinalIgnoreCase), "fork copies attachment to its own path");
+                AssertEqual(clonedAttachment.RelativePath, clonedArtifact.RelativePath, "fork artifact points at copied attachment");
+                AssertTrue(File.Exists(AbsoluteAttachmentPath(paths, clonedAttachment)), "forked attachment file exists");
+            });
         }
 
         private static void ContextServiceNormalizesAndUpserts()
@@ -305,6 +371,25 @@ namespace RNAssistant.Harness
             AssertEqual(2, progressMessages.Count, "edit event count");
             AssertEqual("thinking", JObject.Parse(progressMessages[0])["payload"]["phase"].Value<string>(), "edit progress phase");
             AssertEqual("chatState", JObject.Parse(progressMessages[1])["type"].Value<string>(), "edit chat state event");
+        }
+
+        private static void BridgeCompactsAddressedChatContext()
+        {
+            var controller = new AssistantController();
+            var progressMessages = new List<string>();
+            var bridge = new AssistantWebBridge(controller, progressMessages.Add);
+            var token = BridgeToken(bridge);
+            var responseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"compact1\",\"type\":\"compactChatContext\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-compact\"}}")
+                .GetAwaiter().GetResult();
+
+            var response = JObject.Parse(responseJson);
+            AssertTrue(response["ok"].Value<bool>(), "compact response ok");
+            AssertEqual("chat-compact", controller.LastChatId, "compact targets addressed chat");
+            AssertEqual(1, progressMessages.Count, "compact progress count");
+            var progress = JObject.Parse(progressMessages[0]);
+            AssertEqual("compacted", progress["payload"]["phase"].Value<string>(), "compact progress phase");
+            AssertEqual("compaction", progress["payload"]["activity"]["Kind"].Value<string>(), "compact activity kind");
         }
 
         private static void BridgeConfirmProgressCarriesChatAndRunIds()

@@ -165,7 +165,7 @@ Runtime data is stored under:
 - `secret.bin` - API key protected with DPAPI CurrentUser.
 - `tools` - central editable executable tool library.
 - `skills` - markdown guidance files used by the agent when choosing an approach.
-- `chats` - per-document chat session folders; each chat stores its own context attachments.
+- `chats` - per-document chat session folders; each chat stores the full transcript, context checkpoints, active skills, attachments, and artifact revisions.
 
 Settings has `Clear Chats/Data` for development resets. It clears chats, chat context, VBA backups and WebView user data, while keeping settings, saved API key and custom tools and skills.
 
@@ -211,7 +211,7 @@ Routing happens before Office context capture. General questions receive an empt
 In Agent mode, tools are available only when selected by the deterministic router and current phase. Level 2/3 or confirmation-required actions pause for user confirmation unless `Auto-confirm tool actions` is enabled. Confirmed tools can continue the same run.
 If a route requires a tool but filtering leaves no available tool, the runtime records a local diagnostic without calling the model.
 Decision activities store routing diagnostics: route reason, selected tool ids, exclusion counts, and bounded per-tool exclusion details. Tool selection keeps mutation and inspection capabilities balanced; `Tools in one planner prompt` controls the bounded catalog size.
-Context accounting includes message roles/content, current attachments, response schema and native tool definitions. Recent history is selected as one contiguous suffix; older history may be locally compressed. Exact assembly and estimator limits are documented in `docs/agent-decision-protocol.md`.
+Context accounting includes message roles/content, current attachments, response schema and native tool definitions. At 80% of the input budget the runtime asks the model for a structured checkpoint, preserves the full raw transcript, and replays that checkpoint plus an exact contiguous tail. Exact assembly and estimator limits are documented in `docs/agent-decision-protocol.md`.
 Pipeline safety is resolved recursively before execution. Nested document/local mutations, risk, confirmation requirements, invalid references, and cycles cannot be hidden by incorrect top-level metadata.
 After a document mutation, only a new verification observation can complete the route; an earlier inspection does not count as verification.
 
@@ -223,6 +223,7 @@ The HTML tab is tied to the active chat session. Agent-created HTML pages are st
 - Use `common.html_workspace_upsert_data` for JSON data sources. Preview exposes them as `window.RNAssistantData`.
 - Use `common.html_workspace_delete_file` and `common.html_workspace_delete_data` to remove workspace items. Deletions are recorded in workspace history and can be undone.
 - Use `common.html_workspace_read` to inspect the current workspace and `common.html_workspace_set_active` to choose the displayed HTML file.
+- Every workspace mutation also records an immutable chat artifact revision. Editing or forking from an older message restores/copies the exact revision at that point rather than the latest workspace.
 Edits and deletions of an existing workspace require a successful workspace read in the current agent run.
 HTML preview and its scripts are always enabled inside a sandboxed iframe.
 
@@ -277,7 +278,7 @@ Markdown skills are stored under:
 
 `%AppData%\RNAssistant\skills`
 
-Each custom skill is a `SKILL.md` guidance file with a simple header (`id`, `host`, `description`, `tags`, `enabled`) plus markdown instructions. Skills are not executable actions; they are selected into the prompt to help the agent choose the right approach and tools. The Skills tab can create, edit, clone, delete, and add a skill definition to chat context. Agent mode can also use `common.skills_list`, `common.skills_read`, `common.skills_save`, and `common.skills_delete`; save/delete requires confirmation unless auto-confirm is enabled.
+Each custom skill is a `SKILL.md` guidance file with discovery metadata (`id`, `host`, `description`, `version`, `appliesTo`, `requires`, `conflicts`, `toolCapabilities`, `resources`, `tags`, `enabled`) plus markdown instructions. Every Agent request sees only the compact skill index; the model activates exact ids through `common.skills_load`, after which dependency-checked bodies and owned tools become available. Skills are guidance, never executable results. Agent mode can also use `common.skills_list`, `common.skills_read`, `common.skills_save`, and `common.skills_delete`; save/delete requires confirmation unless auto-confirm is enabled.
 
 ## VBA Workflow
 

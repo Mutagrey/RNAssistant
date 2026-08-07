@@ -60,6 +60,16 @@ namespace RNAssistant.Harness
                     }
                 });
 
+                session.HtmlWorkspace.Files.Add(new HtmlWorkspaceFile
+                {
+                    Id = "index",
+                    Path = "index.html",
+                    Kind = "html",
+                    Content = "<h1>Before edited turn</h1>"
+                });
+                session.HtmlWorkspace.DataSources.Add(new HtmlWorkspaceDataSource { Id = "data", Name = "data", Json = "{\"version\":1}" });
+                var workspaceBeforeTarget = HtmlWorkspaceArtifactService.CaptureCurrent(session, "Before edited turn");
+
                 var targetAttachment = attachmentStore.Import(
                     "edit.txt",
                     "text/plain",
@@ -76,7 +86,8 @@ namespace RNAssistant.Harness
                     ReasoningTokens = 3,
                     ReasoningTruncated = true,
                     RunId = "old-run",
-                    Sequence = 4
+                    Sequence = 4,
+                    HtmlWorkspaceCheckpointId = workspaceBeforeTarget
                 };
                 target.Attachments.Add(targetAttachment);
                 attachmentStore.Commit(sessionId, target);
@@ -95,8 +106,16 @@ namespace RNAssistant.Harness
 
                 session.PendingAgentTask = new PendingAgentTask { Request = "stale pending" };
                 session.LastRun = new ChatRunRecord { RunId = "stale-run", Status = "waiting" };
-                session.HtmlWorkspace.Files.Add(new HtmlWorkspaceFile { Id = "index", Path = "index.html", Kind = "html" });
-                session.HtmlWorkspace.DataSources.Add(new HtmlWorkspaceDataSource { Id = "data", Name = "data", Json = "{}" });
+                session.HtmlWorkspace.Files[0].Content = "<h1>After edited turn</h1>";
+                session.HtmlWorkspace.Files.Add(new HtmlWorkspaceFile { Id = "later", Path = "later.html", Kind = "html", Content = "later" });
+                session.HtmlWorkspace.DataSources.Add(new HtmlWorkspaceDataSource { Id = "later-data", Name = "later-data", Json = "{}" });
+                var workspaceAfterTarget = HtmlWorkspaceArtifactService.CaptureCurrent(session, "After edited turn");
+                ChatArtifactService.LinkMessageArtifacts(session, 0);
+                var targetAttachmentArtifactId = "attachment_" + targetAttachment.Id;
+                var tailAttachmentArtifactId = "attachment_" + tailAttachment.Id;
+                var staleCheckpoint = new ContextCheckpoint { ThroughMessageId = target.Id, SummaryMarkdown = "stale" };
+                session.ContextCheckpoints.Add(staleCheckpoint);
+                session.ActiveContextCheckpointId = staleCheckpoint.Id;
 
                 var targetId = target.Id;
                 var targetCreatedUtc = target.CreatedUtc;
@@ -124,8 +143,17 @@ namespace RNAssistant.Harness
                 AssertTrue(target.PromptTokens == null && target.CompletionTokens == null && target.TotalTokens == null, "edited usage cleared");
                 AssertTrue(target.UsageJson == null && target.ReasoningContent == null && target.ReasoningTokens == null, "edited reasoning cleared");
                 AssertTrue(!target.ReasoningTruncated && target.RunId == null && target.Sequence == null, "edited run metadata cleared");
-                AssertEqual(0, session.HtmlWorkspace.Files.Count, "html files cleared");
-                AssertEqual(0, session.HtmlWorkspace.DataSources.Count, "html data cleared");
+                AssertEqual(1, session.HtmlWorkspace.Files.Count, "html files restored to exact pre-turn revision");
+                AssertEqual("<h1>Before edited turn</h1>", session.HtmlWorkspace.Files[0].Content, "pre-turn html content restored");
+                AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "html data restored to exact pre-turn revision");
+                AssertEqual("{\"version\":1}", session.HtmlWorkspace.DataSources[0].Json, "pre-turn html data restored");
+                AssertEqual(workspaceBeforeTarget, session.ActiveHtmlArtifactId, "pre-turn artifact is active");
+                AssertTrue(session.Artifacts.Any(artifact => artifact.Id == workspaceBeforeTarget), "active html revision remains reachable");
+                AssertTrue(!session.Artifacts.Any(artifact => artifact.Id == workspaceAfterTarget), "future html revision is pruned");
+                AssertTrue(session.Artifacts.Any(artifact => artifact.Id == targetAttachmentArtifactId), "edited message attachment artifact remains");
+                AssertTrue(!session.Artifacts.Any(artifact => artifact.Id == tailAttachmentArtifactId), "removed tail attachment artifact is pruned");
+                AssertEqual(0, session.ContextCheckpoints.Count, "stale compacted context invalidated after edit");
+                AssertTrue(string.IsNullOrWhiteSpace(session.ActiveContextCheckpointId), "no stale active checkpoint remains");
                 AssertTrue(session.PendingAgentTask == null, "pending task cleared");
                 AssertTrue(session.LastRun == null, "last run cleared");
                 AssertTrue(pendingRemoved, "pending tool registry cleared");
@@ -179,6 +207,30 @@ namespace RNAssistant.Harness
                 1,
                 FlattenMessages(captured).Split(new[] { edited.Content }, StringSplitOptions.None).Length - 1,
                 "edited prompt appears once");
+        }
+
+        private static void EditingLegacyTurnClearsUnversionedHtmlWorkspace()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var session = new ChatSession();
+                var user = new ChatMessage { Role = "user", Content = "Пересобери страницу" };
+                session.Messages.Add(user);
+                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Готово" });
+                session.HtmlWorkspace.Files.Add(new HtmlWorkspaceFile
+                {
+                    Id = "index",
+                    Path = "index.html",
+                    Kind = "html",
+                    Content = "<h1>Later state</h1>"
+                });
+
+                var service = new ChatHistoryEditService(new AttachmentStore(paths), delegate { }, delegate { });
+                service.RewriteUserMessage(session, session.Id, user.Id, -1, "Сделай иначе");
+
+                AssertEqual(0, session.HtmlWorkspace.Files.Count, "unversioned future html is not retained after edit");
+                AssertTrue(string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId), "unversioned edit has no active html artifact");
+            });
         }
 
         private static void EditingMessageValidationErrorsAreReported()

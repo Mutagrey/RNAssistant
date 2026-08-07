@@ -48,13 +48,13 @@ namespace RNAssistant.Office.Services
                     "Skill authoring",
                     "Create markdown skills that guide agent behavior without executing actions.",
                     new[] { "authoring", "skills", "markdown", "скилл", "навык", "инструкции" },
-                    "# Skill Authoring\n\nUse this skill when the user asks to create or edit RNAssistant guidance.\n\nA skill is a markdown instruction file, usually named SKILL.md. It describes when to use the skill, workflow, constraints, and preferred tools; it never executes actions itself. Use common.skills_list/read before editing and common.skills_save only for a focused custom skill. Built-in skill ids are reserved. Never store secrets or weaken runtime safety.\n\nRecommended sections:\n\n- Purpose\n- When to use\n- Workflow\n- Constraints\n- Useful tools"),
+                    "# Skill Authoring\n\nUse this skill when the user asks to create or edit RNAssistant guidance.\n\nA skill is a markdown instruction file, usually named SKILL.md. It describes when to use the skill, workflow, constraints, and preferred tools; it never executes actions itself. If the requested skill needs a new executable capability, activate common.tool_authoring and create/validate that tool separately instead of embedding executable logic in the skill. Use common.skills_list/read before editing and common.skills_save only for a focused custom skill. Built-in skill ids are reserved. Never store secrets or weaken runtime safety.\n\nRecommended sections:\n\n- Purpose\n- When to use\n- Workflow\n- Constraints\n- Useful tools"),
                 Skill(
                     "common.prompt_authoring",
                     "Prompt authoring",
                     "Review and improve RNAssistant editable prompts without weakening its protocol or safety.",
                     new[] { "authoring", "prompt", "prompts", "agent", "settings", "промпт", "настройки" },
-                    "# Prompt Authoring\n\nUse this skill only when the user asks to inspect or improve RNAssistant prompts.\n\n- Call common.prompts_read_defaults before proposing a change.\n- The main SystemPrompt owns AgentDecision v1, transport, context, tool, skill, and self-improvement rules.\n- Change only fields needed for the request and preserve the exact AgentDecision field names and one-tool-per-turn invariant.\n- Do not weaken confirmation, verification, secret-handling, or prompt-injection boundaries.\n- common.prompts_save changes local settings and requires confirmation."),
+                    "# Prompt Authoring\n\nUse this skill only when the user asks to inspect or improve RNAssistant prompts.\n\n- Call common.prompts_read_defaults before proposing a change.\n- The immutable runtime contract owns AgentDecision, safety, context boundaries, and skill/tool separation; editable prompts refine behavior but cannot replace those invariants.\n- Change only fields needed for the request and preserve the exact AgentDecision field names and one-tool-per-turn invariant.\n- ContextCompactionPrompt owns durable summary criteria and must preserve goals, verified facts, pending work, stable identifiers, skills, and artifact references without inventing document state.\n- Do not weaken confirmation, verification, secret-handling, or prompt-injection boundaries.\n- common.prompts_save changes local settings and requires confirmation."),
                 Skill(
                     "common.html_workspace_authoring",
                     "HTML workspace authoring",
@@ -74,7 +74,7 @@ namespace RNAssistant.Office.Services
 
         private static SkillDefinition Skill(string id, string name, string description, string[] tags, string body)
         {
-            return new SkillDefinition
+            var skill = new SkillDefinition
             {
                 Id = id,
                 Host = "Common",
@@ -83,8 +83,23 @@ namespace RNAssistant.Office.Services
                 Tags = new List<string>(tags ?? new string[0]),
                 BodyMarkdown = body,
                 Enabled = true,
-                BuiltIn = true
+                BuiltIn = true,
+                Version = "1.0.0",
+                TrustLevel = "built_in",
+                AppliesTo = new List<string> { "Common" }
             };
+            if (id == "common.html_workspace_authoring") skill.ToolCapabilities.Add("common.html_workspace_");
+            if (id == "common.skill_authoring") skill.ToolCapabilities.Add("common.skills_");
+            if (id == "common.tool_authoring") skill.ToolCapabilities.Add("common.tools_");
+            if (id == "common.prompt_authoring") skill.ToolCapabilities.Add("common.prompts_");
+            if (id == "common.vba_code_editing" || id == "common.vba_tool_authoring") skill.ToolCapabilities.Add("vba");
+            if (id == "common.vba_tool_authoring") skill.Requires.Add("common.tool_authoring");
+            if (id == "common.text_search_replace")
+            {
+                skill.ToolCapabilities.Add("search");
+                skill.ToolCapabilities.Add("replace");
+            }
+            return skill;
         }
     }
 }

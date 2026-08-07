@@ -95,6 +95,32 @@ namespace RNAssistant.Office.Services
             protocolMessages.Add(new ChatMessage { Role = role, Content = "TOOL_RESULT:\n" + resultJson });
         }
 
+        public static void AppendToolExchange(
+            ICollection<ChatMessage> protocolMessages,
+            ChatSession session,
+            AgentPlannerAttempt attempt,
+            ToolCommand command,
+            ToolResult result,
+            AppSettings settings)
+        {
+            var list = protocolMessages as IList<ChatMessage>;
+            var before = list == null ? -1 : list.Count;
+            AppendToolExchange(protocolMessages, attempt, command, result, settings);
+            if (session == null || list == null || before < 0)
+            {
+                return;
+            }
+            session.Messages = session.Messages ?? new List<ChatMessage>();
+            for (var index = before; index < list.Count; index++)
+            {
+                var message = list[index];
+                if (message == null) continue;
+                message.ProtocolMessage = true;
+                message.HtmlWorkspaceCheckpointId = session.ActiveHtmlArtifactId;
+                session.Messages.Add(message);
+            }
+        }
+
         private static object ParseProtocolData(string value)
         {
             if (string.IsNullOrWhiteSpace(value)) return null;

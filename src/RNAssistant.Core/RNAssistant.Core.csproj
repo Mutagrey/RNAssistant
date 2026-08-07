@@ -80,6 +80,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Models\AppSettings.cs" />
+    <Compile Include="Models\ArtifactModels.cs" />
     <Compile Include="Models\AgentPlannerModels.cs" />
     <Compile Include="Models\ChatModels.cs" />
     <Compile Include="Models\ChartArtifactModels.cs" />

@@ -32,6 +32,10 @@
     return objectValue(message, "Activity", "activity", null);
   };
 
+  window.messageProtocolMessage = function (message) {
+    return !!objectValue(message, "ProtocolMessage", "protocolMessage", false);
+  };
+
   window.messageTotalTokens = function (message) {
     return objectValue(message, "TotalTokens", "totalTokens", null);
   };

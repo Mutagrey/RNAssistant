@@ -26,11 +26,17 @@ namespace RNAssistant.Harness
                 };
                 var llm = new ScenarioLlm()
                     .Add(
+                        AgentBlock(Command("common.skills_load", "ids", new[] { "excel.reporting_guard" })),
+                        "SKILL_INDEX",
+                        "excel.reporting_guard",
+                        "common.skills_load",
+                        "ACTIVE_SKILLS:\nnone")
+                    .Add(
                         AgentBlock(Command("excel.add_sheet", "name", "Report")),
                         "You are RNAssistant, a local Office assistant and action agent",
                         "ROUTE:",
                         "excel.add_sheet",
-                        "Reporting Guard",
+                        "# Reporting Guard",
                         "User-added context")
                     .Add(
                         AgentBlock(Command("excel.write_table", "sheet", "Report", "startAddress", "A1", "values", "[[\"Month\",\"Sales\"],[\"Jan\",10]]")),
@@ -92,13 +98,23 @@ namespace RNAssistant.Harness
                 };
                 var llm = new ScenarioLlm()
                     .Add(
+                        AgentBlock(Command("common.skills_load", "ids", new[] { "excel.contract_skill" })),
+                        new[]
+                        {
+                            "SKILL_INDEX",
+                            "excel.contract_skill",
+                            "common.skills_load",
+                            "ACTIVE_SKILLS:\nnone"
+                        },
+                        new[] { "# Contract Skill" })
+                    .Add(
                         AgentBlock(Command("excel.read_range", "sheet", "Data", "address", "A1:B4")),
                         new[]
                         {
                             "You are RNAssistant, a local Office assistant and action agent",
                             "AVAILABLE_TOOLS",
                             "excel.read_range",
-                            "Contract Skill",
+                            "# Contract Skill",
                             "Pinned context"
                         },
                         new[] { "word.insert_text" })
@@ -119,7 +135,7 @@ namespace RNAssistant.Harness
                     new[] { skill }).GetAwaiter().GetResult();
 
                 AssertEqual("Done.", result.AssistantText, "assistant text");
-                AssertEqual(2, llm.Calls.Count, "scenario call count");
+                AssertEqual(3, llm.Calls.Count, "scenario call count");
             });
         }
 

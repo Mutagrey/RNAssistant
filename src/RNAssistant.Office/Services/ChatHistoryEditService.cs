@@ -54,6 +54,16 @@ namespace RNAssistant.Office.Services
                 throw new InvalidOperationException("Only user messages can be edited.");
             }
 
+            var workspaceCheckpoint = !string.IsNullOrWhiteSpace(target.HtmlWorkspaceCheckpointId)
+                ? target.HtmlWorkspaceCheckpointId
+                : HtmlWorkspaceArtifactService.CheckpointAtOrBefore(messages, targetIndex);
+            if (string.IsNullOrWhiteSpace(workspaceCheckpoint) ||
+                !HtmlWorkspaceArtifactService.Restore(session, workspaceCheckpoint))
+            {
+                session.HtmlWorkspace = new HtmlWorkspace();
+                session.ActiveHtmlArtifactId = null;
+            }
+
             for (var messageIndex = messages.Count - 1; messageIndex > targetIndex; messageIndex--)
             {
                 _attachmentStore.DeleteMessage(messages[messageIndex]);
@@ -65,13 +75,21 @@ namespace RNAssistant.Office.Services
             _cancelPendingActivities(session, PendingActionCancelledReason);
             session.PendingAgentTask = null;
             session.LastRun = null;
-            session.HtmlWorkspace = new HtmlWorkspace();
+            InvalidateContextCheckpoints(session);
+            ChatArtifactService.PruneUnreachable(session);
 
             return new ChatHistoryEditResult
             {
                 Message = target,
                 Index = targetIndex
             };
+        }
+
+        private static void InvalidateContextCheckpoints(ChatSession session)
+        {
+            if (session == null) return;
+            session.ContextCheckpoints = new List<ContextCheckpoint>();
+            session.ActiveContextCheckpointId = null;
         }
 
         private static int ResolveTargetIndex(IReadOnlyList<ChatMessage> messages, string messageId, int index)

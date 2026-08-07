@@ -16,7 +16,9 @@ namespace RNAssistant.Office
 
         public static void AddLocalResultMessage(ChatSession session, ToolCommand command, ToolResult result)
         {
-            session.Messages.Add(CreateLocalResultMessage(command, result));
+            var message = CreateLocalResultMessage(command, result);
+            message.HtmlWorkspaceCheckpointId = session == null ? null : session.ActiveHtmlArtifactId;
+            session.Messages.Add(message);
         }
 
         public static ChatMessage CreateLocalResultMessage(ToolCommand command, ToolResult result)

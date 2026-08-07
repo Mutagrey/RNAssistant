@@ -130,6 +130,13 @@ namespace RNAssistant.Office.WebView
                     case "clearChat":
                         responsePayload = _controller.ClearChat(Payload<ChatPayload>(payload).ChatId);
                         break;
+                    case "compactChatContext":
+                        var compactChat = Payload<ChatPayload>(payload);
+                        responsePayload = await _controller.CompactChatContextAsync(
+                            compactChat.ChatId,
+                            (phase, message, activity) => ReportProgress(id, compactChat.ChatId, string.Empty, phase, message, activity),
+                            cancellationToken).ConfigureAwait(false);
+                        break;
                     case "deleteChat":
                         responsePayload = _controller.DeleteChat(Payload<ChatPayload>(payload).ChatId);
                         break;

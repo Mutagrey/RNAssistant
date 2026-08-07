@@ -224,7 +224,8 @@ function agentStatusLabel(status) {
     failed: "Ошибка",
     cancelled: "Отменено",
     planned: "В плане",
-    pending: "Ожидает"
+    pending: "Ожидает",
+    incomplete: "Не завершено"
   };
   return labels[status] || status || "Статус";
 }
@@ -386,8 +387,9 @@ function statusFromCounts(counts) {
   return counts.failed ? "failed" :
     (counts.running ? "running" :
       (counts.waiting ? "waiting" :
-        (counts.cancelled ? "cancelled" :
-          (counts.planned && counts.planned === counts.total ? "planned" : "completed"))));
+        (counts.incomplete ? "incomplete" :
+          (counts.cancelled ? "cancelled" :
+          (counts.planned && counts.planned === counts.total ? "planned" : "completed")))));
 }
 
 function agentRunDisplayStats(stats, finalMessage, timeline) {
@@ -791,6 +793,10 @@ function renderAgentRunArticle(run) {
     body.appendChild(transcript);
   }
   appendAgentFinalAnswer(body, finalMessage, persistentPlan);
+  if (!run.live) {
+    items.forEach(function (item) { appendMessageArtifactCards(body, item.message); });
+    if (finalMessage) appendMessageArtifactCards(body, finalMessage.message);
+  }
   node.appendChild(body);
 
   if (!run.live) {

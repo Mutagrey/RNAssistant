@@ -25,12 +25,23 @@ namespace RNAssistant.Office.Services
         private readonly VerificationExecutor _verificationExecutor;
         private readonly AgentToolCatalogResolver _toolCatalogResolver;
         private readonly OfficeSnapshotReader _snapshotReader;
+        private readonly ContextCompactionService _contextCompactionService;
 
         public AgentRunService(
             IOfficeApplicationAdapter adapter,
             OfficeToolExecutor toolExecutor,
             LlmCompletionDelegate completeAsync,
             bool includeControllerTools = true)
+            : this(adapter, toolExecutor, completeAsync, includeControllerTools, null)
+        {
+        }
+
+        internal AgentRunService(
+            IOfficeApplicationAdapter adapter,
+            OfficeToolExecutor toolExecutor,
+            LlmCompletionDelegate completeAsync,
+            bool includeControllerTools,
+            ContextCompactionService contextCompactionService)
         {
             _adapter = adapter;
             _toolExecutor = toolExecutor;
@@ -44,6 +55,7 @@ namespace RNAssistant.Office.Services
             _verificationExecutor = new VerificationExecutor(TimeSpan.FromSeconds(15));
             _toolCatalogResolver = new AgentToolCatalogResolver(toolExecutor, includeControllerTools);
             _snapshotReader = new OfficeSnapshotReader(adapter);
+            _contextCompactionService = contextCompactionService;
         }
 
         public Task<ChatCompletionResult> RunUserTurnAsync(
@@ -66,6 +78,7 @@ namespace RNAssistant.Office.Services
                 {
                     Role = "user",
                     Content = text,
+                    HtmlWorkspaceCheckpointId = session.ActiveHtmlArtifactId,
                     Attachments = attachments == null ? new List<ChatAttachment>() : new List<ChatAttachment>(attachments)
                 });
             }
@@ -88,7 +101,7 @@ namespace RNAssistant.Office.Services
             var initialProtocolMessages = new List<ChatMessage>();
             if (confirmedResult != null)
             {
-                AgentProtocolHistory.AppendToolExchange(initialProtocolMessages, null, confirmedCommand, confirmedResult, settings);
+                AgentProtocolHistory.AppendToolExchange(initialProtocolMessages, session, null, confirmedCommand, confirmedResult, settings);
             }
             var taskText = LatestUserRequest(session, confirmedCommand == null ? string.Empty : confirmedCommand.ToolId);
             return RunLoopAsync(taskText, CommandMutates(confirmedCommand, tools), session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, initialProtocolMessages, confirmedCommand, confirmedResult, cancellationToken);
@@ -156,6 +169,8 @@ namespace RNAssistant.Office.Services
             var routingDiagnosticsJson = string.Empty;
             var protocolMessages = new List<ChatMessage>(initialProtocolMessages ?? new ChatMessage[0]);
             var llmRunCache = new LlmRunCache();
+            var budgetCompactionRetried = false;
+            var runMessageStart = Math.Max(0, (session == null || session.Messages == null ? 0 : session.Messages.Count) - 1);
             if (initialCommand != null && initialPlanResult != null)
             {
                 var initialTool = AgentToolCatalogResolver.Find(allTools, initialCommand.ToolId);
@@ -175,7 +190,9 @@ namespace RNAssistant.Office.Services
             for (var iteration = 0; iteration < maxIterations; iteration++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var slice = _toolCatalogSlicer.Slice(route, allTools, observations, settings.MaxAgentToolsPerRequest, settings.AllowAgentToolAuthoring, settings);
+                var activeSkills = SkillResolver.ActiveSkills(session, skills);
+                var skillScopedTools = SkillResolver.FilterTools(allTools, skills, activeSkills);
+                var slice = _toolCatalogSlicer.Slice(route, skillScopedTools, observations, settings.MaxAgentToolsPerRequest, settings.AllowAgentToolAuthoring, settings);
                 routingDiagnosticsJson = AgentRunPresentation.BuildRoutingDiagnosticsJson(route, slice);
                 if (iteration == 0)
                 {
@@ -200,19 +217,52 @@ namespace RNAssistant.Office.Services
                     slice.Tools,
                     llmRunCache);
                 requestOptions.ReasoningEnabled = session == null ? (bool?)null : session.ReasoningEnabled;
-                var messages = _plannerPromptComposer.BuildMessages(
-                    requestText,
-                    snapshot,
-                    route,
-                    slice,
-                    observations,
-                    documentContext,
-                    skills,
-                    settings,
-                    session,
-                    attachments,
-                    protocolMessages,
-                    requestOptions);
+                List<ChatMessage> messages;
+                try
+                {
+                    messages = _plannerPromptComposer.BuildMessages(
+                        requestText,
+                        snapshot,
+                        route,
+                        slice,
+                        observations,
+                        documentContext,
+                        skills,
+                        settings,
+                        session,
+                        attachments,
+                        protocolMessages,
+                        requestOptions);
+                }
+                catch (PromptBudgetExceededException ex) when (
+                    ex.CanCompact &&
+                    !budgetCompactionRetried &&
+                    settings.AutoCompressContext &&
+                    _contextCompactionService != null)
+                {
+                    var checkpoint = await _contextCompactionService.EnsureWithinBudgetAsync(
+                        session,
+                        settings,
+                        string.Empty,
+                        true,
+                        progress,
+                        cancellationToken).ConfigureAwait(false);
+                    if (checkpoint == null) throw;
+                    budgetCompactionRetried = true;
+                    messages = _plannerPromptComposer.BuildMessages(
+                        requestText,
+                        snapshot,
+                        route,
+                        slice,
+                        observations,
+                        documentContext,
+                        skills,
+                        settings,
+                        session,
+                        attachments,
+                        protocolMessages,
+                        requestOptions);
+                }
                 contextUsage = ContextUsageEstimator.FromPrompt(messages, settings);
                 ReportProgress(progress, "thinking", AgentRunPresentation.BuildTaskProgressMessage(route, true));
                 var plannerAttempt = await _plannerCompletion.CompleteAsync(
@@ -246,6 +296,11 @@ namespace RNAssistant.Office.Services
                 }
                 if (string.Equals(response.Kind, AgentResponseKinds.Plan, StringComparison.OrdinalIgnoreCase))
                 {
+                    var planFingerprint = AgentPlanStateService.Fingerprint(response);
+                    state.RepeatedPlanCount = string.Equals(planFingerprint, state.LastPlanFingerprint, StringComparison.Ordinal)
+                        ? state.RepeatedPlanCount + 1
+                        : 0;
+                    state.LastPlanFingerprint = planFingerprint;
                     bool updatedExisting;
                     var visiblePlan = AgentPlanStateService.ApplyDecision(session, state, response, out updatedExisting);
                     session.Messages.Add(AgentTranscript.CreateAssistantMessage(
@@ -256,7 +311,27 @@ namespace RNAssistant.Office.Services
                         state.WorkingGoal));
                     ReportProgress(progress, "plan", response.DecisionSummary, visiblePlan);
                     protocolMessages.Add(new ChatMessage { Role = "assistant", Content = plannerText });
-                    protocolMessages.Add(new ChatMessage { Role = "user", Content = PromptText(settings, p => p.PlanContinuationPrompt) });
+                    if (state.RepeatedPlanCount >= 2)
+                    {
+                        assistantText = "Модель повторяет план без перехода к следующему действию. Выполнение остановлено, исходный план сохранён.";
+                        RememberPendingTask(session, taskText, assistantText, "repeated_plan_no_progress");
+                        session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, null, new ChatActivity
+                        {
+                            Kind = "diagnostic",
+                            Title = "План не продвигается",
+                            Subtitle = "planner",
+                            Status = "failed",
+                            ExecutionStatus = "repeated_plan_no_progress",
+                            ResultMessage = assistantText
+                        }));
+                        break;
+                    }
+                    var continuation = PromptText(settings, p => p.PlanContinuationPrompt);
+                    if (state.RepeatedPlanCount > 0)
+                    {
+                        continuation += " The previous plan was identical. Do not return plan again; choose one tool, clarify, final, or cannot_complete.";
+                    }
+                    protocolMessages.Add(new ChatMessage { Role = "user", Content = continuation });
                     continue;
                 }
 
@@ -325,8 +400,8 @@ namespace RNAssistant.Office.Services
                     if (!string.Equals(response.Kind, AgentResponseKinds.Tool, StringComparison.OrdinalIgnoreCase))
                     {
                         assistantText = response.Message ?? string.Empty;
-                        UpdatePendingTask(session, taskText, response);
                         ReportPlanProgress(progress, AgentPlanStateService.ApplyTerminalDecision(state, response.Kind));
+                        UpdatePendingTask(session, taskText, response, state);
                         session.Messages.Add(AgentTranscript.CreateAssistantMessage(
                             assistantText,
                             completion,
@@ -374,9 +449,29 @@ namespace RNAssistant.Office.Services
                     state.WorkingGoal));
                 ReportProgress(progress, "plan", response.DecisionSummary, plannedActivity);
 
+                if (string.Equals(command.ToolId, "common.skills_load", StringComparison.OrdinalIgnoreCase))
+                {
+                    var loadResult = _toolExecutor.Execute(
+                        command,
+                        allTools,
+                        settings,
+                        false,
+                        false,
+                        session,
+                        1,
+                        skills,
+                        cancellationToken);
+                    AgentProtocolHistory.AppendToolExchange(protocolMessages, session, plannerAttempt, command, loadResult, settings);
+                    AddToolObservation(command, AgentToolCatalogResolver.Find(allTools, command.ToolId), loadResult, observations, resultLog, session, AgentObservationPurposes.Inspection);
+                    ReportProgress(progress, loadResult.Success ? "completed" : "failed", loadResult.Message, AgentTranscript.CreateToolActivity(command, loadResult, "control"));
+                    if (!loadResult.Success && !settings.AutoRetryToolErrors) break;
+                    continue;
+                }
+
                 var stopped = false;
                 var continueAfterRecoverableError = false;
                 cancellationToken.ThrowIfCancellationRequested();
+                HtmlWorkspaceArtifactService.StampUncheckpointed(session, runMessageStart, session.ActiveHtmlArtifactId);
                 if (state.TotalToolSteps >= maxToolSteps)
                 {
                     var limitResult = ToolResult.Fail("Agent tool step limit exceeded: " + maxToolSteps + ".");
@@ -412,12 +507,12 @@ namespace RNAssistant.Office.Services
                         : "Ожидаю ручного запуска: " + AgentRunPresentation.FriendlyToolAction(command) + ".",
                     AgentRunPresentation.CreateRunningActivity(command, settings.AutoRunToolCalls ? "running" : "waiting", "tool"));
                 var result = settings.AutoRunToolCalls
-                    ? _toolExecutor.Execute(command, allTools, settings, false, false, session, Math.Max(1, maxToolSteps - state.TotalToolSteps + 1), cancellationToken)
+                    ? _toolExecutor.Execute(command, allTools, settings, false, false, session, Math.Max(1, maxToolSteps - state.TotalToolSteps + 1), skills, cancellationToken)
                     : ToolResult.SkippedAutoRun("Auto tool execution is disabled: " + command.ToolId);
                 state.TotalToolSteps += Math.Max(0, (result == null ? 0 : result.ToolStepsConsumed) - 1);
                 var retryingToolError = !result.Success && settings.AutoRetryToolErrors && AgentTranscript.CanRetryToolError(result);
                 ReportPlanProgress(progress, AgentPlanStateService.ApplyResult(session, state, result, retryingToolError));
-                AgentProtocolHistory.AppendToolExchange(protocolMessages, plannerAttempt, command, result, settings);
+                AgentProtocolHistory.AppendToolExchange(protocolMessages, session, plannerAttempt, command, result, settings);
                 AttachPendingId(session, command, result, pendingToolRegistrar);
                 RefreshCreatedTool(allTools, command, result);
                 var purpose = string.Equals(route.Phase, AgentPhases.Verification, StringComparison.OrdinalIgnoreCase)
@@ -492,12 +587,13 @@ namespace RNAssistant.Office.Services
                         ReportProgress(progress, "verifying", "Проверяю результат через " + verify.ToolId, AgentRunPresentation.CreateRunningActivity(verify, "running", "verification"));
                         var verifyExecution = await _verificationExecutor.ExecuteAsync(
                             verify.ToolId,
-                            () => _toolExecutor.Execute(verify, allTools, settings, false, false, session, Math.Max(1, maxToolSteps - state.TotalToolSteps + 1), CancellationToken.None),
+                            () => _toolExecutor.Execute(verify, allTools, settings, false, false, session, Math.Max(1, maxToolSteps - state.TotalToolSteps + 1), skills, CancellationToken.None),
                             cancellationToken).ConfigureAwait(false);
                         state.TotalToolSteps += Math.Max(0, (verifyExecution.Result == null ? 0 : verifyExecution.Result.ToolStepsConsumed) - 1);
                         var verifyResult = VerificationResultValidator.Validate(command, verify, verifyExecution.Result);
                         var retryingVerification = !verifyResult.Success && !verifyExecution.TimedOut && settings.AutoRetryToolErrors;
                         ReportPlanProgress(progress, AgentPlanStateService.ApplyResult(session, state, verifyResult, retryingVerification));
+                        AgentProtocolHistory.AppendToolExchange(protocolMessages, session, null, verify, verifyResult, settings);
                         AddToolObservation(verify, verifyTool, verifyResult, observations, resultLog, session, AgentObservationPurposes.Verification);
                         ReportProgress(progress, verifyResult.Success ? "completed" : "failed", verifyResult.Message, AgentTranscript.CreateToolActivity(verify, verifyResult, "verification"));
                         if (!verifyResult.Success)
@@ -546,7 +642,7 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        private static void UpdatePendingTask(ChatSession session, string taskText, AgentPlannerResponse response)
+        private static void UpdatePendingTask(ChatSession session, string taskText, AgentPlannerResponse response, AgentRunState state)
         {
             if (session == null || response == null)
             {
@@ -562,7 +658,14 @@ namespace RNAssistant.Office.Services
 
             if (string.Equals(response.Kind, AgentResponseKinds.Final, StringComparison.OrdinalIgnoreCase))
             {
-                session.PendingAgentTask = null;
+                if (AgentPlanStateService.HasUnfinishedSteps(state))
+                {
+                    RememberPendingTask(session, taskText, response.Message, "incomplete_plan");
+                }
+                else
+                {
+                    session.PendingAgentTask = null;
+                }
             }
         }
 

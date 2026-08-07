@@ -109,6 +109,18 @@ namespace RNAssistant.Harness
             AssertEqual("conflicting_envelope", parser.Parse(
                 "{\"kind\":\"tool\",\"decisionSummary\":\"x\",\"action\":{\"type\":\"reply\",\"content\":\"Не выполнять tool\"}}").ErrorCode,
                 "conflicting compatibility envelope rejected");
+            AssertEqual("conflicting_alias", parser.Parse(
+                "{\"protocolVersion\":1,\"protocol_version\":2,\"kind\":\"final\",\"message\":\"x\"}").ErrorCode,
+                "conflicting root alias rejected");
+            AssertEqual("invalid_tool", parser.Parse(
+                "{\"kind\":\"tool\",\"tool\":{\"toolId\":\"excel.get_context\",\"name\":\"excel.read_range\",\"arguments\":{}}}").ErrorCode,
+                "conflicting tool id aliases rejected");
+            AssertEqual("invalid_tool", parser.Parse(
+                "{\"kind\":\"tool\",\"tool\":{\"toolId\":\"excel.get_context\",\"arguments\":{},\"args\":{\"x\":1}}}").ErrorCode,
+                "conflicting argument aliases rejected");
+            AssertEqual("invalid_tool", parser.Parse(
+                "{\"kind\":\"tool\",\"tool\":{\"toolId\":\"excel.get_context\",\"arguments\":{},\"invented\":true}}").ErrorCode,
+                "unknown tool fields are not merged into arguments");
         }
 
         private static void ModelQualityRequiresToolRejectsFinal()

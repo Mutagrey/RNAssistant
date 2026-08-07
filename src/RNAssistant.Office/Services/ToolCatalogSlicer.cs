@@ -17,13 +17,14 @@ namespace RNAssistant.Office.Services
             AppSettings settings = null)
         {
             var slice = new ToolCatalogSlice();
-            if (route != null && !route.RequiresTool)
-            {
-                return slice;
-            }
+            var controlOnly = route != null && !route.RequiresTool;
             var host = route == null ? string.Empty : route.App ?? string.Empty;
             foreach (var tool in tools ?? new ToolDefinition[0])
             {
+                if (controlOnly && !IsControlTool(tool))
+                {
+                    continue;
+                }
                 var exclusion = CandidateExclusion(tool, host);
                 if (exclusion != null)
                 {
@@ -165,6 +166,10 @@ namespace RNAssistant.Office.Services
                 }
             };
 
+            // Progressive disclosure must stay reachable even when mutation/read
+            // balancing fills the normal slice.
+            add(ordered.Where(IsControlTool), 1);
+
             var mutationPhase = route != null &&
                 string.Equals(route.Phase, AgentPhases.Mutation, StringComparison.OrdinalIgnoreCase);
             if (mutationPhase)
@@ -216,6 +221,7 @@ namespace RNAssistant.Office.Services
 
         private static bool Relevant(ToolDefinition tool, RoutedTask route)
         {
+            if (IsControlTool(tool)) return true;
             if (route == null || string.IsNullOrWhiteSpace(route.TaskType))
             {
                 return true;
@@ -292,6 +298,7 @@ namespace RNAssistant.Office.Services
                 return 50;
             }
             var id = tool.Id ?? string.Empty;
+            if (IsControlTool(tool)) return -10;
             if (route.TaskType == "html" && AgentText.ContainsAny(id, "html_workspace"))
             {
                 return 0;
@@ -319,6 +326,11 @@ namespace RNAssistant.Office.Services
                 return 10;
             }
             return 30;
+        }
+
+        private static bool IsControlTool(ToolDefinition tool)
+        {
+            return tool != null && string.Equals(tool.Id, "common.skills_load", StringComparison.OrdinalIgnoreCase);
         }
 
 

@@ -1,10 +1,11 @@
 (function () {
   var promptDefinitions = [
-    { key: "systemPrompt", label: "Главный промпт агента", group: "Base", source: "root", field: "SystemPrompt", description: "AgentDecision v1, transport, контекст, tools, skills и правила self-improvement." },
+    { key: "systemPrompt", label: "Главный промпт агента", group: "Base", source: "root", field: "SystemPrompt", description: "Редактируемое поведение Agent поверх неизменяемого runtime-контракта." },
     { key: "chatSystemPrompt", label: "Базовый промпт чата", group: "Base", source: "root", field: "ChatSystemPrompt", description: "Прямой текстовый ответ без planner JSON и внутреннего reasoning." },
     { key: "forceToolUsePrompt", label: "Force tool use", group: "Recovery", source: "agent", field: "ForceToolUsePrompt", description: "Follow-up, когда модель ответила текстом на явное действие." },
     { key: "repairDecisionPrompt", label: "Repair AgentDecision", group: "Recovery", source: "agent", field: "RepairDecisionPrompt", description: "Промпт ограниченных повторов для невалидного решения модели." },
     { key: "planContinuationPrompt", label: "Continue plan", group: "Loop", source: "agent", field: "PlanContinuationPrompt", description: "Переход от видимого plan к следующему решению." },
+    { key: "contextCompactionPrompt", label: "Compact context", group: "Memory", source: "agent", field: "ContextCompactionPrompt", description: "Критерии model-generated checkpoint без удаления исходной истории." },
     { key: "chatTitlePrompt", label: "Название чата", group: "Utility", source: "agent", field: "ChatTitlePrompt", description: "Отдельный короткий запрос для генерации названия чата." }
   ];
 
