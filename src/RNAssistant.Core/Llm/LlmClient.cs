@@ -16,6 +16,7 @@ namespace RNAssistant.Core.Llm
         private const int MaxReasoningCustomJsonChars = 32768;
         private readonly Func<string> _apiKeyProvider;
         private readonly LlmMessageBuilder _messageBuilder;
+        private readonly Action<string> _debugLog;
 
         public LlmClient(Func<string> apiKeyProvider, Func<ChatAttachment, byte[]> attachmentReader = null)
             : this(apiKeyProvider, attachmentReader, null, null)
@@ -27,9 +28,20 @@ namespace RNAssistant.Core.Llm
             Func<ChatAttachment, byte[]> attachmentReader,
             LlmAttachmentTextReader attachmentTextReader,
             LlmModelImageProvider modelImageProvider)
+            : this(apiKeyProvider, attachmentReader, attachmentTextReader, modelImageProvider, null)
+        {
+        }
+
+        public LlmClient(
+            Func<string> apiKeyProvider,
+            Func<ChatAttachment, byte[]> attachmentReader,
+            LlmAttachmentTextReader attachmentTextReader,
+            LlmModelImageProvider modelImageProvider,
+            Action<string> debugLog)
         {
             _apiKeyProvider = apiKeyProvider;
             _messageBuilder = new LlmMessageBuilder(attachmentReader, attachmentTextReader, modelImageProvider);
+            _debugLog = debugLog;
         }
 
         public async Task<LlmCompletionResult> CompleteAsync(
@@ -65,6 +77,11 @@ namespace RNAssistant.Core.Llm
             }
 
             var body = BuildRequestBody(settings, apiMessages, apiBuild.EstimatedPromptTokens, requestOptions);
+            var trafficId = settings.DebugModelTraffic ? Guid.NewGuid().ToString("N").Substring(0, 12) : null;
+            if (settings.DebugModelTraffic)
+            {
+                LogModelJson(settings, trafficId, "REQUEST POST " + requestUri, body.ToString(Formatting.Indented));
+            }
             var content = LlmHttpTransport.CreateJsonContent(body);
             var diagnostics = CreateDiagnostics(requestUri, settings, apiMessages.Count, !string.IsNullOrWhiteSpace(apiKey));
             var timeout = TimeSpan.FromSeconds(Math.Max(30, settings.RequestTimeoutSeconds <= 0 ? 300 : settings.RequestTimeoutSeconds));
@@ -97,6 +114,7 @@ namespace RNAssistant.Core.Llm
                                 response.Content,
                                 LlmHttpTransport.MaxErrorBodyBytes,
                                 requestCancellation.Token).ConfigureAwait(false);
+                            LogModelJson(settings, trafficId, "RESPONSE HTTP " + (int)response.StatusCode, errorBody);
                             var failureKind = LlmHttpTransport.FailureKind(response.StatusCode, errorBody, requestOptions);
                             if ((hasImages || hasAudio) && (int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
                             {
@@ -121,7 +139,20 @@ namespace RNAssistant.Core.Llm
                         {
                             using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
                             {
-                                return await LlmResponseParser.ReadStreamingOrJsonResponseAsync(stream, streamProgress, requestCancellation.Token).ConfigureAwait(false);
+                                Action<string> rawResponseLog = null;
+                                if (settings.DebugModelTraffic)
+                                {
+                                    rawResponseLog = rawJson => LogModelJson(
+                                        settings,
+                                        trafficId,
+                                        "RESPONSE HTTP " + (int)response.StatusCode + " SSE CHUNK",
+                                        rawJson);
+                                }
+                                return await LlmResponseParser.ReadStreamingOrJsonResponseAsync(
+                                    stream,
+                                    streamProgress,
+                                    requestCancellation.Token,
+                                    rawResponseLog).ConfigureAwait(false);
                             }
                         }
 
@@ -129,6 +160,7 @@ namespace RNAssistant.Core.Llm
                             response.Content,
                             LlmHttpTransport.MaxResponseBodyBytes,
                             requestCancellation.Token).ConfigureAwait(false);
+                        LogModelJson(settings, trafficId, "RESPONSE HTTP " + (int)response.StatusCode, responseJson);
                         return LlmResponseParser.ParseCompletionResponse(responseJson);
                     }
                 }
@@ -314,6 +346,33 @@ namespace RNAssistant.Core.Llm
             return current.Message;
         }
 
+        private void LogModelJson(AppSettings settings, string trafficId, string label, string rawJson)
+        {
+            if (settings == null || !settings.DebugModelTraffic || _debugLog == null)
+            {
+                return;
+            }
+
+            var formatted = rawJson ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(formatted))
+            {
+                try
+                {
+                    formatted = JToken.Parse(formatted.TrimStart('\uFEFF')).ToString(Formatting.Indented);
+                }
+                catch (JsonException)
+                {
+                }
+            }
+            try
+            {
+                _debugLog("MODEL TRAFFIC [" + (trafficId ?? "unknown") + "] " + label + Environment.NewLine + formatted);
+            }
+            catch
+            {
+            }
+        }
+
         private static string CreateDiagnostics(Uri requestUri, AppSettings settings, int messageCount, bool hasBearerKey)
         {
             var headerNames = new List<string>();
@@ -395,7 +454,7 @@ namespace RNAssistant.Core.Llm
                     }
                 }));
                 body["tool_choice"] = "auto";
-                body["parallel_tool_calls"] = false;
+                body["parallel_tool_calls"] = true;
             }
             return body;
         }

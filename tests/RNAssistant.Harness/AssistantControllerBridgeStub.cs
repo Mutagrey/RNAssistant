@@ -105,6 +105,8 @@ namespace RNAssistant.Office
         }
         public ChatStateResponse UpdateMessageActivityData(string messageId, string dataJson, string chatId = null) { return ChatState(messageId, chatId); }
         public SettingsResponse GetSettings() { return new SettingsResponse { Settings = new AppSettings(), HasApiKey = false }; }
+        public RuntimeLogResponse GetRuntimeLog() { return new RuntimeLogResponse { Content = "runtime log", Path = "runtime.log" }; }
+        public RuntimeLogResponse ClearRuntimeLog() { return new RuntimeLogResponse { Content = string.Empty, Path = "runtime.log" }; }
         public Task<ModelCatalogResponse> GetModelCatalogAsync(AppSettings settings, string apiKey) { return Task.FromResult(new ModelCatalogResponse { Catalog = new JObject() }); }
 
         public SettingsResponse SaveSettings(AppSettings settings, string apiKey)

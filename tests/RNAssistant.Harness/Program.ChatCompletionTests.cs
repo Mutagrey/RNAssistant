@@ -57,15 +57,19 @@ namespace RNAssistant.Harness
             AssertEqual(7, thinkResult.ReasoningTokens.Value, "output reasoning token alias");
 
             updates.Clear();
+            var rawChunks = new List<string>();
             using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(thinkStream)))
             {
                 var sniffedResult = LlmResponseParser.ReadStreamingOrJsonResponseAsync(
                     stream,
                     updates.Add,
-                    CancellationToken.None).GetAwaiter().GetResult();
+                    CancellationToken.None,
+                    rawChunks.Add).GetAwaiter().GetResult();
                 AssertEqual(thinkResult.Content, sniffedResult.Content, "stream body detected without content type");
                 AssertTrue(updates.Any(item => item.Completed), "stream body completion progress");
                 AssertEqual(sniffedResult.Content, string.Concat(updates.Select(item => item.ContentDelta)), "stream body live content progress");
+                AssertEqual(4, rawChunks.Count, "debug callback receives every raw SSE JSON chunk");
+                AssertTrue(JObject.Parse(rawChunks[0]) != null, "debug SSE callback preserves JSON chunks");
             }
 
             updates.Clear();
@@ -181,6 +185,21 @@ namespace RNAssistant.Harness
             AssertEqual("ok", truncated.Content, "content survives reasoning truncation");
         }
 
+        private static void LlmProviderRefusalMetadataIsPreserved()
+        {
+            var json = LlmResponseParser.ParseCompletionResponse(
+                "{\"choices\":[{\"message\":{\"content\":\"\",\"refusal\":\"upstream safety refusal\"}}]}");
+            AssertEqual(string.Empty, json.Content, "refusal is not mixed into assistant content");
+            AssertEqual("upstream safety refusal", json.RefusalContent, "json refusal metadata");
+
+            var stream = LlmResponseParser.ParseStreamingResponse(
+                "data: {\"choices\":[{\"delta\":{\"refusal\":\"upstream \"}}]}\n\n" +
+                "data: {\"choices\":[{\"delta\":{\"refusal\":\"safety refusal\"}}]}\n\n" +
+                "data: [DONE]\n\n");
+            AssertEqual(string.Empty, stream.Content, "stream refusal is not mixed into assistant content");
+            AssertEqual("upstream safety refusal", stream.RefusalContent, "stream refusal metadata");
+        }
+
         private sealed class DisposeUnblocksStream : Stream
         {
             private readonly TaskCompletionSource<int> _read =
@@ -283,6 +302,7 @@ namespace RNAssistant.Harness
             {
                 var activities = new List<ChatActivity>();
                 var reasoning = new string('r', 300);
+                bool? reasoningEnabled = null;
                 var service = new ChatCompletionService(
                     adapter,
                     executor,
@@ -293,6 +313,7 @@ namespace RNAssistant.Harness
                         Action<LlmStreamUpdate> streamProgress,
                         CancellationToken cancellationToken)
                     {
+                        reasoningEnabled = requestOptions.ReasoningEnabled;
                         streamProgress(new LlmStreamUpdate { ReasoningDelta = reasoning });
                         streamProgress(new LlmStreamUpdate { ContentDelta = "Done." });
                         streamProgress(new LlmStreamUpdate { Completed = true });
@@ -304,6 +325,7 @@ namespace RNAssistant.Harness
                     });
                 var session = NewSession(adapter);
                 session.Mode = ChatModes.Chat;
+                session.ReasoningEnabled = true;
                 service.ExecuteAsync(
                     "Hello",
                     session,
@@ -321,6 +343,7 @@ namespace RNAssistant.Harness
                 AssertTrue(activities.Any(item => item.Status == "running" && item.ResultMessage == reasoning), "chat reasoning live progress");
                 AssertTrue(activities.Any(item => item.Status == "completed"), "chat reasoning completion progress");
                 AssertEqual(reasoning, session.Messages.Last().ReasoningContent, "chat reasoning stored");
+                AssertEqual(true, reasoningEnabled.Value, "chat reasoning toggle reaches LLM request options");
             });
         }
 

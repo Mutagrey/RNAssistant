@@ -311,5 +311,40 @@ namespace RNAssistant.Office.Services
             };
         }
 
+        public static ChatActivity CreateToolBatchActivity(IEnumerable<ToolCommand> commands, string status)
+        {
+            var items = (commands ?? new ToolCommand[0]).Where(command => command != null).ToList();
+            var activity = new ChatActivity
+            {
+                BatchId = "batch_" + Guid.NewGuid().ToString("N"),
+                Kind = "tool_batch",
+                Title = "Инструменты · " + items.Count,
+                Subtitle = "Последовательное выполнение",
+                Status = string.IsNullOrWhiteSpace(status) ? "planned" : status,
+                ExecutionStatus = string.IsNullOrWhiteSpace(status) ? "planned" : status
+            };
+            foreach (var command in items)
+            {
+                activity.Children.Add(CreateRunningActivity(command, activity.Status, "tool"));
+            }
+            return activity;
+        }
+
+        public static void UpdateToolBatchActivity(ChatActivity batch, int index, ToolCommand command, ToolResult result)
+        {
+            if (batch == null || index < 0 || index >= batch.Children.Count) return;
+            batch.Children[index] = AgentTranscript.CreateToolActivity(command, result, "tool");
+            var children = batch.Children ?? new List<ChatActivity>();
+            batch.Status = children.Any(child => child != null && string.Equals(child.Status, "failed", StringComparison.OrdinalIgnoreCase))
+                ? "failed"
+                : children.Any(child => child != null && string.Equals(child.Status, "waiting", StringComparison.OrdinalIgnoreCase))
+                    ? "waiting"
+                    : children.All(child => child != null && string.Equals(child.Status, "completed", StringComparison.OrdinalIgnoreCase))
+                        ? "completed"
+                        : "running";
+            batch.ExecutionStatus = batch.Status;
+            batch.ResultMessage = string.Empty;
+        }
+
     }
 }

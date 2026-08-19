@@ -178,10 +178,11 @@ namespace RNAssistant.Harness
                 ["decisionSummary"] = selected == null ? "No tool selected." : "Run " + selected.ToolId,
                 ["goal"] = null,
                 ["plan"] = null,
-                ["tool"] = selected == null ? null : JObject.FromObject(new { toolId = selected.ToolId, arguments = selected.Arguments }),
+                ["tool"] = selected == null
+                    ? null
+                    : new JArray(commands.Select(command => JObject.FromObject(new { toolId = command.ToolId, arguments = command.Arguments }))),
                 ["message"] = null
             };
-            if (commands != null && commands.Length > 1) result["extraCalls"] = new JArray(commands.Skip(1).Select(command => command.ToolId));
             return result.ToString(Formatting.None);
         }
 

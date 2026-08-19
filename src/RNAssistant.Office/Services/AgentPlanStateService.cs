@@ -101,19 +101,6 @@ namespace RNAssistant.Office.Services
                 !string.Equals(NormalizeStepStatus(step.Status), "completed", StringComparison.OrdinalIgnoreCase));
         }
 
-        public static string Fingerprint(AgentPlannerResponse response)
-        {
-            if (response == null) return string.Empty;
-            return string.Join("|", new[]
-            {
-                response.Goal ?? string.Empty,
-                string.Join(";", (response.Plan ?? new List<AgentPlanStep>())
-                    .Where(step => step != null)
-                    .Select(step => (step.Id ?? string.Empty).Trim() + ":" + (step.Title ?? string.Empty).Trim())
-                    .ToArray())
-            }).ToLowerInvariant();
-        }
-
         public static ChatActivity Restore(ChatSession session, AgentRunState state)
         {
             if (state == null)

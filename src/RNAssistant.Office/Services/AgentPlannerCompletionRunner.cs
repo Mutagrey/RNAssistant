@@ -45,7 +45,7 @@ namespace RNAssistant.Office.Services
             LlmCompletionResult completion;
             try
             {
-                completion = await CompleteWithProgressAsync(settings, activeMessages, options, progress, progressMessage, cancellationToken).ConfigureAwait(false);
+                completion = await CompleteResilientAsync(settings, activeMessages, options, progress, progressMessage, cancellationToken).ConfigureAwait(false);
             }
             catch (LlmRequestException ex) when (
                 ex.Kind == LlmFailureKind.ResponseFormatUnsupported &&
@@ -57,10 +57,10 @@ namespace RNAssistant.Office.Services
                 baseMessages = WithResponseMode(messages, mode);
                 activeMessages = baseMessages;
                 Report(progress, "fallback", "Endpoint не принял json_schema; повторяю через json_object.", null);
-                completion = await CompleteWithProgressAsync(settings, activeMessages, options, progress, progressMessage, cancellationToken).ConfigureAwait(false);
+                completion = await CompleteResilientAsync(settings, activeMessages, options, progress, progressMessage, cancellationToken).ConfigureAwait(false);
             }
 
-            var parsed = ParseCompletion(completion, mode, tools, options.Tools);
+            var parsed = ParseCompletion(completion, mode, tools, options);
             if (!parsed.Success && CanFallback(settings, state, mode))
             {
                 var rejected = CreateRejectedResponse(
@@ -77,8 +77,8 @@ namespace RNAssistant.Office.Services
                 baseMessages = WithResponseMode(messages, mode);
                 activeMessages = baseMessages;
                 Report(progress, "fallback", "Ответ json_schema не прошёл проверку; повторяю через json_object.", rejected.Activity);
-                completion = await CompleteWithProgressAsync(settings, activeMessages, options, progress, progressMessage, cancellationToken).ConfigureAwait(false);
-                parsed = ParseCompletion(completion, mode, tools, options.Tools);
+                completion = await CompleteResilientAsync(settings, activeMessages, options, progress, progressMessage, cancellationToken).ConfigureAwait(false);
+                parsed = ParseCompletion(completion, mode, tools, options);
             }
 
             for (var retry = 1; !parsed.Success && retry <= maxFormatRetries; retry++)
@@ -94,8 +94,8 @@ namespace RNAssistant.Office.Services
                 var retryMessage = (repairMessage ?? "Исправляю формат ответа...") + " (" + retry + "/" + maxFormatRetries + ")";
                 Report(progress, "repairing", retryMessage, rejected.Activity);
                 activeMessages = BuildRepairMessages(baseMessages, parsed, repairPrompt, mode, retry, maxFormatRetries);
-                completion = await CompleteWithProgressAsync(settings, activeMessages, options, progress, repairMessage, cancellationToken).ConfigureAwait(false);
-                parsed = ParseCompletion(completion, mode, tools, options.Tools);
+                completion = await CompleteResilientAsync(settings, activeMessages, options, progress, repairMessage, cancellationToken).ConfigureAwait(false);
+                parsed = ParseCompletion(completion, mode, tools, options);
             }
 
             return new AgentPlannerAttempt
@@ -110,17 +110,41 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        private AgentPlannerParseResult ParseCompletion(LlmCompletionResult completion, string mode, IEnumerable<ToolDefinition> tools, IEnumerable<LlmToolDefinition> apiTools)
+        private AgentPlannerParseResult ParseCompletion(
+            LlmCompletionResult completion,
+            string mode,
+            IEnumerable<ToolDefinition> tools,
+            LlmRequestOptions requestOptions)
         {
-            return string.Equals(mode, AgentResponseModes.NativeToolCalls, StringComparison.OrdinalIgnoreCase)
-                ? _parser.ParseNative(completion, tools, apiTools)
+            if (completion != null &&
+                !string.IsNullOrWhiteSpace(completion.RefusalContent) &&
+                string.IsNullOrWhiteSpace(completion.Content) &&
+                (completion.ToolCalls == null || completion.ToolCalls.Count == 0))
+            {
+                return AgentPlannerParseResult.Fail(
+                    "provider_refusal",
+                    "The provider returned a refusal instead of an AgentDecision. Re-evaluate the original request and return cannot_complete only when a required capability is genuinely unavailable.");
+            }
+
+            var parsed = string.Equals(mode, AgentResponseModes.NativeToolCalls, StringComparison.OrdinalIgnoreCase)
+                ? _parser.ParseNative(completion, tools, requestOptions == null ? null : requestOptions.Tools)
                 : _parser.Parse(completion == null ? null : completion.Content, tools);
+            if (parsed.Success && requestOptions != null && !requestOptions.PlanDecisionAllowed &&
+                (string.Equals(parsed.Response.Kind, AgentResponseKinds.Plan, StringComparison.OrdinalIgnoreCase) ||
+                 parsed.Response.Plan != null && parsed.Response.Plan.Count > 0))
+            {
+                return AgentPlannerParseResult.Fail(
+                    "plan_not_allowed",
+                    "The current plan is already declared and no newer runtime observation exists. Do not return kind=plan or rephrase the plan; choose tool, clarify, final, or cannot_complete.");
+            }
+            return parsed;
         }
 
         internal static LlmRequestOptions BuildOptions(
             string mode,
             IEnumerable<ToolDefinition> tools,
-            LlmRunCache runCache = null)
+            LlmRunCache runCache = null,
+            bool includePlanDecision = true)
         {
             var native = string.Equals(mode, AgentResponseModes.NativeToolCalls, StringComparison.OrdinalIgnoreCase);
             var jsonObject = string.Equals(mode, AgentResponseModes.JsonObject, StringComparison.OrdinalIgnoreCase);
@@ -131,10 +155,11 @@ namespace RNAssistant.Office.Services
             {
                 ResponseFormat = jsonObject ? LlmResponseFormats.JsonObject : LlmResponseFormats.JsonSchema,
                 ResponseSchemaName = jsonObject ? null : AgentDecisionProtocol.SchemaName,
-                ResponseSchemaJson = jsonObject ? null : AgentDecisionSchemaBuilder.Build(tools, !native),
+                ResponseSchemaJson = jsonObject ? null : AgentDecisionSchemaBuilder.Build(tools, !native, includePlanDecision),
                 NativeTools = native,
                 Tools = apiTools,
-                RunCache = runCache
+                RunCache = runCache,
+                PlanDecisionAllowed = includePlanDecision
             };
         }
 
@@ -144,7 +169,11 @@ namespace RNAssistant.Office.Services
             LlmRunCache runCache,
             LlmRequestOptions previous)
         {
-            var options = BuildOptions(mode, tools, runCache);
+            var options = BuildOptions(
+                mode,
+                tools,
+                runCache,
+                previous == null || previous.PlanDecisionAllowed);
             options.ReasoningEnabled = previous == null ? (bool?)null : previous.ReasoningEnabled;
             return options;
         }
@@ -203,6 +232,54 @@ namespace RNAssistant.Office.Services
             return completion ?? new LlmCompletionResult();
         }
 
+        private async Task<LlmCompletionResult> CompleteResilientAsync(
+            AppSettings settings,
+            IEnumerable<ChatMessage> messages,
+            LlmRequestOptions requestOptions,
+            Action<string, string, ChatActivity> progress,
+            string progressMessage,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                return await CompleteWithProgressAsync(
+                    settings,
+                    messages,
+                    requestOptions,
+                    progress,
+                    progressMessage,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (LlmRequestException ex) when (IsRetryableTransportFailure(ex))
+            {
+                Report(progress, "retrying", "Временная ошибка ответа модели; повторяю тот же запрос один раз.", new ChatActivity
+                {
+                    Kind = "diagnostic",
+                    Title = "Повтор запроса модели",
+                    Subtitle = ex.Kind.ToString(),
+                    Status = "running",
+                    ExecutionStatus = "llm_transport_retry",
+                    Retryable = true,
+                    ResultMessage = ex.Message
+                });
+                return await CompleteWithProgressAsync(
+                    settings,
+                    messages,
+                    requestOptions,
+                    progress,
+                    progressMessage,
+                    cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        private static bool IsRetryableTransportFailure(LlmRequestException error)
+        {
+            return error != null &&
+                (error.Kind == LlmFailureKind.Network ||
+                 error.Kind == LlmFailureKind.TransientServer ||
+                 error.Kind == LlmFailureKind.InvalidResponse);
+        }
+
         private static List<ChatMessage> BuildRepairMessages(
             IEnumerable<ChatMessage> originalMessages,
             AgentPlannerParseResult parseResult,
@@ -212,6 +289,9 @@ namespace RNAssistant.Office.Services
             int retryLimit)
         {
             var messages = new List<ChatMessage>(originalMessages ?? new ChatMessage[0]);
+            var refusalGuidance = parseResult != null && string.Equals(parseResult.ErrorCode, "provider_refusal", StringComparison.OrdinalIgnoreCase)
+                ? "\nThe upstream refusal is not executable output. Re-evaluate the original user request under the runtime instructions; return cannot_complete JSON only if a required capability is genuinely unavailable."
+                : string.Empty;
             messages.Add(new ChatMessage
             {
                 Role = "user",
@@ -219,6 +299,7 @@ namespace RNAssistant.Office.Services
                     "\nActive responseMode: " + mode +
                     "\nFormat retry: " + retry + " of " + retryLimit +
                     "\nThe rejected response is intentionally omitted from model context." +
+                    refusalGuidance +
                     "\nValidation error: " + (parseResult == null ? string.Empty : parseResult.ErrorCode + " " + parseResult.ErrorMessage)
             });
             return messages;
@@ -235,7 +316,7 @@ namespace RNAssistant.Office.Services
             var rejected = new AgentPlannerRejectedResponse
             {
                 Completion = completion ?? new LlmCompletionResult(),
-                RawText = completion == null ? string.Empty : completion.Content ?? string.Empty,
+                RawText = CompletionDiagnosticText(completion),
                 ParseResult = parseResult,
                 ResponseMode = mode,
                 RecoveryAction = recoveryAction,
@@ -244,6 +325,14 @@ namespace RNAssistant.Office.Services
             };
             rejected.Activity = AgentRunPresentation.CreatePlannerRecoveryActivity(rejected);
             return rejected;
+        }
+
+        private static string CompletionDiagnosticText(LlmCompletionResult completion)
+        {
+            if (completion == null) return string.Empty;
+            return !string.IsNullOrWhiteSpace(completion.Content)
+                ? completion.Content
+                : completion.RefusalContent ?? string.Empty;
         }
 
         private static IReadOnlyList<ChatMessage> WithResponseMode(IReadOnlyList<ChatMessage> source, string mode)

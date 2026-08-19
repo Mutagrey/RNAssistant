@@ -95,6 +95,15 @@ namespace RNAssistant.Office.Contracts
         public string ContentDelta { get; set; }
     }
 
+    public sealed class RuntimeLogResponse
+    {
+        [JsonProperty("content")]
+        public string Content { get; set; }
+
+        [JsonProperty("path")]
+        public string Path { get; set; }
+    }
+
     public sealed class ChatStateMessage
     {
         [JsonProperty("type")]

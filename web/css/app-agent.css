@@ -3,6 +3,7 @@
   box-sizing: border-box;
   width: 100%;
   max-width: none;
+  min-width: 0;
   padding: 0;
   border: 0;
   background: transparent;
@@ -17,6 +18,13 @@
 .agent-run-process {
   display: grid;
   gap: 5px;
+  min-width: 0;
+}
+
+.agent-tool-batch-list {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
 }
 
 .agent-run-final {
@@ -36,6 +44,7 @@
   color: #202936;
   font-size: 13px;
   line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 
 .message.assistant .agent-decision-message.markdown {
@@ -58,6 +67,8 @@
 
 .agent-run-history {
   margin: 0;
+  min-width: 0;
+  max-width: 100%;
   color: #667085;
 }
 
@@ -126,7 +137,7 @@
 }
 
 .agent-run-history-meta {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   color: #98a2b3;
   font-size: 11px;
 }
@@ -228,9 +239,9 @@
 }
 
 .agent-activity-copy {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1px 6px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 6px;
   align-items: baseline;
   min-width: 0;
 }
@@ -244,17 +255,16 @@
 }
 
 .agent-activity-name {
-  flex: 0 1 auto;
   color: #667085;
   font-size: 12px;
   font-weight: var(--label-font-weight);
   line-height: 1.4;
-  white-space: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agent-activity-comment,
 .agent-activity-meta {
-  flex: 0 1 auto;
   color: #98a2b3;
   font-size: 11px;
   line-height: 1.4;
@@ -270,8 +280,34 @@
 }
 
 .agent-activity-meta {
-  flex: 0 0 auto;
   text-align: left;
+}
+
+.agent-activity.kind-tool_batch {
+  margin: 2px 0;
+  padding: 5px 8px;
+  border: 1px solid rgba(102, 112, 133, .18);
+  border-radius: 9px;
+  background: rgba(249, 250, 251, .78);
+}
+
+.agent-activity.kind-tool_batch > .agent-activity-toggle > .agent-activity-row {
+  min-height: 23px;
+}
+
+.agent-activity.kind-tool_batch .agent-activity-children {
+  gap: 0;
+}
+
+.agent-activity.kind-tool_batch .agent-activity-detail-body {
+  margin: 2px 0 0;
+  padding: 3px 0 0 18px;
+  background: transparent;
+}
+
+:where(html[data-theme="dark"], body[data-theme="dark"]) .agent-activity.kind-tool_batch {
+  border-color: rgba(160, 174, 192, .2);
+  background: rgba(41, 47, 56, .72);
 }
 
 .agent-activity-comment::before,
@@ -439,6 +475,8 @@
 
 .agent-run-plan {
   margin: 0;
+  min-width: 0;
+  max-width: 100%;
   border: 0;
   background: transparent;
   color: #667085;
@@ -627,8 +665,10 @@
 }
 
 .agent-plan-goal > strong {
+  min-width: 0;
   color: var(--text);
   font-weight: var(--title-font-weight);
+  overflow-wrap: anywhere;
 }
 
 .agent-plan-card > .agent-plan-list > .agent-plan-goal {
@@ -721,6 +761,11 @@
   color: #475467;
   font-size: 11px;
   line-height: 1.4;
+}
+
+.agent-plan-step-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .agent-plan-step-mark {

@@ -106,6 +106,7 @@ function applyChatState(response) {
   if (response.messages || response.Messages) {
     state.liveActivity = null;
     state.liveStreamContent = null;
+    if (typeof resetLiveReasoning === "function") resetLiveReasoning();
     state.messages = response.messages || response.Messages || [];
   }
   if (response.artifacts !== undefined || response.Artifacts !== undefined) {

@@ -306,6 +306,47 @@
   background: transparent;
 }
 
+.logs-workspace {
+  display: grid;
+  grid-template-rows: minmax(140px, 0.7fr) minmax(220px, 1.3fr);
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+.log-section {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.log-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.log-section-head > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.log-section-head strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+#runtimeLogPath {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .danger-zone {
   display: flex;
   align-items: center;

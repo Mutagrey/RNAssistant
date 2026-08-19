@@ -10,10 +10,18 @@ namespace RNAssistant.Core.Tools
     {
         public static string Build(IEnumerable<ToolDefinition> tools)
         {
-            return Build(tools, true);
+            return Build(tools, true, true);
         }
 
         public static string Build(IEnumerable<ToolDefinition> tools, bool includeToolDecision)
+        {
+            return Build(tools, includeToolDecision, true);
+        }
+
+        public static string Build(
+            IEnumerable<ToolDefinition> tools,
+            bool includeToolDecision,
+            bool includePlanDecision)
         {
             var toolOptions = new JArray();
             foreach (var tool in includeToolDecision ? tools ?? new ToolDefinition[0] : new ToolDefinition[0])
@@ -33,7 +41,20 @@ namespace RNAssistant.Core.Tools
                     ["additionalProperties"] = false
                 });
             }
-            toolOptions.Add(new JObject { ["type"] = "null" });
+            var toolField = includeToolDecision && toolOptions.Count > 0
+                ? new JObject
+                {
+                    ["anyOf"] = new JArray(
+                        new JObject
+                        {
+                            ["type"] = "array",
+                            ["items"] = new JObject { ["anyOf"] = toolOptions },
+                            ["minItems"] = 1,
+                            ["maxItems"] = AgentDecisionProtocol.MaxToolCallsPerDecision
+                        },
+                        new JObject { ["type"] = "null" })
+                }
+                : new JObject { ["type"] = "null" };
 
             var planItem = new JObject
             {
@@ -46,6 +67,13 @@ namespace RNAssistant.Core.Tools
                 ["required"] = new JArray("id", "title"),
                 ["additionalProperties"] = false
             };
+            var decisionKinds = new JArray();
+            if (includePlanDecision) decisionKinds.Add(AgentResponseKinds.Plan);
+            if (includeToolDecision) decisionKinds.Add(AgentResponseKinds.Tool);
+            decisionKinds.Add(AgentResponseKinds.Clarify);
+            decisionKinds.Add(AgentResponseKinds.Final);
+            decisionKinds.Add(AgentResponseKinds.CannotComplete);
+
             var schemaRoot = new JObject
             {
                 ["type"] = "object",
@@ -55,14 +83,14 @@ namespace RNAssistant.Core.Tools
                     ["kind"] = new JObject
                     {
                         ["type"] = "string",
-                        ["enum"] = includeToolDecision
-                            ? new JArray(AgentResponseKinds.Plan, AgentResponseKinds.Tool, AgentResponseKinds.Clarify, AgentResponseKinds.Final, AgentResponseKinds.CannotComplete)
-                            : new JArray(AgentResponseKinds.Plan, AgentResponseKinds.Clarify, AgentResponseKinds.Final, AgentResponseKinds.CannotComplete)
+                        ["enum"] = decisionKinds
                     },
                     ["decisionSummary"] = new JObject { ["type"] = "string", ["description"] = "Short visible progress statement, not hidden reasoning." },
                     ["goal"] = NullableString("Visible user outcome for a plan or revised plan."),
-                    ["plan"] = new JObject { ["anyOf"] = new JArray(new JObject { ["type"] = "array", ["items"] = planItem }, new JObject { ["type"] = "null" }) },
-                    ["tool"] = new JObject { ["anyOf"] = toolOptions },
+                    ["plan"] = includePlanDecision
+                        ? new JObject { ["anyOf"] = new JArray(new JObject { ["type"] = "array", ["items"] = planItem }, new JObject { ["type"] = "null" }) }
+                        : new JObject { ["type"] = "null" },
+                    ["tool"] = toolField,
                     ["message"] = NullableString("User-facing terminal answer or clarification question.")
                 },
                 ["required"] = new JArray("protocolVersion", "kind", "decisionSummary", "goal", "plan", "tool", "message"),

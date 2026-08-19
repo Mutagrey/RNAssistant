@@ -8,6 +8,7 @@ using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Diagnostics;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
@@ -55,6 +56,7 @@ namespace RNAssistant.Office
         {
             _adapter = adapter;
             _paths = paths ?? AppDataPaths.CreateDefault();
+            RuntimeLog.Configure(_paths.Root);
             _settingsService = new SettingsService(_paths);
             _chatStore = new ChatStore(_paths);
             _attachmentStore = new AttachmentStore(_paths);
@@ -82,7 +84,8 @@ namespace RNAssistant.Office
                 attachment => AttachmentImageService.ReadForModel(_attachmentStore, attachment),
                 (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars),
                 (settings, attachment, maxImages, cancellationToken) =>
-                    ModelAttachmentService.ReadForModel(_attachmentStore, settings, attachment, maxImages, cancellationToken));
+                    ModelAttachmentService.ReadForModel(_attachmentStore, settings, attachment, maxImages, cancellationToken),
+                RuntimeLog.Debug);
             LlmCompletionDelegate completion;
             if (completeAsync == null)
             {
@@ -675,10 +678,11 @@ namespace RNAssistant.Office
         public async Task<ModelCatalogResponse> GetModelCatalogAsync(AppSettings settings, string apiKey)
         {
             settings = settings ?? _settingsService.Load();
+            var configUrl = LlmClient.BuildModelsConfigUrl(settings);
             var json = await _llmClient.GetModelsConfigJsonAsync(
                 settings,
                 string.IsNullOrWhiteSpace(apiKey) ? null : apiKey).ConfigureAwait(false);
-            var catalog = JToken.Parse(json);
+            var catalog = ModelCapabilityService.ParseCatalog(json, configUrl);
             var storedSettings = _settingsService.Load();
             if (ModelCapabilityService.Merge(storedSettings, catalog))
             {
@@ -687,7 +691,7 @@ namespace RNAssistant.Office
 
             return new ModelCatalogResponse
             {
-                ConfigUrl = LlmClient.BuildModelsConfigUrl(settings),
+                ConfigUrl = configUrl,
                 Catalog = catalog
             };
         }

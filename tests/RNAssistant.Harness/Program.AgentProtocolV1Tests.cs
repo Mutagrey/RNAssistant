@@ -37,6 +37,13 @@ namespace RNAssistant.Harness
             AssertEqual(true, (bool)jsonSchemaBody.SelectToken("response_format.json_schema.strict"), "response schema strict flag");
             AssertEqual(AgentDecisionProtocol.SchemaName, (string)jsonSchemaBody.SelectToken("response_format.json_schema.name"), "response schema name");
 
+            var multiToolSchema = JObject.Parse(AgentDecisionSchemaBuilder.Build(new[]
+            {
+                new ToolDefinition { Id = "compat.read", ArgumentSchemaJson = EmptyFormalToolSchema }
+            }));
+            AssertEqual("array", (string)multiToolSchema.SelectToken("properties.tool.anyOf[0].type"), "tool decision schema uses an array");
+            AssertEqual(AgentDecisionProtocol.MaxToolCallsPerDecision, (int)multiToolSchema.SelectToken("properties.tool.anyOf[0].maxItems"), "tool decision schema bounds batch size");
+
             var nativeBody = LlmClient.BuildRequestBody(settings, messages, 10, new LlmRequestOptions
             {
                 ResponseFormat = LlmResponseFormats.JsonSchema,
@@ -55,7 +62,7 @@ namespace RNAssistant.Harness
                 }
             });
             AssertEqual("auto", (string)nativeBody["tool_choice"], "native tool choice");
-            AssertEqual(false, (bool)nativeBody["parallel_tool_calls"], "parallel calls disabled");
+            AssertEqual(true, (bool)nativeBody["parallel_tool_calls"], "multi-tool calls enabled");
             AssertEqual("rna_excel_get_context", (string)nativeBody.SelectToken("tools[0].function.name"), "native function name");
             AssertEqual(true, (bool)nativeBody.SelectToken("tools[0].function.strict"), "native function strict flag");
 
@@ -131,6 +138,10 @@ namespace RNAssistant.Harness
             var nativeDecisionSchema = JObject.Parse(AgentDecisionSchemaBuilder.Build(new ToolDefinition[0], false));
             AssertTrue(!((JArray)nativeDecisionSchema.SelectToken("properties.kind.enum")).Values<string>().Contains("tool"), "native content schema excludes tool decisions");
 
+            var continuationDecisionSchema = JObject.Parse(AgentDecisionSchemaBuilder.Build(new ToolDefinition[0], true, false));
+            AssertTrue(!((JArray)continuationDecisionSchema.SelectToken("properties.kind.enum")).Values<string>().Contains("plan"), "continuation schema excludes plan decisions");
+            AssertEqual("null", (string)continuationDecisionSchema.SelectToken("properties.plan.type"), "continuation schema requires null plan field");
+
             var localTool = new ToolDefinition
             {
                 Id = "excel.get_context",
@@ -158,6 +169,22 @@ namespace RNAssistant.Harness
                 apiTools);
             AssertTrue(visibleNative.Success, "native progress text parses with tool call");
             AssertEqual("Контекст определен. Читаю текущий диапазон.", visibleNative.Response.DecisionSummary, "native progress text remains visible");
+
+            var multiNative = new AgentPlannerResponseParser().ParseNative(
+                new LlmCompletionResult
+                {
+                    Content = "Читаю независимые части книги.",
+                    ToolCalls = new List<LlmToolCall>
+                    {
+                        new LlmToolCall { Id = "call_multi_1", Name = apiTools[0].ApiName, ArgumentsJson = "{}" },
+                        new LlmToolCall { Id = "call_multi_2", Name = apiTools[0].ApiName, ArgumentsJson = "{}" }
+                    }
+                },
+                new[] { localTool },
+                apiTools);
+            AssertTrue(multiNative.Success, "native multi-tool response parses");
+            AssertEqual(2, multiNative.Response.Tools.Count, "native multi-tool count");
+            AssertEqual("call_multi_2", multiNative.Response.Tools[1].ToolCallId, "native multi-tool call id");
         }
 
         private static void LlmSerializesOpenAiToolRoundTrip()
@@ -184,6 +211,53 @@ namespace RNAssistant.Harness
             AssertEqual("call_1", (string)json.SelectToken("[1].tool_call_id"), "tool result call id");
             AssertContains((string)json.SelectToken("[1].content"), "\"ok\":true", "tool result content");
             AssertEqual(2, json.Count, "excluded diagnostic is not serialized");
+        }
+
+        private static void AgentProtocolHistoryNormalizesDuplicateNativeCallIds()
+        {
+            var commands = new[]
+            {
+                new ToolCommand { ToolId = "excel.get_context", ToolCallId = "duplicate_call" },
+                new ToolCommand { ToolId = "excel.get_selection", ToolCallId = "duplicate_call" }
+            };
+            var attempt = new AgentPlannerAttempt
+            {
+                Text = "Читаю контекст и выделение.",
+                Completion = new LlmCompletionResult
+                {
+                    ToolCalls = new List<LlmToolCall>
+                    {
+                        new LlmToolCall { Id = "duplicate_call", Name = "rna_excel_get_context", ArgumentsJson = "{}" },
+                        new LlmToolCall { Id = "duplicate_call", Name = "rna_excel_get_selection", ArgumentsJson = "{}" }
+                    }
+                },
+                RequestOptions = new LlmRequestOptions
+                {
+                    Tools = new[]
+                    {
+                        new LlmToolDefinition { ToolId = "excel.get_context", ApiName = "rna_excel_get_context" },
+                        new LlmToolDefinition { ToolId = "excel.get_selection", ApiName = "rna_excel_get_selection" }
+                    }
+                }
+            };
+            var messages = new List<ChatMessage>();
+            AgentProtocolHistory.AppendToolExchanges(
+                messages,
+                attempt,
+                new[]
+                {
+                    new AgentToolExchange(commands[0], ToolResult.Ok("context")),
+                    new AgentToolExchange(commands[1], ToolResult.Ok("selection"))
+                },
+                new AppSettings { ToolResultRole = "tool" });
+
+            var assistant = messages[0];
+            AssertEqual(2, assistant.ToolCalls.Count, "native duplicate-id batch call count");
+            AssertTrue(!string.Equals(assistant.ToolCalls[0].Id, assistant.ToolCalls[1].Id, StringComparison.Ordinal), "duplicate native ids are normalized");
+            AssertEqual("rna_excel_get_context", assistant.ToolCalls[0].Name, "first native call keeps positional name");
+            AssertEqual("rna_excel_get_selection", assistant.ToolCalls[1].Name, "second native call keeps positional name");
+            AssertEqual(assistant.ToolCalls[0].Id, messages[1].ToolCallId, "first normalized result id matches");
+            AssertEqual(assistant.ToolCalls[1].Id, messages[2].ToolCallId, "second normalized result id matches");
         }
 
         private static void AgentNativeToolCallRoundTripUsesMatchingCallId()
@@ -231,7 +305,7 @@ namespace RNAssistant.Harness
                 AssertEqual("Context read.", result.AssistantText, "native final response");
                 AssertTrue(options[0].NativeTools, "native tools enabled");
                 AssertEqual(LlmResponseFormats.JsonSchema, options[0].ResponseFormat, "native final response format");
-                AssertContains(FlattenMessages(calls[0]), "exactly one native function call", "native transport prompt");
+                AssertContains(FlattenMessages(calls[0]), "one or more native function calls", "native transport prompt");
                 var assistantCall = calls[1].First(message => message.ToolCalls != null && message.ToolCalls.Count == 1);
                 var toolResult = calls[1].First(message => string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase));
                 AssertEqual("native_call_1", assistantCall.ToolCalls[0].Id, "native assistant call id");
@@ -402,6 +476,115 @@ namespace RNAssistant.Harness
             AssertEqual(2, modes.Count, "schema rejection retries once");
             AssertEqual(LlmResponseFormats.JsonSchema, modes[0], "schema rejection starts in schema mode");
             AssertEqual(LlmResponseFormats.JsonObject, modes[1], "schema rejection retries in object mode");
+        }
+
+        private static void AgentProviderRefusalRepairsWithSameTools()
+        {
+            var tool = new ToolDefinition
+            {
+                Id = "excel.get_context",
+                Name = "Get context",
+                Host = "Excel",
+                Enabled = true,
+                AgentCanRun = true,
+                ArgumentSchemaJson = EmptyFormalToolSchema
+            };
+            var requestTools = new List<string[]>();
+            var messages = new List<string>();
+            var optionsSeen = new List<LlmRequestOptions>();
+            var turn = 0;
+            var runner = new AgentPlannerCompletionRunner(delegate(
+                AppSettings settings,
+                IEnumerable<ChatMessage> requestMessages,
+                LlmRequestOptions requestOptions,
+                Action<LlmStreamUpdate> progress,
+                CancellationToken cancellationToken)
+            {
+                requestTools.Add(requestOptions.Tools.Select(item => item.ToolId).ToArray());
+                messages.Add(FlattenMessages(requestMessages));
+                optionsSeen.Add(requestOptions);
+                turn += 1;
+                return Task.FromResult(turn == 1
+                    ? new LlmCompletionResult { RefusalContent = "safety proxy response" }
+                    : new LlmCompletionResult { Content = FinalBlock("Recovered.") });
+            });
+            var prepared = AgentPlannerCompletionRunner.BuildOptions(
+                AgentResponseModes.JsonObject,
+                new[] { tool },
+                new LlmRunCache());
+
+            var attempt = runner.CompleteAsync(
+                new AppSettings { AgentResponseMode = AgentResponseModes.JsonObject, MaxAgentFormatRetries = 2 },
+                new[] { new ChatMessage { Role = "user", Content = "Read workbook" } },
+                new[] { tool },
+                new AgentRunState { ResponseMode = AgentResponseModes.JsonObject },
+                prepared,
+                null,
+                "thinking",
+                "repairing",
+                "repair",
+                CancellationToken.None).GetAwaiter().GetResult();
+
+            AssertTrue(attempt.ParseResult.Success, "provider refusal is repaired");
+            AssertEqual("Recovered.", attempt.ParseResult.Response.Message, "repaired final response");
+            AssertEqual(2, requestTools.Count, "one refusal repair request");
+            AssertEqual(string.Join(",", requestTools[0]), string.Join(",", requestTools[1]), "tool slice survives refusal repair");
+            AssertTrue(object.ReferenceEquals(optionsSeen[0].RunCache, optionsSeen[1].RunCache), "run cache survives refusal repair");
+            AssertContains(messages[1], "upstream refusal is not executable output", "refusal repair guidance");
+            AssertTrue(messages[1].IndexOf("safety proxy response", StringComparison.Ordinal) < 0, "raw refusal is not replayed");
+        }
+
+        private static void AgentTransientInvalidResponseRetriesWithSameTools()
+        {
+            var tool = new ToolDefinition
+            {
+                Id = "excel.get_context",
+                Name = "Get context",
+                Host = "Excel",
+                Enabled = true,
+                AgentCanRun = true,
+                ArgumentSchemaJson = EmptyFormalToolSchema
+            };
+            var calls = new List<Tuple<string, string, LlmRequestOptions>>();
+            var turn = 0;
+            var runner = new AgentPlannerCompletionRunner(delegate(
+                AppSettings settings,
+                IEnumerable<ChatMessage> requestMessages,
+                LlmRequestOptions requestOptions,
+                Action<LlmStreamUpdate> progress,
+                CancellationToken cancellationToken)
+            {
+                calls.Add(Tuple.Create(
+                    FlattenMessages(requestMessages),
+                    string.Join(",", requestOptions.Tools.Select(item => item.ToolId)),
+                    requestOptions));
+                turn += 1;
+                if (turn == 1)
+                {
+                    return Task.FromException<LlmCompletionResult>(new LlmRequestException(
+                        LlmFailureKind.InvalidResponse,
+                        "temporary malformed gateway response"));
+                }
+                return Task.FromResult(new LlmCompletionResult { Content = FinalBlock("Recovered.") });
+            });
+
+            var attempt = runner.CompleteAsync(
+                new AppSettings { AgentResponseMode = AgentResponseModes.JsonObject },
+                new[] { new ChatMessage { Role = "user", Content = "Read workbook" } },
+                new[] { tool },
+                new AgentRunState { ResponseMode = AgentResponseModes.JsonObject },
+                null,
+                null,
+                "thinking",
+                "repairing",
+                "repair",
+                CancellationToken.None).GetAwaiter().GetResult();
+
+            AssertTrue(attempt.ParseResult.Success, "transient invalid response recovers");
+            AssertEqual(2, calls.Count, "invalid response retried once");
+            AssertEqual(calls[0].Item1, calls[1].Item1, "transport retry preserves prompt");
+            AssertEqual(calls[0].Item2, calls[1].Item2, "transport retry preserves tool slice");
+            AssertTrue(object.ReferenceEquals(calls[0].Item3, calls[1].Item3), "transport retry preserves request options");
         }
 
         private static void InvalidCustomToolSchemaIsIgnored()

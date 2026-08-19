@@ -135,12 +135,13 @@ namespace RNAssistant.Office.Services
         public string WorkingGoal { get; set; }
         public List<AgentPlanStep> Plan { get; set; }
         public ChatActivity PlanActivity { get; set; }
-        public string LastPlanFingerprint { get; set; }
-        public int RepeatedPlanCount { get; set; }
+        public int LastPlanObservationCount { get; set; }
+        public int NoProgressPlanCount { get; set; }
 
         public AgentRunState()
         {
             Plan = new List<AgentPlanStep>();
+            LastPlanObservationCount = -1;
         }
     }
 }

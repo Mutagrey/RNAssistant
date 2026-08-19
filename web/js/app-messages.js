@@ -253,7 +253,19 @@ function renderMessageArticle(message, index) {
   node.className = "message " + messageRole(message) + (message.Pending ? " pending" : "") + (message.Failed ? " failed" : "");
   var activity = messageActivity(message);
   if (activity) {
-    return renderActivityArticle(message, index, activity, { live: false, current: false });
+    var activityArticle = renderActivityArticle(message, index, activity, { live: false, current: false });
+    if (typeof appendMessageReasoning === "function") {
+      var activityReasoning = reasoningBlock(
+        reasoningValue(message, "ReasoningContent", "reasoningContent", ""),
+        reasoningValue(message, "ReasoningTokens", "reasoningTokens", null),
+        false,
+        !!reasoningValue(message, "ReasoningTruncated", "reasoningTruncated", false));
+      if (activityReasoning) {
+        var activityBody = activityArticle.querySelector(".agent-activity-wrap");
+        activityArticle.insertBefore(activityReasoning, activityBody || activityArticle.firstChild);
+      }
+    }
+    return activityArticle;
   }
   var attachments = messageAttachments(message);
 
@@ -266,6 +278,8 @@ function renderMessageArticle(message, index) {
     node.appendChild(attachmentBox);
   }
   appendMessageArtifactCards(node, message);
+
+  if (typeof appendMessageReasoning === "function") appendMessageReasoning(node, message);
 
   var decisionSummary = messageDecisionSummary(message).trim();
   if (decisionSummary && decisionSummary !== messageContent(message).trim()) {
@@ -398,7 +412,7 @@ function renderMessages(options) {
   renderedMessagesChatId = state.activeChatId;
   box.innerHTML = "";
   var visibleMessages = (state.messages || []).filter(function (message) { return !messageProtocolMessage(message); });
-  if (!visibleMessages.length && !state.liveStreamContent && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
+  if (!visibleMessages.length && !state.liveStreamContent && !state.liveReasoning && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
     box.appendChild(renderChatEmptyState());
     renderAgentPlanDock();
     renderAgentApprovalDock();
@@ -422,6 +436,11 @@ function renderMessages(options) {
   var live = renderLiveAgentRun();
   if (live) {
     box.appendChild(live);
+  }
+
+  var liveReasoning = typeof renderLiveReasoningMessage === "function" ? renderLiveReasoningMessage() : null;
+  if (liveReasoning) {
+    box.appendChild(liveReasoning);
   }
 
   var stream = renderLiveStreamMessage();

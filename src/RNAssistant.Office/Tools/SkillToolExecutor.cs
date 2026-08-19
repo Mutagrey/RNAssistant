@@ -25,7 +25,8 @@ namespace RNAssistant.Office.Tools
                 "common.skills_load",
                 "Common",
                 "Control: Activate the smallest set of relevant skill instructions before planning or using task tools. Use exact ids from SKILL_INDEX. This changes only the current chat's active guidance.",
-                "{\"type\":\"object\",\"properties\":{\"ids\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"minItems\":1},\"mode\":{\"type\":\"string\",\"enum\":[\"replace\",\"add\"]}},\"required\":[\"ids\"],\"additionalProperties\":false}");
+                "{\"type\":\"object\",\"properties\":{\"ids\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"minItems\":1},\"mode\":{\"type\":\"string\",\"enum\":[\"replace\",\"add\"]}},\"required\":[\"ids\"],\"additionalProperties\":false}",
+                mutatesLocalState: true);
             load.UseWhen = "A SKILL_INDEX entry clearly applies and its full instructions are not listed in ACTIVE_SKILLS.";
             load.DoNotUseWhen = "The required skill is already active, or no indexed skill is relevant.";
             yield return load;

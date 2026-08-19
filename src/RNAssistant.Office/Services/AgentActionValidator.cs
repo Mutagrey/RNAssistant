@@ -52,6 +52,7 @@ namespace RNAssistant.Office.Services
             if (route != null &&
                 route.RequiresInspection &&
                 (tool.MutatesDocument || tool.MutatesLocalState) &&
+                !string.Equals(tool.Id, "common.skills_load", StringComparison.OrdinalIgnoreCase) &&
                 !HasInspectionObservation(observations))
             {
                 return PlannerValidationResult.Fail("Target must be inspected before mutation. Use a read/context tool first.");

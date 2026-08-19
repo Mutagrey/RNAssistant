@@ -91,32 +91,42 @@ namespace RNAssistant.Core.Tools
 
             if (string.Equals(kind, AgentResponseKinds.Tool, StringComparison.OrdinalIgnoreCase))
             {
-                var toolObject = obj["tool"] as JObject;
-                if (toolObject == null)
+                var toolTokens = new List<JObject>();
+                string toolListError;
+                if (!TryReadTools(obj["tool"], toolTokens, out toolListError))
                 {
-                    return Fail(obj, "invalid_tool", "tool decision requires one tool object.");
+                    return Fail(obj, "invalid_tool", toolListError);
                 }
-                string toolId;
-                JObject arguments;
-                string toolError;
-                if (!TryNormalizeTool(toolObject, out toolId, out arguments, out toolError))
+                foreach (var toolObject in toolTokens)
                 {
-                    return Fail(obj, "invalid_tool", toolError);
+                    string toolId;
+                    JObject arguments;
+                    string toolError;
+                    if (!TryNormalizeTool(toolObject, out toolId, out arguments, out toolError))
+                    {
+                        return Fail(obj, "invalid_tool", toolError);
+                    }
+                    var definition = (tools ?? new ToolDefinition[0]).FirstOrDefault(tool => tool != null && string.Equals(tool.Id, toolId, StringComparison.OrdinalIgnoreCase));
+                    if (tools != null && definition == null) return Fail(obj, "unknown_tool", "Tool is not in the current tool slice: " + toolId);
+                    if (definition != null)
+                    {
+                        JObject schema;
+                        string schemaError;
+                        if (!ToolSchemaSupport.TryNormalize(definition, out schema, out schemaError)) return Fail(obj, "invalid_tool_schema", schemaError);
+                        string argumentError;
+                        if (!ToolSchemaSupport.ValidateArguments(arguments, schema, true, out argumentError)) return Fail(obj, "invalid_arguments", argumentError);
+                    }
+                    var step = new AgentPlannerStep { ToolId = toolId };
+                    ToolArgumentNormalizer.AddProperties(arguments, step.Arguments);
+                    response.Tools.Add(step);
                 }
-                var definition = (tools ?? new ToolDefinition[0]).FirstOrDefault(tool => tool != null && string.Equals(tool.Id, toolId, StringComparison.OrdinalIgnoreCase));
-                if (tools != null && definition == null) return Fail(obj, "unknown_tool", "Tool is not in the current tool slice: " + toolId);
-                if (definition != null)
-                {
-                    JObject schema;
-                    string schemaError;
-                    if (!ToolSchemaSupport.TryNormalize(definition, out schema, out schemaError)) return Fail(obj, "invalid_tool_schema", schemaError);
-                    string argumentError;
-                    if (!ToolSchemaSupport.ValidateArguments(arguments, schema, true, out argumentError)) return Fail(obj, "invalid_arguments", argumentError);
-                }
-                response.DecisionSummary = FirstNonEmpty(rawSummary, rawMessage, "Выполняю действие: " + toolId + ".");
-                var step = new AgentPlannerStep { ToolId = toolId, Reason = response.DecisionSummary };
-                ToolArgumentNormalizer.AddProperties(arguments, step.Arguments);
-                response.Tool = step;
+                response.DecisionSummary = FirstNonEmpty(
+                    rawSummary,
+                    rawMessage,
+                    response.Tools.Count == 1
+                        ? "Выполняю действие: " + response.Tools[0].ToolId + "."
+                        : "Выполняю пакет действий: " + response.Tools.Count + ".");
+                foreach (var step in response.Tools) step.Reason = response.DecisionSummary;
                 return AgentPlannerParseResult.Ok(response);
             }
 
@@ -146,36 +156,50 @@ namespace RNAssistant.Core.Tools
                     ? AgentPlannerParseResult.Fail("native_tool_call_required", "native_tool_calls mode requires an API function call for tool actions.")
                     : contentDecision;
             }
-            if (calls.Count != 1) return AgentPlannerParseResult.Fail("multiple_tool_calls", "Exactly one native tool call is allowed per model turn.");
-            var call = calls[0];
-            var toolId = ToolSchemaSupport.ResolveToolId(call.Name, apiTools);
-            if (string.IsNullOrWhiteSpace(toolId)) return AgentPlannerParseResult.Fail("unknown_tool", "Native tool call name is not in the current tool slice: " + call.Name);
-            JObject arguments;
-            try { arguments = JObject.Parse(string.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson); }
-            catch (JsonException ex) { return AgentPlannerParseResult.Fail("invalid_arguments", ex.Message); }
+            if (calls.Count > AgentDecisionProtocol.MaxToolCallsPerDecision)
+            {
+                return AgentPlannerParseResult.Fail("too_many_tool_calls", "A model turn may select at most " + AgentDecisionProtocol.MaxToolCallsPerDecision + " tools.");
+            }
+            var toolArray = new JArray();
+            var resolved = new List<Tuple<LlmToolCall, string>>();
+            foreach (var call in calls)
+            {
+                var toolId = ToolSchemaSupport.ResolveToolId(call.Name, apiTools);
+                if (string.IsNullOrWhiteSpace(toolId)) return AgentPlannerParseResult.Fail("unknown_tool", "Native tool call name is not in the current tool slice: " + call.Name);
+                JObject arguments;
+                try { arguments = JObject.Parse(string.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson); }
+                catch (JsonException ex) { return AgentPlannerParseResult.Fail("invalid_arguments", ex.Message); }
+                resolved.Add(Tuple.Create(call, toolId));
+                toolArray.Add(new JObject { ["toolId"] = toolId, ["arguments"] = arguments });
+            }
             var synthetic = new JObject
             {
                 ["protocolVersion"] = AgentDecisionProtocol.Version,
                 ["kind"] = AgentResponseKinds.Tool,
-                ["decisionSummary"] = VisibleNativeSummary(completion, toolId),
+                ["decisionSummary"] = VisibleNativeSummary(completion, resolved.Select(item => item.Item2).ToList()),
                 ["goal"] = null,
                 ["plan"] = null,
-                ["tool"] = new JObject { ["toolId"] = toolId, ["arguments"] = arguments },
+                ["tool"] = toolArray,
                 ["message"] = null
             };
             var parsed = Parse(synthetic.ToString(Formatting.None), tools);
             if (parsed.Success)
             {
-                parsed.Response.Tool.ToolCallId = call.Id;
+                for (var index = 0; index < parsed.Response.Tools.Count; index++)
+                {
+                    parsed.Response.Tools[index].ToolCallId = resolved[index].Item1.Id;
+                }
             }
             return parsed;
         }
 
-        private static string VisibleNativeSummary(LlmCompletionResult completion, string toolId)
+        private static string VisibleNativeSummary(LlmCompletionResult completion, IReadOnlyList<string> toolIds)
         {
             var content = completion == null ? null : completion.Content;
             return string.IsNullOrWhiteSpace(content)
-                ? "Выполняю следующее действие: " + toolId + "."
+                ? (toolIds == null || toolIds.Count <= 1
+                    ? "Выполняю следующее действие: " + (toolIds == null || toolIds.Count == 0 ? string.Empty : toolIds[0]) + "."
+                    : "Выполняю пакет действий: " + toolIds.Count + ".")
                 : content.Trim();
         }
 
@@ -381,6 +405,38 @@ namespace RNAssistant.Core.Tools
             return true;
         }
 
+        private static bool TryReadTools(JToken token, ICollection<JObject> target, out string error)
+        {
+            error = null;
+            if (token is JObject)
+            {
+                target.Add((JObject)token);
+                return true;
+            }
+            var array = token as JArray;
+            if (array == null || array.Count == 0)
+            {
+                error = "tool decision requires a non-empty tool array (a legacy single object is also accepted).";
+                return false;
+            }
+            if (array.Count > AgentDecisionProtocol.MaxToolCallsPerDecision)
+            {
+                error = "tool decision may contain at most " + AgentDecisionProtocol.MaxToolCallsPerDecision + " calls.";
+                return false;
+            }
+            foreach (var item in array)
+            {
+                var tool = item as JObject;
+                if (tool == null)
+                {
+                    error = "Every tool array item must be an object.";
+                    return false;
+                }
+                target.Add(tool);
+            }
+            return true;
+        }
+
         private static bool TryNormalizeCompatibilityEnvelope(JObject obj, out string errorCode, out string error)
         {
             errorCode = null;
@@ -432,10 +488,10 @@ namespace RNAssistant.Core.Tools
             if (!IsAbsentOrNull(callsToken))
             {
                 var calls = callsToken as JArray;
-                if (calls == null || calls.Count != 1)
+                if (calls == null || calls.Count == 0 || calls.Count > AgentDecisionProtocol.MaxToolCallsPerDecision)
                 {
-                    errorCode = "multiple_tool_calls";
-                    error = "Exactly one compatibility tool call is allowed per model turn.";
+                    errorCode = "invalid_tool_calls";
+                    error = "Compatibility toolCalls must contain 1-" + AgentDecisionProtocol.MaxToolCallsPerDecision + " calls.";
                     return false;
                 }
                 if (!IsAbsentOrNull(obj["tool"]))
@@ -444,33 +500,52 @@ namespace RNAssistant.Core.Tools
                     error = "Canonical tool and compatibility toolCalls cannot be combined.";
                     return false;
                 }
-                var call = calls[0] as JObject;
-                if (call == null)
+                var normalizedCalls = new JArray();
+                var terminalMessage = string.Empty;
+                foreach (var token in calls)
                 {
-                    errorCode = "invalid_tool";
-                    error = "toolCalls must contain one object.";
-                    return false;
+                    var call = token as JObject;
+                    if (call == null)
+                    {
+                        errorCode = "invalid_tool";
+                        error = "toolCalls items must be objects.";
+                        return false;
+                    }
+                    string callId;
+                    JObject callArguments;
+                    string callError;
+                    if (!TryNormalizeTool(call, out callId, out callArguments, out callError))
+                    {
+                        errorCode = "invalid_tool";
+                        error = callError;
+                        return false;
+                    }
+                    if (string.Equals(callId, "answer", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(callId, "reply", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(callId, "respond", StringComparison.OrdinalIgnoreCase))
+                    {
+                        terminalMessage = FirstNonEmpty(ReadString(callArguments["text"]), ReadString(callArguments["content"]), ReadString(callArguments["message"]));
+                    }
+                    else
+                    {
+                        normalizedCalls.Add(call.DeepClone());
+                    }
                 }
-                string callId;
-                JObject callArguments;
-                string callError;
-                if (!TryNormalizeTool(call, out callId, out callArguments, out callError))
+                if (!string.IsNullOrWhiteSpace(terminalMessage))
                 {
-                    errorCode = "invalid_tool";
-                    error = callError;
-                    return false;
-                }
-                if (string.Equals(callId, "answer", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(callId, "reply", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(callId, "respond", StringComparison.OrdinalIgnoreCase))
-                {
+                    if (normalizedCalls.Count > 0 || calls.Count != 1)
+                    {
+                        errorCode = "conflicting_envelope";
+                        error = "A terminal pseudo-tool cannot be combined with executable tool calls.";
+                        return false;
+                    }
                     if (!TrySetCompatibilityKind(obj, AgentResponseKinds.Final, out errorCode, out error)) return false;
-                    FillIfMissing(obj, "message", FirstNonEmpty(ReadString(callArguments["text"]), ReadString(callArguments["content"]), ReadString(callArguments["message"])));
+                    FillIfMissing(obj, "message", terminalMessage);
                 }
                 else
                 {
                     if (!TrySetCompatibilityKind(obj, AgentResponseKinds.Tool, out errorCode, out error)) return false;
-                    obj["tool"] = call.DeepClone();
+                    obj["tool"] = normalizedCalls;
                 }
                 obj.Remove("toolCalls");
                 obj.Remove("tool_calls");

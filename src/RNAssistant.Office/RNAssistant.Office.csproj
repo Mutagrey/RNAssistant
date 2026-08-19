@@ -66,6 +66,7 @@
     <Compile Include="Controller\AssistantController.Agent.cs" />
     <Compile Include="Controller\AssistantController.Chats.cs" />
     <Compile Include="Controller\AssistantController.Context.cs" />
+    <Compile Include="Controller\AssistantController.Diagnostics.cs" />
     <Compile Include="Controller\AssistantController.HtmlWorkspace.cs" />
     <Compile Include="Diagnostics\RuntimeLog.cs" />
     <Compile Include="Runtime\AssistantRuntime.cs" />

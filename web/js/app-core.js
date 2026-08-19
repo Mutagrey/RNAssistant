@@ -3,6 +3,7 @@ var state = {
   title: "",
   officeContext: null,
   settings: {},
+  hasApiKey: false,
   tools: [],
   skills: [],
   context: {},
@@ -32,6 +33,8 @@ var state = {
   liveAgentRun: null,
   agentPlanExpanded: {},
   liveStreamContent: null,
+  liveReasoning: "",
+  liveReasoningComplete: false,
   liveStreamRenderPending: false,
   editingMessageId: "",
   editingMessageIndex: -1,
@@ -222,7 +225,9 @@ if (window.chrome && window.chrome.webview) {
         state.chatRuns[progressChatId].phase = progress.phase || progress.Phase || "working";
       }
       var contentDelta = progress.contentDelta || progress.ContentDelta || "";
-      var hasReasoningProgress = !!(progress.reasoningDelta || progress.ReasoningDelta || progress.reasoningComplete || progress.ReasoningComplete);
+      var reasoningDelta = progress.reasoningDelta || progress.ReasoningDelta || "";
+      var reasoningComplete = !!(progress.reasoningComplete || progress.ReasoningComplete);
+      var hasReasoningProgress = !!(reasoningDelta || reasoningComplete);
       if (contentDelta && isChatProgress) {
         if (progressChatId) state.chatRuns[progressChatId].stream = (state.chatRuns[progressChatId].stream || "") + contentDelta;
         if (progressChatId !== state.activeChatId) { renderChatSessions(); return; }
@@ -244,7 +249,21 @@ if (window.chrome && window.chrome.webview) {
         return;
       }
       if (hasReasoningProgress && isChatProgress) {
-        if (progressChatId !== state.activeChatId) renderChatSessions();
+        var reasoningRun = progressChatId ? state.chatRuns[progressChatId] : null;
+        if (reasoningRun) {
+          if (reasoningDelta && reasoningRun.reasoningComplete) reasoningRun.reasoning = "";
+          reasoningRun.reasoning = (reasoningRun.reasoning || "") + reasoningDelta;
+          if (reasoningRun.reasoning.length > 24000) reasoningRun.reasoning = reasoningRun.reasoning.substring(0, 24000);
+          reasoningRun.reasoningComplete = reasoningComplete;
+        }
+        if (progressChatId === state.activeChatId) {
+          state.liveReasoning = reasoningRun ? reasoningRun.reasoning : reasoningDelta;
+          state.liveReasoningComplete = reasoningRun ? !!reasoningRun.reasoningComplete : reasoningComplete;
+          if (typeof scheduleLiveStreamRender === "function") scheduleLiveStreamRender();
+          else renderMessages();
+        } else {
+          renderChatSessions();
+        }
         return;
       }
       if (isChatProgress) {

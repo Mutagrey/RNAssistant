@@ -610,6 +610,94 @@ namespace RNAssistant.Harness
             AssertEqual("Новая независимая задача", freshState.PlanActivity.Title, "fresh plan goal is isolated");
         }
 
+        private static void ChatImplementPlanResumesExistingPlan()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var session = NewSession(adapter);
+                var plan = new ChatActivity
+                {
+                    Kind = "plan",
+                    Title = "Проверить текущую книгу",
+                    Status = "planned"
+                };
+                plan.Children.Add(new ChatActivity
+                {
+                    Kind = "plan_step",
+                    Title = "Прочитать книгу",
+                    Subtitle = "inspect",
+                    Status = "pending"
+                });
+                session.Messages.Add(AgentTranscript.CreateAssistantMessage("План готов.", null, plan));
+                session.PendingAgentTask = new PendingAgentTask
+                {
+                    Request = "Проверь текущую книгу.",
+                    Kind = "incomplete_plan",
+                    UpdatedUtc = DateTime.UtcNow
+                };
+
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    AgentBlock(Command("excel.get_context")),
+                    FinalBlock("Книга проверена."));
+
+                var result = service.ExecuteAsync(
+                    "Реализуй план",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { FallbackToJsonObject = false },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Книга проверена.", result.AssistantText, "continued plan final response");
+                AssertEqual(1, adapter.Executed.Count, "continued plan executes next tool");
+                AssertEqual(1, session.Messages.Count(message => message.Activity != null && message.Activity.Kind == "plan"), "continued run reuses existing plan");
+                AssertEqual("completed", plan.Children[0].Status, "continued run advances existing step");
+                AssertContains(FlattenMessages(calls[0]), "kind=plan is unavailable", "continued run starts with next action instead of a new plan");
+                AssertContains(FlattenMessages(calls[0]), "USER_FOLLOW_UP", "continued run retains follow-up marker");
+            });
+        }
+
+        private static void ChatRepeatedPlanWithoutObservationIsCorrected()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var firstPlan = "{\"protocolVersion\":1,\"kind\":\"plan\",\"decisionSummary\":\"Сначала прочитаю книгу.\"," +
+                    "\"goal\":\"Проверить текущую книгу\",\"plan\":[{\"id\":\"inspect\",\"title\":\"Прочитать книгу\"}],\"tool\":null,\"message\":null}";
+                var rephrasedPlan = "{\"protocolVersion\":1,\"kind\":\"plan\",\"decisionSummary\":\"Уточняю порядок работы.\"," +
+                    "\"goal\":\"Изучить текущую книгу\",\"plan\":[{\"id\":\"inspect\",\"title\":\"Изучить содержимое книги\"}],\"tool\":null,\"message\":null}";
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    RawResponse(firstPlan),
+                    RawResponse(rephrasedPlan),
+                    AgentBlock(Command("excel.get_context")),
+                    FinalBlock("Книга проверена."));
+                var session = NewSession(adapter);
+
+                var result = service.ExecuteAsync(
+                    "Проверь текущую книгу.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { FallbackToJsonObject = false },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Книга проверена.", result.AssistantText, "run recovers from rephrased plan loop");
+                AssertEqual(1, adapter.Executed.Count, "tool executes after plan correction");
+                AssertEqual(1, session.Messages.Count(message => message.Activity != null && message.Activity.Kind == "plan"), "only original plan is visible");
+                AssertTrue(!session.Messages.Any(message => message.Activity != null && message.Activity.ExecutionStatus == "plan_updated"), "rephrased plan is not shown as an update");
+                AssertTrue(!session.Messages.Any(message => message.Activity != null && message.Activity.ExecutionStatus == "repeated_plan_no_progress"), "single violation is recovered locally");
+                AssertContains(FlattenMessages(calls[1]), "kind=plan is unavailable", "next turn explicitly forbids another plan");
+                AssertContains(FlattenMessages(calls[2]), "Do not return kind=plan or rephrase the plan", "ignored schema violation receives bounded correction");
+            });
+        }
+
         private static void ChatRepeatedPlanRevisesRemainingWork()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
@@ -618,13 +706,14 @@ namespace RNAssistant.Harness
                     "\"goal\":\"Проверить текущую книгу\",\"plan\":[{\"id\":\"inspect\",\"title\":\"Прочитать книгу\"}],\"tool\":null,\"message\":null}";
                 var revisedPlan = "{\"kind\":\"plan\",\"decisionSummary\":\"Уточняю план после анализа.\"," +
                     "\"goal\":\"Проверить и описать текущую книгу\",\"plan\":[{\"id\":\"inspect\",\"action\":\"Прочитать книгу\",\"expected\":\"контекст\"},{\"id\":\"finish\",\"action\":\"Подготовить вывод\"}]}";
+                var calls = new List<IReadOnlyList<ChatMessage>>();
                 var service = ChatServiceWithResponses(
                     adapter,
                     executor,
-                    null,
+                    calls,
                     RawResponse(firstPlan),
-                    RawResponse(revisedPlan),
                     AgentBlock(Command("excel.get_context")),
+                    RawResponse(revisedPlan),
                     FinalBlock("Книга проверена."));
                 var session = NewSession(adapter);
 
@@ -646,7 +735,8 @@ namespace RNAssistant.Harness
                 AssertEqual("pending", plans[0].Activity.Children[1].Status, "remaining plan step stays pending");
                 AssertTrue(session.Messages.Any(message => message.Activity != null && message.Activity.ExecutionStatus == "plan_updated"), "plan update is visible in transcript");
                 AssertEqual("Проверить и описать текущую книгу", session.Messages.Last().Goal, "final message retains goal");
-                AssertTrue(!session.Messages.Any(message => message.Activity != null && message.Activity.ExecutionStatus == "repeated_plan"), "repeated plan no longer fails run");
+                AssertContains(FlattenMessages(calls[2]), "material revision justified by a new runtime observation", "new observation permits one revised plan");
+                AssertTrue(!session.Messages.Any(message => message.Activity != null && message.Activity.ExecutionStatus == "repeated_plan_no_progress"), "observation-backed revision does not fail run");
             });
         }
     }

@@ -104,10 +104,10 @@ function renderSettings() {
   $("fallbackJsonObjectInput").checked = (s.FallbackToJsonObject !== false && s.fallbackToJsonObject !== false);
   var toolResultRole = String(s.ToolResultRole || s.toolResultRole || "tool").toLowerCase();
   $("toolResultRoleInput").value = toolResultRole === "developer" || toolResultRole === "user" ? toolResultRole : "tool";
-  $("maxTokensInput").value = s.MaxTokens || s.maxTokens || 2048;
-  $("requestTimeoutInput").value = s.RequestTimeoutSeconds || s.requestTimeoutSeconds || 300;
-  $("temperatureInput").value = s.Temperature || s.temperature || 0.2;
-  $("topPInput").value = s.TopP || s.topP || 1;
+  $("maxTokensInput").value = compatibilityValue(s, "MaxTokens", "maxTokens", 2048);
+  $("requestTimeoutInput").value = compatibilityValue(s, "RequestTimeoutSeconds", "requestTimeoutSeconds", 300);
+  $("temperatureInput").value = compatibilityValue(s, "Temperature", "temperature", 0.2);
+  $("topPInput").value = compatibilityValue(s, "TopP", "topP", 1);
   $("uiFontScaleInput").value = Math.round(clampUiFontScale(s.UiFontScale || s.uiFontScale || 1) * 100);
   Array.prototype.slice.call(document.querySelectorAll('input[name="uiTheme"]')).forEach(function (input) {
     input.checked = input.value === uiTheme;
@@ -121,6 +121,7 @@ function renderSettings() {
   $("autoContinueAfterConfirmationInput").checked = (s.AutoContinueAfterConfirmation !== false && s.autoContinueAfterConfirmation !== false);
   $("allowAgentToolAuthoringInput").checked = !!(s.AllowAgentToolAuthoring || s.allowAgentToolAuthoring);
   $("autoCompressContextInput").checked = (s.AutoCompressContext !== false && s.autoCompressContext !== false);
+  $("debugModelTrafficInput").checked = !!(s.DebugModelTraffic || s.debugModelTraffic);
   $("smartChatTitlesInput").checked = (s.SmartChatTitles !== false && s.smartChatTitles !== false);
   $("includeVbaContextInput").checked = !!(s.IncludeVbaContext || s.includeVbaContext);
   $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || 8;
@@ -133,6 +134,15 @@ function renderSettings() {
   }
   $("headersInput").value = headersToText(s.CustomHeaders || s.customHeaders || {});
   $("htmlNetworkOriginsInput").value = (s.HtmlNetworkAllowedOrigins || s.htmlNetworkAllowedOrigins || []).join("\n");
+  var apiKeyStatus = $("apiKeyStatus");
+  $("apiKeyInput").placeholder = state.hasApiKey
+    ? "Ключ сохранён; оставьте пустым, чтобы не менять"
+    : "Введите API-ключ";
+  if (apiKeyStatus) {
+    apiKeyStatus.textContent = state.hasApiKey
+      ? "Ключ сохранён локально и не отображается повторно."
+      : "Ключ пока не сохранён.";
+  }
   renderModelControls();
   settingsDirty = false;
   updateSettingsSaveButton();
@@ -171,6 +181,7 @@ function readSettings() {
     AutoContinueAfterConfirmation: $("autoContinueAfterConfirmationInput").checked,
     AllowAgentToolAuthoring: $("allowAgentToolAuthoringInput").checked,
     AutoCompressContext: $("autoCompressContextInput").checked,
+    DebugModelTraffic: $("debugModelTrafficInput").checked,
     SmartChatTitles: $("smartChatTitlesInput").checked,
     IncludeVbaContext: $("includeVbaContextInput").checked,
     MaxAgentIterations: Number($("maxAgentIterationsInput").value || 8),
@@ -196,6 +207,7 @@ async function persistSettingsFromForm() {
   var nextSettings = readSettings();
   var response = await send("saveSettings", { settings: nextSettings, apiKey: apiKey || null });
   state.settings = response.settings || response.Settings || nextSettings;
+  state.hasApiKey = !!(response.hasApiKey || response.HasApiKey);
   $("apiKeyInput").value = "";
   renderSettings();
   updateEstimatedContextUsage();
@@ -300,8 +312,8 @@ function bindSettingsActions() {
     try {
       button.disabled = true;
       await persistSettingsFromForm();
-      await loadModelCatalog(false);
       log("Настройки сохранены.");
+      loadModelCatalog(false);
     } catch (error) {
       settingsDirty = true;
       updateSettingsSaveButton();
@@ -341,7 +353,7 @@ function activeSettingsPage() {
 function updateSettingsSaveButton() {
   var row = document.querySelector(".settings-actions-row");
   var button = $("saveSettingsButton");
-  var visible = !!settingsDirty && activeSettingsPage() !== "service";
+  var visible = !!settingsDirty;
   if (!row || !button) {
     return;
   }

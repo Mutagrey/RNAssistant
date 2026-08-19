@@ -11,6 +11,9 @@ function switchTab(name) {
   if (typeof refreshSplitPanes === "function") {
     refreshSplitPanes();
   }
+  if (name === "logs" && typeof refreshRuntimeLog === "function") {
+    refreshRuntimeLog();
+  }
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -30,16 +33,13 @@ document.addEventListener("DOMContentLoaded", function () {
     tab.addEventListener("click", function () { switchTab(tab.dataset.tab); });
   });
 
-  $("clearLogButton").addEventListener("click", function () {
-    $("logBox").textContent = "";
-  });
-
   bindChatActions();
   bindContextActions();
   bindVbaActions();
   bindHtmlWorkspaceActions();
   bindModelActions();
   bindSettingsActions();
+  bindLogActions();
   bindToolActions();
   bindSkillActions();
   if (typeof initializeSplitPanes === "function") {

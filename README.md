@@ -69,8 +69,12 @@ It is single-instance: later wrapper clicks send activation to the existing
 window through a named pipe and switch the active Office target.
 
 If launched without arguments, the desktop shell can attach to the foreground
-Office window as an MVP fallback. Logs are written under
-`%LOCALAPPDATA%\OfficeAssistant\logs`.
+Office window as an MVP fallback. Desktop launcher logs remain under
+`%LOCALAPPDATA%\OfficeAssistant\logs`; shared runtime logs are written to
+`%APPDATA%\RNAssistant\logs\rnassistant.log`. Settings → Service can enable
+pretty-printed raw model request/response logging in the runtime log; message
+bodies may contain document data, while API keys and HTTP header values are
+never logged.
 
 The desktop shell includes a target picker. `Manual` mode keeps the chosen
 working document locked even if the user switches Office windows. `Auto follow`
@@ -183,7 +187,7 @@ Each chat stores an explicit execution mode:
 
 Editable Chat/Agent instructions use `developer` by default. The Prompts settings page can switch the role to `system` or `user` and edit the main Agent prompt, Chat prompt, recovery transitions and title prompt. Agent-side prompt changes use `common.prompts_read_defaults` and confirmed `common.prompts_save`.
 
-In Agent mode the model returns one `AgentDecision v1` object. One model turn contains at most one tool call:
+In Agent mode the model returns one `AgentDecision v1` object. A tool decision contains one call or up to eight independent read-only calls:
 
 ```json
 {
@@ -192,17 +196,21 @@ In Agent mode the model returns one `AgentDecision v1` object. One model turn co
   "decisionSummary": "Read the table before editing.",
   "goal": null,
   "plan": null,
-  "tool": {
-    "toolId": "excel.read_range",
-    "arguments": { "address": "A1:D20" }
-  },
+  "tool": [
+    {
+      "toolId": "excel.read_range",
+      "arguments": { "address": "A1:D20" }
+    }
+  ],
   "message": null
 }
 ```
 
-The other decisions are `plan`, `clarify`, `final`, and `cannot_complete`. The response is exactly one raw object: Markdown fences, surrounding prose, alternate envelopes and multiple calls are rejected. `decisionSummary` is a short observable action summary, not chain-of-thought; provider reasoning is stored separately when present.
+The other decisions are `plan`, `clarify`, `final`, and `cannot_complete`. The response is exactly one raw object: Markdown fences, surrounding prose and alternate envelopes are rejected. Multi-tool batches are executed locally in order and are accepted only for independent read-only calls; mutations, confirmations and result-dependent actions stay single-call. `decisionSummary` is a short observable action summary, not chain-of-thought; provider reasoning is stored separately when present.
 
-Settings provides three API modes: strict `json_schema` by default, `json_object + prompt`, and OpenAI-compatible `native_tool_calls + json_schema`. The first mode falls back to `json_object` only before any tool has executed. Tool results use `role: tool` by default with a matching assistant `tool_calls` entry and `tool_call_id`; endpoints without tool-history support can receive the normalized result as `developer` or `user` instead.
+After a visible plan is accepted, the next response schema excludes another `plan` until a new local runtime observation exists. Reworded plans without new evidence are corrected once and are not added to the transcript.
+
+Settings provides three API modes: strict `json_schema` by default, `json_object + prompt`, and OpenAI-compatible `native_tool_calls + json_schema`. The first mode falls back to `json_object` only before any tool has executed. Tool results use `role: tool` by default with one matching assistant `tool_calls[]` batch and a `role: tool` result for every `tool_call_id`; endpoints without tool-history support can receive normalized results as `developer` or `user` instead.
 
 The runtime routes the request, slices the tool catalog, validates the decision and arguments against formal JSON Schema, gates risk/confirmation, executes locally, normalizes observations, and runs deterministic verification for mutations. Custom tools without a formal object JSON Schema are rejected.
 

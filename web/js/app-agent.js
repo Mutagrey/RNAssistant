@@ -8,6 +8,7 @@ function renderActivityNode(activity, nested, current, context) {
   if (expandable) {
     var details = document.createElement("details");
     details.className = "agent-activity-toggle";
+    details.open = kind === "tool_batch";
     details.appendChild(renderActivityRow(activity, current, true, context));
     appendActivityDetailsContent(details, activity, context);
     node.appendChild(details);
@@ -85,6 +86,7 @@ function activityPrimaryText(activity) {
     verification: "Проверяю результат",
     retry: "Повторяю шаг",
     tool: "Выполняю действие",
+    tool_batch: "Инструменты",
     plan: "Формирую план"
   };
   return labels[activityKind(activity)] || toolId || title || "Выполняю шаг";
@@ -294,15 +296,33 @@ function appendAgentRunProcess(parent, timeline, stats) {
   timeline.forEach(function (item) {
     var entry = document.createElement("div");
     entry.className = "agent-transcript-entry";
-    appendAgentDecisionMessage(entry, agentDecisionText(item));
+    if (typeof appendMessageReasoning === "function") appendMessageReasoning(entry, item.reasoningMessage || item.message);
+    var itemKind = activityKind(item.activity);
+    if (itemKind === "tool_batch" || itemKind === "diagnostic" || itemKind === "retry") {
+      appendAgentDecisionMessage(entry, agentDecisionText(item));
+    }
     var isCurrent = stats.current && activityContains(item.activity, stats.current);
-    entry.appendChild(renderActivityNode(item.activity, false, isCurrent, {
+    var activityContext = {
       messageId: messageId(item.message),
       index: item.index,
       message: item.message,
       currentActivity: stats.current,
       renderInlineArtifacts: false
-    }));
+    };
+    if (itemKind === "tool_batch" && activityChildren(item.activity).length) {
+      var batchList = document.createElement("div");
+      batchList.className = "agent-tool-batch-list";
+      activityChildren(item.activity).forEach(function (child) {
+        batchList.appendChild(renderActivityNode(
+          child,
+          false,
+          stats.current && activityContains(child, stats.current),
+          activityContext));
+      });
+      entry.appendChild(batchList);
+    } else {
+      entry.appendChild(renderActivityNode(item.activity, false, isCurrent, activityContext));
+    }
     process.appendChild(entry);
   });
   parent.appendChild(process);
@@ -310,17 +330,9 @@ function appendAgentRunProcess(parent, timeline, stats) {
 
 function collectAgentRunTimelineItems(items) {
   items = items || [];
-  if (!items.length) {
-    return [];
-  }
-  var first = items[0].activity;
-  if (items.length > 1 && activityKind(first) === "plan") {
-    return items.slice(1);
-  }
-  if (activityKind(first) === "plan") {
-    return [];
-  }
-  return items.slice();
+  return items.filter(function (item) {
+    return item && activityKind(item.activity) !== "plan";
+  });
 }
 
 function collectVisibleAgentTimelineItems(items, finalMessage) {
@@ -338,7 +350,8 @@ function collapseAgentTimelineItems(timeline) {
       message: item.message,
       index: item.index,
       activity: item.activity,
-      decisionText: agentDecisionText(item)
+      decisionText: agentDecisionText(item),
+      reasoningMessage: typeof messageHasReasoning === "function" && messageHasReasoning(item.message) ? item.message : null
     };
     var key = activityTimelineKey(item.activity);
     var existingIndex = latestByKey[key];
@@ -348,6 +361,7 @@ function collapseAgentTimelineItems(timeline) {
       if (existingStatus === "planned" || existingStatus === "running" || existingStatus === "waiting" ||
           (existingStatus === "failed" && nextStatus === "completed")) {
         nextItem.decisionText = result[existingIndex].decisionText || nextItem.decisionText;
+        nextItem.reasoningMessage = nextItem.reasoningMessage || result[existingIndex].reasoningMessage;
         result[existingIndex] = nextItem;
         return;
       }
@@ -669,6 +683,8 @@ function appendAgentFinalAnswer(parent, finalMessage, hasVisiblePlan) {
     return;
   }
 
+  if (typeof appendMessageReasoning === "function") appendMessageReasoning(parent, finalMessage.message);
+
   var summaryText = messageDecisionSummary(finalMessage.message).trim();
   if (summaryText && summaryText !== messageContent(finalMessage.message).trim()) {
     appendAgentDecisionMessage(parent, summaryText);
@@ -710,12 +726,27 @@ async function deleteAgentRun(items, finalMessage) {
 
 function agentActionCountLabel(count) {
   if (!count) return "Ход выполнения";
-  var mod10 = count % 10;
-  var mod100 = count % 100;
-  var word = mod10 === 1 && mod100 !== 11
-    ? "действие"
-    : (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? "действия" : "действий");
-  return "Выполнено " + count + " " + word;
+  return "Инструменты · " + count;
+}
+
+function agentToolCallCount(timeline) {
+  var count = 0;
+  function append(activity) {
+    if (!activity) return;
+    var kind = activityKind(activity);
+    var children = activityChildren(activity);
+    if (kind === "tool_batch") {
+      children.forEach(append);
+      return;
+    }
+    if (kind === "tool" || kind === "verification" || kind === "control") {
+      count += 1;
+      return;
+    }
+    children.forEach(append);
+  }
+  (timeline || []).forEach(function (item) { append(item.activity); });
+  return count;
 }
 
 function buildAgentRunTranscript(items, timeline, stats, includePlan, includePlanDecision) {
@@ -723,6 +754,7 @@ function buildAgentRunTranscript(items, timeline, stats, includePlan, includePla
   transcript.className = "agent-run-transcript";
   var planItem = findAgentPlanItem(items);
   if (planItem) {
+    if (typeof appendMessageReasoning === "function") appendMessageReasoning(transcript, planItem.message);
     if (includePlanDecision !== false) {
       appendAgentDecisionMessage(transcript, agentDecisionText(planItem));
     }
@@ -749,7 +781,7 @@ function appendCollapsedAgentRun(parent, transcript, timeline, stats) {
   summary.appendChild(icon);
   var title = document.createElement("span");
   title.className = "agent-run-history-title";
-  title.textContent = agentActionCountLabel(timeline.length);
+  title.textContent = agentActionCountLabel(agentToolCallCount(timeline));
   summary.appendChild(title);
   var meta = document.createElement("span");
   meta.className = "agent-run-history-meta";
@@ -784,6 +816,7 @@ function renderAgentRunArticle(run) {
   var persistentPlan = !!finalMessage && !run.live && !!planItem;
   var transcript = buildAgentRunTranscript(items, timeline, stats, !dockCurrentPlan && !persistentPlan, !persistentPlan);
   if (finalMessage && !run.live) {
+    appendAgentFinalAnswer(body, finalMessage, persistentPlan);
     if (persistentPlan) {
       appendAgentDecisionMessage(body, agentDecisionText(planItem));
       appendAgentRunPlan(body, planItem.activity);
@@ -791,8 +824,8 @@ function renderAgentRunArticle(run) {
     appendCollapsedAgentRun(body, transcript, timeline, stats);
   } else {
     body.appendChild(transcript);
+    appendAgentFinalAnswer(body, finalMessage, persistentPlan);
   }
-  appendAgentFinalAnswer(body, finalMessage, persistentPlan);
   if (!run.live) {
     items.forEach(function (item) { appendMessageArtifactCards(body, item.message); });
     if (finalMessage) appendMessageArtifactCards(body, finalMessage.message);

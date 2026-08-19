@@ -1,12 +1,67 @@
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Services
 {
     internal static class ModelCapabilityService
     {
+        public static JToken ParseCatalog(string json, string endpoint)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                throw InvalidCatalog(endpoint, "response body is empty", string.Empty, null);
+            }
+
+            JToken catalog;
+            try
+            {
+                catalog = JToken.Parse(json.TrimStart('\uFEFF'));
+            }
+            catch (JsonException ex)
+            {
+                throw InvalidCatalog(endpoint, "response is not JSON", json, ex);
+            }
+
+            if (catalog.Type != JTokenType.Object && catalog.Type != JTokenType.Array)
+            {
+                throw InvalidCatalog(endpoint, "JSON root must be an object or array", json, null);
+            }
+            if (!ContainsModelArray(catalog))
+            {
+                throw InvalidCatalog(endpoint, "JSON does not contain a supported model array", json, null);
+            }
+            return catalog;
+        }
+
+        private static bool ContainsModelArray(JToken catalog)
+        {
+            if (catalog is JArray)
+            {
+                return true;
+            }
+
+            var root = catalog as JObject;
+            if (root == null)
+            {
+                return false;
+            }
+            var source = root["catalog"] ?? root["Catalog"] ?? root;
+            if (source is JArray)
+            {
+                return true;
+            }
+            var sourceObject = source as JObject;
+            return sourceObject != null &&
+                (sourceObject["models"] is JArray ||
+                 sourceObject["Models"] is JArray ||
+                 sourceObject["data"] is JArray ||
+                 sourceObject["Data"] is JArray);
+        }
+
         public static bool Merge(AppSettings settings, JToken catalog)
         {
             if (settings == null || catalog == null)
@@ -105,6 +160,21 @@ namespace RNAssistant.Office.Services
                 changed = true;
             }
             return changed;
+        }
+
+        private static LlmRequestException InvalidCatalog(string endpoint, string reason, string response, Exception inner)
+        {
+            var preview = (response ?? string.Empty)
+                .Replace("\r", " ")
+                .Replace("\n", " ")
+                .Trim();
+            if (preview.Length > 240) preview = preview.Substring(0, 240) + "…";
+            return new LlmRequestException(
+                LlmFailureKind.InvalidResponse,
+                "Каталог моделей не загружен: " + reason + ". Проверьте URL каталога" +
+                (string.IsNullOrWhiteSpace(endpoint) ? string.Empty : " (" + endpoint + ")") + "." +
+                (preview.Length == 0 ? string.Empty : " Начало ответа: " + preview),
+                inner);
         }
 
         private static string ReadString(JObject value, params string[] names)

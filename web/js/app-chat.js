@@ -248,6 +248,7 @@ function applyInitState(init) {
   state.officeContext = init.officeContext || null;
   state.bridgeToken = init.bridgeToken || init.BridgeToken || state.bridgeToken || "";
   state.settings = init.settings || {};
+  state.hasApiKey = !!(init.hasApiKey || init.HasApiKey);
   state.tools = init.tools || [];
   state.skills = init.skills || [];
   state.toolsPath = init.toolsPath || "";
@@ -779,7 +780,7 @@ function beginChatRunTracking(chatId) {
     return;
   }
 
-  state.chatRuns[chatId] = { activities: [], stream: "" };
+  state.chatRuns[chatId] = { activities: [], stream: "", reasoning: "", reasoningComplete: false };
   if (state.activeChatId !== chatId) {
     return;
   }
@@ -787,6 +788,7 @@ function beginChatRunTracking(chatId) {
   state.liveActivity = null;
   state.liveAgentRun = [];
   state.liveStreamContent = "";
+  resetLiveReasoning();
 }
 
 function endChatRunTracking(chatId) {
@@ -802,12 +804,15 @@ function endChatRunTracking(chatId) {
   state.liveActivity = null;
   state.liveAgentRun = null;
   state.liveStreamContent = null;
+  resetLiveReasoning();
 }
 
 function restoreActiveChatRun() {
   var run = state.chatRuns[state.activeChatId];
   state.liveAgentRun = run && run.activities ? run.activities : null;
   state.liveStreamContent = run && run.stream ? run.stream : null;
+  state.liveReasoning = run && run.reasoning ? run.reasoning : "";
+  state.liveReasoningComplete = !!(run && run.reasoningComplete);
   state.liveActivity = state.liveAgentRun && state.liveAgentRun.length ? state.liveAgentRun[state.liveAgentRun.length - 1] : null;
   renderMessages();
   renderSendControls();

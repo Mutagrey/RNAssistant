@@ -661,6 +661,80 @@ namespace RNAssistant.Harness
             AssertEqual("model-a", settings.AttachmentModelPriority[0], "multimodal model appended to priority");
         }
 
+        private static void InvalidModelCatalogResponseIsConcise()
+        {
+            LlmRequestException failure = null;
+            try
+            {
+                ModelCapabilityService.ParseCatalog(
+                    "<html><body>proxy error</body></html>",
+                    "https://catalog.example.test/models");
+            }
+            catch (LlmRequestException ex)
+            {
+                failure = ex;
+            }
+
+            AssertTrue(failure != null, "HTML catalog response rejected");
+            AssertEqual(LlmFailureKind.InvalidResponse, failure.Kind, "catalog response failure kind");
+            AssertContains(failure.Message, "response is not JSON", "concise catalog reason");
+            AssertContains(failure.Message, "https://catalog.example.test/models", "catalog endpoint diagnostic");
+            AssertTrue(failure.Message.IndexOf("Newtonsoft", StringComparison.OrdinalIgnoreCase) < 0, "stack trace is not exposed in message");
+
+            failure = null;
+            try
+            {
+                ModelCapabilityService.ParseCatalog(
+                    "{\"error\":{\"message\":\"unauthorized\"}}",
+                    "https://catalog.example.test/models");
+            }
+            catch (LlmRequestException ex)
+            {
+                failure = ex;
+            }
+            AssertTrue(failure != null, "JSON error object is not accepted as an empty catalog");
+            AssertContains(failure.Message, "does not contain a supported model array", "catalog shape diagnostic");
+        }
+
+        private static void SettingsRoundTripPreservesValues()
+        {
+            WithTempPaths(delegate(RNAssistant.Core.Storage.AppDataPaths paths)
+            {
+                var store = new RNAssistant.Core.Storage.JsonFileStore();
+                store.Save(paths.SettingsFile, new AppSettings
+                {
+                    BaseUrl = "https://api.example.test/v1",
+                    Model = "test-model",
+                    Temperature = 0,
+                    MaxAgentIterations = 17,
+                    AutoRetryToolErrors = false,
+                    DebugModelTraffic = true
+                });
+
+                var loaded = store.Load(paths.SettingsFile, new AppSettings());
+                AssertEqual("https://api.example.test/v1", loaded.BaseUrl, "base URL persists");
+                AssertEqual("test-model", loaded.Model, "model persists");
+                AssertEqual(0d, loaded.Temperature, "zero temperature persists");
+                AssertEqual(17, loaded.MaxAgentIterations, "agent iteration setting persists");
+                AssertTrue(!loaded.AutoRetryToolErrors, "false boolean setting persists");
+                AssertTrue(loaded.DebugModelTraffic, "model traffic debug setting persists");
+            });
+        }
+
+        private static void RuntimeLogTailAndClear()
+        {
+            WithTempPaths(delegate(RNAssistant.Core.Storage.AppDataPaths paths)
+            {
+                RNAssistant.Office.Diagnostics.RuntimeLog.Configure(paths.Root);
+                RNAssistant.Office.Diagnostics.RuntimeLog.Debug("MODEL TRAFFIC TEST\n{\n  \"ok\": true\n}");
+                var content = RNAssistant.Office.Diagnostics.RuntimeLog.ReadTail(4096);
+                AssertContains(content, "MODEL TRAFFIC TEST", "runtime debug entry is readable");
+                AssertContains(content, "\"ok\": true", "runtime debug JSON stays formatted");
+                RNAssistant.Office.Diagnostics.RuntimeLog.Clear();
+                AssertEqual(string.Empty, RNAssistant.Office.Diagnostics.RuntimeLog.ReadTail(4096), "runtime log clears");
+            });
+        }
+
         private static void VbaCreationRouteAllowsMutation()
         {
             var route = new OfficeIntentRouter().Route(
@@ -729,6 +803,7 @@ namespace RNAssistant.Harness
             AssertContains(resolved, "Создай новый лист", "original task retained");
             AssertContains(resolved, "USER_FOLLOW_UP", "follow-up marker included");
             AssertContains(resolved, "да именно так", "follow-up content included");
+            AssertTrue(AgentTaskContinuationResolver.ShouldContinue("Реализуй план", session), "implement-plan command continues pending task");
 
             AssertEqual("Новая независимая задача", AgentTaskContinuationResolver.Resolve("Новая независимая задача", session), "substantive request is not merged");
             AssertTrue(session.PendingAgentTask == null, "new request clears pending task");

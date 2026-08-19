@@ -177,7 +177,7 @@ namespace RNAssistant.Harness
             AssertTrue(prompt.IndexOf("Use guidance only.", StringComparison.Ordinal) < 0, "inactive skill body is not loaded");
             AssertContains(prompt, "AVAILABLE_TOOLS", "tools section");
             AssertContains(prompt, "Use only exact ids and schemas from AVAILABLE_TOOLS", "tool id protocol");
-            AssertContains(prompt, "at most one external tool per model turn", "single tool call protocol");
+            AssertContains(prompt, "up to 8 independent read-only calls", "multi-tool protocol");
             AssertContains(prompt, "A skill is scoped guidance, not an executable action", "skill guidance boundary");
         }
 
@@ -226,6 +226,7 @@ namespace RNAssistant.Harness
             AssertContains(defaults.SystemPrompt, "{\"toolId\":\"<exact id from AVAILABLE_TOOLS>\",\"arguments\":{}}", "default tool envelope");
             AssertContains(defaults.AgentPrompts.RepairDecisionPrompt, "Canonical plan items", "repair explains canonical plan shape");
             AssertContains(defaults.AgentPrompts.RepairDecisionPrompt, "native function call", "repair preserves native transport");
+            AssertContains(defaults.AgentPrompts.PlanContinuationPrompt, "newer observation", "plan continuation requires new evidence");
             AssertContains(defaults.AgentPrompts.ContextCompactionPrompt, "verified facts", "compaction preserves verified facts");
 
             var legacy = new AppSettings
@@ -242,6 +243,11 @@ namespace RNAssistant.Harness
             AssertEqual(defaults.AgentPrompts.RepairDecisionPrompt, legacy.AgentPrompts.RepairDecisionPrompt, "legacy repair prompt upgraded");
             AssertEqual(defaults.AgentPrompts.ForceToolUsePrompt, legacy.AgentPrompts.ForceToolUsePrompt, "legacy force-tool prompt upgraded");
             AssertEqual(defaults.AgentPrompts.PlanContinuationPrompt, legacy.AgentPrompts.PlanContinuationPrompt, "legacy single-plan prompt upgraded");
+
+            var previousPlanContinuation = new AppSettings();
+            previousPlanContinuation.AgentPrompts.PlanContinuationPrompt = "Continue with one next AgentDecision. Keep the current plan unless new observations materially change the remaining work. If it changes, return kind=plan again with the full revised remaining plan and stable ids; runtime preserves already completed ids. Otherwise select one tool, clarify, or finish.";
+            AgentPromptMigration.Apply(previousPlanContinuation, defaults);
+            AssertEqual(defaults.AgentPrompts.PlanContinuationPrompt, previousPlanContinuation.AgentPrompts.PlanContinuationPrompt, "previous revisable-plan prompt upgraded");
 
             var previousDefault = new AppSettings
             {
@@ -357,6 +363,8 @@ namespace RNAssistant.Harness
                 AssertEqual("skill_in_use", deleteDependencyResult.ErrorCode, "required skill cannot be deleted");
 
                 var activationSession = new ChatSession();
+                var loaderDefinition = executor.GetControllerTools().First(tool => tool.Id == "common.skills_load");
+                AssertTrue(loaderDefinition.MutatesLocalState, "skill activation is marked as local state mutation");
                 var loadSkill = new ToolCommand { ToolId = "common.skills_load" };
                 loadSkill.Arguments["ids"] = new[] { "common.generated_dependent" };
                 var loadSkillResult = executor.Execute(loadSkill, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings(), false, true, activationSession);

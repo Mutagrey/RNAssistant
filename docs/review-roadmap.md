@@ -3,7 +3,7 @@
 ## Current Baseline
 
 - The experimental parallel runtime, shadow/canary paths, evidence/telemetry layers, reducers, and their fixtures are removed.
-- Agent mode has one contract: AgentDecision v1 with at most one external tool per model turn.
+- Agent mode has one contract: AgentDecision v1 with one tool or a bounded batch of independent read-only tools per model turn.
 - Chat sessions expose only Agent and Chat; Agent is the default and the old automatic mode is removed.
 - Model-facing instructions have an immutable minimal runtime contract, one editable Agent prompt, one Chat prompt, bounded recovery/plan transitions, a structured compaction prompt and chat-title generation. Editable fields are available in Settings and through confirmed prompt tools.
 - Context accounting uses the persisted accepted protocol, model-generated checkpoints plus an exact raw tail, attachments, response schema and native tool schemas; raw transcript messages are not deleted by compaction.

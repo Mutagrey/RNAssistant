@@ -63,11 +63,13 @@ namespace RNAssistant.Core.Llm
         public IReadOnlyList<LlmToolDefinition> Tools { get; set; }
         public LlmRunCache RunCache { get; set; }
         public bool? ReasoningEnabled { get; set; }
+        public bool PlanDecisionAllowed { get; set; }
 
         public LlmRequestOptions()
         {
             ResponseFormat = LlmResponseFormats.Text;
             Tools = new LlmToolDefinition[0];
+            PlanDecisionAllowed = true;
         }
     }
 

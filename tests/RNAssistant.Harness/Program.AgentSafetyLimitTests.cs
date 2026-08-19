@@ -180,8 +180,42 @@ namespace RNAssistant.Harness
                 AssertEqual("Done.", result.AssistantText, "replanned final answer");
                 AssertEqual(1, adapter.Executed.Count, "only corrected action executed");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "corrected action");
-                AssertContains(FlattenMessages(calls[1]), "Validation error: unexpected_field", "multiple-call decision rejected");
-                AssertContains(FlattenMessages(calls[1]), "at most one external tool", "repair enforces one call");
+                AssertContains(FlattenMessages(calls[1]), "Multi-tool пакет", "unsafe multi-call decision rejected");
+                AssertContains(FlattenMessages(calls[1]), "read-only", "unsafe batch explains single mutation rule");
+            });
+        }
+
+        private static void MultipleReadOnlyToolsExecuteAsBatch()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var session = NewSession(adapter);
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    null,
+                    AgentBlock(Command("excel.get_context"), Command("excel.get_selection")),
+                    FinalBlock("Read batch complete."));
+
+                var result = service.ExecuteAsync(
+                    "Inspect the current workbook and selection.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { FallbackToJsonObject = false },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Read batch complete.", result.AssistantText, "multi-read final answer");
+                AssertEqual(2, adapter.Executed.Count, "multi-read execution count");
+                var batch = session.Messages.FirstOrDefault(message =>
+                    message != null && message.Activity != null &&
+                    string.Equals(message.Activity.Kind, "tool_batch", StringComparison.OrdinalIgnoreCase));
+                AssertTrue(batch != null, "multi-read batch activity persisted");
+                AssertEqual(2, batch.Activity.Children.Count, "multi-read UI child count");
+                AssertTrue(batch.Activity.Children.All(child => string.Equals(child.Status, "completed", StringComparison.OrdinalIgnoreCase)), "multi-read UI statuses");
+                var protocol = session.Messages.FirstOrDefault(message => message != null && message.ProtocolMessage && message.ToolCalls != null && message.ToolCalls.Count == 2);
+                AssertTrue(protocol != null, "multi-read protocol assistant call persisted");
+                AssertEqual(2, session.Messages.Count(message => message != null && message.ProtocolMessage && string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase)), "multi-read protocol results persisted");
             });
         }
 

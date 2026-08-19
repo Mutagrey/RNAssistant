@@ -30,7 +30,8 @@ namespace RNAssistant.Harness
                     {
                         ToolCalls = new List<LlmToolCall>
                         {
-                            new LlmToolCall { Id = "call-test", Name = "rnassistant_compat_echo", ArgumentsJson = "{\"value\":\"TOOL_OK\"}" }
+                            new LlmToolCall { Id = "call-test-a", Name = "rnassistant_compat_echo_a", ArgumentsJson = "{\"value\":\"A\"}" },
+                            new LlmToolCall { Id = "call-test-b", Name = "rnassistant_compat_echo_b", ArgumentsJson = "{\"value\":\"B\"}" }
                         }
                     });
                 }
@@ -39,7 +40,7 @@ namespace RNAssistant.Harness
                 {
                     return Task.FromResult(new LlmCompletionResult
                     {
-                        Content = "{\"protocolVersion\":1,\"kind\":\"final\",\"decisionSummary\":\"FORMAT_OK\",\"goal\":null,\"plan\":null,\"tool\":null,\"message\":\"FORMAT_OK\"}"
+                        Content = "{\"protocolVersion\":1,\"kind\":\"tool\",\"decisionSummary\":\"MULTI_OK\",\"goal\":null,\"plan\":null,\"tool\":[{\"toolId\":\"compat.echo_a\",\"arguments\":{\"value\":\"A\"}},{\"toolId\":\"compat.echo_b\",\"arguments\":{\"value\":\"B\"}}],\"message\":null}"
                     });
                 }
                 return Task.FromResult(new LlmCompletionResult { Content = "OK" });
@@ -61,6 +62,9 @@ namespace RNAssistant.Harness
             AssertTrue(calls.Any(call => call.Item2.ResponseFormat == LlmResponseFormats.JsonObject), "json_object probed");
             AssertTrue(calls.Any(call => call.Item2.ResponseFormat == LlmResponseFormats.JsonSchema), "json_schema probed");
             AssertTrue(calls.Any(call => call.Item2.NativeTools), "native tools probed");
+            AssertTrue(result.Checks.Any(check => check.Id == "json_object" && check.Passed), "json_object multi-tool capability probed");
+            AssertTrue(result.Checks.Any(check => check.Id == "json_schema" && check.Passed), "json_schema multi-tool capability probed");
+            AssertTrue(result.Checks.Any(check => check.Id == "native_multi_tool_calls" && check.Passed), "native multi-tool capability probed");
         }
     }
 }

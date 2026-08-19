@@ -454,7 +454,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"uiTheme\":\"dark\",\"reasoningRequestMode\":\"custom_json\",\"reasoningCustomJson\":\"{\\\"thinking\\\":{\\\"budget\\\":4096}}\",\"systemPromptRole\":\"system\",\"maxAgentFormatRetries\":4,\"modelImageSupportOverrides\":{\"gpt-test\":true},\"modelAudioSupportOverrides\":{\"gpt-audio\":true},\"attachmentModelPriority\":[\"gpt-test\",\"gpt-audio\"]},\"apiKey\":\"secret\"}}")
+                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"uiTheme\":\"dark\",\"debugModelTraffic\":true,\"reasoningRequestMode\":\"custom_json\",\"reasoningCustomJson\":\"{\\\"thinking\\\":{\\\"budget\\\":4096}}\",\"systemPromptRole\":\"system\",\"maxAgentFormatRetries\":4,\"modelImageSupportOverrides\":{\"gpt-test\":true},\"modelAudioSupportOverrides\":{\"gpt-audio\":true},\"attachmentModelPriority\":[\"gpt-test\",\"gpt-audio\"]},\"apiKey\":\"secret\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -462,6 +462,7 @@ namespace RNAssistant.Harness
             AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
             AssertEqual("gpt-test", controller.LastSettings.Model, "settings model");
             AssertEqual(UiThemes.Dark, controller.LastSettings.UiTheme, "settings theme");
+            AssertTrue(controller.LastSettings.DebugModelTraffic, "settings model traffic debug flag");
             AssertEqual(ReasoningRequestModes.CustomJson, controller.LastSettings.ReasoningRequestMode, "settings custom reasoning mode");
             AssertContains(controller.LastSettings.ReasoningCustomJson, "budget", "settings custom reasoning json");
             AssertEqual("system", controller.LastSettings.SystemPromptRole, "system prompt role");
@@ -470,6 +471,11 @@ namespace RNAssistant.Harness
             AssertEqual(true, controller.LastSettings.ModelAudioSupportOverrides["gpt-audio"].Value, "model audio override");
             AssertEqual("gpt-test", controller.LastSettings.AttachmentModelPriority[0], "attachment model priority");
             AssertEqual("secret", controller.LastApiKey, "api key");
+
+            var runtimeLog = JObject.Parse(bridge.HandleMessageAsync(
+                "{\"id\":\"log1\",\"type\":\"getRuntimeLog\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
+                .GetAwaiter().GetResult());
+            AssertEqual("runtime log", runtimeLog.SelectToken("payload.content").Value<string>(), "runtime log bridge response");
         }
 
         private static void BridgeRunsModelCompatibilityTest()

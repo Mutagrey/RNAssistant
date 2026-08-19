@@ -48,7 +48,8 @@ namespace RNAssistant.Office.Services
             var prefixes = new[]
             {
                 "да", "нет", "ок", "окей", "хорошо", "верно", "именно", "так и", "сделай", "делай",
-                "продолж", "попроб", "давай", "соглас", "подтверж", "перв", "втор", "трет",
+                "продолж", "попроб", "давай", "реализуй", "реализовать", "выполни", "выполнить", "запусти",
+                "соглас", "подтверж", "перв", "втор", "трет",
                 "yes", "no", "ok", "okay", "correct", "exactly", "do it", "proceed", "continue", "try"
             };
             return prefixes.Any(prefix => value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));

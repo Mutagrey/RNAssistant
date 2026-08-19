@@ -103,9 +103,10 @@ namespace RNAssistant.Harness
             AssertTrue(openAiCall.Success, "single OpenAI-style tool_calls envelope accepted");
             AssertEqual("excel.get_context", openAiCall.Response.Tool.ToolId, "function name wins over tool call id");
 
-            AssertEqual("multiple_tool_calls", parser.Parse(
-                "{\"decisionSummary\":\"x\",\"toolCalls\":[{\"id\":\"one\",\"args\":{}},{\"id\":\"two\",\"args\":{}}]}").ErrorCode,
-                "parallel compatibility calls still rejected");
+            var multiCalls = parser.Parse(
+                "{\"decisionSummary\":\"x\",\"toolCalls\":[{\"name\":\"one\",\"args\":{}},{\"name\":\"two\",\"args\":{}}]}");
+            AssertTrue(multiCalls.Success, "compatibility multi-tool calls accepted");
+            AssertEqual(2, multiCalls.Response.Tools.Count, "compatibility multi-tool count");
             AssertEqual("conflicting_envelope", parser.Parse(
                 "{\"kind\":\"tool\",\"decisionSummary\":\"x\",\"action\":{\"type\":\"reply\",\"content\":\"Не выполнять tool\"}}").ErrorCode,
                 "conflicting compatibility envelope rejected");

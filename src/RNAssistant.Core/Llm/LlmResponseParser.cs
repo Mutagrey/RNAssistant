@@ -13,6 +13,7 @@ namespace RNAssistant.Core.Llm
     internal static class LlmResponseParser
     {
         private const int MaxStoredReasoningChars = 24000;
+        private const int MaxStoredRefusalChars = 12000;
         private const int MaxStoredContentChars = 16 * 1024 * 1024;
         private const int MaxToolArgumentsChars = 4 * 1024 * 1024;
         private const int MaxToolCalls = 64;
@@ -74,6 +75,15 @@ namespace RNAssistant.Core.Llm
             Action<LlmStreamUpdate> streamProgress,
             CancellationToken cancellationToken)
         {
+            return await ReadStreamingOrJsonResponseAsync(stream, streamProgress, cancellationToken, null).ConfigureAwait(false);
+        }
+
+        internal static async Task<LlmCompletionResult> ReadStreamingOrJsonResponseAsync(
+            Stream stream,
+            Action<LlmStreamUpdate> streamProgress,
+            CancellationToken cancellationToken,
+            Action<string> rawJsonProgress)
+        {
             if (stream == null)
             {
                 throw new ArgumentNullException("stream");
@@ -108,7 +118,7 @@ namespace RNAssistant.Core.Llm
 
                         if (isEventStream == true)
                         {
-                            if (ProcessStreamingLine(line, state)) break;
+                            if (ProcessStreamingLine(line, state, rawJsonProgress)) break;
                         }
                         else if (isEventStream == false)
                         {
@@ -133,7 +143,9 @@ namespace RNAssistant.Core.Llm
 
             if (isEventStream != true)
             {
-                var jsonResult = ParseCompletionResponse(bufferedJson.ToString());
+                var bufferedResponse = bufferedJson.ToString();
+                if (rawJsonProgress != null) rawJsonProgress(bufferedResponse);
+                var jsonResult = ParseCompletionResponse(bufferedResponse);
                 ReportCompleted(streamProgress);
                 return jsonResult;
             }
@@ -167,6 +179,11 @@ namespace RNAssistant.Core.Llm
 
         private static bool ProcessStreamingLine(string line, StreamingCompletionState state)
         {
+            return ProcessStreamingLine(line, state, null);
+        }
+
+        private static bool ProcessStreamingLine(string line, StreamingCompletionState state, Action<string> rawJsonProgress)
+        {
             if (state == null || string.IsNullOrWhiteSpace(line))
             {
                 return false;
@@ -190,6 +207,7 @@ namespace RNAssistant.Core.Llm
 
             try
             {
+                if (rawJsonProgress != null) rawJsonProgress(data);
                 var chunk = JObject.Parse(data.TrimStart('\uFEFF'));
                 state.Add(chunk);
                 return false;
@@ -205,6 +223,7 @@ namespace RNAssistant.Core.Llm
             private readonly StringBuilder _content = new StringBuilder();
             private readonly StringBuilder _reasoning = new StringBuilder();
             private readonly StringBuilder _embeddedReasoning = new StringBuilder();
+            private readonly StringBuilder _refusal = new StringBuilder();
             private readonly Action<LlmStreamUpdate> _progress;
             private readonly ThinkStreamSplitter _thinkSplitter;
             private readonly IDictionary<int, StreamingToolCallState> _toolCalls = new SortedDictionary<int, StreamingToolCallState>();
@@ -252,6 +271,12 @@ namespace RNAssistant.Core.Llm
                     AddReasoning(reasoning);
                 }
 
+                var refusal = ReadStringToken(delta["refusal"], "choices[0].delta.refusal");
+                if (!string.IsNullOrEmpty(refusal))
+                {
+                    AddRefusal(refusal);
+                }
+
                 var toolCalls = delta["tool_calls"] as JArray;
                 if (toolCalls != null)
                 {
@@ -280,7 +305,8 @@ namespace RNAssistant.Core.Llm
                 var message = new JObject
                 {
                     ["content"] = _content.ToString(),
-                    ["reasoning_content"] = reasoning
+                    ["reasoning_content"] = reasoning,
+                    ["refusal"] = _refusal.ToString()
                 };
                 if (_toolCalls.Count > 0)
                 {
@@ -327,6 +353,20 @@ namespace RNAssistant.Core.Llm
                     _embeddedProgressReported = true;
                     _progress(new LlmStreamUpdate { ReasoningDelta = stored });
                 }
+            }
+
+            private void AddRefusal(string value)
+            {
+                if (string.IsNullOrEmpty(value))
+                {
+                    return;
+                }
+                var remaining = MaxStoredRefusalChars - _refusal.Length;
+                if (remaining <= 0)
+                {
+                    return;
+                }
+                _refusal.Append(value.Length <= remaining ? value : value.Substring(0, remaining));
             }
 
             private static string AppendLimited(StringBuilder target, string value, ref bool truncated)
@@ -555,6 +595,16 @@ namespace RNAssistant.Core.Llm
             return value.Length > MaxStoredReasoningChars ? value.Substring(0, MaxStoredReasoningChars) : value;
         }
 
+        private static string ReadRefusalContent(JObject message)
+        {
+            if (message == null)
+            {
+                return string.Empty;
+            }
+            var value = ReadStringToken(message["refusal"], "choices[0].message.refusal");
+            return value.Length > MaxStoredRefusalChars ? value.Substring(0, MaxStoredRefusalChars) : value;
+        }
+
         private static bool IsReasoningTruncated(JObject message)
         {
             if (message == null)
@@ -595,6 +645,7 @@ namespace RNAssistant.Core.Llm
             return new LlmCompletionResult
             {
                 Content = content,
+                RefusalContent = ReadRefusalContent(message),
                 ToolCalls = ReadToolCalls(message),
                 ReasoningContent = providerReasoning.Length > 0 ? providerReasoning : embeddedReasoning,
                 ReasoningTokens = ReadReasoningTokens(usage),

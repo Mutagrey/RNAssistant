@@ -74,6 +74,10 @@ function activityToolId(activity) {
   return activityValue(activity, "ToolId", "toolId", "") || "";
 }
 
+function activityBatchId(activity) {
+  return activityValue(activity, "BatchId", "batchId", "") || "";
+}
+
 function activityPendingId(activity) {
   return activityValue(activity, "PendingId", "pendingId", "") || "";
 }
@@ -134,6 +138,7 @@ function activityTimelineKey(activity) {
   return [
     runId || "run",
     kind || "activity",
+    activityBatchId(activity),
     activityToolId(activity),
     activityArgumentsJson(activity)
   ].join("|");
@@ -151,7 +156,7 @@ function setActivityStatusValue(activity, status) {
 }
 
 function isActiveTimelineStatus(status) {
-  return status === "running" || status === "waiting";
+  return status === "planned" || status === "running" || status === "waiting";
 }
 
 function recordActivityTimeline(items, activity) {
@@ -356,7 +361,7 @@ function isAgentRunStart(message) {
 function isAgentRunContinuation(message) {
   var kind = activityKind(messageActivity(message));
   return messageRole(message) === "assistant" &&
-    (kind === "tool" || kind === "verification" || kind === "retry" || kind === "diagnostic");
+    (kind === "plan" || kind === "tool" || kind === "tool_batch" || kind === "verification" || kind === "retry" || kind === "diagnostic");
 }
 
 function canCollectAgentRunAt(index) {

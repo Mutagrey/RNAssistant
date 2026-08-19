@@ -87,6 +87,7 @@ namespace RNAssistant.Core.Models
     public sealed class ChatActivity
     {
         public string RunId { get; set; }
+        public string BatchId { get; set; }
         public int? Sequence { get; set; }
         public string Kind { get; set; }
         public string Title { get; set; }

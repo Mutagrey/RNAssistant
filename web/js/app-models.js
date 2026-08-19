@@ -9,11 +9,14 @@ async function loadModelCatalog(useFormSettings) {
     normalizeModelCatalog(response);
     renderModelControls();
     log("Models loaded: " + state.modelCatalog.models.length);
+    return true;
   } catch (error) {
     state.modelCatalog.loading = false;
     state.modelCatalog.error = error.message || "Unknown error";
     renderModelControls();
-    log(error.detail || error.message);
+    var message = error.message || "Неизвестная ошибка";
+    log(/^Каталог моделей не загружен:/i.test(message) ? message : ("Каталог моделей не загружен: " + message));
+    return false;
   }
 }
 

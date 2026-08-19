@@ -48,6 +48,7 @@
       Exclude="..\..\src\RNAssistant.Core\Storage\ProtectedSecretStore.cs;..\..\src\RNAssistant.Core\Storage\SettingsService.cs"
       Link="Core\Storage\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Contracts\*.cs" Link="Office\Contracts\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\RNAssistant.Office\Diagnostics\RuntimeLog.cs" Link="Office\Diagnostics\RuntimeLog.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Agent\*.cs" Link="Office\Agent\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaProjectSupport.cs" Link="Office\Vba\VbaProjectSupport.cs" />
     <Compile

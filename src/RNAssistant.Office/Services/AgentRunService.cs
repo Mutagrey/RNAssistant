@@ -71,6 +71,7 @@ namespace RNAssistant.Office.Services
             CancellationToken cancellationToken,
             bool appendUserMessage = true)
         {
+            var resumePendingPlan = AgentTaskContinuationResolver.ShouldContinue(text, session);
             var taskText = AgentTaskContinuationResolver.Resolve(text, session);
             if (appendUserMessage)
             {
@@ -82,7 +83,7 @@ namespace RNAssistant.Office.Services
                     Attachments = attachments == null ? new List<ChatAttachment>() : new List<ChatAttachment>(attachments)
                 });
             }
-            return RunLoopAsync(taskText, false, session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, null, null, null, cancellationToken);
+            return RunLoopAsync(taskText, false, session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, null, null, null, resumePendingPlan, cancellationToken);
         }
 
         public Task<ChatCompletionResult> ContinueAfterToolAsync(
@@ -104,7 +105,7 @@ namespace RNAssistant.Office.Services
                 AgentProtocolHistory.AppendToolExchange(initialProtocolMessages, session, null, confirmedCommand, confirmedResult, settings);
             }
             var taskText = LatestUserRequest(session, confirmedCommand == null ? string.Empty : confirmedCommand.ToolId);
-            return RunLoopAsync(taskText, CommandMutates(confirmedCommand, tools), session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, initialProtocolMessages, confirmedCommand, confirmedResult, cancellationToken);
+            return RunLoopAsync(taskText, CommandMutates(confirmedCommand, tools), session, documentContext, settings, tools, attachments, progress, pendingToolRegistrar, skills, initialProtocolMessages, confirmedCommand, confirmedResult, false, cancellationToken);
         }
 
         private static bool CommandMutates(ToolCommand command, IReadOnlyList<ToolDefinition> tools)
@@ -133,6 +134,7 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<ChatMessage> initialProtocolMessages,
             ToolCommand initialCommand,
             ToolResult initialPlanResult,
+            bool resumePendingPlan,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -182,8 +184,12 @@ namespace RNAssistant.Office.Services
                 resultLog.Add(AgentTranscript.DescribeResult(initialCommand, initialPlanResult));
                 AgentPhaseController.Advance(route, observations, state.PendingVerification);
             }
-            if (initialPlanResult != null && AgentPlanStateService.Restore(session, state) != null)
+            if ((initialPlanResult != null || resumePendingPlan) && AgentPlanStateService.Restore(session, state) != null)
             {
+                if (resumePendingPlan && initialPlanResult == null)
+                {
+                    state.LastPlanObservationCount = observations.Count;
+                }
                 ReportPlanProgress(progress, state.PlanActivity);
             }
 
@@ -212,11 +218,14 @@ namespace RNAssistant.Office.Services
                     break;
                 }
                 var requestText = taskText;
+                var planDecisionAllowed = !state.PlanDeclared || observations.Count > state.LastPlanObservationCount;
                 var requestOptions = AgentPlannerCompletionRunner.BuildOptions(
                     string.IsNullOrWhiteSpace(state.ResponseMode) ? settings.AgentResponseMode : state.ResponseMode,
                     slice.Tools,
-                    llmRunCache);
+                    llmRunCache,
+                    planDecisionAllowed);
                 requestOptions.ReasoningEnabled = session == null ? (bool?)null : session.ReasoningEnabled;
+                var requestProtocolMessages = WithPlanDecisionConstraint(protocolMessages, planDecisionAllowed);
                 List<ChatMessage> messages;
                 try
                 {
@@ -231,7 +240,7 @@ namespace RNAssistant.Office.Services
                         settings,
                         session,
                         attachments,
-                        protocolMessages,
+                        requestProtocolMessages,
                         requestOptions);
                 }
                 catch (PromptBudgetExceededException ex) when (
@@ -260,7 +269,7 @@ namespace RNAssistant.Office.Services
                         settings,
                         session,
                         attachments,
-                        protocolMessages,
+                        requestProtocolMessages,
                         requestOptions);
                 }
                 contextUsage = ContextUsageEstimator.FromPrompt(messages, settings);
@@ -290,30 +299,14 @@ namespace RNAssistant.Office.Services
                     break;
                 }
                 var response = parsed.Response;
-                if (!string.IsNullOrWhiteSpace(response.Goal))
+                var isPlanDecision = string.Equals(response.Kind, AgentResponseKinds.Plan, StringComparison.OrdinalIgnoreCase);
+                if (isPlanDecision && !planDecisionAllowed)
                 {
-                    state.WorkingGoal = response.Goal;
-                }
-                if (string.Equals(response.Kind, AgentResponseKinds.Plan, StringComparison.OrdinalIgnoreCase))
-                {
-                    var planFingerprint = AgentPlanStateService.Fingerprint(response);
-                    state.RepeatedPlanCount = string.Equals(planFingerprint, state.LastPlanFingerprint, StringComparison.Ordinal)
-                        ? state.RepeatedPlanCount + 1
-                        : 0;
-                    state.LastPlanFingerprint = planFingerprint;
-                    bool updatedExisting;
-                    var visiblePlan = AgentPlanStateService.ApplyDecision(session, state, response, out updatedExisting);
-                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(
-                        response.DecisionSummary,
-                        completion,
-                        updatedExisting ? AgentPlanStateService.CreateUpdateActivity(response, visiblePlan) : visiblePlan,
-                        response.DecisionSummary,
-                        state.WorkingGoal));
-                    ReportProgress(progress, "plan", response.DecisionSummary, visiblePlan);
+                    state.NoProgressPlanCount += 1;
                     protocolMessages.Add(new ChatMessage { Role = "assistant", Content = plannerText });
-                    if (state.RepeatedPlanCount >= 2)
+                    if (state.NoProgressPlanCount >= 2)
                     {
-                        assistantText = "Модель повторяет план без перехода к следующему действию. Выполнение остановлено, исходный план сохранён.";
+                        assistantText = "Модель повторно вернула план без нового наблюдения. Выполнение остановлено, текущий план сохранён.";
                         RememberPendingTask(session, taskText, assistantText, "repeated_plan_no_progress");
                         session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, null, new ChatActivity
                         {
@@ -326,19 +319,43 @@ namespace RNAssistant.Office.Services
                         }));
                         break;
                     }
-                    var continuation = PromptText(settings, p => p.PlanContinuationPrompt);
-                    if (state.RepeatedPlanCount > 0)
+                    ReportProgress(progress, "repairing", "План уже задан; запрашиваю следующее действие...");
+                    protocolMessages.Add(new ChatMessage
                     {
-                        continuation += " The previous plan was identical. Do not return plan again; choose one tool, clarify, final, or cannot_complete.";
-                    }
+                        Role = "user",
+                        Content = "The current plan is already declared and no new runtime observation exists after it. Do not return kind=plan or rephrase the plan. Choose one allowed next decision: tool, clarify, final, or cannot_complete."
+                    });
+                    continue;
+                }
+                state.NoProgressPlanCount = 0;
+                if (!string.IsNullOrWhiteSpace(response.Goal))
+                {
+                    state.WorkingGoal = response.Goal;
+                }
+                if (isPlanDecision)
+                {
+                    bool updatedExisting;
+                    var visiblePlan = AgentPlanStateService.ApplyDecision(session, state, response, out updatedExisting);
+                    state.LastPlanObservationCount = observations.Count;
+                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(
+                        response.DecisionSummary,
+                        completion,
+                        updatedExisting ? AgentPlanStateService.CreateUpdateActivity(response, visiblePlan) : visiblePlan,
+                        response.DecisionSummary,
+                        state.WorkingGoal));
+                    ReportProgress(progress, "plan", response.DecisionSummary, visiblePlan);
+                    protocolMessages.Add(new ChatMessage { Role = "assistant", Content = plannerText });
+                    var continuation = PromptText(settings, p => p.PlanContinuationPrompt);
+                    continuation += " Runtime constraint for the immediately following decision: kind=plan is unavailable until a new observation is recorded.";
                     protocolMessages.Add(new ChatMessage { Role = "user", Content = continuation });
                     continue;
                 }
 
-                if (response.Plan != null && response.Plan.Count > 0)
+                if (planDecisionAllowed && response.Plan != null && response.Plan.Count > 0)
                 {
                     bool updatedExisting;
                     var visiblePlan = AgentPlanStateService.ApplyDecision(session, state, response, out updatedExisting);
+                    state.LastPlanObservationCount = observations.Count;
                     session.Messages.Add(AgentTranscript.CreateAssistantMessage(
                         response.DecisionSummary,
                         null,
@@ -356,7 +373,7 @@ namespace RNAssistant.Office.Services
                         !state.ToolCorrectionUsed)
                     {
                         state.ToolCorrectionUsed = true;
-                        var forced = BuildPlannerCorrectionMessages(PromptText(settings, p => p.ForceToolUsePrompt), snapshot, route, slice, observations, documentContext, skills, settings, requestText, session, attachments, protocolMessages, plannerAttempt.RequestOptions);
+                        var forced = BuildPlannerCorrectionMessages(PromptText(settings, p => p.ForceToolUsePrompt), snapshot, route, slice, observations, documentContext, skills, settings, requestText, session, attachments, requestProtocolMessages, plannerAttempt.RequestOptions);
                         var correctionAttempt = await _plannerCompletion.CompleteAsync(
                             settings,
                             forced,
@@ -377,6 +394,8 @@ namespace RNAssistant.Office.Services
                         }
                         response = correctionAttempt.ParseResult.Response;
                         completion = correctionAttempt.Completion;
+                        plannerAttempt = correctionAttempt;
+                        plannerText = correctionAttempt.Text;
                     }
 
                     if (route.RequiresTool &&
@@ -412,33 +431,144 @@ namespace RNAssistant.Office.Services
                     }
                 }
 
-                var step = response.Tool;
-                var validation = _actionValidator.Validate(step, slice, route, observations, allTools);
-                if (!validation.Success)
+                var requestedSteps = response.Tools == null || response.Tools.Count == 0
+                    ? new[] { response.Tool }
+                    : response.Tools.ToArray();
+                var validations = requestedSteps
+                    .Select(step => _actionValidator.Validate(step, slice, route, observations, allTools))
+                    .ToList();
+                var invalidStepIndex = validations.FindIndex(item => item == null || !item.Success);
+                if (invalidStepIndex >= 0)
                 {
+                    var invalidValidation = validations[invalidStepIndex];
+                    var invalidStep = invalidStepIndex >= 0 && invalidStepIndex < requestedSteps.Length
+                        ? requestedSteps[invalidStepIndex]
+                        : null;
+                    var validationMessage = invalidValidation == null ? "Tool validation failed." : invalidValidation.Message;
                     var validationObservation = new AgentObservation
                     {
                         Id = "obs_validation_" + (observations.Count + 1),
-                        ToolId = step == null ? string.Empty : step.ToolId,
+                        ToolId = invalidStep == null ? string.Empty : invalidStep.ToolId,
                         Status = "error",
-                        Summary = validation.Message,
+                        Summary = validationMessage,
                         Mutation = false,
                         RequiresVerification = false
                     };
                     observations.Add(validationObservation);
-                    resultLog.Add(new { toolId = validationObservation.ToolId, success = false, status = "validation_failed", message = validation.Message });
-                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(validation.Message, completion, new ChatActivity
+                    resultLog.Add(new { toolId = validationObservation.ToolId, success = false, status = "validation_failed", message = validationMessage });
+                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(validationMessage, completion, new ChatActivity
                     {
                         Kind = "diagnostic",
                         Title = "Planner validation",
                         Subtitle = validationObservation.ToolId,
                         Status = "failed",
                         ExecutionStatus = "validation_failed",
-                        ResultMessage = validation.Message
+                        ResultMessage = validationMessage
                     }));
                     continue;
                 }
-                var command = validation.Command;
+                var commands = validations.Select(item => item.Command).ToList();
+                if (commands.Count > 1)
+                {
+                    var batchValidationError = ValidateMultiToolBatch(commands, allTools, settings, maxToolSteps - state.TotalToolSteps);
+                    if (!string.IsNullOrWhiteSpace(batchValidationError))
+                    {
+                        var validationObservation = new AgentObservation
+                        {
+                            Id = "obs_validation_" + (observations.Count + 1),
+                            ToolId = string.Join(",", commands.Select(item => item.ToolId)),
+                            Status = "error",
+                            Summary = batchValidationError,
+                            Mutation = false,
+                            RequiresVerification = false
+                        };
+                        observations.Add(validationObservation);
+                        resultLog.Add(new { toolId = validationObservation.ToolId, success = false, status = "multi_tool_batch_rejected", message = batchValidationError });
+                        session.Messages.Add(AgentTranscript.CreateAssistantMessage(batchValidationError, completion, new ChatActivity
+                        {
+                            Kind = "diagnostic",
+                            Title = "Пакет инструментов отклонён",
+                            Subtitle = commands.Count + " calls",
+                            Status = "failed",
+                            ExecutionStatus = "multi_tool_batch_rejected",
+                            ResultMessage = batchValidationError
+                        }));
+                        continue;
+                    }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                    HtmlWorkspaceArtifactService.StampUncheckpointed(session, runMessageStart, session.ActiveHtmlArtifactId);
+                    var batchActivity = AgentRunPresentation.CreateToolBatchActivity(commands, "planned");
+                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(
+                        response.DecisionSummary,
+                        completion,
+                        batchActivity,
+                        response.DecisionSummary,
+                        state.WorkingGoal));
+                    ReportProgress(progress, "plan", response.DecisionSummary, batchActivity);
+
+                    var exchanges = new List<AgentToolExchange>();
+                    var batchRetry = false;
+                    var batchFailed = false;
+                    for (var batchIndex = 0; batchIndex < commands.Count; batchIndex++)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var batchCommand = commands[batchIndex];
+                        var batchTool = AgentToolCatalogResolver.Find(allTools, batchCommand.ToolId);
+                        ReportPlanProgress(progress, AgentPlanStateService.BeginCurrent(session, state));
+                        batchActivity.Status = settings.AutoRunToolCalls ? "running" : "waiting";
+                        batchActivity.ExecutionStatus = batchActivity.Status;
+                        batchActivity.Children[batchIndex] = AgentRunPresentation.CreateRunningActivity(
+                            batchCommand,
+                            settings.AutoRunToolCalls ? "running" : "waiting",
+                            "tool");
+                        ReportProgress(
+                            progress,
+                            settings.AutoRunToolCalls ? "executing" : "waiting",
+                            "Инструмент " + (batchIndex + 1) + "/" + commands.Count + ": " + AgentRunPresentation.FriendlyToolAction(batchCommand),
+                            batchActivity);
+
+                        ToolResult batchResult;
+                        if (state.TotalToolSteps >= maxToolSteps)
+                        {
+                            batchResult = ToolResult.Fail(
+                                "Agent tool step limit exceeded: " + maxToolSteps + ".",
+                                null,
+                                "tool_step_limit_exceeded",
+                                false);
+                        }
+                        else
+                        {
+                            state.TotalToolSteps += 1;
+                            batchResult = settings.AutoRunToolCalls
+                                ? _toolExecutor.Execute(batchCommand, allTools, settings, false, false, session, Math.Max(1, maxToolSteps - state.TotalToolSteps + 1), skills, cancellationToken)
+                                : ToolResult.SkippedAutoRun("Auto tool execution is disabled: " + batchCommand.ToolId);
+                        }
+                        batchResult = batchResult ?? ToolResult.Fail("Tool returned no result.", null, "missing_result", false);
+                        state.TotalToolSteps += Math.Max(0, (batchResult == null ? 0 : batchResult.ToolStepsConsumed) - 1);
+                        var retryingBatchError = !batchResult.Success && settings.AutoRetryToolErrors && AgentTranscript.CanRetryToolError(batchResult);
+                        ReportPlanProgress(progress, AgentPlanStateService.ApplyResult(session, state, batchResult, retryingBatchError));
+                        exchanges.Add(new AgentToolExchange(batchCommand, batchResult));
+                        var batchPurpose = AgentObservationPurposes.Inspection;
+                        AddToolObservation(batchCommand, batchTool, batchResult, observations, resultLog, session, batchPurpose, false);
+                        AgentRunPresentation.UpdateToolBatchActivity(batchActivity, batchIndex, batchCommand, batchResult);
+                        ReportProgress(
+                            progress,
+                            batchResult.Success ? "completed" : "failed",
+                            batchResult.Message,
+                            batchActivity);
+                        batchRetry |= retryingBatchError;
+                        batchFailed |= !batchResult.Success && !retryingBatchError;
+                    }
+
+                    AgentProtocolHistory.AppendToolExchanges(protocolMessages, session, plannerAttempt, exchanges, settings);
+                    AgentPhaseController.Advance(route, observations, state.PendingVerification);
+                    if (batchFailed) break;
+                    if (batchRetry) continue;
+                    continue;
+                }
+
+                var command = commands[0];
                 var plannedActivity = AgentRunPresentation.CreateRunningActivity(command, "planned", "tool");
                 plannedActivity.DataJson = routingDiagnosticsJson;
                 session.Messages.Add(AgentTranscript.CreateAssistantMessage(
@@ -700,13 +830,46 @@ namespace RNAssistant.Office.Services
             ICollection<AgentObservation> observations,
             ICollection<object> resultLog,
             ChatSession session,
-            string purpose = null)
+            string purpose = null,
+            bool addTranscript = true)
         {
             var observation = _observationNormalizer.Normalize(command, tool, result, purpose);
             observations.Add(observation);
             resultLog.Add(AgentTranscript.DescribeResult(command, result));
-            AgentTranscript.AddLocalResultMessage(session, command, result);
+            if (addTranscript) AgentTranscript.AddLocalResultMessage(session, command, result);
             return observation;
+        }
+
+        private static string ValidateMultiToolBatch(
+            IReadOnlyList<ToolCommand> commands,
+            IReadOnlyList<ToolDefinition> tools,
+            AppSettings settings,
+            int remainingToolSteps)
+        {
+            if (commands == null || commands.Count < 2) return null;
+            if (commands.Count > AgentDecisionProtocol.MaxToolCallsPerDecision)
+            {
+                return "Пакет содержит слишком много вызовов: максимум " + AgentDecisionProtocol.MaxToolCallsPerDecision + ".";
+            }
+            if (remainingToolSteps < commands.Count)
+            {
+                return "Пакет не помещается в оставшийся лимит инструментов. Уменьшите число вызовов.";
+            }
+            foreach (var command in commands)
+            {
+                var tool = AgentToolCatalogResolver.Find(tools, command == null ? null : command.ToolId);
+                var profile = ToolSafetyPolicy.Resolve(tool, tools);
+                if (tool == null || profile == null || !profile.Valid)
+                {
+                    return "Пакет содержит недоступный инструмент: " + (command == null ? string.Empty : command.ToolId) + ".";
+                }
+                if (profile.MutatesDocument || profile.MutatesLocalState ||
+                    ToolSafetyPolicy.RequiresConfirmation(tool, profile, settings, false, false))
+                {
+                    return "Multi-tool пакет разрешён только для независимых read-only действий без подтверждения. Выполните " + tool.Id + " отдельным решением.";
+                }
+            }
+            return null;
         }
 
         private static string LatestUserRequest(ChatSession session, string fallback)
@@ -759,6 +922,21 @@ namespace RNAssistant.Office.Services
                 : settings.AgentPrompts;
             var value = selector(prompts);
             return string.IsNullOrWhiteSpace(value) ? selector(defaults) : value;
+        }
+
+        private static IReadOnlyList<ChatMessage> WithPlanDecisionConstraint(
+            IReadOnlyList<ChatMessage> protocolMessages,
+            bool planDecisionAllowed)
+        {
+            var messages = new List<ChatMessage>(protocolMessages ?? new ChatMessage[0]);
+            messages.Add(new ChatMessage
+            {
+                Role = "user",
+                Content = planDecisionAllowed
+                    ? "RUNTIME_DECISION_CONSTRAINT: kind=plan is available only for an initial complex-task plan or a material revision justified by a new runtime observation. Never return it merely to restate the current plan."
+                    : "RUNTIME_DECISION_CONSTRAINT: the current plan is already declared and no newer runtime observation exists. kind=plan is unavailable. Continue with one tool decision, clarify, final, or cannot_complete."
+            });
+            return messages;
         }
 
         private static void AttachPendingId(ChatSession session, ToolCommand command, ToolResult result, ChatCompletionService.PendingToolRegistrar pendingToolRegistrar)

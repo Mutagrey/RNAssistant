@@ -21,13 +21,13 @@
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
   <link rel="stylesheet" href="css/app.css?v=scrollbar-hover-20260723-1">
-  <link rel="stylesheet" href="css/app-chat.css?v=message-edit-20260806-1">
+  <link rel="stylesheet" href="css/app-chat.css?v=agent-reliability-20260819-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-composer.css?v=message-edit-20260806-1">
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=custom-reasoning-20260806-1">
-  <link rel="stylesheet" href="css/app-workspace.css?v=agent-protocol-20260806-1">
+  <link rel="stylesheet" href="css/app-workspace.css?v=model-debug-20260819-1">
   <link rel="stylesheet" href="css/app-tools.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-prompts.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-vba.css?v=chatui-20260622-7">
@@ -37,7 +37,7 @@
   <link rel="stylesheet" href="css/app-artifacts.css?v=context-20260807-1">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=chatui-20260702-2">
   <link rel="stylesheet" href="css/app-responsive.css?v=message-edit-20260806-1">
-  <link rel="stylesheet" href="css/app-agent.css?v=agent-protocol-20260806-1">
+  <link rel="stylesheet" href="css/app-agent.css?v=agent-reliability-20260819-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=agent-transcript-20260805-3">
   <link rel="stylesheet" href="css/app-theme.css?v=message-edit-20260806-1">
 </head>
@@ -477,7 +477,7 @@
               <div class="form-grid two-columns">
                 <label><span>Адрес API</span><input id="baseUrlInput" autocomplete="off" placeholder="https://host"></label>
                 <label><span>URL каталога моделей</span><input id="modelsConfigUrlInput" autocomplete="off" placeholder="Пусто = вычислять из адреса API"></label>
-                <label><span>API-ключ</span><input id="apiKeyInput" type="password" autocomplete="off" placeholder="Оставьте пустым, чтобы не менять"></label>
+                <label><span>API-ключ</span><input id="apiKeyInput" type="password" autocomplete="off" placeholder="Оставьте пустым, чтобы не менять"><small id="apiKeyStatus"></small></label>
                 <label class="wide"><span>HTTP-заголовки</span><textarea id="headersInput" rows="4" placeholder="Header-Name: value"></textarea></label>
                 <label class="wide"><span>Разрешённые origins HTML workspace</span><textarea id="htmlNetworkOriginsInput" rows="3" placeholder="https://api.example.com"></textarea><small>По одному HTTP(S) origin на строку. Удалите строку, чтобы отозвать доступ.</small></label>
               </div>
@@ -663,8 +663,12 @@
             <section class="settings-page" data-settings-page="service">
               <div class="settings-heading">
                 <h2>Сервис</h2>
-                <p>Очистка локальных данных без удаления настроек, API-ключа, инструментов и навыков.</p>
+                <p>Диагностика и очистка локальных данных.</p>
               </div>
+              <div class="form-grid">
+                <label class="checkline"><input id="debugModelTrafficInput" type="checkbox"><span>Debug: логировать сырые запросы и ответы модели</span></label>
+              </div>
+              <div class="setting-note">Запросы и ответы пишутся pretty printed JSON во вкладку «Логи» и файл runtime-журнала. API-ключ и HTTP-заголовки не пишутся, но в сообщениях могут быть текст документа и другие чувствительные данные.</div>
               <div class="danger-zone">
                 <div>
                   <div class="danger-zone-title">Сброс локальных данных</div>
@@ -682,13 +686,20 @@
 
       <section class="panel" id="tab-logs">
         <div class="panel-head">
-          <div class="panel-status">События текущей сессии</div>
+          <div class="panel-status">Журналы диагностики</div>
           <div class="panel-actions">
-            <button class="secondary" id="clearLogButton" type="button">Очистить</button>
+            <button class="secondary" id="refreshRuntimeLogButton" type="button">Обновить</button>
           </div>
         </div>
-        <div class="log-panel surface-panel padded">
-          <pre class="log-box" id="logBox"></pre>
+        <div class="logs-workspace">
+          <section class="log-section surface-panel padded">
+            <div class="log-section-head"><strong>UI-события сессии</strong><button class="secondary" id="clearLogButton" type="button">Очистить</button></div>
+            <pre class="log-box" id="logBox"></pre>
+          </section>
+          <section class="log-section surface-panel padded">
+            <div class="log-section-head"><div><strong>Runtime / model traffic</strong><span id="runtimeLogPath"></span></div><button class="secondary" id="clearRuntimeLogButton" type="button">Очистить файл</button></div>
+            <pre class="log-box" id="runtimeLogBox"></pre>
+          </section>
         </div>
       </section>
     </main>
@@ -707,18 +718,19 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=runtime-20260807-1"></script>
+  <script src="js/app-core.js?v=reasoning-ui-20260819-1"></script>
   <script src="js/app-utils.js?v=runtime-20260807-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
   <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js?v=agent-protocol-20260806-1"></script>
+  <script src="js/app-settings.js?v=model-debug-20260819-1"></script>
+  <script src="js/app-logs.js?v=model-debug-20260819-1"></script>
   <script src="js/app-prompts.js?v=runtime-20260807-1"></script>
   <script src="js/app-model-data.js?v=reasoning-transport-20260805-1"></script>
   <script src="js/app-model-render.js?v=message-edit-20260806-1"></script>
-  <script src="js/app-models.js?v=message-edit-20260806-1"></script>
+  <script src="js/app-models.js?v=agent-reliability-20260819-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=runtime-20260807-1"></script>
+  <script src="js/app-chat-state.js?v=reasoning-ui-20260819-1"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
   <script src="js/app-tools.js?v=chatui-20260622-4"></script>
   <script src="js/app-skills.js?v=chatui-20260622-4"></script>
@@ -726,16 +738,16 @@
   <script src="js/app-html-workspace.js?v=chatui-20260703-2"></script>
   <script src="js/app-context.js?v=chatui-20260622-1"></script>
   <script src="js/app-agent-data.js?v=chatui-20260622-1"></script>
-  <script src="js/app-agent-model.js?v=runtime-20260807-1"></script>
+  <script src="js/app-agent-model.js?v=agent-reliability-20260819-1"></script>
   <script src="js/app-chart-artifacts.js?v=chatui-20260622-2"></script>
   <script src="js/app-html-artifacts.js?v=chatui-20260702-2"></script>
   <script src="js/app-artifacts.js?v=context-20260807-1"></script>
-  <script src="js/app-agent.js?v=runtime-20260807-1"></script>
-  <script src="js/app-messages.js?v=runtime-20260807-1"></script>
-  <script src="js/app-reasoning.js?v=reasoning-20260805-1"></script>
+  <script src="js/app-agent.js?v=reasoning-ui-20260819-1"></script>
+  <script src="js/app-messages.js?v=reasoning-ui-20260819-1"></script>
+  <script src="js/app-reasoning.js?v=reasoning-ui-20260819-1"></script>
   <script src="js/app-attachments.js?v=mediarouting-20260722-1"></script>
-  <script src="js/app-chat.js?v=runtime-20260807-1"></script>
+  <script src="js/app-chat.js?v=reasoning-ui-20260819-1"></script>
   <script src="js/app-chat-edit.js?v=runtime-20260807-1"></script>
-  <script src="js/app.js?v=topbar-removal-20260723-1"></script>
+  <script src="js/app.js?v=model-debug-20260819-1"></script>
 </body>
 </html>

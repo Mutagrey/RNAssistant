@@ -7,6 +7,7 @@ namespace RNAssistant.Core.Models
     {
         public const int Version = 1;
         public const string SchemaName = "rnassistant_agent_decision_v1";
+        public const int MaxToolCallsPerDecision = 8;
     }
 
     public static class AgentResponseKinds
@@ -33,13 +34,24 @@ namespace RNAssistant.Core.Models
         public string DecisionSummary { get; set; }
         public string Goal { get; set; }
         public List<AgentPlanStep> Plan { get; set; }
-        public AgentPlannerStep Tool { get; set; }
+        public List<AgentPlannerStep> Tools { get; set; }
         public string Message { get; set; }
+
+        public AgentPlannerStep Tool
+        {
+            get { return Tools.Count == 0 ? null : Tools[0]; }
+            set
+            {
+                Tools.Clear();
+                if (value != null) Tools.Add(value);
+            }
+        }
 
         public AgentPlannerResponse()
         {
             ProtocolVersion = AgentDecisionProtocol.Version;
             Plan = new List<AgentPlanStep>();
+            Tools = new List<AgentPlannerStep>();
         }
     }
 
