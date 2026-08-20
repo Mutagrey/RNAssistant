@@ -23,7 +23,7 @@ namespace RNAssistant.Office.Tools
                 Host = host,
                 Name = name ?? id,
                 Description = description,
-                ArgumentSchemaJson = ToolSchemaSupport.FromPropertySamples(schema),
+                ArgumentSchemaJson = schema,
                 BuiltIn = true,
                 Enabled = true,
                 MutatesDocument = mutatesDocument,

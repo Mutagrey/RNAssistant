@@ -32,16 +32,6 @@ function normalizeProgressActivity(progress) {
       } else {
         copy.progressTitle = progressTitle;
       }
-      if (phase === "routing") {
-        if (copy.Title !== undefined) {
-          copy.Title = progressTitle;
-        } else {
-          copy.title = progressTitle;
-        }
-      }
-      if (phase === "plan") {
-        copy.__decisionMessage = message.trim();
-      }
     }
     return copy;
   }
@@ -74,8 +64,8 @@ function activityToolId(activity) {
   return activityValue(activity, "ToolId", "toolId", "") || "";
 }
 
-function activityBatchId(activity) {
-  return activityValue(activity, "BatchId", "batchId", "") || "";
+function activityToolCallId(activity) {
+  return activityValue(activity, "ToolCallId", "toolCallId", "") || "";
 }
 
 function activityPendingId(activity) {
@@ -130,33 +120,17 @@ function activityTimelineKey(activity) {
   }
 
   var runId = activityValue(activity, "RunId", "runId", "") || "";
-  var kind = activityKind(activity);
-  if (kind === "plan") {
-    return [runId || "run", "plan"].join("|");
-  }
-
   return [
     runId || "run",
-    kind || "activity",
-    activityBatchId(activity),
+    activityKind(activity) || "activity",
+    activityToolCallId(activity),
     activityToolId(activity),
     activityArgumentsJson(activity)
   ].join("|");
 }
 
-function setActivityStatusValue(activity, status) {
-  if (!activity) {
-    return;
-  }
-  if (activity.Status !== undefined) {
-    activity.Status = status;
-  } else {
-    activity.status = status;
-  }
-}
-
 function isActiveTimelineStatus(status) {
-  return status === "planned" || status === "running" || status === "waiting";
+  return status === "running" || status === "waiting";
 }
 
 function recordActivityTimeline(items, activity) {
@@ -168,31 +142,12 @@ function recordActivityTimeline(items, activity) {
   var copy = cloneActivity(activity);
   var key = activityTimelineKey(copy);
   var nextStatus = activityStatus(copy);
-  var kind = activityKind(copy);
   copy.__timelineKey = key;
-
-  if (kind !== "plan" && isActiveTimelineStatus(nextStatus)) {
-    items.forEach(function (item) {
-      if (!item || item.__timelineKey === key || !isActiveTimelineStatus(activityStatus(item))) {
-        return;
-      }
-      setActivityStatusValue(item, "completed");
-    });
-  }
 
   for (var i = items.length - 1; i >= 0; i -= 1) {
     var existing = items[i];
     if (!existing || existing.__timelineKey !== key) {
       continue;
-    }
-
-    if (!copy.__decisionMessage && existing.__decisionMessage) {
-      copy.__decisionMessage = existing.__decisionMessage;
-    }
-
-    if (kind === "plan") {
-      items[i] = copy;
-      return copy;
     }
 
     var existingStatus = activityStatus(existing);
@@ -254,10 +209,7 @@ function collectRunActivities(items) {
     activityChildren(activity).forEach(append);
   }
 
-  var first = items[0].activity;
-  var runActivities = items.length > 1 && activityKind(first) === "plan"
-    ? items.slice(1).map(function (item) { return item.activity; })
-    : (activityKind(first) === "plan" ? activityChildren(first) : items.map(function (item) { return item.activity; }));
+  var runActivities = items.map(function (item) { return item.activity; });
   runActivities.forEach(append);
   return activities;
 }
@@ -329,12 +281,6 @@ function agentRunStats(items) {
   if (counts.waiting) {
     parts.push(counts.waiting + " waiting");
   }
-  if (counts.planned) {
-    parts.push(counts.planned + " planned");
-  }
-  if (counts.incomplete) {
-    parts.push(counts.incomplete + " incomplete");
-  }
   if (elapsed) {
     parts.push("elapsed " + elapsed);
   }
@@ -342,7 +288,7 @@ function agentRunStats(items) {
     parts.push("current: " + activityTitle(current));
   }
   if (!parts.length) {
-    parts.push("planned");
+    parts.push("completed");
   }
 
   return {
@@ -350,27 +296,20 @@ function agentRunStats(items) {
     current: current,
     counts: counts,
     elapsed: elapsed,
-    status: counts.failed ? "failed" : (counts.running ? "running" : (counts.waiting ? "waiting" : (counts.incomplete ? "incomplete" : (counts.cancelled ? "cancelled" : (counts.planned && counts.planned === counts.total ? "planned" : "completed")))))
+    status: counts.failed ? "failed" : (counts.running ? "running" : (counts.waiting ? "waiting" : (counts.cancelled ? "cancelled" : "completed")))
   };
-}
-
-function isAgentRunStart(message) {
-  return messageRole(message) === "assistant" && activityKind(messageActivity(message)) === "plan";
 }
 
 function isAgentRunContinuation(message) {
   var kind = activityKind(messageActivity(message));
   return messageRole(message) === "assistant" &&
-    (kind === "plan" || kind === "tool" || kind === "tool_batch" || kind === "verification" || kind === "retry" || kind === "diagnostic");
+    (kind === "tool" || kind === "control" || kind === "diagnostic" || kind === "reasoning");
 }
 
 function canCollectAgentRunAt(index) {
   var message = state.messages[index];
   if (!message || messageProtocolMessage(message) || messageRole(message) !== "assistant" || !messageActivity(message)) {
     return false;
-  }
-  if (isAgentRunStart(message)) {
-    return true;
   }
   var runId = messageRunId(message);
   if (!runId) {

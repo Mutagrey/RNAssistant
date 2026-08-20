@@ -1,5 +1,4 @@
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -58,11 +57,6 @@ namespace RNAssistant.Core.Storage
             {
                 settings.ModelCapabilities = new Dictionary<string, ModelCapabilitySettings>(StringComparer.OrdinalIgnoreCase);
             }
-            settings.AttachmentModelPriority = (settings.AttachmentModelPriority ?? new List<string>())
-                .Where(value => !string.IsNullOrWhiteSpace(value))
-                .Select(value => value.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
             if (settings.HtmlNetworkAllowedOrigins == null)
             {
                 settings.HtmlNetworkAllowedOrigins = new List<string>();
@@ -86,8 +80,6 @@ namespace RNAssistant.Core.Storage
                 settings.ChatSystemPrompt = defaults.ChatSystemPrompt;
             }
             settings.SystemPromptRole = NormalizePromptRole(settings.SystemPromptRole, defaults.SystemPromptRole);
-            settings.ToolResultRole = NormalizeToolResultRole(settings.ToolResultRole, defaults.ToolResultRole);
-            settings.AgentResponseMode = NormalizeResponseMode(settings.AgentResponseMode, defaults.AgentResponseMode);
             settings.ReasoningRequestMode = ReasoningRequestModes.Normalize(settings.ReasoningRequestMode);
             settings.ReasoningCustomJson = string.IsNullOrWhiteSpace(settings.ReasoningCustomJson)
                 ? defaults.ReasoningCustomJson
@@ -100,8 +92,8 @@ namespace RNAssistant.Core.Storage
                     capability.ReasoningRequestMode = ReasoningRequestModes.NormalizeOverride(capability.ReasoningRequestMode);
                 }
             }
-            NormalizeAgentPrompts(settings);
-            AgentPromptMigration.Apply(settings, defaults);
+            settings.ChatTitlePrompt = DefaultIfBlank(settings.ChatTitlePrompt, defaults.ChatTitlePrompt);
+            settings.ContextCompactionPrompt = DefaultIfBlank(settings.ContextCompactionPrompt, defaults.ContextCompactionPrompt);
             if (settings.MaxTokens <= 0)
             {
                 settings.MaxTokens = defaults.MaxTokens;
@@ -130,44 +122,11 @@ namespace RNAssistant.Core.Storage
             {
                 settings.MaxAgentIterations = defaults.MaxAgentIterations;
             }
-            if (settings.MaxAgentIterations < 1)
-            {
-                settings.MaxAgentIterations = 1;
-            }
-            if (settings.MaxAgentFormatRetries <= 0)
-            {
-                settings.MaxAgentFormatRetries = defaults.MaxAgentFormatRetries;
-            }
-            settings.MaxAgentFormatRetries = Math.Max(1, settings.MaxAgentFormatRetries);
             if (settings.MaxAgentToolSteps <= 0)
             {
                 settings.MaxAgentToolSteps = defaults.MaxAgentToolSteps;
             }
-            if (settings.MaxAgentToolSteps < 1)
-            {
-                settings.MaxAgentToolSteps = 1;
-            }
-            if (settings.MaxAgentToolsPerRequest <= 0)
-            {
-                settings.MaxAgentToolsPerRequest = defaults.MaxAgentToolsPerRequest;
-            }
-            settings.MaxAgentToolsPerRequest = Math.Max(1, settings.MaxAgentToolsPerRequest);
             return settings;
-        }
-
-        private static void NormalizeAgentPrompts(AppSettings settings)
-        {
-            var defaults = new AgentPromptSettings();
-            if (settings.AgentPrompts == null)
-            {
-                settings.AgentPrompts = new AgentPromptSettings();
-            }
-
-            settings.AgentPrompts.ForceToolUsePrompt = DefaultIfBlank(settings.AgentPrompts.ForceToolUsePrompt, defaults.ForceToolUsePrompt);
-            settings.AgentPrompts.RepairDecisionPrompt = DefaultIfBlank(settings.AgentPrompts.RepairDecisionPrompt, defaults.RepairDecisionPrompt);
-            settings.AgentPrompts.PlanContinuationPrompt = DefaultIfBlank(settings.AgentPrompts.PlanContinuationPrompt, defaults.PlanContinuationPrompt);
-            settings.AgentPrompts.ChatTitlePrompt = DefaultIfBlank(settings.AgentPrompts.ChatTitlePrompt, defaults.ChatTitlePrompt);
-            settings.AgentPrompts.ContextCompactionPrompt = DefaultIfBlank(settings.AgentPrompts.ContextCompactionPrompt, defaults.ContextCompactionPrompt);
         }
 
         private static string NormalizePromptRole(string value, string fallback)
@@ -182,25 +141,6 @@ namespace RNAssistant.Core.Storage
             return fallback;
         }
 
-        private static string NormalizeToolResultRole(string value, string fallback)
-        {
-            value = string.IsNullOrWhiteSpace(value) ? fallback : value;
-            if (string.Equals(value, "developer", StringComparison.OrdinalIgnoreCase)) return "developer";
-            if (string.Equals(value, "user", StringComparison.OrdinalIgnoreCase)) return "user";
-            return "tool";
-        }
-
-        private static string NormalizeResponseMode(string value, string fallback)
-        {
-            value = string.IsNullOrWhiteSpace(value) ? fallback : value;
-            if (string.Equals(value, AgentResponseModes.NativeToolCalls, StringComparison.OrdinalIgnoreCase))
-            {
-                return AgentResponseModes.NativeToolCalls;
-            }
-            return string.Equals(value, AgentResponseModes.JsonObject, StringComparison.OrdinalIgnoreCase)
-                ? AgentResponseModes.JsonObject
-                : AgentResponseModes.JsonSchema;
-        }
 
         private static string DefaultIfBlank(string value, string fallback)
         {

@@ -63,7 +63,6 @@ namespace RNAssistant.Harness
                 var currentHash = VbaToolManifestParser.CodeSha256(adapter.GetVbaModuleCode("Module1"));
                 var deleted = executor.Execute(Command("excel.vba_delete_module", "moduleName", "Module1", "expectedCodeSha256", currentHash), tools, settings, false, false);
                 AssertTrue(deleted.Success, "standard module delete succeeds");
-                AssertEqual("vba_module_not_found", deleted.Verification.ExpectedErrorCode, "delete verifies absence");
             });
         }
     }

@@ -73,7 +73,6 @@ namespace RNAssistant.Office.Services
             ResetMessageForReplay(target, trimmed);
             _removePendingAgentTools(sessionId);
             _cancelPendingActivities(session, PendingActionCancelledReason);
-            session.PendingAgentTask = null;
             session.LastRun = null;
             InvalidateContextCheckpoints(session);
             ChatArtifactService.PruneUnreachable(session);

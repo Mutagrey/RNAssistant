@@ -1,22 +1,14 @@
 (function () {
   var promptDefinitions = [
-    { key: "systemPrompt", label: "Главный промпт агента", group: "Base", source: "root", field: "SystemPrompt", description: "Редактируемое поведение Agent поверх неизменяемого runtime-контракта." },
-    { key: "chatSystemPrompt", label: "Базовый промпт чата", group: "Base", source: "root", field: "ChatSystemPrompt", description: "Прямой текстовый ответ без planner JSON и внутреннего reasoning." },
-    { key: "forceToolUsePrompt", label: "Force tool use", group: "Recovery", source: "agent", field: "ForceToolUsePrompt", description: "Follow-up, когда модель ответила текстом на явное действие." },
-    { key: "repairDecisionPrompt", label: "Repair AgentDecision", group: "Recovery", source: "agent", field: "RepairDecisionPrompt", description: "Промпт ограниченных повторов для невалидного решения модели." },
-    { key: "planContinuationPrompt", label: "Continue plan", group: "Loop", source: "agent", field: "PlanContinuationPrompt", description: "Переход от видимого plan к следующему решению." },
-    { key: "contextCompactionPrompt", label: "Compact context", group: "Memory", source: "agent", field: "ContextCompactionPrompt", description: "Критерии model-generated checkpoint без удаления исходной истории." },
-    { key: "chatTitlePrompt", label: "Название чата", group: "Utility", source: "agent", field: "ChatTitlePrompt", description: "Отдельный короткий запрос для генерации названия чата." }
+    { key: "systemPrompt", label: "Главный промпт агента", group: "Base", source: "root", field: "SystemPrompt", description: "Полностью описывает Agent JSON-поток и правила работы с tools и skills." },
+    { key: "chatSystemPrompt", label: "Базовый промпт чата", group: "Base", source: "root", field: "ChatSystemPrompt", description: "Прямой текстовый ответ без tools." },
+    { key: "contextCompactionPrompt", label: "Compact context", group: "Memory", source: "root", field: "ContextCompactionPrompt", description: "Критерии model-generated checkpoint без удаления исходной истории." },
+    { key: "chatTitlePrompt", label: "Название чата", group: "Utility", source: "root", field: "ChatTitlePrompt", description: "Отдельный короткий запрос для генерации названия чата." }
   ];
 
   function promptValue(settings, def) {
     settings = settings || {};
-    if (def.source === "root") {
-      return settings[def.field] !== undefined ? settings[def.field] : (settings[lowerFirst(def.field)] || "");
-    }
-
-    var prompts = settings.AgentPrompts || settings.agentPrompts || {};
-    return prompts[def.field] !== undefined ? prompts[def.field] : (prompts[lowerFirst(def.field)] || "");
+    return settings[def.field] !== undefined ? settings[def.field] : (settings[lowerFirst(def.field)] || "");
   }
 
   function lowerFirst(value) {
@@ -186,13 +178,9 @@
     var result = {
       SystemPrompt: state.promptDrafts.systemPrompt || "",
       ChatSystemPrompt: state.promptDrafts.chatSystemPrompt || "",
-      AgentPrompts: {}
+      ContextCompactionPrompt: state.promptDrafts.contextCompactionPrompt || "",
+      ChatTitlePrompt: state.promptDrafts.chatTitlePrompt || ""
     };
-    promptDefinitions.forEach(function (def) {
-      if (def.source === "agent") {
-        result.AgentPrompts[def.field] = state.promptDrafts[def.key] || "";
-      }
-    });
     return result;
   }
 

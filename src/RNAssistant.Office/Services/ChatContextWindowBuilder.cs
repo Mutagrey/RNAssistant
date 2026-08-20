@@ -49,7 +49,9 @@ namespace RNAssistant.Office.Services
                 messages,
                 messages.Count - 1,
                 session,
-                settings);
+                settings,
+                0,
+                false);
             return messages;
         }
 

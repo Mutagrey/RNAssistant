@@ -15,13 +15,6 @@ namespace RNAssistant.Office
     {
         private const int MaxTranscriptReasoningChars = 24000;
 
-        public static void AddLocalResultMessage(ChatSession session, ToolCommand command, ToolResult result)
-        {
-            var message = CreateLocalResultMessage(command, result);
-            message.HtmlWorkspaceCheckpointId = session == null ? null : session.ActiveHtmlArtifactId;
-            session.Messages.Add(message);
-        }
-
         public static ChatMessage CreateLocalResultMessage(ToolCommand command, ToolResult result)
         {
             var activity = CreateToolActivity(command, result, "tool");
@@ -37,9 +30,7 @@ namespace RNAssistant.Office
         public static ChatMessage CreateAssistantMessage(
             string content,
             LlmCompletionResult completion,
-            ChatActivity activity = null,
-            string decisionSummary = null,
-            string goal = null)
+            ChatActivity activity = null)
         {
             var reasoning = completion == null ? null : completion.ReasoningContent;
             var transcriptReasoningTruncated = !string.IsNullOrEmpty(reasoning) && reasoning.Length > MaxTranscriptReasoningChars;
@@ -47,8 +38,6 @@ namespace RNAssistant.Office
             {
                 Role = "assistant",
                 Content = content ?? string.Empty,
-                DecisionSummary = decisionSummary,
-                Goal = goal,
                 ExcludeFromModelContext = activity != null,
                 Activity = activity,
                 PromptTokens = completion == null ? null : completion.PromptTokens,
@@ -84,7 +73,11 @@ namespace RNAssistant.Office
             var success = result != null && result.Success;
             var message = result == null ? string.Empty : result.Message ?? string.Empty;
             var executionStatus = NormalizeExecutionStatus(result);
-            var title = command == null ? "Tool step" : AgentRunPresentation.FriendlyToolAction(command);
+            var title = command == null
+                ? "Tool step"
+                : !string.IsNullOrWhiteSpace(command.Description)
+                    ? command.Description
+                    : command.ToolId;
 
             var activity = new ChatActivity
             {
@@ -97,6 +90,7 @@ namespace RNAssistant.Office
                 Retryable = result == null ? null : result.Retryable,
                 PendingId = result == null ? null : result.PendingId,
                 ToolId = command == null ? string.Empty : command.ToolId,
+                ToolCallId = command == null ? string.Empty : command.ToolCallId,
                 ArgumentsJson = command == null ? null : JsonConvert.SerializeObject(command.Arguments, Formatting.Indented),
                 ResultMessage = message,
                 DataJson = result == null ? null : result.DataJson
@@ -115,31 +109,6 @@ namespace RNAssistant.Office
             var status = NormalizeExecutionStatus(result);
             return string.Equals(status, "waiting_confirmation", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(status, "skipped_auto_run", StringComparison.OrdinalIgnoreCase);
-        }
-
-        public static string CreateRunSummary(IReadOnlyList<object> results)
-        {
-            var count = results == null ? 0 : results.Count;
-            if (count == 0)
-            {
-                return "Выполнение завершилось без итогового ответа модели.";
-            }
-
-            var text = JsonConvert.SerializeObject(results);
-            if (text.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "Выполнение приостановлено: требуется подтверждение действия.";
-            }
-            if (text.IndexOf("skipped_auto_run", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "Действия подготовлены, но автоматический запуск отключён.";
-            }
-            if (text.IndexOf("\"success\":false", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "Выполнение остановлено после ошибки инструмента. Откройте шаг с ошибкой для диагностики.";
-            }
-
-            return "Готово: выполнено действий — " + count + ".";
         }
 
         private static string ToActivityStatus(ToolResult result)
@@ -251,17 +220,5 @@ namespace RNAssistant.Office
             }
         }
 
-        public static bool CanRetryToolError(ToolResult result)
-        {
-            if (result != null && result.Retryable.HasValue)
-            {
-                return result.Retryable.Value;
-            }
-
-            var message = result == null ? string.Empty : result.Message ?? string.Empty;
-            return !IsWaitingResult(result) &&
-                message.IndexOf("requires confirmation", StringComparison.OrdinalIgnoreCase) < 0 &&
-                message.IndexOf("Auto tool execution is disabled", StringComparison.OrdinalIgnoreCase) < 0;
-        }
     }
 }

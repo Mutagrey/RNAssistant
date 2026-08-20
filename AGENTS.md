@@ -30,12 +30,12 @@ RNAssistant - локальный VSTO/WebView2 ассистент для Office,
 ## Tool/Agent Protocol
 
 - Поддерживаются только режимы `agent` и `chat`; новый chat создается в `agent`. Agent может отвечать без tools, отдельного auto-router режима нет.
-- Семантический runtime protocol — AgentDecision v1: один raw JSON object; канонические поля `protocolVersion`, `kind`, `decisionSummary`, `goal`, `plan`, `tool`, `message`. Kind: `plan`, `tool`, `clarify`, `final`, `cannot_complete`. Parser может нормализовать только безопасные пропуски/алиасы, но не ослабляет tool/schema validation.
-- Один model turn может выбрать один tool или batch до 8 независимых read-only tools. Batch выполняется локально последовательно; mutations, local-state changes, confirmation-requiring и result-dependent calls выбираются по одному. Fences, surrounding prose, конфликтующие envelopes и legacy `function_call` не поддерживаются. Legacy reply/toolCalls допустим только через безопасную нормализацию.
-- Transport modes: `json_schema` по умолчанию, `json_object`, `native_tool_calls`. Fallback `json_schema -> json_object` допустим только до первого выполненного tool. Office tools всегда выполняются локально.
-- Роль инструкций выбирается из `developer` (default), `system`, `user`. Роль результата выбирается независимо: `tool` (default с matching assistant `tool_calls`/`tool_call_id`), `developer`, `user`.
-- `decisionSummary`, goal и видимый plan не являются chain-of-thought. Повторный plan согласует оставшиеся шаги, сохраняя выполненные stable ids; завершённый plan остаётся в transcript. Provider reasoning хранится отдельно и не смешивается с протоколом или replay history.
-- `SystemPrompt` — единый редактируемый prompt Agent; служебные переходы хранятся в `AgentPromptSettings`. Динамические route/tools/observations/skills остаются runtime data. Изменение prompt через tool требует подтверждения.
+- Chat mode отправляет обычную историю с `ChatSystemPrompt`; tools и skills в его контекст не попадают и ничего локально не исполняется.
+- Agent mode всегда использует `json_object`. Ответ — один raw JSON object: `message` и `tool_calls`. `tool_calls` пуст для финала/уточнения или содержит ровно один вызов с `id`, точным `name` и object `arguments`. Fences, surrounding prose, batches, legacy envelopes и автоматический repair не поддерживаются.
+- Каждый Agent prompt содержит один `RUNTIME_CONTEXT`: document identity, все доступные tools в native-like function JSON, полные тела всех enabled skills, chat context и artifact references. Runtime не маршрутизирует запрос, не режет каталог, не активирует skills и не ведёт phase/plan state.
+- Tool result передаётся следующим user protocol message как `TOOL_RESULT:` и JSON `{ok, tool_call_id, name, status, message, data, error}`. Модель сама выбирает следующий шаг; runtime не делает automatic retry или отдельную verification phase.
+- Роль Agent-инструкции выбирается из `developer` (default), `system`, `user`. Provider reasoning хранится отдельно и не смешивается с agent JSON или replay history.
+- `SystemPrompt` — единый редактируемый prompt Agent. Изменение prompt через tool требует подтверждения.
 - Custom tools обязаны иметь formal object JSON Schema. Другие формы отклоняются без миграции.
 - Built-in Office mutation tools могут исполняться в Agent mode, кроме VBA mutation tools.
 - Custom tools с `requiresConfirmation` и VBA mutation tools требуют подтверждения, если `AutoConfirmToolActions` выключен.

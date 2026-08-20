@@ -45,6 +45,7 @@ namespace RNAssistant.Office
 
             try
             {
+                EnsureCurrentDocument(session);
                 if (!MarkPendingActivityExecuting(session, pending.PendingId))
                 {
                     throw new InvalidOperationException("Pending tool was not found or was already resolved.");
@@ -86,7 +87,6 @@ namespace RNAssistant.Office
                 var pendingResolved = false;
                 try
                 {
-                    ReportAgentPlanProgress(runProgress, AgentPlanStateService.MarkLatestCurrent(session, "running"));
                     ReportProgress(runProgress, "executing", "Executing confirmed tool...");
                     var result = _toolExecutor.Execute(
                         CloneCommand(pending.Command),
@@ -97,19 +97,13 @@ namespace RNAssistant.Office
                         session,
                         runCancellation.Token);
                     UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
-                    ReportAgentPlanProgress(runProgress, AgentPlanStateService.ApplyLatestResult(session, result, false));
                     pendingResolved = true;
-                    if (result.Success && settings.AutoContinueAfterConfirmation)
+                    if (result.Success)
                     {
                         tools = _toolCatalog.GetVisibleTools().Where(tool => tool.Enabled).ToList();
                         var context = LoadContext(session);
-                        var latestUser = LatestUserMessage(session);
-                        var skillRequest = session.PendingAgentTask != null && !string.IsNullOrWhiteSpace(session.PendingAgentTask.Request)
-                            ? session.PendingAgentTask.Request
-                            : latestUser == null ? "continue confirmed agent task" : latestUser.Content;
                         var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
-                        SkillResolver.ActivateExplicitMentions(session, skillRequest, skills);
-                        await _chatCompletionService.ContinueAfterToolAsync(
+                        await _agentRunService.ContinueAfterToolAsync(
                             CloneCommand(pending.Command),
                             result,
                             session,
@@ -124,13 +118,7 @@ namespace RNAssistant.Office
                     }
                     else
                     {
-                        AgentProtocolHistory.AppendToolExchange(
-                            new List<ChatMessage>(),
-                            session,
-                            null,
-                            CloneCommand(pending.Command),
-                            result,
-                            settings);
+                        session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(CloneCommand(pending.Command), result));
                     }
 
                     AnnotateRunMessages(session, firstRunMessageIndex, runId);
@@ -147,11 +135,6 @@ namespace RNAssistant.Office
                             ? ToolResult.Cancelled("Confirmed tool execution was cancelled.")
                             : ToolResult.Fail(ex.Message, null, "confirmed_tool_failed", false);
                         UpdatePendingActivity(session, pending.PendingId, pending.Command, failedResult);
-                        AgentPlanStateService.ApplyLatestResult(session, failedResult, false);
-                    }
-                    else
-                    {
-                        AgentPlanStateService.MarkLatestCurrent(session, ex is OperationCanceledException ? "cancelled" : "failed");
                     }
                     RecordFailedTurn(session, ex);
                     if (session.LastRun != null)
@@ -197,15 +180,8 @@ namespace RNAssistant.Office
                 var result = ToolResult.Cancelled("Tool cancelled by user.");
                 result.PendingId = pending.PendingId;
                 UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
-                AgentPlanStateService.ApplyLatestResult(session, result, false);
                 var protocolStart = session.Messages.Count;
-                AgentProtocolHistory.AppendToolExchange(
-                    new List<ChatMessage>(),
-                    session,
-                    null,
-                    CloneCommand(pending.Command),
-                    result,
-                    _settingsService.Load());
+                session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(CloneCommand(pending.Command), result));
                 AnnotateRunMessages(session, protocolStart, "cancel_" + Guid.NewGuid().ToString("N"));
                 SaveSessionChanges(session);
             }
@@ -328,8 +304,7 @@ namespace RNAssistant.Office
             {
                 ToolId = command == null ? string.Empty : command.ToolId,
                 Description = command == null ? string.Empty : command.Description,
-                ToolCallId = command == null ? string.Empty : command.ToolCallId,
-                ToolApiName = command == null ? string.Empty : command.ToolApiName
+                ToolCallId = command == null ? string.Empty : command.ToolCallId
             };
 
             if (command != null && command.Arguments != null)
@@ -453,6 +428,7 @@ namespace RNAssistant.Office
             var command = new ToolCommand
             {
                 ToolId = activity == null ? string.Empty : activity.ToolId,
+                ToolCallId = activity == null ? string.Empty : activity.ToolCallId,
                 Description = activity == null ? string.Empty : activity.Title
             };
 
@@ -536,6 +512,7 @@ namespace RNAssistant.Office
             target.Retryable = source.Retryable;
             target.PendingId = source.PendingId;
             target.ToolId = source.ToolId;
+            target.ToolCallId = source.ToolCallId;
             target.ArgumentsJson = source.ArgumentsJson;
             target.ResultMessage = source.ResultMessage;
             target.DataJson = source.DataJson;
@@ -548,14 +525,6 @@ namespace RNAssistant.Office
                 "Tool: " + (activity == null ? string.Empty : activity.ToolId) + Environment.NewLine +
                 "Status: " + (activity == null ? string.Empty : activity.Status) + Environment.NewLine +
                 "Result: " + (activity == null ? string.Empty : activity.ResultMessage);
-        }
-
-        private static void ReportAgentPlanProgress(Action<string, string, ChatActivity> progress, ChatActivity plan)
-        {
-            if (progress != null && plan != null)
-            {
-                progress("plan_update", AgentPlanStateService.ProgressText(plan), AgentPlanStateService.Snapshot(plan));
-            }
         }
 
         private sealed class PendingAgentTool

@@ -181,10 +181,6 @@
     display: none;
   }
 
-  .agent-plan-card-current {
-    max-width: 130px;
-  }
-
   .composer-options-panel {
     left: -64px;
     width: min(270px, calc(100vw - 28px));

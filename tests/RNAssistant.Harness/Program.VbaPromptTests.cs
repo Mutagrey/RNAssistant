@@ -139,6 +139,7 @@ namespace RNAssistant.Harness
                     Name = "Custom VBA",
                     Executor = "vba",
                     Code = code,
+                    ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}},\"required\":[\"value\"],\"additionalProperties\":false}",
                     Enabled = true,
                     BuiltIn = false,
                     MutatesDocument = true,
@@ -191,36 +192,7 @@ namespace RNAssistant.Harness
             AssertEqual(0, newDocument.VBProject.VBComponents.Count, "incomplete module removed");
         }
 
-        private static void VerificationUsesControllerVbaExpectedCode()
-        {
-            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                adapter.VbaModuleCode = "Sub Main()\nEnd Sub";
-                var command = Command(
-                    executor.VbaToolId("vba_apply_patch"),
-                    "moduleName", "Module1",
-                    "patch", "[{\"op\":\"replaceFirst\",\"find\":\"Main\",\"text\":\"Changed\"}]");
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
-                var mutation = tools.First(tool => string.Equals(tool.Id, command.ToolId, StringComparison.OrdinalIgnoreCase));
-                var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
-
-                var verification = new VerificationRunner().BuildVerificationCommands(command, mutation, tools, result).Single();
-                var mismatch = VerificationResultValidator.Validate(
-                    command,
-                    verification,
-                    ToolResult.Ok("read", "{\"name\":\"Module1\",\"code\":\"Sub Main()\\nEnd Sub\"}"));
-                var match = VerificationResultValidator.Validate(
-                    command,
-                    verification,
-                    ToolResult.Ok("read", JsonConvert.SerializeObject(new { name = "Module1", code = adapter.VbaModuleCode })));
-
-                AssertTrue(!mismatch.Success, "controller VBA mismatch rejected");
-                AssertEqual("vba_verification_mismatch", mismatch.ErrorCode, "controller VBA mismatch code");
-                AssertTrue(match.Success, "controller VBA expected code accepted");
-            });
-        }
-
-        private static void VbaRestoreExposesVerification()
+        private static void VbaRestoreAppliesBackup()
         {
             WithTempPaths(delegate(AppDataPaths paths)
             {
@@ -236,8 +208,6 @@ namespace RNAssistant.Harness
 
                 AssertTrue(result.Success, "restore result");
                 AssertContains(adapter.VbaModuleCode, "Restored", "restored module code");
-                AssertTrue(result.Verification != null, "restore verification metadata");
-                AssertEqual(VbaToolExecutor.CodeSha256(adapter.VbaModuleCode), result.Verification.ExpectedCodeSha256, "restore expected hash");
                 AssertEqual(2, backupStore.List("Excel", "doc").Count, "restore preserves current version as backup");
             });
         }
@@ -272,17 +242,15 @@ namespace RNAssistant.Harness
             AssertEqual(2, promptUsage["messageCount"].Value<int>(), "prompt message count");
             AssertTrue(promptUsage["actual"].Value<bool>(), "prompt actual");
 
-            var estimatedWithSchema = JObject.FromObject(ContextUsageEstimator.FromPrompt(
+            var estimatedJson = JObject.FromObject(ContextUsageEstimator.FromPrompt(
                 new[] { new ChatMessage { Role = "user", Content = "hello" } },
                 settings,
                 null,
                 new LlmRequestOptions
                 {
-                    ResponseFormat = LlmResponseFormats.JsonSchema,
-                    ResponseSchemaName = "decision",
-                    ResponseSchemaJson = "{\"type\":\"object\",\"description\":\"" + new string('x', 600) + "\"}"
+                    ResponseFormat = LlmResponseFormats.JsonObject
                 }));
-            AssertTrue(estimatedWithSchema["usedTokens"].Value<int>() > 150, "response schema counts toward estimated request usage");
+            AssertTrue(estimatedJson["usedTokens"].Value<int>() > 0, "json response mode counts toward estimated request usage");
 
             var session = new ChatSession();
             session.Messages.Add(new ChatMessage

@@ -2,11 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
@@ -77,19 +72,6 @@ namespace RNAssistant.Harness
             }
 
             return null;
-        }
-
-        private static bool ContainsMessage(IEnumerable<ChatMessage> messages, string text)
-        {
-            foreach (var message in messages ?? new ChatMessage[0])
-            {
-                if (message != null && (message.Content ?? string.Empty).IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         private static List<ToolDefinition> BuildPipelineTools(bool requiresConfirmation)
@@ -166,170 +148,6 @@ namespace RNAssistant.Harness
             }
 
             return command;
-        }
-
-        private static string AgentBlock(params ToolCommand[] commands)
-        {
-            var selected = (commands ?? new ToolCommand[0]).FirstOrDefault();
-            var result = new JObject
-            {
-                ["protocolVersion"] = 1,
-                ["kind"] = "tool",
-                ["decisionSummary"] = selected == null ? "No tool selected." : "Run " + selected.ToolId,
-                ["goal"] = null,
-                ["plan"] = null,
-                ["tool"] = selected == null
-                    ? null
-                    : new JArray(commands.Select(command => JObject.FromObject(new { toolId = command.ToolId, arguments = command.Arguments }))),
-                ["message"] = null
-            };
-            return result.ToString(Formatting.None);
-        }
-
-        private static string FinalBlock(string message)
-        {
-            return JsonConvert.SerializeObject(new
-            {
-                protocolVersion = 1,
-                kind = "final",
-                decisionSummary = "Return the final answer.",
-                goal = (string)null,
-                plan = (object)null,
-                tool = (object)null,
-                message = message ?? string.Empty
-            });
-        }
-
-        private static string RawResponse(string response)
-        {
-            return "RAW:" + (response ?? string.Empty);
-        }
-
-        private static ChatCompletionService ChatServiceWithResponses(
-            FakeOfficeAdapter adapter,
-            OfficeToolExecutor executor,
-            ICollection<IReadOnlyList<ChatMessage>> calls,
-            params string[] responses)
-        {
-            var index = 0;
-            return new ChatCompletionService(
-                adapter,
-                executor,
-                delegate(AppSettings settings, IEnumerable<ChatMessage> messages, LlmRequestOptions requestOptions, Action<LlmStreamUpdate> streamProgress, CancellationToken cancellationToken)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    if (calls != null)
-                    {
-                        calls.Add(new List<ChatMessage>(messages ?? new ChatMessage[0]));
-                    }
-
-                    var content = index < (responses == null ? 0 : responses.Length)
-                        ? responses[index]
-                        : "Done.";
-                    index += 1;
-                    content = NormalizeScriptedResponse(content);
-                    return Task.FromResult(new LlmCompletionResult
-                    {
-                        Content = content,
-                        PromptTokens = 10,
-                        CompletionTokens = 2,
-                        TotalTokens = 12
-                    });
-                });
-        }
-
-        private sealed class ScenarioLlm
-        {
-            private readonly List<ScenarioTurn> _turns = new List<ScenarioTurn>();
-            private int _index;
-
-            public readonly List<IReadOnlyList<ChatMessage>> Calls = new List<IReadOnlyList<ChatMessage>>();
-
-            public ScenarioLlm Add(string response, string[] mustContain, string[] mustNotContain)
-            {
-                _turns.Add(new ScenarioTurn
-                {
-                    Response = response ?? string.Empty,
-                    MustContain = mustContain ?? new string[0],
-                    MustNotContain = mustNotContain ?? new string[0]
-                });
-                return this;
-            }
-
-            public ScenarioLlm Add(string response, params string[] mustContain)
-            {
-                return Add(response, mustContain, null);
-            }
-
-            public Task<LlmCompletionResult> CompleteAsync(
-                AppSettings settings,
-                IEnumerable<ChatMessage> messages,
-                LlmRequestOptions requestOptions,
-                Action<LlmStreamUpdate> streamProgress,
-                CancellationToken cancellationToken)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var captured = new List<ChatMessage>(messages ?? new ChatMessage[0]);
-                Calls.Add(captured);
-                if (_index >= _turns.Count)
-                {
-                    throw new InvalidOperationException("Scenario LLM has no response for turn " + (_index + 1) + ".");
-                }
-
-                var turn = _turns[_index];
-                var prompt = FlattenMessages(captured);
-                for (var i = 0; i < turn.MustContain.Length; i++)
-                {
-                    AssertContains(prompt, turn.MustContain[i], "scenario turn " + (_index + 1) + " prompt");
-                }
-
-                for (var i = 0; i < turn.MustNotContain.Length; i++)
-                {
-                    if (prompt.IndexOf(turn.MustNotContain[i], StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        throw new InvalidOperationException("scenario turn " + (_index + 1) + " prompt unexpectedly contained '" + turn.MustNotContain[i] + "'");
-                    }
-                }
-
-                _index += 1;
-                return Task.FromResult(new LlmCompletionResult
-                {
-                    Content = NormalizeScriptedResponse(turn.Response),
-                    PromptTokens = 10,
-                    CompletionTokens = 2,
-                    TotalTokens = 12
-                });
-            }
-
-            public ChatCompletionService CreateService(FakeOfficeAdapter adapter, OfficeToolExecutor executor)
-            {
-                return new ChatCompletionService(adapter, executor, CompleteAsync);
-            }
-
-            private sealed class ScenarioTurn
-            {
-                public string Response { get; set; }
-                public string[] MustContain { get; set; }
-                public string[] MustNotContain { get; set; }
-            }
-        }
-
-        private static string NormalizeScriptedResponse(string content)
-        {
-            if (content == null)
-            {
-                return FinalBlock(string.Empty);
-            }
-            if (content.StartsWith("RAW:", StringComparison.Ordinal))
-            {
-                return content.Substring(4);
-            }
-            var trimmed = content.TrimStart();
-            if (trimmed.StartsWith("{", StringComparison.Ordinal))
-            {
-                return content;
-            }
-            return FinalBlock(content);
         }
 
         private static ChatSession NewSession(FakeOfficeAdapter adapter)

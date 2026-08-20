@@ -31,7 +31,6 @@ var state = {
   chatRuns: {},
   liveActivity: null,
   liveAgentRun: null,
-  agentPlanExpanded: {},
   liveStreamContent: null,
   liveReasoning: "",
   liveReasoningComplete: false,

@@ -8,8 +8,6 @@
   function artifactKind(artifact) { return value(artifact, "Kind", "kind", "file"); }
   function artifactTitle(artifact) { return value(artifact, "Title", "title", "Артефакт"); }
   function artifactRevision(artifact) { return Number(value(artifact, "Revision", "revision", 1) || 1); }
-  function artifactInlineText(artifact) { return value(artifact, "InlineText", "inlineText", "") || ""; }
-
   function artifactById(id) {
     return (state.artifacts || []).filter(function (artifact) { return artifactId(artifact) === id; })[0] || null;
   }
@@ -20,7 +18,6 @@
 
   function kindLabel(kind) {
     var labels = {
-      plan: "План",
       markdown: "Markdown",
       html_workspace: "HTML",
       image: "Изображение",
@@ -31,21 +28,6 @@
       tool_result: "Результат"
     };
     return labels[kind] || "Артефакт";
-  }
-
-  function planDetails(artifact) {
-    var parsed;
-    try { parsed = JSON.parse(artifactInlineText(artifact)); } catch (error) { return null; }
-    var plan = parsed && (parsed.plan || parsed.Plan);
-    if (!Array.isArray(plan)) return null;
-    var list = document.createElement("ol");
-    list.className = "artifact-plan-list";
-    plan.forEach(function (step) {
-      var item = document.createElement("li");
-      item.textContent = (step && (step.title || step.Title)) || String(step || "");
-      list.appendChild(item);
-    });
-    return list;
   }
 
   function artifactCard(artifact) {
@@ -70,8 +52,6 @@
     header.appendChild(meta);
     card.appendChild(header);
 
-    var detail = kind === "plan" ? planDetails(artifact) : null;
-    if (detail) card.appendChild(detail);
     if (kind === "html_workspace" && artifactId(artifact) === state.activeHtmlArtifactId) {
       var button = document.createElement("button");
       button.type = "button";

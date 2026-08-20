@@ -376,7 +376,6 @@ function renderModelControls() {
   renderModelInfo(formModel());
   renderModelStatus();
   renderModelCapabilityList();
-  renderAttachmentModelPriority();
   renderActiveModelCapability();
   renderReasoningToggle();
   renderChatModelPicker();
@@ -530,7 +529,6 @@ function setModelCapabilityOverride(kind, value, mode) {
   if (mode !== "auto") {
     overrides[value] = mode === "true";
   }
-  settings.AttachmentModelPriority = attachmentModelPriorityForSettings();
   settingsDirty = true;
   updateSettingsSaveButton();
   renderModelControls();
@@ -613,87 +611,6 @@ function renderModelCapabilityList() {
     appendModelCapabilityNumber(row, "Изображений в запросе: " + value, maxImages, "3", function (next) {
       setStoredModelCapabilityField(value, "MaxImagesPerPrompt", next);
     });
-    list.appendChild(row);
-  });
-}
-
-function setAttachmentModelPriority(values) {
-  var settings = state.settings || (state.settings = {});
-  settings.AttachmentModelPriority = values.slice();
-  settingsDirty = true;
-  updateSettingsSaveButton();
-  renderAttachmentModelPriority();
-}
-
-function renderAttachmentModelPriority() {
-  var list = $("attachmentModelPriorityList");
-  if (!list) return;
-  var values = attachmentModelPriorityForSettings();
-  list.innerHTML = "";
-  if (!values.length) {
-    var empty = document.createElement("div");
-    empty.className = "model-capability-empty";
-    empty.textContent = "Нет моделей с подтверждённой поддержкой Vision или Audio.";
-    list.appendChild(empty);
-    return;
-  }
-  values.forEach(function (value, index) {
-    var row = document.createElement("div");
-    row.className = "attachment-model-priority-row";
-    var rank = document.createElement("span");
-    rank.className = "attachment-model-priority-rank";
-    rank.textContent = String(index + 1);
-    row.appendChild(rank);
-
-    var copy = document.createElement("div");
-    copy.className = "model-capability-text";
-    var model = findModel(value);
-    var title = document.createElement("div");
-    title.className = "model-capability-title";
-    title.textContent = model ? model.title : value;
-    copy.appendChild(title);
-    if (model && model.title !== value) {
-      var id = document.createElement("div");
-      id.className = "model-capability-id";
-      id.textContent = value;
-      copy.appendChild(id);
-    }
-    row.appendChild(copy);
-
-    var badges = document.createElement("div");
-    badges.className = "attachment-model-priority-badges";
-    if (effectiveModelSupportsImages(value) === true) {
-      var vision = document.createElement("span");
-      vision.textContent = "Vision";
-      badges.appendChild(vision);
-    }
-    if (effectiveModelSupportsAudio(value) === true) {
-      var audio = document.createElement("span");
-      audio.textContent = "Audio";
-      badges.appendChild(audio);
-    }
-    row.appendChild(badges);
-
-    var actions = document.createElement("div");
-    actions.className = "attachment-model-priority-actions";
-    [["↑", -1, "Поднять приоритет"], ["↓", 1, "Понизить приоритет"]].forEach(function (action) {
-      var button = document.createElement("button");
-      button.type = "button";
-      button.className = "secondary";
-      button.textContent = action[0];
-      button.title = action[2];
-      button.disabled = index + action[1] < 0 || index + action[1] >= values.length;
-      button.addEventListener("click", function () {
-        var target = index + action[1];
-        var reordered = values.slice();
-        var moved = reordered[index];
-        reordered[index] = reordered[target];
-        reordered[target] = moved;
-        setAttachmentModelPriority(reordered);
-      });
-      actions.appendChild(button);
-    });
-    row.appendChild(actions);
     list.appendChild(row);
   });
 }

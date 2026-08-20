@@ -77,7 +77,7 @@ End Function
 
 ## Что возвращает VBA
 
-Функция возвращает обычный полезный `String`: текст, id созданного объекта или компактный JSON бизнес-результата. Она не формирует `AgentDecision`, `tool_calls` или общий ToolResult envelope. C# runtime сам оборачивает строку в нормализованный результат с `ok`, `status`, `summary`, `data` и `error`.
+Функция возвращает обычный полезный `String`: текст, id созданного объекта или компактный JSON бизнес-результата. Она не формирует agent `tool_calls` или общий ToolResult envelope. C# runtime сам оборачивает строку в результат с `ok`, `tool_call_id`, `name`, `status`, `message`, `data` и `error`.
 
 При ошибке VBA должна поднять обычную ошибку (`Err.Raise`) с понятным сообщением. Не нужно встраивать JSON parser, сетевой клиент или собственный transport protocol.
 

@@ -39,10 +39,9 @@ namespace RNAssistant.Office.Services
                 return BuildFallback(assistantText, userText);
             }
 
-            var defaults = new AgentPromptSettings();
-            var instruction = settings.AgentPrompts == null || string.IsNullOrWhiteSpace(settings.AgentPrompts.ChatTitlePrompt)
-                ? defaults.ChatTitlePrompt
-                : settings.AgentPrompts.ChatTitlePrompt;
+            var instruction = string.IsNullOrWhiteSpace(settings.ChatTitlePrompt)
+                ? new AppSettings().ChatTitlePrompt
+                : settings.ChatTitlePrompt;
             var request =
                 "Запрос пользователя:\n" + Clip(CleanSource(userText), 1400) +
                 "\n\nОтвет ассистента:\n" + Clip(CleanSource(assistantText), 1800);

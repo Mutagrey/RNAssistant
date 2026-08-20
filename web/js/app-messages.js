@@ -281,22 +281,6 @@ function renderMessageArticle(message, index) {
 
   if (typeof appendMessageReasoning === "function") appendMessageReasoning(node, message);
 
-  var decisionSummary = messageDecisionSummary(message).trim();
-  if (decisionSummary && decisionSummary !== messageContent(message).trim()) {
-    var decision = document.createElement("div");
-    decision.className = "agent-decision-message markdown";
-    decision.innerHTML = markdown(decisionSummary);
-    node.appendChild(decision);
-    enhanceMarkdown(decision);
-  }
-  var goalText = messageGoal(message).trim();
-  if (goalText) {
-    var goal = document.createElement("div");
-    goal.className = "agent-message-goal";
-    goal.textContent = "Цель: " + goalText;
-    node.appendChild(goal);
-  }
-
   var body = document.createElement("div");
   body.className = "markdown";
   body.innerHTML = markdown(messageContent(message));
@@ -352,7 +336,6 @@ function renderLiveAgentRun() {
     ? state.liveAgentRun
     : (state.liveActivity ? [state.liveActivity] : []);
   if (!activities.length) return null;
-  if (!activities.some(function (activity) { return activityKind(activity) !== "plan"; })) return null;
   return renderAgentRunArticle({
     live: true,
     items: activities.map(function (activity) {
@@ -414,7 +397,6 @@ function renderMessages(options) {
   var visibleMessages = (state.messages || []).filter(function (message) { return !messageProtocolMessage(message); });
   if (!visibleMessages.length && !state.liveStreamContent && !state.liveReasoning && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
     box.appendChild(renderChatEmptyState());
-    renderAgentPlanDock();
     renderAgentApprovalDock();
     syncChatScroll(false, false);
     return;
@@ -448,7 +430,6 @@ function renderMessages(options) {
     box.appendChild(stream);
   }
 
-  renderAgentPlanDock();
   renderAgentApprovalDock();
   syncChatScroll(shouldScroll, false);
 }

@@ -423,39 +423,6 @@ namespace RNAssistant.Core.Llm
             {
                 body["response_format"] = new JObject { ["type"] = "json_object" };
             }
-            else if (string.Equals(requestOptions.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.OrdinalIgnoreCase))
-            {
-                JObject schema;
-                try { schema = JObject.Parse(requestOptions.ResponseSchemaJson ?? string.Empty); }
-                catch (JsonException ex) { throw new InvalidOperationException("Response JSON Schema is invalid: " + ex.Message, ex); }
-                body["response_format"] = new JObject
-                {
-                    ["type"] = "json_schema",
-                    ["json_schema"] = new JObject
-                    {
-                        ["name"] = string.IsNullOrWhiteSpace(requestOptions.ResponseSchemaName) ? "response" : requestOptions.ResponseSchemaName,
-                        ["strict"] = true,
-                        ["schema"] = schema
-                    }
-                };
-            }
-
-            if (requestOptions.NativeTools && requestOptions.Tools != null && requestOptions.Tools.Count > 0)
-            {
-                body["tools"] = new JArray(requestOptions.Tools.Select(tool => new JObject
-                {
-                    ["type"] = "function",
-                    ["function"] = new JObject
-                    {
-                        ["name"] = tool.ApiName,
-                        ["description"] = tool.Description ?? string.Empty,
-                        ["parameters"] = JObject.Parse(tool.ParametersSchemaJson ?? "{}"),
-                        ["strict"] = true
-                    }
-                }));
-                body["tool_choice"] = "auto";
-                body["parallel_tool_calls"] = true;
-            }
             return body;
         }
 

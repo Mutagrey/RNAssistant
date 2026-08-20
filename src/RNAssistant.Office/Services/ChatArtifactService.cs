@@ -57,7 +57,6 @@ namespace RNAssistant.Office.Services
                 if (message == null || message.ProtocolMessage) continue;
                 message.ArtifactIds = message.ArtifactIds ?? new List<string>();
                 LinkAttachments(session, message);
-                LinkPlan(session, message);
                 LinkHtmlWorkspace(session, message);
             }
         }
@@ -164,34 +163,6 @@ namespace RNAssistant.Office.Services
                 }
                 AddUnique(message.ArtifactIds, artifact.Id);
             }
-        }
-
-        private static void LinkPlan(ChatSession session, ChatMessage message)
-        {
-            var activity = message.Activity;
-            var isPlan = activity != null &&
-                (string.Equals(activity.Kind, "plan", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(activity.ExecutionStatus, "plan_updated", StringComparison.OrdinalIgnoreCase));
-            if (!isPlan) return;
-            if (FindLinked(session, message, ChatArtifactKinds.Plan) != null) return;
-
-            var previous = session.Artifacts.LastOrDefault(item => item != null &&
-                string.Equals(item.Kind, ChatArtifactKinds.Plan, StringComparison.OrdinalIgnoreCase));
-            var artifact = new ChatArtifact
-            {
-                Id = "plan_" + message.Id,
-                Kind = ChatArtifactKinds.Plan,
-                Title = string.IsNullOrWhiteSpace(activity.Title) ? "План" : activity.Title,
-                MimeType = "application/vnd.rnassistant.plan+json",
-                SourceMessageId = message.Id,
-                RunId = message.RunId,
-                ParentArtifactId = previous == null ? null : previous.Id,
-                Revision = previous == null ? 1 : Math.Max(1, previous.Revision + 1),
-                InlineText = activity.DataJson ?? JsonConvert.SerializeObject(activity),
-                ModelContextPolicy = "reference"
-            };
-            session.Artifacts.Add(artifact);
-            AddUnique(message.ArtifactIds, artifact.Id);
         }
 
         private static void LinkHtmlWorkspace(ChatSession session, ChatMessage message)

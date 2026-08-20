@@ -172,12 +172,7 @@ namespace RNAssistant.Office.Tools
                     false);
             }
 
-            // Host adapters own validation for their legacy built-ins. Their schemas were
-            // historically descriptive samples, so enforcing them here would be a breaking
-            // change. Authored tools and controller tools always use formal schemas.
-            var enforceFormalSchema = _controllerExecutors.ContainsKey(tool.Id ?? string.Empty) ||
-                (!tool.BuiltIn && string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase));
-            var argumentValidation = enforceFormalSchema ? ValidateCommandArguments(command, tool) : null;
+            var argumentValidation = ValidateCommandArguments(command, tool);
             if (argumentValidation != null)
             {
                 return argumentValidation;

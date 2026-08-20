@@ -86,15 +86,8 @@ namespace RNAssistant.Office.Services
                 Id = message.Id,
                 Role = message.Role,
                 Content = message.Content,
-                DecisionSummary = message.DecisionSummary,
-                Goal = message.Goal,
                 ExcludeFromModelContext = message.ExcludeFromModelContext,
                 ProtocolMessage = message.ProtocolMessage,
-                ToolCallId = message.ToolCallId,
-                ToolName = message.ToolName,
-                ToolCalls = message.ToolCalls == null
-                    ? new List<LlmToolCall>()
-                    : message.ToolCalls.Select(CloneToolCall).ToList(),
                 Attachments = message.Attachments == null
                     ? new List<ChatAttachment>()
                     : message.Attachments.Select(CloneAttachment).ToList(),
@@ -133,19 +126,6 @@ namespace RNAssistant.Office.Services
                 RelatedArtifactIds = artifact.RelatedArtifactIds == null ? new List<string>() : new List<string>(artifact.RelatedArtifactIds),
                 CreatedUtc = artifact.CreatedUtc
             };
-        }
-
-        private static LlmToolCall CloneToolCall(LlmToolCall call)
-        {
-            return call == null
-                ? null
-                : new LlmToolCall
-                {
-                    Id = call.Id,
-                    Type = call.Type,
-                    Name = call.Name,
-                    ArgumentsJson = call.ArgumentsJson
-                };
         }
 
         private static ChatAttachment CloneAttachment(ChatAttachment attachment)

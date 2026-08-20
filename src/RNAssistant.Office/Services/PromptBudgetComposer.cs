@@ -24,7 +24,9 @@ namespace RNAssistant.Office.Services
             int insertIndex,
             ChatSession session,
             AppSettings settings,
-            int inputBudgetTokens = 0)
+            int inputBudgetTokens = 0,
+            bool includeProtocolMessages = true,
+            bool excludeLatestUser = true)
         {
             if (messages == null)
             {
@@ -39,7 +41,7 @@ namespace RNAssistant.Office.Services
                     "The current request and required runtime context exceed the model input budget. No conversation history was removed.",
                     false);
             }
-            var history = ConversationHistory(session);
+            var history = ConversationHistory(session, includeProtocolMessages, excludeLatestUser);
             var available = Math.Max(0, budget - used);
             if (history.Count == 0)
             {
@@ -67,34 +69,15 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        public void AddProtocolHistory(
-            List<ChatMessage> messages,
-            IEnumerable<ChatMessage> protocolMessages,
-            int inputBudgetTokens)
-        {
-            if (messages == null) return;
-            var groups = ProtocolGroups(protocolMessages);
-            if (groups.Count == 0) return;
-            var available = Math.Max(0, inputBudgetTokens - EstimateMessages(messages));
-            var required = groups.Sum(group => EstimateMessages(group));
-            if (required > available)
-            {
-                throw new PromptBudgetExceededException(
-                    "Current agent protocol exceeds the request budget. The accepted tool history was preserved; compact context before continuing.",
-                    false);
-            }
-            foreach (var group in groups)
-            {
-                messages.AddRange(group);
-            }
-        }
-
         public int EstimateMessages(IEnumerable<ChatMessage> messages)
         {
             return ModelContextBudget.EstimateMessagesTokens(messages);
         }
 
-        internal static List<ChatMessage> ConversationHistory(ChatSession session)
+        internal static List<ChatMessage> ConversationHistory(
+            ChatSession session,
+            bool includeProtocolMessages = true,
+            bool excludeLatestUser = true)
         {
             if (session == null || session.Messages == null)
             {
@@ -103,10 +86,10 @@ namespace RNAssistant.Office.Services
 
             var history = ContextCompactionService.BuildActiveWindow(session);
             var activeUserIndex = -1;
-            for (var index = history.Count - 1; index >= 0; index--)
+            for (var index = history.Count - 1; excludeLatestUser && index >= 0; index--)
             {
                 var message = history[index];
-                if (!message.ProtocolMessage && IsConversationMessage(message) &&
+                if (!message.ProtocolMessage && IsConversationMessage(message, includeProtocolMessages) &&
                     string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase))
                 {
                     activeUserIndex = index;
@@ -115,42 +98,19 @@ namespace RNAssistant.Office.Services
             }
 
             return history
-                .Where((message, index) => index != activeUserIndex && IsConversationMessage(message))
+                .Where((message, index) => index != activeUserIndex && IsConversationMessage(message, includeProtocolMessages))
                 .ToList();
         }
 
-        private static List<IReadOnlyList<ChatMessage>> ProtocolGroups(IEnumerable<ChatMessage> source)
+        private static bool IsConversationMessage(ChatMessage message, bool includeProtocolMessages)
         {
-            var messages = (source ?? new ChatMessage[0]).Where(message => message != null).ToList();
-            var groups = new List<IReadOnlyList<ChatMessage>>();
-            for (var index = 0; index < messages.Count; index++)
-            {
-                var group = new List<ChatMessage> { messages[index] };
-                if (string.Equals(messages[index].Role, "assistant", StringComparison.OrdinalIgnoreCase) && index + 1 < messages.Count)
-                {
-                    var next = messages[index + 1];
-                    if (string.Equals(next.Role, "tool", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(next.Role, "developer", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(next.Role, "user", StringComparison.OrdinalIgnoreCase))
-                    {
-                        group.Add(next);
-                        index += 1;
-                    }
-                }
-                groups.Add(group);
-            }
-            return groups;
-        }
-
-        private static bool IsConversationMessage(ChatMessage message)
-        {
-            return ContextCompactionService.IsReplayMessage(message) ||
-                message != null &&
-                !message.ExcludeFromModelContext &&
-                message.Activity == null &&
-                !string.IsNullOrWhiteSpace(message.Content) &&
-                string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) &&
-                (message.Content ?? string.Empty).StartsWith("COMPACTED_EARLIER_CONTEXT", StringComparison.Ordinal);
+            return (ContextCompactionService.IsReplayMessage(message) && (includeProtocolMessages || !message.ProtocolMessage)) ||
+                (message != null &&
+                 !message.ExcludeFromModelContext &&
+                 message.Activity == null &&
+                 !string.IsNullOrWhiteSpace(message.Content) &&
+                 string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) &&
+                 (message.Content ?? string.Empty).StartsWith("COMPACTED_EARLIER_CONTEXT", StringComparison.Ordinal));
         }
 
         private static ChatMessage CloneConversationMessage(ChatMessage source)
@@ -163,17 +123,6 @@ namespace RNAssistant.Office.Services
                 Role = source == null ? string.Empty : source.Role,
                 Content = AppendHistoricalReferences(source, sourceAttachments),
                 ProtocolMessage = source != null && source.ProtocolMessage,
-                ToolCallId = source == null ? null : source.ToolCallId,
-                ToolName = source == null ? null : source.ToolName,
-                ToolCalls = source == null || source.ToolCalls == null
-                    ? new List<LlmToolCall>()
-                    : source.ToolCalls.Select(call => call == null ? null : new LlmToolCall
-                    {
-                        Id = call.Id,
-                        Type = call.Type,
-                        Name = call.Name,
-                        ArgumentsJson = call.ArgumentsJson
-                    }).ToList(),
                 Attachments = sourceAttachments
                         .Where(attachment =>
                             !string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) &&

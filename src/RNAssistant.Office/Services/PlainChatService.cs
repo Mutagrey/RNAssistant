@@ -21,7 +21,7 @@ namespace RNAssistant.Office.Services
             _contextCompactionService = contextCompactionService;
         }
 
-        public async Task<ChatCompletionResult> ExecuteAsync(
+        public async Task<ChatTurnResult> ExecuteAsync(
             string text,
             ChatSession session,
             DocumentContext context,
@@ -31,12 +31,7 @@ namespace RNAssistant.Office.Services
             CancellationToken cancellationToken,
             bool appendUserMessage = true)
         {
-            var routing = AttachmentModelRoutingService.Select(settings, session, attachments);
-            settings = routing.Settings;
-            if (routing.IsRouted)
-            {
-                Report(progress, "routing", routing.ProgressMessage);
-            }
+            settings = settings ?? new AppSettings();
             if (appendUserMessage)
             {
                 session.Messages.Add(new ChatMessage
@@ -77,7 +72,7 @@ namespace RNAssistant.Office.Services
             }
             var assistantText = completion.Content ?? string.Empty;
             session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, completion));
-            return new ChatCompletionResult
+            return new ChatTurnResult
             {
                 AssistantText = assistantText,
                 ToolResults = new object[0],

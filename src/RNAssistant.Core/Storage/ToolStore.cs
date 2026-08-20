@@ -173,8 +173,6 @@ namespace RNAssistant.Core.Storage
                 RiskLevel = tool.RiskLevel,
                 UseWhen = tool.UseWhen,
                 DoNotUseWhen = tool.DoNotUseWhen,
-                ExamplesJson = tool.ExamplesJson,
-                VerifyJson = tool.VerifyJson,
                 CapabilityStatus = string.IsNullOrWhiteSpace(tool.CapabilityStatus) ? "available" : tool.CapabilityStatus,
                 Limitations = tool.Limitations,
                 PackageVersion = tool.PackageVersion,

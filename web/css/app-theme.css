@@ -370,7 +370,7 @@ html[data-theme="dark"] .chat-document-actions {
   background: linear-gradient(90deg, transparent, #232830 8px);
 }
 
-html[data-theme="dark"] .offline-notice {
+html[data-theme="dark"] .document-notice {
   background: #191d23;
   color: var(--muted);
 }
@@ -467,9 +467,8 @@ html[data-theme="dark"] .context-popover-preview {
   color: var(--code-text);
 }
 
-html[data-theme="dark"] .agent-decision-message,
+html[data-theme="dark"] .agent-diagnostic-message,
 html[data-theme="dark"] .agent-run-history-summary:hover,
-html[data-theme="dark"] .agent-run-plan-summary:hover,
 html[data-theme="dark"] .agent-activity-row:hover,
 html[data-theme="dark"] .agent-activity.status-running .agent-activity-name,
 html[data-theme="dark"] .agent-activity.status-waiting .agent-activity-name,
@@ -479,15 +478,12 @@ html[data-theme="dark"] .agent-activity.status-failed .agent-activity-name {
 
 html[data-theme="dark"] .agent-run-history,
 html[data-theme="dark"] .agent-run-history-summary,
-html[data-theme="dark"] .agent-run-plan,
-html[data-theme="dark"] .agent-run-plan-summary strong,
 html[data-theme="dark"] .agent-activity-row,
 html[data-theme="dark"] .agent-activity-name {
   color: #a9b2bf;
 }
 
 html[data-theme="dark"] .agent-run-history-meta,
-html[data-theme="dark"] .agent-run-plan-summary > span:not(.agent-run-plan-caret),
 html[data-theme="dark"] .agent-activity-comment,
 html[data-theme="dark"] .agent-activity-meta,
 html[data-theme="dark"] .agent-run-empty {
@@ -516,23 +512,6 @@ html[data-theme="dark"] .agent-approval-title {
 html[data-theme="dark"] .agent-approval-meta,
 html[data-theme="dark"] .agent-approval-reason {
   color: #c3a97c;
-}
-
-html[data-theme="dark"] .agent-plan-step {
-  color: #b6bfcc;
-}
-
-html[data-theme="dark"] .agent-plan-step-mark {
-  border-color: #4b5563;
-  color: #a4afbd;
-}
-
-html[data-theme="dark"] .agent-plan-step.status-completed {
-  color: #747f8e;
-}
-
-html[data-theme="dark"] .agent-plan-step.status-running {
-  color: #9fc3ff;
 }
 
 html[data-theme="dark"] .agent-data-view,
@@ -569,18 +548,13 @@ html[data-theme="dark"] .agent-data-table tbody tr:nth-child(even) {
 }
 
 html[data-theme="dark"] .model-info-metrics span,
-html[data-theme="dark"] .model-capability-header,
-html[data-theme="dark"] .attachment-model-priority-rank {
+html[data-theme="dark"] .model-capability-header {
   background: #202a38;
   color: #b9c7dc;
 }
 
 html[data-theme="dark"] .model-default-badge {
   background: #203452;
-}
-
-html[data-theme="dark"] .attachment-model-priority-badges span {
-  background: #183229;
 }
 
 html[data-theme="dark"] .tool-list-item,

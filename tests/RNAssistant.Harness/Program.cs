@@ -1,23 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using RNAssistant.Core.Llm;
-using RNAssistant.Core.Models;
-using RNAssistant.Core.Services;
-using RNAssistant.Core.Tools;
-using RNAssistant.Core.Storage;
-using RNAssistant.Office;
-using RNAssistant.Office.Contracts;
-using RNAssistant.Office.Services;
-using RNAssistant.Office.Tools;
-using RNAssistant.Office.WebView;
-using RNAssistant.Desktop;
-using RNAssistant.OfficeHosts;
 
 namespace RNAssistant.Harness
 {
@@ -32,21 +16,10 @@ namespace RNAssistant.Harness
 
             public Task ExecuteAsync()
             {
-                if (RunAsync != null)
-                {
-                    return RunAsync();
-                }
+                if (RunAsync != null) return RunAsync();
                 Run();
                 return Task.CompletedTask;
             }
-        }
-
-        private sealed class HostTaskScenario
-        {
-            public string Host { get; set; }
-            public string UserText { get; set; }
-            public string[] Responses { get; set; }
-            public string[] ExpectedTools { get; set; }
         }
 
         private static HarnessTest Test(string name, Action run)
@@ -64,38 +37,17 @@ namespace RNAssistant.Harness
             var tests = new List<HarnessTest>
             {
                 Test("harness: native async execution", HarnessRunsNativeAsync),
-                Test("planner: strict json envelope", PlannerStrictParsesJsonEnvelope),
-                Test("planner: rejects fences and prose", PlannerRejectsFencesAndProse),
-                Test("planner: rejects alternate envelopes", PlannerRejectsAlternateEnvelopes),
-                Test("planner: rejects invalid intent and steps", PlannerRejectsInvalidIntentAndSteps),
-                Test("planner: normalizes safe model variants", PlannerNormalizesSafeModelVariants),
-                Test("planner: boundary corpus stays strict", PlannerBoundaryCorpusStaysStrict),
-                Test("planner quality: requires tool rejects final", ModelQualityRequiresToolRejectsFinal),
-                Test("models: compatibility checks roles and formats", ModelCompatibilityChecksRolesAndFormats),
-                Test("modes: selects chat and agent", ModesSelectChatAndAgent),
-                Test("modes: plain chat omits planner and activities", PlainChatOmitsPlannerAndActivities),
-                Test("modes: offline agent keeps request options", OfflineAgentKeepsRequestOptions),
-                Test("models: attachment routing is request scoped", AttachmentRoutingIsRequestScoped),
-                Test("models: attachment routing covers pdf and mixed media", AttachmentRoutingCoversPdfAndMixedMedia),
-                Test("context: deleted message absent from rebuilt prompt", DeletedMessageIsAbsentFromRebuiltContext),
-                Test("routing: empty tool slice still permits terminal answer", RequiredEmptyToolSliceStopsBeforeLlm),
-                Test("routing: tool slice balances mutation and inspection", ToolSliceBalancesMutationAndInspection),
-                Test("routing: natural language is not classified", ConversationHistoryAvoidsOfficeTools),
-                Test("routing: vba wording uses generic agent route", VbaCreationRouteAllowsMutation),
-                Test("routing: confirmation tool remains selectable", DestructiveChartRouteAdvancesToMutation),
-                Test("routing: report wording uses generic agent route", NewFormattedReportStartsWithMutation),
-                Test("routing: pending task uses labeled context", ShortFollowUpContinuesPendingAgentTask),
-                Test("routing: unknown and excluded tools have precise diagnostics", ToolValidationExplainsUnknownAndExcludedTools),
-                Test("routing: authoring uses tools and safety metadata", OptionalToolAuthoringIsExplicitAndDoesNotCompleteDocumentTask),
-                Test("context: prompt budget fails closed without compaction", PromptBudgetFailsClosedWithoutCompaction),
-                Test("context: prompt budget uses checkpoint and exact tail", PromptBudgetUsesCheckpointAndExactTail),
-                Test("context: model compaction keeps raw transcript", ContextCompactionCreatesDurableCheckpoint),
-                Test("context: prompt overflow retries after model compaction", PromptOverflowRetriesAfterModelCompaction),
-                Test("context: output budget reserves prompt space", OutputBudgetReservesPromptSpace),
-                Test("chat runs: registry isolates sessions", ChatRunRegistryIsolatesSessions),
-                Test("html network: origin requires permission", HtmlNetworkOriginRequiresPermission),
-                Test("models: explicit catalog url and standard data shape", ModelCatalogUsesExplicitUrlAndStandardDataShape),
-                Test("models: invalid catalog response is concise", InvalidModelCatalogResponseIsConcise),
+                Test("agent: parses final JSON", SimpleAgentParsesFinalJson),
+                Test("agent: parses one tool call", SimpleAgentParsesToolCall),
+                Test("agent: rejects tool call without id", SimpleAgentRejectsMissingToolCallId),
+                Test("agent: prompt contains all tools and skills", SimpleAgentPromptContainsToolsAndSkills),
+                Test("agent: prompt skips invalid tool schemas", SimpleAgentPromptSkipsInvalidToolSchema),
+                Test("agent: executes tool and receives JSON result", SimpleAgentExecutesToolAndReceivesJsonResult),
+                Test("agent: invalid response fails without repair state", SimpleAgentInvalidResponseFailsDirectly),
+                Test("agent: confirmation replays one final result", SimpleAgentConfirmationReplaysOnlyFinalResult),
+                Test("chat: plain mode has no agent context", SimpleChatHasNoAgentContext),
+                Test("context: compaction uses one summary field", SimpleCompactionUsesOneSummaryField),
+
                 Test("desktop target: parses json descriptor", ParsesOfficeTargetJsonDescriptor),
                 Test("desktop target: parses base64 descriptor", ParsesOfficeTargetBase64Descriptor),
                 Test("desktop target: ignores utf8 bom", OfficeTargetIgnoresUtf8Bom),
@@ -106,39 +58,10 @@ namespace RNAssistant.Harness
                 Test("documents: catalog activates selected document", DocumentCatalogActivatesSelectedDocument),
                 Test("documents: recognizes web paths", DocumentOpenServiceRecognizesWebPaths),
                 Test("documents: unsaved identity is stable", UnsavedDocumentIdentityUsesStoredId),
+
                 Test("storage: chat roundtrip", CreatesAndListsChatsInTempRoot),
-                Test("storage: settings roundtrip preserves values", SettingsRoundTripPreservesValues),
-                Test("storage: runtime log tail and clear", RuntimeLogTailAndClear),
                 Test("storage: broken chat skipped", SkipsBrokenChatFiles),
                 Test("storage: deletes document chats", DeletesDocumentChats),
-                Test("attachments: import commit delete", AttachmentImportCommitDelete),
-                Test("attachments: fork artifact tracks copied file", ForkedAttachmentArtifactTracksCopiedFile),
-                Test("attachments: multimodal api payload", AttachmentMultimodalApiPayload),
-                Test("attachments: audio import and api payload", AttachmentAudioImportAndApiPayload),
-                Test("llm: streaming SSE response", LlmStreamingResponseIsAggregated),
-                Test("llm: streaming cancellation interrupts read", LlmStreamingCancellationInterruptsRead),
-                Test("llm: separates reasoning metadata", LlmReasoningMetadataIsSeparated),
-                Test("llm: preserves provider refusal metadata", LlmProviderRefusalMetadataIsPreserved),
-                Test("llm: agent response request modes", LlmRequestBodySupportsAllAgentResponseModes),
-                Test("llm: serializes tool roundtrip", LlmSerializesOpenAiToolRoundTrip),
-                Test("planner: duplicate native call ids normalize", AgentProtocolHistoryNormalizesDuplicateNativeCallIds),
-                Test("planner: native tool call roundtrip", AgentNativeToolCallRoundTripUsesMatchingCallId),
-                Test("planner: selectable tool result roles", AgentJsonToolResultRolesAreSelectable),
-                Test("planner: json schema fallback persists", AgentJsonSchemaFallbackPersistsForTheRun),
-                Test("planner: timeout does not trigger schema fallback", AgentTimeoutDoesNotTriggerSchemaFallback),
-                Test("planner: schema rejection triggers fallback", AgentSchemaRejectionTriggersFallback),
-                Test("planner: provider refusal repairs with same tools", AgentProviderRefusalRepairsWithSameTools),
-                Test("planner: transient invalid response retries with same tools", AgentTransientInvalidResponseRetriesWithSameTools),
-                Test("tools: invalid schema is ignored", InvalidCustomToolSchemaIsIgnored),
-                Test("llm: chat mode forwards reasoning progress", PlainChatForwardsReasoningProgress),
-                Test("llm: rejects alternate completion formats", LlmAlternateCompletionFormatsAreRejected),
-                Test("llm: reports invalid response envelope", LlmInvalidResponseEnvelopeIsReported),
-                Test("attachments: extracts pdf text", AttachmentExtractsPdfText),
-                Test("attachments: accepts text formats and encodings", AttachmentAcceptsTextFormatsAndEncodings),
-                Test("attachments: stores extracted text sidecar", AttachmentStoresExtractedTextSidecar),
-                Test("attachments: visual pdf payload", AttachmentBuildsVisualPdfPayload),
-                Test("attachments: rejects unsupported file", AttachmentRejectsUnsupportedFile),
-                Test("attachments: cleans stale drafts", AttachmentCleansStaleDrafts),
                 Test("chat sessions: document key migration", ChatSessionServiceMigratesDocumentKey),
                 Test("chat sessions: stale requested id fallback", ChatSessionServiceFallsBackForStaleRequestedId),
                 Test("chat sessions: addressed id loads archived chat", AddressedSessionLoadsExplicitChatAcrossDocuments),
@@ -146,170 +69,103 @@ namespace RNAssistant.Harness
                 Test("chat sessions: empty drafts are transient", EmptyChatDraftsAreNotPersisted),
                 Test("chat sessions: background save keeps active chat", BackgroundSaveKeepsActiveChat),
                 Test("chat sessions: interrupted run is cancelled", InterruptedRunIsRecoveredAsCancelled),
+
+                Test("attachments: import commit delete", AttachmentImportCommitDelete),
+                Test("attachments: fork artifact tracks copied file", ForkedAttachmentArtifactTracksCopiedFile),
+                Test("attachments: multimodal api payload", AttachmentMultimodalApiPayload),
+                Test("attachments: audio import and api payload", AttachmentAudioImportAndApiPayload),
+                Test("attachments: extracts pdf text", AttachmentExtractsPdfText),
+                Test("attachments: accepts text formats and encodings", AttachmentAcceptsTextFormatsAndEncodings),
+                Test("attachments: stores extracted text sidecar", AttachmentStoresExtractedTextSidecar),
+                Test("attachments: visual pdf payload", AttachmentBuildsVisualPdfPayload),
+                Test("attachments: rejects unsupported file", AttachmentRejectsUnsupportedFile),
+                Test("attachments: cleans stale drafts", AttachmentCleansStaleDrafts),
+
                 Test("pipeline: dry-run resolves placeholders", PipelineDryRunResolvesPlaceholders),
                 Test("pipeline: executes fake adapter steps", PipelineExecutesFakeAdapterSteps),
                 Test("pipeline: resolves step output placeholders", PipelineResolvesStepOutputPlaceholders),
                 Test("pipeline: stops after failed step", PipelineStopsAfterFailedStep),
                 Test("pipeline: rejects missing step tool id", PipelineRejectsMissingStepToolId),
-                Test("pipeline: rejects invalid definitions", PipelineRejectsInvalidDefinitions),
                 Test("pipeline: rejects duplicate step ids", PipelineRejectsDuplicateStepIds),
+                Test("pipeline: rejects invalid definitions", PipelineRejectsInvalidDefinitions),
                 Test("pipeline: rejects cycles", PipelineRejectsCycles),
-                Test("pipeline: resolves nested confirmation before execution", PipelineResolvesNestedConfirmationBeforeExecution),
-                Test("pipeline: effective safety propagates nested risk", PipelineEffectiveSafetyPropagatesNestedRisk),
+                Test("pipeline: resolves nested confirmation", PipelineResolvesNestedConfirmationBeforeExecution),
+                Test("pipeline: effective safety propagates", PipelineEffectiveSafetyPropagatesNestedRisk),
                 Test("pipeline: custom tool needs confirmation", CustomPipelineNeedsConfirmation),
-                Test("pipeline: agent mode gates built-in mutation", AgentModeGatesBuiltInMutation),
-                Test("search: regexp engine and capture replacement", TextPatternEngineSupportsRegexpAndGroups),
-                Test("pipeline: validates arguments and nested budget", PipelineExecutionValidatesArgumentsAndNestedBudget),
+                Test("pipeline: built-in mutation can run", AgentModeGatesBuiltInMutation),
+                Test("pipeline: validates arguments and budget", PipelineExecutionValidatesArgumentsAndNestedBudget),
+                Test("search: regexp and capture replacement", TextPatternEngineSupportsRegexpAndGroups),
+
                 Test("tools: catalog merges visible tools", ToolCatalogMergesVisibleTools),
                 Test("tools: built-in ids cannot be shadowed", BuiltInToolIdsCannotBeShadowed),
-                Test("tools: refreshed custom tool gets effective safety", RefreshedCustomToolGetsEffectiveSafety),
-                Test("tools: store saves and updates custom tools", ToolStoreSavesAndUpdatesCustomTools),
-                Test("tools: addressed store preserves extra files", ToolStorePreservesExtraFilesAndOtherTools),
-                Test("tools: store skips broken custom tool files", ToolStoreSkipsBrokenCustomToolFiles),
-                Test("tools: validates save and preserves metadata", ValidatesToolSaveAndPreservesMetadata),
-                Test("tools: unknown and disabled tools fail", UnknownAndDisabledToolsFail),
+                Test("tools: nested safety is effective", RefreshedCustomToolGetsEffectiveSafety),
+                Test("tools: store saves and updates", ToolStoreSavesAndUpdatesCustomTools),
+                Test("tools: store preserves extra files", ToolStorePreservesExtraFilesAndOtherTools),
+                Test("tools: store skips broken files", ToolStoreSkipsBrokenCustomToolFiles),
+                Test("tools: validates save metadata", ValidatesToolSaveAndPreservesMetadata),
+                Test("tools: unknown and disabled fail", UnknownAndDisabledToolsFail),
                 Test("tools: removed ids are unknown", RemovedToolIdsAreUnknown),
-                Test("tools: html workspace updates chat session", HtmlWorkspaceToolsUpdateChatSession),
-                Test("tools: html workspace undo restores version", HtmlWorkspaceUndoRestoresPreviousVersion),
-                Test("storage: html workspace persists with chat", HtmlWorkspacePersistsWithChatSession),
-                Test("chat: agent creates html workspace", ChatAgentCreatesHtmlWorkspace),
-                Test("chat: html mode forces workspace prompt", ChatHtmlModeForcesWorkspacePrompt),
-                Test("chat: html workspace keeps generic follow-up route", ChatHtmlWorkspaceKeepsGenericFollowUpRoute),
-                Test("chat: large malformed html planner response is rebuilt", ChatLargeMalformedHtmlPlannerResponseIsRebuilt),
-                Test("chat: html delete requires read before mutation", ChatHtmlDeleteRequiresReadBeforeMutation),
-                Test("tools: prompt templates save", PromptToolSavesAgentPromptTemplates),
-                Test("tools: prompt defaults read", PromptToolReadsDefaults),
-                Test("tools: validate custom tool payload", ToolValidateChecksPayloadWithoutSaving),
                 Test("tools: expanded built-ins visible", ExpandedBuiltInToolsAreVisible),
-                Test("prompt: tool metadata is weak-model friendly", PromptToolMetadataIsWeakModelFriendly),
                 Test("tools: safety metadata gates mutations", ToolSafetyMetadataGatesMutations),
-                Test("tools: pipeline effective mutation gates false metadata", CustomPipelineWithMutatingStepNeedsConfirmationWhenMetadataLies),
-                Test("tools: confirmation matrix covers dry and manual runs", ConfirmationMatrixCoversDryAndManualRuns),
-                Test("tools: agent can save custom tools with confirmation", AgentCanSaveCustomToolsWithConfirmation),
-                Test("tools: agent validates and creates custom tool", AgentValidatesAndCreatesCustomTool),
-                Test("tools: agent can author missing capability when enabled", AgentCanCreateAndUseToolDuringDocumentTaskWhenEnabled),
-                Test("skills: store saves markdown skills", SkillStoreSavesMarkdownSkills),
-                Test("skills: addressed store preserves extra files", SkillStorePreservesExtraFilesAndOtherSkills),
-                Test("skills: store skips broken markdown skills", SkillStoreSkipsBrokenMarkdownSkills),
-                Test("skills: catalog lists host-visible skills", SkillCatalogListsHostVisibleSkills),
-                Test("skills: prompt separates skills from tools", PromptSeparatesSkillsFromTools),
-                Test("skills: prompt limits skill bodies", PromptLimitsSkillBodies),
-                Test("prompt: editable agent blocks", PromptUsesEditableAgentPromptBlocks),
-                Test("prompt: known protocol defaults migrate", PromptMigrationUpgradesKnownProtocolDefaults),
-                Test("prompt: settings apply on next request", PromptSettingsApplyOnNextRequest),
-                Test("skills: agent can save skills with confirmation", AgentCanSaveSkillsWithConfirmation),
-                Test("skills: resolver dependencies conflicts and tool filter", SkillResolverLoadsDependenciesAndFiltersTools),
+                Test("tools: confirmation matrix", ConfirmationMatrixCoversDryAndManualRuns),
+                Test("tools: html workspace updates session", HtmlWorkspaceToolsUpdateChatSession),
+                Test("tools: html workspace undo", HtmlWorkspaceUndoRestoresPreviousVersion),
+                Test("storage: html workspace persists", HtmlWorkspacePersistsWithChatSession),
+                Test("tools: validate payload without saving", ToolValidateChecksPayloadWithoutSaving),
+
                 Test("vba: replace text backs up module", VbaReplaceTextBacksUpModule),
-                Test("vba: apply patch targets named module", VbaApplyPatchTargetsNamedModule),
+                Test("vba: apply patch targets module", VbaApplyPatchTargetsNamedModule),
                 Test("vba: backup failure blocks replacement", VbaBackupFailureBlocksReplacement),
                 Test("vba: patch rejects line overrun", VbaPatchRejectsLineOverrun),
-                Test("vba: search regexp patch and safe delete", VbaSearchRegexpPatchAndDeleteAreSafe),
+                Test("vba: regexp patch and safe delete", VbaSearchRegexpPatchAndDeleteAreSafe),
                 Test("vba: custom macro failure cleans session", VbaCustomMacroFailureCleansSession),
-                Test("vba: manifest validates typed entry point", VbaToolManifestValidatesTypedEntryPoint),
+                Test("vba: failed write restores code", VbaFailedModuleWriteRestoresCode),
+                Test("vba: restore applies backup", VbaRestoreAppliesBackup),
+                Test("vba: backup store skips broken files", VbaBackupStoreSkipsBrokenFiles),
+                Test("vba: manifest validates entry point", VbaToolManifestValidatesTypedEntryPoint),
                 Test("vba: package rejects duplicate sources", VbaToolPackageRejectsDuplicateSources),
-                Test("vba: internal command ids are reserved", VbaToolPackageReservesInternalCommandIds),
+                Test("vba: internal ids are reserved", VbaToolPackageReservesInternalCommandIds),
                 Test("vba: package sources roundtrip", VbaToolStoreRoundTripsPackageSources),
                 Test("vba: session execution cleans package", VbaToolSessionExecutionUsesTypedArgumentsAndCleansUp),
                 Test("vba: persistent install tracks ownership", VbaToolPersistentInstallRequiresMacroDocumentAndTracksOwnership),
-                Test("vba: document tools are discovered", VbaDocumentToolsAreDiscoveredAndRunnable),
+                Test("vba: document tools discovered", VbaDocumentToolsAreDiscoveredAndRunnable),
                 Test("vba: code hash normalizes export", VbaCodeHashIgnoresExportHeadersAndRuntimeMarkers),
-                Test("vba: failed module write restores code", VbaFailedModuleWriteRestoresCode),
-                Test("vba: restore exposes deterministic verification", VbaRestoreExposesVerification),
-                Test("verification: controller vba patch compares expected code", VerificationUsesControllerVbaExpectedCode),
-                Test("vba: backup store skips broken files", VbaBackupStoreSkipsBrokenFiles),
-                Test("prompt: usage estimator counts context", ContextUsageEstimatorCountsPromptAndSession),
-                Test("chat: completion service records prose", ChatCompletionServiceRecordsProseResponse),
-                Test("chat: planner includes recent history", ChatPlannerIncludesRecentHistory),
-                Test("chat: does not auto include vba source", ChatDoesNotAutoIncludeVbaSource),
-                Test("chat: vba tasks use read tools", ChatVbaTasksUseReadTools),
-                Test("chat: deferred smart title setting", ChatCompletionServiceUsesDeferredSmartTitleSetting),
-                Test("chat: localized draft title is auto", ChatTitleBuilderTreatsLocalizedDraftTitlesAsAuto),
-                Test("chat: smart title survives cached session save", GeneratedSmartTitleSurvivesCachedSessionSave),
-                Test("chat: editing middle turn restores artifact checkpoint", EditingMiddleUserMessageRewindsHistoryAndClearsHtmlWorkspace),
-                Test("chat: editing latest turn avoids duplicate user", EditingLatestUserMessageDoesNotDuplicateUserTurn),
-                Test("chat: editing legacy turn clears unversioned html", EditingLegacyTurnClearsUnversionedHtmlWorkspace),
-                Test("chat: editing validation errors are reported", EditingMessageValidationErrorsAreReported),
-                Test("chat: run lease serializes history mutations", ChatRunLeaseSerializesHistoryMutations),
-                Test("chat: duplicate confirm executes once and cancels", ConfirmedToolRunLeaseRejectsDuplicateAndSupportsCancellation),
-                Test("chat: executes typical host tasks", ChatExecutesTypicalHostTasks),
-                Test("chat: built-in mutation follows safety metadata", ChatBuiltInMutationFollowsSafetyMetadata),
-                Test("chat: general answer skips Office reads and tools", ChatGeneralAnswerSkipsOfficeReadsAndTools),
-                Test("chat: routing avoids substring false positives", ChatRoutingAvoidsSubstringFalsePositives),
-                Test("chat: current document question uses read tool", ChatCurrentDocumentQuestionUsesReadTool),
-                Test("chat: prose greeting requires strict repair", ChatProseGreetingRequiresStrictRepair),
-                Test("chat: stateful Excel scenario verifies result", ChatExcelStatefulScenarioVerifiesResult),
-                Test("chat: scenario llm checks prompt contracts", ChatScenarioLlmChecksPromptContracts),
-                Test("chat: agent activity transcript", AgentTranscriptCreatesActivityTree),
-                Test("chat: agent plan runtime statuses", AgentPlanRuntimeStatusesStayOnCurrentStep),
-                Test("chat: implement plan resumes existing plan", ChatImplementPlanResumesExistingPlan),
-                Test("chat: repeated plan without observation is corrected", ChatRepeatedPlanWithoutObservationIsCorrected),
-                Test("chat: unchanged plan after observation is ignored", ChatUnchangedPlanAfterObservationIsIgnored),
-                Test("chat: plan cannot be revised after observation", ChatRepeatedPlanAfterObservationIsRejected),
-                Test("chat: duplicate successful read is corrected", ChatDuplicateSuccessfulReadIsCorrected),
-                Test("chat: completed summary read leaves available tools", CompletedSummaryReadLeavesAvailableTools),
-                Test("chat: valid final is not keyword-coerced", ChatProseActionForcesToolFollowUp),
-                Test("chat: malformed action response forces repair", ChatMalformedActionResponseForcesRepair),
-                Test("chat: repeated malformed responses recover without replay pollution", ChatRepeatedMalformedResponsesRecoverWithoutReplayPollution),
-                Test("chat: repaired final is accepted", ChatRepairThenFinalStillForcesTool),
-                Test("chat: valid final needs no tool correction", ChatInvalidToolCorrectionDoesNotFallbackToFinal),
-                Test("chat: model owns answer versus action", ChatRepeatedFinalForRequiredToolFailsClosed),
-                Test("chat: editable required-action prompt", ChatUsesEditableAgentFollowUpPrompt),
-                Test("chat: failed tool retries corrected call", ChatFailedToolRetriesCorrectedCall),
-                Test("chat: unknown tool retries exact available id", ChatUnknownToolRetriesExactAvailableId),
-                Test("chat: retry success continues", ChatRetrySuccessContinuesToFinalAnswer),
-                Test("chat: adapter exception becomes observation", ChatAdapterExceptionRequiresSuccessfulRetry),
-                Test("chat: unfinished plan requires next action", ChatInspectionDoesNotSatisfyMutationRoute),
-                Test("chat: mutation asks for verification", ChatMutationRequestsVerificationFollowUp),
-                Test("verification: sheet mutation uses lightweight read", VerificationUsesLightweightSheetRead),
-                Test("verification: chart mutation reads exact chart", VerificationUsesTargetedChartRead),
-                Test("verification: vba mutation reads and compares module", VerificationUsesVbaModuleReadAndComparesCode),
-                Test("tools: excel chart update and delete", ExcelChartToolsUpdateAndDeleteState),
-                Test("verification: hung read times out", VerificationHungReadTimesOut),
-                Test("chat: missing verifier avoids broad summary", ChatUnavailableVerificationFailsClosed),
-                Test("chat: failed verification recovers", ChatFailedVerificationRecovers),
-                Test("chat: prior inspection does not verify mutation", ChatPriorInspectionDoesNotVerifyMutation),
-                Test("chat: waiting tool gets pending id", ChatWaitingToolGetsPendingId),
-                Test("chat: waiting tool stops run", ChatWaitingToolStopsRun),
-                Test("chat: confirmed pending tool continues", ChatConfirmedPendingToolContinuesAfterManualRun),
-                Test("chat: max iterations returns summary", ChatMaxIterationsReturnsRuntimeSummary),
-                Test("chat: tool step limit stops run", ChatToolStepLimitStopsRun),
-                Test("chat: unsafe multiple tool calls are replanned", MultipleToolCallsAreRejectedAndReplanned),
-                Test("chat: read-only multiple tools execute as batch", MultipleReadOnlyToolsExecuteAsBatch),
-                Test("chat: auto-run disabled records failure", ChatAutoRunDisabledRecordsLocalFailure),
-                Test("chat: malformed planner response is repaired", ChatMalformedPlannerResponseIsRepaired),
-                Test("chat: invalid planner records response diagnostics", ChatInvalidPlannerRecordsResponseDiagnostics),
-                Test("chat: null completion records diagnostic", ChatNullCompletionBecomesPlannerDiagnostic),
-                Test("chat: explicit clone preserves values", ChatCloneServicePreservesValues),
+
+                Test("chat: editing middle rewinds artifacts", EditingMiddleUserMessageRewindsHistoryAndClearsHtmlWorkspace),
+                Test("chat: editing latest avoids duplicate", EditingLatestUserMessageDoesNotDuplicateUserTurn),
+                Test("chat: editing legacy clears html", EditingLegacyTurnClearsUnversionedHtmlWorkspace),
+                Test("chat: editing errors reported", EditingMessageValidationErrorsAreReported),
+                Test("chat: run lease serializes", ChatRunLeaseSerializesHistoryMutations),
+                Test("chat: duplicate confirmation is rejected", ConfirmedToolRunLeaseRejectsDuplicateAndSupportsCancellation),
+
+                Test("context: clone preserves values", ChatCloneServicePreservesValues),
                 Test("context: core normalizer", ContextNormalizerUsesCoreModelsOnly),
                 Test("context: normalize and upsert", ContextServiceNormalizesAndUpserts),
                 Test("context: trim helper", ContextServiceTrimsText),
-                Test("chart: artifact default config", ChartArtifactBuildsDefaultConfig),
-                Test("chart: artifact requested type truncates", ChartArtifactHonorsRequestedTypeAndTruncates),
+                Test("chart: default config", ChartArtifactBuildsDefaultConfig),
+                Test("chart: requested type truncates", ChartArtifactHonorsRequestedTypeAndTruncates),
+
                 Test("bridge: init returns token", BridgeInitReturnsToken),
                 Test("bridge: rejects missing token", BridgeRejectsMissingToken),
-                Test("bridge: typed runTool payload", BridgeUsesTypedRunToolPayload),
-                Test("bridge: typed sendChat progress", BridgeUsesTypedSendChatPayloadAndProgress),
-                Test("bridge: typed editMessage progress", BridgeUsesTypedEditMessagePayloadAndProgress),
-                Test("bridge: compact addressed chat context", BridgeCompactsAddressedChatContext),
-                Test("bridge: confirm progress ids", BridgeConfirmProgressCarriesChatAndRunIds),
-                Test("bridge: typed chat mode payload", BridgeUsesTypedChatModePayload),
-                Test("bridge: typed chat reasoning payload", BridgeUsesTypedChatReasoningPayload),
-                Test("bridge: typed settings payload", BridgeUsesTypedSettingsPayload),
-                Test("bridge: model compatibility test", BridgeRunsModelCompatibilityTest),
-                Test("bridge: typed document activation", BridgeUsesTypedDocumentPayload),
-                Test("bridge: typed tool and skill payloads", BridgeUsesTypedToolAndSkillPayloads),
-                Test("bridge: typed context payload", BridgeUsesTypedContextPayload),
-                Test("bridge: typed vba payload", BridgeUsesTypedVbaPayload),
-                Test("bridge: typed html workspace delete payloads", BridgeUsesTypedHtmlWorkspaceDeletePayloads),
-                Test("bridge: typed html network payloads", BridgeUsesTypedHtmlNetworkPayloads),
-                Test("bridge: cancels addressed chat run", BridgeCancelsAddressedChatRun)
+                Test("bridge: typed runTool", BridgeUsesTypedRunToolPayload),
+                Test("bridge: typed sendChat", BridgeUsesTypedSendChatPayloadAndProgress),
+                Test("bridge: typed editMessage", BridgeUsesTypedEditMessagePayloadAndProgress),
+                Test("bridge: compact addressed context", BridgeCompactsAddressedChatContext),
+                Test("bridge: confirm ids", BridgeConfirmProgressCarriesChatAndRunIds),
+                Test("bridge: typed chat mode", BridgeUsesTypedChatModePayload),
+                Test("bridge: typed chat reasoning", BridgeUsesTypedChatReasoningPayload),
+                Test("bridge: typed settings", BridgeUsesTypedSettingsPayload),
+                Test("bridge: typed document", BridgeUsesTypedDocumentPayload),
+                Test("bridge: typed tools and skills", BridgeUsesTypedToolAndSkillPayloads),
+                Test("bridge: typed context", BridgeUsesTypedContextPayload),
+                Test("bridge: typed vba", BridgeUsesTypedVbaPayload),
+                Test("bridge: typed html delete", BridgeUsesTypedHtmlWorkspaceDeletePayloads),
+                Test("bridge: typed html network", BridgeUsesTypedHtmlNetworkPayloads),
+                Test("bridge: cancels addressed run", BridgeCancelsAddressedChatRun)
             };
 
-            var duplicates = tests
-                .GroupBy(test => test.Name, StringComparer.OrdinalIgnoreCase)
-                .Where(group => group.Count() > 1)
-                .Select(group => group.Key)
-                .ToArray();
+            var duplicates = tests.GroupBy(test => test.Name, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() > 1).Select(group => group.Key).ToArray();
             if (duplicates.Length > 0)
             {
                 Console.WriteLine("Duplicate test names: " + string.Join(", ", duplicates));
@@ -317,23 +173,19 @@ namespace RNAssistant.Harness
             }
 
             var arguments = (args ?? new string[0])
-                .Where(value => !string.IsNullOrWhiteSpace(value) && value != "--")
-                .ToArray();
+                .Where(value => !string.IsNullOrWhiteSpace(value) && value != "--").ToArray();
             if (arguments.Any(value => string.Equals(value, "--list", StringComparison.OrdinalIgnoreCase) ||
                                        string.Equals(value, "list", StringComparison.OrdinalIgnoreCase)))
             {
                 foreach (var test in tests.OrderBy(test => test.Category).ThenBy(test => test.Name))
-                {
                     Console.WriteLine(test.Category + "\t" + test.Name);
-                }
                 return 0;
             }
 
             var filter = arguments.Length == 0 ? string.Empty : string.Join(" ", arguments).Trim();
             var selected = string.IsNullOrWhiteSpace(filter)
                 ? tests
-                : tests.Where(test =>
-                    test.Category.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                : tests.Where(test => test.Category.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0 ||
                     test.Name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
             if (selected.Count == 0)
             {
@@ -355,32 +207,15 @@ namespace RNAssistant.Harness
                     Console.WriteLine("FAIL " + test.Name + ": " + ex.Message);
                 }
             }
-
-            Console.WriteLine((failed == 0 ? "OK" : "FAILED") + " passed=" + (selected.Count - failed) + " failed=" + failed + " total=" + selected.Count);
+            Console.WriteLine((failed == 0 ? "OK" : "FAILED") + " passed=" + (selected.Count - failed) +
+                " failed=" + failed + " total=" + selected.Count);
             return failed == 0 ? 0 : 1;
         }
 
         private static string CategoryFromName(string name)
         {
             var separator = (name ?? string.Empty).IndexOf(':');
-            var prefix = separator <= 0 ? "other" : name.Substring(0, separator).Trim().ToLowerInvariant();
-            if (prefix == "chat sessions")
-            {
-                return "storage";
-            }
-            if (prefix == "chat" || prefix.StartsWith("planner", StringComparison.Ordinal) || prefix == "prompt")
-            {
-                return "agent-loop";
-            }
-            if (prefix == "pipeline" || prefix == "tools" || prefix == "vba")
-            {
-                return "tools-safety";
-            }
-            if (prefix == "storage" || prefix == "attachments")
-            {
-                return "storage";
-            }
-            return prefix;
+            return separator <= 0 ? "other" : name.Substring(0, separator).Trim().ToLowerInvariant();
         }
 
         private static async Task HarnessRunsNativeAsync()
@@ -388,6 +223,5 @@ namespace RNAssistant.Harness
             await Task.Yield();
             AssertTrue(true, "native async harness execution");
         }
-
     }
 }

@@ -104,7 +104,6 @@ namespace RNAssistant.Harness
                 session.Messages.Add(tail);
                 session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Третий ответ" });
 
-                session.PendingAgentTask = new PendingAgentTask { Request = "stale pending" };
                 session.LastRun = new ChatRunRecord { RunId = "stale-run", Status = "waiting" };
                 session.HtmlWorkspace.Files[0].Content = "<h1>After edited turn</h1>";
                 session.HtmlWorkspace.Files.Add(new HtmlWorkspaceFile { Id = "later", Path = "later.html", Kind = "html", Content = "later" });
@@ -154,7 +153,6 @@ namespace RNAssistant.Harness
                 AssertTrue(!session.Artifacts.Any(artifact => artifact.Id == tailAttachmentArtifactId), "removed tail attachment artifact is pruned");
                 AssertEqual(0, session.ContextCheckpoints.Count, "stale compacted context invalidated after edit");
                 AssertTrue(string.IsNullOrWhiteSpace(session.ActiveContextCheckpointId), "no stale active checkpoint remains");
-                AssertTrue(session.PendingAgentTask == null, "pending task cleared");
                 AssertTrue(session.LastRun == null, "last run cleared");
                 AssertTrue(pendingRemoved, "pending tool registry cleared");
                 AssertTrue(pendingCancelled, "pending activity cancellation invoked");

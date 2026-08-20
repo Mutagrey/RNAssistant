@@ -31,14 +31,14 @@ namespace RNAssistant.Office.Tools
                 yield break;
             }
 
-            yield return ControllerToolDefinition.Create(ToolId("vba_list_backups"), _adapter.HostName, "Read-only: List RNAssistant VBA rollback backups for the current document.", "{}");
-            yield return ControllerToolDefinition.Create(ToolId("vba_list_modules"), _adapter.HostName, "Read-only: List all VBA components with name, type, and line count. Read only the needed component with vba_read_module.", "{}");
-            yield return ControllerToolDefinition.Create(ToolId("vba_search_code"), _adapter.HostName, "Read-only: Search literal or regexp patterns across VBA component code.", "{\"query\":\"pattern\",\"moduleName\":\"\",\"mode\":\"literal\",\"matchCase\":false,\"wholeWord\":false,\"maxResults\":100,\"contextChars\":80}");
-            yield return ControllerToolDefinition.Create(ToolId("vba_restore_backup"), _adapter.HostName, "Mutates document: Restore a VBA module from a backupId or from the latest backup for moduleName.", "{\"backupId\":\"\",\"moduleName\":\"Module1\"}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
-            yield return ControllerToolDefinition.Create(ToolId("vba_replace_text"), _adapter.HostName, "Mutates document: Replace an exact text fragment inside one VBA module and create a rollback backup.", "{\"moduleName\":\"Module1\",\"find\":\"old code\",\"replace\":\"new code\"}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
-            yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), _adapter.HostName, "Mutates document: Apply structured literal/regexp/line VBA patches and create a rollback backup.", "{\"moduleName\":\"Module1\",\"patch\":[{\"op\":\"regexReplace\",\"pattern\":\"old(.*)\",\"text\":\"new$1\",\"replaceAll\":true},{\"op\":\"replaceLines\",\"startLine\":10,\"deleteCount\":2,\"text\":\"new code\"}]}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
-            yield return ControllerToolDefinition.Create(ToolId("vba_create_module"), _adapter.HostName, "Mutates document: Create a StdModule or ClassModule. Document modules and UserForms cannot be created.", "{\"moduleName\":\"Module1\",\"componentType\":\"StdModule\",\"code\":\"Option Explicit\"}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
-            yield return ControllerToolDefinition.Create(ToolId("vba_delete_module"), _adapter.HostName, "Mutates document: Delete a StdModule or ClassModule after hash validation and backup. Document modules and UserForms cannot be deleted.", "{\"moduleName\":\"Module1\",\"expectedCodeSha256\":\"\"}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_list_backups"), _adapter.HostName, "Read-only: List RNAssistant VBA rollback backups for the current document.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}");
+            yield return ControllerToolDefinition.Create(ToolId("vba_list_modules"), _adapter.HostName, "Read-only: List all VBA components with name, type, and line count. Read only the needed component with vba_read_module.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}");
+            yield return ControllerToolDefinition.Create(ToolId("vba_search_code"), _adapter.HostName, "Read-only: Search literal or regexp patterns across VBA component code.", "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"moduleName\":{\"type\":\"string\"},\"mode\":{\"type\":\"string\"},\"matchCase\":{\"type\":\"boolean\"},\"wholeWord\":{\"type\":\"boolean\"},\"maxResults\":{\"type\":\"integer\"},\"contextChars\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}");
+            yield return ControllerToolDefinition.Create(ToolId("vba_restore_backup"), _adapter.HostName, "Mutates document: Restore a VBA module from a backupId or from the latest backup for moduleName.", "{\"type\":\"object\",\"properties\":{\"backupId\":{\"type\":\"string\"},\"moduleName\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_replace_text"), _adapter.HostName, "Mutates document: Replace an exact text fragment inside one VBA module and create a rollback backup.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\"},\"find\":{\"type\":\"string\"},\"replace\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), _adapter.HostName, "Mutates document: Apply structured literal/regexp/line VBA patches and create a rollback backup.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\"},\"patch\":{\"type\":\"array\",\"items\":{}}},\"required\":[],\"additionalProperties\":false}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_create_module"), _adapter.HostName, "Mutates document: Create a StdModule or ClassModule. Document modules and UserForms cannot be created.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\"},\"componentType\":{\"type\":\"string\"},\"code\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_delete_module"), _adapter.HostName, "Mutates document: Delete a StdModule or ClassModule after hash validation and backup. Document modules and UserForms cannot be deleted.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\"},\"expectedCodeSha256\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
         }
 
         public string ToolId(string suffix)
@@ -330,9 +330,7 @@ namespace RNAssistant.Office.Tools
             if (dryRun) return ToolResult.Ok("Dry run: would create VBA " + componentType + " " + moduleName + ".");
             var create = new ToolCommand { ToolId = ToolId("vba_create_module_internal") };
             create.Arguments["moduleName"] = moduleName; create.Arguments["componentType"] = componentType; create.Arguments["code"] = code;
-            var result = _adapter.ExecuteTool(create);
-            if (result != null && result.Success) result.Verification = CreateVerification(moduleName, code);
-            return result;
+            return _adapter.ExecuteTool(create);
         }
 
         private ToolResult DeleteModule(ToolCommand command, bool dryRun)
@@ -352,13 +350,7 @@ namespace RNAssistant.Office.Tools
             if (!TrySaveBackup(moduleName, module, "delete", out backupError)) return backupError;
             var delete = new ToolCommand { ToolId = ToolId("vba_delete_module_internal") };
             delete.Arguments["moduleName"] = moduleName;
-            var result = _adapter.ExecuteTool(delete);
-            if (result != null && result.Success)
-            {
-                result.Verification = new ToolVerification { ToolId = ToolId("vba_read_module"), ExpectedErrorCode = "vba_module_not_found" };
-                result.Verification.Arguments["moduleName"] = moduleName;
-            }
-            return result;
+            return _adapter.ExecuteTool(delete);
         }
 
         private ToolResult RestoreVbaBackup(ToolCommand command, bool dryRun, CancellationToken cancellationToken)
@@ -403,9 +395,7 @@ namespace RNAssistant.Office.Tools
                 return result;
             }
 
-            var restored = ToolResult.Ok("VBA backup restored: " + backup.BackupId, JsonConvert.SerializeObject(new { backupId = backup.BackupId, moduleName = backup.ModuleName, restore = result }));
-            restored.Verification = CreateVerification(backup.ModuleName, backup.Code);
-            return restored;
+            return ToolResult.Ok("VBA backup restored: " + backup.BackupId, JsonConvert.SerializeObject(new { backupId = backup.BackupId, moduleName = backup.ModuleName, restore = result }));
         }
 
         private ToolResult ReplaceVbaText(ToolCommand command, bool dryRun, CancellationToken cancellationToken)
@@ -458,9 +448,7 @@ namespace RNAssistant.Office.Tools
                 return result;
             }
 
-            var replaced = ToolResult.Ok("VBA text replaced in " + moduleName + ": " + replacements + " replacement(s).", preview);
-            replaced.Verification = CreateVerification(moduleName, updated);
-            return replaced;
+            return ToolResult.Ok("VBA text replaced in " + moduleName + ": " + replacements + " replacement(s).", preview);
         }
 
         private ToolResult ApplyVbaPatch(ToolCommand command, bool dryRun, CancellationToken cancellationToken)
@@ -537,9 +525,7 @@ namespace RNAssistant.Office.Tools
                 return writeResult;
             }
 
-            var patched = ToolResult.Ok("VBA patch applied to " + moduleName + ".", preview);
-            patched.Verification = CreateVerification(moduleName, updated);
-            return patched;
+            return ToolResult.Ok("VBA patch applied to " + moduleName + ".", preview);
         }
 
         private bool TryReadVbaModule(string moduleName, int maxChars, out VbaModuleState module, out ToolResult error)
@@ -623,17 +609,6 @@ namespace RNAssistant.Office.Tools
                     false);
                 return false;
             }
-        }
-
-        private ToolVerification CreateVerification(string moduleName, string code)
-        {
-            var verification = new ToolVerification
-            {
-                ToolId = ToolId("vba_read_module"),
-                ExpectedCodeSha256 = CodeSha256(code)
-            };
-            verification.Arguments["moduleName"] = moduleName;
-            return verification;
         }
 
         internal static string CodeSha256(string code)

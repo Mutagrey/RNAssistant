@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using Outlook = Microsoft.Office.Interop.Outlook;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Tools;
 
@@ -109,20 +108,20 @@ namespace RNAssistant.OfficeHosts
         {
             return new[]
             {
-                Skill("outlook.get_context", "Read-only: Return active mail or folder context.", "{}"),
-                Skill("outlook.read_current_mail", "Read-only: Read selected or open mail.", "{\"maxChars\":12000}"),
-                Skill("outlook.read_selection", "Read-only: Read selected email metadata and body.", "{\"maxChars\":12000}"),
-                Skill("outlook.read_mail_by_entry_id", "Read-only: Read one mail item by EntryID.", "{\"entryId\":\"\",\"maxChars\":12000}"),
-                Skill("outlook.search_mail", "Read-only: Search recent mail fields with literal or regexp matching and return field coordinates.", "{\"query\":\"text\",\"mode\":\"literal\",\"matchCase\":false,\"wholeWord\":false,\"fields\":\"subject,sender,body\",\"maxItems\":100,\"maxResults\":50,\"maxBodyChars\":1000,\"contextChars\":80}"),
-                Skill("outlook.list_attachments", "Read-only: List attachments for selected mail or EntryID.", "{\"entryId\":\"\"}"),
-                Skill("outlook.create_mail_draft", "Mutates document: Create and display a new mail draft without sending it.", "{\"to\":\"person@example.com\",\"cc\":\"\",\"bcc\":\"\",\"subject\":\"Subject\",\"body\":\"Body\"}", true, true, 1),
-                Skill("outlook.create_reply_draft", "Mutates document: Create and display a reply draft for selected mail.", "{\"body\":\"Reply body\"}", true, true, 1),
-                Skill("outlook.create_reply_all_draft", "Mutates document: Create and display a reply-all draft for selected mail.", "{\"body\":\"Reply body\"}", true, true, 1),
-                Skill("outlook.create_forward_draft", "Mutates document: Create and display a forward draft for selected mail.", "{\"to\":\"person@example.com\",\"body\":\"Forward body\"}", true, true, 1),
-                Skill("outlook.set_categories", "Mutates document: Set categories on selected mail.", "{\"categories\":\"Category A, Category B\"}", true, false, 1),
-                Skill("outlook.mark_as_read", "Mutates document: Mark selected mail as read.", "{}", true, false, 1),
-                Skill("outlook.collect_folder_mail", "Read-only: Collect recent mail metadata from current folder for analysis.", "{\"maxItems\":100,\"maxBodyChars\":1000}"),
-                Skill("outlook.collect_monthly_summary_data", "Read-only: Collect current folder mail grouped by month for archive summary.", "{\"maxItems\":500,\"maxBodyChars\":500}")
+                Tool("outlook.get_context", "Read-only: Return active mail or folder context.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
+                Tool("outlook.read_current_mail", "Read-only: Read selected or open mail.", "{\"type\":\"object\",\"properties\":{\"maxChars\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("outlook.read_selection", "Read-only: Read selected email metadata and body.", "{\"type\":\"object\",\"properties\":{\"maxChars\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("outlook.read_mail_by_entry_id", "Read-only: Read one mail item by EntryID.", "{\"type\":\"object\",\"properties\":{\"entryId\":{\"type\":\"string\"},\"maxChars\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("outlook.search_mail", "Read-only: Search recent mail fields with literal or regexp matching and return field coordinates.", "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"mode\":{\"type\":\"string\"},\"matchCase\":{\"type\":\"boolean\"},\"wholeWord\":{\"type\":\"boolean\"},\"fields\":{\"type\":\"string\"},\"maxItems\":{\"type\":\"integer\"},\"maxResults\":{\"type\":\"integer\"},\"maxBodyChars\":{\"type\":\"integer\"},\"contextChars\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("outlook.list_attachments", "Read-only: List attachments for selected mail or EntryID.", "{\"type\":\"object\",\"properties\":{\"entryId\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("outlook.create_mail_draft", "Mutates document: Create and display a new mail draft without sending it.", "{\"type\":\"object\",\"properties\":{\"to\":{\"type\":\"string\"},\"cc\":{\"type\":\"string\"},\"bcc\":{\"type\":\"string\"},\"subject\":{\"type\":\"string\"},\"body\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
+                Tool("outlook.create_reply_draft", "Mutates document: Create and display a reply draft for selected mail.", "{\"type\":\"object\",\"properties\":{\"body\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
+                Tool("outlook.create_reply_all_draft", "Mutates document: Create and display a reply-all draft for selected mail.", "{\"type\":\"object\",\"properties\":{\"body\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
+                Tool("outlook.create_forward_draft", "Mutates document: Create and display a forward draft for selected mail.", "{\"type\":\"object\",\"properties\":{\"to\":{\"type\":\"string\"},\"body\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
+                Tool("outlook.set_categories", "Mutates document: Set categories on selected mail.", "{\"type\":\"object\",\"properties\":{\"categories\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, false, 1),
+                Tool("outlook.mark_as_read", "Mutates document: Mark selected mail as read.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}", true, false, 1),
+                Tool("outlook.collect_folder_mail", "Read-only: Collect recent mail metadata from current folder for analysis.", "{\"type\":\"object\",\"properties\":{\"maxItems\":{\"type\":\"integer\"},\"maxBodyChars\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("outlook.collect_monthly_summary_data", "Read-only: Collect current folder mail grouped by month for archive summary.", "{\"type\":\"object\",\"properties\":{\"maxItems\":{\"type\":\"integer\"},\"maxBodyChars\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}")
             };
         }
 
@@ -136,7 +135,6 @@ namespace RNAssistant.OfficeHosts
                     Host = "Outlook",
                     Name = "Outlook email assistant",
                     Description = "Draft, summarize, and reply to Outlook mail.",
-                    Tags = new List<string> { "outlook", "email", "draft", "reply" },
                     BodyMarkdown = "# Outlook Email Assistant\n\nUse this skill for email tasks.\n\n- Identify whether the user wants a draft, reply, summary, or extraction.\n- Match the requested tone and recipient context.\n- Keep replies concise unless asked otherwise.\n- Do not send mail unless the user explicitly requests sending and a tool supports it.\n- Preserve important dates, names, and commitments.",
                     Enabled = true,
                     BuiltIn = true
@@ -692,9 +690,9 @@ namespace RNAssistant.OfficeHosts
             catch { return string.Empty; }
         }
 
-        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0)
+        private static ToolDefinition Tool(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0)
         {
-            return new ToolDefinition { Id = id, Host = "Outlook", Name = id, Description = description, ArgumentSchemaJson = ToolSchemaSupport.FromPropertySamples(schema), BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel };
+            return new ToolDefinition { Id = id, Host = "Outlook", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel };
         }
 
         private static string Trim(string text, int maxChars)

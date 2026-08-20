@@ -33,7 +33,7 @@ function renderChatSessions() {
     subtitle = subtitle.concat([chatDocumentTitle(activeChat), chatHost(activeChat)].filter(Boolean));
   }
   $("activeChatSubtitle").textContent = subtitle.join(" · ");
-  $("offlineNotice").classList.toggle("hidden", isCurrentDocument);
+  $("documentNotice").classList.toggle("hidden", isCurrentDocument);
   $("openDocumentButton").hidden = isCurrentDocument || !chatDocumentPath(activeChat);
 
   var hasActive = !!state.activeChatId;

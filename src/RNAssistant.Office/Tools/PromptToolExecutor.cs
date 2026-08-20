@@ -23,19 +23,16 @@ namespace RNAssistant.Office.Tools
                 yield break;
             }
 
-            yield return ControllerToolDefinition.Create("common.prompts_read", "Common", "Read-only: Read RNAssistant editable chat and agent prompt templates from Settings.", "{}", name: "prompts_read");
-            yield return ControllerToolDefinition.Create("common.prompts_read_defaults", "Common", "Read-only: Read current RNAssistant prompts and built-in default prompt templates.", "{}", name: "prompts_read_defaults");
+            yield return ControllerToolDefinition.Create("common.prompts_read", "Common", "Read-only: Read RNAssistant editable chat and agent prompt templates from Settings.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}", name: "prompts_read");
+            yield return ControllerToolDefinition.Create("common.prompts_read_defaults", "Common", "Read-only: Read current RNAssistant prompts and built-in default prompt templates.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}", name: "prompts_read_defaults");
             yield return ControllerToolDefinition.Create(
                 "common.prompts_save",
                 "Common",
-                "Mutates settings: Update RNAssistant Agent, Chat, recovery, compaction, or title prompts after the user asks to edit them.",
+                "Mutates settings: Update RNAssistant Agent, Chat, compaction, or title prompts after the user asks to edit them.",
                 "{\"type\":\"object\",\"properties\":{" +
                     "\"systemPrompt\":{\"type\":\"string\"}," +
                     "\"chatSystemPrompt\":{\"type\":\"string\"}," +
                     "\"systemPromptRole\":{\"type\":\"string\",\"enum\":[\"developer\",\"system\",\"user\"]}," +
-                    "\"forceToolUsePrompt\":{\"type\":\"string\"}," +
-                    "\"repairDecisionPrompt\":{\"type\":\"string\"}," +
-                    "\"planContinuationPrompt\":{\"type\":\"string\"}," +
                     "\"contextCompactionPrompt\":{\"type\":\"string\"}," +
                     "\"chatTitlePrompt\":{\"type\":\"string\"}}," +
                     "\"required\":[],\"additionalProperties\":false}",
@@ -87,16 +84,11 @@ namespace RNAssistant.Office.Tools
             var settings = dryRun
                 ? source.Clone()
                 : source;
-            settings.AgentPrompts = settings.AgentPrompts ?? new AgentPromptSettings();
-
             ApplyIfPresent(command, "systemPrompt", value => settings.SystemPrompt = value);
             ApplyIfPresent(command, "chatSystemPrompt", value => settings.ChatSystemPrompt = value);
             ApplyIfPresent(command, "systemPromptRole", value => settings.SystemPromptRole = NormalizePromptRole(value));
-            ApplyIfPresent(command, "forceToolUsePrompt", value => settings.AgentPrompts.ForceToolUsePrompt = value);
-            ApplyIfPresent(command, "repairDecisionPrompt", value => settings.AgentPrompts.RepairDecisionPrompt = value);
-            ApplyIfPresent(command, "planContinuationPrompt", value => settings.AgentPrompts.PlanContinuationPrompt = value);
-            ApplyIfPresent(command, "contextCompactionPrompt", value => settings.AgentPrompts.ContextCompactionPrompt = value);
-            ApplyIfPresent(command, "chatTitlePrompt", value => settings.AgentPrompts.ChatTitlePrompt = value);
+            ApplyIfPresent(command, "contextCompactionPrompt", value => settings.ContextCompactionPrompt = value);
+            ApplyIfPresent(command, "chatTitlePrompt", value => settings.ChatTitlePrompt = value);
 
             if (dryRun)
             {
@@ -126,7 +118,8 @@ namespace RNAssistant.Office.Tools
                 systemPrompt = settings.SystemPrompt,
                 chatSystemPrompt = settings.ChatSystemPrompt,
                 systemPromptRole = settings.SystemPromptRole,
-                agentPrompts = settings.AgentPrompts ?? new AgentPromptSettings()
+                contextCompactionPrompt = settings.ContextCompactionPrompt,
+                chatTitlePrompt = settings.ChatTitlePrompt
             };
         }
 

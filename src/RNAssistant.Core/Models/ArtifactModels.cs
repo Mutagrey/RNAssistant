@@ -5,7 +5,6 @@ namespace RNAssistant.Core.Models
 {
     public static class ChatArtifactKinds
     {
-        public const string Plan = "plan";
         public const string Markdown = "markdown";
         public const string HtmlWorkspace = "html_workspace";
         public const string Image = "image";

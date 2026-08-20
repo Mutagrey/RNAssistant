@@ -475,7 +475,7 @@
   font-size: 11px;
 }
 
-.offline-notice {
+.document-notice {
   display: flex;
   gap: 8px;
   align-items: center;

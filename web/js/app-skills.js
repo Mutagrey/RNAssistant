@@ -11,7 +11,7 @@ function renderSkills() {
     enabled: function (skill) { return skill.Enabled !== false; },
     icon: function (skill) { return skill.BuiltIn ? "SKL" : "CUS"; },
     meta: skillListMeta,
-    description: function (skill) { return skill.Description || ((skill.Tags || []).join(", ") || "Инструкция навыка"); },
+    description: function (skill) { return skill.Description || "Инструкция навыка"; },
     groupKey: function (skill) { return (skill.Host || "Common") + ":" + (skill.BuiltIn ? "builtin" : "custom"); },
     groupLabel: skillGroupLabel,
     groupStoragePrefix: "skills",
@@ -44,8 +44,7 @@ function skillMatchesSearch(skill, query) {
     skill.Id || "",
     skill.Name || "",
     skill.Host || "",
-    skill.Description || "",
-    (skill.Tags || []).join(" ")
+    skill.Description || ""
   ].join(" ").toLowerCase();
   return text.indexOf(query) >= 0;
 }
@@ -69,7 +68,6 @@ function renderSkillEditor() {
   $("skillIdInput").value = skill ? (skill.Id || "") : "";
   $("skillHostInput").value = skill ? (skill.Host || "Common") : "Common";
   $("skillDescriptionInput").value = skill ? (skill.Description || "") : "";
-  $("skillTagsInput").value = skill ? ((skill.Tags || []).join(", ")) : "";
   $("skillBodyInput").value = skill ? (skill.BodyMarkdown || "") : "";
   if (typeof setCodeEditorValue === "function") {
     setCodeEditorValue("skillBodyInput", $("skillBodyInput").value);
@@ -80,7 +78,6 @@ function renderSkillEditor() {
     "skillIdInput",
     "skillHostInput",
     "skillDescriptionInput",
-    "skillTagsInput",
     "skillBodyInput"
   ].forEach(function (id) {
     $(id).disabled = disabled || builtIn;
@@ -110,7 +107,6 @@ function syncSelectedSkillFromEditor() {
   skill.Host = $("skillHostInput").value;
   skill.Name = skill.Id;
   skill.Description = $("skillDescriptionInput").value;
-  skill.Tags = parseSkillTags($("skillTagsInput").value);
   skill.BodyMarkdown = $("skillBodyInput").value;
   skill.Enabled = $("skillEnabledInput").checked;
   skill.BuiltIn = false;
@@ -124,19 +120,10 @@ function readSkills() {
       Host: skill.Host || "Common",
       Name: skill.Name || skill.Id || "",
       Description: skill.Description || "",
-      Tags: skill.Tags || [],
       BodyMarkdown: skill.BodyMarkdown || "",
       Enabled: skill.Enabled !== false,
       BuiltIn: !!skill.BuiltIn
     };
-  });
-}
-
-function parseSkillTags(text) {
-  return (text || "").split(",").map(function (tag) {
-    return tag.trim();
-  }).filter(function (tag) {
-    return !!tag;
   });
 }
 
@@ -151,7 +138,6 @@ function selectedSkillContext() {
     "# Skill",
     "id: " + (skill.Id || ""),
     "host: " + (skill.Host || "Common"),
-    "tags: " + ((skill.Tags || []).join(", ")),
     "",
     "## Description",
     skill.Description || "",
@@ -194,7 +180,6 @@ function bindSkillActions() {
       Host: "Common",
       Name: "new_skill",
       Description: "",
-      Tags: [],
       BodyMarkdown: "# Новый навык\n\nИспользуйте этот навык, когда...\n",
       Enabled: true,
       BuiltIn: false
@@ -216,7 +201,6 @@ function bindSkillActions() {
       Host: source.Host || "Common",
       Name: id,
       Description: source.Description || "",
-      Tags: (source.Tags || []).slice(),
       BodyMarkdown: source.BodyMarkdown || "",
       Enabled: true,
       BuiltIn: false

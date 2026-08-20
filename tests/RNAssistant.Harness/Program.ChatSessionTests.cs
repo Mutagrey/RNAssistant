@@ -34,7 +34,6 @@ namespace RNAssistant.Harness
                     Id = null,
                     Role = "user",
                     Content = "hello",
-                    ToolCalls = null,
                     ArtifactIds = new List<string> { "artifact-a", "artifact-a", "" },
                     Activity = new ChatActivity
                     {
@@ -45,7 +44,6 @@ namespace RNAssistant.Harness
                 });
                 session.ContextCheckpoints.Add(new ContextCheckpoint { Id = null, ThroughMessageId = session.Messages[0].Id });
                 session.Artifacts.Add(new ChatArtifact { Id = null, Kind = ChatArtifactKinds.Markdown, RelatedArtifactIds = null });
-                session.ActiveSkillIds = new List<string> { " common.skill ", "COMMON.SKILL" };
                 store.Save(session);
 
                 var loaded = store.Load("Word", "doc-key", session.Id);
@@ -55,12 +53,9 @@ namespace RNAssistant.Harness
                 AssertEqual("hello", loaded.Messages[0].Content, "message content");
                 AssertEqual("Stored activity", loaded.Messages[0].Activity.Title, "message activity title");
                 AssertTrue(!string.IsNullOrWhiteSpace(loaded.Messages[0].Id), "missing message id normalized");
-                AssertTrue(loaded.Messages[0].ToolCalls != null, "null tool calls normalized");
                 AssertEqual(1, loaded.Messages[0].ArtifactIds.Count, "artifact refs deduplicated");
                 AssertTrue(!string.IsNullOrWhiteSpace(loaded.Artifacts[0].Id), "missing artifact id normalized");
                 AssertTrue(loaded.Artifacts[0].RelatedArtifactIds != null, "artifact relations normalized");
-                AssertEqual(1, loaded.ActiveSkillIds.Count, "active skills normalized");
-
                 var sessions = store.List("Word", "doc-key", "Doc");
                 AssertEqual(1, sessions.Count, "document session count");
                 AssertEqual(session.Id, sessions[0].Id, "session id");
@@ -238,15 +233,15 @@ namespace RNAssistant.Harness
                 AssertEqual(1, draftSummaries.Count, "active transient draft is visible in chat tree");
                 AssertEqual(ChatModes.Agent, draftSummaries[0].Mode, "visible transient draft keeps agent mode");
 
-                var offline = service.CreateChatForDocument(
-                    "Offline draft",
+                var archived = service.CreateChatForDocument(
+                    "Archived draft",
                     "Word",
                     "archived-doc",
                     "Archive.docx",
                     "C:\\Docs\\Archive.docx");
-                AssertEqual(ChatModes.Agent, offline.Mode, "document group draft defaults to agent mode");
-                AssertEqual("archived-doc", offline.DocumentKey, "document group draft uses target document");
-                AssertEqual("C:\\Docs\\Archive.docx", offline.DocumentPath, "document group draft keeps document path");
+                AssertEqual(ChatModes.Agent, archived.Mode, "document group draft defaults to agent mode");
+                AssertEqual("archived-doc", archived.DocumentKey, "document group draft uses target document");
+                AssertEqual("C:\\Docs\\Archive.docx", archived.DocumentPath, "document group draft keeps document path");
             });
         }
 

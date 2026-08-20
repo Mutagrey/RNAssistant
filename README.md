@@ -165,11 +165,11 @@ Runtime data is stored under:
 
 `%AppData%\RNAssistant`
 
-- `settings.json` - API base URL, model, headers, token limits, response/tool roles and editable prompts.
+- `settings.json` - API base URL, model, headers, token limits, safety settings and editable prompts.
 - `secret.bin` - API key protected with DPAPI CurrentUser.
 - `tools` - central editable executable tool library.
 - `skills` - markdown guidance files used by the agent when choosing an approach.
-- `chats` - per-document chat session folders; each chat stores the full transcript, context checkpoints, active skills, attachments, and artifact revisions.
+- `chats` - per-document chat session folders; each chat stores the transcript, context checkpoints, attachments, and artifact revisions.
 
 Settings has `Clear Chats/Data` for development resets. It clears chats, chat context, VBA backups and WebView user data, while keeping settings, saved API key and custom tools and skills.
 
@@ -178,50 +178,35 @@ Word, Excel and PowerPoint documents are identified by a custom document propert
 ## Tool Protocol
 
 The API is OpenAI-compatible chat completions: `/v1/chat/completions`.
-Endpoint compatibility details are in `docs/model-endpoint-compatibility.md`; the full wire/runtime contract is in `docs/agent-decision-protocol.md`.
+Endpoint compatibility details are in `docs/model-endpoint-compatibility.md`; the Agent flow is in `docs/agent-protocol.md`.
 
 Each chat stores an explicit execution mode:
 
-- `Chat` sends a normal completion without planner instructions, Office snapshots, or tools.
-- `Agent` is the default and uses the local planner/tool loop. It can also answer ordinary questions without tools. HTML workspace and unfinished agent continuations always use Agent.
+- `Chat` sends a normal completion without tools, skills, agent JSON, or Office execution.
+- `Agent` is the default and uses a direct model/tool loop. It can also answer ordinary questions without tools.
 
-Editable Chat/Agent instructions use `developer` by default. The Prompts settings page can switch the role to `system` or `user` and edit the main Agent prompt, Chat prompt, recovery transitions and title prompt. Agent-side prompt changes use `common.prompts_read_defaults` and confirmed `common.prompts_save`.
+Editable Agent instructions use `developer` by default and may use `system` or `user`. The Prompts page edits the Agent prompt, Chat prompt, context-compaction prompt, and title prompt. Agent-side prompt changes use `common.prompts_read_defaults` and confirmed `common.prompts_save`.
 
-In Agent mode the model returns one `AgentDecision v1` object. A tool decision contains one call or up to eight independent read-only calls:
+In Agent mode the prompt contains all runnable tools in native-like function JSON and the full bodies of all enabled skills. The model returns one raw JSON object. A tool turn contains exactly one call:
 
 ```json
 {
-  "protocolVersion": 1,
-  "kind": "tool",
-  "decisionSummary": "Read the table before editing.",
-  "goal": null,
-  "plan": null,
-  "tool": [
+  "message": "Read the table before editing.",
+  "tool_calls": [
     {
-      "toolId": "excel.read_range",
+      "id": "call_1",
+      "name": "excel.read_range",
       "arguments": { "address": "A1:D20" }
     }
-  ],
-  "message": null
+  ]
 }
 ```
 
-The other decisions are `plan`, `clarify`, `final`, and `cannot_complete`. The response is exactly one raw object: Markdown fences, surrounding prose and alternate envelopes are rejected. Multi-tool batches are executed locally in order and are accepted only for independent read-only calls; mutations, confirmations and result-dependent actions stay single-call. `decisionSummary` is a short observable action summary, not chain-of-thought; provider reasoning is stored separately when present.
+To answer or clarify, the model returns `{"message":"...","tool_calls":[]}`. Agent mode always requests `json_object`; there are no response-mode fallbacks, native tool-call transport, batches, plans, format repair, router, tool slicer, skill activation, automatic retries, or separate verification phase.
 
-After a visible plan is accepted, the next response schema excludes another `plan` until a new local runtime observation exists. Reworded plans without new evidence are corrected once and are not added to the transcript.
+Office tools execute locally. The next model turn receives a string protocol message such as `TOOL_RESULT:\n{"ok":true,"tool_call_id":"call_1","name":"excel.read_range","status":"completed","message":"Range read.","data":{...},"error":null}`. The model decides what to do next. The runtime only enforces exact tool ids, formal argument schemas, safety/confirmation metadata, and iteration/tool-step limits.
 
-Settings provides three API modes: strict `json_schema` by default, `json_object + prompt`, and OpenAI-compatible `native_tool_calls + json_schema`. The first mode falls back to `json_object` only before any tool has executed. Tool results use `role: tool` by default with one matching assistant `tool_calls[]` batch and a `role: tool` result for every `tool_call_id`; endpoints without tool-history support can receive normalized results as `developer` or `user` instead.
-
-The runtime routes the request, slices the tool catalog, validates the decision and arguments against formal JSON Schema, gates risk/confirmation, executes locally, normalizes observations, and runs deterministic verification for mutations. Custom tools without a formal object JSON Schema are rejected.
-
-Routing happens before Office context capture. General questions receive an empty tool catalog and do not read the active document. Document-dependent requests use explicit read tools; mutations inspect first only when the route marks the target as unknown or risky.
-
-In Agent mode, tools are available only when selected by the deterministic router and current phase. Level 2/3 or confirmation-required actions pause for user confirmation unless `Auto-confirm tool actions` is enabled. Confirmed tools can continue the same run.
-If a route requires a tool but filtering leaves no available tool, the runtime records a local diagnostic without calling the model.
-Decision activities store routing diagnostics: route reason, selected tool ids, exclusion counts, and bounded per-tool exclusion details. Tool selection keeps mutation and inspection capabilities balanced; `Tools in one planner prompt` controls the bounded catalog size.
-Context accounting includes message roles/content, current attachments, response schema and native tool definitions. At 80% of the input budget the runtime asks the model for a structured checkpoint, preserves the full raw transcript, and replays that checkpoint plus an exact contiguous tail. Exact assembly and estimator limits are documented in `docs/agent-decision-protocol.md`.
-Pipeline safety is resolved recursively before execution. Nested document/local mutations, risk, confirmation requirements, invalid references, and cycles cannot be hidden by incorrect top-level metadata.
-After a document mutation, only a new verification observation can complete the route; an earlier inspection does not count as verification.
+Context compaction preserves the full stored transcript and replays a checkpoint plus an exact tail. Pipeline safety is resolved recursively, so nested mutation, risk, confirmation, missing-reference, and cycle errors cannot be hidden by top-level metadata.
 
 ## HTML Workspace
 
@@ -274,7 +259,7 @@ Pipeline tools use:
 
 Each pipeline step must set `toolId`; step `id` values must be unique. `id` is only the step label used for placeholders. Supported placeholders are `{{args.name}}`, `{{steps.stepId.message}}`, `{{steps.stepId.dataJson}}`, and `{{steps.stepId.success}}`.
 
-The Tools tab can run a selected tool with ad hoc JSON arguments. `Dry Run` resolves the planned calls without changing the Office document. `Run` is treated as explicit user confirmation.
+The Tools tab can run a selected tool with ad hoc JSON arguments. `Dry Run` resolves pipeline steps without changing the Office document. `Run` is treated as explicit user confirmation.
 
 For Excel, Word, and PowerPoint, `executor: "vba"` uses a strict comment manifest and a `Public Function ... As String` entry point with typed positional arguments. A global package is injected for one run and cleaned in `finally`; explicit persistent installation is allowed only in macro-enabled documents. RNAssistant also discovers valid document-local tools through the VBA project object model. Both paths require Trust Access to the VBA project object model.
 
@@ -286,19 +271,19 @@ Markdown skills are stored under:
 
 `%AppData%\RNAssistant\skills`
 
-Each custom skill is a `SKILL.md` guidance file with discovery metadata (`id`, `host`, `description`, `version`, `appliesTo`, `requires`, `conflicts`, `toolCapabilities`, `resources`, `tags`, `enabled`) plus markdown instructions. Every Agent request sees only the compact skill index; the model activates exact ids through `common.skills_load`, after which dependency-checked bodies and owned tools become available. Skills are guidance, never executable results. Agent mode can also use `common.skills_list`, `common.skills_read`, `common.skills_save`, and `common.skills_delete`; save/delete requires confirmation unless auto-confirm is enabled.
+Each custom skill is a `SKILL.md` guidance file with simple metadata (`id`, `host`, `name`, `description`, `version`, `enabled`) and markdown instructions. Every enabled visible skill is included in full in each Agent request. There is no skill router, activation state, dependency graph, or hidden tool ownership. Agent mode can inspect and edit custom skills through `common.skills_list`, `common.skills_read`, `common.skills_save`, and `common.skills_delete`; save/delete requires confirmation unless auto-confirm is enabled.
 
 ## VBA Workflow
 
 Office VBA support requires Office setting `Trust access to the VBA project object model`.
 
-- Settings has `Include VBA code in chat context`; keep it off unless the model needs to review existing VBA. Settings also has request timeout seconds; increase it for slow local or proxy LLM endpoints.
+- Settings has request timeout seconds; increase it for slow local or proxy LLM endpoints.
 - Excel, Word, and PowerPoint can read VBA modules, show source code, and list RNAssistant rollback backups.
 - `Preview Diff` shows the current editor changes before saving.
 - `Save Module` replaces the selected module and stores the previous version under `%AppData%\RNAssistant\vba-backups`.
 - `Restore Backup` restores the selected backup; restoring also backs up the current module first.
 - Existing-module writes fail closed when a rollback backup cannot be created. A failed code write restores the original module when Office still permits access.
-- Agent mutations verify the resulting module against the expected code hash before reporting completion.
+- VBA writes retain local backup, expected-hash, ownership, and stale-state checks inside the VBA tools.
 - `Review in Chat` sends loaded VBA modules to chat for review and improvement suggestions.
 
 The model can call host-specific tools such as `excel.vba_read_project`, `word.vba_read_module`, `powerpoint.vba_apply_patch`, `*.vba_replace_text`, `*.vba_replace_module`, `*.vba_list_backups`, and `*.vba_restore_backup`. Prefer `*.vba_apply_patch` for small structured patches and `*.vba_replace_module` only for whole-module replacement.
@@ -319,7 +304,7 @@ In chat, ask for the desired Office action in normal language. For example:
 
 `Создай новый лист Sales Demo, сгенерируй таблицу продаж по месяцам и построй линейный график.`
 
-The model responds with one AgentDecision v1 per turn. The runtime may execute tools such as `excel.add_sheet`, `excel.write_table`, and `excel.add_chart` sequentially after router slicing, schema validation, risk gating, and confirmation checks. Recoverable failures are recorded as observations so the model can choose a corrected next action.
+The model returns one JSON response per turn. The runtime may execute tools such as `excel.add_sheet`, `excel.write_table`, and `excel.add_chart` one at a time after schema, safety, and confirmation checks. Every result is returned to the model as JSON so it can choose the next action.
 
 Use the Tools tab to create or edit reusable tools:
 

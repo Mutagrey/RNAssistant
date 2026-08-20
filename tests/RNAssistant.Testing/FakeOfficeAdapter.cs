@@ -193,17 +193,17 @@ namespace RNAssistant.Harness
         {
             if (string.Equals(_hostName, "Word", StringComparison.OrdinalIgnoreCase))
             {
-                return new[] { BuiltInSkill("word.document_editing", "Word", "Word document editing", "Rewrite, insert, format, and review Word document content.", new[] { "word", "editing", "review", "formatting" }) };
+                return new[] { BuiltInSkill("word.document_editing", "Word", "Word document editing", "Rewrite, insert, format, and review Word document content.") };
             }
             if (string.Equals(_hostName, "PowerPoint", StringComparison.OrdinalIgnoreCase))
             {
-                return new[] { BuiltInSkill("powerpoint.deck_building", "PowerPoint", "PowerPoint deck building", "Create and improve slide structure, content, and speaker notes.", new[] { "powerpoint", "slides", "deck", "notes" }) };
+                return new[] { BuiltInSkill("powerpoint.deck_building", "PowerPoint", "PowerPoint deck building", "Create and improve slide structure, content, and speaker notes.") };
             }
             if (string.Equals(_hostName, "Outlook", StringComparison.OrdinalIgnoreCase))
             {
-                return new[] { BuiltInSkill("outlook.email_assistant", "Outlook", "Outlook email assistant", "Draft, summarize, and reply to Outlook mail.", new[] { "outlook", "email", "draft", "reply" }) };
+                return new[] { BuiltInSkill("outlook.email_assistant", "Outlook", "Outlook email assistant", "Draft, summarize, and reply to Outlook mail.") };
             }
-            return new[] { BuiltInSkill("excel.analysis_reporting", "Excel", "Excel analysis reporting", "Analyze ranges, create summaries, tables, and charts in Excel.", new[] { "excel", "analysis", "reporting", "charts" }) };
+            return new[] { BuiltInSkill("excel.analysis_reporting", "Excel", "Excel analysis reporting", "Analyze ranges, create summaries, tables, and charts in Excel.") };
         }
 
         public void QueueResult(string toolId, ToolResult result)
@@ -1197,7 +1197,7 @@ namespace RNAssistant.Harness
             };
         }
 
-        private static SkillDefinition BuiltInSkill(string id, string host, string name, string description, string[] tags)
+        private static SkillDefinition BuiltInSkill(string id, string host, string name, string description)
         {
             return new SkillDefinition
             {
@@ -1205,7 +1205,6 @@ namespace RNAssistant.Harness
                 Host = host,
                 Name = name,
                 Description = description,
-                Tags = new List<string>(tags ?? new string[0]),
                 BodyMarkdown = "# " + name,
                 Enabled = true,
                 BuiltIn = true
@@ -1235,8 +1234,6 @@ namespace RNAssistant.Harness
                 RiskLevel = tool.RiskLevel,
                 UseWhen = tool.UseWhen,
                 DoNotUseWhen = tool.DoNotUseWhen,
-                ExamplesJson = tool.ExamplesJson,
-                VerifyJson = tool.VerifyJson,
                 CapabilityStatus = tool.CapabilityStatus,
                 Limitations = tool.Limitations
             };

@@ -485,14 +485,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("model")]
         public string Model { get; set; }
 
-        [JsonProperty("responseMode")]
-        public string ResponseMode { get; set; }
-
         [JsonProperty("instructionRole")]
         public string InstructionRole { get; set; }
-
-        [JsonProperty("toolResultRole")]
-        public string ToolResultRole { get; set; }
 
         [JsonProperty("summary")]
         public string Summary { get; set; }

@@ -402,7 +402,7 @@ async function clearRuntimeData() {
 function chatModeDefinition(mode) {
   return mode === "chat"
     ? { value: "chat", title: "Chat", icon: "○", description: "Прямой ответ модели без инструментов" }
-    : { value: "agent", title: "Agent", icon: "✦", description: "Планирует, вызывает инструменты и проверяет результат" };
+    : { value: "agent", title: "Agent", icon: "✦", description: "Получает skills и tools, выполняет их по одному" };
 }
 
 function renderChatModePicker() {

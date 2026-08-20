@@ -94,16 +94,11 @@ function renderSettings() {
   $("modelInput").value = s.Model || s.model || "";
   var instructionRole = String(s.SystemPromptRole || s.systemPromptRole || "developer").toLowerCase();
   $("systemPromptRoleInput").value = instructionRole === "system" || instructionRole === "user" ? instructionRole : "developer";
-  var responseMode = String(s.AgentResponseMode || s.agentResponseMode || "json_schema").toLowerCase();
-  $("agentResponseModeInput").value = responseMode === "native_tool_calls" || responseMode === "json_object" ? responseMode : "json_schema";
   var reasoningRequestMode = String(s.ReasoningRequestMode || s.reasoningRequestMode || "auto").toLowerCase();
   var reasoningModes = ["auto", "reasoning_effort", "enable_thinking", "chat_template_kwargs", "reasoning_enabled", "custom_json"];
   $("reasoningRequestModeInput").value = reasoningModes.indexOf(reasoningRequestMode) >= 0 ? reasoningRequestMode : "auto";
   $("reasoningCustomJsonInput").value = s.ReasoningCustomJson || s.reasoningCustomJson || "{}";
   updateReasoningCustomJsonVisibility();
-  $("fallbackJsonObjectInput").checked = (s.FallbackToJsonObject !== false && s.fallbackToJsonObject !== false);
-  var toolResultRole = String(s.ToolResultRole || s.toolResultRole || "tool").toLowerCase();
-  $("toolResultRoleInput").value = toolResultRole === "developer" || toolResultRole === "user" ? toolResultRole : "tool";
   $("maxTokensInput").value = compatibilityValue(s, "MaxTokens", "maxTokens", 2048);
   $("requestTimeoutInput").value = compatibilityValue(s, "RequestTimeoutSeconds", "requestTimeoutSeconds", 300);
   $("temperatureInput").value = compatibilityValue(s, "Temperature", "temperature", 0.2);
@@ -116,16 +111,11 @@ function renderSettings() {
   $("streamInput").checked = !!(s.StreamResponses || s.streamResponses);
   $("autoRunToolsInput").checked = (s.AutoRunToolCalls !== false && s.autoRunToolCalls !== false);
   $("autoConfirmToolsInput").checked = !!(s.AutoConfirmToolActions || s.autoConfirmToolActions);
-  $("autoRetryToolsInput").checked = (s.AutoRetryToolErrors !== false && s.autoRetryToolErrors !== false);
-  $("requireVerificationInput").checked = (s.RequireVerificationForMutations !== false && s.requireVerificationForMutations !== false);
-  $("autoContinueAfterConfirmationInput").checked = (s.AutoContinueAfterConfirmation !== false && s.autoContinueAfterConfirmation !== false);
   $("autoCompressContextInput").checked = (s.AutoCompressContext !== false && s.autoCompressContext !== false);
   $("debugModelTrafficInput").checked = !!(s.DebugModelTraffic || s.debugModelTraffic);
   $("smartChatTitlesInput").checked = (s.SmartChatTitles !== false && s.smartChatTitles !== false);
   $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || 8;
-  $("maxAgentFormatRetriesInput").value = s.MaxAgentFormatRetries || s.maxAgentFormatRetries || 2;
   $("maxAgentToolStepsInput").value = s.MaxAgentToolSteps || s.maxAgentToolSteps || 40;
-  $("maxAgentToolsPerRequestInput").value = s.MaxAgentToolsPerRequest || s.maxAgentToolsPerRequest || 24;
   if (typeof renderPromptSettings === "function") {
     renderPromptSettings(s);
   }
@@ -151,18 +141,15 @@ function readSettings() {
   }
   var promptSettings = typeof readPromptSettings === "function"
     ? readPromptSettings()
-    : { SystemPrompt: "", ChatSystemPrompt: "", AgentPrompts: {} };
+    : { SystemPrompt: "", ChatSystemPrompt: "", ContextCompactionPrompt: "", ChatTitlePrompt: "" };
   var reasoningRequestMode = $("reasoningRequestModeInput").value;
   var reasoningCustomJson = readReasoningCustomJson(reasoningRequestMode);
   return {
     BaseUrl: $("baseUrlInput").value.trim(),
     ModelsConfigUrl: $("modelsConfigUrlInput").value.trim(),
     Model: $("modelInput").value.trim(),
-    AgentResponseMode: $("agentResponseModeInput").value,
     ReasoningRequestMode: reasoningRequestMode,
     ReasoningCustomJson: reasoningCustomJson,
-    FallbackToJsonObject: $("fallbackJsonObjectInput").checked,
-    ToolResultRole: $("toolResultRoleInput").value,
     MaxTokens: Number($("maxTokensInput").value || 2048),
     RequestTimeoutSeconds: Number($("requestTimeoutInput").value || 300),
     Temperature: Number($("temperatureInput").value || 0.2),
@@ -173,24 +160,19 @@ function readSettings() {
     StreamResponses: $("streamInput").checked,
     AutoRunToolCalls: $("autoRunToolsInput").checked,
     AutoConfirmToolActions: $("autoConfirmToolsInput").checked,
-    AutoRetryToolErrors: $("autoRetryToolsInput").checked,
-    RequireVerificationForMutations: $("requireVerificationInput").checked,
-    AutoContinueAfterConfirmation: $("autoContinueAfterConfirmationInput").checked,
     AutoCompressContext: $("autoCompressContextInput").checked,
     DebugModelTraffic: $("debugModelTrafficInput").checked,
     SmartChatTitles: $("smartChatTitlesInput").checked,
     MaxAgentIterations: Number($("maxAgentIterationsInput").value || 8),
-    MaxAgentFormatRetries: Number($("maxAgentFormatRetriesInput").value || 2),
     MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || 40),
-    MaxAgentToolsPerRequest: Number($("maxAgentToolsPerRequestInput").value || 24),
     SystemPrompt: promptSettings.SystemPrompt,
     ChatSystemPrompt: promptSettings.ChatSystemPrompt,
     SystemPromptRole: $("systemPromptRoleInput").value,
-    AgentPrompts: promptSettings.AgentPrompts,
+    ContextCompactionPrompt: promptSettings.ContextCompactionPrompt,
+    ChatTitlePrompt: promptSettings.ChatTitlePrompt,
     ModelImageSupportOverrides: modelImageSupportOverrides(),
     ModelAudioSupportOverrides: modelAudioSupportOverrides(),
     ModelCapabilities: modelCapabilitiesForSettings(),
-    AttachmentModelPriority: attachmentModelPriorityForSettings(),
     HtmlNetworkAllowedOrigins: $("htmlNetworkOriginsInput").value.split(/\r?\n/).map(function (value) { return value.trim(); }).filter(Boolean),
     CustomHeaders: textToHeaders($("headersInput").value)
   };
@@ -229,9 +211,7 @@ function renderModelCompatibilityResult(result) {
   meta.className = "model-compatibility-meta";
   meta.textContent = [
     compatibilityValue(result, "Model", "model", ""),
-    compatibilityValue(result, "ResponseMode", "responseMode", ""),
-    "instruction: " + compatibilityValue(result, "InstructionRole", "instructionRole", ""),
-    "tool result: " + compatibilityValue(result, "ToolResultRole", "toolResultRole", "")
+    "instruction: " + compatibilityValue(result, "InstructionRole", "instructionRole", "")
   ].filter(Boolean).join(" · ");
   root.appendChild(meta);
 

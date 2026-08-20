@@ -81,7 +81,7 @@
   <ItemGroup>
     <Compile Include="Models\AppSettings.cs" />
     <Compile Include="Models\ArtifactModels.cs" />
-    <Compile Include="Models\AgentPlannerModels.cs" />
+    <Compile Include="Models\AgentResponseModels.cs" />
     <Compile Include="Models\ChatModels.cs" />
     <Compile Include="Models\ChartArtifactModels.cs" />
     <Compile Include="Models\ContextModels.cs" />
@@ -99,12 +99,10 @@
     <Compile Include="Tools\ToolArgumentNormalizer.cs" />
     <Compile Include="Tools\ToolSchemaSupport.cs" />
     <Compile Include="Tools\TextPatternEngine.cs" />
-    <Compile Include="Tools\AgentDecisionSchemaBuilder.cs" />
     <Compile Include="Tools\VbaToolManifestParser.cs" />
-    <Compile Include="Tools\AgentPlannerResponseParser.cs" />
+    <Compile Include="Tools\AgentResponseParser.cs" />
     <Compile Include="Services\ContextNormalizer.cs" />
     <Compile Include="Services\ChartArtifactBuilder.cs" />
-    <Compile Include="Services\AgentPromptMigration.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
     <Compile Include="Storage\AttachmentStore.cs" />
     <Compile Include="Storage\ChatStore.cs" />

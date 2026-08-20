@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
-using RNAssistant.Core.Llm;
 
 namespace RNAssistant.Core.Models
 {
@@ -22,15 +21,10 @@ namespace RNAssistant.Core.Models
         public string Id { get; set; }
         public string Role { get; set; }
         public string Content { get; set; }
-        public string DecisionSummary { get; set; }
-        public string Goal { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool ExcludeFromModelContext { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool ProtocolMessage { get; set; }
-        public string ToolCallId { get; set; }
-        public string ToolName { get; set; }
-        public List<LlmToolCall> ToolCalls { get; set; }
         public List<ChatAttachment> Attachments { get; set; }
         public List<string> ArtifactIds { get; set; }
         public string HtmlWorkspaceCheckpointId { get; set; }
@@ -51,7 +45,6 @@ namespace RNAssistant.Core.Models
             Id = Guid.NewGuid().ToString("N");
             CreatedUtc = DateTime.UtcNow;
             Attachments = new List<ChatAttachment>();
-            ToolCalls = new List<LlmToolCall>();
             ArtifactIds = new List<string>();
         }
     }
@@ -87,7 +80,6 @@ namespace RNAssistant.Core.Models
     public sealed class ChatActivity
     {
         public string RunId { get; set; }
-        public string BatchId { get; set; }
         public int? Sequence { get; set; }
         public string Kind { get; set; }
         public string Title { get; set; }
@@ -98,6 +90,7 @@ namespace RNAssistant.Core.Models
         public bool? Retryable { get; set; }
         public string PendingId { get; set; }
         public string ToolId { get; set; }
+        public string ToolCallId { get; set; }
         public string ArgumentsJson { get; set; }
         public string ResultMessage { get; set; }
         public string DataJson { get; set; }
@@ -128,14 +121,12 @@ namespace RNAssistant.Core.Models
         public DateTime CreatedUtc { get; set; }
         public DateTime UpdatedUtc { get; set; }
         public DocumentContext Context { get; set; }
-        public PendingAgentTask PendingAgentTask { get; set; }
         public ChatRunRecord LastRun { get; set; }
         public HtmlWorkspace HtmlWorkspace { get; set; }
         public List<ChatMessage> Messages { get; set; }
         public List<ContextCheckpoint> ContextCheckpoints { get; set; }
         public string ActiveContextCheckpointId { get; set; }
         public List<ChatArtifact> Artifacts { get; set; }
-        public List<string> ActiveSkillIds { get; set; }
         public string ActiveHtmlArtifactId { get; set; }
 
         public ChatSession()
@@ -149,7 +140,6 @@ namespace RNAssistant.Core.Models
             Messages = new List<ChatMessage>();
             ContextCheckpoints = new List<ContextCheckpoint>();
             Artifacts = new List<ChatArtifact>();
-            ActiveSkillIds = new List<string>();
             Mode = ChatModes.Agent;
         }
     }
@@ -185,14 +175,6 @@ namespace RNAssistant.Core.Models
         public string Phase { get; set; }
         public string CurrentAction { get; set; }
         public DateTime StartedUtc { get; set; }
-    }
-
-    public sealed class PendingAgentTask
-    {
-        public string Request { get; set; }
-        public string LastQuestion { get; set; }
-        public string Kind { get; set; }
-        public DateTime UpdatedUtc { get; set; }
     }
 
     public sealed class ChatSessionSummary

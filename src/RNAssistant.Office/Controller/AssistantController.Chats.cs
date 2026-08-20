@@ -106,7 +106,6 @@ namespace RNAssistant.Office
                 fork.Mode = ChatModes.Normalize(source.Mode);
                 fork.HtmlModeEnabled = source.HtmlModeEnabled;
                 fork.ReasoningEnabled = source.ReasoningEnabled;
-                fork.ActiveSkillIds = new List<string>(source.ActiveSkillIds ?? new List<string>());
                 fork.Context = ChatCloneService.CloneContext(LoadContext(source)) ?? CreateEmptyContext();
                 fork.Messages = targetIndex < 0
                     ? new List<ChatMessage>()
@@ -316,7 +315,6 @@ namespace RNAssistant.Office
                 session.ContextCheckpoints = new List<ContextCheckpoint>();
                 session.ActiveContextCheckpointId = null;
                 session.ActiveHtmlArtifactId = null;
-                session.ActiveSkillIds = new List<string>();
                 NormalizeContext(session.Context, session);
                 SaveSessionChanges(session);
             }

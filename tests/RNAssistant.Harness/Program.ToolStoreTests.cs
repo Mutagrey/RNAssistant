@@ -62,7 +62,6 @@ namespace RNAssistant.Harness
                     AgentCanRun = false,
                     RiskLevel = 2,
                     UseWhen = "Create a report.",
-                    VerifyJson = "{\"toolId\":\"excel.list_sheets\"}",
                     CapabilityStatus = "available"
                 };
 
@@ -73,102 +72,6 @@ namespace RNAssistant.Harness
                 AssertTrue(!loaded.AgentCanRun, "agent run metadata preserved");
                 AssertEqual(2, loaded.RiskLevel, "risk metadata preserved");
                 AssertEqual(valid.UseWhen, loaded.UseWhen, "useWhen preserved");
-                AssertEqual(valid.VerifyJson, loaded.VerifyJson, "verify metadata preserved");
-            });
-        }
-
-        private static void AgentValidatesAndCreatesCustomTool()
-        {
-            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                var definitionArgs = new object[]
-                {
-                    "id", "excel.agent_report",
-                    "host", "Excel",
-                    "name", "Agent report",
-                    "description", "Create an agent report.",
-                    "argumentSchemaJson", SheetFormalToolSchema,
-                    "executor", "pipeline",
-                    "pipelineJson", "{\"steps\":[{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}]}",
-                    "enabled", true,
-                    "requiresConfirmation", true,
-                    "mutatesDocument", true,
-                    "agentCanRun", false
-                };
-                var service = ChatServiceWithResponses(
-                    adapter,
-                    executor,
-                    null,
-                    AgentBlock(Command("common.skills_load", "ids", new[] { "common.tool_authoring" })),
-                    AgentBlock(Command("common.tools_validate", definitionArgs)),
-                    AgentBlock(Command("common.tools_save", definitionArgs)),
-                    FinalBlock("Tool created."));
-
-                var result = service.ExecuteAsync(
-                    "Создай пользовательский инструмент для отчета.",
-                    NewSession(adapter),
-                    NewContext(adapter),
-                    new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false },
-                    new List<ToolDefinition>(executor.GetControllerTools()),
-                    null,
-                    null,
-                    BuiltInSkillProvider.GetSkills(adapter)).GetAwaiter().GetResult();
-
-                AssertEqual("Tool created.", result.AssistantText, "agent tool creation final");
-                var read = new ToolCommand { ToolId = "common.tools_read" };
-                read.Arguments["id"] = "excel.agent_report";
-                var readResult = executor.Execute(read, new List<ToolDefinition>(executor.GetControllerTools()), new AppSettings(), false, true);
-                AssertTrue(readResult.Success, "agent-created tool readable");
-                AssertContains(readResult.DataJson, "excel.add_sheet", "agent-created pipeline preserved");
-            });
-        }
-
-        private static void AgentCanCreateAndUseToolDuringDocumentTaskWhenEnabled()
-        {
-            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                var definitionArgs = new object[]
-                {
-                    "id", "excel.custom_chart",
-                    "host", "Excel",
-                    "name", "Custom chart",
-                    "description", "Create the requested chart.",
-                    "argumentSchemaJson", EmptyFormalToolSchema,
-                    "executor", "pipeline",
-                    "pipelineJson", "{\"steps\":[{\"toolId\":\"excel.add_chart\",\"arguments\":{\"sheet\":\"Data\",\"sourceRange\":\"A1:B4\",\"chartName\":\"Generated\",\"title\":\"Generated\"}}]}",
-                    "enabled", true,
-                    "requiresConfirmation", false,
-                    "mutatesDocument", true,
-                    "agentCanRun", true,
-                    "riskLevel", 2
-                };
-                var service = ChatServiceWithResponses(
-                    adapter,
-                    executor,
-                    null,
-                    AgentBlock(Command("common.skills_load", "ids", new[] { "common.tool_authoring" })),
-                    AgentBlock(Command("common.tools_validate", definitionArgs)),
-                    AgentBlock(Command("common.tools_save", definitionArgs)),
-                    AgentBlock(Command("excel.custom_chart")),
-                    FinalBlock("Chart created."));
-
-                var result = service.ExecuteAsync(
-                    "Создай специальный график в текущей книге.",
-                    NewSession(adapter),
-                    NewContext(adapter),
-                    new AppSettings
-                    {
-                        AutoConfirmToolActions = true,
-                        RequireVerificationForMutations = false,
-                        MaxAgentToolsPerRequest = 40
-                    },
-                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
-                    null,
-                    null,
-                    BuiltInSkillProvider.GetSkills(adapter)).GetAwaiter().GetResult();
-
-                AssertEqual("Chart created.", result.AssistantText, "tool-authoring task final");
-                AssertTrue(adapter.Executed.Any(command => string.Equals(command.ToolId, "excel.add_chart", StringComparison.OrdinalIgnoreCase)), "new pipeline tool executed in same run");
             });
         }
 
@@ -208,10 +111,6 @@ namespace RNAssistant.Harness
 
                 var catalogTool = FindTool(new ToolCatalogService(adapter, executor, store).GetVisibleTools(), shadow.Id);
                 AssertTrue(catalogTool != null && catalogTool.BuiltIn, "catalog keeps built-in definition");
-                var plannerTool = FindTool(new AgentToolCatalogResolver(executor, true).Resolve(
-                    adapter.GetBuiltInTools().Concat(new[] { shadow }).ToList()), shadow.Id);
-                AssertTrue(plannerTool != null && plannerTool.BuiltIn, "agent catalog keeps built-in definition");
-
                 var command = new ToolCommand { ToolId = shadow.Id };
                 command.Arguments["name"] = "Protected";
                 var result = executor.Execute(command, new[] { shadow }, new AppSettings { AutoConfirmToolActions = true }, false, false);
@@ -236,20 +135,18 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var resolver = new AgentToolCatalogResolver(executor, true);
-                var tools = resolver.Resolve(adapter.GetBuiltInTools().ToList());
+                var tools = adapter.GetBuiltInTools().ToList();
                 var pipeline = CustomTool("Excel", "excel.dynamic_mutation");
                 pipeline.AgentCanRun = false;
                 pipeline.MutatesDocument = false;
                 pipeline.RiskLevel = 0;
                 pipeline.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Dynamic\"}}]}";
 
-                resolver.Refresh(tools, pipeline);
-
-                var refreshed = FindTool(tools, pipeline.Id);
-                AssertTrue(refreshed != null && refreshed.MutatesDocument, "nested mutation propagated after refresh");
-                AssertTrue(!refreshed.AgentCanRun, "nested mutation agent safety propagated after refresh");
-                AssertTrue(refreshed.RiskLevel > 0, "nested mutation risk propagated after refresh");
+                tools.Add(pipeline);
+                var profile = ToolSafetyPolicy.Resolve(pipeline, tools);
+                AssertTrue(profile.MutatesDocument, "nested mutation propagated");
+                AssertTrue(!profile.AgentCanRun, "nested mutation agent safety propagated");
+                AssertTrue(profile.RiskLevel > 0, "nested mutation risk propagated");
                 AssertTrue(!pipeline.MutatesDocument, "source tool remains unchanged");
             });
         }
@@ -284,10 +181,15 @@ namespace RNAssistant.Harness
             {
                 var tools = new List<ToolDefinition>(fake.GetBuiltInTools());
                 tools.AddRange(executor.GetControllerTools());
-                var prompt = FlattenMessages(BuildPlannerMessages(
-                    new AppSettings(),
+                var prompt = FlattenMessages(new AgentPromptComposer().BuildMessages(
+                    "Test request",
+                    fake,
                     tools,
-                    new SkillDefinition[0]));
+                    new SkillDefinition[0],
+                    new DocumentContext(),
+                    new AppSettings(),
+                    NewSession(fake),
+                    null));
 
                 AssertContains(prompt, "mode: read", "prompt includes read mode");
                 AssertContains(prompt, "mode: mutation", "prompt includes mutation mode");

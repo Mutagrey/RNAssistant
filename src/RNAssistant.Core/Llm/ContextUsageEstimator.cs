@@ -75,9 +75,7 @@ namespace RNAssistant.Core.Llm
                 foreach (var message in session.Messages.Skip(startIndex))
                 {
                     var protocolTool = message != null && message.ProtocolMessage &&
-                        (string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(message.Role, "developer", StringComparison.OrdinalIgnoreCase) ||
+                        (string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase));
                     if (message == null || message.ExcludeFromModelContext || message.Activity != null ||
                         !protocolTool && (string.IsNullOrWhiteSpace(message.Content) ||
@@ -91,18 +89,6 @@ namespace RNAssistant.Core.Llm
                     usedTokens += 4 +
                         ModelContextBudget.EstimateTextTokens(message.Role) +
                         ModelContextBudget.EstimateTextTokens(message.Content);
-                    if (message.ToolCalls != null && message.ToolCalls.Count > 0)
-                    {
-                        usedTokens += 8 + message.ToolCalls.Sum(call => call == null ? 0 :
-                            4 + ModelContextBudget.EstimateTextTokens(call.Id) +
-                            ModelContextBudget.EstimateTextTokens(call.Name) +
-                            ModelContextBudget.EstimateTextTokens(call.ArgumentsJson));
-                    }
-                    if (string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase))
-                    {
-                        usedTokens += 2 + ModelContextBudget.EstimateTextTokens(message.ToolCallId) +
-                            ModelContextBudget.EstimateTextTokens(message.ToolName);
-                    }
                     foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
                     {
                         if (attachment == null)

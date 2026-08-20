@@ -185,17 +185,6 @@ namespace RNAssistant.Core.Llm
         {
             if (message == null || message.ExcludeFromModelContext) return 0;
             var total = 4 + EstimateTextTokens(message.Role) + EstimateTextTokens(message.Content);
-            if (message.ToolCalls != null && message.ToolCalls.Count > 0)
-            {
-                total += 8;
-                total += message.ToolCalls.Sum(call => call == null
-                    ? 0
-                    : 4 + EstimateTextTokens(call.Id) + EstimateTextTokens(call.Name) + EstimateTextTokens(call.ArgumentsJson));
-            }
-            if (string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase))
-            {
-                total += 2 + EstimateTextTokens(message.ToolCallId) + EstimateTextTokens(message.ToolName);
-            }
             foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
             {
                 if (attachment == null) continue;
@@ -212,18 +201,7 @@ namespace RNAssistant.Core.Llm
         public static int EstimateRequestOptionsTokens(LlmRequestOptions options)
         {
             if (options == null) return 0;
-            var total = 8 + EstimateTextTokens(options.ResponseFormat);
-            if (string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.OrdinalIgnoreCase))
-            {
-                total += EstimateTextTokens(options.ResponseSchemaName) + EstimateTextTokens(options.ResponseSchemaJson);
-            }
-            if (options.NativeTools)
-            {
-                total += (options.Tools ?? new LlmToolDefinition[0]).Sum(tool => tool == null
-                    ? 0
-                    : 12 + EstimateTextTokens(tool.ApiName) + EstimateTextTokens(tool.Description) + EstimateTextTokens(tool.ParametersSchemaJson));
-            }
-            return total;
+            return 8 + EstimateTextTokens(options.ResponseFormat);
         }
 
         public static int EstimateAudioTokens(long bytes)

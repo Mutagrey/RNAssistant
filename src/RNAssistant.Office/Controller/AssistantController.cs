@@ -30,11 +30,9 @@ namespace RNAssistant.Office
         private readonly SkillCatalogService _skillCatalog;
         private readonly ChatSessionService _chatSessions;
         private readonly ChatHistoryEditService _chatHistoryEditService;
-        private readonly ChatCompletionService _chatCompletionService;
+        private readonly AgentRunService _agentRunService;
         private readonly PlainChatService _plainChatService;
         private readonly ContextCompactionService _contextCompactionService;
-        private readonly ChatExecutionModeSelector _chatModeSelector;
-        private readonly OfflineChatService _offlineChatService;
         private readonly ContextService _contextService;
         private readonly LlmClient _llmClient;
         private readonly LlmCompletionDelegate _llmCompletion;
@@ -101,11 +99,9 @@ namespace RNAssistant.Office
             _contextCompactionService = new ContextCompactionService(
                 completion,
                 (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars));
-            _chatCompletionService = new ChatCompletionService(_adapter, _toolExecutor, completion, _contextCompactionService);
-            _offlineChatService = new OfflineChatService(_toolExecutor, completion, _contextCompactionService);
+            _agentRunService = new AgentRunService(_adapter, _toolExecutor, completion, _contextCompactionService);
             _plainChatService = new PlainChatService(completion, _contextCompactionService);
             _contextService = new ContextService(_adapter);
-            _chatModeSelector = new ChatExecutionModeSelector();
             _syncRoot = new object();
             _pendingAgentTools = new Dictionary<string, PendingAgentTool>(StringComparer.OrdinalIgnoreCase);
         }
@@ -401,10 +397,13 @@ namespace RNAssistant.Office
                 input = input ?? new ChatTurnInput();
                 var text = input.Text ?? string.Empty;
                 var attachments = input.Attachments ?? new ChatAttachment[0];
+                var executionMode = ChatModes.Normalize(session.Mode);
+                if (executionMode == ChatModes.Agent)
+                {
+                    EnsureCurrentDocument(session);
+                }
                 HtmlWorkspaceArtifactService.CaptureCurrent(session, "Before chat turn");
                 var documentContext = LoadContext(session);
-                var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
-                SkillResolver.ActivateExplicitMentions(session, text, skills);
                 var titleUserSeed = ChatTitleBuilder.ResolveUserSeed(session, text);
                 var shouldGenerateLlmTitle = settings.SmartChatTitles && ChatTitleBuilder.ShouldAssign(session);
                 var provisionalTitle = ChatTitleBuilder.ShouldAssign(session)
@@ -455,7 +454,7 @@ namespace RNAssistant.Office
                     }
                 };
 
-                ChatCompletionResult completion;
+                ChatTurnResult completion;
                 try
                 {
                     try
@@ -487,7 +486,6 @@ namespace RNAssistant.Office
                             "Не удалось обновить сжатый контекст; продолжаю с сохранённой историей.", null, activity));
                         runProgress("compaction_failed", activity.ResultMessage, activity);
                     }
-                    var executionMode = _chatModeSelector.Select(text, session);
                     if (executionMode == ChatModes.Chat)
                     {
                         completion = await _plainChatService.ExecuteAsync(
@@ -500,10 +498,11 @@ namespace RNAssistant.Office
                             runCancellation.Token,
                             input.AppendUserMessage).ConfigureAwait(false);
                     }
-                    else if (_chatSessions.IsCurrentDocument(session))
+                    else
                     {
                         var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-                        completion = await _chatCompletionService.ExecuteAsync(
+                        var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
+                        completion = await _agentRunService.ExecuteAsync(
                             text,
                             session,
                             documentContext,
@@ -516,33 +515,9 @@ namespace RNAssistant.Office
                             runCancellation.Token,
                             input.AppendUserMessage).ConfigureAwait(false);
                     }
-                    else
-                    {
-                        var offlineTools = _toolCatalog.GetVisibleTools()
-                            .Where(tool => tool.Enabled &&
-                                string.Equals(tool.Host, "Common", StringComparison.OrdinalIgnoreCase) &&
-                                !string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
-                            .ToList();
-                        completion = await _offlineChatService.ExecuteAsync(
-                            text,
-                            session,
-                            documentContext,
-                            settings,
-                            offlineTools,
-                            attachments,
-                            runProgress,
-                            RegisterPendingAgentTool,
-                            skills,
-                            runCancellation.Token,
-                            input.AppendUserMessage).ConfigureAwait(false);
-                    }
                 }
                 catch (Exception ex)
                 {
-                    AgentPlanStateService.MarkCurrentForRun(
-                        session,
-                        runId,
-                        ex is OperationCanceledException ? "cancelled" : "failed");
                     RecordFailedTurn(session, ex);
                     if (session.LastRun != null)
                     {
@@ -597,7 +572,7 @@ namespace RNAssistant.Office
             }
         }
 
-        private SendChatResponse CreateSendChatResponse(ChatSession session, AppSettings settings, ChatCompletionResult completion)
+        private SendChatResponse CreateSendChatResponse(ChatSession session, AppSettings settings, ChatTurnResult completion)
         {
             var activeId = session.Id;
             return new SendChatResponse
@@ -627,7 +602,7 @@ namespace RNAssistant.Office
 
         private SendChatResponse EmptySendResponse(ChatSession session, AppSettings settings)
         {
-            return CreateSendChatResponse(session, settings, new ChatCompletionResult
+            return CreateSendChatResponse(session, settings, new ChatTurnResult
             {
                 AssistantText = string.Empty,
                 ToolResults = new object[0],
@@ -794,8 +769,7 @@ namespace RNAssistant.Office
 
             ReportProgress(progress, dryRun ? "checking" : "executing", (dryRun ? "Проверяю tool: " : "Исполняю tool: ") + toolId);
             var result = _toolExecutor.Execute(command, tools, settings, dryRun, true, session, cancellationToken);
-            if (!dryRun && (IsHtmlWorkspaceTool(toolId) ||
-                string.Equals(toolId, "common.skills_load", StringComparison.OrdinalIgnoreCase)))
+            if (!dryRun && IsHtmlWorkspaceTool(toolId))
             {
                 SaveSessionChanges(session);
             }

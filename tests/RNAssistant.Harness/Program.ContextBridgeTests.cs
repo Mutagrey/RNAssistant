@@ -58,18 +58,10 @@ namespace RNAssistant.Harness
                 Id = "message-1",
                 Role = "assistant",
                 Content = "Done",
-                DecisionSummary = "Finishing",
-                Goal = "Prepare report",
                 ExcludeFromModelContext = true,
                 ProtocolMessage = true,
                 ArtifactIds = new List<string> { "plan-1" },
                 HtmlWorkspaceCheckpointId = "html-2",
-                ToolCallId = "call-1",
-                ToolName = "excel_write_table",
-                ToolCalls = new List<LlmToolCall>
-                {
-                    new LlmToolCall { Id = "call-1", Name = "excel_write_table", ArgumentsJson = "{\"address\":\"A1\"}" }
-                },
                 PromptTokens = 10,
                 CompletionTokens = 2,
                 TotalTokens = 12,
@@ -99,15 +91,10 @@ namespace RNAssistant.Harness
             AssertTrue(!object.ReferenceEquals(sourceMessage, clonedMessages[0]), "message cloned");
             AssertEqual("message-1", clonedMessages[0].Id, "message id");
             AssertEqual("assistant", clonedMessages[0].Role, "message role");
-            AssertEqual("Finishing", clonedMessages[0].DecisionSummary, "decision summary cloned");
-            AssertEqual("Prepare report", clonedMessages[0].Goal, "goal cloned");
             AssertTrue(clonedMessages[0].ExcludeFromModelContext, "message context exclusion");
             AssertTrue(clonedMessages[0].ProtocolMessage, "protocol marker cloned");
             AssertEqual("plan-1", clonedMessages[0].ArtifactIds[0], "artifact reference cloned");
             AssertEqual("html-2", clonedMessages[0].HtmlWorkspaceCheckpointId, "html checkpoint cloned");
-            AssertEqual("call-1", clonedMessages[0].ToolCallId, "tool call id");
-            AssertEqual("excel_write_table", clonedMessages[0].ToolCalls[0].Name, "tool call name");
-            AssertTrue(!object.ReferenceEquals(sourceMessage.ToolCalls[0], clonedMessages[0].ToolCalls[0]), "tool call cloned");
             AssertEqual(12, clonedMessages[0].TotalTokens, "message tokens");
             AssertEqual("run-1", clonedMessages[0].RunId, "message run id");
             AssertEqual(4, clonedMessages[0].Sequence, "message sequence");
@@ -125,7 +112,7 @@ namespace RNAssistant.Harness
 
             var artifacts = new[]
             {
-                new ChatArtifact { Id = "plan-1", Kind = ChatArtifactKinds.Plan, Title = "Plan", InlineText = "{}", RelatedArtifactIds = new List<string> { "related" } },
+                new ChatArtifact { Id = "plan-1", Kind = ChatArtifactKinds.Markdown, Title = "Note", InlineText = "{}", RelatedArtifactIds = new List<string> { "related" } },
                 new ChatArtifact { Id = "html-1", Kind = ChatArtifactKinds.HtmlWorkspace, Title = "HTML v1", InlineText = "large-v1" },
                 new ChatArtifact { Id = "html-2", Kind = ChatArtifactKinds.HtmlWorkspace, Title = "HTML v2", ParentArtifactId = "html-1", InlineText = "large-v2" },
                 new ChatArtifact { Id = "related", Kind = ChatArtifactKinds.Markdown, Title = "Related" },
@@ -454,7 +441,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"uiTheme\":\"dark\",\"debugModelTraffic\":true,\"reasoningRequestMode\":\"custom_json\",\"reasoningCustomJson\":\"{\\\"thinking\\\":{\\\"budget\\\":4096}}\",\"systemPromptRole\":\"system\",\"maxAgentFormatRetries\":4,\"modelImageSupportOverrides\":{\"gpt-test\":true},\"modelAudioSupportOverrides\":{\"gpt-audio\":true},\"attachmentModelPriority\":[\"gpt-test\",\"gpt-audio\"]},\"apiKey\":\"secret\"}}")
+                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"uiTheme\":\"dark\",\"debugModelTraffic\":true,\"reasoningRequestMode\":\"custom_json\",\"reasoningCustomJson\":\"{\\\"thinking\\\":{\\\"budget\\\":4096}}\",\"systemPromptRole\":\"system\",\"modelImageSupportOverrides\":{\"gpt-test\":true},\"modelAudioSupportOverrides\":{\"gpt-audio\":true}},\"apiKey\":\"secret\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -466,10 +453,8 @@ namespace RNAssistant.Harness
             AssertEqual(ReasoningRequestModes.CustomJson, controller.LastSettings.ReasoningRequestMode, "settings custom reasoning mode");
             AssertContains(controller.LastSettings.ReasoningCustomJson, "budget", "settings custom reasoning json");
             AssertEqual("system", controller.LastSettings.SystemPromptRole, "system prompt role");
-            AssertEqual(4, controller.LastSettings.MaxAgentFormatRetries, "format retry limit");
             AssertEqual(true, controller.LastSettings.ModelImageSupportOverrides["gpt-test"].Value, "model image override");
             AssertEqual(true, controller.LastSettings.ModelAudioSupportOverrides["gpt-audio"].Value, "model audio override");
-            AssertEqual("gpt-test", controller.LastSettings.AttachmentModelPriority[0], "attachment model priority");
             AssertEqual("secret", controller.LastApiKey, "api key");
 
             var runtimeLog = JObject.Parse(bridge.HandleMessageAsync(

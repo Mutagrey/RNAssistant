@@ -26,9 +26,9 @@ namespace RNAssistant.Office.Services
         public List<ToolDefinition> GetVisibleTools()
         {
             var result = new Dictionary<string, ToolDefinition>(StringComparer.OrdinalIgnoreCase);
-            foreach (var skill in _adapter.GetBuiltInTools() ?? new ToolDefinition[0])
+            foreach (var tool in _adapter.GetBuiltInTools() ?? new ToolDefinition[0])
             {
-                result[skill.Id] = skill;
+                result[tool.Id] = tool;
             }
 
             foreach (var tool in _toolExecutor.GetControllerTools())

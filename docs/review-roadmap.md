@@ -1,28 +1,34 @@
-# Cleanup And Refactor Roadmap
+# Cleanup baseline
 
-## Current Baseline
+The agent runtime now has one direct flow:
 
-- The experimental parallel runtime, shadow/canary paths, evidence/telemetry layers, reducers, and their fixtures are removed.
-- Agent mode has one contract: AgentDecision v1 with one tool or a bounded batch of independent read-only tools per model turn.
-- Chat sessions expose only Agent and Chat; Agent is the default and the old automatic mode is removed.
-- Model-facing instructions have an immutable minimal runtime contract, one editable Agent prompt, one Chat prompt, bounded recovery/plan transitions, a structured compaction prompt and chat-title generation. Editable fields are available in Settings and through confirmed prompt tools.
-- Context accounting uses the persisted accepted protocol, model-generated checkpoints plus an exact raw tail, attachments, response schema and native tool schemas; raw transcript messages are not deleted by compaction.
-- Skills use progressive disclosure through `SKILL_INDEX`, `common.skills_load`, dependency/conflict validation and capability-scoped tools. Plans, attachments, compaction and HTML revisions share the chat artifact registry.
-- Alternate planner envelopes, batch-step wrappers, example-object custom schemas, single-file VBA packages, duplicate chat ids, and the separate context directory are unsupported.
-- Tools execute through `OfficeToolExecutor`; pipelines cannot call Office adapters directly.
-- VBA tools use only manifest-based packages with `src/*.bas` and `src/*.cls`.
-- Completion has one Core contract (`LlmCompletionDelegate`); agent, offline, plain-chat and title paths no longer maintain delegate adapters.
-- LLM HTTP transport, multimodal message construction and response parsing are separate components.
-- Planner routing, catalog slicing, prompt composition, validation and observation normalization are separate files; protocol replay, run presentation and snapshot capture are outside `AgentRunService`.
-- `AppSettings` and `ToolDefinition` have typed deep clones; JSON roundtrips and reflection-based message-builder tests are removed.
-- The host-neutral harness is the required fast validation path. COM/VSTO changes still require Windows x64 + Office validation.
+```text
+request + full tool/skill context
+    -> model JSON
+        -> zero or one local tool
+            -> TOOL_RESULT JSON
+                -> next model turn
+```
 
-## Next Refactor
+Removed layers include offline mode, automatic mode selection, task routing, phase state, tool catalog slicing, progressive skill activation, plans, observations, format repair, transport fallback, multi-tool batching, automatic tool retry, and separate mutation verification.
 
-1. Reduce the remaining `AgentRunService` decision loop by extracting execution/verification state transitions only where they form independent behavior.
-2. Reorganize the harness by subsystem and share scenario builders; delete tests for removed contracts instead of preserving compatibility fixtures.
-3. Review static WebView feature ownership and move remaining feature logic out of shared boot/render files.
+The remaining runtime responsibilities are intentionally small:
 
-## Order Of Work
+- prompt/context assembly;
+- one JSON parser;
+- schema and safety validation at execution time;
+- confirmation and resource limits;
+- local execution and result serialization;
+- transcript persistence and optional context compaction.
 
-Refactor one boundary at a time, keep the harness green, then validate COM/VSTO behavior on Windows. Product features wait until the runtime, storage, harness, and UI boundaries are stable.
+Future changes should prefer extending the editable prompt, skill text, native-like tool descriptions, or tool-result JSON. Add a new runtime state machine only when a local safety or consistency invariant cannot be expressed or enforced at the tool boundary.
+
+Known trade-offs of this simpler design:
+
+- the full enabled tool/skill catalog consumes context and can outgrow a small model window;
+- one tool per turn is predictable but increases model round trips;
+- the selected endpoint must reliably support `json_object`, because invalid JSON is not repaired;
+- without a separate verifier, correctness depends on explicit tool results and tool-internal hash/backup/stale-state checks;
+- attachments use the selected model and fail explicitly when its declared media capabilities are insufficient.
+
+The fast validation path is `dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj`. COM/VSTO behavior still requires Windows x64 + Office + VS 2022 smoke testing.

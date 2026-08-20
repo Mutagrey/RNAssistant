@@ -18,19 +18,8 @@ namespace RNAssistant.Office.Services
         internal const int TargetPercent = 55;
 
         private const string SummarySchema =
-            "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"summary\",\"goals\",\"requirements\",\"decisions\",\"verifiedFacts\",\"completedActions\",\"pendingWork\",\"blockers\",\"stableReferences\",\"activeSkills\",\"artifactReferences\",\"warnings\"],\"properties\":{" +
-            "\"summary\":{\"type\":\"string\"}," +
-            "\"goals\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}," +
-            "\"requirements\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}," +
-            "\"decisions\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}," +
-            "\"verifiedFacts\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}," +
-            "\"completedActions\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}," +
-            "\"pendingWork\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}," +
-            "\"blockers\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}," +
-            "\"stableReferences\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}," +
-            "\"activeSkills\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}," +
-            "\"artifactReferences\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}," +
-            "\"warnings\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}}}";
+            "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"summary\"],\"properties\":{" +
+            "\"summary\":{\"type\":\"string\"}}}";
 
         private readonly LlmCompletionDelegate _completeAsync;
         private readonly LlmAttachmentTextReader _attachmentTextReader;
@@ -111,39 +100,11 @@ namespace RNAssistant.Office.Services
             };
             var options = new LlmRequestOptions
             {
-                ResponseFormat = LlmResponseFormats.JsonSchema,
-                ResponseSchemaName = "rnassistant_context_compaction",
-                ResponseSchemaJson = SummarySchema,
+                ResponseFormat = LlmResponseFormats.JsonObject,
                 ReasoningEnabled = false
             };
-            LlmCompletionResult completion;
-            try
-            {
-                completion = await _completeAsync(settings, request, options, null, cancellationToken).ConfigureAwait(false);
-            }
-            catch (LlmRequestException ex) when (ex.Kind == LlmFailureKind.ResponseFormatUnsupported && settings.FallbackToJsonObject)
-            {
-                options.ResponseFormat = LlmResponseFormats.JsonObject;
-                options.ResponseSchemaName = null;
-                options.ResponseSchemaJson = null;
-                completion = await _completeAsync(settings, request, options, null, cancellationToken).ConfigureAwait(false);
-            }
-
-            JObject summary;
-            try
-            {
-                summary = ParseSummary(completion == null ? null : completion.Content);
-            }
-            catch (InvalidOperationException)
-            {
-                request.Add(new ChatMessage
-                {
-                    Role = "user",
-                    Content = "The previous summary was invalid. Return only one JSON object matching every required field and type in the supplied schema."
-                });
-                completion = await _completeAsync(settings, request, options, null, cancellationToken).ConfigureAwait(false);
-                summary = ParseSummary(completion == null ? null : completion.Content);
-            }
+            var completion = await _completeAsync(settings, request, options, null, cancellationToken).ConfigureAwait(false);
+            var summary = ParseSummary(completion == null ? null : completion.Content);
             var summaryJson = summary.ToString(Formatting.None);
             var summaryMarkdown = RenderSummary(summary);
             var checkpoint = new ContextCheckpoint
@@ -261,9 +222,7 @@ namespace RNAssistant.Office.Services
             if (message.ProtocolMessage)
             {
                 if (string.IsNullOrWhiteSpace(message.RunId)) return false;
-                return string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(message.Role, "developer", StringComparison.OrdinalIgnoreCase) ||
+                return string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase);
             }
             return !string.IsNullOrWhiteSpace(message.Content) &&
@@ -298,14 +257,6 @@ namespace RNAssistant.Office.Services
             {
                 return 0;
             }
-            if (firstRecent < window.Count && string.Equals(window[firstRecent].Role, "tool", StringComparison.OrdinalIgnoreCase))
-            {
-                firstRecent = Math.Max(0, firstRecent - 1);
-            }
-            if (firstRecent > 0 && window[firstRecent - 1].ToolCalls != null && window[firstRecent - 1].ToolCalls.Count > 0)
-            {
-                firstRecent -= 1;
-            }
             return firstRecent;
         }
 
@@ -323,10 +274,6 @@ namespace RNAssistant.Office.Services
                 builder.AppendLine("PRIOR_CHECKPOINT:");
                 builder.AppendLine(active.SummaryJson);
             }
-            builder.AppendLine("ACTIVE_SKILLS:");
-            builder.AppendLine(session == null || session.ActiveSkillIds == null || session.ActiveSkillIds.Count == 0
-                ? "none"
-                : string.Join(",", session.ActiveSkillIds.ToArray()));
             var referencedArtifactIds = new HashSet<string>(
                 prefixMessages.SelectMany(message => message.ArtifactIds ?? new List<string>())
                     .Where(id => !string.IsNullOrWhiteSpace(id)),
@@ -355,14 +302,7 @@ namespace RNAssistant.Office.Services
             {
                 if (message == null) continue;
                 builder.Append('[').Append(message.Role ?? "unknown").Append("] ");
-                if (message.ToolCalls != null && message.ToolCalls.Count > 0)
-                {
-                    builder.Append("tool_calls=").Append(JsonConvert.SerializeObject(message.ToolCalls));
-                }
-                else
-                {
-                    builder.Append(message.Content ?? string.Empty);
-                }
+                builder.Append(message.Content ?? string.Empty);
                 var artifactIds = message.ArtifactIds == null ? string.Empty : string.Join(",", message.ArtifactIds.ToArray());
                 if (!string.IsNullOrWhiteSpace(artifactIds)) builder.Append(" [artifacts:").Append(artifactIds).Append(']');
                 var attachmentNames = (message.Attachments ?? new List<ChatAttachment>())
@@ -433,65 +373,28 @@ namespace RNAssistant.Office.Services
             {
                 throw new InvalidOperationException("Context compaction returned invalid JSON.", ex);
             }
-            var required = new[] { "summary", "goals", "requirements", "decisions", "verifiedFacts", "completedActions", "pendingWork", "blockers", "stableReferences", "activeSkills", "artifactReferences", "warnings" };
-            var allowed = new HashSet<string>(required, StringComparer.Ordinal);
-            if (value.Properties().Any(property => !allowed.Contains(property.Name)))
+            if (value.Properties().Any(property => !string.Equals(property.Name, "summary", StringComparison.Ordinal)))
             {
                 throw new InvalidOperationException("Context compaction response contains unexpected fields.");
             }
-            foreach (var name in required)
+            var summary = value["summary"];
+            if (summary == null || summary.Type != JTokenType.String || string.IsNullOrWhiteSpace(summary.Value<string>()))
             {
-                var token = value[name];
-                if (token == null || name != "summary" && token.Type != JTokenType.Array || name == "summary" && token.Type != JTokenType.String)
-                {
-                    throw new InvalidOperationException("Context compaction response is missing a valid " + name + ".");
-                }
-                if (name == "summary" && string.IsNullOrWhiteSpace(token.Value<string>()))
-                {
-                    throw new InvalidOperationException("Context compaction summary must not be empty.");
-                }
-                if (name != "summary" && token.Children().Any(item => item.Type != JTokenType.String))
-                {
-                    throw new InvalidOperationException("Context compaction field " + name + " must contain strings only.");
-                }
+                throw new InvalidOperationException("Context compaction response is missing a non-empty summary.");
             }
             return value;
         }
 
         private static string RenderSummary(JObject summary)
         {
-            var builder = new StringBuilder();
-            builder.AppendLine(Convert.ToString(summary["summary"]));
-            AppendSection(builder, "Цели", summary["goals"] as JArray);
-            AppendSection(builder, "Требования", summary["requirements"] as JArray);
-            AppendSection(builder, "Решения", summary["decisions"] as JArray);
-            AppendSection(builder, "Подтверждённые факты", summary["verifiedFacts"] as JArray);
-            AppendSection(builder, "Выполнено", summary["completedActions"] as JArray);
-            AppendSection(builder, "Осталось", summary["pendingWork"] as JArray);
-            AppendSection(builder, "Блокеры", summary["blockers"] as JArray);
-            AppendSection(builder, "Стабильные ссылки", summary["stableReferences"] as JArray);
-            AppendSection(builder, "Активные skills", summary["activeSkills"] as JArray);
-            AppendSection(builder, "Артефакты", summary["artifactReferences"] as JArray);
-            AppendSection(builder, "Предупреждения", summary["warnings"] as JArray);
-            return builder.ToString().Trim();
-        }
-
-        private static void AppendSection(StringBuilder builder, string title, JArray values)
-        {
-            if (values == null || values.Count == 0) return;
-            builder.AppendLine().AppendLine(title + ":");
-            foreach (var value in values.Where(item => item != null && !string.IsNullOrWhiteSpace(Convert.ToString(item))))
-            {
-                builder.Append("- ").AppendLine(Convert.ToString(value));
-            }
+            return Convert.ToString(summary["summary"]).Trim();
         }
 
         private static string CompactionPrompt(AppSettings settings)
         {
-            var prompts = settings == null ? null : settings.AgentPrompts;
-            return prompts == null || string.IsNullOrWhiteSpace(prompts.ContextCompactionPrompt)
-                ? new AgentPromptSettings().ContextCompactionPrompt
-                : prompts.ContextCompactionPrompt.Trim();
+            return settings == null || string.IsNullOrWhiteSpace(settings.ContextCompactionPrompt)
+                ? new AppSettings().ContextCompactionPrompt
+                : settings.ContextCompactionPrompt.Trim();
         }
 
         private static string InstructionRole(AppSettings settings)

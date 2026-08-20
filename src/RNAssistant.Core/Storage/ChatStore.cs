@@ -317,10 +317,6 @@ namespace RNAssistant.Core.Storage
                     .Where(id => !string.IsNullOrWhiteSpace(id))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
-                if (message.ToolCalls == null)
-                {
-                    message.ToolCalls = new List<LlmToolCall>();
-                }
                 if (message.Attachments == null)
                 {
                     message.Attachments = new List<ChatAttachment>();
@@ -407,15 +403,6 @@ namespace RNAssistant.Core.Storage
                 .Where(item => item != null)
                 .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
                 .Select(group => group.OrderByDescending(item => item.CreatedUtc).First())
-                .ToList();
-            if (session.ActiveSkillIds == null)
-            {
-                session.ActiveSkillIds = new List<string>();
-            }
-            session.ActiveSkillIds = session.ActiveSkillIds
-                .Where(id => !string.IsNullOrWhiteSpace(id))
-                .Select(id => id.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
             var messageIds = new HashSet<string>(session.Messages.Where(item => item != null).Select(item => item.Id), StringComparer.OrdinalIgnoreCase);
             var activeCheckpoint = session.ContextCheckpoints.FirstOrDefault(item =>

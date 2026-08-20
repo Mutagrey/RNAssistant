@@ -7,7 +7,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
-using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Tools;
@@ -194,39 +193,39 @@ namespace RNAssistant.OfficeHosts
         {
             return new[]
             {
-                Skill("excel.get_context", "Read-only: Return active workbook, sheet, and selection context.", "{}"),
-                Skill("excel.get_selection", "Read-only: Read the current or launcher-captured selection values.", "{}"),
-                Skill("excel.workbook_summary", "Read-only: Return workbook metadata, sheets, and used ranges.", "{}"),
-                Skill("excel.list_sheets", "Read-only: List workbook sheet names.", "{}"),
-                Skill("excel.read_range", "Read-only: Read worksheet values from an A1 range.", "{\"sheet\":\"\",\"address\":\"A1:D20\"}"),
-                Skill("excel.read_formula_range", "Read-only: Read formulas from an A1 range.", "{\"sheet\":\"\",\"address\":\"A1:D20\"}"),
-                Skill("excel.profile_range", "Read-only: Profile a range or selection for dimensions, blanks, formulas, headers, and numeric columns.", "{\"sheet\":\"\",\"address\":\"\"}"),
-                Skill("excel.find_cells", "Read-only: Find literal or regexp matches in cell values or formulas and return stable scope coordinates/hash.", "{\"sheet\":\"\",\"address\":\"\",\"scope\":\"workbook\",\"query\":\"text\",\"mode\":\"literal\",\"matchCase\":false,\"wholeWord\":false,\"lookIn\":\"values\",\"maxResults\":50,\"contextChars\":80}"),
-                Skill("excel.create_chat_chart", "Read-only: Create an interactive chart artifact in chat from a selection or range.", "{\"sheet\":\"\",\"address\":\"\",\"chartType\":\"auto\",\"title\":\"Chart title\"}"),
-                Skill("excel.list_charts", "Read-only: List chart objects in the workbook or one sheet.", "{\"sheet\":\"\"}"),
-                Skill("excel.get_chart", "Read-only: Read one worksheet chart, including its title, axes, series, position, and size.", "{\"sheet\":\"\",\"chartName\":\"Chart 1\"}"),
-                Skill("excel.list_tables", "Read-only: List Excel tables in the workbook or one sheet.", "{\"sheet\":\"\"}"),
-                Skill("excel.list_names", "Read-only: List workbook defined names.", "{}"),
-                Skill("excel.list_shapes", "Read-only: List shapes in the workbook or one sheet.", "{\"sheet\":\"\"}"),
-                Skill("excel.replace_cells", "Mutates document: Replace literal or regexp matches in scoped text constants or formulas after a matching search preview.", "{\"sheet\":\"\",\"address\":\"\",\"scope\":\"range\",\"find\":\"old\",\"replace\":\"new\",\"mode\":\"literal\",\"matchCase\":false,\"wholeWord\":false,\"lookIn\":\"values\",\"replaceAll\":true,\"expectedMatches\":1,\"expectedScopeSha256\":\"\",\"maxReplacements\":500}", true, false, 2, true),
-                Skill("excel.write_range", "Mutates document: Write one scalar value to a worksheet range.", "{\"sheet\":\"\",\"address\":\"A1\",\"value\":\"text\"}", true, true, 2),
-                Skill("excel.write_table", "Mutates document: Write a 2D JSON array to a worksheet starting at a cell.", "{\"sheet\":\"\",\"startAddress\":\"A1\",\"values\":[[\"Header\",\"Value\"],[\"A\",1]]}", true, true, 2),
-                Skill("excel.set_formula", "Mutates document: Write one formula to a worksheet range.", "{\"sheet\":\"\",\"address\":\"B2\",\"formula\":\"=SUM(A1:A10)\"}", true, true, 2),
-                Skill("excel.add_table", "Mutates document: Convert a source range into an Excel table.", "{\"sheet\":\"\",\"sourceRange\":\"A1:B6\",\"name\":\"Table1\",\"hasHeaders\":true,\"style\":\"TableStyleMedium2\"}", true, true, 2),
-                Skill("excel.add_chart", "Mutates document: Create and position a chart from a worksheet source range.", "{\"sheet\":\"\",\"sourceRange\":\"A1:B6\",\"chartType\":\"line\",\"title\":\"Chart title\",\"chartName\":\"\",\"categoryLabelsRange\":\"\",\"xAxisTitle\":\"\",\"yAxisTitle\":\"\",\"left\":300,\"top\":20,\"width\":480,\"height\":300}", true, true, 2),
-                Skill("excel.update_chart", "Mutates document: Update an existing chart's data, type, labels, axes, position, or size. Only supplied fields are changed.", "{\"sheet\":\"\",\"chartName\":\"Chart 1\",\"sourceRange\":\"\",\"chartType\":\"\",\"title\":\"\",\"categoryLabelsRange\":\"\",\"xAxisTitle\":\"\",\"yAxisTitle\":\"\",\"left\":300,\"top\":20,\"width\":480,\"height\":300}", true, true, 2),
-                Skill("excel.delete_chart", "Mutates document: Delete one existing worksheet chart by name.", "{\"sheet\":\"\",\"chartName\":\"Chart 1\"}", true, false, 3),
-                Skill("excel.format_range", "Mutates document: Apply basic number, font, fill, and alignment formatting to a range.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"numberFormat\":\"\",\"bold\":true,\"italic\":false,\"fillColor\":\"#FFFF00\",\"fontColor\":\"#000000\",\"horizontalAlignment\":\"center\"}", true, true, 1),
-                Skill("excel.autofit", "Mutates document: Autofit rows and columns for a range or used range.", "{\"sheet\":\"\",\"address\":\"\"}", true, true, 1),
-                Skill("excel.add_sheet", "Mutates document: Add a new worksheet.", "{\"name\":\"Sheet name\"}", true, true, 1),
-                Skill("excel.rename_sheet", "Mutates document: Rename a worksheet.", "{\"sheet\":\"Old name\",\"newName\":\"New name\"}", true, false, 2),
-                Skill("excel.clear_range", "Mutates document: Clear cell values, formats, or both in a range.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"clearWhat\":\"values\"}", true, false, 3),
-                Skill("excel.sort_range", "Mutates document: Sort rows in a range by one key column.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"keyColumn\":1,\"descending\":false,\"hasHeaders\":true}", true, false, 2),
-                Skill("excel.filter_range", "Mutates document: Apply AutoFilter criteria to a range.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"field\":1,\"criteria\":\"North\"}", true, false, 2),
-                Skill("excel.vba_read_module", "Read-only: Read one VBA component by exact name from vba_list_modules; returns source and full code hash.", "{\"moduleName\":\"Module1\",\"maxChars\":30000}"),
-                Skill("excel.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}", true, false, 3),
-                Skill("excel.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}", true, false, 3),
-                Skill("excel.run_macro", "Mutates document: Run an Excel VBA macro by name.", "{\"macroName\":\"Module1.Test\"}", true, false, 3)
+                Tool("excel.get_context", "Read-only: Return active workbook, sheet, and selection context.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.get_selection", "Read-only: Read the current or launcher-captured selection values.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.workbook_summary", "Read-only: Return workbook metadata, sheets, and used ranges.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.list_sheets", "Read-only: List workbook sheet names.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.read_range", "Read-only: Read worksheet values from an A1 range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"address\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.read_formula_range", "Read-only: Read formulas from an A1 range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"address\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.profile_range", "Read-only: Profile a range or selection for dimensions, blanks, formulas, headers, and numeric columns.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"address\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.find_cells", "Read-only: Find literal or regexp matches in cell values or formulas and return stable scope coordinates/hash.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"address\":{\"type\":\"string\"},\"scope\":{\"type\":\"string\"},\"query\":{\"type\":\"string\"},\"mode\":{\"type\":\"string\"},\"matchCase\":{\"type\":\"boolean\"},\"wholeWord\":{\"type\":\"boolean\"},\"lookIn\":{\"type\":\"string\"},\"maxResults\":{\"type\":\"integer\"},\"contextChars\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.create_chat_chart", "Read-only: Create an interactive chart artifact in chat from a selection or range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"address\":{\"type\":\"string\"},\"chartType\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.list_charts", "Read-only: List chart objects in the workbook or one sheet.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.get_chart", "Read-only: Read one worksheet chart, including its title, axes, series, position, and size.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"chartName\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.list_tables", "Read-only: List Excel tables in the workbook or one sheet.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.list_names", "Read-only: List workbook defined names.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.list_shapes", "Read-only: List shapes in the workbook or one sheet.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.replace_cells", "Mutates document: Replace literal or regexp matches in scoped text constants or formulas after a matching search preview.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"address\":{\"type\":\"string\"},\"scope\":{\"type\":\"string\"},\"find\":{\"type\":\"string\"},\"replace\":{\"type\":\"string\"},\"mode\":{\"type\":\"string\"},\"matchCase\":{\"type\":\"boolean\"},\"wholeWord\":{\"type\":\"boolean\"},\"lookIn\":{\"type\":\"string\"},\"replaceAll\":{\"type\":\"boolean\"},\"expectedMatches\":{\"type\":\"integer\"},\"expectedScopeSha256\":{\"type\":\"string\"},\"maxReplacements\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}", true, false, 2, true),
+                Tool("excel.write_range", "Mutates document: Write one scalar value to a worksheet range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"address\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 2),
+                Tool("excel.write_table", "Mutates document: Write a 2D JSON array to a worksheet starting at a cell.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"startAddress\":{\"type\":\"string\"},\"values\":{\"type\":\"array\",\"items\":{}}},\"required\":[],\"additionalProperties\":false}", true, true, 2),
+                Tool("excel.set_formula", "Mutates document: Write one formula to a worksheet range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"address\":{\"type\":\"string\"},\"formula\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 2),
+                Tool("excel.add_table", "Mutates document: Convert a source range into an Excel table.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"sourceRange\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"hasHeaders\":{\"type\":\"boolean\"},\"style\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 2),
+                Tool("excel.add_chart", "Mutates document: Create and position a chart from a worksheet source range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"sourceRange\":{\"type\":\"string\"},\"chartType\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"chartName\":{\"type\":\"string\"},\"categoryLabelsRange\":{\"type\":\"string\"},\"xAxisTitle\":{\"type\":\"string\"},\"yAxisTitle\":{\"type\":\"string\"},\"left\":{\"type\":\"integer\"},\"top\":{\"type\":\"integer\"},\"width\":{\"type\":\"integer\"},\"height\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}", true, true, 2),
+                Tool("excel.update_chart", "Mutates document: Update an existing chart's data, type, labels, axes, position, or size. Only supplied fields are changed.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"chartName\":{\"type\":\"string\"},\"sourceRange\":{\"type\":\"string\"},\"chartType\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"categoryLabelsRange\":{\"type\":\"string\"},\"xAxisTitle\":{\"type\":\"string\"},\"yAxisTitle\":{\"type\":\"string\"},\"left\":{\"type\":\"integer\"},\"top\":{\"type\":\"integer\"},\"width\":{\"type\":\"integer\"},\"height\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}", true, true, 2),
+                Tool("excel.delete_chart", "Mutates document: Delete one existing worksheet chart by name.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"chartName\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, false, 3),
+                Tool("excel.format_range", "Mutates document: Apply basic number, font, fill, and alignment formatting to a range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"address\":{\"type\":\"string\"},\"numberFormat\":{\"type\":\"string\"},\"bold\":{\"type\":\"boolean\"},\"italic\":{\"type\":\"boolean\"},\"fillColor\":{\"type\":\"string\"},\"fontColor\":{\"type\":\"string\"},\"horizontalAlignment\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
+                Tool("excel.autofit", "Mutates document: Autofit rows and columns for a range or used range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"address\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
+                Tool("excel.add_sheet", "Mutates document: Add a new worksheet.", "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
+                Tool("excel.rename_sheet", "Mutates document: Rename a worksheet.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"newName\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, false, 2),
+                Tool("excel.clear_range", "Mutates document: Clear cell values, formats, or both in a range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"address\":{\"type\":\"string\"},\"clearWhat\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, false, 3),
+                Tool("excel.sort_range", "Mutates document: Sort rows in a range by one key column.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"address\":{\"type\":\"string\"},\"keyColumn\":{\"type\":\"integer\"},\"descending\":{\"type\":\"boolean\"},\"hasHeaders\":{\"type\":\"boolean\"}},\"required\":[],\"additionalProperties\":false}", true, false, 2),
+                Tool("excel.filter_range", "Mutates document: Apply AutoFilter criteria to a range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"},\"address\":{\"type\":\"string\"},\"field\":{\"type\":\"integer\"},\"criteria\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, false, 2),
+                Tool("excel.vba_read_module", "Read-only: Read one VBA component by exact name from vba_list_modules; returns source and full code hash.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\"},\"maxChars\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\"},\"code\":{\"type\":\"string\"},\"createIfMissing\":{\"type\":\"boolean\"}},\"required\":[],\"additionalProperties\":false}", true, false, 3),
+                Tool("excel.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\"},\"code\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, false, 3),
+                Tool("excel.run_macro", "Mutates document: Run an Excel VBA macro by name.", "{\"type\":\"object\",\"properties\":{\"macroName\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, false, 3)
             };
         }
 
@@ -240,26 +239,9 @@ namespace RNAssistant.OfficeHosts
                     Host = "Excel",
                     Name = "Excel analysis reporting",
                     Description = "Analyze ranges, create summaries, tables, and charts in Excel.",
-                    Tags = new List<string> { "excel", "analysis", "reporting", "charts" },
-                    BodyMarkdown = "# Excel Analysis Reporting\n\nUse this skill for Excel reporting tasks.\n\n- For a new report sheet, execute the direct sequence: `excel.add_sheet`, `excel.write_table`, optional `excel.format_range`/`excel.autofit`, then `excel.add_chart`.\n- Do not call `excel.workbook_summary` for a brand-new sheet unless existing workbook content is required. Use `excel.list_sheets` only when a naming collision must be checked.\n- Inspect sheets/ranges before modifying unknown existing content.\n- Write tables with stable headers and predictable start addresses.\n- Prefer chart source ranges that include headers.\n- Keep generated sheets named clearly and avoid overwriting existing sheets unless asked.\n- If the exact required tool is present in AVAILABLE_TOOLS, execute it; do not report that the capability is missing.",
+                    BodyMarkdown = "# Excel Analysis Reporting\n\nUse this skill for Excel reporting tasks.\n\n- For a new report sheet, execute the direct sequence: `excel.add_sheet`, `excel.write_table`, optional `excel.format_range`/`excel.autofit`, then `excel.add_chart`.\n- Do not call `excel.workbook_summary` for a brand-new sheet unless existing workbook content is required. Use `excel.list_sheets` only when a naming collision must be checked.\n- Inspect sheets/ranges before modifying unknown existing content.\n- Write tables with stable headers and predictable start addresses.\n- Prefer chart source ranges that include headers.\n- Keep generated sheets named clearly and avoid overwriting existing sheets unless asked.\n- If the exact required tool is present in RUNTIME_CONTEXT.tools, execute it; do not report that the capability is missing.",
                     Enabled = true,
-                    BuiltIn = true,
-                    ToolCapabilities = new List<string>
-                    {
-                        "excel.get_selection",
-                        "excel.list_sheets",
-                        "excel.read_range",
-                        "excel.profile_range",
-                        "excel.create_chat_chart",
-                        "excel.list_charts",
-                        "excel.get_chart",
-                        "excel.write_table",
-                        "excel.add_sheet",
-                        "excel.format_range",
-                        "excel.autofit",
-                        "excel.add_chart",
-                        "excel.update_chart"
-                    }
+                    BuiltIn = true
                 }
             };
         }
@@ -690,10 +672,7 @@ namespace RNAssistant.OfficeHosts
                 if (!post.Success) return post;
                 var postJson = JObject.Parse(post.DataJson ?? "{}");
                 var postHash = (string)postJson["scopeSha256"];
-                var result = ToolResult.Ok("Excel replacements completed: " + total + ".", JsonConvert.SerializeObject(new { replacements = total, scopeSha256 = postHash }));
-                result.Verification = new ToolVerification { ToolId = "excel.find_cells", ExpectedContentSha256 = postHash };
-                foreach (var pair in verifyCommand.Arguments) result.Verification.Arguments[pair.Key] = pair.Value;
-                return result;
+                return ToolResult.Ok("Excel replacements completed: " + total + ".", JsonConvert.SerializeObject(new { replacements = total, scopeSha256 = postHash }));
             }
             catch (TextPatternException ex)
             {
@@ -1554,9 +1533,9 @@ namespace RNAssistant.OfficeHosts
                 && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
-        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool requiresConfirmation = false)
+        private static ToolDefinition Tool(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool requiresConfirmation = false)
         {
-            return new ToolDefinition { Id = id, Host = "Excel", Name = id, Description = description, ArgumentSchemaJson = ToolSchemaSupport.FromPropertySamples(schema), BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, RequiresConfirmation = requiresConfirmation };
+            return new ToolDefinition { Id = id, Host = "Excel", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, RequiresConfirmation = requiresConfirmation };
         }
 
         private static List<List<object>> RangeToRows(Excel.Range range)

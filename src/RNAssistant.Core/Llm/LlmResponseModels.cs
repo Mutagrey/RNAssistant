@@ -1,12 +1,9 @@
-using System.Collections.Generic;
-
 namespace RNAssistant.Core.Llm
 {
     public sealed class LlmCompletionResult
     {
         public string Content { get; set; }
         public string RefusalContent { get; set; }
-        public List<LlmToolCall> ToolCalls { get; set; }
         public string ReasoningContent { get; set; }
         public int? ReasoningTokens { get; set; }
         public bool ReasoningTruncated { get; set; }

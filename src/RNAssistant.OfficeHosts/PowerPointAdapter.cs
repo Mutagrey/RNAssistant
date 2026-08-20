@@ -6,7 +6,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PowerPoint = Microsoft.Office.Interop.PowerPoint;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Tools;
@@ -200,28 +199,28 @@ namespace RNAssistant.OfficeHosts
         {
             return new[]
             {
-                Skill("powerpoint.get_context", "Read-only: Return active presentation and slide context.", "{}"),
-                Skill("powerpoint.get_selection", "Read-only: Read selected slide or shape context.", "{}"),
-                Skill("powerpoint.read_slides", "Read-only: Read text from slides.", "{\"maxSlides\":20}"),
-                Skill("powerpoint.read_slide", "Read-only: Read text and notes from one slide.", "{\"slideIndex\":1}"),
-                Skill("powerpoint.list_slides", "Read-only: List slide titles and text previews.", "{}"),
-                Skill("powerpoint.list_shapes", "Read-only: List shapes on one slide.", "{\"slideIndex\":1}"),
-                Skill("powerpoint.search_text", "Read-only: Find literal or regexp text in slide shapes and notes with stable coordinates/hash.", "{\"query\":\"text\",\"scope\":\"deck\",\"slideIndex\":0,\"includeNotes\":true,\"mode\":\"literal\",\"matchCase\":false,\"wholeWord\":false,\"maxResults\":50,\"contextChars\":80}"),
-                Skill("powerpoint.read_speaker_notes", "Read-only: Read speaker notes from slides.", "{\"slideIndex\":0,\"maxSlides\":20}"),
-                Skill("powerpoint.add_slide", "Mutates document: Add a text slide.", "{\"title\":\"Slide title\",\"body\":\"Slide body\"}", true, true, 1),
-                Skill("powerpoint.replace_selection_text", "Mutates document: Replace text in the selected shape.", "{\"text\":\"Replacement text\"}", true, true, 2),
-                Skill("powerpoint.set_speaker_notes", "Mutates document: Set speaker notes for one slide.", "{\"slideIndex\":1,\"notes\":\"Speaker notes\"}", true, true, 1),
-                Skill("powerpoint.add_text_box", "Mutates document: Add a text box to a slide.", "{\"slideIndex\":1,\"text\":\"Text\",\"left\":60,\"top\":120,\"width\":480,\"height\":120,\"fontSize\":18}", true, true, 1),
-                Skill("powerpoint.set_shape_text", "Mutates document: Set text for a named shape or selected shape.", "{\"slideIndex\":1,\"shapeName\":\"Title 1\",\"text\":\"Replacement text\"}", true, true, 2),
-                Skill("powerpoint.replace_text", "Mutates document: Replace literal or regexp text after a matching search preview.", "{\"find\":\"old\",\"replace\":\"new\",\"scope\":\"deck\",\"slideIndex\":0,\"includeNotes\":true,\"mode\":\"literal\",\"matchCase\":false,\"wholeWord\":false,\"replaceAll\":true,\"expectedMatches\":1,\"expectedScopeSha256\":\"\",\"maxReplacements\":500}", true, false, 2, true),
-                Skill("powerpoint.add_picture", "Mutates document: Add a local picture file to a slide.", "{\"slideIndex\":1,\"path\":\"C:\\\\Temp\\\\image.png\",\"left\":60,\"top\":120,\"width\":320,\"height\":180}", true, true, 1),
-                Skill("powerpoint.add_table", "Mutates document: Add a table to a slide.", "{\"slideIndex\":1,\"rows\":2,\"columns\":2,\"values\":[[\"Header\",\"Value\"],[\"A\",\"1\"]],\"left\":60,\"top\":120,\"width\":520,\"height\":160}", true, true, 1),
-                Skill("powerpoint.duplicate_slide", "Mutates document: Duplicate one slide.", "{\"slideIndex\":1}", true, true, 1),
-                Skill("powerpoint.move_slide", "Mutates document: Move a slide to a new position.", "{\"slideIndex\":2,\"toIndex\":1}", true, false, 2),
-                Skill("powerpoint.vba_read_module", "Read-only: Read one VBA component by exact name from vba_list_modules; returns source and full code hash.", "{\"moduleName\":\"Module1\",\"maxChars\":30000}"),
-                Skill("powerpoint.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}", true, false, 3),
-                Skill("powerpoint.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}", true, false, 3),
-                Skill("powerpoint.run_macro", "Mutates document: Run a PowerPoint VBA macro by name.", "{\"macroName\":\"Module1.Test\"}", true, false, 3)
+                Tool("powerpoint.get_context", "Read-only: Return active presentation and slide context.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
+                Tool("powerpoint.get_selection", "Read-only: Read selected slide or shape context.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
+                Tool("powerpoint.read_slides", "Read-only: Read text from slides.", "{\"type\":\"object\",\"properties\":{\"maxSlides\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("powerpoint.read_slide", "Read-only: Read text and notes from one slide.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("powerpoint.list_slides", "Read-only: List slide titles and text previews.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
+                Tool("powerpoint.list_shapes", "Read-only: List shapes on one slide.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("powerpoint.search_text", "Read-only: Find literal or regexp text in slide shapes and notes with stable coordinates/hash.", "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"scope\":{\"type\":\"string\"},\"slideIndex\":{\"type\":\"integer\"},\"includeNotes\":{\"type\":\"boolean\"},\"mode\":{\"type\":\"string\"},\"matchCase\":{\"type\":\"boolean\"},\"wholeWord\":{\"type\":\"boolean\"},\"maxResults\":{\"type\":\"integer\"},\"contextChars\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("powerpoint.read_speaker_notes", "Read-only: Read speaker notes from slides.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\"},\"maxSlides\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("powerpoint.add_slide", "Mutates document: Add a text slide.", "{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\"},\"body\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
+                Tool("powerpoint.replace_selection_text", "Mutates document: Replace text in the selected shape.", "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 2),
+                Tool("powerpoint.set_speaker_notes", "Mutates document: Set speaker notes for one slide.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\"},\"notes\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
+                Tool("powerpoint.add_text_box", "Mutates document: Add a text box to a slide.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\"},\"text\":{\"type\":\"string\"},\"left\":{\"type\":\"integer\"},\"top\":{\"type\":\"integer\"},\"width\":{\"type\":\"integer\"},\"height\":{\"type\":\"integer\"},\"fontSize\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
+                Tool("powerpoint.set_shape_text", "Mutates document: Set text for a named shape or selected shape.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\"},\"shapeName\":{\"type\":\"string\"},\"text\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 2),
+                Tool("powerpoint.replace_text", "Mutates document: Replace literal or regexp text after a matching search preview.", "{\"type\":\"object\",\"properties\":{\"find\":{\"type\":\"string\"},\"replace\":{\"type\":\"string\"},\"scope\":{\"type\":\"string\"},\"slideIndex\":{\"type\":\"integer\"},\"includeNotes\":{\"type\":\"boolean\"},\"mode\":{\"type\":\"string\"},\"matchCase\":{\"type\":\"boolean\"},\"wholeWord\":{\"type\":\"boolean\"},\"replaceAll\":{\"type\":\"boolean\"},\"expectedMatches\":{\"type\":\"integer\"},\"expectedScopeSha256\":{\"type\":\"string\"},\"maxReplacements\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}", true, false, 2, true),
+                Tool("powerpoint.add_picture", "Mutates document: Add a local picture file to a slide.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\"},\"path\":{\"type\":\"string\"},\"left\":{\"type\":\"integer\"},\"top\":{\"type\":\"integer\"},\"width\":{\"type\":\"integer\"},\"height\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
+                Tool("powerpoint.add_table", "Mutates document: Add a table to a slide.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\"},\"rows\":{\"type\":\"integer\"},\"columns\":{\"type\":\"integer\"},\"values\":{\"type\":\"array\",\"items\":{}},\"left\":{\"type\":\"integer\"},\"top\":{\"type\":\"integer\"},\"width\":{\"type\":\"integer\"},\"height\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
+                Tool("powerpoint.duplicate_slide", "Mutates document: Duplicate one slide.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
+                Tool("powerpoint.move_slide", "Mutates document: Move a slide to a new position.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\"},\"toIndex\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}", true, false, 2),
+                Tool("powerpoint.vba_read_module", "Read-only: Read one VBA component by exact name from vba_list_modules; returns source and full code hash.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\"},\"maxChars\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("powerpoint.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\"},\"code\":{\"type\":\"string\"},\"createIfMissing\":{\"type\":\"boolean\"}},\"required\":[],\"additionalProperties\":false}", true, false, 3),
+                Tool("powerpoint.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\"},\"code\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, false, 3),
+                Tool("powerpoint.run_macro", "Mutates document: Run a PowerPoint VBA macro by name.", "{\"type\":\"object\",\"properties\":{\"macroName\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, false, 3)
             };
         }
 
@@ -235,7 +234,6 @@ namespace RNAssistant.OfficeHosts
                     Host = "PowerPoint",
                     Name = "PowerPoint deck building",
                     Description = "Create and improve slide structure, content, and speaker notes.",
-                    Tags = new List<string> { "powerpoint", "slides", "deck", "notes" },
                     BodyMarkdown = "# PowerPoint Deck Building\n\nUse this skill for slide creation and cleanup.\n\n- Create one clear idea per slide.\n- Use short titles and concise body bullets.\n- Keep slide order logical: context, evidence, recommendation, next steps.\n- Add speaker notes only when useful.\n- Do not overload slides with long paragraphs.",
                     Enabled = true,
                     BuiltIn = true
@@ -591,10 +589,7 @@ namespace RNAssistant.OfficeHosts
                 var post = SearchText(verify);
                 if (!post.Success) return post;
                 var postHash = Convert.ToString(JObject.Parse(post.DataJson ?? "{}")["scopeSha256"]);
-                var result = ToolResult.Ok("PowerPoint replacements completed: " + total + ".", JsonConvert.SerializeObject(new { replacements = total, scopeSha256 = postHash }));
-                result.Verification = new ToolVerification { ToolId = "powerpoint.search_text", ExpectedContentSha256 = postHash };
-                foreach (var pair in verify.Arguments) result.Verification.Arguments[pair.Key] = pair.Value;
-                return result;
+                return ToolResult.Ok("PowerPoint replacements completed: " + total + ".", JsonConvert.SerializeObject(new { replacements = total, scopeSha256 = postHash }));
             }
             catch (TextPatternException ex) { return ToolResult.Fail(ex.Message, null, ex.ErrorCode, false); }
         }
@@ -1236,9 +1231,9 @@ namespace RNAssistant.OfficeHosts
                 && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
-        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool requiresConfirmation = false)
+        private static ToolDefinition Tool(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool requiresConfirmation = false)
         {
-            return new ToolDefinition { Id = id, Host = "PowerPoint", Name = id, Description = description, ArgumentSchemaJson = ToolSchemaSupport.FromPropertySamples(schema), BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, RequiresConfirmation = requiresConfirmation };
+            return new ToolDefinition { Id = id, Host = "PowerPoint", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, RequiresConfirmation = requiresConfirmation };
         }
 
         private static string Trim(string text, int maxChars)

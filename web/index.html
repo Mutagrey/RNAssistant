@@ -89,8 +89,8 @@
             </button>
           </div>
         </div>
-        <div class="offline-notice hidden" id="offlineNotice">
-          <span>Документ закрыт: доступны история, сохранённый контекст и локальные инструменты.</span>
+        <div class="document-notice hidden" id="documentNotice">
+          <span>Документ закрыт: Chat доступен, а для Agent и Office tools нужно открыть файл.</span>
           <button type="button" class="link-button" id="openDocumentButton">Открыть файл</button>
         </div>
         <div class="chat-scroll-region">
@@ -99,7 +99,6 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
           </button>
         </div>
-        <div class="agent-plan-dock hidden" id="agentPlanDock" aria-live="polite"></div>
         <div class="agent-approval-dock hidden" id="agentApprovalDock" aria-live="polite"></div>
         <form class="composer" id="chatForm">
           <div class="composer-edit-bar hidden" id="messageEditBar" aria-hidden="true">
@@ -312,7 +311,6 @@
                 <label class="checkline"><input type="checkbox" id="skillEnabledInput"> Включен</label>
               </div>
               <label class="wide">Описание<textarea id="skillDescriptionInput" rows="3" placeholder="Когда агенту использовать этот навык"></textarea></label>
-              <label class="wide">Теги<input id="skillTagsInput" placeholder="review, writing, word"></label>
               <div class="tool-form-section">Инструкции агента</div>
               <label class="wide">SKILL.md<textarea id="skillBodyInput" rows="18" spellcheck="false" placeholder="# Название навыка&#10;&#10;Используйте этот навык, когда..."></textarea></label>
             </div>
@@ -499,15 +497,6 @@
                   </div>
                   <div class="model-capability-list" id="modelCapabilityList"></div>
                 </section>
-                <section class="model-capability-section wide" aria-labelledby="attachmentModelPriorityTitle">
-                  <div class="model-capability-heading">
-                    <div>
-                      <h3 id="attachmentModelPriorityTitle">Маршрутизация вложений</h3>
-                      <p>Для изображений, сканов и аудио выбирается первая совместимая модель сверху вниз. Модель чата при этом не меняется.</p>
-                    </div>
-                  </div>
-                  <div class="attachment-model-priority" id="attachmentModelPriorityList"></div>
-                </section>
                 <label><span>Макс. токены ответа</span><input id="maxTokensInput" type="number" min="1"></label>
                 <label><span>Таймаут запроса, сек</span><input id="requestTimeoutInput" type="number" min="30"></label>
                 <label><span>Temperature</span><input id="temperatureInput" type="number" min="0" max="2" step="0.1"></label>
@@ -527,26 +516,18 @@
                 <p>Управляет выполнением инструментов и поведением при ошибках.</p>
               </div>
               <div class="form-grid">
-                <label><span>Формат Agent API</span><select id="agentResponseModeInput"><option value="json_schema">json_schema — по умолчанию</option><option value="json_object">json_object + prompt</option><option value="native_tool_calls">native tool_calls + json_schema</option></select></label>
-                <label><span>Роль результата tool</span><select id="toolResultRoleInput"><option value="tool">tool — по умолчанию</option><option value="developer">developer</option><option value="user">user</option></select></label>
-                <label class="checkline"><input id="fallbackJsonObjectInput" type="checkbox"><span>Fallback json_schema → json_object до первого tool</span></label>
                 <label class="checkline"><input id="autoRunToolsInput" type="checkbox"><span>Автозапуск инструментов</span></label>
                 <label class="checkline"><input id="autoConfirmToolsInput" type="checkbox"><span>Автоподтверждение действий</span></label>
-                <label class="checkline"><input id="autoRetryToolsInput" type="checkbox"><span>Авторемонт ошибок инструментов</span></label>
-                <label class="checkline"><input id="requireVerificationInput" type="checkbox"><span>Проверять результат мутаций</span></label>
-                <label class="checkline"><input id="autoContinueAfterConfirmationInput" type="checkbox"><span>Продолжать после подтверждения</span></label>
                 <label class="checkline"><input id="autoCompressContextInput" type="checkbox"><span>Создавать summary при заполнении контекста</span></label>
                 <label><span>Макс. итераций агента</span><input id="maxAgentIterationsInput" type="number" min="1"></label>
-                <label><span>Повторов при ошибке формата</span><input id="maxAgentFormatRetriesInput" type="number" min="1"></label>
                 <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1"></label>
-                <label><span>Tools в одном planner prompt</span><input id="maxAgentToolsPerRequestInput" type="number" min="1"></label>
               </div>
-              <div class="setting-note">json_schema и json_object передают AgentDecision через content; native_tool_calls передаёт действия через OpenAI tools API. Роль tool создаёт matching assistant tool_calls/tool_call_id. Fallback разрешён только до первого выполненного tool.</div>
+              <div class="setting-note">Agent использует один JSON-поток: получает все tools и skills, выбирает один tool за шаг и получает TOOL_RESULT JSON.</div>
               <section class="model-compatibility-panel" aria-labelledby="modelCompatibilityTitle">
                 <div class="model-compatibility-head">
                   <div>
                     <h3 id="modelCompatibilityTitle">Проверка совместимости</h3>
-                    <p>Тестирует роли, JSON-форматы и tool history без запуска Office-инструментов. Перед тестом текущие настройки сохраняются.</p>
+                    <p>Тестирует роль инструкций, Agent JSON и TOOL_RESULT без запуска Office-инструментов. Перед тестом текущие настройки сохраняются.</p>
                   </div>
                   <button class="secondary" id="testModelCompatibilityButton" type="button">Запустить тест</button>
                 </div>
@@ -613,7 +594,7 @@
                 </label>
                 <button class="secondary" id="resetAllPromptsButton" type="button" title="Вернуть встроенные значения всех промптов">Сбросить все промпты</button>
               </div>
-              <div class="setting-note">Роль применяется к главной инструкции Agent, инструкции Chat и генератору названий. Динамические route, tools, observations и skills добавляет runtime.</div>
+              <div class="setting-note">Роль применяется к инструкциям Agent, Chat и генератору названий. В Agent runtime добавляет один JSON-контекст с tools, skills, документом и пользовательским контекстом.</div>
               <div class="prompt-layout split-layout" id="promptsLayout" data-split-key="prompts" data-default-ratio="0.3" data-min-left="180" data-min-ratio="0.2" data-max-ratio="0.48">
                 <div class="tool-list-panel surface-panel">
                   <input class="tool-search" id="promptSearchInput" placeholder="Поиск промптов..." autocomplete="off">
@@ -745,7 +726,7 @@
   <script src="js/app-agent.js?v=agent-actions-20260820-1"></script>
   <script src="js/app-messages.js?v=reasoning-ui-20260819-1"></script>
   <script src="js/app-reasoning.js?v=reasoning-ui-20260819-1"></script>
-  <script src="js/app-attachments.js?v=mediarouting-20260722-1"></script>
+  <script src="js/app-attachments.js?v=media-20260820-1"></script>
   <script src="js/app-chat.js?v=reasoning-ui-20260819-1"></script>
   <script src="js/app-chat-edit.js?v=runtime-20260807-1"></script>
   <script src="js/app.js?v=agent-progress-20260820-1"></script>

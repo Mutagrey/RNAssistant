@@ -15,8 +15,6 @@ namespace RNAssistant.Core.Llm
         private const int MaxStoredReasoningChars = 24000;
         private const int MaxStoredRefusalChars = 12000;
         private const int MaxStoredContentChars = 16 * 1024 * 1024;
-        private const int MaxToolArgumentsChars = 4 * 1024 * 1024;
-        private const int MaxToolCalls = 64;
         private const int MaxUsageJsonChars = 64 * 1024;
 
         internal static LlmCompletionResult ParseStreamingResponse(string sse)
@@ -226,7 +224,6 @@ namespace RNAssistant.Core.Llm
             private readonly StringBuilder _refusal = new StringBuilder();
             private readonly Action<LlmStreamUpdate> _progress;
             private readonly ThinkStreamSplitter _thinkSplitter;
-            private readonly IDictionary<int, StreamingToolCallState> _toolCalls = new SortedDictionary<int, StreamingToolCallState>();
             private JObject _usage;
             private bool _reasoningTruncated;
             private bool _embeddedReasoningTruncated;
@@ -277,25 +274,6 @@ namespace RNAssistant.Core.Llm
                     AddRefusal(refusal);
                 }
 
-                var toolCalls = delta["tool_calls"] as JArray;
-                if (toolCalls != null)
-                {
-                    foreach (var token in toolCalls.OfType<JObject>())
-                    {
-                        var index = token["index"] == null ? 0 : token["index"].Value<int>();
-                        StreamingToolCallState call;
-                        if (!_toolCalls.TryGetValue(index, out call))
-                        {
-                            if (_toolCalls.Count >= MaxToolCalls)
-                            {
-                                throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM response contains too many tool calls.");
-                            }
-                            call = new StreamingToolCallState();
-                            _toolCalls[index] = call;
-                        }
-                        call.Add(token);
-                    }
-                }
             }
 
             public LlmCompletionResult ToResult()
@@ -308,10 +286,6 @@ namespace RNAssistant.Core.Llm
                     ["reasoning_content"] = reasoning,
                     ["refusal"] = _refusal.ToString()
                 };
-                if (_toolCalls.Count > 0)
-                {
-                    message["tool_calls"] = new JArray(_toolCalls.Values.Select(call => call.ToJson()));
-                }
                 var result = BuildCompletionResult(message, _usage);
                 result.ReasoningTruncated = _reasoning.Length > 0
                     ? _reasoningTruncated
@@ -388,65 +362,6 @@ namespace RNAssistant.Core.Llm
                     truncated = true;
                 }
                 return stored;
-            }
-        }
-
-        private sealed class StreamingToolCallState
-        {
-            private readonly StringBuilder _name = new StringBuilder();
-            private readonly StringBuilder _arguments = new StringBuilder();
-            private string _id;
-            private string _type;
-
-            public void Add(JObject token)
-            {
-                if (token == null) return;
-                if (token["id"] != null) _id = BoundedMetadata((string)token["id"]);
-                if (token["type"] != null) _type = BoundedMetadata((string)token["type"]);
-                var function = token["function"] as JObject;
-                if (function == null) return;
-                if (function["name"] != null)
-                {
-                    var name = (string)function["name"] ?? string.Empty;
-                    if (_name.Length + name.Length > 1024)
-                    {
-                        throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM tool name exceeds the safety limit.");
-                    }
-                    _name.Append(name);
-                }
-                if (function["arguments"] != null)
-                {
-                    var arguments = (string)function["arguments"] ?? string.Empty;
-                    if (_arguments.Length + arguments.Length > MaxToolArgumentsChars)
-                    {
-                        throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM tool arguments exceed the safety limit.");
-                    }
-                    _arguments.Append(arguments);
-                }
-            }
-
-            private static string BoundedMetadata(string value)
-            {
-                value = value ?? string.Empty;
-                if (value.Length > 1024)
-                {
-                    throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM tool metadata exceeds the safety limit.");
-                }
-                return value;
-            }
-
-            public JObject ToJson()
-            {
-                return new JObject
-                {
-                    ["id"] = _id,
-                    ["type"] = string.IsNullOrWhiteSpace(_type) ? "function" : _type,
-                    ["function"] = new JObject
-                    {
-                        ["name"] = _name.ToString(),
-                        ["arguments"] = _arguments.Length == 0 ? "{}" : _arguments.ToString()
-                    }
-                };
             }
         }
 
@@ -646,7 +561,6 @@ namespace RNAssistant.Core.Llm
             {
                 Content = content,
                 RefusalContent = ReadRefusalContent(message),
-                ToolCalls = ReadToolCalls(message),
                 ReasoningContent = providerReasoning.Length > 0 ? providerReasoning : embeddedReasoning,
                 ReasoningTokens = ReadReasoningTokens(usage),
                 ReasoningTruncated = providerReasoning.Length > 0
@@ -657,41 +571,6 @@ namespace RNAssistant.Core.Llm
                 TotalTokens = totalTokens,
                 UsageJson = BoundedUsageJson(usage)
             };
-        }
-
-        private static List<LlmToolCall> ReadToolCalls(JObject message)
-        {
-            var result = new List<LlmToolCall>();
-            var calls = message == null ? null : message["tool_calls"] as JArray;
-            if (calls != null && calls.Count > MaxToolCalls)
-            {
-                throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM response contains too many tool calls.");
-            }
-            foreach (var token in calls == null ? new JObject[0] : calls.OfType<JObject>())
-            {
-                var function = token["function"] as JObject;
-                if (function == null) continue;
-                var id = (string)token["id"] ?? string.Empty;
-                var type = (string)token["type"] ?? "function";
-                var name = (string)function["name"] ?? string.Empty;
-                var arguments = (string)function["arguments"] ?? "{}";
-                if (id.Length > 1024 || type.Length > 1024 || name.Length > 1024)
-                {
-                    throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM tool metadata exceeds the safety limit.");
-                }
-                if (arguments.Length > MaxToolArgumentsChars)
-                {
-                    throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM tool arguments exceed the safety limit.");
-                }
-                result.Add(new LlmToolCall
-                {
-                    Id = id,
-                    Type = type,
-                    Name = name,
-                    ArgumentsJson = arguments
-                });
-            }
-            return result;
         }
 
         private static string ExtractLeadingThink(string content, out string reasoning, out bool truncated)

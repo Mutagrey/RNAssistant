@@ -5,7 +5,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Word = Microsoft.Office.Interop.Word;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Tools;
@@ -184,29 +183,29 @@ namespace RNAssistant.OfficeHosts
         {
             return new[]
             {
-                Skill("word.get_context", "Read-only: Return active document and selection context.", "{}"),
-                Skill("word.get_selection_text", "Read-only: Read current selection text.", "{}"),
-                Skill("word.read_document", "Read-only: Read current document text.", "{\"maxChars\":12000}"),
-                Skill("word.read_selection", "Read-only: Read current selection text.", "{}"),
-                Skill("word.read_range", "Read-only: Read document text by character range.", "{\"start\":0,\"end\":1000,\"maxChars\":12000}"),
-                Skill("word.find_text", "Read-only: Find literal or regexp text across Word stories and return stable coordinates/hash.", "{\"query\":\"text\",\"scope\":\"main\",\"mode\":\"literal\",\"matchCase\":false,\"wholeWord\":false,\"maxResults\":50,\"contextChars\":80}"),
-                Skill("word.read_headings", "Read-only: List paragraphs that use heading styles.", "{\"maxResults\":100}"),
-                Skill("word.read_tables", "Read-only: Read text from document tables.", "{\"maxTables\":20,\"maxRows\":50}"),
-                Skill("word.list_comments", "Read-only: List document comments.", "{}"),
-                Skill("word.document_stats", "Read-only: Return basic document counts.", "{}"),
-                Skill("word.insert_text", "Mutates document: Insert text at the current cursor position.", "{\"text\":\"Text to insert\"}", true, true, 2),
-                Skill("word.insert_paragraph", "Mutates document: Insert a paragraph at selection, start, or end.", "{\"text\":\"Paragraph text\",\"location\":\"selection\"}", true, true, 2),
-                Skill("word.replace_selection", "Mutates document: Replace selected text.", "{\"text\":\"Replacement text\"}", true, true, 2),
-                Skill("word.replace_text", "Mutates document: Replace literal or regexp text after a matching search preview.", "{\"find\":\"old text\",\"replace\":\"new text\",\"scope\":\"main\",\"mode\":\"literal\",\"replaceAll\":true,\"matchCase\":false,\"wholeWord\":false,\"expectedMatches\":1,\"expectedScopeSha256\":\"\",\"maxReplacements\":500}", true, false, 2, true),
-                Skill("word.apply_style", "Mutates document: Apply a named Word style to selection or document.", "{\"style\":\"Heading 1\",\"target\":\"selection\"}", true, true, 1),
-                Skill("word.format_selection", "Mutates document: Apply basic font formatting to the current selection.", "{\"bold\":true,\"italic\":false,\"underline\":false,\"fontSize\":12,\"fontName\":\"\"}", true, true, 1),
-                Skill("word.add_table", "Mutates document: Insert a table at selection, start, or end.", "{\"rows\":2,\"columns\":2,\"values\":[[\"Header\",\"Value\"],[\"A\",\"1\"]],\"location\":\"selection\"}", true, true, 2),
-                Skill("word.insert_page_break", "Mutates document: Insert a page break at the current cursor position.", "{}", true, true, 1),
-                Skill("word.add_comment", "Mutates document: Add a comment to the current selection.", "{\"text\":\"Comment text\"}", true, true, 1),
-                Skill("word.vba_read_module", "Read-only: Read one VBA component by exact name from vba_list_modules; returns source and full code hash.", "{\"moduleName\":\"Module1\",\"maxChars\":30000}"),
-                Skill("word.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}", true, false, 3),
-                Skill("word.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}", true, false, 3),
-                Skill("word.run_macro", "Mutates document: Run a Word VBA macro by name.", "{\"macroName\":\"Module1.Test\"}", true, false, 3)
+                Tool("word.get_context", "Read-only: Return active document and selection context.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
+                Tool("word.get_selection_text", "Read-only: Read current selection text.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
+                Tool("word.read_document", "Read-only: Read current document text.", "{\"type\":\"object\",\"properties\":{\"maxChars\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("word.read_selection", "Read-only: Read current selection text.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
+                Tool("word.read_range", "Read-only: Read document text by character range.", "{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\"},\"end\":{\"type\":\"integer\"},\"maxChars\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("word.find_text", "Read-only: Find literal or regexp text across Word stories and return stable coordinates/hash.", "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"scope\":{\"type\":\"string\"},\"mode\":{\"type\":\"string\"},\"matchCase\":{\"type\":\"boolean\"},\"wholeWord\":{\"type\":\"boolean\"},\"maxResults\":{\"type\":\"integer\"},\"contextChars\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("word.read_headings", "Read-only: List paragraphs that use heading styles.", "{\"type\":\"object\",\"properties\":{\"maxResults\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("word.read_tables", "Read-only: Read text from document tables.", "{\"type\":\"object\",\"properties\":{\"maxTables\":{\"type\":\"integer\"},\"maxRows\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("word.list_comments", "Read-only: List document comments.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
+                Tool("word.document_stats", "Read-only: Return basic document counts.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
+                Tool("word.insert_text", "Mutates document: Insert text at the current cursor position.", "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 2),
+                Tool("word.insert_paragraph", "Mutates document: Insert a paragraph at selection, start, or end.", "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"},\"location\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 2),
+                Tool("word.replace_selection", "Mutates document: Replace selected text.", "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 2),
+                Tool("word.replace_text", "Mutates document: Replace literal or regexp text after a matching search preview.", "{\"type\":\"object\",\"properties\":{\"find\":{\"type\":\"string\"},\"replace\":{\"type\":\"string\"},\"scope\":{\"type\":\"string\"},\"mode\":{\"type\":\"string\"},\"replaceAll\":{\"type\":\"boolean\"},\"matchCase\":{\"type\":\"boolean\"},\"wholeWord\":{\"type\":\"boolean\"},\"expectedMatches\":{\"type\":\"integer\"},\"expectedScopeSha256\":{\"type\":\"string\"},\"maxReplacements\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}", true, false, 2, true),
+                Tool("word.apply_style", "Mutates document: Apply a named Word style to selection or document.", "{\"type\":\"object\",\"properties\":{\"style\":{\"type\":\"string\"},\"target\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
+                Tool("word.format_selection", "Mutates document: Apply basic font formatting to the current selection.", "{\"type\":\"object\",\"properties\":{\"bold\":{\"type\":\"boolean\"},\"italic\":{\"type\":\"boolean\"},\"underline\":{\"type\":\"boolean\"},\"fontSize\":{\"type\":\"integer\"},\"fontName\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
+                Tool("word.add_table", "Mutates document: Insert a table at selection, start, or end.", "{\"type\":\"object\",\"properties\":{\"rows\":{\"type\":\"integer\"},\"columns\":{\"type\":\"integer\"},\"values\":{\"type\":\"array\",\"items\":{}},\"location\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 2),
+                Tool("word.insert_page_break", "Mutates document: Insert a page break at the current cursor position.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}", true, true, 1),
+                Tool("word.add_comment", "Mutates document: Add a comment to the current selection.", "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
+                Tool("word.vba_read_module", "Read-only: Read one VBA component by exact name from vba_list_modules; returns source and full code hash.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\"},\"maxChars\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("word.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\"},\"code\":{\"type\":\"string\"},\"createIfMissing\":{\"type\":\"boolean\"}},\"required\":[],\"additionalProperties\":false}", true, false, 3),
+                Tool("word.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\"},\"code\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, false, 3),
+                Tool("word.run_macro", "Mutates document: Run a Word VBA macro by name.", "{\"type\":\"object\",\"properties\":{\"macroName\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", true, false, 3)
             };
         }
 
@@ -220,7 +219,6 @@ namespace RNAssistant.OfficeHosts
                     Host = "Word",
                     Name = "Word document editing",
                     Description = "Rewrite, insert, format, and review Word document content.",
-                    Tags = new List<string> { "word", "editing", "review", "formatting" },
                     BodyMarkdown = "# Word Document Editing\n\nUse this skill for Word drafting and editing tasks.\n\n- Read selection or document context before targeted edits.\n- Preserve user tone unless the user asks to change it.\n- Use insert/replace tools for document mutations.\n- Keep formatting changes explicit.\n- For review tasks, separate findings from suggested edits.",
                     Enabled = true,
                     BuiltIn = true
@@ -585,10 +583,7 @@ namespace RNAssistant.OfficeHosts
                 var post = FindText(verify);
                 if (!post.Success) return post;
                 var postHash = Convert.ToString(JObject.Parse(post.DataJson ?? "{}")["scopeSha256"]);
-                var result = ToolResult.Ok("Word replacements completed: " + total + ".", JsonConvert.SerializeObject(new { replacements = total, scopeSha256 = postHash }));
-                result.Verification = new ToolVerification { ToolId = "word.find_text", ExpectedContentSha256 = postHash };
-                foreach (var pair in verify.Arguments) result.Verification.Arguments[pair.Key] = pair.Value;
-                return result;
+                return ToolResult.Ok("Word replacements completed: " + total + ".", JsonConvert.SerializeObject(new { replacements = total, scopeSha256 = postHash }));
             }
             catch (TextPatternException ex)
             {
@@ -1021,9 +1016,9 @@ namespace RNAssistant.OfficeHosts
                 && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
-        private static ToolDefinition Skill(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool requiresConfirmation = false)
+        private static ToolDefinition Tool(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool requiresConfirmation = false)
         {
-            return new ToolDefinition { Id = id, Host = "Word", Name = id, Description = description, ArgumentSchemaJson = ToolSchemaSupport.FromPropertySamples(schema), BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, RequiresConfirmation = requiresConfirmation };
+            return new ToolDefinition { Id = id, Host = "Word", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, RequiresConfirmation = requiresConfirmation };
         }
 
         private static string Trim(string text, int maxChars)
