@@ -248,23 +248,111 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void SimpleAgentInvalidResponseFailsDirectly()
+        private static void SimpleAgentPromptIsRequestLocal()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
+                var requests = new List<IReadOnlyList<ChatMessage>>();
+                var responses = new Queue<string>(new[]
+                {
+                    "{\"message\":\"Читаю листы.\",\"tool_calls\":[{\"id\":\"call_sheets\",\"name\":\"excel.list_sheets\",\"arguments\":{}}]}",
+                    "{\"message\":\"Готово.\",\"tool_calls\":[]}"
+                });
+                LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
+                {
+                    requests.Add(messages.ToList());
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+                var session = NewSession(adapter);
+                var settings = new AppSettings { SystemPrompt = "SYSTEM_PROMPT_SENTINEL" };
+                var result = new AgentRunService(adapter, executor, completion).ExecuteAsync(
+                    "List sheets.", session, NewContext(adapter), settings,
+                    adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
+
+                AssertEqual("Готово.", result.AssistantText, "agent completed");
+                AssertEqual(2, requests.Count, "two model requests");
+                foreach (var request in requests)
+                {
+                    AssertEqual(1, request.Count(message =>
+                        (message.Content ?? string.Empty).IndexOf("SYSTEM_PROMPT_SENTINEL", StringComparison.Ordinal) >= 0),
+                        "system prompt appears once per request");
+                    AssertEqual(1, request.Count(message =>
+                        (message.Content ?? string.Empty).IndexOf("RUNTIME_CONTEXT:", StringComparison.Ordinal) >= 0),
+                        "runtime context appears once per request");
+                }
+                AssertTrue(!session.Messages.Any(message =>
+                    (message.Content ?? string.Empty).IndexOf("SYSTEM_PROMPT_SENTINEL", StringComparison.Ordinal) >= 0 ||
+                    (message.Content ?? string.Empty).IndexOf("RUNTIME_CONTEXT:", StringComparison.Ordinal) >= 0),
+                    "prompt is not persisted in chat history");
+            });
+        }
+
+        private static void SimpleAgentRepairsInvalidResponse()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                const string invalid = "PLAIN_INVALID_RESPONSE_SENTINEL";
+                var responses = new Queue<LlmCompletionResult>(new[]
+                {
+                    new LlmCompletionResult { Content = invalid, ReasoningContent = "INVALID_REASONING_SENTINEL" },
+                    new LlmCompletionResult { Content = "{\"message\":\"Не могу выполнить этот запрос.\",\"tool_calls\":[]}" }
+                });
+                var requests = new List<IReadOnlyList<ChatMessage>>();
+                LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
+                {
+                    requests.Add(messages.ToList());
+                    return Task.FromResult(responses.Dequeue());
+                };
+                var session = NewSession(adapter);
+                var result = new AgentRunService(adapter, executor, completion).ExecuteAsync(
+                    "Restricted request.", session, NewContext(adapter), new AppSettings(),
+                    adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
+
+                AssertEqual(2, requests.Count, "one repair request");
+                AssertEqual("Не могу выполнить этот запрос.", result.AssistantText, "formatted refusal accepted");
+                var repair = requests[1].Last();
+                AssertContains(repair.Content, "FORMAT_REPAIR", "repair instruction added");
+                AssertContains(repair.Content, "refuse", "refusal can remain a final answer");
+                AssertTrue(FlattenSimple(requests[1]).IndexOf(invalid, StringComparison.Ordinal) < 0,
+                    "invalid raw response is not copied into repair prompt");
+                AssertTrue(!session.Messages.Any(message =>
+                    (message.Content ?? string.Empty).IndexOf(invalid, StringComparison.Ordinal) >= 0 ||
+                    (message.Content ?? string.Empty).IndexOf("FORMAT_REPAIR", StringComparison.Ordinal) >= 0 ||
+                    (message.ReasoningContent ?? string.Empty).IndexOf("INVALID_REASONING_SENTINEL", StringComparison.Ordinal) >= 0),
+                    "invalid completion and repair instruction are not persisted");
+            });
+        }
+
+        private static void SimpleAgentFailedRepairDoesNotPolluteContext()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var responses = new Queue<string>(new[] { "INVALID_FIRST", "INVALID_SECOND" });
                 var calls = 0;
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
                 {
                     calls += 1;
-                    return Task.FromResult(new LlmCompletionResult { Content = "not json" });
+                    return Task.FromResult(new LlmCompletionResult
+                    {
+                        Content = responses.Dequeue(),
+                        ReasoningContent = "INVALID_DIAGNOSTIC_REASONING"
+                    });
                 };
                 var session = NewSession(adapter);
                 var result = new AgentRunService(adapter, executor, completion).ExecuteAsync(
                     "Do something.", session, NewContext(adapter), new AppSettings(),
                     adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
-                AssertEqual(1, calls, "no repair loop");
-                AssertContains(result.AssistantText, "Ответ агента не выполнен", "clear diagnostic");
+
+                AssertEqual(2, calls, "repair is bounded to one retry");
+                AssertContains(result.AssistantText, "после одной попытки", "clear bounded-repair diagnostic");
                 AssertTrue(session.Messages.Last().Activity != null, "diagnostic activity recorded");
+                AssertTrue(session.Messages.Last().ExcludeFromModelContext, "diagnostic excluded from replay");
+                AssertTrue(!session.Messages.Any(message =>
+                    (message.Content ?? string.Empty).IndexOf("INVALID_FIRST", StringComparison.Ordinal) >= 0 ||
+                    (message.Content ?? string.Empty).IndexOf("INVALID_SECOND", StringComparison.Ordinal) >= 0 ||
+                    (message.Content ?? string.Empty).IndexOf("FORMAT_REPAIR", StringComparison.Ordinal) >= 0 ||
+                    (message.ReasoningContent ?? string.Empty).IndexOf("INVALID_DIAGNOSTIC_REASONING", StringComparison.Ordinal) >= 0),
+                    "failed completions do not enter stored context");
             });
         }
 

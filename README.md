@@ -204,7 +204,7 @@ In Agent mode the prompt contains all runnable tools in native-like function JSO
 
 Independent calls may be placed in the same array and execute locally in order. Dependent calls and calls that may require confirmation are emitted one at a time. If confirmation pauses a multi-call response, calls after it are not executed; the model selects them again after the confirmed result. There is no persistent batch state.
 
-To answer or clarify, the model returns `{"message":"...","tool_calls":[]}`. Agent mode always requests `json_object`; there are no response-mode fallbacks, native tool-call transport, plans, format repair, router, tool slicer, skill activation, automatic retries, or separate verification phase.
+To answer, clarify, or refuse, the model returns `{"message":"...","tool_calls":[]}`. Agent mode always requests `json_object`; there are no response-mode fallbacks, native tool-call transport, plans, router, tool slicer, skill activation, automatic tool retries, or separate verification phase. One invalid response gets one ephemeral format-correction request and neither the invalid output nor that instruction enters chat history.
 
 Office tools execute locally. The next model turn receives a string protocol message such as `TOOL_RESULT:\n{"ok":true,"tool_call_id":"call_1","name":"excel.read_range","status":"completed","message":"Range read.","data":{...},"error":null}`. The model decides what to do next. The runtime only enforces exact tool ids, formal argument schemas, safety/confirmation metadata, and iteration/tool-step limits.
 

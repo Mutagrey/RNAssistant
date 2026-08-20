@@ -8,6 +8,25 @@ namespace RNAssistant.Office.Services
 {
     internal static class AgentJsonProtocol
     {
+        public static ChatMessage CreateFormatRepairMessage(string error)
+        {
+            var root = new JObject
+            {
+                ["error"] = string.IsNullOrWhiteSpace(error) ? "Invalid Agent JSON response." : error.Trim(),
+                ["instruction"] =
+                    "Return a new response to the current user request as exactly one JSON object with message and tool_calls. " +
+                    "Do not use Markdown, fences, or surrounding prose. To answer, clarify, refuse, or report inability, " +
+                    "put the user-facing text in message and return an empty tool_calls array. " +
+                    "To use tools, return calls with unique id, exact name, and object arguments."
+            };
+            return new ChatMessage
+            {
+                Role = "user",
+                Content = "FORMAT_REPAIR:\n" + root.ToString(Formatting.None),
+                ProtocolMessage = true
+            };
+        }
+
         public static ToolCommand ToCommand(AgentToolCall call)
         {
             return new ToolCommand

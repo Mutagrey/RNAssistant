@@ -3,7 +3,7 @@
 RNAssistant has two explicit modes.
 
 - `chat`: a normal text completion. The request contains no tool catalog or skill bodies and the response is not parsed as an agent command.
-- `agent`: a prompt-driven loop over local Office tools. The runtime does not route the request, select a phase, activate skills, repair model output, retry tools, or verify mutations as a separate agent stage.
+- `agent`: a prompt-driven loop over local Office tools. The runtime does not route the request, select a phase, activate skills, retry tools, or verify mutations as a separate agent stage. It may make one request-local format correction when the model violates the JSON contract.
 
 ## Agent context
 
@@ -77,7 +77,7 @@ The parser accepts one or more calls, requires unique call ids, and checks each 
 
 If a call needs confirmation, execution pauses at that call and later calls from the same response are not retained or executed. After confirmation, the model receives that result and chooses the remaining work normally. There is no separate batch state. Additional root fields are allowed so the prompt can evolve without a protocol migration.
 
-An invalid model response ends the run with a visible diagnostic. There is no repair loop or legacy normalization.
+If parsing fails, the runtime makes one correction request with the same accepted conversation plus a short `FORMAT_REPAIR` instruction. The invalid raw output is not copied into that request and neither the output nor the repair instruction is stored in chat history. A refusal remains valid user-facing content when returned in `message` with an empty `tool_calls` array. If the correction is also invalid, the run ends with a visible diagnostic excluded from model replay. There is no unbounded repair loop or legacy normalization.
 
 ## Tool result
 

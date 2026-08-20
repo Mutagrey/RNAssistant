@@ -162,8 +162,20 @@ namespace RNAssistant.Office.Services
                 var parsed = _responseParser.Parse(completion == null ? null : completion.Content, availableTools);
                 if (!parsed.Success)
                 {
-                    return FinishWithDiagnostic(session, results, contextUsage, completion,
-                        "Ответ агента не выполнен: " + parsed.Error);
+                    Report(progress, "thinking", "Модель исправляет формат ответа...", null);
+                    var repairMessages = new List<ChatMessage>(messages)
+                    {
+                        AgentJsonProtocol.CreateFormatRepairMessage(parsed.Error)
+                    };
+                    completion = await CompleteAsync(settings, repairMessages, options, progress, cancellationToken).ConfigureAwait(false);
+                    contextUsage = ContextUsageEstimator.FromPrompt(repairMessages, settings,
+                        completion == null ? null : completion.PromptTokens, options);
+                    parsed = _responseParser.Parse(completion == null ? null : completion.Content, availableTools);
+                    if (!parsed.Success)
+                    {
+                        return FinishWithDiagnostic(session, results, contextUsage,
+                            "Ответ агента не выполнен после одной попытки исправить формат: " + parsed.Error);
+                    }
                 }
 
                 var response = parsed.Response;
@@ -334,7 +346,6 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             IReadOnlyList<object> results,
             object contextUsage,
-            LlmCompletionResult completion,
             string text)
         {
             var activity = new ChatActivity
@@ -345,7 +356,7 @@ namespace RNAssistant.Office.Services
                 ExecutionStatus = "invalid_agent_response",
                 ResultMessage = text
             };
-            session.Messages.Add(AgentTranscript.CreateAssistantMessage(text, completion, activity));
+            session.Messages.Add(AgentTranscript.CreateAssistantMessage(text, null, activity));
             return Result(text, results, contextUsage);
         }
 

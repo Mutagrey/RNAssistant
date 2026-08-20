@@ -29,7 +29,7 @@ There are exactly two persisted modes.
 
 `AgentPromptComposer` creates one `RUNTIME_CONTEXT` JSON object containing document identity, all runnable tools in native-like function format, a compact enabled-skill catalog, chat context, and artifact references. Relevant complete skill Markdown is loaded by the model through `common.skills_read`. The composer does not inspect or classify request wording and does not capture Office content eagerly.
 
-`AgentResponseParser` accepts either a final `message` or one or more `tool_calls` entries with unique ids. `OfficeToolExecutor` remains the authority for formal argument schemas, effective pipeline safety, confirmation, and dispatch. `AgentJsonProtocol` serializes each result to `{ok, tool_call_id, name, status, message, data, error}`.
+`AgentResponseParser` accepts either a final `message` or one or more `tool_calls` entries with unique ids. One invalid response gets one ephemeral format-correction request; invalid content is never added to replay history. `OfficeToolExecutor` remains the authority for formal argument schemas, effective pipeline safety, confirmation, and dispatch. `AgentJsonProtocol` serializes each result to `{ok, tool_call_id, name, status, message, data, error}`.
 
 See [agent-protocol.md](agent-protocol.md).
 

@@ -106,7 +106,8 @@ namespace RNAssistant.Core.Models
                 "Return exactly one JSON object and no markdown or surrounding prose. To call a tool return " +
                 "{\"message\":\"short visible progress\",\"tool_calls\":[{\"id\":\"call_unique\",\"name\":\"exact tool name\",\"arguments\":{}}]}. " +
                 "Every call needs a unique id. You may return several tool_calls only when they are independent and their arguments do not depend on earlier results; they execute sequentially in array order. " +
-                "Use one call when the next action depends on its result or may require confirmation. To answer, clarify, or finish return {\"message\":\"user-facing answer\",\"tool_calls\":[]}. " +
+                "Use one call when the next action depends on its result or may require confirmation. To answer, clarify, refuse, report inability, or finish return {\"message\":\"user-facing answer\",\"tool_calls\":[]}. " +
+                "Keep this JSON envelope even when you cannot fulfill the request. Escape message content as valid JSON. " +
                 "Additional JSON fields are allowed, but message and tool_calls keep these meanings.\n\n" +
                 "Choose the next step yourself from the request, loaded skills, tools, conversation, and TOOL_RESULT messages. " +
                 "Each TOOL_RESULT is JSON with ok, tool_call_id, name, status, message, data, and error. Read current Office state when you need it, inspect an error before deciding whether to retry, " +
