@@ -504,6 +504,56 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void SimpleAgentConfirmationFailureContinues()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var responses = new Queue<string>(new[]
+                {
+                    "{\"message\":\"Создаю skill.\",\"tool_calls\":[{\"id\":\"call_skill_failure\",\"name\":\"common.skills_create\",\"arguments\":{\"id\":\"common.failure_test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
+                    "{\"message\":\"Skill уже существует; выберу другой id.\",\"tool_calls\":[]}"
+                });
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
+                {
+                    calls.Add(messages.ToList());
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+                var service = new AgentRunService(adapter, executor, completion);
+                var session = NewSession(adapter);
+                var settings = new AppSettings { AutoConfirmToolActions = false };
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                service.ExecuteAsync(
+                    "Create a test skill.", session, NewContext(adapter), settings, tools,
+                    (Action<string, string, ChatActivity>)null,
+                    (pendingSession, pendingCommand, result) => "pending_failure").GetAwaiter().GetResult();
+
+                var command = new ToolCommand { ToolId = "common.skills_create", ToolCallId = "call_skill_failure" };
+                command.Arguments["id"] = "common.failure_test";
+                var failure = ToolResult.Fail(
+                    "Skill already exists: common.failure_test.",
+                    null,
+                    "skill_already_exists",
+                    false);
+                var final = service.ContinueAfterToolAsync(
+                    command,
+                    failure,
+                    session,
+                    NewContext(adapter),
+                    settings,
+                    tools,
+                    null,
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Skill уже существует; выберу другой id.", final.AssistantText, "agent continues after confirmed failure");
+                AssertEqual(2, calls.Count, "failure triggers next model turn");
+                var replay = FlattenSimple(calls[1]);
+                AssertContains(replay, "\"ok\":false", "confirmed failure replayed");
+                AssertContains(replay, "skill_already_exists", "confirmed failure code replayed");
+                AssertTrue(replay.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) < 0, "waiting result is not replayed after failure");
+            });
+        }
+
         private static void SimpleChatHasNoAgentContext()
         {
             var adapter = FakeOfficeAdapter.ForHost("Excel");

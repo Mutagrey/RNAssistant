@@ -56,6 +56,7 @@ namespace RNAssistant.Harness
                 Test("agent: format repair limit is clamped to five", SimpleAgentClampsFormatRepairLimit),
                 Test("agent: exposes safe VBA editing tools", SimpleAgentExposesSafeVbaEditingTools),
                 Test("agent: confirmation replays one final result", SimpleAgentConfirmationReplaysOnlyFinalResult),
+                Test("agent: confirmed tool failure continues", SimpleAgentConfirmationFailureContinues),
                 Test("chat: plain mode has no agent context", SimpleChatHasNoAgentContext),
                 Test("context: compaction uses one summary field", SimpleCompactionUsesOneSummaryField),
 

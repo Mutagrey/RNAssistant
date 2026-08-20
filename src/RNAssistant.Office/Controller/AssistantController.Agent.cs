@@ -98,28 +98,21 @@ namespace RNAssistant.Office
                         runCancellation.Token);
                     UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
                     pendingResolved = true;
-                    if (result.Success)
-                    {
-                        tools = _toolCatalog.GetVisibleTools().Where(tool => tool.Enabled).ToList();
-                        var context = LoadContext(session);
-                        var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
-                        await _agentRunService.ContinueAfterToolAsync(
-                            CloneCommand(pending.Command),
-                            result,
-                            session,
-                            context,
-                            settings,
-                            tools,
-                            pending.Attachments ?? LatestUserAttachments(session),
-                            runProgress,
-                            RegisterPendingAgentTool,
-                            skills,
-                            runCancellation.Token).ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(CloneCommand(pending.Command), result));
-                    }
+                    tools = _toolCatalog.GetVisibleTools().Where(tool => tool.Enabled).ToList();
+                    var context = LoadContext(session);
+                    var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
+                    await _agentRunService.ContinueAfterToolAsync(
+                        CloneCommand(pending.Command),
+                        result,
+                        session,
+                        context,
+                        settings,
+                        tools,
+                        pending.Attachments ?? LatestUserAttachments(session),
+                        runProgress,
+                        RegisterPendingAgentTool,
+                        skills,
+                        runCancellation.Token).ConfigureAwait(false);
 
                     AnnotateRunMessages(session, firstRunMessageIndex, runId);
                     HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
@@ -183,6 +176,7 @@ namespace RNAssistant.Office
                 var protocolStart = session.Messages.Count;
                 session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(CloneCommand(pending.Command), result));
                 AnnotateRunMessages(session, protocolStart, "cancel_" + Guid.NewGuid().ToString("N"));
+                // Explicit user cancellation is terminal for this run: persist it, but do not invoke the model.
                 SaveSessionChanges(session);
             }
             return ChatState(session);
