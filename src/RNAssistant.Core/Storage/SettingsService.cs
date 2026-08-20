@@ -126,10 +126,6 @@ namespace RNAssistant.Core.Storage
             {
                 settings.ContextWindowOverrideTokens = 0;
             }
-            if (settings.ContextWindowOverrideTokens > 4000000)
-            {
-                settings.ContextWindowOverrideTokens = 4000000;
-            }
             if (settings.VbaContextCharLimit <= 0)
             {
                 settings.VbaContextCharLimit = defaults.VbaContextCharLimit;
@@ -142,15 +138,11 @@ namespace RNAssistant.Core.Storage
             {
                 settings.MaxAgentIterations = 1;
             }
-            if (settings.MaxAgentIterations > 50)
-            {
-                settings.MaxAgentIterations = 50;
-            }
             if (settings.MaxAgentFormatRetries <= 0)
             {
                 settings.MaxAgentFormatRetries = defaults.MaxAgentFormatRetries;
             }
-            settings.MaxAgentFormatRetries = Math.Max(1, Math.Min(5, settings.MaxAgentFormatRetries));
+            settings.MaxAgentFormatRetries = Math.Max(1, settings.MaxAgentFormatRetries);
             if (settings.MaxAgentToolSteps <= 0)
             {
                 settings.MaxAgentToolSteps = defaults.MaxAgentToolSteps;
@@ -159,15 +151,11 @@ namespace RNAssistant.Core.Storage
             {
                 settings.MaxAgentToolSteps = 1;
             }
-            if (settings.MaxAgentToolSteps > 200)
-            {
-                settings.MaxAgentToolSteps = 200;
-            }
             if (settings.MaxAgentToolsPerRequest <= 0)
             {
                 settings.MaxAgentToolsPerRequest = defaults.MaxAgentToolsPerRequest;
             }
-            settings.MaxAgentToolsPerRequest = Math.Max(8, Math.Min(64, settings.MaxAgentToolsPerRequest));
+            settings.MaxAgentToolsPerRequest = Math.Max(1, settings.MaxAgentToolsPerRequest);
             return settings;
         }
 

@@ -30,11 +30,13 @@ function modelOptionTitle(model) {
   if (model.description) {
     parts.push(model.description);
   }
-  if (model.maxContextTokens) {
-    parts.push("Контекст: " + model.maxContextTokens);
+  var maxContextTokens = effectiveModelCapabilityValue(model.value, "MaxContextTokens", "maxContextTokens", model.maxContextTokens);
+  var maxOutputTokens = effectiveModelCapabilityValue(model.value, "MaxOutputTokens", "maxOutputTokens", model.maxOutputTokens);
+  if (maxContextTokens) {
+    parts.push("Контекст: " + maxContextTokens);
   }
-  if (model.maxOutputTokens) {
-    parts.push("Лимит ответа: " + model.maxOutputTokens);
+  if (maxOutputTokens) {
+    parts.push("Лимит ответа: " + maxOutputTokens);
   } else if (model.maxTokens) {
     parts.push("Ответ по умолчанию: " + model.maxTokens);
   }
@@ -44,9 +46,12 @@ function modelOptionTitle(model) {
   if (model.topP !== null && model.topP !== undefined) {
     parts.push("Top P: " + model.topP);
   }
-  if (model.supportsReasoning !== null) parts.push("Reasoning: " + (model.supportsReasoning ? "да" : "нет"));
-  if (model.supportsImages !== null) parts.push("Vision: " + (model.supportsImages ? "да" : "нет"));
-  if (model.supportsAudio !== null) parts.push("Audio: " + (model.supportsAudio ? "да" : "нет"));
+  var reasoning = effectiveModelSupportsReasoning(model.value);
+  var vision = effectiveModelSupportsImages(model.value);
+  var audio = effectiveModelSupportsAudio(model.value);
+  if (reasoning !== null) parts.push("Reasoning: " + (reasoning ? "да" : "нет"));
+  if (vision !== null) parts.push("Vision: " + (vision ? "да" : "нет"));
+  if (audio !== null) parts.push("Audio: " + (audio ? "да" : "нет"));
   return parts.join("\n");
 }
 
@@ -120,11 +125,13 @@ function createChatModelPickerItem(value, model, isDefault, selected) {
   if (model) {
     var badges = document.createElement("span");
     badges.className = "composer-model-badges";
-    if (model.supportsReasoning === true) appendModelPickerBadge(badges, "is-reasoning", "Reasoning");
-    if (catalogModelSupportsImages(model) === true) appendModelPickerBadge(badges, "is-vision", "Vision");
-    if (catalogModelSupportsAudio(model) === true) appendModelPickerBadge(badges, "is-audio", "Audio");
-    appendModelPickerBadge(badges, "", compactModelTokenCount(model.maxContextTokens) ? compactModelTokenCount(model.maxContextTokens) + " контекст" : "");
-    appendModelPickerBadge(badges, "", compactModelTokenCount(model.maxOutputTokens) ? compactModelTokenCount(model.maxOutputTokens) + " ответ" : "");
+    if (effectiveModelSupportsReasoning(model.value) === true) appendModelPickerBadge(badges, "is-reasoning", "Reasoning");
+    if (effectiveModelSupportsImages(model.value) === true) appendModelPickerBadge(badges, "is-vision", "Vision");
+    if (effectiveModelSupportsAudio(model.value) === true) appendModelPickerBadge(badges, "is-audio", "Audio");
+    var contextTokens = effectiveModelCapabilityValue(model.value, "MaxContextTokens", "maxContextTokens", model.maxContextTokens);
+    var outputTokens = effectiveModelCapabilityValue(model.value, "MaxOutputTokens", "maxOutputTokens", model.maxOutputTokens);
+    appendModelPickerBadge(badges, "", compactModelTokenCount(contextTokens) ? compactModelTokenCount(contextTokens) + " контекст" : "");
+    appendModelPickerBadge(badges, "", compactModelTokenCount(outputTokens) ? compactModelTokenCount(outputTokens) + " ответ" : "");
     if (badges.childNodes.length) button.appendChild(badges);
   }
   return button;
@@ -316,17 +323,20 @@ function renderModelInfo(selectedValue) {
 
   var metrics = document.createElement("div");
   metrics.className = "model-info-metrics";
-  appendModelMetric(metrics, "Контекст", model.maxContextTokens);
-  appendModelMetric(metrics, "Лимит ответа", model.maxOutputTokens);
+  appendModelMetric(metrics, "Контекст", effectiveModelCapabilityValue(model.value, "MaxContextTokens", "maxContextTokens", model.maxContextTokens));
+  appendModelMetric(metrics, "Лимит ответа", effectiveModelCapabilityValue(model.value, "MaxOutputTokens", "maxOutputTokens", model.maxOutputTokens));
   appendModelMetric(metrics, "Ответ по умолчанию", model.maxTokens);
   appendModelMetric(metrics, "Temp", model.temperature);
   appendModelMetric(metrics, "Top P", model.topP);
   appendModelMetric(metrics, "Top K", model.topK);
   appendModelMetric(metrics, "Presence penalty", model.presencePenalty);
   appendModelMetric(metrics, "Frequency penalty", model.frequencyPenalty);
-  appendModelMetric(metrics, "Reasoning", model.supportsReasoning === null ? "?" : (model.supportsReasoning ? "да" : "нет"));
-  appendModelMetric(metrics, "Vision", catalogModelSupportsImages(model) === null ? "?" : (catalogModelSupportsImages(model) ? "да" : "нет"));
-  appendModelMetric(metrics, "Audio", catalogModelSupportsAudio(model) === null ? "?" : (catalogModelSupportsAudio(model) ? "да" : "нет"));
+  var reasoning = effectiveModelSupportsReasoning(model.value);
+  var vision = effectiveModelSupportsImages(model.value);
+  var audio = effectiveModelSupportsAudio(model.value);
+  appendModelMetric(metrics, "Reasoning", reasoning === null ? "?" : (reasoning ? "да" : "нет"));
+  appendModelMetric(metrics, "Vision", vision === null ? "?" : (vision ? "да" : "нет"));
+  appendModelMetric(metrics, "Audio", audio === null ? "?" : (audio ? "да" : "нет"));
   box.appendChild(metrics);
 
   if (model.systemPrompt) {
@@ -454,6 +464,59 @@ function appendModelCapabilitySelect(row, label, mode, onChange) {
   row.appendChild(holder);
 }
 
+function appendModelCapabilityNumber(row, label, value, placeholder, onChange) {
+  var holder = document.createElement("label");
+  holder.className = "model-capability-flag";
+  var input = document.createElement("input");
+  input.className = "model-capability-number";
+  input.type = "number";
+  input.min = "1";
+  input.value = Number(value || 0) > 0 ? String(value) : "";
+  input.placeholder = placeholder || "Авто";
+  input.setAttribute("aria-label", label);
+  input.title = label;
+  input.addEventListener("change", function () {
+    var parsed = Number(input.value || 0);
+    onChange(parsed > 0 && isFinite(parsed) ? Math.floor(parsed) : null);
+  });
+  holder.appendChild(input);
+  row.appendChild(holder);
+}
+
+function appendReasoningModeSelect(row, value, onChange) {
+  var holder = document.createElement("label");
+  holder.className = "model-capability-flag";
+  var select = document.createElement("select");
+  select.className = "model-capability-mode-select";
+  select.setAttribute("aria-label", "Режим reasoning API");
+  [["", "Общий"], ["auto", "Auto"], ["reasoning_effort", "effort"], ["enable_thinking", "thinking"],
+    ["chat_template_kwargs", "kwargs"], ["reasoning_enabled", "enabled"], ["custom_json", "custom"]].forEach(function (item) {
+    var option = document.createElement("option");
+    option.value = item[0];
+    option.textContent = item[1];
+    select.appendChild(option);
+  });
+  select.value = value || "";
+  select.addEventListener("change", function () { onChange(select.value || null); });
+  holder.appendChild(select);
+  row.appendChild(holder);
+}
+
+function setStoredModelCapabilityField(value, field, nextValue) {
+  value = String(value || "").trim();
+  if (!value) return;
+  var settings = state.settings || (state.settings = {});
+  var capabilities = settings.ModelCapabilities || settings.modelCapabilities || {};
+  settings.ModelCapabilities = capabilities;
+  var entry = storedModelCapabilityEntry(value);
+  var capability = entry ? entry.value : {};
+  if (!entry) capabilities[value] = capability;
+  capability[field] = nextValue;
+  settingsDirty = true;
+  updateSettingsSaveButton();
+  renderModelControls();
+}
+
 function setModelCapabilityOverride(kind, value, mode) {
   value = String(value || "").trim();
   if (!value) return;
@@ -494,7 +557,7 @@ function renderModelCapabilityList() {
   var audioOverrides = modelAudioSupportOverrides();
   var header = document.createElement("div");
   header.className = "model-capability-row model-capability-header";
-  ["Модель", "Reasoning", "Vision", "Audio"].forEach(function (label) {
+  ["Модель", "Контекст", "Ответ", "Reasoning", "Reasoning API", "Vision", "Audio", "Изобр."].forEach(function (label) {
     var cell = document.createElement("span");
     cell.textContent = label;
     header.appendChild(cell);
@@ -504,6 +567,12 @@ function renderModelCapabilityList() {
     var value = model.value;
     var imageMode = modelOverrideState(imageOverrides, value);
     var audioMode = modelOverrideState(audioOverrides, value);
+    var reasoningValue = effectiveModelSupportsReasoning(value);
+    var reasoningMode = reasoningValue === null ? "auto" : (reasoningValue ? "true" : "false");
+    var maxContextTokens = effectiveModelCapabilityValue(value, "MaxContextTokens", "maxContextTokens", model.maxContextTokens);
+    var maxOutputTokens = effectiveModelCapabilityValue(value, "MaxOutputTokens", "maxOutputTokens", model.maxOutputTokens);
+    var maxImages = effectiveModelCapabilityValue(value, "MaxImagesPerPrompt", "maxImagesPerPrompt", model.maxImagesPerPrompt);
+    var requestMode = effectiveModelCapabilityValue(value, "ReasoningRequestMode", "reasoningRequestMode", model.reasoningRequestMode);
     var hasOverride = imageMode !== "auto" || audioMode !== "auto";
 
     var row = document.createElement("div");
@@ -523,12 +592,26 @@ function renderModelCapabilityList() {
     }
     row.appendChild(text);
 
-    appendModelCapabilityToggle(row, "Reasoning: " + value, effectiveModelSupportsReasoning(value), false, null);
+    appendModelCapabilityNumber(row, "Контекст модели: " + value, maxContextTokens, "32768", function (next) {
+      setStoredModelCapabilityField(value, "MaxContextTokens", next);
+    });
+    appendModelCapabilityNumber(row, "Лимит ответа модели: " + value, maxOutputTokens, "Нет", function (next) {
+      setStoredModelCapabilityField(value, "MaxOutputTokens", next);
+    });
+    appendModelCapabilitySelect(row, "Reasoning: " + value, reasoningMode, function (mode) {
+      setStoredModelCapabilityField(value, "SupportsReasoning", mode === "auto" ? null : mode === "true");
+    });
+    appendReasoningModeSelect(row, requestMode, function (mode) {
+      setStoredModelCapabilityField(value, "ReasoningRequestMode", mode);
+    });
     appendModelCapabilitySelect(row, "Vision: " + value, imageMode, function (mode) {
       setModelCapabilityOverride("image", value, mode);
     });
     appendModelCapabilitySelect(row, "Audio: " + value, audioMode, function (mode) {
       setModelCapabilityOverride("audio", value, mode);
+    });
+    appendModelCapabilityNumber(row, "Изображений в запросе: " + value, maxImages, "3", function (next) {
+      setStoredModelCapabilityField(value, "MaxImagesPerPrompt", next);
     });
     list.appendChild(row);
   });

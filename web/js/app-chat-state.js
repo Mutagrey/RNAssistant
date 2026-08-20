@@ -514,11 +514,15 @@ function updateEstimatedContextUsage() {
   var override = Number(settings.ContextWindowOverrideTokens || settings.contextWindowOverrideTokens || 0);
   var modelName = activeChatModel() || settingsModel();
   var model = typeof findModel === "function" ? findModel(modelName) : null;
-  var capabilities = settings.ModelCapabilities || settings.modelCapabilities || {};
-  var capability = capabilities[modelName] || {};
-  var windowTokens = override || Number((model && model.maxContextTokens) || capability.MaxContextTokens || capability.maxContextTokens || 32768);
+  var configuredWindow = typeof effectiveModelCapabilityValue === "function"
+    ? effectiveModelCapabilityValue(modelName, "MaxContextTokens", "maxContextTokens", model && model.maxContextTokens)
+    : (model && model.maxContextTokens);
+  var windowTokens = override || Number(configuredWindow || 32768);
   var requestedOutput = Number(settings.MaxTokens || settings.maxTokens || 2048);
-  var modelOutputLimit = Number((model && model.maxOutputTokens) || capability.MaxOutputTokens || capability.maxOutputTokens || 0);
+  var configuredOutput = typeof effectiveModelCapabilityValue === "function"
+    ? effectiveModelCapabilityValue(modelName, "MaxOutputTokens", "maxOutputTokens", model && model.maxOutputTokens)
+    : (model && model.maxOutputTokens);
+  var modelOutputLimit = Number(configuredOutput || 0);
   var maxOutput = modelOutputLimit > 0 ? Math.min(requestedOutput, modelOutputLimit) : requestedOutput;
   var safety = Math.max(1024, Math.min(16384, Math.ceil(windowTokens * 0.02)));
   var reservedOutput = Math.min(Math.max(1, maxOutput), Math.max(1, windowTokens - safety - 1024));

@@ -267,7 +267,7 @@ namespace RNAssistant.Harness
         private static void ToolSliceBalancesMutationAndInspection()
         {
             var tools = new List<ToolDefinition>();
-            for (var index = 0; index < 40; index++)
+            for (var index = 0; index < 70; index++)
             {
                 tools.Add(new ToolDefinition
                 {
@@ -318,6 +318,20 @@ namespace RNAssistant.Harness
             AssertEqual(8, compact.Tools.Count, "compact slice size");
             AssertTrue(compact.Tools.Any(tool => !tool.MutatesDocument), "compact slice keeps inspection");
             AssertTrue(compact.Tools.Any(tool => tool.MutatesDocument), "compact slice keeps mutation");
+
+            var expanded = new ToolCatalogSlicer().Slice(
+                new RoutedTask
+                {
+                    App = "Excel",
+                    TaskType = "content",
+                    Phase = AgentPhases.Mutation,
+                    RiskAllowed = 2,
+                    RequiresTool = true
+                },
+                tools,
+                new List<AgentObservation>(),
+                100);
+            AssertEqual(73, expanded.Tools.Count, "tool slice has no arbitrary 64 item cap");
 
             foreach (var tool in tools)
             {
@@ -659,6 +673,19 @@ namespace RNAssistant.Harness
             AssertEqual(ReasoningRequestModes.EnableThinking, settings.ModelCapabilities["model-a"].ReasoningRequestMode, "model reasoning request mode parsed");
             AssertTrue(settings.ModelCapabilities["model-a"].SupportsAudio == false, "model audio parsed");
             AssertEqual("model-a", settings.AttachmentModelPriority[0], "multimodal model appended to priority");
+
+            settings.ModelCapabilities["model-a"].MaxContextTokens = 2000000;
+            settings.ModelCapabilities["model-a"].MaxOutputTokens = 16000;
+            settings.ModelCapabilities["model-a"].SupportsReasoning = false;
+            settings.ModelCapabilities["model-a"].ReasoningRequestMode = ReasoningRequestModes.CustomJson;
+            var minimalCatalog = JObject.Parse("{\"data\":[{\"id\":\"model-a\",\"value\":\"legacy-name\",\"context_window\":4096,\"max_completion_tokens\":512,\"supports_reasoning\":true},{\"id\":\"model-b\"}]}");
+            AssertTrue(ModelCapabilityService.Merge(settings, minimalCatalog), "minimal id catalog adds a model without clearing stored capabilities");
+            AssertEqual(2000000, settings.ModelCapabilities["model-a"].MaxContextTokens.Value, "manual context survives catalog refresh");
+            AssertEqual(16000, settings.ModelCapabilities["model-a"].MaxOutputTokens.Value, "manual output limit survives catalog refresh");
+            AssertTrue(settings.ModelCapabilities["model-a"].SupportsReasoning == false, "manual reasoning support survives catalog refresh");
+            AssertEqual(ReasoningRequestModes.CustomJson, settings.ModelCapabilities["model-a"].ReasoningRequestMode, "manual reasoning mode survives catalog refresh");
+            AssertTrue(settings.ModelCapabilities.ContainsKey("model-b"), "id-only model is retained");
+            AssertTrue(!settings.ModelCapabilities.ContainsKey("legacy-name"), "id is preferred over legacy value field");
         }
 
         private static void InvalidModelCatalogResponseIsConcise()

@@ -26,7 +26,7 @@
   <link rel="stylesheet" href="css/app-composer.css?v=message-edit-20260806-1">
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
-  <link rel="stylesheet" href="css/app-models.css?v=custom-reasoning-20260806-1">
+  <link rel="stylesheet" href="css/app-models.css?v=model-capabilities-20260820-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=model-debug-20260819-1">
   <link rel="stylesheet" href="css/app-tools.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-prompts.css?v=sidebar-polish-20260723-1">
@@ -498,7 +498,7 @@
                   <div class="model-capability-heading">
                     <div>
                       <h3 id="modelCapabilityTitle">Возможности моделей</h3>
-                      <p>Reasoning берётся из каталога. Для Vision и Audio можно выбрать «Авто», «Да» или «Нет».</p>
+                      <p>Каталог может содержать только ID. Остальные поля задаются вручную; пустой контекст использует безопасный резерв 32768 токенов.</p>
                     </div>
                   </div>
                   <div class="model-capability-list" id="modelCapabilityList"></div>
@@ -512,11 +512,11 @@
                   </div>
                   <div class="attachment-model-priority" id="attachmentModelPriorityList"></div>
                 </section>
-                <label><span>Макс. токены ответа</span><input id="maxTokensInput" type="number" min="1" max="200000"></label>
-                <label><span>Таймаут запроса, сек</span><input id="requestTimeoutInput" type="number" min="30" max="3600"></label>
+                <label><span>Макс. токены ответа</span><input id="maxTokensInput" type="number" min="1"></label>
+                <label><span>Таймаут запроса, сек</span><input id="requestTimeoutInput" type="number" min="30"></label>
                 <label><span>Temperature</span><input id="temperatureInput" type="number" min="0" max="2" step="0.1"></label>
                 <label><span>Top P</span><input id="topPInput" type="number" min="0" max="1" step="0.01"></label>
-                <label><span>Окно контекста, токены (0 = авто)</span><input id="contextLimitInput" type="number" min="0" max="4000000"></label>
+                <label><span>Окно контекста, токены (0 = по модели)</span><input id="contextLimitInput" type="number" min="0"></label>
                 <label class="checkline"><input id="streamInput" type="checkbox"><span>Потоковый API (SSE)</span></label>
               </div>
               <div class="toolbar">
@@ -542,11 +542,11 @@
                 <label class="checkline"><input id="allowAgentToolAuthoringInput" type="checkbox"><span>Создавать missing tool по ходу задачи</span></label>
                 <label class="checkline"><input id="autoCompressContextInput" type="checkbox"><span>Создавать summary при заполнении контекста</span></label>
                 <label class="checkline"><input id="includeVbaContextInput" type="checkbox"><span>Включать VBA-контекст автоматически</span></label>
-                <label><span>Макс. итераций агента</span><input id="maxAgentIterationsInput" type="number" min="1" max="50"></label>
-                <label><span>Повторов при ошибке формата</span><input id="maxAgentFormatRetriesInput" type="number" min="1" max="5"></label>
-                <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1" max="200"></label>
-                <label><span>Tools в одном planner prompt</span><input id="maxAgentToolsPerRequestInput" type="number" min="8" max="64"></label>
-                <label><span>VBA-контекст, символы</span><input id="vbaContextLimitInput" type="number" min="1000" max="200000"></label>
+                <label><span>Макс. итераций агента</span><input id="maxAgentIterationsInput" type="number" min="1"></label>
+                <label><span>Повторов при ошибке формата</span><input id="maxAgentFormatRetriesInput" type="number" min="1"></label>
+                <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1"></label>
+                <label><span>Tools в одном planner prompt</span><input id="maxAgentToolsPerRequestInput" type="number" min="1"></label>
+                <label><span>VBA-контекст, символы</span><input id="vbaContextLimitInput" type="number" min="1000"></label>
               </div>
               <div class="setting-note">json_schema и json_object передают AgentDecision через content; native_tool_calls передаёт действия через OpenAI tools API. Роль tool создаёт matching assistant tool_calls/tool_call_id. Fallback разрешён только до первого выполненного tool.</div>
               <section class="model-compatibility-panel" aria-labelledby="modelCompatibilityTitle">
@@ -726,11 +726,11 @@
   <script src="js/app-settings.js?v=model-debug-20260819-1"></script>
   <script src="js/app-logs.js?v=model-debug-20260819-1"></script>
   <script src="js/app-prompts.js?v=runtime-20260807-1"></script>
-  <script src="js/app-model-data.js?v=reasoning-transport-20260805-1"></script>
-  <script src="js/app-model-render.js?v=message-edit-20260806-1"></script>
+  <script src="js/app-model-data.js?v=model-capabilities-20260820-1"></script>
+  <script src="js/app-model-render.js?v=model-capabilities-20260820-1"></script>
   <script src="js/app-models.js?v=agent-reliability-20260819-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=reasoning-ui-20260819-1"></script>
+  <script src="js/app-chat-state.js?v=model-capabilities-20260820-1"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
   <script src="js/app-tools.js?v=chatui-20260622-4"></script>
   <script src="js/app-skills.js?v=chatui-20260622-4"></script>

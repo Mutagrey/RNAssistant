@@ -25,7 +25,7 @@ namespace RNAssistant.Office.Services
             CancellationToken cancellationToken)
         {
             settings = (settings ?? new AppSettings()).Clone();
-            settings.MaxTokens = Math.Max(128, Math.Min(192, settings.MaxTokens));
+            settings.MaxTokens = Math.Max(512, settings.MaxTokens);
             settings.StreamResponses = false;
             settings.Temperature = 0;
             settings.TopP = 1;
@@ -109,12 +109,6 @@ namespace RNAssistant.Office.Services
                     Id = "compat.echo_a",
                     Description = "Compatibility probe tool A.",
                     ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}},\"required\":[\"value\"],\"additionalProperties\":false}"
-                },
-                new ToolDefinition
-                {
-                    Id = "compat.echo_b",
-                    Description = "Compatibility probe tool B.",
-                    ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}},\"required\":[\"value\"],\"additionalProperties\":false}"
                 }
             };
             var format = schema ? LlmResponseFormats.JsonSchema : LlmResponseFormats.JsonObject;
@@ -127,18 +121,18 @@ namespace RNAssistant.Office.Services
             return RunAsync(
                 settings,
                 schema ? "json_schema" : "json_object",
-                schema ? "json_schema + multi-tool" : "json_object + multi-tool",
+                schema ? "json_schema + tool" : "json_object + tool",
                 required,
                 new[]
                 {
                     new ChatMessage
                     {
                         Role = "user",
-                        Content = "Return exactly this AgentDecision v1 multi-tool object and no surrounding text: {\"protocolVersion\":1,\"kind\":\"tool\",\"decisionSummary\":\"MULTI_OK\",\"goal\":null,\"plan\":null,\"tool\":[{\"toolId\":\"compat.echo_a\",\"arguments\":{\"value\":\"A\"}},{\"toolId\":\"compat.echo_b\",\"arguments\":{\"value\":\"B\"}}],\"message\":null}"
+                        Content = "Return exactly this AgentDecision v1 tool object and no surrounding text: {\"protocolVersion\":1,\"kind\":\"tool\",\"decisionSummary\":\"TOOL_OK\",\"goal\":null,\"plan\":null,\"tool\":[{\"toolId\":\"compat.echo_a\",\"arguments\":{\"value\":\"A\"}}],\"message\":null}"
                     }
                 },
                 options,
-                completion => ValidateMultiToolDecisionJson(completion, probeTools),
+                completion => ValidateToolDecisionJson(completion, probeTools),
                 cancellationToken);
         }
 
@@ -207,7 +201,6 @@ namespace RNAssistant.Office.Services
             CancellationToken cancellationToken)
         {
             var firstApiName = "rnassistant_compat_echo_a";
-            var secondApiName = "rnassistant_compat_echo_b";
             var options = new LlmRequestOptions
             {
                 ResponseFormat = LlmResponseFormats.JsonSchema,
@@ -222,28 +215,20 @@ namespace RNAssistant.Office.Services
                         ApiName = firstApiName,
                         Description = "Compatibility probe A. Call with value A.",
                         ParametersSchemaJson = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}},\"required\":[\"value\"],\"additionalProperties\":false}"
-                    },
-                    new LlmToolDefinition
-                    {
-                        ToolId = "compat.echo_b",
-                        ApiName = secondApiName,
-                        Description = "Compatibility probe B. Call with value B.",
-                        ParametersSchemaJson = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}},\"required\":[\"value\"],\"additionalProperties\":false}"
                     }
                 }
             };
             return RunAsync(
                 settings,
-                "native_multi_tool_calls",
-                "Native multi-tool calls + json_schema",
+                "native_tool_calls",
+                "Native tool call + json_schema",
                 required,
-                new[] { new ChatMessage { Role = "user", Content = "In one response, call rnassistant_compat_echo_a with value A and rnassistant_compat_echo_b with value B. Call both tools and no others." } },
+                new[] { new ChatMessage { Role = "user", Content = "Call rnassistant_compat_echo_a with value A and no other tool." } },
                 options,
-                completion => completion != null && completion.ToolCalls != null && completion.ToolCalls.Count == 2 &&
-                    completion.ToolCalls.Any(call => string.Equals(call.Name, firstApiName, StringComparison.OrdinalIgnoreCase)) &&
-                    completion.ToolCalls.Any(call => string.Equals(call.Name, secondApiName, StringComparison.OrdinalIgnoreCase))
+                completion => completion != null && completion.ToolCalls != null && completion.ToolCalls.Count == 1 &&
+                    completion.ToolCalls.Any(call => string.Equals(call.Name, firstApiName, StringComparison.OrdinalIgnoreCase))
                         ? null
-                        : "Endpoint did not return both expected native tool calls in one response.",
+                        : "Endpoint did not return the expected native tool call.",
                 cancellationToken);
         }
 
@@ -308,7 +293,7 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        private static string ValidateMultiToolDecisionJson(
+        private static string ValidateToolDecisionJson(
             LlmCompletionResult completion,
             IEnumerable<ToolDefinition> tools)
         {
@@ -319,11 +304,10 @@ namespace RNAssistant.Office.Services
                 return "AgentDecision parser rejected the response: " + parsed.ErrorCode + ". " + parsed.ErrorMessage;
             }
             if (!string.Equals(parsed.Response.Kind, AgentResponseKinds.Tool, StringComparison.OrdinalIgnoreCase) ||
-                parsed.Response.Tools == null || parsed.Response.Tools.Count != 2 ||
-                !parsed.Response.Tools.Any(tool => string.Equals(tool.ToolId, "compat.echo_a", StringComparison.OrdinalIgnoreCase)) ||
-                !parsed.Response.Tools.Any(tool => string.Equals(tool.ToolId, "compat.echo_b", StringComparison.OrdinalIgnoreCase)))
+                parsed.Response.Tools == null || parsed.Response.Tools.Count != 1 ||
+                !parsed.Response.Tools.Any(tool => string.Equals(tool.ToolId, "compat.echo_a", StringComparison.OrdinalIgnoreCase)))
             {
-                return "Endpoint returned JSON, but not the requested two-call AgentDecision.";
+                return "Endpoint returned JSON, but not the requested tool AgentDecision.";
             }
             return null;
         }

@@ -51,7 +51,7 @@ namespace RNAssistant.Office.Services
                 .ThenBy(t => t.RiskLevel)
                 .ThenBy(t => t.Id)
                 .ToList();
-            slice.Tools = SelectBalancedTools(ordered, route, Math.Max(8, Math.Min(64, maxTools)));
+            slice.Tools = SelectBalancedTools(ordered, route, Math.Max(1, maxTools));
             FitRequestBudget(slice, settings);
             var selectedIds = new HashSet<string>(slice.Tools.Select(tool => tool.Id), StringComparer.OrdinalIgnoreCase);
             foreach (var omitted in ordered.Where(tool =>

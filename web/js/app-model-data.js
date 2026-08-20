@@ -52,7 +52,10 @@ function normalizeModelCatalog(payload) {
   var models = [];
 
   rawModels.forEach(function (item) {
-    var value = String(modelField(item, "Value", "value", "value", item.id || item.Id || "") || "").trim();
+    var rawId = typeof item === "string"
+      ? item
+      : (item.id !== undefined ? item.id : (item.Id !== undefined ? item.Id : modelField(item, "Value", "value", "value", "")));
+    var value = String(rawId || "").trim();
     var fallbackTitle = modelField(item, "Title", "title", "title", value);
     var title = String(modelField(item, "DisplayName", "display_name", "displayName", fallbackTitle) || value).trim();
     if (!value || seen[value.toLowerCase()]) {
@@ -131,16 +134,22 @@ function modelCapabilitiesForSettings() {
       });
     }
     result[model.value] = {
-      MaxContextTokens: model.maxContextTokens || null,
-      MaxOutputTokens: model.maxOutputTokens || null,
-      SupportsImages: catalogModelSupportsImages(model),
-      SupportsReasoning: model.supportsReasoning,
-      ReasoningRequestMode: model.reasoningRequestMode || stored.ReasoningRequestMode || stored.reasoningRequestMode || null,
-      SupportsAudio: catalogModelSupportsAudio(model),
-      MaxImagesPerPrompt: model.maxImagesPerPrompt || null
+      MaxContextTokens: preferredCapabilityValue(stored, "MaxContextTokens", "maxContextTokens", model.maxContextTokens),
+      MaxOutputTokens: preferredCapabilityValue(stored, "MaxOutputTokens", "maxOutputTokens", model.maxOutputTokens),
+      SupportsImages: preferredCapabilityValue(stored, "SupportsImages", "supportsImages", catalogModelSupportsImages(model)),
+      SupportsReasoning: preferredCapabilityValue(stored, "SupportsReasoning", "supportsReasoning", model.supportsReasoning),
+      ReasoningRequestMode: preferredCapabilityValue(stored, "ReasoningRequestMode", "reasoningRequestMode", model.reasoningRequestMode),
+      SupportsAudio: preferredCapabilityValue(stored, "SupportsAudio", "supportsAudio", catalogModelSupportsAudio(model)),
+      MaxImagesPerPrompt: preferredCapabilityValue(stored, "MaxImagesPerPrompt", "maxImagesPerPrompt", model.maxImagesPerPrompt)
     };
   });
   return result;
+}
+
+function preferredCapabilityValue(stored, pascal, camel, fallback) {
+  stored = stored || {};
+  var value = stored[pascal] !== undefined ? stored[pascal] : stored[camel];
+  return value !== null && value !== undefined && value !== "" ? value : (fallback === undefined ? null : fallback);
 }
 
 function findModel(value) {
@@ -192,18 +201,30 @@ function catalogModelSupportsAudio(model) {
     : null;
 }
 
-function storedModelCapability(value, pascal, camel, snake) {
+function storedModelCapabilityEntry(value) {
   value = String(value || "").trim().toLowerCase();
   var settings = state.settings || {};
   var capabilities = settings.ModelCapabilities || settings.modelCapabilities || {};
   var keys = Object.keys(capabilities);
   for (var index = 0; index < keys.length; index += 1) {
     if (keys[index].toLowerCase() !== value) continue;
-    var capability = capabilities[keys[index]] || {};
-    var support = modelField(capability, pascal, snake, camel, null);
-    return nullableModelBoolean(support);
+    return { key: keys[index], value: capabilities[keys[index]] || {} };
   }
   return null;
+}
+
+function storedModelCapabilityValue(value, pascal, camel, snake) {
+  var entry = storedModelCapabilityEntry(value);
+  return entry ? modelField(entry.value, pascal, snake, camel, null) : null;
+}
+
+function storedModelCapability(value, pascal, camel, snake) {
+  return nullableModelBoolean(storedModelCapabilityValue(value, pascal, camel, snake));
+}
+
+function effectiveModelCapabilityValue(value, pascal, camel, catalogValue) {
+  var stored = storedModelCapabilityValue(value, pascal, camel, camel);
+  return stored !== null && stored !== undefined && stored !== "" ? stored : catalogValue;
 }
 
 function modelSupportOverride(overrides, value) {
@@ -218,10 +239,12 @@ function modelSupportOverride(overrides, value) {
 }
 
 function effectiveModelSupportsReasoning(value) {
+  var stored = storedModelCapability(value, "SupportsReasoning", "supportsReasoning", "supports_reasoning");
+  if (stored !== null) return stored;
   var model = findModel(value);
   return model && model.supportsReasoning !== null && model.supportsReasoning !== undefined
     ? nullableModelBoolean(model.supportsReasoning)
-    : storedModelCapability(value, "SupportsReasoning", "supportsReasoning", "supports_reasoning");
+    : null;
 }
 
 function effectiveModelSupportsAudio(value) {

@@ -41,7 +41,7 @@ namespace RNAssistant.Office.Services
             var options = preparedOptions ?? BuildOptions(mode, tools);
             var runCache = options.RunCache;
             var rejectedResponses = new List<AgentPlannerRejectedResponse>();
-            var maxFormatRetries = Math.Max(1, Math.Min(5, settings.MaxAgentFormatRetries));
+            var maxFormatRetries = Math.Max(1, settings.MaxAgentFormatRetries);
             LlmCompletionResult completion;
             try
             {
@@ -96,6 +96,7 @@ namespace RNAssistant.Office.Services
                 activeMessages = BuildRepairMessages(baseMessages, parsed, repairPrompt, mode, retry, maxFormatRetries);
                 completion = await CompleteResilientAsync(settings, activeMessages, options, progress, repairMessage, cancellationToken).ConfigureAwait(false);
                 parsed = ParseCompletion(completion, mode, tools, options);
+                if (retry == maxFormatRetries) break;
             }
 
             return new AgentPlannerAttempt

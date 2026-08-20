@@ -98,10 +98,11 @@
 
 .model-capability-row {
   display: grid;
-  grid-template-columns: minmax(130px, 1fr) minmax(58px, auto) repeat(2, minmax(76px, auto));
+  grid-template-columns: minmax(150px, 1fr) repeat(2, 92px) 82px 92px repeat(2, 76px) 70px;
   gap: 8px;
   align-items: center;
   min-height: 42px;
+  min-width: 930px;
   padding: 5px 8px;
   border-bottom: 1px solid var(--control-border);
 }
@@ -144,6 +145,15 @@
 
 .model-capability-select {
   min-width: 70px;
+  min-height: 28px;
+  padding: 3px 5px;
+  font-size: 11px;
+}
+
+.model-capability-number,
+.model-capability-mode-select {
+  width: 100%;
+  min-width: 0;
   min-height: 28px;
   padding: 3px 5px;
   font-size: 11px;

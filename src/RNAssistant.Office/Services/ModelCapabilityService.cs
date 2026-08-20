@@ -96,7 +96,7 @@ namespace RNAssistant.Office.Services
             }
             foreach (var model in models.Children<JObject>())
             {
-                var value = ReadString(model, "Value", "value", "id", "Id");
+                var value = ReadString(model, "id", "Id", "Value", "value");
                 if (string.IsNullOrWhiteSpace(value))
                 {
                     continue;
@@ -151,12 +151,63 @@ namespace RNAssistant.Office.Services
                         }
                     }
                 }
-                settings.ModelCapabilities[value] = capability;
-                if ((capability.SupportsImages == true || capability.SupportsAudio == true) &&
+                ModelCapabilitySettings storedCapability;
+                if (!settings.ModelCapabilities.TryGetValue(value, out storedCapability) || storedCapability == null)
+                {
+                    settings.ModelCapabilities[value] = capability;
+                    storedCapability = capability;
+                    changed = true;
+                }
+                else if (MergeMissing(storedCapability, capability))
+                {
+                    changed = true;
+                }
+                if ((storedCapability.SupportsImages == true || storedCapability.SupportsAudio == true) &&
                     !settings.AttachmentModelPriority.Exists(item => string.Equals(item, value, StringComparison.OrdinalIgnoreCase)))
                 {
                     settings.AttachmentModelPriority.Add(value);
+                    changed = true;
                 }
+            }
+            return changed;
+        }
+
+        private static bool MergeMissing(ModelCapabilitySettings target, ModelCapabilitySettings source)
+        {
+            var changed = false;
+            if (target.MaxContextTokens.GetValueOrDefault() <= 0 && source.MaxContextTokens.GetValueOrDefault() > 0)
+            {
+                target.MaxContextTokens = source.MaxContextTokens;
+                changed = true;
+            }
+            if (target.MaxOutputTokens.GetValueOrDefault() <= 0 && source.MaxOutputTokens.GetValueOrDefault() > 0)
+            {
+                target.MaxOutputTokens = source.MaxOutputTokens;
+                changed = true;
+            }
+            if (!target.SupportsImages.HasValue && source.SupportsImages.HasValue)
+            {
+                target.SupportsImages = source.SupportsImages;
+                changed = true;
+            }
+            if (!target.SupportsReasoning.HasValue && source.SupportsReasoning.HasValue)
+            {
+                target.SupportsReasoning = source.SupportsReasoning;
+                changed = true;
+            }
+            if (!target.SupportsAudio.HasValue && source.SupportsAudio.HasValue)
+            {
+                target.SupportsAudio = source.SupportsAudio;
+                changed = true;
+            }
+            if (target.MaxImagesPerPrompt.GetValueOrDefault() <= 0 && source.MaxImagesPerPrompt.GetValueOrDefault() > 0)
+            {
+                target.MaxImagesPerPrompt = source.MaxImagesPerPrompt;
+                changed = true;
+            }
+            if (string.IsNullOrWhiteSpace(target.ReasoningRequestMode) && !string.IsNullOrWhiteSpace(source.ReasoningRequestMode))
+            {
+                target.ReasoningRequestMode = source.ReasoningRequestMode;
                 changed = true;
             }
             return changed;
