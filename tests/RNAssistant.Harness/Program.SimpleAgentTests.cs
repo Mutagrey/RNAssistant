@@ -327,7 +327,7 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var responses = new Queue<string>(new[] { "INVALID_FIRST", "INVALID_SECOND" });
+                var responses = new Queue<string>(new[] { "INVALID_FIRST", "INVALID_SECOND", "INVALID_THIRD" });
                 var calls = 0;
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
                 {
@@ -340,19 +340,65 @@ namespace RNAssistant.Harness
                 };
                 var session = NewSession(adapter);
                 var result = new AgentRunService(adapter, executor, completion).ExecuteAsync(
-                    "Do something.", session, NewContext(adapter), new AppSettings(),
+                    "Do something.", session, NewContext(adapter), new AppSettings { MaxAgentFormatRetries = 2 },
                     adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
 
-                AssertEqual(2, calls, "repair is bounded to one retry");
-                AssertContains(result.AssistantText, "после одной попытки", "clear bounded-repair diagnostic");
+                AssertEqual(3, calls, "initial request plus configured repair retries");
+                AssertContains(result.AssistantText, "после 2 попыток", "clear bounded-repair diagnostic");
                 AssertTrue(session.Messages.Last().Activity != null, "diagnostic activity recorded");
                 AssertTrue(session.Messages.Last().ExcludeFromModelContext, "diagnostic excluded from replay");
                 AssertTrue(!session.Messages.Any(message =>
                     (message.Content ?? string.Empty).IndexOf("INVALID_FIRST", StringComparison.Ordinal) >= 0 ||
                     (message.Content ?? string.Empty).IndexOf("INVALID_SECOND", StringComparison.Ordinal) >= 0 ||
+                    (message.Content ?? string.Empty).IndexOf("INVALID_THIRD", StringComparison.Ordinal) >= 0 ||
                     (message.Content ?? string.Empty).IndexOf("FORMAT_REPAIR", StringComparison.Ordinal) >= 0 ||
                     (message.ReasoningContent ?? string.Empty).IndexOf("INVALID_DIAGNOSTIC_REASONING", StringComparison.Ordinal) >= 0),
                     "failed completions do not enter stored context");
+            });
+        }
+
+        private static void SimpleAgentClampsFormatRepairLimit()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = 0;
+                LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
+                {
+                    calls += 1;
+                    return Task.FromResult(new LlmCompletionResult { Content = "INVALID" });
+                };
+                var result = new AgentRunService(adapter, executor, completion).ExecuteAsync(
+                    "Do something.", NewSession(adapter), NewContext(adapter), new AppSettings { MaxAgentFormatRetries = 99 },
+                    adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
+
+                AssertEqual(6, calls, "initial request plus at most five repairs");
+                AssertContains(result.AssistantText, "после 5 попыток", "clamped repair diagnostic");
+            });
+        }
+
+        private static void SimpleAgentExposesSafeVbaEditingTools()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                IReadOnlyList<ChatMessage> request = null;
+                LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
+                {
+                    request = messages.ToList();
+                    return Task.FromResult(new LlmCompletionResult { Content = "{\"message\":\"Готово.\",\"tool_calls\":[]}" });
+                };
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                new AgentRunService(adapter, executor, completion).ExecuteAsync(
+                    "Inspect VBA.", NewSession(adapter), NewContext(adapter), new AppSettings(), tools, null)
+                    .GetAwaiter().GetResult();
+
+                var prompt = FlattenSimple(request);
+                AssertContains(prompt, "\"name\":\"excel.vba_search_code\"", "VBA search exposed");
+                AssertContains(prompt, "\"name\":\"excel.vba_apply_patch\"", "safe VBA patch exposed");
+                AssertContains(prompt, "\"name\":\"excel.vba_create_module\"", "VBA create exposed");
+                AssertContains(prompt, "\"name\":\"excel.vba_delete_module\"", "VBA delete exposed");
+                AssertContains(prompt, "expectedCodeSha256", "VBA edit schema requires current hash");
+                AssertTrue(prompt.IndexOf("\"name\":\"excel.vba_replace_module\"", StringComparison.Ordinal) < 0,
+                    "raw whole-module backend remains hidden");
             });
         }
 
@@ -398,8 +444,8 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Сохраняю skill.\",\"tool_calls\":[" +
-                    "{\"id\":\"call_skill\",\"name\":\"common.skills_save\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}," +
+                    "{\"message\":\"Создаю skill.\",\"tool_calls\":[" +
+                    "{\"id\":\"call_skill\",\"name\":\"common.skills_create\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}," +
                     "{\"id\":\"call_after\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"MustWait\"}}]}",
                     "{\"message\":\"Skill сохранён.\",\"tool_calls\":[]}"
                 });
@@ -418,7 +464,7 @@ namespace RNAssistant.Harness
                     (Action<string, string, ChatActivity>)null,
                     (pendingSession, pendingCommand, result) => "pending_1").GetAwaiter().GetResult();
 
-                AssertContains(first.AssistantText, "Сохраняю", "waiting response returned");
+                AssertContains(first.AssistantText, "Создаю", "waiting response returned");
                 AssertTrue(!session.Messages.Any(message => message.ProtocolMessage &&
                     (message.Content ?? string.Empty).IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) >= 0),
                     "waiting result not replayed");
@@ -433,7 +479,7 @@ namespace RNAssistant.Harness
                     message.RunId = "initial_run";
                 }
 
-                var confirmedCommand = new ToolCommand { ToolId = "common.skills_save", ToolCallId = "call_skill" };
+                var confirmedCommand = new ToolCommand { ToolId = "common.skills_create", ToolCallId = "call_skill" };
                 confirmedCommand.Arguments["id"] = "common.test";
                 var final = service.ContinueAfterToolAsync(
                     confirmedCommand,

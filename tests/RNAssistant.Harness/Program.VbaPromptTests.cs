@@ -32,6 +32,7 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var command = new ToolCommand { ToolId = executor.VbaToolId("vba_replace_text") };
                 command.Arguments["moduleName"] = "Module1";
+                command.Arguments["expectedCodeSha256"] = VbaToolManifestParser.CodeSha256(adapter.VbaModuleCode);
                 command.Arguments["find"] = "\"old\"";
                 command.Arguments["replace"] = "\"new\"";
 
@@ -62,6 +63,7 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var command = new ToolCommand { ToolId = executor.VbaToolId("vba_apply_patch") };
                 command.Arguments["moduleName"] = "Module2";
+                command.Arguments["expectedCodeSha256"] = VbaToolManifestParser.CodeSha256(adapter.GetVbaModuleCode("Module2"));
                 command.Arguments["patch"] = "[{\"op\":\"replaceFirst\",\"find\":\"\\\"old\\\"\",\"text\":\"\\\"new\\\"\"}]";
 
                 var result = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
@@ -110,6 +112,7 @@ namespace RNAssistant.Harness
                 var command = Command(
                     executor.VbaToolId("vba_apply_patch"),
                     "moduleName", "Module1",
+                    "expectedCodeSha256", VbaToolManifestParser.CodeSha256(adapter.VbaModuleCode),
                     "patch", "[{\"op\":\"replaceLines\",\"startLine\":2,\"deleteCount\":5,\"text\":\"End Sub\"}]");
 
                 var result = executor.Execute(command, adapter.GetBuiltInTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Services;
@@ -65,10 +66,10 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var pipeline = CustomTool("Excel", "excel.read_then_save_skill");
+                var pipeline = CustomTool("Excel", "excel.read_then_create_skill");
                 pipeline.PipelineJson = "{\"steps\":[" +
                     "{\"toolId\":\"excel.read_range\",\"arguments\":{\"address\":\"A1\"}}," +
-                    "{\"toolId\":\"common.skills_save\",\"arguments\":{\"id\":\"common.saved\",\"bodyMarkdown\":\"test\"}}" +
+                    "{\"toolId\":\"common.skills_create\",\"arguments\":{\"id\":\"common.saved\",\"description\":\"Saved test skill.\",\"bodyMarkdown\":\"test\"}}" +
                     "]}";
 
                 var result = executor.Execute(
@@ -308,9 +309,9 @@ namespace RNAssistant.Harness
                 command.Arguments["host"] = "Excel";
                 command.Arguments["name"] = "Validated";
                 command.Arguments["description"] = "Validated pipeline.";
-                command.Arguments["argumentSchemaJson"] = EmptyFormalToolSchema;
+                command.Arguments["parameters"] = JObject.Parse(EmptyFormalToolSchema);
                 command.Arguments["executor"] = "pipeline";
-                command.Arguments["pipelineJson"] = "{\"steps\":[{\"toolId\":\"excel.list_sheets\",\"arguments\":{}}]}";
+                command.Arguments["pipeline"] = JObject.Parse("{\"version\":1,\"steps\":[{\"toolId\":\"excel.list_sheets\",\"arguments\":{}}]}");
 
                 var result = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings(), false, false);
 

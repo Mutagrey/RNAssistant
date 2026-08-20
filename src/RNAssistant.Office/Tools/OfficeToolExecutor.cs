@@ -375,7 +375,7 @@ namespace RNAssistant.Office.Tools
                 case ControllerExecutorKind.Vba:
                     return _vbaExecutor.ExecuteControllerTool(command, dryRun, cancellationToken);
                 case ControllerExecutorKind.Skill:
-                    return _skillExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun, context.Session, context.SkillCatalog);
+                    return _skillExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun, context.SkillCatalog);
                 case ControllerExecutorKind.ToolAuthoring:
                     return _toolAuthoringExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun);
                 case ControllerExecutorKind.Prompt:
@@ -428,7 +428,8 @@ namespace RNAssistant.Office.Tools
         {
             if (command == null ||
                 (!string.Equals(command.ToolId, "common.tools_validate", StringComparison.OrdinalIgnoreCase) &&
-                 !string.Equals(command.ToolId, "common.tools_save", StringComparison.OrdinalIgnoreCase)))
+                 !string.Equals(command.ToolId, "common.tools_create", StringComparison.OrdinalIgnoreCase) &&
+                 !string.Equals(command.ToolId, "common.tools_update", StringComparison.OrdinalIgnoreCase)))
             {
                 return null;
             }

@@ -115,6 +115,7 @@ function renderSettings() {
   $("debugModelTrafficInput").checked = !!(s.DebugModelTraffic || s.debugModelTraffic);
   $("smartChatTitlesInput").checked = (s.SmartChatTitles !== false && s.smartChatTitles !== false);
   $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || 8;
+  $("maxAgentFormatRetriesInput").value = s.MaxAgentFormatRetries || s.maxAgentFormatRetries || 2;
   $("maxAgentToolStepsInput").value = s.MaxAgentToolSteps || s.maxAgentToolSteps || 40;
   if (typeof renderPromptSettings === "function") {
     renderPromptSettings(s);
@@ -164,6 +165,7 @@ function readSettings() {
     DebugModelTraffic: $("debugModelTrafficInput").checked,
     SmartChatTitles: $("smartChatTitlesInput").checked,
     MaxAgentIterations: Number($("maxAgentIterationsInput").value || 8),
+    MaxAgentFormatRetries: Math.max(1, Math.min(5, Number($("maxAgentFormatRetriesInput").value || 2))),
     MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || 40),
     SystemPrompt: promptSettings.SystemPrompt,
     ChatSystemPrompt: promptSettings.ChatSystemPrompt,

@@ -80,6 +80,7 @@ namespace RNAssistant.Core.Models
         public bool AutoConfirmToolActions { get; set; }
         public bool SmartChatTitles { get; set; }
         public int MaxAgentIterations { get; set; }
+        public int MaxAgentFormatRetries { get; set; }
         public int MaxAgentToolSteps { get; set; }
         public bool AutoCompressContext { get; set; }
         public bool DebugModelTraffic { get; set; }
@@ -128,6 +129,7 @@ namespace RNAssistant.Core.Models
             AutoConfirmToolActions = false;
             SmartChatTitles = true;
             MaxAgentIterations = 8;
+            MaxAgentFormatRetries = 2;
             MaxAgentToolSteps = 40;
             AutoCompressContext = true;
             DebugModelTraffic = false;

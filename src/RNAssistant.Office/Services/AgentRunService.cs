@@ -160,22 +160,26 @@ namespace RNAssistant.Office.Services
                 contextUsage = ContextUsageEstimator.FromPrompt(messages, settings,
                     completion == null ? null : completion.PromptTokens, options);
                 var parsed = _responseParser.Parse(completion == null ? null : completion.Content, availableTools);
-                if (!parsed.Success)
+                var configuredFormatRetries = settings.MaxAgentFormatRetries > 0
+                    ? settings.MaxAgentFormatRetries
+                    : new AppSettings().MaxAgentFormatRetries;
+                var maxFormatRetries = Math.Max(1, Math.Min(5, configuredFormatRetries));
+                for (var retry = 1; !parsed.Success && retry <= maxFormatRetries; retry++)
                 {
-                    Report(progress, "thinking", "Модель исправляет формат ответа...", null);
+                    Report(progress, "thinking", "Модель исправляет формат ответа... (" + retry + "/" + maxFormatRetries + ")", null);
                     var repairMessages = new List<ChatMessage>(messages)
                     {
-                        AgentJsonProtocol.CreateFormatRepairMessage(parsed.Error)
+                        AgentJsonProtocol.CreateFormatRepairMessage(parsed.Error, retry, maxFormatRetries)
                     };
                     completion = await CompleteAsync(settings, repairMessages, options, progress, cancellationToken).ConfigureAwait(false);
                     contextUsage = ContextUsageEstimator.FromPrompt(repairMessages, settings,
                         completion == null ? null : completion.PromptTokens, options);
                     parsed = _responseParser.Parse(completion == null ? null : completion.Content, availableTools);
-                    if (!parsed.Success)
-                    {
-                        return FinishWithDiagnostic(session, results, contextUsage,
-                            "Ответ агента не выполнен после одной попытки исправить формат: " + parsed.Error);
-                    }
+                }
+                if (!parsed.Success)
+                {
+                    return FinishWithDiagnostic(session, results, contextUsage,
+                        "Ответ агента не выполнен после " + maxFormatRetries + " попыток исправить формат: " + parsed.Error);
                 }
 
                 var response = parsed.Response;

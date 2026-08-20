@@ -204,7 +204,7 @@ In Agent mode the prompt contains all runnable tools in native-like function JSO
 
 Independent calls may be placed in the same array and execute locally in order. Dependent calls and calls that may require confirmation are emitted one at a time. If confirmation pauses a multi-call response, calls after it are not executed; the model selects them again after the confirmed result. There is no persistent batch state.
 
-To answer, clarify, or refuse, the model returns `{"message":"...","tool_calls":[]}`. Agent mode always requests `json_object`; there are no response-mode fallbacks, native tool-call transport, plans, router, tool slicer, skill activation, automatic tool retries, or separate verification phase. One invalid response gets one ephemeral format-correction request and neither the invalid output nor that instruction enters chat history.
+To answer, clarify, or refuse, the model returns `{"message":"...","tool_calls":[]}`. Agent mode always requests `json_object`; there are no response-mode fallbacks, native tool-call transport, plans, router, tool slicer, skill activation, automatic tool retries, or separate verification phase. Invalid output gets up to `MaxAgentFormatRetries` ephemeral correction requests (default 2, range 1–5); every retry starts from the original accepted prompt and neither rejected output nor correction instructions enter chat history.
 
 Office tools execute locally. The next model turn receives a string protocol message such as `TOOL_RESULT:\n{"ok":true,"tool_call_id":"call_1","name":"excel.read_range","status":"completed","message":"Range read.","data":{...},"error":null}`. The model decides what to do next. The runtime only enforces exact tool ids, formal argument schemas, safety/confirmation metadata, and iteration/tool-step limits.
 
@@ -265,7 +265,7 @@ The Tools tab can run a selected tool with ad hoc JSON arguments. `Dry Run` reso
 
 For Excel, Word, and PowerPoint, `executor: "vba"` uses a strict comment manifest and a `Public Function ... As String` entry point with typed positional arguments. A global package is injected for one run and cleaned in `finally`; explicit persistent installation is allowed only in macro-enabled documents. RNAssistant also discovers valid document-local tools through the VBA project object model. Both paths require Trust Access to the VBA project object model.
 
-Agent mode can also use `common.tools_list`, `common.tools_read`, `common.tools_validate`, `common.tools_save`, and `common.tools_delete` to manage custom tools. Save/delete requires confirmation unless auto-confirm is enabled. Pipeline and VBA packages are validated before save. Built-in and controller tool ids are reserved and cannot be shadowed by custom tools. VBA authoring rules are available to the model through `common.vba_tool_authoring`.
+Agent mode manages custom tools through `common.tools_list/read/validate/create/update/delete`. Create fails for an existing id; update changes only supplied fields. `parameters`, `pipeline`, and VBA `components` are nested native JSON rather than escaped JSON strings. Create/update/delete requires confirmation unless auto-confirm is enabled. Pipeline and VBA packages are validated before persistence. Built-in and controller ids are reserved. The catalog refreshes after confirmation or on the next user run.
 
 ## Skill Library
 
@@ -273,7 +273,7 @@ Markdown skills are stored under:
 
 `%AppData%\RNAssistant\skills`
 
-Each custom skill is a `SKILL.md` guidance file with simple metadata (`id`, `host`, `name`, `description`, `version`, `enabled`) and Markdown instructions. Every enabled visible skill contributes only `id`, `name`, and `description` to `RUNTIME_CONTEXT.skills`. There is no skill router, activation state, dependency graph, or hidden tool ownership. The model calls `common.skills_read` for each clearly relevant catalog entry before following its complete instructions. Agent mode can inspect and edit custom skills through `common.skills_list`, `common.skills_read`, `common.skills_save`, and `common.skills_delete`; save/delete requires confirmation unless auto-confirm is enabled.
+Each custom skill is a `SKILL.md` guidance file with simple metadata (`id`, `host`, `name`, `description`, `version`, `enabled`) and Markdown instructions. Every enabled visible skill contributes only `id`, `name`, and `description` to `RUNTIME_CONTEXT.skills`. There is no skill router, activation state, dependency graph, or hidden tool ownership. The model calls `common.skills_read` for each clearly relevant catalog entry before following its complete instructions. Agent CRUD is `common.skills_list/read/create/update/delete`; update preserves omitted fields, while create/update/delete requires confirmation unless auto-confirm is enabled.
 
 ```markdown
 ---
@@ -291,7 +291,7 @@ enabled: true
 - Preserve the requested column order.
 ```
 
-At runtime the catalog entry is `{"id","name","description"}`. `common.skills_read` returns `{"id","name","description","version","format":"markdown","instructions":"..."}` in a normal `TOOL_RESULT.data` object. That result remains in conversation history; there is no separate activation state.
+At runtime the catalog entry is `{"id","name","description"}`. `common.skills_read` returns metadata plus `format: "markdown"` and the complete body in both `bodyMarkdown` and `instructions` inside a normal `TOOL_RESULT.data` object. That result remains in conversation history; there is no separate activation state.
 
 ## VBA Workflow
 
@@ -306,7 +306,7 @@ Office VBA support requires Office setting `Trust access to the VBA project obje
 - VBA writes retain local backup, expected-hash, ownership, and stale-state checks inside the VBA tools.
 - `Review in Chat` sends loaded VBA modules to chat for review and improvement suggestions.
 
-The Agent can use read-only VBA inspection tools such as `word.vba_read_module` and `*.vba_list_modules`. Direct VBA mutations remain manual/confirmation-controlled and are not exposed as ordinary Agent calls.
+The Agent can list/read/search VBA and use the public `*.vba_replace_text`, `*.vba_apply_patch`, `*.vba_create_module`, `*.vba_delete_module`, and backup restore tools. Mutations require confirmation and create rollback backups. Edit/delete calls require the current `codeSha256` from read/search; stale code is rejected. The raw whole-module replacement, insert, and arbitrary macro backend tools remain hidden from Agent selection.
 
 Patch operations support:
 

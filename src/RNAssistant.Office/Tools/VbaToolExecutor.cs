@@ -34,11 +34,11 @@ namespace RNAssistant.Office.Tools
             yield return ControllerToolDefinition.Create(ToolId("vba_list_backups"), _adapter.HostName, "Read-only: List RNAssistant VBA rollback backups for the current document.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}");
             yield return ControllerToolDefinition.Create(ToolId("vba_list_modules"), _adapter.HostName, "Read-only: List all VBA components with name, type, and line count. Read only the needed component with vba_read_module.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}");
             yield return ControllerToolDefinition.Create(ToolId("vba_search_code"), _adapter.HostName, "Read-only: Search literal or regex patterns across VBA component code.", "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Non-empty literal or regular-expression search query.\",\"minLength\":1},\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"maxResults\":{\"type\":\"integer\",\"description\":\"Maximum number of matches returned.\",\"default\":100},\"contextChars\":{\"type\":\"integer\",\"description\":\"Maximum context characters returned around each match.\",\"default\":80}},\"required\":[\"query\"],\"additionalProperties\":false}");
-            yield return ControllerToolDefinition.Create(ToolId("vba_restore_backup"), _adapter.HostName, "Mutates document: Restore a VBA module from a backupId or from the latest backup for moduleName.", "{\"type\":\"object\",\"properties\":{\"backupId\":{\"type\":\"string\",\"description\":\"Exact rollback backup identifier.\"},\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"}},\"required\":[],\"additionalProperties\":false}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
-            yield return ControllerToolDefinition.Create(ToolId("vba_replace_text"), _adapter.HostName, "Mutates document: Replace an exact text fragment inside one VBA module and create a rollback backup.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"find\":{\"type\":\"string\",\"description\":\"Exact non-empty text to find.\",\"minLength\":1},\"replace\":{\"type\":\"string\",\"description\":\"Replacement text.\"}},\"required\":[\"moduleName\",\"find\"],\"additionalProperties\":false}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
-            yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), _adapter.HostName, "Mutates document: Apply structured literal/regex/line VBA patches and create a rollback backup.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"patch\":{\"type\":\"array\",\"items\":{\"type\":\"object\"},\"description\":\"JSON array of ordered VBA patch operation objects.\"}},\"required\":[\"moduleName\",\"patch\"],\"additionalProperties\":false}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
-            yield return ControllerToolDefinition.Create(ToolId("vba_create_module"), _adapter.HostName, "Mutates document: Create a StdModule or ClassModule. Document modules and UserForms cannot be created.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"componentType\":{\"type\":\"string\",\"description\":\"VBA component type: StdModule or ClassModule.\",\"default\":\"StdModule\",\"enum\":[\"StdModule\",\"ClassModule\"]},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code.\"}},\"required\":[\"moduleName\",\"code\"],\"additionalProperties\":false}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
-            yield return ControllerToolDefinition.Create(ToolId("vba_delete_module"), _adapter.HostName, "Mutates document: Delete a StdModule or ClassModule after hash validation and backup. Document modules and UserForms cannot be deleted.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"expectedCodeSha256\":{\"type\":\"string\",\"description\":\"Expected current SHA-256 hash of the VBA source.\"}},\"required\":[\"moduleName\",\"expectedCodeSha256\"],\"additionalProperties\":false}", mutatesDocument: true, agentCanRun: false, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_restore_backup"), _adapter.HostName, "Mutates document: Restore a VBA module from an exact backupId, or restore the latest backup for moduleName when backupId is omitted.", "{\"type\":\"object\",\"properties\":{\"backupId\":{\"type\":\"string\",\"description\":\"Exact rollback backup identifier from vba_list_backups.\"},\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name; used only to select its latest backup when backupId is omitted.\"}},\"required\":[],\"additionalProperties\":false}", mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_replace_text"), _adapter.HostName, "Mutates document: Replace one exact text fragment, or all exact occurrences when replaceAll=true. Requires the current module hash and creates a rollback backup.", ReplaceTextSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), _adapter.HostName, "Mutates document: Apply ordered structured literal, regex, insertion, or line patches. Requires the current module hash and creates a rollback backup.", ApplyPatchSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_create_module"), _adapter.HostName, "Mutates document: Create a new StdModule or ClassModule and return its code hash. Document modules and UserForms cannot be created.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact new VBA component name.\"},\"componentType\":{\"type\":\"string\",\"description\":\"VBA component type.\",\"default\":\"StdModule\",\"enum\":[\"StdModule\",\"ClassModule\"]},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code, normally beginning with Option Explicit.\",\"minLength\":1}},\"required\":[\"moduleName\",\"code\"],\"additionalProperties\":false}", mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_delete_module"), _adapter.HostName, "Mutates document: Delete a StdModule or ClassModule after current-hash validation and backup. Document modules and UserForms cannot be deleted.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"expectedCodeSha256\":{\"type\":\"string\",\"description\":\"Exact current codeSha256 returned by vba_read_module or vba_search_code.\"}},\"required\":[\"moduleName\",\"expectedCodeSha256\"],\"additionalProperties\":false}", mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
         }
 
         public string ToolId(string suffix)
@@ -330,7 +330,18 @@ namespace RNAssistant.Office.Tools
             if (dryRun) return ToolResult.Ok("Dry run: would create VBA " + componentType + " " + moduleName + ".");
             var create = new ToolCommand { ToolId = ToolId("vba_create_module_internal") };
             create.Arguments["moduleName"] = moduleName; create.Arguments["componentType"] = componentType; create.Arguments["code"] = code;
-            return _adapter.ExecuteTool(create);
+            var created = _adapter.ExecuteTool(create);
+            if (created == null || !created.Success) return created ?? ToolResult.Fail("VBA create returned no result.");
+            VbaModuleState module;
+            ToolResult readError;
+            return TryReadVbaModule(moduleName, 1000000, out module, out readError)
+                ? ToolResult.Ok("VBA module created: " + moduleName, JsonConvert.SerializeObject(new
+                {
+                    moduleName = moduleName,
+                    componentType = module.ComponentType,
+                    codeSha256 = CodeSha256(module.Code)
+                }))
+                : ToolResult.PartialFailure("VBA module was created but could not be read back: " + (readError == null ? moduleName : readError.Message), created.DataJson, "vba_create_verify_failed");
         }
 
         private ToolResult DeleteModule(ToolCommand command, bool dryRun)
@@ -417,19 +428,32 @@ namespace RNAssistant.Office.Tools
             }
 
             var code = module.Code;
+            var expectedHash = ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", string.Empty);
+            var currentHash = CodeSha256(code);
+            if (string.IsNullOrWhiteSpace(expectedHash) || !string.Equals(expectedHash, currentHash, StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Fail("VBA module changed after it was read. Read or search it again before editing.", JsonConvert.SerializeObject(new { moduleName = moduleName, actualCodeSha256 = currentHash }), "stale_vba_module", true);
+            }
             var replacements = CountOccurrences(code, find);
             if (replacements == 0)
             {
                 return ToolResult.Fail("Text fragment was not found in VBA module: " + moduleName);
             }
 
-            var updated = code.Replace(find, replace ?? string.Empty);
+            var replaceAll = ToolArgumentReader.Boolean(command.Arguments, "replaceAll", false);
+            if (replacements > 1 && !replaceAll)
+            {
+                return ToolResult.Fail("The exact text occurs " + replacements + " times. Narrow find or set replaceAll=true explicitly.", JsonConvert.SerializeObject(new { moduleName = moduleName, matchCount = replacements, codeSha256 = currentHash }), "vba_patch_ambiguous", true);
+            }
+            var updated = replaceAll ? code.Replace(find, replace ?? string.Empty) : ReplaceFirst(code, find, replace ?? string.Empty);
             var preview = JsonConvert.SerializeObject(new
             {
                 moduleName = moduleName,
                 replacements = replacements,
                 oldLength = code.Length,
-                newLength = updated.Length
+                newLength = updated.Length,
+                previousCodeSha256 = currentHash,
+                codeSha256 = CodeSha256(updated)
             });
             if (dryRun)
             {
@@ -483,6 +507,12 @@ namespace RNAssistant.Office.Tools
             }
 
             var code = module.Code;
+            var expectedHash = ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", string.Empty);
+            var currentHash = CodeSha256(code);
+            if (string.IsNullOrWhiteSpace(expectedHash) || !string.Equals(expectedHash, currentHash, StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Fail("VBA module changed after it was read. Read or search it again before editing.", JsonConvert.SerializeObject(new { moduleName = moduleName, actualCodeSha256 = currentHash }), "stale_vba_module", true);
+            }
             var updated = code;
             var summary = new List<object>();
             foreach (JObject operation in operations.OfType<JObject>())
@@ -506,7 +536,9 @@ namespace RNAssistant.Office.Tools
                 moduleName = moduleName,
                 operations = summary,
                 oldLength = code.Length,
-                newLength = updated.Length
+                newLength = updated.Length,
+                previousCodeSha256 = currentHash,
+                codeSha256 = CodeSha256(updated)
             });
             if (dryRun)
             {
@@ -850,6 +882,14 @@ namespace RNAssistant.Office.Tools
             return ToolResult.Ok("Patched first occurrence.");
         }
 
+        private static string ReplaceFirst(string current, string find, string replacement)
+        {
+            var index = current.IndexOf(find, StringComparison.Ordinal);
+            return index < 0
+                ? current
+                : current.Substring(0, index) + replacement + current.Substring(index + find.Length);
+        }
+
         private static ToolResult ReplaceLines(string current, JObject operation, string text, out string updated)
         {
             updated = current;
@@ -903,6 +943,38 @@ namespace RNAssistant.Office.Tools
             return string.Equals(_adapter.HostName, "Excel", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(_adapter.HostName, "Word", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(_adapter.HostName, "PowerPoint", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string ReplaceTextSchema()
+        {
+            return "{\"type\":\"object\",\"properties\":{" +
+                "\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"}," +
+                "\"expectedCodeSha256\":{\"type\":\"string\",\"description\":\"Exact current codeSha256 returned by vba_read_module or vba_search_code.\"}," +
+                "\"find\":{\"type\":\"string\",\"description\":\"Exact non-empty code fragment to replace.\",\"minLength\":1}," +
+                "\"replace\":{\"type\":\"string\",\"description\":\"Replacement code fragment.\"}," +
+                "\"replaceAll\":{\"type\":\"boolean\",\"description\":\"Whether every exact occurrence may be replaced; false rejects an ambiguous multi-match edit.\",\"default\":false}" +
+                "},\"required\":[\"moduleName\",\"expectedCodeSha256\",\"find\"],\"additionalProperties\":false}";
+        }
+
+        private static string ApplyPatchSchema()
+        {
+            return "{\"type\":\"object\",\"properties\":{" +
+                "\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"}," +
+                "\"expectedCodeSha256\":{\"type\":\"string\",\"description\":\"Exact current codeSha256 returned by vba_read_module or vba_search_code.\"}," +
+                "\"patch\":{\"type\":\"array\",\"description\":\"Ordered patch operations applied to one current module snapshot.\",\"minItems\":1,\"maxItems\":100,\"items\":{" +
+                    "\"type\":\"object\",\"properties\":{" +
+                        "\"op\":{\"type\":\"string\",\"description\":\"Operation: replace/replaceAll replace every exact match; replaceFirst changes the first; insertBefore/insertAfter use find as anchor; replaceLines uses startLine/deleteCount; regexReplace uses pattern.\",\"enum\":[\"replace\",\"replaceAll\",\"replaceFirst\",\"insertBefore\",\"insertAfter\",\"replaceLines\",\"regexReplace\"]}," +
+                        "\"find\":{\"type\":\"string\",\"description\":\"Exact text or insertion anchor for literal operations.\"}," +
+                        "\"pattern\":{\"type\":\"string\",\"description\":\"Regular expression for regexReplace.\"}," +
+                        "\"text\":{\"type\":\"string\",\"description\":\"Replacement or inserted VBA code; regex capture groups such as $1 are supported.\"}," +
+                        "\"startLine\":{\"type\":\"integer\",\"description\":\"One-based first line for replaceLines.\",\"minimum\":1}," +
+                        "\"deleteCount\":{\"type\":\"integer\",\"description\":\"Number of existing lines removed by replaceLines.\",\"minimum\":0}," +
+                        "\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether regexReplace is case-sensitive.\",\"default\":true}," +
+                        "\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether regexReplace accepts only whole-word matches.\",\"default\":false}," +
+                        "\"replaceAll\":{\"type\":\"boolean\",\"description\":\"Whether regexReplace replaces every match.\",\"default\":true}," +
+                        "\"maxReplacements\":{\"type\":\"integer\",\"description\":\"Maximum regex replacements allowed.\",\"default\":500,\"minimum\":1,\"maximum\":10000}" +
+                    "},\"required\":[\"op\"],\"additionalProperties\":false}" +
+                "}},\"required\":[\"moduleName\",\"expectedCodeSha256\",\"patch\"],\"additionalProperties\":false}";
         }
 
         private bool SupportsPersistentVbaDocument()

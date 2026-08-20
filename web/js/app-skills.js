@@ -245,7 +245,7 @@ function bindSkillActions() {
       }
 
       switchTab("chat");
-      setChatInputText("Отредактируй RNAssistant-навык из добавленного контекста. Верни обновленный SKILL.md и при необходимости вызови common.skills_save после подтверждения.", true);
+      setChatInputText("Отредактируй RNAssistant-навык из добавленного контекста. Сначала прочитай текущий skill, затем при необходимости вызови common.skills_update только с изменёнными полями после подтверждения.", true);
     }).catch(function (error) {
       log(error.detail || error.message);
     });

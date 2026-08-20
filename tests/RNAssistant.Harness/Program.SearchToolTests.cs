@@ -53,7 +53,9 @@ namespace RNAssistant.Harness
                 AssertContains(searched.DataJson, "Module1", "VBA regex search returns module");
 
                 var patch = "[{\"op\":\"regexReplace\",\"pattern\":\"old(Value)\",\"text\":\"new$1\",\"replaceAll\":true}]";
-                var patched = executor.Execute(Command("excel.vba_apply_patch", "moduleName", "Module1", "patch", patch), tools, settings, false, false);
+                var stale = executor.Execute(Command("excel.vba_apply_patch", "moduleName", "Module1", "expectedCodeSha256", "stale", "patch", patch), tools, settings, false, false);
+                AssertEqual("stale_vba_module", stale.ErrorCode, "stale VBA patch rejected");
+                var patched = executor.Execute(Command("excel.vba_apply_patch", "moduleName", "Module1", "expectedCodeSha256", VbaToolManifestParser.CodeSha256(adapter.GetVbaModuleCode("Module1")), "patch", patch), tools, settings, false, false);
                 AssertTrue(patched.Success, "VBA regex patch succeeds");
                 AssertContains(adapter.GetVbaModuleCode("Module1"), "newValue", "VBA regex patch applies captures");
 

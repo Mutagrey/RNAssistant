@@ -120,11 +120,13 @@ namespace RNAssistant.Harness
                 AssertEqual(1, adapter.Executed.Count(item => string.Equals(item.ToolId, "excel.add_sheet", StringComparison.OrdinalIgnoreCase)), "built-in add sheet executed once");
                 AssertEqual(0, adapter.Executed.Count(item => string.Equals(item.ToolId, "excel.list_sheets", StringComparison.OrdinalIgnoreCase)), "shadow pipeline was not executed");
 
-                var save = new ToolCommand { ToolId = "common.tools_save" };
+                var save = new ToolCommand { ToolId = "common.tools_create" };
                 save.Arguments["id"] = shadow.Id;
                 save.Arguments["host"] = "Excel";
+                save.Arguments["description"] = "Invalid shadow.";
                 save.Arguments["executor"] = "pipeline";
-                save.Arguments["pipelineJson"] = shadow.PipelineJson;
+                save.Arguments["parameters"] = JObject.Parse(EmptyFormalToolSchema);
+                save.Arguments["pipeline"] = JObject.Parse(shadow.PipelineJson);
                 var saveResult = executor.Execute(save, adapter.GetBuiltInTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(!saveResult.Success, "controller rejects reserved id");
                 AssertEqual("reserved_tool_id", saveResult.ErrorCode, "reserved id error code");
@@ -305,34 +307,76 @@ namespace RNAssistant.Harness
                 AssertEqual(1, adapter.Executed.Count, "allowed adapter execution count");
             });
         }
-        private static void AgentCanSaveCustomToolsWithConfirmation()
+        private static void AgentToolCrudPreservesOmittedFields()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var command = new ToolCommand { ToolId = "common.tools_save" };
+                var command = new ToolCommand { ToolId = "common.tools_create" };
                 command.Arguments["id"] = "excel.generated_report";
                 command.Arguments["host"] = "Excel";
                 command.Arguments["name"] = "Generated report";
                 command.Arguments["description"] = "Create a generated report sheet.";
-                command.Arguments["argumentSchemaJson"] = SheetFormalToolSchema;
+                command.Arguments["parameters"] = JObject.Parse(SheetFormalToolSchema);
                 command.Arguments["executor"] = "pipeline";
-                command.Arguments["pipelineJson"] = "{\"steps\":[{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}]}";
-                command.Arguments["enabled"] = "true";
-                command.Arguments["requiresConfirmation"] = "true";
-                command.Arguments["mutatesDocument"] = "true";
-                command.Arguments["agentCanRun"] = "false";
+                command.Arguments["pipeline"] = JObject.Parse("{\"version\":1,\"steps\":[{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}]}");
+                command.Arguments["enabled"] = true;
+                command.Arguments["requiresConfirmation"] = true;
+                command.Arguments["mutatesDocument"] = true;
+                command.Arguments["agentCanRun"] = false;
+                command.Arguments["riskLevel"] = 2;
 
                 var blocked = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = false }, false, false);
-                AssertTrue(!blocked.Success, "tool save should require confirmation");
+                AssertTrue(!blocked.Success, "tool create should require confirmation");
                 AssertContains(blocked.Status, "waiting_confirmation", "blocked status");
 
                 var saved = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
-                AssertTrue(saved.Success, "tool save should succeed");
-                AssertContains(saved.Message, "Custom tool saved", "save message");
+                AssertTrue(saved.Success, "tool create should succeed");
+                AssertContains(saved.Message, "created", "create message");
+
+                var update = new ToolCommand { ToolId = "common.tools_update" };
+                update.Arguments["id"] = "excel.generated_report";
+                update.Arguments["name"] = "Updated report";
+                var updated = executor.Execute(update, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
+                AssertTrue(updated.Success, "partial tool update should succeed");
 
                 var read = executor.Execute(new ToolCommand { ToolId = "common.tools_read", Arguments = { ["id"] = "excel.generated_report" } }, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings(), false, false);
                 AssertTrue(read.Success, "tool read should succeed");
                 AssertContains(read.DataJson, "excel.add_sheet", "saved pipeline");
+                AssertContains(read.DataJson, "\"parameters\":{", "schema returned as native object");
+                AssertContains(read.DataJson, "Updated report", "updated field returned");
+                AssertContains(read.DataJson, "Create a generated report sheet", "omitted description preserved");
+            });
+        }
+
+        private static void AgentSkillCrudPreservesOmittedFields()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var create = Command(
+                    "common.skills_create",
+                    "id", "excel.review_style",
+                    "host", "Excel",
+                    "name", "Review style",
+                    "description", "Review workbook style consistently.",
+                    "version", "1.0.0",
+                    "bodyMarkdown", "# Review style\n\nPreserve workbook conventions.",
+                    "enabled", true);
+                var created = executor.Execute(create, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+                AssertTrue(created.Success, "skill create succeeds");
+
+                var update = Command("common.skills_update", "id", "excel.review_style", "description", "Review workbook formatting consistently.");
+                var updated = executor.Execute(update, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+                AssertTrue(updated.Success, "partial skill update succeeds");
+
+                var read = executor.Execute(Command("common.skills_read", "id", "excel.review_style"), tools, new AppSettings(), false, false);
+                AssertTrue(read.Success, "skill read succeeds");
+                AssertContains(read.DataJson, "Review workbook formatting consistently", "skill description updated");
+                AssertContains(read.DataJson, "Preserve workbook conventions", "omitted skill body preserved");
+                AssertContains(read.DataJson, "\"version\":\"1.0.0\"", "omitted version preserved");
+
+                var deleted = executor.Execute(Command("common.skills_delete", "id", "excel.review_style"), tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+                AssertTrue(deleted.Success, "skill delete succeeds");
             });
         }
     }

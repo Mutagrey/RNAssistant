@@ -14,7 +14,7 @@ Every Agent request contains the editable `SystemPrompt` and one `RUNTIME_CONTEX
 - the enabled skill catalog with `id`, `name`, and `description` only;
 - chat-owned user context and artifact references.
 
-When a catalog description matches the task, the model calls `common.skills_read` with the exact id. Its `TOOL_RESULT.data` contains `id`, `name`, `description`, `version`, `format: "markdown"`, and the complete body in `instructions`. Several clearly relevant skills may be read as independent calls. The result is normal conversation history; there is no router or activation state.
+When a catalog description matches the task, the model calls `common.skills_read` with the exact id. Its `TOOL_RESULT.data` contains `id`, `host`, `name`, `description`, `version`, `enabled`, `format: "markdown"`, and the complete body in both authoring-compatible `bodyMarkdown` and model-facing `instructions`. Several clearly relevant skills may be read as independent calls. The result is normal conversation history; there is no router or activation state.
 
 Tools use a native-like description:
 
@@ -77,7 +77,7 @@ The parser accepts one or more calls, requires unique call ids, and checks each 
 
 If a call needs confirmation, execution pauses at that call and later calls from the same response are not retained or executed. After confirmation, the model receives that result and chooses the remaining work normally. There is no separate batch state. Additional root fields are allowed so the prompt can evolve without a protocol migration.
 
-If parsing fails, the runtime makes one correction request with the same accepted conversation plus a short `FORMAT_REPAIR` instruction. The invalid raw output is not copied into that request and neither the output nor the repair instruction is stored in chat history. A refusal remains valid user-facing content when returned in `message` with an empty `tool_calls` array. If the correction is also invalid, the run ends with a visible diagnostic excluded from model replay. There is no unbounded repair loop or legacy normalization.
+If parsing fails, the runtime makes up to `MaxAgentFormatRetries` correction requests (default 2, clamped to 1–5). Every attempt starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored. A refusal remains valid user-facing content when returned in `message` with an empty `tool_calls` array. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy normalization.
 
 ## Tool result
 

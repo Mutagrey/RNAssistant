@@ -10,7 +10,7 @@ request + full tool catalog + compact skill catalog
                 -> next model turn
 ```
 
-Removed layers include offline mode, automatic mode selection, task routing, phase state, tool catalog slicing, progressive skill activation, plans, observations, repair state machines, transport fallback, persistent batch orchestration, automatic tool retry, and separate mutation verification. The only format recovery is one stateless correction request whose temporary input and invalid output are not persisted.
+Removed layers include offline mode, automatic mode selection, task routing, phase state, tool catalog slicing, progressive skill activation, plans, observations, repair state machines, transport fallback, persistent batch orchestration, automatic tool retry, and separate mutation verification. Format recovery is a bounded 1–5 stateless retry loop; each attempt uses the same clean accepted prompt plus one current error and persists no rejected data.
 
 The remaining runtime responsibilities are intentionally small:
 
@@ -28,7 +28,7 @@ Known trade-offs of this simpler design:
 - the full enabled tool catalog consumes context and can outgrow a small model window; skill bodies consume context only after `common.skills_read`;
 - independent multi-tool calls reduce model round trips, but result-dependent calls still require another model turn;
 - strict tool schemas improve selection and validation, but their descriptions, defaults, enums, and required fields must stay synchronized with executor behavior;
-- the selected endpoint should support `json_object`; one malformed response can be corrected once, but repeated violations end the run;
+- the selected endpoint should support `json_object`; repeated malformed responses stop after the configured 1–5 correction attempts;
 - without a separate verifier, correctness depends on explicit tool results and tool-internal hash/backup/stale-state checks;
 - attachments use the selected model and fail explicitly when its declared media capabilities are insufficient.
 

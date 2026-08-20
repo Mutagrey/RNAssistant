@@ -29,7 +29,7 @@ Attachments never trigger automatic model routing or failover. RNAssistant uses 
 
 ## Failure behavior
 
-- Invalid Agent JSON receives one format-correction request. The raw invalid response and temporary correction instruction are not persisted; a second invalid response stops the run.
+- Invalid Agent JSON receives up to `MaxAgentFormatRetries` clean format-correction requests (1–5, default 2). Raw invalid responses and temporary instructions are not persisted; exhausting the limit stops the run.
 - Network, timeout, rate-limit, server, or provider-refusal errors are returned without an automatic duplicate request.
 - Unknown tools and invalid arguments are rejected locally before Office execution.
 - A tool failure is returned to the model as `TOOL_RESULT`; the model decides whether to retry, change arguments, ask the user, or finish.

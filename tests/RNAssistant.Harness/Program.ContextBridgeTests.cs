@@ -441,7 +441,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"uiTheme\":\"dark\",\"debugModelTraffic\":true,\"reasoningRequestMode\":\"custom_json\",\"reasoningCustomJson\":\"{\\\"thinking\\\":{\\\"budget\\\":4096}}\",\"systemPromptRole\":\"system\",\"modelImageSupportOverrides\":{\"gpt-test\":true},\"modelAudioSupportOverrides\":{\"gpt-audio\":true}},\"apiKey\":\"secret\"}}")
+                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"uiTheme\":\"dark\",\"debugModelTraffic\":true,\"reasoningRequestMode\":\"custom_json\",\"reasoningCustomJson\":\"{\\\"thinking\\\":{\\\"budget\\\":4096}}\",\"systemPromptRole\":\"system\",\"maxAgentFormatRetries\":4,\"modelImageSupportOverrides\":{\"gpt-test\":true},\"modelAudioSupportOverrides\":{\"gpt-audio\":true}},\"apiKey\":\"secret\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -453,6 +453,7 @@ namespace RNAssistant.Harness
             AssertEqual(ReasoningRequestModes.CustomJson, controller.LastSettings.ReasoningRequestMode, "settings custom reasoning mode");
             AssertContains(controller.LastSettings.ReasoningCustomJson, "budget", "settings custom reasoning json");
             AssertEqual("system", controller.LastSettings.SystemPromptRole, "system prompt role");
+            AssertEqual(4, controller.LastSettings.MaxAgentFormatRetries, "format retry limit");
             AssertEqual(true, controller.LastSettings.ModelImageSupportOverrides["gpt-test"].Value, "model image override");
             AssertEqual(true, controller.LastSettings.ModelAudioSupportOverrides["gpt-audio"].Value, "model audio override");
             AssertEqual("secret", controller.LastApiKey, "api key");

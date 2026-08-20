@@ -28,9 +28,10 @@ namespace RNAssistant.Office.Tools
             }
 
             yield return ControllerToolDefinition.Create("common.tools_list", "Common", "Read-only: List custom executable RNAssistant tools visible to the current Office host.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}");
-            yield return ControllerToolDefinition.Create("common.tools_read", "Common", "Read-only: Read one custom RNAssistant tool by id, including metadata, README, pipeline, and VBA code.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable identifier.\"}},\"required\":[\"id\"],\"additionalProperties\":false}");
-            yield return ControllerToolDefinition.Create("common.tools_validate", "Common", "Read-only: Validate a custom RNAssistant pipeline or manifest-based VBA package without saving it.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable identifier.\"},\"host\":{\"type\":\"string\",\"description\":\"Office host name: Common, Excel, Word, PowerPoint, or Outlook.\",\"enum\":[\"Common\",\"Excel\",\"Word\",\"PowerPoint\",\"Outlook\"]},\"name\":{\"type\":\"string\",\"description\":\"Human-readable name or exact saved item name, as required by the tool.\"},\"description\":{\"type\":\"string\",\"description\":\"Clear model-facing description of what the item does.\"},\"argumentSchemaJson\":{\"type\":\"string\",\"description\":\"Formal object JSON Schema for tool arguments, serialized as JSON.\"},\"executor\":{\"type\":\"string\",\"description\":\"Execution type: pipeline or vba.\",\"default\":\"pipeline\",\"enum\":[\"pipeline\",\"vba\"]},\"pipelineJson\":{\"type\":\"string\",\"description\":\"JSON array of ordered pipeline steps.\"},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code.\"},\"componentsJson\":{\"type\":\"string\",\"description\":\"JSON array describing VBA package components.\"},\"readme\":{\"type\":\"string\",\"description\":\"Markdown documentation for the custom tool.\"},\"enabled\":{\"type\":\"boolean\",\"description\":\"Whether the saved item is enabled.\",\"default\":true},\"requiresConfirmation\":{\"type\":\"boolean\",\"description\":\"Whether execution requires user confirmation.\",\"default\":false},\"mutatesDocument\":{\"type\":\"boolean\",\"description\":\"Whether execution may change the Office document.\",\"default\":false},\"mutatesLocalState\":{\"type\":\"boolean\",\"description\":\"Whether execution may change RNAssistant local state.\",\"default\":false},\"agentCanRun\":{\"type\":\"boolean\",\"description\":\"Whether Agent mode may execute the tool.\",\"default\":true},\"riskLevel\":{\"type\":\"integer\",\"description\":\"Integer risk level from 0 through 3.\",\"default\":0,\"minimum\":0,\"maximum\":3}},\"required\":[\"id\"],\"additionalProperties\":false}");
-            yield return ControllerToolDefinition.Create("common.tools_save", "Common", "Mutates settings: Create or update a custom RNAssistant pipeline or manifest-based VBA package.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable identifier.\"},\"host\":{\"type\":\"string\",\"description\":\"Office host name: Common, Excel, Word, PowerPoint, or Outlook.\",\"enum\":[\"Common\",\"Excel\",\"Word\",\"PowerPoint\",\"Outlook\"]},\"name\":{\"type\":\"string\",\"description\":\"Human-readable name or exact saved item name, as required by the tool.\"},\"description\":{\"type\":\"string\",\"description\":\"Clear model-facing description of what the item does.\"},\"argumentSchemaJson\":{\"type\":\"string\",\"description\":\"Formal object JSON Schema for tool arguments, serialized as JSON.\"},\"executor\":{\"type\":\"string\",\"description\":\"Execution type: pipeline or vba.\",\"default\":\"pipeline\",\"enum\":[\"pipeline\",\"vba\"]},\"pipelineJson\":{\"type\":\"string\",\"description\":\"JSON array of ordered pipeline steps.\"},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code.\"},\"componentsJson\":{\"type\":\"string\",\"description\":\"JSON array describing VBA package components.\"},\"readme\":{\"type\":\"string\",\"description\":\"Markdown documentation for the custom tool.\"},\"enabled\":{\"type\":\"boolean\",\"description\":\"Whether the saved item is enabled.\",\"default\":true},\"requiresConfirmation\":{\"type\":\"boolean\",\"description\":\"Whether execution requires user confirmation.\",\"default\":false},\"mutatesDocument\":{\"type\":\"boolean\",\"description\":\"Whether execution may change the Office document.\",\"default\":false},\"mutatesLocalState\":{\"type\":\"boolean\",\"description\":\"Whether execution may change RNAssistant local state.\",\"default\":false},\"agentCanRun\":{\"type\":\"boolean\",\"description\":\"Whether Agent mode may execute the tool.\",\"default\":true},\"riskLevel\":{\"type\":\"integer\",\"description\":\"Integer risk level from 0 through 3.\",\"default\":0,\"minimum\":0,\"maximum\":3}},\"required\":[\"id\"],\"additionalProperties\":false}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
+            yield return ControllerToolDefinition.Create("common.tools_read", "Common", "Read-only: Read one custom tool as the same native JSON shape accepted by tools_update.", IdSchema());
+            yield return ControllerToolDefinition.Create("common.tools_validate", "Common", "Read-only: Validate a complete custom pipeline or manifest-based VBA tool definition without saving it.", ToolPayloadSchema(false));
+            yield return ControllerToolDefinition.Create("common.tools_create", "Common", "Mutates settings: Create a new validated custom pipeline or manifest-based VBA tool; fails if the id already exists.", ToolPayloadSchema(false), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
+            yield return ControllerToolDefinition.Create("common.tools_update", "Common", "Mutates settings: Update only supplied fields of an existing custom tool; omitted fields are preserved.", ToolPayloadSchema(true), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
             yield return ControllerToolDefinition.Create("common.tools_delete", "Common", "Mutates settings: Delete a custom RNAssistant tool by id.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable identifier.\"}},\"required\":[\"id\"],\"additionalProperties\":false}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
         }
 
@@ -56,9 +57,14 @@ namespace RNAssistant.Office.Tools
                 return ValidateToolPayload(command);
             }
 
-            if (string.Equals(command.ToolId, "common.tools_save", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, "common.tools_create", StringComparison.OrdinalIgnoreCase))
             {
-                return SaveTool(command, settings, dryRun, manualRun);
+                return CreateTool(command, settings, dryRun, manualRun);
+            }
+
+            if (string.Equals(command.ToolId, "common.tools_update", StringComparison.OrdinalIgnoreCase))
+            {
+                return UpdateTool(command, settings, dryRun, manualRun);
             }
 
             if (string.Equals(command.ToolId, "common.tools_delete", StringComparison.OrdinalIgnoreCase))
@@ -98,7 +104,7 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Fail("Custom tool not found: " + id);
             }
 
-            return ToolResult.Ok("Custom tool read: " + tool.Id, JsonConvert.SerializeObject(tool));
+            return ToolResult.Ok("Custom tool read: " + tool.Id, ToolPayload(tool).ToString(Formatting.None));
         }
 
         private ToolResult ValidateToolPayload(ToolCommand command)
@@ -110,30 +116,48 @@ namespace RNAssistant.Office.Tools
                 return validation;
             }
 
-            return ToolResult.Ok("Tool definition is valid: " + tool.Id, JsonConvert.SerializeObject(tool));
+            return ToolResult.Ok("Tool definition is valid: " + tool.Id, ToolPayload(tool).ToString(Formatting.None));
         }
 
-        private ToolResult SaveTool(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)
+        private ToolResult CreateTool(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)
         {
-            if (!dryRun && !manualRun && !(settings ?? new AppSettings()).AutoConfirmToolActions)
+            var id = ToolArgumentReader.String(command.Arguments, "id", string.Empty);
+            if (_toolStore.Load().Any(candidate => string.Equals(candidate.Id, id, StringComparison.OrdinalIgnoreCase)))
             {
-                return ToolResult.WaitingConfirmation("Tool save requires confirmation: " + ToolArgumentReader.String(command.Arguments, "id", string.Empty));
+                return ToolResult.Fail("Custom tool already exists: " + id + ". Use common.tools_update.", null, "tool_already_exists", false);
             }
 
             var tool = ReadToolDefinition(command);
-            var validation = ValidateToolDefinition(tool);
-            if (!validation.Success)
-            {
-                return validation;
-            }
+            return PersistTool(tool, settings, dryRun, manualRun, "create");
+        }
 
+        private ToolResult UpdateTool(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)
+        {
+            var id = ToolArgumentReader.String(command.Arguments, "id", string.Empty);
+            var existing = _toolStore.Load().FirstOrDefault(tool => string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (existing == null)
+            {
+                return ToolResult.Fail("Custom tool not found: " + id + ". Use common.tools_create.", null, "tool_not_found", false);
+            }
+            return PersistTool(UpdateToolDefinition(existing, command), settings, dryRun, manualRun, "update");
+        }
+
+        private ToolResult PersistTool(ToolDefinition tool, AppSettings settings, bool dryRun, bool manualRun, string operation)
+        {
+            if (!dryRun && !manualRun && !(settings ?? new AppSettings()).AutoConfirmToolActions)
+            {
+                return ToolResult.WaitingConfirmation("Tool " + operation + " requires confirmation: " + (tool == null ? string.Empty : tool.Id));
+            }
+            var validation = ValidateToolDefinition(tool);
+            if (!validation.Success) return validation;
             if (dryRun)
             {
-                return ToolResult.Ok("Dry run: would save custom tool " + tool.Id, JsonConvert.SerializeObject(tool));
+                return ToolResult.Ok("Dry run: would " + operation + " custom tool " + tool.Id, ToolPayload(tool).ToString(Formatting.None));
             }
 
             var saved = _toolStore.SaveOne(tool);
-            return ToolResult.Ok("Custom tool saved: " + tool.Id, JsonConvert.SerializeObject(saved ?? tool));
+            return ToolResult.Ok("Custom tool " + (operation == "create" ? "created: " : "updated: ") + tool.Id,
+                ToolPayload(saved ?? tool).ToString(Formatting.None));
         }
 
         private ToolResult DeleteTool(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)
@@ -162,31 +186,65 @@ namespace RNAssistant.Office.Tools
         private ToolDefinition ReadToolDefinition(ToolCommand command)
         {
             var id = ToolArgumentReader.String(command.Arguments, "id", string.Empty);
-            var mutatesDocument = ReadBool(command, "mutatesDocument", true);
-            return new ToolDefinition
+            var components = ReadComponents(ToolArgumentReader.String(command.Arguments, "components", "[]"));
+            return NormalizeVbaEntryCode(new ToolDefinition
             {
                 Id = id,
                 Host = ToolArgumentReader.String(command.Arguments, "host", DefaultHostFromId(id)),
                 Name = ToolArgumentReader.String(command.Arguments, "name", id),
                 Description = ToolArgumentReader.String(command.Arguments, "description", string.Empty),
-                ArgumentSchemaJson = ToolArgumentReader.String(command.Arguments, "argumentSchemaJson", ToolArgumentReader.String(command.Arguments, "schema", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}")),
+                ArgumentSchemaJson = ToolArgumentReader.String(command.Arguments, "parameters", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
                 Executor = ToolArgumentReader.String(command.Arguments, "executor", "pipeline"),
-                PipelineJson = ToolArgumentReader.String(command.Arguments, "pipelineJson", ToolArgumentReader.String(command.Arguments, "pipeline", string.Empty)),
-                Code = ToolArgumentReader.String(command.Arguments, "code", string.Empty),
-                Readme = ToolArgumentReader.String(command.Arguments, "readme", ToolArgumentReader.String(command.Arguments, "README", string.Empty)),
+                PipelineJson = ToolArgumentReader.String(command.Arguments, "pipeline", string.Empty),
+                Readme = ToolArgumentReader.String(command.Arguments, "readme", string.Empty),
                 Enabled = ReadBool(command, "enabled", true),
-                RequiresConfirmation = ReadBool(command, "requiresConfirmation", true),
-                MutatesDocument = mutatesDocument,
+                RequiresConfirmation = ReadBool(command, "requiresConfirmation", false),
+                MutatesDocument = ReadBool(command, "mutatesDocument", false),
                 MutatesLocalState = ReadBool(command, "mutatesLocalState", false),
-                AgentCanRun = ReadBool(command, "agentCanRun", false),
+                AgentCanRun = ReadBool(command, "agentCanRun", true),
                 BuiltIn = false,
-                RiskLevel = ReadInt(command, "riskLevel", mutatesDocument ? 2 : 0),
+                RiskLevel = ReadInt(command, "riskLevel", 0),
                 UseWhen = ToolArgumentReader.String(command.Arguments, "useWhen", string.Empty),
                 DoNotUseWhen = ToolArgumentReader.String(command.Arguments, "doNotUseWhen", string.Empty),
                 CapabilityStatus = ToolArgumentReader.String(command.Arguments, "capabilityStatus", "available"),
                 Limitations = ToolArgumentReader.String(command.Arguments, "limitations", string.Empty),
-                Components = ReadComponents(ToolArgumentReader.String(command.Arguments, "componentsJson", "[]"))
-            };
+                Components = components
+            });
+        }
+
+        private static ToolDefinition UpdateToolDefinition(ToolDefinition existing, ToolCommand command)
+        {
+            var tool = existing.Clone();
+            tool.StoragePath = existing.StoragePath;
+            SetString(command, "host", value => tool.Host = value);
+            SetString(command, "name", value => tool.Name = value);
+            SetString(command, "description", value => tool.Description = value);
+            SetString(command, "parameters", value => tool.ArgumentSchemaJson = value);
+            SetString(command, "executor", value => tool.Executor = value);
+            SetString(command, "pipeline", value => tool.PipelineJson = value);
+            SetString(command, "readme", value => tool.Readme = value);
+            SetString(command, "useWhen", value => tool.UseWhen = value);
+            SetString(command, "doNotUseWhen", value => tool.DoNotUseWhen = value);
+            SetString(command, "capabilityStatus", value => tool.CapabilityStatus = value);
+            SetString(command, "limitations", value => tool.Limitations = value);
+            SetBool(command, "enabled", value => tool.Enabled = value);
+            SetBool(command, "requiresConfirmation", value => tool.RequiresConfirmation = value);
+            SetBool(command, "mutatesDocument", value => tool.MutatesDocument = value);
+            SetBool(command, "mutatesLocalState", value => tool.MutatesLocalState = value);
+            SetBool(command, "agentCanRun", value => tool.AgentCanRun = value);
+            if (HasArgument(command, "riskLevel")) tool.RiskLevel = ReadInt(command, "riskLevel", tool.RiskLevel);
+            if (HasArgument(command, "components")) tool.Components = ReadComponents(ToolArgumentReader.String(command.Arguments, "components", "[]"));
+            return NormalizeVbaEntryCode(tool);
+        }
+
+        private static ToolDefinition NormalizeVbaEntryCode(ToolDefinition tool)
+        {
+            if (tool != null && string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
+            {
+                var entry = (tool.Components ?? new List<VbaToolComponent>()).FirstOrDefault();
+                tool.Code = entry == null ? string.Empty : entry.Code ?? string.Empty;
+            }
+            return tool;
         }
 
         private static List<VbaToolComponent> ReadComponents(string json)
@@ -206,6 +264,209 @@ namespace RNAssistant.Office.Tools
             {
                 return new List<VbaToolComponent>();
             }
+        }
+
+        private static JObject ToolPayload(ToolDefinition tool)
+        {
+            tool = tool ?? new ToolDefinition();
+            return new JObject
+            {
+                ["id"] = tool.Id ?? string.Empty,
+                ["host"] = tool.Host ?? string.Empty,
+                ["name"] = tool.Name ?? string.Empty,
+                ["description"] = tool.Description ?? string.Empty,
+                ["parameters"] = ParseJsonObject(tool.ArgumentSchemaJson),
+                ["executor"] = tool.Executor ?? string.Empty,
+                ["pipeline"] = ParseJsonObject(tool.PipelineJson),
+                ["components"] = new JArray((tool.Components ?? new List<VbaToolComponent>())
+                    .Where(component => component != null)
+                    .Select(component => new JObject
+                    {
+                        ["name"] = component.Name ?? string.Empty,
+                        ["type"] = component.Type ?? string.Empty,
+                        ["fileName"] = component.FileName ?? string.Empty,
+                        ["code"] = component.Code ?? string.Empty
+                    })),
+                ["readme"] = tool.Readme ?? string.Empty,
+                ["enabled"] = tool.Enabled,
+                ["requiresConfirmation"] = tool.RequiresConfirmation,
+                ["mutatesDocument"] = tool.MutatesDocument,
+                ["mutatesLocalState"] = tool.MutatesLocalState,
+                ["agentCanRun"] = tool.AgentCanRun,
+                ["riskLevel"] = tool.RiskLevel,
+                ["useWhen"] = tool.UseWhen ?? string.Empty,
+                ["doNotUseWhen"] = tool.DoNotUseWhen ?? string.Empty,
+                ["capabilityStatus"] = tool.CapabilityStatus ?? "available",
+                ["limitations"] = tool.Limitations ?? string.Empty
+            };
+        }
+
+        private static JToken ParseJsonObject(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return JValue.CreateNull();
+            try
+            {
+                var parsed = JToken.Parse(json);
+                return parsed.Type == JTokenType.Object ? parsed : JValue.CreateNull();
+            }
+            catch (JsonException)
+            {
+                return JValue.CreateNull();
+            }
+        }
+
+        private static string IdSchema()
+        {
+            return "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable custom tool id.\",\"minLength\":1}},\"required\":[\"id\"],\"additionalProperties\":false}";
+        }
+
+        private static string ToolPayloadSchema(bool update)
+        {
+            var properties = new JObject
+            {
+                ["id"] = Property("string", "Exact stable custom tool id; it cannot shadow a built-in id."),
+                ["host"] = EnumProperty("Office host where the tool is available.", "Common", "Excel", "Word", "PowerPoint", "Outlook"),
+                ["name"] = Property("string", "Human-readable tool name."),
+                ["description"] = Property("string", "Clear model-facing description of what the tool does."),
+                ["parameters"] = ParametersProperty(),
+                ["executor"] = EnumProperty("Execution type.", "pipeline", "vba"),
+                ["pipeline"] = PipelineProperty(),
+                ["components"] = new JObject
+                {
+                    ["type"] = "array",
+                    ["description"] = "Ordered VBA package source components; the first component is the StdModule containing the manifest and entry function.",
+                    ["items"] = new JObject
+                    {
+                        ["type"] = "object",
+                        ["properties"] = new JObject
+                        {
+                            ["name"] = Property("string", "Exact VBA component name."),
+                            ["type"] = EnumProperty("VBA component type.", "StdModule", "ClassModule"),
+                            ["fileName"] = Property("string", "Optional source file name ending in .bas or .cls."),
+                            ["code"] = Property("string", "Complete VBA source code for this component.")
+                        },
+                        ["required"] = new JArray("name", "type", "code"),
+                        ["additionalProperties"] = false
+                    }
+                },
+                ["readme"] = Property("string", "Markdown documentation stored with the custom tool."),
+                ["enabled"] = Property("boolean", "Whether the tool is enabled."),
+                ["requiresConfirmation"] = Property("boolean", "Whether execution requires explicit user confirmation."),
+                ["mutatesDocument"] = Property("boolean", "Whether execution may change the Office document."),
+                ["mutatesLocalState"] = Property("boolean", "Whether execution may change RNAssistant local state."),
+                ["agentCanRun"] = Property("boolean", "Whether Agent mode may select this tool."),
+                ["riskLevel"] = new JObject
+                {
+                    ["type"] = "integer",
+                    ["description"] = "Risk level from 0 through 3.",
+                    ["minimum"] = 0,
+                    ["maximum"] = 3
+                },
+                ["useWhen"] = Property("string", "Positive selection guidance for the model."),
+                ["doNotUseWhen"] = Property("string", "Cases where the model should not select this tool."),
+                ["capabilityStatus"] = EnumProperty("Current capability status.", "available", "partial", "unavailable"),
+                ["limitations"] = Property("string", "Known limitations presented to the model.")
+            };
+            if (!update)
+            {
+                properties["enabled"]["default"] = true;
+                properties["requiresConfirmation"]["default"] = false;
+                properties["mutatesDocument"]["default"] = false;
+                properties["mutatesLocalState"]["default"] = false;
+                properties["agentCanRun"]["default"] = true;
+                properties["riskLevel"]["default"] = 0;
+                properties["capabilityStatus"]["default"] = "available";
+            }
+            return new JObject
+            {
+                ["type"] = "object",
+                ["properties"] = properties,
+                ["required"] = update
+                    ? new JArray("id")
+                    : new JArray("id", "host", "description", "parameters", "executor"),
+                ["additionalProperties"] = false
+            }.ToString(Formatting.None);
+        }
+
+        private static JObject Property(string type, string description)
+        {
+            return new JObject { ["type"] = type, ["description"] = description };
+        }
+
+        private static JObject ParametersProperty()
+        {
+            return new JObject
+            {
+                ["type"] = "object",
+                ["description"] = "Strict object JSON Schema for the custom tool arguments.",
+                ["properties"] = new JObject
+                {
+                    ["type"] = new JObject { ["type"] = "string", ["description"] = "Root schema type; must be object.", ["enum"] = new JArray("object") },
+                    ["properties"] = Property("object", "Named argument schemas with types and useful descriptions."),
+                    ["required"] = new JObject { ["type"] = "array", ["description"] = "Names of required arguments.", ["items"] = new JObject { ["type"] = "string" } },
+                    ["additionalProperties"] = new JObject { ["type"] = "boolean", ["description"] = "Must be false." }
+                },
+                ["required"] = new JArray("type", "properties", "required", "additionalProperties")
+            };
+        }
+
+        private static JObject PipelineProperty()
+        {
+            return new JObject
+            {
+                ["type"] = "object",
+                ["description"] = "Pipeline definition with ordered calls to existing tools.",
+                ["properties"] = new JObject
+                {
+                    ["version"] = new JObject { ["type"] = "integer", ["description"] = "Pipeline format version.", ["default"] = 1 },
+                    ["steps"] = new JObject
+                    {
+                        ["type"] = "array",
+                        ["description"] = "Ordered pipeline steps.",
+                        ["minItems"] = 1,
+                        ["maxItems"] = 50,
+                        ["items"] = new JObject
+                        {
+                            ["type"] = "object",
+                            ["properties"] = new JObject
+                            {
+                                ["id"] = Property("string", "Unique step id used by result placeholders."),
+                                ["toolId"] = Property("string", "Exact existing tool id."),
+                                ["arguments"] = Property("object", "Arguments for the nested tool; placeholders may reference args or prior step results.")
+                            },
+                            ["required"] = new JArray("toolId"),
+                            ["additionalProperties"] = false
+                        }
+                    }
+                },
+                ["required"] = new JArray("steps"),
+                ["additionalProperties"] = false
+            };
+        }
+
+        private static JObject EnumProperty(string description, params string[] values)
+        {
+            return new JObject
+            {
+                ["type"] = "string",
+                ["description"] = description,
+                ["enum"] = new JArray(values ?? new string[0])
+            };
+        }
+
+        private static bool HasArgument(ToolCommand command, string name)
+        {
+            return command != null && command.Arguments != null && command.Arguments.ContainsKey(name);
+        }
+
+        private static void SetString(ToolCommand command, string name, Action<string> apply)
+        {
+            if (HasArgument(command, name) && apply != null) apply(ToolArgumentReader.String(command.Arguments, name, string.Empty));
+        }
+
+        private static void SetBool(ToolCommand command, string name, Action<bool> apply)
+        {
+            if (HasArgument(command, name) && apply != null) apply(ReadBool(command, name, false));
         }
 
         private static int ReadInt(ToolCommand command, string name, int fallback)

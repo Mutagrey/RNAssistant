@@ -122,6 +122,11 @@ namespace RNAssistant.Core.Storage
             {
                 settings.MaxAgentIterations = defaults.MaxAgentIterations;
             }
+            if (settings.MaxAgentFormatRetries <= 0)
+            {
+                settings.MaxAgentFormatRetries = defaults.MaxAgentFormatRetries;
+            }
+            settings.MaxAgentFormatRetries = Math.Max(1, Math.Min(5, settings.MaxAgentFormatRetries));
             if (settings.MaxAgentToolSteps <= 0)
             {
                 settings.MaxAgentToolSteps = defaults.MaxAgentToolSteps;

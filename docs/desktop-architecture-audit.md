@@ -8,7 +8,7 @@
 - `wrappers/native` contains VBA launcher modules for `.xlam`, `.dotm`, `.ppam`/`.potm`, and Outlook VBA.
 - Web UI is static local files under `web`; no npm/bundler is required.
 - Tool safety is metadata-driven through `MutatesDocument`, `AgentCanRun`, and `RequiresConfirmation`.
-- VBA mutation tools are not agent-runnable by default.
+- Public hash/backup-protected VBA mutation tools are agent-selectable but confirmation-controlled; raw whole-module and macro backends remain hidden.
 
 ## Implemented Desktop Path
 
