@@ -167,66 +167,78 @@ namespace RNAssistant.Office.Services
                 }
 
                 var response = parsed.Response;
-                if (response.ToolCall == null)
+                if (response.ToolCalls.Count == 0)
                 {
                     var finalText = response.Message.Trim();
                     session.Messages.Add(AgentTranscript.CreateAssistantMessage(finalText, completion));
                     return Result(finalText, results, contextUsage);
                 }
 
-                var command = AgentJsonProtocol.ToCommand(response.ToolCall);
-                var callMessage = AgentJsonProtocol.CreateToolCallMessage(completion.Content, completion);
-                session.Messages.Add(callMessage);
-                messages.Add(callMessage);
                 if (!string.IsNullOrWhiteSpace(response.Message))
                 {
                     Report(progress, "acting", response.Message.Trim(), null);
                 }
+                for (var callIndex = 0; callIndex < response.ToolCalls.Count; callIndex++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var call = response.ToolCalls[callIndex];
+                    var command = AgentJsonProtocol.ToCommand(call);
+                    var callMessage = AgentJsonProtocol.CreateToolCallMessage(
+                        call,
+                        callIndex == 0 ? response.Message : string.Empty,
+                        callIndex == 0 ? completion : null);
+                    session.Messages.Add(callMessage);
+                    messages.Add(callMessage);
 
-                ToolResult toolResult;
-                if (toolSteps >= Math.Max(1, settings.MaxAgentToolSteps))
-                {
-                    toolResult = ToolResult.Fail("Agent tool step limit reached.", null, "tool_step_limit_reached", false);
-                }
-                else if (!settings.AutoRunToolCalls)
-                {
-                    toolResult = ToolResult.SkippedAutoRun("Automatic tool execution is disabled.");
-                }
-                else
-                {
-                    toolResult = _toolExecutor.Execute(
-                        command,
-                        availableTools,
-                        settings,
-                        false,
-                        false,
-                        session,
-                        Math.Max(1, settings.MaxAgentToolSteps - toolSteps),
-                        enabledSkills,
-                        cancellationToken) ?? ToolResult.Fail("Tool returned no result.", null, "missing_result", true);
-                }
-                toolSteps += Math.Max(1, toolResult.ToolStepsConsumed);
-                if (AgentTranscript.IsWaitingResult(toolResult) && pendingToolRegistrar != null)
-                {
-                    toolResult.PendingId = pendingToolRegistrar(session, command, toolResult);
-                }
+                    ToolResult toolResult;
+                    if (toolSteps >= Math.Max(1, settings.MaxAgentToolSteps))
+                    {
+                        toolResult = ToolResult.Fail("Agent tool step limit reached.", null, "tool_step_limit_reached", false);
+                    }
+                    else if (!settings.AutoRunToolCalls)
+                    {
+                        toolResult = ToolResult.SkippedAutoRun("Automatic tool execution is disabled.");
+                    }
+                    else
+                    {
+                        toolResult = _toolExecutor.Execute(
+                            command,
+                            availableTools,
+                            settings,
+                            false,
+                            false,
+                            session,
+                            Math.Max(1, settings.MaxAgentToolSteps - toolSteps),
+                            enabledSkills,
+                            cancellationToken) ?? ToolResult.Fail("Tool returned no result.", null, "missing_result", true);
+                    }
+                    toolSteps += Math.Max(1, toolResult.ToolStepsConsumed);
+                    if (AgentTranscript.IsWaitingResult(toolResult) && pendingToolRegistrar != null)
+                    {
+                        toolResult.PendingId = pendingToolRegistrar(session, command, toolResult);
+                    }
 
-                if (!AgentTranscript.IsWaitingResult(toolResult))
-                {
-                    var resultMessage = AgentJsonProtocol.CreateToolResultMessage(command, toolResult);
-                    session.Messages.Add(resultMessage);
-                    messages.Add(resultMessage);
-                }
-                var activityMessage = AgentTranscript.CreateLocalResultMessage(command, toolResult);
-                activityMessage.HtmlWorkspaceCheckpointId = session.ActiveHtmlArtifactId;
-                session.Messages.Add(activityMessage);
-                results.Add(AgentTranscript.DescribeResult(command, toolResult));
-                Report(progress, "tool_result", toolResult.Message, activityMessage.Activity);
+                    if (!AgentTranscript.IsWaitingResult(toolResult))
+                    {
+                        var resultMessage = AgentJsonProtocol.CreateToolResultMessage(command, toolResult);
+                        session.Messages.Add(resultMessage);
+                        messages.Add(resultMessage);
+                    }
+                    var activityMessage = AgentTranscript.CreateLocalResultMessage(command, toolResult);
+                    activityMessage.HtmlWorkspaceCheckpointId = session.ActiveHtmlArtifactId;
+                    session.Messages.Add(activityMessage);
+                    results.Add(AgentTranscript.DescribeResult(command, toolResult));
+                    Report(progress, "tool_result", toolResult.Message, activityMessage.Activity);
 
-                if (AgentTranscript.IsWaitingResult(toolResult))
-                {
-                    var waitingText = string.IsNullOrWhiteSpace(response.Message) ? toolResult.Message : response.Message.Trim();
-                    return Result(waitingText, results, contextUsage);
+                    if (AgentTranscript.IsWaitingResult(toolResult))
+                    {
+                        var waitingText = string.IsNullOrWhiteSpace(response.Message) ? toolResult.Message : response.Message.Trim();
+                        return Result(waitingText, results, contextUsage);
+                    }
+                    if (string.Equals(toolResult.ErrorCode, "tool_step_limit_reached", StringComparison.OrdinalIgnoreCase))
+                    {
+                        break;
+                    }
                 }
             }
 

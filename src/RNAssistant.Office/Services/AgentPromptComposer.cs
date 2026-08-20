@@ -153,6 +153,7 @@ namespace RNAssistant.Office.Services
                     ["id"] = skill.Id ?? string.Empty,
                     ["name"] = skill.Name ?? string.Empty,
                     ["description"] = skill.Description ?? string.Empty,
+                    ["format"] = "markdown",
                     ["instructions"] = skill.BodyMarkdown ?? string.Empty
                 }));
         }

@@ -14,6 +14,8 @@ Every Agent request contains the editable `SystemPrompt` and one `RUNTIME_CONTEX
 - every enabled skill with its full Markdown instructions;
 - chat-owned user context and artifact references.
 
+Every skill entry contains `id`, `name`, `description`, `format: "markdown"`, and the complete Markdown body in `instructions`. Skills are guidance already present in the prompt; the agent does not load or activate them through a tool. Skill tools exist only for explicit skill inspection and authoring.
+
 Tools use a native-like description:
 
 ```json
@@ -25,10 +27,10 @@ Tools use a native-like description:
     "parameters": {
       "type": "object",
       "properties": {
-        "sheet": { "type": "string" },
-        "address": { "type": "string" }
+        "sheet": { "type": "string", "description": "Worksheet name; omit to use the active sheet." },
+        "address": { "type": "string", "description": "A1 range to read; defaults to A1." }
       },
-      "required": ["address"],
+      "required": [],
       "additionalProperties": false
     }
   },
@@ -71,7 +73,9 @@ Final answer or clarification:
 }
 ```
 
-Only one tool call is accepted per model turn. The parser checks the JSON shape and exact tool name; the executor validates arguments against the tool schema immediately before execution. Additional root fields are allowed so the prompt can evolve without a protocol migration.
+The parser accepts one or more calls, requires unique call ids, and checks each exact tool name. The executor validates every argument object against its tool schema immediately before execution. Calls execute locally and sequentially in array order. A multi-call response is appropriate only when calls are independent and later arguments do not depend on earlier results.
+
+If a call needs confirmation, execution pauses at that call and later calls from the same response are not retained or executed. After confirmation, the model receives that result and chooses the remaining work normally. There is no separate batch state. Additional root fields are allowed so the prompt can evolve without a protocol migration.
 
 An invalid model response ends the run with a visible diagnostic. There is no repair loop or legacy normalization.
 

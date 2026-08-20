@@ -6,7 +6,12 @@ namespace RNAssistant.Core.Models
     public sealed class AgentResponse
     {
         public string Message { get; set; }
-        public AgentToolCall ToolCall { get; set; }
+        public List<AgentToolCall> ToolCalls { get; set; }
+
+        public AgentResponse()
+        {
+            ToolCalls = new List<AgentToolCall>();
+        }
     }
 
     public sealed class AgentToolCall

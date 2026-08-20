@@ -25,11 +25,11 @@ static WebView UI
 There are exactly two persisted modes.
 
 - `Chat` uses `PlainChatService`: normal history plus `ChatSystemPrompt`; no tools, skills, agent JSON, or Office execution.
-- `Agent` uses `AgentRunService`: prompt assembly, one model JSON response, optional one local tool, JSON result, and the next model turn.
+- `Agent` uses `AgentRunService`: prompt assembly, one model JSON response, zero or more sequential local tools, JSON results, and the next model turn.
 
 `AgentPromptComposer` creates one `RUNTIME_CONTEXT` JSON object containing document identity, all runnable tools in native-like function format, every enabled skill body, chat context, and artifact references. It does not inspect or classify request wording and does not capture Office content eagerly.
 
-`AgentResponseParser` accepts either a final `message` or exactly one `tool_calls` entry. `OfficeToolExecutor` remains the authority for formal argument schemas, effective pipeline safety, confirmation, and dispatch. `AgentJsonProtocol` serializes results to `{ok, tool_call_id, name, status, message, data, error}`.
+`AgentResponseParser` accepts either a final `message` or one or more `tool_calls` entries with unique ids. `OfficeToolExecutor` remains the authority for formal argument schemas, effective pipeline safety, confirmation, and dispatch. `AgentJsonProtocol` serializes each result to `{ok, tool_call_id, name, status, message, data, error}`.
 
 See [agent-protocol.md](agent-protocol.md).
 

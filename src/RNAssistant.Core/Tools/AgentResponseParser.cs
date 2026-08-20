@@ -56,36 +56,42 @@ namespace RNAssistant.Core.Tools
                     ? AgentResponseParseResult.Fail("Final agent response requires a non-empty message.")
                     : AgentResponseParseResult.Ok(response);
             }
-            if (calls.Count != 1)
+            var knownTools = (tools ?? new ToolDefinition[0])
+                .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
+                .GroupBy(item => item.Id, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+            var callIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var token in calls)
             {
-                return AgentResponseParseResult.Fail("Select exactly one tool per response.");
-            }
+                var call = token as JObject;
+                var idToken = call == null ? null : call["id"];
+                var nameToken = call == null ? null : call["name"];
+                var id = idToken != null && idToken.Type == JTokenType.String ? (string)idToken : null;
+                var name = nameToken != null && nameToken.Type == JTokenType.String ? (string)nameToken : null;
+                var arguments = call == null ? null : call["arguments"] as JObject;
+                if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(name) || arguments == null)
+                {
+                    return AgentResponseParseResult.Fail("Each tool call requires id, name, and object arguments.");
+                }
+                if (!callIds.Add(id))
+                {
+                    return AgentResponseParseResult.Fail("Tool call ids must be unique within one response: " + id + ".");
+                }
+                ToolDefinition tool;
+                if (!knownTools.TryGetValue(name, out tool))
+                {
+                    return AgentResponseParseResult.Fail("Unknown tool: " + name + ". Use an exact name from tools.");
+                }
 
-            var call = calls[0] as JObject;
-            var idToken = call == null ? null : call["id"];
-            var nameToken = call == null ? null : call["name"];
-            var id = idToken != null && idToken.Type == JTokenType.String ? (string)idToken : null;
-            var name = nameToken != null && nameToken.Type == JTokenType.String ? (string)nameToken : null;
-            var arguments = call == null ? null : call["arguments"] as JObject;
-            if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(name) || arguments == null)
-            {
-                return AgentResponseParseResult.Fail("Each tool call requires id, name, and object arguments.");
+                var parsedArguments = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                ToolArgumentNormalizer.AddProperties(arguments, parsedArguments);
+                response.ToolCalls.Add(new AgentToolCall
+                {
+                    Id = id,
+                    Name = tool.Id,
+                    Arguments = parsedArguments
+                });
             }
-            var tool = (tools ?? new ToolDefinition[0]).FirstOrDefault(item =>
-                item != null && string.Equals(item.Id, name, StringComparison.OrdinalIgnoreCase));
-            if (tool == null)
-            {
-                return AgentResponseParseResult.Fail("Unknown tool: " + name + ". Use an exact name from tools.");
-            }
-
-            var parsedArguments = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            ToolArgumentNormalizer.AddProperties(arguments, parsedArguments);
-            response.ToolCall = new AgentToolCall
-            {
-                Id = id,
-                Name = tool.Id,
-                Arguments = parsedArguments
-            };
             return AgentResponseParseResult.Ok(response);
         }
     }

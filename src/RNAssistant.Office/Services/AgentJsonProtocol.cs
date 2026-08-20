@@ -54,11 +54,29 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        public static ChatMessage CreateToolCallMessage(string rawJson, RNAssistant.Core.Llm.LlmCompletionResult completion)
+        public static ChatMessage CreateToolCallMessage(
+            AgentToolCall call,
+            string message,
+            RNAssistant.Core.Llm.LlmCompletionResult completion)
         {
-            var message = AgentTranscript.CreateAssistantMessage(rawJson ?? string.Empty, completion);
-            message.ProtocolMessage = true;
-            return message;
+            var content = new JObject
+            {
+                ["message"] = message ?? string.Empty,
+                ["tool_calls"] = new JArray
+                {
+                    new JObject
+                    {
+                        ["id"] = call == null ? string.Empty : call.Id ?? string.Empty,
+                        ["name"] = call == null ? string.Empty : call.Name ?? string.Empty,
+                        ["arguments"] = call == null || call.Arguments == null
+                            ? new JObject()
+                            : JObject.FromObject(call.Arguments)
+                    }
+                }
+            }.ToString(Formatting.None);
+            var protocolMessage = AgentTranscript.CreateAssistantMessage(content, completion);
+            protocolMessage.ProtocolMessage = true;
+            return protocolMessage;
         }
 
         private static JToken ParseData(string dataJson)

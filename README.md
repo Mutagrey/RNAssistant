@@ -187,7 +187,7 @@ Each chat stores an explicit execution mode:
 
 Editable Agent instructions use `developer` by default and may use `system` or `user`. The Prompts page edits the Agent prompt, Chat prompt, context-compaction prompt, and title prompt. Agent-side prompt changes use `common.prompts_read_defaults` and confirmed `common.prompts_save`.
 
-In Agent mode the prompt contains all runnable tools in native-like function JSON and the full bodies of all enabled skills. The model returns one raw JSON object. A tool turn contains exactly one call:
+In Agent mode the prompt contains all runnable tools in native-like function JSON and the full Markdown bodies of all enabled skills. The model returns one raw JSON object. A tool turn contains one or more calls:
 
 ```json
 {
@@ -202,7 +202,9 @@ In Agent mode the prompt contains all runnable tools in native-like function JSO
 }
 ```
 
-To answer or clarify, the model returns `{"message":"...","tool_calls":[]}`. Agent mode always requests `json_object`; there are no response-mode fallbacks, native tool-call transport, batches, plans, format repair, router, tool slicer, skill activation, automatic retries, or separate verification phase.
+Independent calls may be placed in the same array and execute locally in order. Dependent calls and calls that may require confirmation are emitted one at a time. If confirmation pauses a multi-call response, calls after it are not executed; the model selects them again after the confirmed result. There is no persistent batch state.
+
+To answer or clarify, the model returns `{"message":"...","tool_calls":[]}`. Agent mode always requests `json_object`; there are no response-mode fallbacks, native tool-call transport, plans, format repair, router, tool slicer, skill activation, automatic retries, or separate verification phase.
 
 Office tools execute locally. The next model turn receives a string protocol message such as `TOOL_RESULT:\n{"ok":true,"tool_call_id":"call_1","name":"excel.read_range","status":"completed","message":"Range read.","data":{...},"error":null}`. The model decides what to do next. The runtime only enforces exact tool ids, formal argument schemas, safety/confirmation metadata, and iteration/tool-step limits.
 
@@ -273,6 +275,24 @@ Markdown skills are stored under:
 
 Each custom skill is a `SKILL.md` guidance file with simple metadata (`id`, `host`, `name`, `description`, `version`, `enabled`) and markdown instructions. Every enabled visible skill is included in full in each Agent request. There is no skill router, activation state, dependency graph, or hidden tool ownership. Agent mode can inspect and edit custom skills through `common.skills_list`, `common.skills_read`, `common.skills_save`, and `common.skills_delete`; save/delete requires confirmation unless auto-confirm is enabled.
 
+```markdown
+---
+id: excel.monthly_report
+host: Excel
+name: Monthly report
+description: Build a consistent monthly report.
+version: 1.0.0
+enabled: true
+---
+
+# Monthly report
+
+- Inspect the source range first.
+- Preserve the requested column order.
+```
+
+At runtime this becomes one JSON entry with `id`, `name`, `description`, `format: "markdown"`, and the complete body in `instructions`. `common.skills_read` is for explicit inspection/editing, not activation.
+
 ## VBA Workflow
 
 Office VBA support requires Office setting `Trust access to the VBA project object model`.
@@ -286,7 +306,7 @@ Office VBA support requires Office setting `Trust access to the VBA project obje
 - VBA writes retain local backup, expected-hash, ownership, and stale-state checks inside the VBA tools.
 - `Review in Chat` sends loaded VBA modules to chat for review and improvement suggestions.
 
-The model can call host-specific tools such as `excel.vba_read_project`, `word.vba_read_module`, `powerpoint.vba_apply_patch`, `*.vba_replace_text`, `*.vba_replace_module`, `*.vba_list_backups`, and `*.vba_restore_backup`. Prefer `*.vba_apply_patch` for small structured patches and `*.vba_replace_module` only for whole-module replacement.
+The Agent can use read-only VBA inspection tools such as `word.vba_read_module` and `*.vba_list_modules`. Direct VBA mutations remain manual/confirmation-controlled and are not exposed as ordinary Agent calls.
 
 Patch operations support:
 
@@ -304,7 +324,7 @@ In chat, ask for the desired Office action in normal language. For example:
 
 `Создай новый лист Sales Demo, сгенерируй таблицу продаж по месяцам и построй линейный график.`
 
-The model returns one JSON response per turn. The runtime may execute tools such as `excel.add_sheet`, `excel.write_table`, and `excel.add_chart` one at a time after schema, safety, and confirmation checks. Every result is returned to the model as JSON so it can choose the next action.
+The model returns one JSON response per turn. Independent tools such as separate reads may be returned together and execute sequentially after schema, safety, and confirmation checks. Result-dependent operations remain separate model turns. Every result is returned to the model as JSON so it can choose the next action.
 
 Use the Tools tab to create or edit reusable tools:
 

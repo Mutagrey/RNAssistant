@@ -5,12 +5,12 @@ The agent runtime now has one direct flow:
 ```text
 request + full tool/skill context
     -> model JSON
-        -> zero or one local tool
-            -> TOOL_RESULT JSON
+        -> zero or more sequential local tools
+            -> one TOOL_RESULT JSON per call id
                 -> next model turn
 ```
 
-Removed layers include offline mode, automatic mode selection, task routing, phase state, tool catalog slicing, progressive skill activation, plans, observations, format repair, transport fallback, multi-tool batching, automatic tool retry, and separate mutation verification.
+Removed layers include offline mode, automatic mode selection, task routing, phase state, tool catalog slicing, progressive skill activation, plans, observations, format repair, transport fallback, persistent batch orchestration, automatic tool retry, and separate mutation verification.
 
 The remaining runtime responsibilities are intentionally small:
 
@@ -26,7 +26,8 @@ Future changes should prefer extending the editable prompt, skill text, native-l
 Known trade-offs of this simpler design:
 
 - the full enabled tool/skill catalog consumes context and can outgrow a small model window;
-- one tool per turn is predictable but increases model round trips;
+- independent multi-tool calls reduce model round trips, but result-dependent calls still require another model turn;
+- built-in tool schemas are formal but still need richer per-argument descriptions, enums, defaults, and required-field coverage;
 - the selected endpoint must reliably support `json_object`, because invalid JSON is not repaired;
 - without a separate verifier, correctness depends on explicit tool results and tool-internal hash/backup/stale-state checks;
 - attachments use the selected model and fail explicitly when its declared media capabilities are insufficient.

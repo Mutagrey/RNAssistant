@@ -95,7 +95,7 @@ namespace RNAssistant.Office.Services
                 completion =>
                 {
                     var parsed = new AgentResponseParser().Parse(completion == null ? null : completion.Content, new[] { tool });
-                    return parsed.Success && parsed.Response.ToolCall != null
+                    return parsed.Success && parsed.Response.ToolCalls.Count == 1
                         ? null
                         : parsed.Error ?? "Endpoint returned no tool call.";
                 },
@@ -116,7 +116,7 @@ namespace RNAssistant.Office.Services
                 completion =>
                 {
                     var parsed = new AgentResponseParser().Parse(completion == null ? null : completion.Content, new ToolDefinition[0]);
-                    return parsed.Success && parsed.Response.ToolCall == null
+                    return parsed.Success && parsed.Response.ToolCalls.Count == 0
                         ? null
                         : parsed.Error ?? "Endpoint did not consume the tool result.";
                 },

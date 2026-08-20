@@ -20,7 +20,7 @@ namespace RNAssistant.Harness
                 new ToolDefinition[0]);
             AssertTrue(parsed.Success, "final response parses");
             AssertEqual("Готово.", parsed.Response.Message, "final message");
-            AssertTrue(parsed.Response.ToolCall == null, "final has no tool");
+            AssertEqual(0, parsed.Response.ToolCalls.Count, "final has no tool");
         }
 
         private static void SimpleAgentParsesToolCall()
@@ -30,8 +30,46 @@ namespace RNAssistant.Harness
                 "{\"message\":\"Добавляю лист.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
                 new[] { tool });
             AssertTrue(parsed.Success, "tool response parses");
-            AssertEqual("excel.add_sheet", parsed.Response.ToolCall.Name, "tool name");
-            AssertEqual("Report", Convert.ToString(parsed.Response.ToolCall.Arguments["name"]), "tool argument");
+            AssertEqual(1, parsed.Response.ToolCalls.Count, "one tool parsed");
+            AssertEqual("excel.add_sheet", parsed.Response.ToolCalls[0].Name, "tool name");
+            AssertEqual("Report", Convert.ToString(parsed.Response.ToolCalls[0].Arguments["name"]), "tool argument");
+        }
+
+        private static void SimpleAgentParsesMultipleToolCalls()
+        {
+            var tools = new[]
+            {
+                new ToolDefinition { Id = "excel.list_sheets" },
+                new ToolDefinition { Id = "excel.list_charts" }
+            };
+            var parsed = new AgentResponseParser().Parse(
+                "{\"message\":\"Inspecting.\",\"tool_calls\":[" +
+                "{\"id\":\"call_sheets\",\"name\":\"excel.list_sheets\",\"arguments\":{}}," +
+                "{\"id\":\"call_charts\",\"name\":\"excel.list_charts\",\"arguments\":{}}]}",
+                tools);
+            AssertTrue(parsed.Success, "multiple tool calls parse");
+            AssertEqual(2, parsed.Response.ToolCalls.Count, "both tools parsed");
+            AssertEqual("call_charts", parsed.Response.ToolCalls[1].Id, "call order preserved");
+        }
+
+        private static void SimpleAgentRejectsDuplicateToolCallIds()
+        {
+            var parsed = new AgentResponseParser().Parse(
+                "{\"message\":\"Inspecting.\",\"tool_calls\":[" +
+                "{\"id\":\"call_same\",\"name\":\"excel.list_sheets\",\"arguments\":{}}," +
+                "{\"id\":\"call_same\",\"name\":\"excel.list_sheets\",\"arguments\":{}}]}",
+                new[] { new ToolDefinition { Id = "excel.list_sheets" } });
+            AssertTrue(!parsed.Success, "duplicate call ids rejected");
+            AssertContains(parsed.Error, "unique", "duplicate id diagnostic");
+        }
+
+        private static void SimpleAgentRequiresExactToolNames()
+        {
+            var parsed = new AgentResponseParser().Parse(
+                "{\"message\":\"Working.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"Excel.List_Sheets\",\"arguments\":{}}]}",
+                new[] { new ToolDefinition { Id = "excel.list_sheets" } });
+            AssertTrue(!parsed.Success, "case aliases are rejected");
+            AssertContains(parsed.Error, "Unknown tool", "exact name diagnostic");
         }
 
         private static void SimpleAgentRejectsMissingToolCallId()
@@ -66,6 +104,8 @@ namespace RNAssistant.Harness
             AssertContains(prompt, "excel.add_sheet", "first tool present");
             AssertContains(prompt, "excel.read_range", "second tool present");
             AssertContains(prompt, "TEST_SKILL_SENTINEL", "full skill present");
+            AssertContains(prompt, "\"format\":\"markdown\"", "skill format is explicit");
+            AssertContains(prompt, "several tool_calls", "multi-tool guidance present");
             AssertTrue(prompt.IndexOf("ROUTE:", StringComparison.OrdinalIgnoreCase) < 0, "no route wrapper");
             AssertTrue(prompt.IndexOf("NEXT_ACTION_POLICY", StringComparison.OrdinalIgnoreCase) < 0, "no action heuristic");
         }
@@ -151,13 +191,51 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void SimpleAgentExecutesMultipleToolsSequentially()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var responses = new Queue<string>(new[]
+                {
+                    "{\"message\":\"Создаю два независимых листа.\",\"tool_calls\":[" +
+                    "{\"id\":\"call_first\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"First\"}}," +
+                    "{\"id\":\"call_second\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Second\"}}]}",
+                    "{\"message\":\"Оба листа созданы.\",\"tool_calls\":[]}"
+                });
+                IReadOnlyList<ChatMessage> secondTurn = null;
+                var callCount = 0;
+                LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
+                {
+                    callCount += 1;
+                    if (callCount == 2) secondTurn = messages.ToList();
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+                var result = new AgentRunService(adapter, executor, completion).ExecuteAsync(
+                    "Создай листы First и Second.", NewSession(adapter), NewContext(adapter),
+                    new AppSettings { AutoConfirmToolActions = true, MaxAgentIterations = 4 },
+                    adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
+
+                AssertEqual("Оба листа созданы.", result.AssistantText, "multi-tool final response");
+                AssertTrue(adapter.HasSheet("First") && adapter.HasSheet("Second"), "both tools executed");
+                AssertEqual("excel.add_sheet", adapter.Executed[adapter.Executed.Count - 2].ToolId, "first execution recorded");
+                AssertEqual("First", Convert.ToString(adapter.Executed[adapter.Executed.Count - 2].Arguments["name"]), "first call order");
+                AssertEqual("Second", Convert.ToString(adapter.Executed[adapter.Executed.Count - 1].Arguments["name"]), "second call order");
+                var replay = FlattenSimple(secondTurn);
+                AssertEqual(2, replay.Split(new[] { "TOOL_RESULT:" }, StringSplitOptions.None).Length - 1, "two results replayed");
+                AssertContains(replay, "call_first", "first call id replayed");
+                AssertContains(replay, "call_second", "second call id replayed");
+            });
+        }
+
         private static void SimpleAgentConfirmationReplaysOnlyFinalResult()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Сохраняю skill.\",\"tool_calls\":[{\"id\":\"call_skill\",\"name\":\"common.skills_save\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
+                    "{\"message\":\"Сохраняю skill.\",\"tool_calls\":[" +
+                    "{\"id\":\"call_skill\",\"name\":\"common.skills_save\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}," +
+                    "{\"id\":\"call_after\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"MustWait\"}}]}",
                     "{\"message\":\"Skill сохранён.\",\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
@@ -179,6 +257,10 @@ namespace RNAssistant.Harness
                 AssertTrue(!session.Messages.Any(message => message.ProtocolMessage &&
                     (message.Content ?? string.Empty).IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) >= 0),
                     "waiting result not replayed");
+                AssertTrue(!adapter.HasSheet("MustWait"), "calls after confirmation are not executed");
+                AssertTrue(!session.Messages.Any(message => message.ProtocolMessage &&
+                    (message.Content ?? string.Empty).IndexOf("call_after", StringComparison.OrdinalIgnoreCase) >= 0),
+                    "calls after confirmation are not retained");
                 AssertEqual("call_skill", session.Messages.Last(message => message.Activity != null).Activity.ToolCallId,
                     "pending activity keeps tool call id");
                 foreach (var message in session.Messages)
