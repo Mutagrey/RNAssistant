@@ -126,10 +126,6 @@ namespace RNAssistant.Core.Storage
             {
                 settings.ContextWindowOverrideTokens = 0;
             }
-            if (settings.VbaContextCharLimit <= 0)
-            {
-                settings.VbaContextCharLimit = defaults.VbaContextCharLimit;
-            }
             if (settings.MaxAgentIterations <= 0)
             {
                 settings.MaxAgentIterations = defaults.MaxAgentIterations;

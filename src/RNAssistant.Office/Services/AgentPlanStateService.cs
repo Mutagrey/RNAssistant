@@ -35,37 +35,18 @@ namespace RNAssistant.Office.Services
                 {
                     Kind = "plan",
                     Title = state.WorkingGoal,
-                    Subtitle = response.DecisionSummary,
+                    Subtitle = "План задачи",
                     Status = "planned"
                 };
             }
             else
             {
-                updatedExisting = true;
-                state.PlanDeclared = true;
-                state.WorkingGoal = FirstNonEmpty(response.Goal, state.WorkingGoal, state.PlanActivity.Title, response.DecisionSummary, "Рабочий план");
-                state.Plan = Reconcile(state.Plan, response.Plan);
-                state.PlanActivity.Title = state.WorkingGoal;
-                state.PlanActivity.Subtitle = FirstNonEmpty(response.DecisionSummary, state.PlanActivity.Subtitle);
+                return state.PlanActivity;
             }
 
             SyncActivitySteps(state);
             UpdatePlanActivity(state);
             return state.PlanActivity;
-        }
-
-        public static ChatActivity CreateUpdateActivity(AgentPlannerResponse response, ChatActivity plan)
-        {
-            return new ChatActivity
-            {
-                Kind = "diagnostic",
-                Title = FirstNonEmpty(response == null ? null : response.DecisionSummary, "План обновлён"),
-                Subtitle = "План обновлён",
-                Status = "completed",
-                ExecutionStatus = "plan_updated",
-                ResultMessage = ProgressText(plan),
-                DataJson = plan == null ? null : plan.DataJson
-            };
         }
 
         public static ChatActivity ApplyTerminalDecision(AgentRunState state, string kind)
@@ -265,45 +246,6 @@ namespace RNAssistant.Office.Services
                     Status = NormalizeStepStatus(item.Status)
                 })
                 .ToList();
-        }
-
-        private static List<AgentPlanStep> Reconcile(
-            IEnumerable<AgentPlanStep> existing,
-            IEnumerable<AgentPlanStep> declared)
-        {
-            var oldSteps = (existing ?? new AgentPlanStep[0]).Where(item => item != null).ToList();
-            var nextSteps = (declared ?? new AgentPlanStep[0]).Where(item => item != null).ToList();
-            if (nextSteps.Count == 0)
-            {
-                return CloneSteps(oldSteps);
-            }
-
-            var byId = oldSteps
-                .Where(item => !string.IsNullOrWhiteSpace(item.Id))
-                .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-            var result = new List<AgentPlanStep>();
-            var declaredIds = new HashSet<string>(nextSteps.Select(item => item.Id ?? string.Empty), StringComparer.OrdinalIgnoreCase);
-            foreach (var old in oldSteps.Where(item =>
-                string.Equals(NormalizeStepStatus(item.Status), "completed", StringComparison.OrdinalIgnoreCase) &&
-                !declaredIds.Contains(item.Id ?? string.Empty)))
-            {
-                result.Add(CloneStep(old));
-            }
-            foreach (var step in nextSteps)
-            {
-                AgentPlanStep previous;
-                byId.TryGetValue(step.Id ?? string.Empty, out previous);
-                var status = previous == null ? "pending" : NormalizeStepStatus(previous.Status);
-                if (status == "failed" || status == "cancelled") status = "pending";
-                result.Add(new AgentPlanStep
-                {
-                    Id = step.Id,
-                    Title = step.Title,
-                    Status = status
-                });
-            }
-            return result;
         }
 
         private static List<AgentPlanStep> CloneSteps(IEnumerable<AgentPlanStep> source)

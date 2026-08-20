@@ -525,9 +525,6 @@ function renderSendControls() {
   if ($("addSelectionContextButton")) {
     $("addSelectionContextButton").disabled = isSending || isEditing || state.bridgeUnavailable || !currentDocumentAvailable;
   }
-  if ($("toggleVbaContextButton")) {
-    $("toggleVbaContextButton").disabled = isSending || isEditing || state.bridgeUnavailable || !currentDocumentAvailable;
-  }
   if ($("toggleHtmlModeButton")) {
     $("toggleHtmlModeButton").disabled = isSending || isEditing || state.bridgeUnavailable || !state.activeChatId;
   }

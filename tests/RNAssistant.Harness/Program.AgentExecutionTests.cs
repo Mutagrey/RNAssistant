@@ -72,7 +72,7 @@ namespace RNAssistant.Harness
                 AssertEqual(0, adapter.DocumentSnapshotReadCount, "document snapshot reads");
                 AssertEqual(0, adapter.Executed.Count, "executed tools");
                 AssertContains(FlattenMessages(calls[0]), "requiresTool: false", "answer route");
-                AssertTrue(FlattenMessages(calls[0]).IndexOf("excel.read_range", StringComparison.OrdinalIgnoreCase) < 0, "tool catalog is empty");
+                AssertContains(FlattenMessages(calls[0]), "excel.read_range", "model can choose a tool when the request actually needs one");
             });
         }
 
@@ -96,7 +96,7 @@ namespace RNAssistant.Harness
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
-                AssertContains(FlattenMessages(buildCalls[0]), "taskType: content", "build routes to Office content");
+                AssertContains(FlattenMessages(buildCalls[0]), "mode: agent", "runtime uses one language-neutral agent route");
                 AssertTrue(FlattenMessages(buildCalls[0]).IndexOf("HTML MODE IS ENABLED", StringComparison.OrdinalIgnoreCase) < 0, "build does not match ui substring");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "build report tool");
             });
@@ -114,7 +114,7 @@ namespace RNAssistant.Harness
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
-                AssertContains(FlattenMessages(calls[0]), "requiresTool: false", "clear/add substrings do not route as actions");
+                AssertContains(FlattenMessages(calls[0]), "requiresTool: false", "runtime does not classify substrings");
                 AssertEqual(0, adapter.Executed.Count, "false positive route executes no tool");
             });
         }
@@ -139,7 +139,7 @@ namespace RNAssistant.Harness
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
-                AssertContains(FlattenMessages(calls[0]), "requiresTool: true", "current document question requires read");
+                AssertContains(FlattenMessages(calls[0]), "requiresTool: false", "model chooses the read without a keyword route");
                 AssertEqual(1, adapter.Executed.Count, "current document read executed");
                 AssertEqual("excel.get_context", adapter.Executed[0].ToolId, "current document read tool");
                 AssertContains(result.AssistantText, "данные", "current document final answer");
@@ -278,9 +278,7 @@ namespace RNAssistant.Harness
                     adapter,
                     executor,
                     calls,
-                    "Sure, I can do that.",
-                    AgentBlock(Command("excel.add_sheet", "name", "Report")),
-                    "Done.");
+                    FinalBlock("Sure, I can do that."));
                 var session = NewSession(adapter);
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "Earlier tool context" });
                 session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Earlier tool answer" });
@@ -300,13 +298,11 @@ namespace RNAssistant.Harness
                     new[] { attachment },
                     null).GetAwaiter().GetResult();
 
-                AssertEqual("Done.", result.AssistantText, "assistant text");
-                AssertEqual(3, calls.Count, "llm call count");
-                AssertTrue(ContainsMessage(calls[1], "requires a local Office tool"), "forced follow-up prompt");
-                AssertTrue(ContainsMessage(calls[1], "Earlier tool context"), "forced follow-up keeps history");
-                AssertEqual(1, calls[1].Sum(message => message.Attachments.Count(item => item.FileName == "instruction.txt")), "forced follow-up keeps current attachment");
-                AssertEqual(1, adapter.Executed.Count, "adapter execution count");
-                AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "executed tool");
+                AssertEqual("Sure, I can do that.", result.AssistantText, "model terminal response");
+                AssertEqual(1, calls.Count, "runtime does not classify action words");
+                AssertTrue(ContainsMessage(calls[0], "Earlier tool context"), "request keeps history");
+                AssertEqual(1, calls[0].Sum(message => message.Attachments.Count(item => item.FileName == "instruction.txt")), "request keeps current attachment");
+                AssertEqual(0, adapter.Executed.Count, "no tool was selected");
             });
         }
 
@@ -406,9 +402,7 @@ namespace RNAssistant.Harness
                     executor,
                     calls,
                     RawResponse("{broken"),
-                    FinalBlock("I will do it without a tool."),
-                    AgentBlock(Command("excel.add_sheet", "name", "Report")),
-                    FinalBlock("Done."));
+                    FinalBlock("I will do it without a tool."));
 
                 var result = service.ExecuteAsync(
                     "Create a new sheet named Report.",
@@ -418,12 +412,10 @@ namespace RNAssistant.Harness
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
-                AssertEqual(4, calls.Count, "repair then correction call count");
+                AssertEqual(2, calls.Count, "format repair call count");
                 AssertTrue(ContainsMessage(calls[1], "Correct only the reported AgentDecision v1 validation error"), "format repair requested");
-                AssertTrue(ContainsMessage(calls[2], "requires a local Office tool"), "tool correction requested after repair");
-                AssertEqual(1, adapter.Executed.Count, "tool executed after repair and correction");
-                AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "corrected tool id");
-                AssertEqual("Done.", result.AssistantText, "final answer");
+                AssertEqual(0, adapter.Executed.Count, "valid repaired terminal decision executes no tool");
+                AssertEqual("I will do it without a tool.", result.AssistantText, "repaired final answer");
             });
         }
 
@@ -437,9 +429,7 @@ namespace RNAssistant.Harness
                     adapter,
                     executor,
                     calls,
-                    FinalBlock("I can do that without tools."),
-                    RawResponse("invalid correction"),
-                    RawResponse("invalid correction repair"));
+                    FinalBlock("I can do that without tools."));
 
                 var result = service.ExecuteAsync(
                     "Create a new sheet named Report.",
@@ -449,10 +439,10 @@ namespace RNAssistant.Harness
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
-                AssertEqual(3, calls.Count, "invalid correction repair call count");
-                AssertEqual(0, adapter.Executed.Count, "invalid correction executes no tools");
-                AssertContains(result.AssistantText, "not_json_object", "invalid correction result");
-                AssertEqual("Planner correction invalid", session.Messages.Last().Activity.Title, "correction diagnostic");
+                AssertEqual(1, calls.Count, "valid final needs no correction");
+                AssertEqual(0, adapter.Executed.Count, "terminal decision executes no tools");
+                AssertEqual("I can do that without tools.", result.AssistantText, "terminal response");
+                AssertTrue(session.Messages.Last().Activity == null, "no correction diagnostic");
             });
         }
 
@@ -465,8 +455,7 @@ namespace RNAssistant.Harness
                     adapter,
                     executor,
                     null,
-                    FinalBlock("No tool needed."),
-                    FinalBlock("Still no tool needed."));
+                    FinalBlock("No tool needed."));
 
                 var result = service.ExecuteAsync(
                     "Create a new sheet named Report.",
@@ -477,9 +466,8 @@ namespace RNAssistant.Harness
                     null).GetAwaiter().GetResult();
 
                 AssertEqual(0, adapter.Executed.Count, "repeated final executes no tools");
-                AssertContains(result.AssistantText, "Не удалось подобрать безопасное действие", "localized required tool quality error");
-                AssertEqual("Действие Office не определено", session.Messages.Last().Activity.Title, "quality diagnostic");
-                AssertEqual("required_tool_decision", session.Messages.Last().Activity.ExecutionStatus, "quality diagnostic code");
+                AssertEqual("No tool needed.", result.AssistantText, "model owns answer-versus-action semantics");
+                AssertTrue(session.Messages.Last().Activity == null, "no lexical routing diagnostic");
             });
         }
 
@@ -492,10 +480,16 @@ namespace RNAssistant.Harness
                     adapter,
                     executor,
                     calls,
-                    "Sure, I can do that.",
-                    AgentBlock(Command("excel.add_sheet", "name", "Report")),
-                    "Done.");
+                    FinalBlock("Not finished."),
+                    AgentBlock(Command(
+                        "common.html_workspace_upsert_file",
+                        "path", "index.html",
+                        "kind", "html",
+                        "content", "<main>Ready</main>",
+                        "setActive", true)),
+                    FinalBlock("Done."));
                 var session = NewSession(adapter);
+                session.HtmlModeEnabled = true;
                 var settings = new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false };
                 settings.AgentPrompts.ForceToolUsePrompt = "CUSTOM_FORCE_TOOL_PROMPT";
 
@@ -508,7 +502,9 @@ namespace RNAssistant.Harness
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("Done.", result.AssistantText, "assistant text");
+                AssertEqual(3, calls.Count, "explicit workspace requirement triggers one correction");
                 AssertContains(FlattenMessages(calls[1]), "CUSTOM_FORCE_TOOL_PROMPT", "custom force tool prompt");
+                AssertTrue(session.HtmlWorkspace.Files.Any(file => file.Path == "index.html"), "corrected tool executes");
             });
         }
 
@@ -580,16 +576,16 @@ namespace RNAssistant.Harness
             revised.Plan.Add(new AgentPlanStep { Id = "publish", Title = "Опубликовать отчёт", Status = "pending" });
             bool updatedExisting;
             AgentPlanStateService.ApplyDecision(session, state, revised, out updatedExisting);
-            AssertTrue(updatedExisting, "repeated plan updates existing activity");
-            AssertEqual(2, state.Plan.Count, "unfinished steps replaced by revised plan");
+            AssertTrue(!updatedExisting, "repeated plan cannot update existing activity");
+            AssertEqual(2, state.Plan.Count, "initial plan steps remain fixed");
             AssertEqual("completed", state.Plan[0].Status, "completed stable id preserved");
-            AssertEqual("pending", state.Plan[1].Status, "new step pending");
-            AssertEqual("Подготовить и опубликовать отчёт", plan.Title, "goal updated visibly");
+            AssertEqual("waiting", state.Plan[1].Status, "existing runtime status is preserved");
+            AssertEqual("Подготовить отчёт", plan.Title, "initial goal remains fixed");
 
             AgentPlanStateService.ApplyTerminalDecision(state, AgentResponseKinds.Final);
             AssertEqual("incomplete", plan.Status, "terminal final does not invent completion evidence");
             AssertEqual("completed", plan.Children[0].Status, "verified completed step stays completed");
-            AssertEqual("pending", plan.Children[1].Status, "unexecuted step remains pending on final");
+            AssertEqual("waiting", plan.Children[1].Status, "unfinished step remains waiting on final");
             AssertEqual("terminal_with_pending_steps", plan.ExecutionStatus, "incomplete terminal plan is explicit");
 
             var noPlanState = new AgentRunState();
@@ -657,7 +653,7 @@ namespace RNAssistant.Harness
                 AssertEqual(1, session.Messages.Count(message => message.Activity != null && message.Activity.Kind == "plan"), "continued run reuses existing plan");
                 AssertEqual("completed", plan.Children[0].Status, "continued run advances existing step");
                 AssertContains(FlattenMessages(calls[0]), "kind=plan is unavailable", "continued run starts with next action instead of a new plan");
-                AssertContains(FlattenMessages(calls[0]), "USER_FOLLOW_UP", "continued run retains follow-up marker");
+                AssertContains(FlattenMessages(calls[0]), "USER_MESSAGE", "continued run retains current-message marker");
             });
         }
 
@@ -694,11 +690,11 @@ namespace RNAssistant.Harness
                 AssertTrue(!session.Messages.Any(message => message.Activity != null && message.Activity.ExecutionStatus == "plan_updated"), "rephrased plan is not shown as an update");
                 AssertTrue(!session.Messages.Any(message => message.Activity != null && message.Activity.ExecutionStatus == "repeated_plan_no_progress"), "single violation is recovered locally");
                 AssertContains(FlattenMessages(calls[1]), "kind=plan is unavailable", "next turn explicitly forbids another plan");
-                AssertContains(FlattenMessages(calls[2]), "Do not return kind=plan or rephrase the plan", "ignored schema violation receives bounded correction");
+                AssertContains(FlattenMessages(calls[2]), "Keep the current plan and choose", "ignored schema violation receives bounded correction");
             });
         }
 
-        private static void ChatRepeatedPlanRevisesRemainingWork()
+        private static void ChatRepeatedPlanAfterObservationIsRejected()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -725,19 +721,132 @@ namespace RNAssistant.Harness
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
-                AssertEqual("Книга проверена.", result.AssistantText, "replanned run final response");
-                AssertEqual(1, adapter.Executed.Count, "replanned run executes intended tool once");
+                AssertEqual("Книга проверена.", result.AssistantText, "fixed-plan run final response");
+                AssertEqual(1, adapter.Executed.Count, "fixed-plan run executes intended tool once");
                 var plans = session.Messages.Where(message => message.Activity != null && message.Activity.Kind == "plan").ToList();
-                AssertEqual(1, plans.Count, "canonical plan activity is not duplicated");
-                AssertEqual("Проверить и описать текущую книгу", plans[0].Activity.Title, "latest goal remains visible");
-                AssertEqual("incomplete", plans[0].Activity.Status, "final answer does not auto-complete remaining prose step");
+                AssertEqual(1, plans.Count, "canonical plan activity remains single");
+                AssertEqual("Проверить текущую книгу", plans[0].Activity.Title, "initial goal remains fixed");
+                AssertEqual("completed", plans[0].Activity.Status, "executed initial plan completes");
                 AssertEqual("completed", plans[0].Activity.Children[0].Status, "executed step remains completed");
-                AssertEqual("pending", plans[0].Activity.Children[1].Status, "remaining plan step stays pending");
-                AssertTrue(session.Messages.Any(message => message.Activity != null && message.Activity.ExecutionStatus == "plan_updated"), "plan update is visible in transcript");
-                AssertEqual("Проверить и описать текущую книгу", session.Messages.Last().Goal, "final message retains goal");
-                AssertContains(FlattenMessages(calls[2]), "material revision justified by a new runtime observation", "new observation permits one revised plan");
-                AssertTrue(!session.Messages.Any(message => message.Activity != null && message.Activity.ExecutionStatus == "repeated_plan_no_progress"), "observation-backed revision does not fail run");
+                AssertTrue(!session.Messages.Any(message => message.Activity != null && message.Activity.ExecutionStatus == "plan_updated"), "replan is not persisted");
+                AssertEqual("Проверить текущую книгу", session.Messages.Last().Goal, "final message retains initial goal");
+                AssertContains(FlattenMessages(calls[2]), "unavailable_for_this_run", "new observation does not reopen planning");
+                AssertContains(FlattenMessages(calls[3]), "plan_not_allowed", "replan receives bounded format repair");
             });
+        }
+
+        private static void ChatUnchangedPlanAfterObservationIsIgnored()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var plan = "{\"protocolVersion\":1,\"kind\":\"plan\",\"decisionSummary\":\"Готовлю отчёт.\"," +
+                    "\"goal\":\"Создать лист отчёта\",\"plan\":[{\"id\":\"inspect\",\"title\":\"Проверить книгу\"},{\"id\":\"create\",\"title\":\"Создать лист\"}],\"tool\":null,\"message\":null}";
+                var repeated = "{\"protocolVersion\":1,\"kind\":\"plan\",\"decisionSummary\":\"Продолжаю по плану.\"," +
+                    "\"goal\":\"Создать лист отчёта\",\"plan\":[{\"id\":\"inspect\",\"title\":\"Проверить книгу ещё раз\"},{\"id\":\"create\",\"title\":\"Создать лист\"}],\"tool\":null,\"message\":null}";
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    RawResponse(plan),
+                    AgentBlock(Command("excel.get_context")),
+                    RawResponse(repeated),
+                    AgentBlock(Command("excel.add_sheet", "name", "Report")),
+                    FinalBlock("Лист создан."));
+                var session = NewSession(adapter);
+
+                var result = service.ExecuteAsync(
+                    "Создай новый лист отчёта.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings
+                    {
+                        AutoConfirmToolActions = true,
+                        RequireVerificationForMutations = false,
+                        FallbackToJsonObject = false
+                    },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Лист создан.", result.AssistantText, "unchanged replan final response");
+                AssertEqual(2, adapter.Executed.Count, "unchanged replan does not consume an Office action");
+                AssertEqual("excel.get_context", adapter.Executed[0].ToolId, "initial inspection executes");
+                AssertEqual("excel.add_sheet", adapter.Executed[1].ToolId, "mutation follows unchanged plan");
+                AssertEqual(1, session.Messages.Count(message => message.Activity != null && message.Activity.Kind == "plan"), "one canonical plan remains visible");
+                AssertTrue(!session.Messages.Any(message => message.Activity != null && message.Activity.ExecutionStatus == "plan_updated"), "title-only replan is not persisted");
+                AssertContains(FlattenMessages(calls[2]), "unavailable_for_this_run", "plan remains unavailable after observation");
+                AssertContains(FlattenMessages(calls[3]), "plan_not_allowed", "unchanged plan is repaired into an action");
+            });
+        }
+
+        private static void ChatDuplicateSuccessfulReadIsCorrected()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    AgentBlock(Command("excel.get_context")),
+                    AgentBlock(Command("excel.get_context")),
+                    AgentBlock(Command("excel.add_sheet", "name", "Report")),
+                    FinalBlock("Лист создан."));
+
+                var result = service.ExecuteAsync(
+                    "Создай новый лист отчёта.",
+                    NewSession(adapter),
+                    NewContext(adapter),
+                    new AppSettings
+                    {
+                        AutoConfirmToolActions = true,
+                        RequireVerificationForMutations = false,
+                        FallbackToJsonObject = false
+                    },
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Лист создан.", result.AssistantText, "duplicate read recovery final response");
+                AssertEqual(2, adapter.Executed.Count, "duplicate successful read is not executed twice");
+                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.get_context"), "workbook context executes once");
+                AssertEqual("excel.add_sheet", adapter.Executed[1].ToolId, "agent advances to mutation");
+                AssertContains(FlattenMessages(calls[1]), "excel.get_context succeeded", "successful read is retained as an observation");
+                AssertTrue(!PlannerAvailableTools(FlattenMessages(calls[1])).Contains("excel.get_context"), "completed parameterless read is removed from available tools");
+            });
+        }
+
+        private static void CompletedSummaryReadLeavesAvailableTools()
+        {
+            var adapter = FakeOfficeAdapter.ForHost("Excel");
+            var tools = adapter.GetBuiltInTools().ToList();
+            var summary = tools.First(tool => tool.Id == "excel.workbook_summary");
+            var mutation = tools.First(tool => tool.Id == "excel.add_sheet");
+            var guard = new AgentDecisionProgressGuard();
+
+            AssertTrue(guard.PlanDecisionAllowed(new AgentRunState()), "plan is available before the first action");
+            AssertTrue(!guard.PlanDecisionAllowed(new AgentRunState { TotalToolSteps = 1 }), "plan is unavailable after an action");
+
+            guard.RecordToolResult(
+                new ToolCommand { ToolId = summary.Id },
+                summary,
+                ToolResult.Ok("summary"),
+                tools);
+            AssertTrue(!guard.FilterAvailableTools(tools).Any(tool => tool.Id == summary.Id), "completed workbook summary is hidden");
+
+            guard.RecordToolResult(
+                new ToolCommand { ToolId = mutation.Id },
+                mutation,
+                ToolResult.Ok("sheet added"),
+                tools);
+            AssertTrue(guard.FilterAvailableTools(tools).Any(tool => tool.Id == summary.Id), "mutation invalidates old workbook summary");
+        }
+
+        private static string PlannerAvailableTools(string prompt)
+        {
+            var start = (prompt ?? string.Empty).IndexOf("AVAILABLE_TOOLS:", StringComparison.Ordinal);
+            var end = (prompt ?? string.Empty).IndexOf("OBSERVATIONS:", start < 0 ? 0 : start, StringComparison.Ordinal);
+            if (start < 0) return string.Empty;
+            return end > start ? prompt.Substring(start, end - start) : prompt.Substring(start);
         }
     }
 }

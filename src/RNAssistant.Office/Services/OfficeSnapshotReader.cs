@@ -1,5 +1,4 @@
 using System;
-using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Services
 {
@@ -12,7 +11,7 @@ namespace RNAssistant.Office.Services
             _adapter = adapter;
         }
 
-        public OfficeSnapshot Read(AppSettings settings, string taskText)
+        public OfficeSnapshot Read()
         {
             var snapshot = new OfficeSnapshot
             {
@@ -40,40 +39,7 @@ namespace RNAssistant.Office.Services
                 }
             }
 
-            var vba = ReadVba(settings, taskText);
-            if (!string.IsNullOrWhiteSpace(vba))
-            {
-                snapshot.SnapshotText = "Current VBA project snapshot:\n" + vba;
-            }
             return snapshot;
-        }
-
-        public static bool IsVbaTask(string text)
-        {
-            var value = text ?? string.Empty;
-            return value.IndexOf("vba", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                value.IndexOf("macro", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                value.IndexOf("макрос", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                value.IndexOf("макро", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                value.IndexOf("visual basic", StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        private string ReadVba(AppSettings settings, string taskText)
-        {
-            settings = settings ?? new AppSettings();
-            if (!settings.IncludeVbaContext && !IsVbaTask(taskText))
-            {
-                return string.Empty;
-            }
-
-            try
-            {
-                return _adapter.GetVbaSnapshot(Math.Max(1000, settings.VbaContextCharLimit));
-            }
-            catch (Exception ex)
-            {
-                return "VBA project snapshot could not be read: " + ex.Message;
-            }
         }
 
         private static string SafeRead(Func<string> read)

@@ -93,6 +93,7 @@ namespace RNAssistant.Office.Services
             if (id == "common.tool_authoring") skill.ToolCapabilities.Add("common.tools_");
             if (id == "common.prompt_authoring") skill.ToolCapabilities.Add("common.prompts_");
             if (id == "common.vba_code_editing" || id == "common.vba_tool_authoring") skill.ToolCapabilities.Add("vba");
+            if (id == "common.vba_code_editing") skill.ToolCapabilities.Add("run_macro");
             if (id == "common.vba_tool_authoring") skill.Requires.Add("common.tool_authoring");
             if (id == "common.text_search_replace")
             {

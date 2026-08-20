@@ -22,7 +22,16 @@ namespace RNAssistant.Harness
                     Host = "Excel",
                     Description = "Reporting scenario guidance.",
                     BodyMarkdown = "# Reporting Guard\n\nAlways verify generated tables and charts before final answer.",
-                    Enabled = true
+                    Enabled = true,
+                    BuiltIn = true,
+                    ToolCapabilities = new List<string>
+                    {
+                        "excel.add_sheet",
+                        "excel.write_table",
+                        "excel.add_chart",
+                        "excel.list_sheets",
+                        "excel.list_charts"
+                    }
                 };
                 var llm = new ScenarioLlm()
                     .Add(
@@ -188,6 +197,9 @@ namespace RNAssistant.Harness
                 var tools = new List<ToolDefinition>(adapter.GetBuiltInTools());
                 var llm = new ScenarioLlm()
                     .Add(
+                        AgentBlock(Command("common.skills_load", "ids", new[] { "common.vba_code_editing" })),
+                        "common.vba_code_editing")
+                    .Add(
                         AgentBlock(Command("word.vba_read_module", "moduleName", "Module1")),
                         "word.vba_read_module")
                     .Add(
@@ -220,7 +232,8 @@ namespace RNAssistant.Harness
                     {
                         pendingCommand = CloneCommandForTest(command);
                         return "pending-1";
-                    }).GetAwaiter().GetResult();
+                    },
+                    BuiltInSkillProvider.GetSkills(adapter)).GetAwaiter().GetResult();
 
                 AssertContains(first.AssistantText, "требуется подтверждение", "first assistant text");
                 AssertTrue(pendingCommand != null, "pending command captured");
@@ -237,7 +250,9 @@ namespace RNAssistant.Harness
                     settings,
                     tools,
                     attachments,
-                    null).GetAwaiter().GetResult();
+                    null,
+                    null,
+                    BuiltInSkillProvider.GetSkills(adapter)).GetAwaiter().GetResult();
 
                 AssertEqual("Confirmed and verified.", continued.AssistantText, "continued assistant text");
                 AssertContains(adapter.GetVbaModuleCode("Module1"), "ChangedMacro", "module changed after confirmation");

@@ -241,7 +241,7 @@ namespace RNAssistant.Harness
                     delegate(AppSettings settings, IEnumerable<ChatMessage> messages, LlmRequestOptions requestOptions, Action<LlmStreamUpdate> streamProgress, CancellationToken cancellationToken)
                     {
                         calls += 1;
-                        return Task.FromResult(new LlmCompletionResult { Content = FinalBlock("unexpected") });
+                        return Task.FromResult(new LlmCompletionResult { Content = FinalBlock("No local action is available.") });
                     },
                     false);
                 var service = new ChatCompletionService(runner);
@@ -254,13 +254,11 @@ namespace RNAssistant.Harness
                     new List<ToolDefinition>(),
                     null).GetAwaiter().GetResult();
 
-                AssertEqual(0, calls, "llm not called");
-                AssertContains(result.AssistantText, "Нет доступного", "local diagnostic");
-                AssertTrue(session.Messages.Any(message =>
+                AssertEqual(1, calls, "model decides whether the request can be answered without tools");
+                AssertEqual("No local action is available.", result.AssistantText, "model terminal response");
+                AssertTrue(!session.Messages.Any(message =>
                     message.Activity != null &&
-                    message.Activity.ExecutionStatus == "no_available_tools"), "diagnostic activity");
-                var diagnostic = session.Messages.Last(message => message.Activity != null).Activity;
-                AssertContains(diagnostic.DataJson, "excludedCounts", "tool diagnostics");
+                    message.Activity.ExecutionStatus == "no_available_tools"), "generic agent route is not pre-classified as a tool task");
             });
         }
 
@@ -289,16 +287,14 @@ namespace RNAssistant.Harness
                     App = "Excel",
                     TaskType = "content",
                     Phase = AgentPhases.Mutation,
-                    RiskAllowed = 2,
                     RequiresTool = true
                 },
-                tools,
-                new List<AgentObservation>());
+                tools);
 
             AssertEqual(24, slice.Tools.Count, "balanced slice size");
             AssertTrue(slice.Tools.Any(tool => tool.Id == "excel.read_range"), "read tool retained");
             AssertTrue(slice.Tools.Any(tool => tool.Id == "excel.get_context"), "context tool retained");
-            AssertTrue(slice.Tools.Any(tool => tool.Id == "excel.confirm_mutation"), "confirmation-only mutation retained");
+            AssertTrue(slice.Excluded.Any(item => item.ToolId == "excel.confirm_mutation" && item.Reason == "selection_limit"), "overflow uses a neutral selection limit");
             AssertTrue(slice.Excluded.Any(item => item.ToolId == "word.read_document" && item.Reason == "wrong_host"), "wrong host reason");
             AssertTrue(slice.Excluded.Any(item => item.ToolId == "excel.unavailable" && item.Reason == "capability_unavailable"), "capability reason");
             AssertTrue(slice.Excluded.Any(item => item.Reason == "selection_limit"), "selection limit reason");
@@ -309,11 +305,9 @@ namespace RNAssistant.Harness
                     App = "Excel",
                     TaskType = "content",
                     Phase = AgentPhases.Mutation,
-                    RiskAllowed = 2,
                     RequiresTool = true
                 },
                 tools,
-                new List<AgentObservation>(),
                 8);
             AssertEqual(8, compact.Tools.Count, "compact slice size");
             AssertTrue(compact.Tools.Any(tool => !tool.MutatesDocument), "compact slice keeps inspection");
@@ -325,11 +319,9 @@ namespace RNAssistant.Harness
                     App = "Excel",
                     TaskType = "content",
                     Phase = AgentPhases.Mutation,
-                    RiskAllowed = 2,
                     RequiresTool = true
                 },
                 tools,
-                new List<AgentObservation>(),
                 100);
             AssertEqual(73, expanded.Tools.Count, "tool slice has no arbitrary 64 item cap");
 
@@ -343,13 +335,10 @@ namespace RNAssistant.Harness
                     App = "Excel",
                     TaskType = "content",
                     Phase = AgentPhases.Mutation,
-                    RiskAllowed = 2,
                     RequiresTool = true
                 },
                 tools,
-                new List<AgentObservation>(),
                 24,
-                false,
                 new AppSettings { ContextWindowOverrideTokens = 4096 });
             AssertTrue(budgeted.Tools.Count < 24, "large schemas are trimmed by request budget");
             AssertTrue(budgeted.Excluded.Any(item => item.Reason == "request_token_limit"), "schema budget exclusion reason");
@@ -357,12 +346,12 @@ namespace RNAssistant.Harness
 
         private static void ConversationHistoryAvoidsOfficeTools()
         {
-            var route = new OfficeIntentRouter().Route(
-                "Что было в первом сообщении нашей переписки?",
+            var route = new AgentRouteResolver().Route(
                 new OfficeSnapshot { Host = "Excel" },
                 new ChatSession());
-            AssertEqual("conversation_history", route.TaskType, "conversation route");
+            AssertEqual("agent", route.TaskType, "runtime does not classify natural language");
             AssertTrue(!route.RequiresTool, "conversation history does not require Office tool");
+            AssertEqual("model_decision", route.DecisionReason, "model owns semantic decision");
             AssertEqual(ChatModes.Agent, new ChatExecutionModeSelector().Select(
                 "Сделай саммари нашего чата и диалога",
                 new ChatSession { Mode = ChatModes.Agent }), "agent answers conversation history without Office tools");
@@ -764,32 +753,25 @@ namespace RNAssistant.Harness
 
         private static void VbaCreationRouteAllowsMutation()
         {
-            var route = new OfficeIntentRouter().Route(
-                "Создай новый VBA-модуль и добавь в него макрос.",
+            var route = new AgentRouteResolver().Route(
                 new OfficeSnapshot { Host = "Excel" });
 
-            AssertEqual("vba", route.TaskType, "vba task type");
-            AssertEqual("mutate_vba", route.Mode, "vba mutation mode");
-            AssertEqual(AgentPhases.Mutation, route.Phase, "vba creation phase");
-            AssertEqual(3, route.RiskAllowed, "vba risk allowance");
-            AssertTrue(!route.RequiresInspection, "new vba module does not require prior module inspection");
+            AssertEqual("agent", route.TaskType, "VBA wording is not parsed by runtime");
+            AssertEqual("agent", route.Mode, "generic agent mode");
+            AssertEqual(AgentPhases.Decision, route.Phase, "model may select the next concrete action");
+            AssertTrue(!route.RequiresInspection, "inspection is chosen from tool guidance, not keywords");
 
             var tools = new List<ToolDefinition>(FakeOfficeAdapter.ForHost("Excel").GetBuiltInTools());
-            var slice = new ToolCatalogSlicer().Slice(route, tools, new List<AgentObservation>());
+            var slice = new ToolCatalogSlicer().Slice(route, tools, 100);
             AssertTrue(slice.Find("excel.insert_vba_module") != null, "insert vba module is available");
 
-            var macroRoute = new OfficeIntentRouter().Route("Запусти макрос Module1.Test", new OfficeSnapshot { Host = "Excel" });
-            AgentPhaseController.Advance(macroRoute, new List<AgentObservation>
-            {
-                new AgentObservation { Status = "success", ToolId = "excel.vba_read_project", Purpose = AgentObservationPurposes.Inspection }
-            }, false);
-            AssertTrue(new ToolCatalogSlicer().Slice(macroRoute, tools, new List<AgentObservation>()).Find("excel.run_macro") != null, "run macro is available after inspection");
+            var macroRoute = new AgentRouteResolver().Route(new OfficeSnapshot { Host = "Excel" });
+            AssertTrue(new ToolCatalogSlicer().Slice(macroRoute, tools, 100).Find("excel.run_macro") != null, "confirmation-requiring tool remains selectable");
         }
 
         private static void DestructiveChartRouteAdvancesToMutation()
         {
-            var route = new OfficeIntentRouter().Route(
-                "Удали лишние графики, оставь один.",
+            var route = new AgentRouteResolver().Route(
                 new OfficeSnapshot { Host = "Excel" });
             var tools = new List<ToolDefinition>
             {
@@ -797,18 +779,20 @@ namespace RNAssistant.Harness
                 new ToolDefinition { Id = "excel.delete_chart", Host = "Excel", Enabled = true, MutatesDocument = true, AgentCanRun = false, RiskLevel = 3 }
             };
 
-            AssertEqual("chart", route.TaskType, "destructive target remains chart-specific");
-            AssertEqual(AgentPhases.ReadOnly, route.Phase, "destructive request inspects first");
-            AssertTrue(new ToolCatalogSlicer().Slice(route, tools, new List<AgentObservation>()).Find("excel.delete_chart") == null, "delete hidden before inspection");
+            AssertEqual("agent", route.TaskType, "destructive wording is not parsed by runtime");
+            AssertEqual(AgentPhases.Decision, route.Phase, "generic agent phase");
+            AssertTrue(new ToolCatalogSlicer().Slice(route, tools).Find("excel.delete_chart") != null, "confirmation-requiring delete remains selectable");
+        }
 
-            AgentPhaseController.Advance(route, new List<AgentObservation>
-            {
-                new AgentObservation { Status = "success", ToolId = "excel.list_charts", Purpose = AgentObservationPurposes.Inspection }
-            }, false);
+        private static void NewFormattedReportStartsWithMutation()
+        {
+            var route = new AgentRouteResolver().Route(
+                new OfficeSnapshot { Host = "Excel" });
 
-            AssertEqual(AgentPhases.Mutation, route.Phase, "destructive route advances to mutation");
-            AssertEqual(3, route.RiskAllowed, "destructive route raises risk allowance");
-            AssertTrue(new ToolCatalogSlicer().Slice(route, tools, new List<AgentObservation>()).Find("excel.delete_chart") != null, "delete capability available after inspection");
+            AssertEqual("agent", route.TaskType, "report wording is not parsed by runtime");
+            AssertEqual(AgentPhases.Decision, route.Phase, "generic decision phase");
+            AssertTrue(!route.RequiresInspection, "runtime does not invent an inspection requirement");
+            AssertEqual("model_decision", route.DecisionReason, "model owns the requested workflow");
         }
 
         private static void ShortFollowUpContinuesPendingAgentTask()
@@ -828,12 +812,14 @@ namespace RNAssistant.Harness
             AssertEqual(ChatModes.Agent, new ChatExecutionModeSelector().Select("да именно так", session), "pending agent task overrides chat mode");
             var resolved = AgentTaskContinuationResolver.Resolve("да именно так", session);
             AssertContains(resolved, "Создай новый лист", "original task retained");
-            AssertContains(resolved, "USER_FOLLOW_UP", "follow-up marker included");
+            AssertContains(resolved, "USER_MESSAGE", "current-message marker included");
             AssertContains(resolved, "да именно так", "follow-up content included");
             AssertTrue(AgentTaskContinuationResolver.ShouldContinue("Реализуй план", session), "implement-plan command continues pending task");
 
-            AssertEqual("Новая независимая задача", AgentTaskContinuationResolver.Resolve("Новая независимая задача", session), "substantive request is not merged");
-            AssertTrue(session.PendingAgentTask == null, "new request clears pending task");
+            var replacement = AgentTaskContinuationResolver.Resolve("Новая независимая задача", session);
+            AssertContains(replacement, "PENDING_TASK_CONTEXT", "pending request remains context without lexical guessing");
+            AssertContains(replacement, "Новая независимая задача", "model can replace the pending request");
+            AssertTrue(session.PendingAgentTask != null, "runtime does not discard pending state by message length");
         }
 
         private static void ToolValidationExplainsUnknownAndExcludedTools()
@@ -853,10 +839,9 @@ namespace RNAssistant.Harness
                 TaskType = "vba",
                 Mode = "mutate_vba",
                 Phase = AgentPhases.Mutation,
-                RiskAllowed = 3,
                 RequiresTool = true
             };
-            var mutationSlice = new ToolCatalogSlicer().Slice(mutationRoute, tools, new List<AgentObservation>());
+            var mutationSlice = new ToolCatalogSlicer().Slice(mutationRoute, tools);
             var unknown = new AgentActionValidator().Validate(
                 new AgentPlannerStep { ToolId = "excel.vba_create_module" },
                 mutationSlice,
@@ -873,11 +858,10 @@ namespace RNAssistant.Harness
                 TaskType = "vba",
                 Mode = "mutate_vba",
                 Phase = AgentPhases.ReadOnly,
-                RiskAllowed = 3,
                 RequiresTool = true,
                 RequiresInspection = true
             };
-            var readSlice = new ToolCatalogSlicer().Slice(readRoute, tools, new List<AgentObservation>());
+            var readSlice = new ToolCatalogSlicer().Slice(readRoute, tools);
             var excluded = new AgentActionValidator().Validate(
                 new AgentPlannerStep { ToolId = insert.Id },
                 readSlice,
@@ -885,16 +869,15 @@ namespace RNAssistant.Harness
                 new List<AgentObservation>(),
                 tools);
             AssertTrue(!excluded.Success, "phase-excluded tool rejected");
-            AssertContains(excluded.Message, "wrong_phase", "excluded diagnostic reason");
+            AssertContains(excluded.Message, "Target must be inspected", "explicit inspection precondition is precise");
         }
 
         private static void OptionalToolAuthoringIsExplicitAndDoesNotCompleteDocumentTask()
         {
-            var promptRoute = new OfficeIntentRouter().Route(
-                "Улучши главный системный промпт агента.",
+            var promptRoute = new AgentRouteResolver().Route(
                 new OfficeSnapshot { Host = "Excel" });
-            AssertEqual("tool_authoring", promptRoute.TaskType, "prompt authoring route");
-            AssertEqual(AgentPhases.Mutation, promptRoute.Phase, "prompt improvement allows confirmed save");
+            AssertEqual("agent", promptRoute.TaskType, "prompt wording is not parsed by runtime");
+            AssertEqual(AgentPhases.Decision, promptRoute.Phase, "model selects authoring tools through skills");
 
             var route = new RoutedTask
             {
@@ -902,7 +885,6 @@ namespace RNAssistant.Harness
                 TaskType = "chart",
                 Mode = "mutate_chart",
                 Phase = AgentPhases.Mutation,
-                RiskAllowed = 2,
                 RequiresTool = true
             };
             var tools = new List<ToolDefinition>
@@ -912,10 +894,9 @@ namespace RNAssistant.Harness
                 new ToolDefinition { Id = "common.tools_save", Host = "Common", Enabled = true, MutatesLocalState = true, RiskLevel = 1 }
             };
 
-            AssertTrue(new ToolCatalogSlicer().Slice(route, tools, new List<AgentObservation>()).Find("common.tools_save") == null, "tool authoring disabled by default");
-            var enabled = new ToolCatalogSlicer().Slice(route, tools, new List<AgentObservation>(), 24, true);
-            AssertTrue(enabled.Find("common.tools_validate") != null, "tool validation exposed by option");
-            AssertTrue(enabled.Find("common.tools_save") != null, "tool save exposed by option");
+            var visible = new ToolCatalogSlicer().Slice(route, tools);
+            AssertTrue(visible.Find("common.tools_validate") != null, "explicit catalog tool remains selectable");
+            AssertTrue(visible.Find("common.tools_save") != null, "confirmation policy is enforced by executor metadata");
 
             AgentPhaseController.Advance(route, new List<AgentObservation>
             {

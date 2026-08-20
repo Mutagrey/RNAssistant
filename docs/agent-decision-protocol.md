@@ -5,20 +5,20 @@ RNAssistant использует локальный agent harness поверх O
 ## Цикл выполнения
 
 1. Chat session хранит явный режим `Agent` или `Chat`; новый chat создаётся в `Agent`. HTML workspace и продолжение незавершённой agent-задачи всегда используют Agent.
-2. В Agent mode детерминированный router определяет тип задачи, риск и необходимость чтения/мутации. Agent способен дать обычный ответ без tools, если route не требует действия Office.
+2. В обычном Agent mode runtime не классифицирует текст по словарям и не угадывает тип задачи. Модель выбирает `tool` либо terminal decision из одного общего каталога; route задаёт обязательную фазу только для явно включённого HTML workspace и продолжения verification.
 3. Runtime всегда показывает компактный `SKILL_INDEX`. Если подходящий skill ещё не активирован, модель вызывает `common.skills_load`; resolver добавляет зависимости и отклоняет неизвестные ids, циклы и конфликты.
-4. Catalog slicer выбирает ограниченный набор tools после skill-фильтра. В prompt попадают только id, описание, safety metadata и JSON Schema аргументов.
+4. Catalog slicer применяет только metadata: host, enabled/capability status, активные skill capabilities, явный workspace mode и размер request budget. В prompt попадают id, описание, safety metadata и JSON Schema аргументов; task keywords не влияют на набор.
 5. Runtime собирает сообщения из неизменяемого контракта harness, редактируемой инструкции, environment pack, сохранённой истории/checkpoint, запроса, активных skills, route и нормализованных observations.
 6. Модель возвращает одно решение `AgentDecision v1` либо native `tool_calls[]` из 1–8 вызовов.
 7. Runtime нормализует только безопасные вариации формы, затем строго проверяет каждый tool id и аргументы. Несколько calls разрешены только для независимых read-only действий; runtime выполняет их локально последовательно. Mutations, local-state changes, confirmation-requiring и result-dependent calls выбираются по одному.
 8. Результаты нормализуются, сохраняются одним protocol batch и добавляются в рабочий контекст. Следующий запрос решает, нужен ли ещё один tool decision, уточнение или финальный ответ.
-9. После мутации runtime запускает отдельную read-only verification. Старое наблюдение не считается проверкой нового изменения.
+9. После мутации runtime запускает точную read-only verification, если её вернул tool result, описал `VerifyJson` или можно однозначно построить для встроенного tool. Старое наблюдение не считается проверкой нового изменения; широкий summary не используется как универсальная проверка.
 
 Принятые tool exchanges сохраняются в chat session как скрытые protocol messages и доступны после перезапуска. В постоянную replay history не возвращаются route diagnostics, отклонённые ответы, полный собранный prompt, UI activity и provider reasoning.
 
 Provider `refusal` хранится отдельно от content и считается невалидным transport-ответом, а не решением агента. Runtime делает ограниченное исправление, не возвращая текст отказа в replay context и не меняя доступный tool slice. Для сетевой ошибки, 5xx или повреждённого transport envelope тот же запрос с теми же messages, tools и run cache повторяется один раз; timeout остаётся отменяемым и автоматически не дублируется.
 
-Короткие команды продолжения незавершённой задачи, включая «Реализуй план» и «Выполни план», сохраняют исходный request и восстанавливают последний видимый plan. Новый run сразу запрашивает следующее действие и не объявляет этот план заново.
+При наличии незавершённой задачи runtime передаёт модели отдельно `PENDING_TASK_CONTEXT` и новое `USER_MESSAGE`; модель сама решает, продолжает пользователь задачу, исправляет, отменяет или заменяет её. Последний видимый plan восстанавливается без повторного объявления.
 
 ## Формат решения
 
@@ -72,7 +72,7 @@ Provider `refusal` хранится отдельно от content и счита�
 
 `decisionSummary` — видимое сообщение модели перед выбранным действием, а не chain-of-thought. Для tool turn оно кратко фиксирует уже подтвержденный результат и следующее действие. В `native_tool_calls` тот же текст передается через assistant content и сохраняется runtime как `decisionSummary`. Детальные рассуждения не входят в протокол. Если provider отдельно возвращает `reasoning_content`, runtime показывает его как необязательные transport metadata и не смешивает с JSON решения.
 
-Шаги плана в канонической форме содержат только `id` и `title`. После принятого плана runtime исключает `kind=plan` из динамической schema до появления нового observation. Если новая observation материально меняет оставшуюся работу, модель может один раз для этого состояния вернуть пересмотренный `kind=plan`: runtime сохраняет выполненные шаги с теми же стабильными id и заменяет незавершённую часть. Простое перефразирование без нового observation не попадает в transcript и проходит через ограниченное исправление формата; постоянное нарушение завершает текущий run с сохранением плана и pending task. Статусы `pending`, `running`, `waiting`, `completed`, `failed`, `cancelled`, `incomplete` принадлежат локальному harness. `final` не завершает pending/running шаги без подтверждающих действий.
+Шаги плана в канонической форме содержат только `id` и `title`. План разрешён один раз в начале сложного run и сам ничего не выполняет. После его принятия runtime навсегда исключает `kind=plan` и advisory `plan` из динамической schema этого run: модель обязана выбрать конкретный tool, уточнение или terminal decision. Успешный read-only tool с теми же аргументами не выполняется повторно до следующей мутации; успешные parameterless summary/context tools дополнительно исключаются из `AVAILABLE_TOOLS`, пока мутация не сделает их результат устаревшим. Статусы `pending`, `running`, `waiting`, `completed`, `failed`, `cancelled`, `incomplete` принадлежат локальному harness. `final` не завершает pending/running шаги без подтверждающих действий.
 
 ## Совместимая нормализация
 
@@ -91,7 +91,7 @@ Surrounding prose, fences, неизвестные root-поля, конфлик�
 
 | Режим | Что отправляется | Когда использовать |
 | --- | --- | --- |
-| `json_schema` | `response_format.type=json_schema` со строгой динамической схемой `AgentDecision v1`; поле `tools` не отправляется; после плана schema временно исключает новый `plan` | Режим по умолчанию. Лучший контроль формы ответа, если endpoint поддерживает Structured Outputs. |
+| `json_schema` | `response_format.type=json_schema` со строгой динамической схемой `AgentDecision v1`; поле `tools` не отправляется; после первого плана schema исключает новый `plan` до конца run | Режим по умолчанию. Лучший контроль формы ответа, если endpoint поддерживает Structured Outputs. |
 | `json_object` | `response_format.type=json_object`; протокол и доступные tools описаны в prompt | Самая переносимая связка для локальных моделей. Семантику всё равно проверяет локальный parser. |
 | `native_tool_calls` | Строгий `json_schema` для нетуловых решений плюс OpenAI `tools`, `tool_choice=auto`, `parallel_tool_calls=true` | Для endpoint, который корректно поддерживает OpenAI multi-function calling и совместную работу `tools` с `response_format`. |
 

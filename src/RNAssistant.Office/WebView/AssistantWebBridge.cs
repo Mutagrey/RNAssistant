@@ -338,12 +338,6 @@ namespace RNAssistant.Office.WebView
                             textContext.DetailsJson,
                             textContext.ChatId);
                         break;
-                    case "addVbaContext":
-                        var vbaContext = Payload<VbaContextPayload>(payload);
-                        responsePayload = _controller.AddVbaContext(
-                            vbaContext.ChatId,
-                            vbaContext.MaxChars ?? 0);
-                        break;
                     case "removeContextItem":
                         var removeContextItem = Payload<RemoveContextItemPayload>(payload);
                         responsePayload = _controller.RemoveContextItem(removeContextItem.Id, removeContextItem.ChatId);

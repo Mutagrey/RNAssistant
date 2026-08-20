@@ -3,12 +3,6 @@ function contextNotes() {
   return (context.Notes || context.notes || []).filter(function (note) { return !!note; });
 }
 
-function vbaContextNotes() {
-  return contextNotes().filter(function (note) {
-    return noteKind(note) === "vba_project";
-  });
-}
-
 function noteValue(note, pascal, camel, fallback) {
   note = note || {};
   return note[pascal] || note[camel] || fallback || "";

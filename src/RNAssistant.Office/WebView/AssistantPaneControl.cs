@@ -234,12 +234,12 @@ namespace RNAssistant.Office.WebView
             try
             {
                 var requestJson = e.WebMessageAsJson;
-                RuntimeLog.Info("Web message received: " + DescribeMessageForLog(requestJson));
                 if (TryHandleHostStateMessage(requestJson))
                 {
                     return;
                 }
 
+                RuntimeLog.Info("Web message received: " + DescribeMessageForLog(requestJson));
                 var responseJson = await _bridge.HandleMessageAsync(requestJson).ConfigureAwait(true);
                 PostBridgeMessage(responseJson);
             }

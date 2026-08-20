@@ -62,8 +62,7 @@ namespace RNAssistant.Office.Services
             ToolResult read;
             try
             {
-                var command = new ToolCommand { ToolId = (_adapter.HostName ?? string.Empty).ToLowerInvariant() + ".vba_read_project" };
-                command.Arguments["maxChars"] = 2000000;
+                var command = new ToolCommand { ToolId = (_adapter.HostName ?? string.Empty).ToLowerInvariant() + ".vba_list_project_components_internal" };
                 read = _adapter.ExecuteTool(command);
             }
             catch { return; }
@@ -76,8 +75,10 @@ namespace RNAssistant.Office.Services
             var moduleMap = modules.OfType<JObject>()
                 .Where(module => !string.IsNullOrWhiteSpace((string)module["name"]))
                 .ToDictionary(module => (string)module["name"], StringComparer.OrdinalIgnoreCase);
-            foreach (var module in moduleMap.Values.Where(module => string.Equals((string)module["type"], "StdModule", StringComparison.OrdinalIgnoreCase)))
+            foreach (var moduleInfo in moduleMap.Values.Where(module => string.Equals((string)module["type"], "StdModule", StringComparison.OrdinalIgnoreCase)).ToList())
             {
+                var module = ReadDocumentModule(moduleMap, (string)moduleInfo["name"]);
+                if (module == null) continue;
                 var code = (string)module["code"] ?? string.Empty;
                 if (code.IndexOf("<RNAssistantTool>", StringComparison.Ordinal) < 0 || code.EndsWith("\n...[truncated]", StringComparison.Ordinal)) continue;
                 var parsed = new VbaToolManifestParser().Parse((string)module["name"], code);
@@ -111,13 +112,12 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        private static List<VbaToolComponent> ResolveDocumentComponents(ToolDefinition tool, IDictionary<string, JObject> modules)
+        private List<VbaToolComponent> ResolveDocumentComponents(ToolDefinition tool, IDictionary<string, JObject> modules)
         {
             var result = new List<VbaToolComponent>();
             foreach (var declared in tool.Components ?? new List<VbaToolComponent>())
             {
-                JObject module;
-                modules.TryGetValue(declared.Name, out module);
+                var module = ReadDocumentModule(modules, declared.Name);
                 var type = module == null ? string.Empty : (string)module["type"] ?? string.Empty;
                 var supported = string.Equals(type, "StdModule", StringComparison.OrdinalIgnoreCase) || string.Equals(type, "ClassModule", StringComparison.OrdinalIgnoreCase);
                 var code = supported ? (string)module["code"] ?? string.Empty : string.Empty;
@@ -131,6 +131,34 @@ namespace RNAssistant.Office.Services
                 });
             }
             return result;
+        }
+
+        private JObject ReadDocumentModule(IDictionary<string, JObject> modules, string moduleName)
+        {
+            JObject module;
+            if (modules == null || !modules.TryGetValue(moduleName ?? string.Empty, out module)) return null;
+            if (module["code"] != null) return module;
+
+            ToolResult read;
+            try
+            {
+                var command = new ToolCommand { ToolId = (_adapter.HostName ?? string.Empty).ToLowerInvariant() + ".vba_read_module" };
+                command.Arguments["moduleName"] = moduleName;
+                command.Arguments["maxChars"] = 2000000;
+                read = _adapter.ExecuteTool(command);
+            }
+            catch { return null; }
+            if (read == null || !read.Success || string.IsNullOrWhiteSpace(read.DataJson)) return null;
+
+            try
+            {
+                var data = JObject.Parse(read.DataJson);
+                module["code"] = data["code"];
+                module["type"] = data["type"] ?? module["type"];
+                module["lineCount"] = data["lineCount"] ?? module["lineCount"];
+                return module;
+            }
+            catch (JsonException) { return null; }
         }
 
         private static bool PackageMatches(ToolDefinition global, ToolDefinition document)

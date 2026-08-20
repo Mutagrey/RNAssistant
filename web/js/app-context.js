@@ -110,18 +110,6 @@ function renderContextChips(notes) {
   });
 }
 
-function renderVbaContextToggle() {
-  var button = $("toggleVbaContextButton");
-  if (!button) {
-    return;
-  }
-
-  var active = vbaContextNotes().length > 0;
-  button.classList.toggle("active", active);
-  button.setAttribute("aria-pressed", active ? "true" : "false");
-  button.title = active ? "Убрать VBA-проект из контекста" : "Добавить VBA-проект в контекст";
-}
-
 function renderContextList(notes) {
   var list = $("contextList");
   var summary = $("contextSummary");
@@ -174,7 +162,6 @@ function renderContext(skipUsageEstimate) {
   if ($("contextBox")) {
     $("contextBox").textContent = JSON.stringify(state.context || {}, null, 2);
   }
-  renderVbaContextToggle();
   if (!skipUsageEstimate) {
     updateEstimatedContextUsage();
   }
@@ -243,46 +230,6 @@ async function addSelectedToolContextToContext() {
   return true;
 }
 
-async function ensureVbaContextAttached() {
-  if (vbaContextNotes().length > 0) {
-    return;
-  }
-
-  await addVbaContext();
-}
-
-async function addVbaContext() {
-  setActivity("context", "Добавляю VBA в контекст...");
-  try {
-    await send("addVbaContext", {
-      chatId: state.activeChatId,
-      maxChars: Number($("vbaContextLimitInput").value || 30000)
-    });
-    await syncActiveChatState();
-    log("VBA-контекст добавлен.");
-  } finally {
-    clearActivity();
-  }
-}
-
-async function toggleVbaContext() {
-  var notes = vbaContextNotes();
-  try {
-    if (notes.length) {
-      for (var i = 0; i < notes.length; i += 1) {
-        await send("removeContextItem", { chatId: state.activeChatId, id: noteId(notes[i]) });
-      }
-      await syncActiveChatState();
-      log("VBA-контекст удален.");
-      return;
-    }
-
-    await addVbaContext();
-  } catch (error) {
-    log(error.detail || error.message);
-  }
-}
-
 async function removeContextItem(id) {
   if (!id) {
     return;
@@ -319,7 +266,6 @@ function toggleContextManager() {
 function bindContextActions() {
   $("openContextTabButton").addEventListener("click", toggleContextManager);
   $("addSelectionContextButton").addEventListener("click", function () { addSelectionContext("full"); });
-  $("toggleVbaContextButton").addEventListener("click", toggleVbaContext);
   $("clearContextButton").addEventListener("click", async function () {
     setActivity("clearing", "Очищаю контекст...");
     try {

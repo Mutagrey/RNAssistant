@@ -21,6 +21,7 @@ namespace RNAssistant.Core.Models
 
     public static class AgentPhases
     {
+        public const string Decision = "decision_phase";
         public const string ReadOnly = "read_only_phase";
         public const string Mutation = "mutation_phase";
         public const string Verification = "verification_phase";

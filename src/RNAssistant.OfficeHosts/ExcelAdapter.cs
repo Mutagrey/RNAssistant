@@ -242,9 +242,25 @@ namespace RNAssistant.OfficeHosts
                     Name = "Excel analysis reporting",
                     Description = "Analyze ranges, create summaries, tables, and charts in Excel.",
                     Tags = new List<string> { "excel", "analysis", "reporting", "charts" },
-                    BodyMarkdown = "# Excel Analysis Reporting\n\nUse this skill for Excel reporting tasks.\n\n- Inspect sheets/ranges before modifying unknown workbooks.\n- Write tables with stable headers and predictable start addresses.\n- Prefer chart source ranges that include headers.\n- Autofit after writing tables when available.\n- Keep generated sheets named clearly and avoid overwriting existing sheets unless asked.",
+                    BodyMarkdown = "# Excel Analysis Reporting\n\nUse this skill for Excel reporting tasks.\n\n- For a new report sheet, execute the direct sequence: `excel.add_sheet`, `excel.write_table`, optional `excel.format_range`/`excel.autofit`, then `excel.add_chart`.\n- Do not call `excel.workbook_summary` for a brand-new sheet unless existing workbook content is required. Use `excel.list_sheets` only when a naming collision must be checked.\n- Inspect sheets/ranges before modifying unknown existing content.\n- Write tables with stable headers and predictable start addresses.\n- Prefer chart source ranges that include headers.\n- Keep generated sheets named clearly and avoid overwriting existing sheets unless asked.\n- If the exact required tool is present in AVAILABLE_TOOLS, execute it; do not report that the capability is missing.",
                     Enabled = true,
-                    BuiltIn = true
+                    BuiltIn = true,
+                    ToolCapabilities = new List<string>
+                    {
+                        "excel.get_selection",
+                        "excel.list_sheets",
+                        "excel.read_range",
+                        "excel.profile_range",
+                        "excel.create_chat_chart",
+                        "excel.list_charts",
+                        "excel.get_chart",
+                        "excel.write_table",
+                        "excel.add_sheet",
+                        "excel.format_range",
+                        "excel.autofit",
+                        "excel.add_chart",
+                        "excel.update_chart"
+                    }
                 }
             };
         }
@@ -272,17 +288,6 @@ namespace RNAssistant.OfficeHosts
             }
 
             return Trim(builder.ToString(), maxChars);
-        }
-
-        public string GetVbaSnapshot(int maxChars)
-        {
-            var workbook = ActiveWorkbook();
-            if (workbook == null)
-            {
-                return "No active workbook.";
-            }
-
-            return VbaProjectSupport.GetSnapshot(workbook, workbook.Name, maxChars);
         }
 
         public void PrepareForContextCapture()

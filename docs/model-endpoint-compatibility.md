@@ -55,7 +55,7 @@ Endpoints that reject tool-call history can use `developer` or `user` result rol
 | Endpoint behavior | RNAssistant behavior |
 | --- | --- |
 | Returns ordinary text in Chat mode | Stored as the assistant response; no agent parser or tool execution runs. |
-| Returns a valid AgentDecision object | Locally validated; router, safety gates and phase state decide whether it may continue. |
+| Returns a valid AgentDecision object | Locally validated; tool metadata, explicit runtime mode, visible plan state and safety gates decide whether it may continue. |
 | Returns plain text/fenced/noisy JSON in Agent mode | Rejected; one bounded correction request may be made. |
 | Returns one native tool call in native mode | API name maps back to the exact local tool id; arguments are validated before local execution. |
 | Returns native tool calls in a JSON-only mode | Rejected because that mode's contract is AgentDecision content. |

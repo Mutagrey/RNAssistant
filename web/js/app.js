@@ -11,7 +11,7 @@ function switchTab(name) {
   if (typeof refreshSplitPanes === "function") {
     refreshSplitPanes();
   }
-  if (name === "logs" && typeof refreshRuntimeLog === "function") {
+  if (name === "logs" && typeof runtimeLogVisible === "function" && runtimeLogVisible()) {
     refreshRuntimeLog();
   }
 }

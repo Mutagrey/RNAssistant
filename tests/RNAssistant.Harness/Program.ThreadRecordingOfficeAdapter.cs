@@ -44,12 +44,6 @@ namespace RNAssistant.Harness
                 return _inner.GetDocumentSnapshot(maxChars);
             }
 
-            public string GetVbaSnapshot(int maxChars)
-            {
-                _record();
-                return _inner.GetVbaSnapshot(maxChars);
-            }
-
             public void PrepareForContextCapture()
             {
                 _record();

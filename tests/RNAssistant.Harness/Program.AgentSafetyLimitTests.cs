@@ -31,6 +31,7 @@ namespace RNAssistant.Harness
                     adapter,
                     executor,
                     null,
+                    AgentBlock(Command("common.skills_load", "ids", new[] { "common.vba_code_editing" })),
                     AgentBlock(Command("word.vba_read_module", "moduleName", "Module1")),
                     AgentBlock(Command("word.vba_replace_module", "moduleName", "Module1", "code", "Sub Test()\nEnd Sub")));
                 var session = NewSession(adapter);
@@ -48,7 +49,8 @@ namespace RNAssistant.Harness
                         AssertEqual("word.vba_replace_module", pendingCommand.ToolId, "pending tool id");
                         pendingIds.Add("pending-1");
                         return "pending-1";
-                    }).GetAwaiter().GetResult();
+                    },
+                    BuiltInSkillProvider.GetSkills(adapter)).GetAwaiter().GetResult();
 
                 AssertEqual(1, adapter.Executed.Count, "only inspection executes before confirmation");
                 AssertEqual("word.vba_read_module", adapter.Executed[0].ToolId, "inspection tool");
@@ -105,8 +107,8 @@ namespace RNAssistant.Harness
                     executor,
                     null,
                     AgentBlock(Command("excel.list_sheets")),
-                    AgentBlock(Command("excel.list_sheets")),
-                    AgentBlock(Command("excel.list_sheets")));
+                    AgentBlock(Command("excel.get_context")),
+                    AgentBlock(Command("excel.get_selection")));
                 var session = NewSession(adapter);
 
                 var result = service.ExecuteAsync(

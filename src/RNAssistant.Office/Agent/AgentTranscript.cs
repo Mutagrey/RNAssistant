@@ -7,6 +7,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office
 {
@@ -83,9 +84,7 @@ namespace RNAssistant.Office
             var success = result != null && result.Success;
             var message = result == null ? string.Empty : result.Message ?? string.Empty;
             var executionStatus = NormalizeExecutionStatus(result);
-            var title = command == null || string.IsNullOrWhiteSpace(command.Description)
-                ? (command == null ? "Tool step" : command.ToolId)
-                : command.Description;
+            var title = command == null ? "Tool step" : AgentRunPresentation.FriendlyToolAction(command);
 
             var activity = new ChatActivity
             {

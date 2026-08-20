@@ -41,14 +41,6 @@ namespace RNAssistant.Office.Services
                         ? string.Empty
                         : " Reason: " + exclusion.Reason + ". " + exclusion.Detail));
             }
-            if (route != null && string.Equals(route.Phase, AgentPhases.ReadOnly, StringComparison.OrdinalIgnoreCase) && tool.MutatesDocument)
-            {
-                return PlannerValidationResult.Fail("Mutation tool is not allowed during read_only_phase: " + step.ToolId);
-            }
-            if (route != null && tool.RiskLevel > route.RiskAllowed)
-            {
-                return PlannerValidationResult.Fail("Tool risk level is above current route allowance: " + step.ToolId);
-            }
             if (route != null &&
                 route.RequiresInspection &&
                 (tool.MutatesDocument || tool.MutatesLocalState) &&

@@ -7,18 +7,6 @@ namespace RNAssistant.Office.Services
 {
     internal static class AgentText
     {
-        public static bool ContainsAny(string value, params string[] terms)
-        {
-            foreach (var term in terms ?? new string[0])
-            {
-                if (!string.IsNullOrWhiteSpace(term) && value.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
         public static string FirstNonEmpty(params string[] values)
         {
             foreach (var value in values ?? new string[0])
@@ -57,7 +45,6 @@ namespace RNAssistant.Office.Services
         public string Mode { get; set; }
         public string TaskType { get; set; }
         public string Phase { get; set; }
-        public int RiskAllowed { get; set; }
         public bool RequiresTool { get; set; }
         public bool RequiresInspection { get; set; }
         public string DecisionReason { get; set; }
@@ -135,13 +122,12 @@ namespace RNAssistant.Office.Services
         public string WorkingGoal { get; set; }
         public List<AgentPlanStep> Plan { get; set; }
         public ChatActivity PlanActivity { get; set; }
-        public int LastPlanObservationCount { get; set; }
         public int NoProgressPlanCount { get; set; }
+        public int NoProgressToolCount { get; set; }
 
         public AgentRunState()
         {
             Plan = new List<AgentPlanStep>();
-            LastPlanObservationCount = -1;
         }
     }
 }

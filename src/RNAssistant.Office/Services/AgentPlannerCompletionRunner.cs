@@ -136,7 +136,7 @@ namespace RNAssistant.Office.Services
             {
                 return AgentPlannerParseResult.Fail(
                     "plan_not_allowed",
-                    "The current plan is already declared and no newer runtime observation exists. Do not return kind=plan or rephrase the plan; choose tool, clarify, final, or cannot_complete.");
+                    "kind=plan is unavailable for the rest of this run. Keep the current plan and choose tool, clarify, final, or cannot_complete.");
             }
             return parsed;
         }

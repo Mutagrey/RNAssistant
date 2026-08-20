@@ -255,17 +255,6 @@ namespace RNAssistant.OfficeHosts
             return Trim(ReadSlidesText(presentation, 20), maxChars);
         }
 
-        public string GetVbaSnapshot(int maxChars)
-        {
-            var presentation = ActivePresentation();
-            if (presentation == null)
-            {
-                return "No active presentation.";
-            }
-
-            return VbaProjectSupport.GetSnapshot(presentation, presentation.Name, maxChars);
-        }
-
         public void PrepareForContextCapture()
         {
             try

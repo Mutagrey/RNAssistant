@@ -219,7 +219,6 @@ namespace RNAssistant.Office
             return new DocumentContext { Title = kind ?? string.Empty };
         }
 
-        public DocumentContext AddVbaContext(string chatId = null, int maxChars = 0) { return new DocumentContext { Title = maxChars.ToString() }; }
         public DocumentContext RemoveContextItem(string id, string chatId = null) { return new DocumentContext { Title = id ?? string.Empty }; }
         public DocumentContext ClearContext(string chatId = null) { return new DocumentContext { DocumentKey = chatId ?? string.Empty }; }
         public Task<QuickActionResponse> RunQuickActionAsync(string action) { return Task.FromResult(new QuickActionResponse { Prompt = action }); }

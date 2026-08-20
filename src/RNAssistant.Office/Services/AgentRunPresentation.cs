@@ -141,8 +141,8 @@ namespace RNAssistant.Office.Services
                     Activity = new ChatActivity
                     {
                         Kind = "diagnostic",
-                        Title = "Tool routing",
-                        Subtitle = route == null ? string.Empty : route.TaskType + " / " + route.Phase,
+                        Title = "Инструменты недоступны",
+                        Subtitle = host,
                         Status = "failed",
                         ExecutionStatus = "no_available_tools",
                         ResultMessage = "host=" + host + "; reason=" + (route == null ? string.Empty : route.DecisionReason),
@@ -159,7 +159,7 @@ namespace RNAssistant.Office.Services
             {
                 Kind = "diagnostic",
                 Title = BuildTaskProgressMessage(route, false).TrimEnd('.'),
-                Subtitle = route == null ? string.Empty : route.Mode + " · " + route.TaskType,
+                Subtitle = route == null ? string.Empty : route.App,
                 Status = "completed",
                 ExecutionStatus = "routed",
                 ResultMessage = route == null
@@ -176,19 +176,7 @@ namespace RNAssistant.Office.Services
                 return active ? "Анализирую задачу..." : "Проверяю доступные действия.";
             }
 
-            if (!active)
-            {
-                if (string.Equals(route.TaskType, "vba", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(route.TaskType, "macro_execution", StringComparison.OrdinalIgnoreCase))
-                {
-                    return "Проверяю доступные операции VBA.";
-                }
-                if (string.Equals(route.TaskType, "chart", StringComparison.OrdinalIgnoreCase))
-                {
-                    return "Проверяю доступные операции с графиками.";
-                }
-                return "Проверяю доступные действия для текущего документа.";
-            }
+            if (!active) return "Проверяю доступные инструменты.";
 
             if (string.Equals(route.Phase, AgentPhases.Verification, StringComparison.OrdinalIgnoreCase))
             {
@@ -196,34 +184,9 @@ namespace RNAssistant.Office.Services
             }
             if (string.Equals(route.Phase, AgentPhases.ReadOnly, StringComparison.OrdinalIgnoreCase))
             {
-                if (string.Equals(route.TaskType, "chart", StringComparison.OrdinalIgnoreCase))
-                {
-                    return "Изучаю существующие графики и их параметры...";
-                }
-                if (string.Equals(route.TaskType, "vba", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(route.TaskType, "macro_execution", StringComparison.OrdinalIgnoreCase))
-                {
-                    return "Изучаю VBA-проект и доступные модули...";
-                }
                 return "Изучаю содержимое текущего документа...";
             }
-            if (string.Equals(route.TaskType, "chart", StringComparison.OrdinalIgnoreCase))
-            {
-                return "Подготавливаю изменения графика...";
-            }
-            if (string.Equals(route.TaskType, "vba", StringComparison.OrdinalIgnoreCase))
-            {
-                return "Подготавливаю VBA-код и параметры модуля...";
-            }
-            if (string.Equals(route.TaskType, "formatting", StringComparison.OrdinalIgnoreCase))
-            {
-                return "Подготавливаю форматирование документа...";
-            }
-            if (string.Equals(route.TaskType, "tool_authoring", StringComparison.OrdinalIgnoreCase))
-            {
-                return "Подготавливаю описание нового инструмента...";
-            }
-            return "Подготавливаю изменение текущего документа...";
+            return "Выбираю следующее действие...";
         }
 
         public static string FriendlyToolAction(ToolCommand command)
@@ -232,25 +195,81 @@ namespace RNAssistant.Office.Services
             {
                 return string.Empty;
             }
-            if (!string.IsNullOrWhiteSpace(command.Description))
+            if (!string.IsNullOrWhiteSpace(command.Description) &&
+                !command.Description.StartsWith("Deterministic", StringComparison.OrdinalIgnoreCase))
             {
                 return command.Description.Trim().TrimEnd('.');
             }
 
             switch ((command.ToolId ?? string.Empty).ToLowerInvariant())
             {
+                case "excel.get_context": return "читаю контекст книги";
+                case "excel.get_selection": return "читаю выделенные ячейки";
+                case "excel.workbook_summary": return "читаю структуру книги";
+                case "excel.list_sheets": return "получаю список листов";
+                case "excel.read_range": return "читаю значения диапазона";
+                case "excel.read_formula_range": return "читаю формулы диапазона";
+                case "excel.profile_range": return "анализирую структуру диапазона";
+                case "excel.find_cells": return "ищу ячейки";
+                case "excel.write_range": return "записываю значение в ячейки";
+                case "excel.write_table": return "записываю таблицу";
+                case "excel.set_formula": return "записываю формулу";
+                case "excel.add_table": return "создаю таблицу Excel";
+                case "excel.format_range": return "форматирую диапазон";
+                case "excel.autofit": return "подбираю ширину строк и столбцов";
+                case "excel.add_sheet": return "создаю новый лист";
+                case "excel.rename_sheet": return "переименовываю лист";
+                case "excel.clear_range": return "очищаю диапазон";
+                case "excel.sort_range": return "сортирую диапазон";
+                case "excel.filter_range": return "фильтрую диапазон";
+                case "excel.replace_cells": return "заменяю значения в ячейках";
                 case "excel.list_charts": return "проверяю список графиков";
                 case "excel.get_chart": return "читаю параметры графика";
                 case "excel.add_chart": return "создаю график";
                 case "excel.update_chart": return "изменяю график";
                 case "excel.delete_chart": return "удаляю график";
-                case "excel.vba_read_project": return "читаю VBA-проект";
+                case "excel.vba_list_modules": return "получаю список VBA-модулей";
                 case "excel.vba_read_module": return "читаю VBA-модуль";
                 case "excel.insert_vba_module": return "создаю VBA-модуль";
                 case "excel.vba_replace_module": return "обновляю VBA-модуль";
                 case "excel.run_macro": return "запускаю макрос";
-                default: return command.ToolId;
+                case "common.skills_load": return "загружаю инструкции навыка";
+                default: return FriendlyToolAction(command.ToolId);
             }
+        }
+
+        public static string FriendlyToolAction(string toolId)
+        {
+            var id = (toolId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(id)) return "выполняю действие";
+            var action = ToolActionKind(id);
+            if (action == "SEARCH") return "выполняю поиск";
+            if (action == "READ") return "читаю данные";
+            if (action == "CREATE") return "создаю объект";
+            if (action == "WRITE") return "записываю данные";
+            if (action == "UPDATE") return "обновляю объект";
+            if (action == "DELETE") return "удаляю объект";
+            if (action == "RUN") return "запускаю действие";
+            if (action == "CHECK") return "проверяю результат";
+            if (action == "LOAD") return "загружаю данные";
+            return "выполняю действие";
+        }
+
+        public static string ToolActionKind(string toolId)
+        {
+            var id = (toolId ?? string.Empty).ToLowerInvariant();
+            if (id.Contains("find") || id.Contains("search")) return "SEARCH";
+            if (id.Contains("delete") || id.Contains("remove") || id.Contains("clear")) return "DELETE";
+            if (id.Contains("add_") || id.Contains("create") || id.Contains("insert")) return "CREATE";
+            if (id.Contains("write") || id.Contains("set_formula")) return "WRITE";
+            if (id.Contains("update") || id.Contains("replace") || id.Contains("rename") ||
+                id.Contains("format") || id.Contains("autofit") || id.Contains("sort") || id.Contains("filter") || id.Contains("upsert")) return "UPDATE";
+            if (id.Contains("run") || id.Contains("execute")) return "RUN";
+            if (id.Contains("verify") || id.Contains("validate") || id.Contains("check")) return "CHECK";
+            if (id.Contains("load")) return "LOAD";
+            if (id.Contains("read") || id.Contains("get_") || id.Contains("list_") ||
+                id.Contains("summary") || id.Contains("profile") || id.Contains("inspect")) return "READ";
+            return "ACTION";
         }
 
         public static string BuildRoutingDiagnosticsJson(RoutedTask route, ToolCatalogSlice slice)
@@ -266,7 +285,6 @@ namespace RNAssistant.Office.Services
                     mode = route.Mode,
                     taskType = route.TaskType,
                     phase = route.Phase,
-                    riskAllowed = route.RiskAllowed,
                     requiresTool = route.RequiresTool,
                     requiresInspection = route.RequiresInspection,
                     reason = route.DecisionReason

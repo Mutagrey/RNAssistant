@@ -27,7 +27,7 @@
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-capabilities-20260820-1">
-  <link rel="stylesheet" href="css/app-workspace.css?v=model-debug-20260819-1">
+  <link rel="stylesheet" href="css/app-workspace.css?v=agent-progress-20260820-1">
   <link rel="stylesheet" href="css/app-tools.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-prompts.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-vba.css?v=chatui-20260622-7">
@@ -37,7 +37,7 @@
   <link rel="stylesheet" href="css/app-artifacts.css?v=context-20260807-1">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=chatui-20260702-2">
   <link rel="stylesheet" href="css/app-responsive.css?v=message-edit-20260806-1">
-  <link rel="stylesheet" href="css/app-agent.css?v=agent-reliability-20260819-1">
+  <link rel="stylesheet" href="css/app-agent.css?v=agent-actions-20260820-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=agent-transcript-20260805-3">
   <link rel="stylesheet" href="css/app-theme.css?v=message-edit-20260806-1">
 </head>
@@ -150,10 +150,6 @@
                 <div class="composer-options-panel">
                   <div class="composer-options-title">Контекст</div>
                   <div class="composer-option-actions">
-                    <button type="button" class="composer-option-button context-toggle-button" id="toggleVbaContextButton" title="Добавить или убрать VBA-проект из контекста">
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4 4 12l4 8"/><path d="m16 4 4 8-4 8"/><path d="m14 4-4 16"/></svg>
-                      <span>VBA-контекст</span>
-                    </button>
                     <button type="button" class="composer-option-button context-toggle-button html-mode-toggle-button" id="toggleHtmlModeButton" title="Вести этот чат как HTML workspace">
                       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 9-4 3 4 3"/><path d="m16 9 4 3-4 3"/><path d="m14 5-4 14"/></svg>
                       <span>HTML workspace</span>
@@ -539,14 +535,11 @@
                 <label class="checkline"><input id="autoRetryToolsInput" type="checkbox"><span>Авторемонт ошибок инструментов</span></label>
                 <label class="checkline"><input id="requireVerificationInput" type="checkbox"><span>Проверять результат мутаций</span></label>
                 <label class="checkline"><input id="autoContinueAfterConfirmationInput" type="checkbox"><span>Продолжать после подтверждения</span></label>
-                <label class="checkline"><input id="allowAgentToolAuthoringInput" type="checkbox"><span>Создавать missing tool по ходу задачи</span></label>
                 <label class="checkline"><input id="autoCompressContextInput" type="checkbox"><span>Создавать summary при заполнении контекста</span></label>
-                <label class="checkline"><input id="includeVbaContextInput" type="checkbox"><span>Включать VBA-контекст автоматически</span></label>
                 <label><span>Макс. итераций агента</span><input id="maxAgentIterationsInput" type="number" min="1"></label>
                 <label><span>Повторов при ошибке формата</span><input id="maxAgentFormatRetriesInput" type="number" min="1"></label>
                 <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1"></label>
                 <label><span>Tools в одном planner prompt</span><input id="maxAgentToolsPerRequestInput" type="number" min="1"></label>
-                <label><span>VBA-контекст, символы</span><input id="vbaContextLimitInput" type="number" min="1000"></label>
               </div>
               <div class="setting-note">json_schema и json_object передают AgentDecision через content; native_tool_calls передаёт действия через OpenAI tools API. Роль tool создаёт matching assistant tool_calls/tool_call_id. Fallback разрешён только до первого выполненного tool.</div>
               <section class="model-compatibility-panel" aria-labelledby="modelCompatibilityTitle">
@@ -687,17 +680,24 @@
       <section class="panel" id="tab-logs">
         <div class="panel-head">
           <div class="panel-status">Журналы диагностики</div>
-          <div class="panel-actions">
-            <button class="secondary" id="refreshRuntimeLogButton" type="button">Обновить</button>
+          <div class="mode-toggle log-view-tabs" role="tablist" aria-label="Тип журнала">
+            <button class="mode-button log-view-button active" type="button" role="tab" aria-selected="true" data-log-view="session">Сессия</button>
+            <button class="mode-button log-view-button" type="button" role="tab" aria-selected="false" data-log-view="runtime">Runtime</button>
           </div>
         </div>
         <div class="logs-workspace">
-          <section class="log-section surface-panel padded">
+          <section class="log-section surface-panel padded" data-log-view-section="session">
             <div class="log-section-head"><strong>UI-события сессии</strong><button class="secondary" id="clearLogButton" type="button">Очистить</button></div>
             <pre class="log-box" id="logBox"></pre>
           </section>
-          <section class="log-section surface-panel padded">
-            <div class="log-section-head"><div><strong>Runtime / model traffic</strong><span id="runtimeLogPath"></span></div><button class="secondary" id="clearRuntimeLogButton" type="button">Очистить файл</button></div>
+          <section class="log-section surface-panel padded hidden" data-log-view-section="runtime">
+            <div class="log-section-head">
+              <div><strong>Runtime / model traffic</strong><span id="runtimeLogPath"></span></div>
+              <div class="log-section-actions">
+                <button class="secondary" id="refreshRuntimeLogButton" type="button">Обновить</button>
+                <button class="secondary" id="clearRuntimeLogButton" type="button">Очистить файл</button>
+              </div>
+            </div>
             <pre class="log-box" id="runtimeLogBox"></pre>
           </section>
         </div>
@@ -718,13 +718,13 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=reasoning-ui-20260819-1"></script>
+  <script src="js/app-core.js?v=agent-progress-20260820-1"></script>
   <script src="js/app-utils.js?v=runtime-20260807-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
   <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js?v=model-debug-20260819-1"></script>
-  <script src="js/app-logs.js?v=model-debug-20260819-1"></script>
+  <script src="js/app-settings.js?v=vba-tools-20260820-1"></script>
+  <script src="js/app-logs.js?v=agent-progress-20260820-1"></script>
   <script src="js/app-prompts.js?v=runtime-20260807-1"></script>
   <script src="js/app-model-data.js?v=model-capabilities-20260820-1"></script>
   <script src="js/app-model-render.js?v=model-capabilities-20260820-1"></script>
@@ -734,20 +734,20 @@
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
   <script src="js/app-tools.js?v=chatui-20260622-4"></script>
   <script src="js/app-skills.js?v=chatui-20260622-4"></script>
-  <script src="js/app-vba.js?v=chatui-20260622-7"></script>
+  <script src="js/app-vba.js?v=vba-tools-20260820-1"></script>
   <script src="js/app-html-workspace.js?v=chatui-20260703-2"></script>
-  <script src="js/app-context.js?v=chatui-20260622-1"></script>
+  <script src="js/app-context.js?v=vba-tools-20260820-1"></script>
   <script src="js/app-agent-data.js?v=chatui-20260622-1"></script>
   <script src="js/app-agent-model.js?v=agent-reliability-20260819-1"></script>
   <script src="js/app-chart-artifacts.js?v=chatui-20260622-2"></script>
   <script src="js/app-html-artifacts.js?v=chatui-20260702-2"></script>
   <script src="js/app-artifacts.js?v=context-20260807-1"></script>
-  <script src="js/app-agent.js?v=reasoning-ui-20260819-1"></script>
+  <script src="js/app-agent.js?v=agent-actions-20260820-1"></script>
   <script src="js/app-messages.js?v=reasoning-ui-20260819-1"></script>
   <script src="js/app-reasoning.js?v=reasoning-ui-20260819-1"></script>
   <script src="js/app-attachments.js?v=mediarouting-20260722-1"></script>
   <script src="js/app-chat.js?v=reasoning-ui-20260819-1"></script>
   <script src="js/app-chat-edit.js?v=runtime-20260807-1"></script>
-  <script src="js/app.js?v=model-debug-20260819-1"></script>
+  <script src="js/app.js?v=agent-progress-20260820-1"></script>
 </body>
 </html>

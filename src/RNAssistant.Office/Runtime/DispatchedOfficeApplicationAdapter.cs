@@ -62,11 +62,6 @@ namespace RNAssistant.Office
             return _dispatcher.Invoke(delegate { return Inner.GetDocumentSnapshot(maxChars); });
         }
 
-        public string GetVbaSnapshot(int maxChars)
-        {
-            return _dispatcher.Invoke(delegate { return Inner.GetVbaSnapshot(maxChars); });
-        }
-
         public void PrepareForContextCapture()
         {
             _dispatcher.Invoke(delegate { Inner.PrepareForContextCapture(); });

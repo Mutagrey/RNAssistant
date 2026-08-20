@@ -99,6 +99,7 @@ namespace RNAssistant.Harness
                     adapter,
                     executor,
                     null,
+                    AgentBlock(Command("common.skills_load", "ids", new[] { "common.tool_authoring" })),
                     AgentBlock(Command("common.tools_validate", definitionArgs)),
                     AgentBlock(Command("common.tools_save", definitionArgs)),
                     FinalBlock("Tool created."));
@@ -109,7 +110,9 @@ namespace RNAssistant.Harness
                     NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, RequireVerificationForMutations = false },
                     new List<ToolDefinition>(executor.GetControllerTools()),
-                    null).GetAwaiter().GetResult();
+                    null,
+                    null,
+                    BuiltInSkillProvider.GetSkills(adapter)).GetAwaiter().GetResult();
 
                 AssertEqual("Tool created.", result.AssistantText, "agent tool creation final");
                 var read = new ToolCommand { ToolId = "common.tools_read" };
@@ -143,6 +146,7 @@ namespace RNAssistant.Harness
                     adapter,
                     executor,
                     null,
+                    AgentBlock(Command("common.skills_load", "ids", new[] { "common.tool_authoring" })),
                     AgentBlock(Command("common.tools_validate", definitionArgs)),
                     AgentBlock(Command("common.tools_save", definitionArgs)),
                     AgentBlock(Command("excel.custom_chart")),
@@ -154,12 +158,14 @@ namespace RNAssistant.Harness
                     NewContext(adapter),
                     new AppSettings
                     {
-                        AllowAgentToolAuthoring = true,
                         AutoConfirmToolActions = true,
-                        RequireVerificationForMutations = false
+                        RequireVerificationForMutations = false,
+                        MaxAgentToolsPerRequest = 40
                     },
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
-                    null).GetAwaiter().GetResult();
+                    null,
+                    null,
+                    BuiltInSkillProvider.GetSkills(adapter)).GetAwaiter().GetResult();
 
                 AssertEqual("Chart created.", result.AssistantText, "tool-authoring task final");
                 AssertTrue(adapter.Executed.Any(command => string.Equals(command.ToolId, "excel.add_chart", StringComparison.OrdinalIgnoreCase)), "new pipeline tool executed in same run");

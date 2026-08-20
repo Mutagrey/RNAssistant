@@ -11,125 +11,53 @@ namespace RNAssistant.Office.Services
         public ToolCatalogSlice Slice(
             RoutedTask route,
             IEnumerable<ToolDefinition> tools,
-            IReadOnlyList<AgentObservation> observations,
             int maxTools = 24,
-            bool allowAgentToolAuthoring = false,
             AppSettings settings = null)
         {
             var slice = new ToolCatalogSlice();
-            var controlOnly = route != null && !route.RequiresTool;
             var host = route == null ? string.Empty : route.App ?? string.Empty;
             foreach (var tool in tools ?? new ToolDefinition[0])
             {
-                if (controlOnly && !IsControlTool(tool))
-                {
-                    continue;
-                }
                 var exclusion = CandidateExclusion(tool, host);
+                if (exclusion == null && !AllowedForPhase(tool, route))
+                {
+                    exclusion = Exclude(tool, "wrong_phase", "Only read-only tools are available during verification.");
+                }
+                if (exclusion == null && !AllowedForExplicitMode(tool, route))
+                {
+                    exclusion = Exclude(tool, "explicit_mode", "Tool is outside the active explicit workspace mode.");
+                }
                 if (exclusion != null)
                 {
                     slice.Excluded.Add(exclusion);
-                    continue;
-                }
-                if (!AllowedForPhase(tool, route))
-                {
-                    slice.Excluded.Add(Exclude(tool, "wrong_phase", "Tool risk or mutation mode is not allowed in phase " + (route == null ? string.Empty : route.Phase) + "."));
-                    continue;
-                }
-                if (!Relevant(tool, route) && !OptionalToolAuthoring(tool, route, allowAgentToolAuthoring))
-                {
-                    slice.Excluded.Add(Exclude(tool, "not_relevant", "Tool does not match task type " + (route == null ? string.Empty : route.TaskType) + "."));
                     continue;
                 }
                 slice.Tools.Add(tool);
             }
 
             var ordered = slice.Tools
-                .GroupBy(t => t.Id, StringComparer.OrdinalIgnoreCase)
+                .GroupBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
                 .Select(group => group.First())
-                .OrderBy(t => ToolPriority(t, route))
-                .ThenBy(t => t.RiskLevel)
-                .ThenBy(t => t.Id)
+                .OrderBy(tool => ToolPriority(tool, host))
                 .ToList();
-            slice.Tools = SelectBalancedTools(ordered, route, Math.Max(1, maxTools));
+            slice.Tools = SelectBalancedTools(ordered, host, route, Math.Max(1, maxTools));
             FitRequestBudget(slice, settings);
+
             var selectedIds = new HashSet<string>(slice.Tools.Select(tool => tool.Id), StringComparer.OrdinalIgnoreCase);
             foreach (var omitted in ordered.Where(tool =>
                 !selectedIds.Contains(tool.Id) &&
-                !slice.Excluded.Any(exclusion => string.Equals(exclusion.ToolId, tool.Id, StringComparison.OrdinalIgnoreCase))))
+                !slice.Excluded.Any(item => string.Equals(item.ToolId, tool.Id, StringComparison.OrdinalIgnoreCase))))
             {
-                slice.Excluded.Add(Exclude(omitted, "selection_limit", "A higher-priority balanced set filled the prompt tool budget."));
+                slice.Excluded.Add(Exclude(omitted, "selection_limit", "The balanced tool set filled the request budget."));
             }
             return slice;
         }
 
-        private static void FitRequestBudget(ToolCatalogSlice slice, AppSettings settings)
-        {
-            if (slice == null || settings == null || slice.Tools.Count <= 1) return;
-            var limit = Math.Max(512, ModelContextBudget.InputBudgetTokens(settings) / 2);
-            if (EstimateRequestTokens(slice.Tools, settings) <= limit) return;
-
-            var low = 1;
-            var high = slice.Tools.Count - 1;
-            var selectedCount = 1;
-            while (low <= high)
-            {
-                var middle = low + (high - low) / 2;
-                var candidate = slice.Tools.Take(middle).ToList();
-                if (EstimateRequestTokens(candidate, settings) <= limit)
-                {
-                    selectedCount = middle;
-                    low = middle + 1;
-                }
-                else
-                {
-                    high = middle - 1;
-                }
-            }
-
-            for (var index = slice.Tools.Count - 1; index >= selectedCount; index--)
-            {
-                var omitted = slice.Tools[index];
-                slice.Excluded.Add(Exclude(omitted, "request_token_limit", "Tool schema was omitted to keep the request inside the model context budget."));
-            }
-            slice.Tools.RemoveRange(selectedCount, slice.Tools.Count - selectedCount);
-        }
-
-        private static int EstimateRequestTokens(IReadOnlyList<ToolDefinition> tools, AppSettings settings)
-        {
-            var options = AgentPlannerCompletionRunner.BuildOptions(settings.AgentResponseMode, tools);
-            var structured = options.NativeTools ||
-                string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.OrdinalIgnoreCase);
-            return ModelContextBudget.EstimateRequestOptionsTokens(options) + EstimatePromptToolTokens(tools, structured);
-        }
-
-        private static int EstimatePromptToolTokens(IEnumerable<ToolDefinition> tools, bool structured)
-        {
-            return (tools ?? new ToolDefinition[0]).Sum(tool => tool == null
-                ? 0
-                : 16 + ModelContextBudget.EstimateTextTokens(
-                    (tool.Id ?? string.Empty) + "\n" +
-                    (tool.Description ?? string.Empty) + "\n" +
-                    (tool.ArgumentSchemaJson ?? string.Empty) + "\n" +
-                    (tool.UseWhen ?? string.Empty) + "\n" +
-                    (tool.DoNotUseWhen ?? string.Empty) + "\n" +
-                    (structured ? string.Empty : tool.ExamplesJson ?? string.Empty)));
-        }
-
         private static ToolExclusion CandidateExclusion(ToolDefinition tool, string host)
         {
-            if (tool == null)
-            {
-                return new ToolExclusion { ToolId = string.Empty, Reason = "invalid_definition", Detail = "Tool definition is null." };
-            }
-            if (string.IsNullOrWhiteSpace(tool.Id))
-            {
-                return Exclude(tool, "missing_id", "Tool id is empty.");
-            }
-            if (!tool.Enabled)
-            {
-                return Exclude(tool, "disabled", "Tool is disabled.");
-            }
+            if (tool == null) return new ToolExclusion { ToolId = string.Empty, Reason = "invalid_definition", Detail = "Tool definition is null." };
+            if (string.IsNullOrWhiteSpace(tool.Id)) return Exclude(tool, "missing_id", "Tool id is empty.");
+            if (!tool.Enabled) return Exclude(tool, "disabled", "Tool is disabled.");
             if (!string.Equals(tool.CapabilityStatus ?? "available", "available", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(tool.CapabilityStatus ?? "available", "partial", StringComparison.OrdinalIgnoreCase))
             {
@@ -143,8 +71,23 @@ namespace RNAssistant.Office.Services
             return null;
         }
 
+        private static bool AllowedForPhase(ToolDefinition tool, RoutedTask route)
+        {
+            return route == null ||
+                !string.Equals(route.Phase, AgentPhases.Verification, StringComparison.OrdinalIgnoreCase) ||
+                tool != null && !tool.MutatesDocument && !tool.MutatesLocalState;
+        }
+
+        private static bool AllowedForExplicitMode(ToolDefinition tool, RoutedTask route)
+        {
+            if (route == null || !string.Equals(route.TaskType, "html", StringComparison.OrdinalIgnoreCase)) return true;
+            return IsControlTool(tool) ||
+                tool != null && (tool.Id ?? string.Empty).StartsWith("common.html_workspace_", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static List<ToolDefinition> SelectBalancedTools(
             IReadOnlyList<ToolDefinition> ordered,
+            string host,
             RoutedTask route,
             int limit)
         {
@@ -153,43 +96,46 @@ namespace RNAssistant.Office.Services
             {
                 foreach (var tool in source)
                 {
-                    if (selected.Count >= limit || count <= 0)
-                    {
-                        break;
-                    }
-                    if (selected.Any(existing => string.Equals(existing.Id, tool.Id, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        continue;
-                    }
+                    if (selected.Count >= limit || count <= 0) break;
+                    if (selected.Any(item => string.Equals(item.Id, tool.Id, StringComparison.OrdinalIgnoreCase))) continue;
                     selected.Add(tool);
                     count -= 1;
                 }
             };
 
-            // Progressive disclosure must stay reachable even when mutation/read
-            // balancing fills the normal slice.
             add(ordered.Where(IsControlTool), 1);
+            if (route != null && string.Equals(route.Phase, AgentPhases.Verification, StringComparison.OrdinalIgnoreCase))
+            {
+                add(ordered.Where(IsReadOnly), limit - selected.Count);
+                return selected;
+            }
 
-            var mutationPhase = route != null &&
-                string.Equals(route.Phase, AgentPhases.Mutation, StringComparison.OrdinalIgnoreCase);
-            if (mutationPhase)
-            {
-                add(ordered.Where(tool => tool.MutatesDocument), Math.Max(1, (int)Math.Ceiling(limit * 0.6)));
-                add(ordered.Where(tool => !tool.MutatesDocument && LooksLikeInspectionTool(tool)), Math.Max(2, limit / 4));
-            }
-            else
-            {
-                add(ordered.Where(tool => !tool.MutatesDocument && LooksLikeInspectionTool(tool)), Math.Max(4, limit / 3));
-            }
+            add(ordered.Where(tool => IsHostTool(tool, host) && (tool.MutatesDocument || tool.MutatesLocalState)), Math.Max(1, limit / 2));
+            add(ordered.Where(tool => IsHostTool(tool, host) && IsReadOnly(tool)), Math.Max(2, limit / 3));
+            add(ordered.Where(tool => !IsHostTool(tool, host)), Math.Max(2, limit / 4));
             add(ordered, limit - selected.Count);
             return selected;
         }
 
-        private static bool LooksLikeInspectionTool(ToolDefinition tool)
+        private static bool IsHostTool(ToolDefinition tool, string host)
         {
-            return tool != null && AgentText.ContainsAny(
-                (tool.Id ?? string.Empty) + " " + (tool.UseWhen ?? string.Empty),
-                "context", "selection", "summary", "read", "profile", "list", "search", "find", "inspect", "get_");
+            return tool != null && string.Equals(tool.Host, host, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsReadOnly(ToolDefinition tool)
+        {
+            return tool != null && !tool.MutatesDocument && !tool.MutatesLocalState;
+        }
+
+        private static int ToolPriority(ToolDefinition tool, string host)
+        {
+            if (IsControlTool(tool)) return -10;
+            return IsHostTool(tool, host) ? 0 : 10;
+        }
+
+        private static bool IsControlTool(ToolDefinition tool)
+        {
+            return tool != null && string.Equals(tool.Id, "common.skills_load", StringComparison.OrdinalIgnoreCase);
         }
 
         private static ToolExclusion Exclude(ToolDefinition tool, string reason, string detail)
@@ -202,137 +148,50 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        private static bool AllowedForPhase(ToolDefinition tool, RoutedTask route)
+        private static void FitRequestBudget(ToolCatalogSlice slice, AppSettings settings)
         {
-            if (route == null)
+            if (slice == null || settings == null || slice.Tools.Count <= 1) return;
+            var limit = Math.Max(512, ModelContextBudget.InputBudgetTokens(settings) / 2);
+            if (EstimateRequestTokens(slice.Tools, settings) <= limit) return;
+
+            var selectedCount = 1;
+            var low = 1;
+            var high = slice.Tools.Count - 1;
+            while (low <= high)
             {
-                return true;
+                var middle = low + (high - low) / 2;
+                if (EstimateRequestTokens(slice.Tools.Take(middle).ToList(), settings) <= limit)
+                {
+                    selectedCount = middle;
+                    low = middle + 1;
+                }
+                else
+                {
+                    high = middle - 1;
+                }
             }
-            if (string.Equals(route.Phase, AgentPhases.ReadOnly, StringComparison.OrdinalIgnoreCase))
+
+            for (var index = slice.Tools.Count - 1; index >= selectedCount; index--)
             {
-                return !tool.MutatesDocument && tool.RiskLevel <= 0;
+                slice.Excluded.Add(Exclude(slice.Tools[index], "request_token_limit", "Tool schema was omitted to keep the request inside the model context budget."));
             }
-            if (string.Equals(route.Phase, AgentPhases.Verification, StringComparison.OrdinalIgnoreCase))
-            {
-                return !tool.MutatesDocument;
-            }
-            return tool.RiskLevel <= route.RiskAllowed;
+            slice.Tools.RemoveRange(selectedCount, slice.Tools.Count - selectedCount);
         }
 
-        private static bool Relevant(ToolDefinition tool, RoutedTask route)
+        private static int EstimateRequestTokens(IReadOnlyList<ToolDefinition> tools, AppSettings settings)
         {
-            if (IsControlTool(tool)) return true;
-            if (route == null || string.IsNullOrWhiteSpace(route.TaskType))
-            {
-                return true;
-            }
-
-            var id = tool.Id ?? string.Empty;
-            if (id.StartsWith("common.", StringComparison.OrdinalIgnoreCase) && route.TaskType != "html" && route.TaskType != "tool_authoring")
-            {
-                return false;
-            }
-            if (route.TaskType == "content")
-            {
-                return true;
-            }
-            if (route.TaskType == "formatting")
-            {
-                return AgentText.ContainsAny(id, "context", "selection", "summary", "read", "profile", "format", "autofit");
-            }
-            if (route.TaskType == "html")
-            {
-                return AgentText.ContainsAny(id, "html_workspace", "prompts_read", "skills_read", "tools_read");
-            }
-            if (route.TaskType == "tool_authoring")
-            {
-                return AgentText.ContainsAny(id, "tools_", "skills_", "prompts_");
-            }
-            if (route.TaskType == "chart")
-            {
-                return AgentText.ContainsAny(id, "context", "selection", "summary", "read", "profile", "chart");
-            }
-            if (route.TaskType == "mail_search")
-            {
-                return AgentText.ContainsAny(id, "context", "read", "search", "mail", "attachment", "collect");
-            }
-            if (route.TaskType == "text_search")
-            {
-                return AgentText.ContainsAny(id, "context", "selection", "read", "search", "find");
-            }
-            if (route.TaskType == "text_replace")
-            {
-                return AgentText.ContainsAny(id, "context", "selection", "read", "search", "find", "replace");
-            }
-            if (route.TaskType == "vba")
-            {
-                return AgentText.ContainsAny(id, "vba", "macro", "context");
-            }
-            if (route.TaskType == "macro_execution")
-            {
-                return AgentText.ContainsAny(id, "vba", "macro", "context");
-            }
-            if (route.TaskType == "destructive")
-            {
-                return true;
-            }
-            return !tool.MutatesDocument || AgentText.ContainsAny(id, "read", "list", "search", "context", "summary");
+            var options = AgentPlannerCompletionRunner.BuildOptions(settings.AgentResponseMode, tools);
+            var structured = options.NativeTools ||
+                string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.OrdinalIgnoreCase);
+            return ModelContextBudget.EstimateRequestOptionsTokens(options) + (tools ?? new ToolDefinition[0]).Sum(tool => tool == null
+                ? 0
+                : 16 + ModelContextBudget.EstimateTextTokens(
+                    (tool.Id ?? string.Empty) + "\n" +
+                    (tool.Description ?? string.Empty) + "\n" +
+                    (tool.ArgumentSchemaJson ?? string.Empty) + "\n" +
+                    (tool.UseWhen ?? string.Empty) + "\n" +
+                    (tool.DoNotUseWhen ?? string.Empty) + "\n" +
+                    (structured ? string.Empty : tool.ExamplesJson ?? string.Empty)));
         }
-
-        private static bool OptionalToolAuthoring(ToolDefinition tool, RoutedTask route, bool enabled)
-        {
-            if (!enabled || tool == null || route == null ||
-                !string.Equals(route.Phase, AgentPhases.Mutation, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            return string.Equals(tool.Id, "common.tools_validate", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(tool.Id, "common.tools_save", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static int ToolPriority(ToolDefinition tool, RoutedTask route)
-        {
-            if (tool == null || route == null)
-            {
-                return 50;
-            }
-            var id = tool.Id ?? string.Empty;
-            if (IsControlTool(tool)) return -10;
-            if (route.TaskType == "html" && AgentText.ContainsAny(id, "html_workspace"))
-            {
-                return 0;
-            }
-            if (route.TaskType == "formatting" && AgentText.ContainsAny(id, "format", "autofit"))
-            {
-                return string.Equals(route.Phase, AgentPhases.Mutation, StringComparison.OrdinalIgnoreCase) ? 0 : 20;
-            }
-            if (route.TaskType == "chart" && AgentText.ContainsAny(id, "chart"))
-            {
-                return string.Equals(route.Phase, AgentPhases.Mutation, StringComparison.OrdinalIgnoreCase) ? 0 : 20;
-            }
-            if (AgentText.ContainsAny(id, "common.tools_validate", "common.tools_save"))
-            {
-                return 5;
-            }
-            if (route.TaskType == "content" && tool.MutatesDocument)
-            {
-                return AgentText.ContainsAny(id, "add_sheet", "add_slide", "write_table", "write_range", "set_formula", "add_chart", "add_table", "insert", "replace", "comment")
-                    ? 0
-                    : 20;
-            }
-            if (!tool.MutatesDocument && AgentText.ContainsAny(id, "context", "selection", "summary", "read", "profile", "list", "search", "find"))
-            {
-                return 10;
-            }
-            return 30;
-        }
-
-        private static bool IsControlTool(ToolDefinition tool)
-        {
-            return tool != null && string.Equals(tool.Id, "common.skills_load", StringComparison.OrdinalIgnoreCase);
-        }
-
-
     }
 }

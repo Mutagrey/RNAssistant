@@ -119,16 +119,13 @@ function renderSettings() {
   $("autoRetryToolsInput").checked = (s.AutoRetryToolErrors !== false && s.autoRetryToolErrors !== false);
   $("requireVerificationInput").checked = (s.RequireVerificationForMutations !== false && s.requireVerificationForMutations !== false);
   $("autoContinueAfterConfirmationInput").checked = (s.AutoContinueAfterConfirmation !== false && s.autoContinueAfterConfirmation !== false);
-  $("allowAgentToolAuthoringInput").checked = !!(s.AllowAgentToolAuthoring || s.allowAgentToolAuthoring);
   $("autoCompressContextInput").checked = (s.AutoCompressContext !== false && s.autoCompressContext !== false);
   $("debugModelTrafficInput").checked = !!(s.DebugModelTraffic || s.debugModelTraffic);
   $("smartChatTitlesInput").checked = (s.SmartChatTitles !== false && s.smartChatTitles !== false);
-  $("includeVbaContextInput").checked = !!(s.IncludeVbaContext || s.includeVbaContext);
   $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || 8;
   $("maxAgentFormatRetriesInput").value = s.MaxAgentFormatRetries || s.maxAgentFormatRetries || 2;
   $("maxAgentToolStepsInput").value = s.MaxAgentToolSteps || s.maxAgentToolSteps || 40;
   $("maxAgentToolsPerRequestInput").value = s.MaxAgentToolsPerRequest || s.maxAgentToolsPerRequest || 24;
-  $("vbaContextLimitInput").value = s.VbaContextCharLimit || s.vbaContextCharLimit || 30000;
   if (typeof renderPromptSettings === "function") {
     renderPromptSettings(s);
   }
@@ -179,16 +176,13 @@ function readSettings() {
     AutoRetryToolErrors: $("autoRetryToolsInput").checked,
     RequireVerificationForMutations: $("requireVerificationInput").checked,
     AutoContinueAfterConfirmation: $("autoContinueAfterConfirmationInput").checked,
-    AllowAgentToolAuthoring: $("allowAgentToolAuthoringInput").checked,
     AutoCompressContext: $("autoCompressContextInput").checked,
     DebugModelTraffic: $("debugModelTrafficInput").checked,
     SmartChatTitles: $("smartChatTitlesInput").checked,
-    IncludeVbaContext: $("includeVbaContextInput").checked,
     MaxAgentIterations: Number($("maxAgentIterationsInput").value || 8),
     MaxAgentFormatRetries: Number($("maxAgentFormatRetriesInput").value || 2),
     MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || 40),
     MaxAgentToolsPerRequest: Number($("maxAgentToolsPerRequestInput").value || 24),
-    VbaContextCharLimit: Number($("vbaContextLimitInput").value || 30000),
     SystemPrompt: promptSettings.SystemPrompt,
     ChatSystemPrompt: promptSettings.ChatSystemPrompt,
     SystemPromptRole: $("systemPromptRoleInput").value,

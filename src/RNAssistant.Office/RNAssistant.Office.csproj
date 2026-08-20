@@ -81,10 +81,11 @@
     <Compile Include="Services\ChatArtifactService.cs" />
     <Compile Include="Services\ChatHistoryEditService.cs" />
     <Compile Include="Services\AgentRunService.cs" />
+    <Compile Include="Services\AgentDecisionProgressGuard.cs" />
     <Compile Include="Services\AgentPlanStateService.cs" />
     <Compile Include="Services\AgentProtocolHistory.cs" />
     <Compile Include="Services\AgentRunPresentation.cs" />
-    <Compile Include="Services\OfficeIntentRouter.cs" />
+    <Compile Include="Services\AgentRouteResolver.cs" />
     <Compile Include="Services\ToolCatalogSlicer.cs" />
     <Compile Include="Services\PlannerPromptComposer.cs" />
     <Compile Include="Services\AgentActionValidator.cs" />

@@ -307,14 +307,13 @@
 }
 
 .logs-workspace {
-  display: grid;
-  grid-template-rows: minmax(140px, 0.7fr) minmax(220px, 1.3fr);
-  gap: 8px;
+  display: flex;
   flex: 1;
   min-height: 0;
 }
 
 .log-section {
+  flex: 1;
   display: flex;
   min-height: 0;
   flex-direction: column;
@@ -334,6 +333,17 @@
   display: grid;
   min-width: 0;
   gap: 2px;
+}
+
+.log-section-head .log-section-actions {
+  display: flex;
+  flex: none;
+  grid-auto-flow: column;
+  gap: 6px;
+}
+
+.log-view-tabs {
+  margin-left: auto;
 }
 
 .log-section-head strong {

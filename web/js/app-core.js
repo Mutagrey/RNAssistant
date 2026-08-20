@@ -69,6 +69,7 @@ var state = {
   pending: {},
   seq: 1,
   focusReportTimer: null,
+  lastReportedWantsKeyboard: null,
   highlightLog: {},
   highlightRetryScheduled: false,
   highlightRetryAttempts: 0,
@@ -191,10 +192,15 @@ function reportFocusState() {
 
   var selection = window.getSelection ? window.getSelection() : null;
   var hasSelection = !!(selection && !selection.isCollapsed && String(selection).length > 0);
+  var wantsKeyboard = document.hasFocus() && (isKeyboardElement(document.activeElement) || hasSelection);
+  if (state.lastReportedWantsKeyboard === wantsKeyboard) {
+    return;
+  }
+  state.lastReportedWantsKeyboard = wantsKeyboard;
   window.chrome.webview.postMessage({
     type: "focusState",
     payload: {
-      wantsKeyboard: document.hasFocus() && (isKeyboardElement(document.activeElement) || hasSelection)
+      wantsKeyboard: wantsKeyboard
     }
   });
 }

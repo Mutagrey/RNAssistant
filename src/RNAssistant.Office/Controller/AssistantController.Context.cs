@@ -1,5 +1,4 @@
 using System;
-using Newtonsoft.Json;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
@@ -37,42 +36,6 @@ namespace RNAssistant.Office
                 Preview = ContextNormalizer.TrimForContext(text ?? string.Empty, 360),
                 DetailsJson = detailsJson
             }, kind);
-            return context;
-        }
-
-        public DocumentContext AddVbaContext(string chatId = null, int maxChars = 0)
-        {
-            var settings = _settingsService.Load();
-            var session = LoadAddressedSession(chatId);
-            EnsureCurrentDocument(session);
-            var limit = maxChars <= 0 ? settings.VbaContextCharLimit : maxChars;
-            var snapshot = _adapter.GetVbaSnapshot(Math.Max(1000, limit));
-            if (string.IsNullOrWhiteSpace(snapshot) ||
-                snapshot.IndexOf("VBA project could not be read", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                throw new InvalidOperationException(string.IsNullOrWhiteSpace(snapshot) ? "VBA project is empty or unavailable." : snapshot);
-            }
-
-            var text =
-                "Attached VBA project snapshot for this chat. Modules are separated by lines like ===== ModuleName (Type) =====.\n" +
-                "When editing VBA, use `" + _toolExecutor.VbaToolId("vba_apply_patch") + "` for targeted changes and avoid whole-module replacement unless necessary.\n\n" +
-                snapshot;
-            var context = AddContextNote(session, new ContextNote
-            {
-                Host = _adapter.HostName,
-                Kind = "vba_project",
-                Title = "VBA project",
-                Reference = "vba:project",
-                Source = _adapter.DocumentTitle,
-                Text = ContextNormalizer.TrimForContext(text, Math.Max(1000, limit)),
-                Preview = "VBA project attached for this chat. Use VBA tools to patch modules.",
-                DetailsJson = JsonConvert.SerializeObject(new
-                {
-                    type = "vba_project",
-                    patchTool = _toolExecutor.VbaToolId("vba_apply_patch"),
-                    replaceModuleTool = _toolExecutor.VbaToolId("vba_replace_module")
-                })
-            }, "vba_project");
             return context;
         }
 

@@ -13,46 +13,20 @@ namespace RNAssistant.Office.Services
             return session != null &&
                 session.PendingAgentTask != null &&
                 !string.IsNullOrWhiteSpace(session.PendingAgentTask.Request) &&
-                LooksLikeShortFollowUp(userText);
+                !string.IsNullOrWhiteSpace(userText);
         }
 
         public static string Resolve(string userText, ChatSession session)
         {
             if (!ShouldContinue(userText, session))
             {
-                if (session != null)
-                {
-                    session.PendingAgentTask = null;
-                }
                 return userText ?? string.Empty;
             }
 
-            return session.PendingAgentTask.Request.Trim() +
-                "\n\nUSER_FOLLOW_UP:\n" +
+            return "PENDING_TASK_CONTEXT (the user may continue, correct, cancel, or replace it):\n" +
+                session.PendingAgentTask.Request.Trim() +
+                "\n\nUSER_MESSAGE:\n" +
                 (userText ?? string.Empty).Trim();
-        }
-
-        private static bool LooksLikeShortFollowUp(string userText)
-        {
-            var value = (userText ?? string.Empty).Trim().ToLowerInvariant();
-            if (value.Length == 0 || value.Length > 120)
-            {
-                return false;
-            }
-
-            if (value.All(char.IsDigit))
-            {
-                return true;
-            }
-
-            var prefixes = new[]
-            {
-                "да", "нет", "ок", "окей", "хорошо", "верно", "именно", "так и", "сделай", "делай",
-                "продолж", "попроб", "давай", "реализуй", "реализовать", "выполни", "выполнить", "запусти",
-                "соглас", "подтверж", "перв", "втор", "трет",
-                "yes", "no", "ok", "okay", "correct", "exactly", "do it", "proceed", "continue", "try"
-            };
-            return prefixes.Any(prefix => value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
         }
     }
 
@@ -100,7 +74,15 @@ namespace RNAssistant.Office.Services
             {
                 tools.Remove(existing);
             }
-            tools.Add(tool.Clone());
+            var list = tools as IList<ToolDefinition>;
+            if (list != null)
+            {
+                list.Insert(0, tool.Clone());
+            }
+            else
+            {
+                tools.Add(tool.Clone());
+            }
             ApplySafety(tools);
         }
 
@@ -167,14 +149,10 @@ namespace RNAssistant.Office.Services
             }
             if (string.Equals(route.Phase, AgentPhases.ReadOnly, StringComparison.OrdinalIgnoreCase) && HasSuccessfulRead(observations))
             {
-                if (RequiresMutationPhase(route.Mode))
+                if (route.RequiresTool)
                 {
                     route.Phase = AgentPhases.Mutation;
-                    if (string.Equals(route.Mode, "destructive_mutation", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(route.Mode, "high_risk_execution", StringComparison.OrdinalIgnoreCase))
-                    {
-                        route.RiskAllowed = Math.Max(route.RiskAllowed, 3);
-                    }
+                    route.RequiresInspection = false;
                 }
                 else
                 {
@@ -207,8 +185,7 @@ namespace RNAssistant.Office.Services
         private static bool HasSuccessfulMutation(RoutedTask route, IEnumerable<AgentObservation> observations)
         {
             var localMutationCompletesTask = route != null &&
-                (string.Equals(route.TaskType, "tool_authoring", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(route.TaskType, "html", StringComparison.OrdinalIgnoreCase));
+                string.Equals(route.TaskType, "html", StringComparison.OrdinalIgnoreCase);
             return (observations ?? new AgentObservation[0]).Any(o =>
                 o != null &&
                 string.Equals(o.Status, "success", StringComparison.OrdinalIgnoreCase) &&
@@ -221,14 +198,6 @@ namespace RNAssistant.Office.Services
                 o != null &&
                 string.Equals(o.Status, "success", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(o.Purpose, AgentObservationPurposes.Verification, StringComparison.OrdinalIgnoreCase));
-        }
-
-        private static bool RequiresMutationPhase(string mode)
-        {
-            return !string.IsNullOrWhiteSpace(mode) &&
-                (mode.IndexOf("mutate", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                 mode.IndexOf("mutation", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                 string.Equals(mode, "high_risk_execution", StringComparison.OrdinalIgnoreCase));
         }
     }
 }

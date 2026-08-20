@@ -38,6 +38,12 @@ function renderActivityRow(activity, current, expandable, context) {
   var copy = document.createElement("span");
   copy.className = "agent-activity-copy";
 
+  var operation = toolActionLabel(activity);
+  var operationNode = document.createElement("span");
+  operationNode.className = "agent-activity-action" + (operation ? "" : " is-empty");
+  operationNode.textContent = operation;
+  copy.appendChild(operationNode);
+
   var name = document.createElement("span");
   name.className = "agent-activity-name";
   name.textContent = title;
@@ -77,8 +83,12 @@ function activityPrimaryText(activity) {
 
   var title = activityTitle(activity);
   var toolId = activityToolId(activity);
-  if (title && title !== toolId && title !== "Tool step" && title !== "Agent step") {
-    return title;
+  if (title && title !== toolId && title !== "Tool step" && title !== "Agent step" &&
+      title.toLowerCase().indexOf("deterministic") !== 0) {
+    return title.charAt(0).toUpperCase() + title.slice(1);
+  }
+  if (toolId) {
+    return friendlyToolActionText(toolId);
   }
 
   var labels = {
@@ -90,6 +100,73 @@ function activityPrimaryText(activity) {
     plan: "Формирую план"
   };
   return labels[activityKind(activity)] || toolId || title || "Выполняю шаг";
+}
+
+function toolActionKind(toolId) {
+  var id = String(toolId || "").toLowerCase();
+  if (id.indexOf("find") >= 0 || id.indexOf("search") >= 0) return "SEARCH";
+  if (id.indexOf("delete") >= 0 || id.indexOf("remove") >= 0 || id.indexOf("clear") >= 0) return "DELETE";
+  if (id.indexOf("add_") >= 0 || id.indexOf("create") >= 0 || id.indexOf("insert") >= 0) return "CREATE";
+  if (id.indexOf("write") >= 0 || id.indexOf("set_formula") >= 0) return "WRITE";
+  if (id.indexOf("update") >= 0 || id.indexOf("replace") >= 0 || id.indexOf("rename") >= 0 ||
+      id.indexOf("format") >= 0 || id.indexOf("autofit") >= 0 || id.indexOf("sort") >= 0 ||
+      id.indexOf("filter") >= 0 || id.indexOf("upsert") >= 0) return "UPDATE";
+  if (id.indexOf("run") >= 0 || id.indexOf("execute") >= 0) return "RUN";
+  if (id.indexOf("verify") >= 0 || id.indexOf("validate") >= 0 || id.indexOf("check") >= 0) return "CHECK";
+  if (id.indexOf("load") >= 0) return "LOAD";
+  if (id.indexOf("read") >= 0 || id.indexOf("get_") >= 0 || id.indexOf("list_") >= 0 ||
+      id.indexOf("summary") >= 0 || id.indexOf("profile") >= 0 || id.indexOf("inspect") >= 0) return "READ";
+  return "ACTION";
+}
+
+function toolActionLabel(activity) {
+  var kind = activityKind(activity);
+  if (["tool", "verification", "control"].indexOf(kind) < 0 || !activityToolId(activity)) return "";
+  return toolActionKind(activityToolId(activity));
+}
+
+function friendlyToolActionText(toolId) {
+  var labels = {
+    "excel.get_context": "Читаю контекст книги",
+    "excel.get_selection": "Читаю выделенные ячейки",
+    "excel.workbook_summary": "Читаю структуру книги",
+    "excel.list_sheets": "Получаю список листов",
+    "excel.read_range": "Читаю значения диапазона",
+    "excel.read_formula_range": "Читаю формулы диапазона",
+    "excel.profile_range": "Анализирую структуру диапазона",
+    "excel.find_cells": "Ищу ячейки",
+    "excel.write_range": "Записываю значение в ячейки",
+    "excel.write_table": "Записываю таблицу",
+    "excel.set_formula": "Записываю формулу",
+    "excel.add_table": "Создаю таблицу Excel",
+    "excel.add_chart": "Создаю график",
+    "excel.update_chart": "Изменяю график",
+    "excel.delete_chart": "Удаляю график",
+    "excel.format_range": "Форматирую диапазон",
+    "excel.autofit": "Подбираю ширину строк и столбцов",
+    "excel.add_sheet": "Создаю новый лист",
+    "excel.rename_sheet": "Переименовываю лист",
+    "excel.clear_range": "Очищаю диапазон",
+    "excel.sort_range": "Сортирую диапазон",
+    "excel.filter_range": "Фильтрую диапазон",
+    "excel.replace_cells": "Заменяю значения в ячейках",
+    "common.skills_load": "Загружаю инструкции навыка"
+  };
+  var id = String(toolId || "").toLowerCase();
+  if (labels[id]) return labels[id];
+  var fallbacks = {
+    SEARCH: "Выполняю поиск",
+    READ: "Читаю данные",
+    CREATE: "Создаю объект",
+    WRITE: "Записываю данные",
+    UPDATE: "Обновляю объект",
+    DELETE: "Удаляю объект",
+    RUN: "Запускаю действие",
+    CHECK: "Проверяю результат",
+    LOAD: "Загружаю данные",
+    ACTION: "Выполняю действие"
+  };
+  return fallbacks[toolActionKind(id)] || fallbacks.ACTION;
 }
 
 function activityCommentText(activity) {
@@ -755,9 +832,6 @@ function buildAgentRunTranscript(items, timeline, stats, includePlan, includePla
   var planItem = findAgentPlanItem(items);
   if (planItem) {
     if (typeof appendMessageReasoning === "function") appendMessageReasoning(transcript, planItem.message);
-    if (includePlanDecision !== false) {
-      appendAgentDecisionMessage(transcript, agentDecisionText(planItem));
-    }
     if (includePlan) {
       appendAgentRunPlan(transcript, planItem.activity);
     }
@@ -818,7 +892,6 @@ function renderAgentRunArticle(run) {
   if (finalMessage && !run.live) {
     appendAgentFinalAnswer(body, finalMessage, persistentPlan);
     if (persistentPlan) {
-      appendAgentDecisionMessage(body, agentDecisionText(planItem));
       appendAgentRunPlan(body, planItem.activity);
     }
     appendCollapsedAgentRun(body, transcript, timeline, stats);

@@ -226,7 +226,7 @@ namespace RNAssistant.Harness
             AssertContains(defaults.SystemPrompt, "{\"toolId\":\"<exact id from AVAILABLE_TOOLS>\",\"arguments\":{}}", "default tool envelope");
             AssertContains(defaults.AgentPrompts.RepairDecisionPrompt, "Canonical plan items", "repair explains canonical plan shape");
             AssertContains(defaults.AgentPrompts.RepairDecisionPrompt, "native function call", "repair preserves native transport");
-            AssertContains(defaults.AgentPrompts.PlanContinuationPrompt, "newer observation", "plan continuation requires new evidence");
+            AssertContains(defaults.AgentPrompts.PlanContinuationPrompt, "fixed for this run", "plan continuation forbids replanning");
             AssertContains(defaults.AgentPrompts.ContextCompactionPrompt, "verified facts", "compaction preserves verified facts");
 
             var legacy = new AppSettings
@@ -449,9 +449,8 @@ namespace RNAssistant.Harness
                 App = "Excel",
                 TaskType = "content",
                 Phase = AgentPhases.Mutation,
-                RiskAllowed = 2,
                 RequiresTool = true
-            }, crowdedTools, new List<AgentObservation>(), 8);
+            }, crowdedTools, 8);
             AssertTrue(crowdedSlice.Tools.Any(tool => tool.Id == "common.skills_load"), "skill loader survives a crowded mutation slice");
 
             var staleSession = new ChatSession { ActiveSkillIds = new List<string> { "common.removed", owner.Id } };
@@ -505,12 +504,14 @@ namespace RNAssistant.Harness
             var vbaAuthoring = SkillResolver.Resolve(builtIns, new[] { "common.vba_tool_authoring" });
             AssertTrue(vbaAuthoring.Success, "vba authoring dependencies resolve");
             AssertTrue(vbaAuthoring.Skills.Any(skill => skill.Id == "common.tool_authoring"), "vba authoring loads generic tool authoring");
-            var executableSkill = SkillResolver.Resolve(builtIns, new[] { "common.skill_authoring" }, "Создай skill с исполняемым инструментом");
-            AssertTrue(executableSkill.Skills.Any(skill => skill.Id == "common.tool_authoring"), "executable skill authoring loads tool authoring");
+            var executableSkill = SkillResolver.Resolve(builtIns, new[] { "common.skill_authoring" });
+            AssertTrue(!executableSkill.Skills.Any(skill => skill.Id == "common.tool_authoring"), "task wording does not inject undeclared dependencies");
+            var explicitlyCombined = SkillResolver.Resolve(builtIns, new[] { "common.skill_authoring", "common.tool_authoring" });
+            AssertTrue(explicitlyCombined.Skills.Any(skill => skill.Id == "common.tool_authoring"), "explicit skill selection loads tool authoring");
             var executableSession = new ChatSession();
             executableSession.Messages.Add(new ChatMessage { Role = "user", Content = "Создай skill с исполняемым инструментом" });
             var activatedExecutableSkill = SkillResolver.Activate(executableSession, builtIns, new[] { "common.skill_authoring" }, "replace");
-            AssertTrue(activatedExecutableSkill.Skills.Any(skill => skill.Id == "common.tool_authoring"), "session task activates tool authoring dependency");
+            AssertTrue(!activatedExecutableSkill.Skills.Any(skill => skill.Id == "common.tool_authoring"), "session text does not alter dependency metadata");
         }
     }
 }

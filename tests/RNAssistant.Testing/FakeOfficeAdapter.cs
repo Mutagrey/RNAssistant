@@ -165,13 +165,6 @@ namespace RNAssistant.Harness
             return Trim(snapshot, maxChars);
         }
 
-        public string GetVbaSnapshot(int maxChars)
-        {
-            var snapshot = string.Join("\n", _vbaModules.Values.Select(module =>
-                "===== " + module.Name + " (" + module.Type + ") =====\n" + module.Code).ToArray());
-            return Trim(snapshot, maxChars);
-        }
-
         public void PrepareForContextCapture()
         {
         }

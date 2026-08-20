@@ -98,9 +98,7 @@ namespace RNAssistant.Harness
                     executor,
                     calls,
                     AgentBlock(Command("excel.add_sheet", "name", "Report")),
-                    FinalBlock("Done without retry."),
-                    AgentBlock(Command("excel.add_sheet", "name", "Report")),
-                    FinalBlock("Done after retry."));
+                    FinalBlock("Could not complete after adapter failure."));
 
                 var result = service.ExecuteAsync(
                     "Create a report sheet.",
@@ -110,11 +108,10 @@ namespace RNAssistant.Harness
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
-                AssertEqual(4, calls.Count, "adapter exception retry call count");
-                AssertEqual(2, adapter.Executed.Count, "adapter exception execution count");
+                AssertEqual(2, calls.Count, "model receives the adapter error once");
+                AssertEqual(1, adapter.Executed.Count, "adapter exception execution count");
                 AssertContains(FlattenMessages(calls[1]), "scripted adapter failure", "adapter exception becomes observation");
-                AssertContains(FlattenMessages(calls[2]), "requires a local Office tool", "failed tool does not satisfy required tool gate");
-                AssertEqual("Done after retry.", result.AssistantText, "final after successful retry");
+                AssertEqual("Could not complete after adapter failure.", result.AssistantText, "model may report the failed action");
             });
         }
 
@@ -127,6 +124,7 @@ namespace RNAssistant.Harness
                     adapter,
                     executor,
                     calls,
+                    RawResponse("{\"protocolVersion\":1,\"kind\":\"plan\",\"decisionSummary\":\"Inspect then format.\",\"goal\":\"Format the table\",\"plan\":[{\"id\":\"inspect\",\"title\":\"Inspect target\"},{\"id\":\"format\",\"title\":\"Format range\"}],\"tool\":null,\"message\":null}"),
                     AgentBlock(Command("excel.get_context")),
                     FinalBlock("Inspected, so formatting is done."),
                     AgentBlock(Command("excel.format_range", "sheet", "Data", "address", "A1:B4")),
@@ -140,11 +138,11 @@ namespace RNAssistant.Harness
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
-                AssertEqual(4, calls.Count, "inspection mutation call count");
+                AssertEqual(5, calls.Count, "unfinished visible plan forces the next action");
                 AssertEqual(2, adapter.Executed.Count, "inspection and mutation executed");
                 AssertEqual("excel.get_context", adapter.Executed[0].ToolId, "inspection tool");
                 AssertEqual("excel.format_range", adapter.Executed[1].ToolId, "mutation tool");
-                AssertContains(FlattenMessages(calls[2]), "requires a local Office tool", "premature final corrected");
+                AssertContains(FlattenMessages(calls[3]), "requires a concrete local action", "premature final corrected");
                 AssertEqual("Formatting done.", result.AssistantText, "final after mutation");
             });
         }
@@ -288,8 +286,8 @@ namespace RNAssistant.Harness
                     new List<ToolDefinition> { mutation },
                     null).GetAwaiter().GetResult();
 
-                AssertTrue(result.AssistantText.IndexOf("Done without verification", StringComparison.OrdinalIgnoreCase) < 0, "unverified final rejected");
-                AssertContains(JsonConvert.SerializeObject(result.ToolResults), "No deterministic verification tool", "verification unavailable diagnostic");
+                AssertEqual("Done without verification.", result.AssistantText, "no broad fallback read is invented");
+                AssertTrue(JsonConvert.SerializeObject(result.ToolResults).IndexOf("workbook_summary", StringComparison.OrdinalIgnoreCase) < 0, "broad summary is not used as fake verification");
             });
         }
 
@@ -350,7 +348,8 @@ namespace RNAssistant.Harness
                     Enabled = true,
                     MutatesDocument = true,
                     AgentCanRun = true,
-                    RiskLevel = 1
+                    RiskLevel = 1,
+                    VerifyJson = "{\"toolId\":\"excel.get_context\"}"
                 };
                 var read = new ToolDefinition
                 {
@@ -365,8 +364,6 @@ namespace RNAssistant.Harness
                     null,
                     AgentBlock(Command(read.Id)),
                     AgentBlock(Command(mutation.Id)),
-                    FinalBlock("Premature final."),
-                    AgentBlock(Command(read.Id)),
                     FinalBlock("Verified with a new read."));
 
                 var result = service.ExecuteAsync(

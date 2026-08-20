@@ -526,11 +526,11 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void ChatIncludesVbaContextWhenEnabled()
+        private static void ChatDoesNotAutoIncludeVbaSource()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                adapter.SetVbaModule("Module1", "Sub Main()\nEnd Sub", "StdModule");
+                adapter.SetVbaModule("Module1", "VBA_AUTO_CONTEXT_SENTINEL", "StdModule");
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 var service = ChatServiceWithResponses(adapter, executor, calls, "Done.");
                 var session = NewSession(adapter);
@@ -539,36 +539,45 @@ namespace RNAssistant.Harness
                     "Analyze this workbook.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { IncludeVbaContext = true },
+                    new AppSettings(),
                     new List<ToolDefinition>(adapter.GetBuiltInTools()),
                     null).GetAwaiter().GetResult();
 
                 AssertTrue(calls.Count > 0, "llm call count");
-                AssertContains(FlattenMessages(calls[0]), "Current VBA project snapshot", "vba prompt section");
-                AssertContains(FlattenMessages(calls[0]), "Module1", "vba module name");
+                AssertTrue(!FlattenMessages(calls[0]).Contains("VBA_AUTO_CONTEXT_SENTINEL"), "VBA source is not added to prompt");
             });
         }
 
-        private static void ChatVbaTaskAutoIncludesVbaContext()
+        private static void ChatVbaTasksUseReadTools()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                adapter.SetVbaModule("Module1", "Sub ExistingMacro()\nEnd Sub", "StdModule");
+                adapter.SetVbaModule("Module1", "VBA_TOOL_CONTEXT_SENTINEL", "StdModule");
                 var calls = new List<IReadOnlyList<ChatMessage>>();
-                var service = ChatServiceWithResponses(adapter, executor, calls, "Done.");
+                var service = ChatServiceWithResponses(
+                    adapter,
+                    executor,
+                    calls,
+                    AgentBlock(Command("common.skills_load", "ids", new[] { "common.vba_code_editing" })),
+                    "Done.");
                 var session = NewSession(adapter);
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
 
                 service.ExecuteAsync(
                     "Review the VBA macro before changing it.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { IncludeVbaContext = false },
-                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
-                    null).GetAwaiter().GetResult();
+                    new AppSettings(),
+                    tools,
+                    null,
+                    null,
+                    BuiltInSkillProvider.GetSkills(adapter)).GetAwaiter().GetResult();
 
-                AssertTrue(calls.Count > 0, "llm call count");
-                AssertContains(FlattenMessages(calls[0]), "Current VBA project snapshot", "auto vba prompt section");
-                AssertContains(FlattenMessages(calls[0]), "Module1", "auto vba module name");
+                AssertEqual(2, calls.Count, "skill activation and final calls");
+                AssertTrue(!FlattenMessages(calls[0]).Contains("VBA_TOOL_CONTEXT_SENTINEL"), "VBA task does not inject source");
+                AssertTrue(FlattenMessages(calls[0]).IndexOf("excel.vba_read_module", StringComparison.OrdinalIgnoreCase) < 0, "specialized tools stay hidden before skill activation");
+                AssertContains(FlattenMessages(calls[1]), "excel.vba_list_modules", "VBA list tool is available after activation");
+                AssertContains(FlattenMessages(calls[1]), "excel.vba_read_module", "VBA module read tool is available after activation");
             });
         }
 

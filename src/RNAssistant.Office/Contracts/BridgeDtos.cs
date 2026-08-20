@@ -354,12 +354,6 @@ namespace RNAssistant.Office.Contracts
         public List<SkillDefinition> Skills { get; set; }
     }
 
-    public sealed class VbaProjectPayload
-    {
-        [JsonProperty("maxChars")]
-        public int? MaxChars { get; set; }
-    }
-
     public sealed class VbaModulePayload
     {
         [JsonProperty("moduleName")]
@@ -400,12 +394,6 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("detailsJson")]
         public string DetailsJson { get; set; }
-    }
-
-    public sealed class VbaContextPayload : ChatPayload
-    {
-        [JsonProperty("maxChars")]
-        public int? MaxChars { get; set; }
     }
 
     public sealed class HtmlWorkspaceFilePayload : ChatPayload

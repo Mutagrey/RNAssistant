@@ -11,7 +11,6 @@ namespace RNAssistant.Office
         string RuntimeDocumentKey { get; }
         string DocumentTitle { get; }
         string GetDocumentSnapshot(int maxChars);
-        string GetVbaSnapshot(int maxChars);
         void PrepareForContextCapture();
         ContextNote CaptureSelectionContext(string mode, int maxChars);
         IEnumerable<ToolDefinition> GetBuiltInTools();

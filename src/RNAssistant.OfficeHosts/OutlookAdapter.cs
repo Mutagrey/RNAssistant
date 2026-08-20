@@ -156,11 +156,6 @@ namespace RNAssistant.OfficeHosts
             return Trim("Subject: " + mail.Subject + "\nFrom: " + mail.SenderName + "\nReceived: " + mail.ReceivedTime + "\n\n" + mail.Body, maxChars);
         }
 
-        public string GetVbaSnapshot(int maxChars)
-        {
-            return string.Empty;
-        }
-
         public void PrepareForContextCapture()
         {
             try

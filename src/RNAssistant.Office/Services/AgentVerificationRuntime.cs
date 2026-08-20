@@ -94,11 +94,6 @@ namespace RNAssistant.Office.Services
                     yield return verify;
                     yield break;
                 }
-                if (HasReadOnlyTool(allTools, "excel.workbook_summary"))
-                {
-                    yield return new ToolCommand { ToolId = "excel.workbook_summary", Description = "Deterministic verification" };
-                    yield break;
-                }
             }
 
             if (string.Equals(host, "Word", StringComparison.OrdinalIgnoreCase) && HasReadOnlyTool(allTools, "word.read_document"))

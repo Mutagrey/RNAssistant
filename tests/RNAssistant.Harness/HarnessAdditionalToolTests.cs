@@ -374,11 +374,7 @@ namespace RNAssistant.Harness
                     "Готово.");
                 var session = NewSession(adapter);
                 HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "<main>Chart</main>", true);
-                var officeRoute = new OfficeIntentRouter().Route(
-                    "Добавь новый лист Excel.",
-                    new OfficeSnapshot { Host = "Excel" },
-                    session);
-                AssertTrue(officeRoute.TaskType != "html", "explicit Office target does not inherit html route");
+                session.HtmlModeEnabled = true;
 
                 var result = service.ExecuteAsync(
                     "Никаких внешних зависимостей. Сделай, чтобы локально работало.",
@@ -393,7 +389,7 @@ namespace RNAssistant.Harness
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("Готово.", result.AssistantText, "html follow-up final answer");
-                AssertContains(FlattenMessages(calls[0]), "taskType: html", "existing workspace keeps html route");
+                AssertContains(FlattenMessages(calls[0]), "mode: html_workspace", "explicit html mode keeps workspace route");
                 AssertContains(FlattenMessages(calls[0]), "requiresInspection: true", "existing workspace requires inspection");
                 AssertContains(FlattenMessages(calls[0]), "common.html_workspace_upsert_file", "html file tool retained");
                 AssertEqual(3, calls.Count, "html follow-up reads before mutation");
@@ -460,6 +456,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "<main>Chart</main>", true);
                 HtmlArtifactToolExecutor.UpsertFile(session, "app.js", "script", "window.ready=true;", false);
+                session.HtmlModeEnabled = true;
 
                 var result = service.ExecuteAsync(
                     "Удалить app.js из HTML workspace.",
@@ -653,7 +650,6 @@ namespace RNAssistant.Harness
                     Mode = "mutate",
                     TaskType = "content",
                     Phase = AgentPhases.Mutation,
-                    RiskAllowed = 2,
                     RequiresTool = true
                 },
                 new ToolCatalogSlice { Tools = new List<ToolDefinition>(tools ?? new ToolDefinition[0]) },

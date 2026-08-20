@@ -5,6 +5,24 @@ function logsTabVisible() {
   return !!panel && panel.classList.contains("active");
 }
 
+function runtimeLogVisible() {
+  var section = document.querySelector('[data-log-view-section="runtime"]');
+  return logsTabVisible() && !!section && !section.classList.contains("hidden");
+}
+
+function switchLogView(name) {
+  name = name === "runtime" ? "runtime" : "session";
+  Array.prototype.slice.call(document.querySelectorAll(".log-view-button")).forEach(function (button) {
+    var active = button.dataset.logView === name;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  Array.prototype.slice.call(document.querySelectorAll("[data-log-view-section]")).forEach(function (section) {
+    section.classList.toggle("hidden", section.dataset.logViewSection !== name);
+  });
+  if (name === "runtime") refreshRuntimeLog();
+}
+
 async function refreshRuntimeLog() {
   if (runtimeLogRefreshBusy || state.bridgeUnavailable) return;
   runtimeLogRefreshBusy = true;
@@ -42,12 +60,17 @@ async function clearRuntimeLog() {
 }
 
 function bindLogActions() {
+  Array.prototype.slice.call(document.querySelectorAll(".log-view-button")).forEach(function (button) {
+    button.addEventListener("click", function () {
+      switchLogView(button.dataset.logView);
+    });
+  });
   $("clearLogButton").addEventListener("click", function () {
     $("logBox").textContent = "";
   });
   $("refreshRuntimeLogButton").addEventListener("click", refreshRuntimeLog);
   $("clearRuntimeLogButton").addEventListener("click", clearRuntimeLog);
   window.setInterval(function () {
-    if (logsTabVisible()) refreshRuntimeLog();
+    if (runtimeLogVisible()) refreshRuntimeLog();
   }, 3000);
 }

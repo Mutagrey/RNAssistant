@@ -240,17 +240,6 @@ namespace RNAssistant.OfficeHosts
             return Trim(doc.Range().Text, maxChars);
         }
 
-        public string GetVbaSnapshot(int maxChars)
-        {
-            var doc = ActiveDocument();
-            if (doc == null)
-            {
-                return "No active Word document.";
-            }
-
-            return VbaProjectSupport.GetSnapshot(doc, doc.Name, maxChars);
-        }
-
         public void PrepareForContextCapture()
         {
             try

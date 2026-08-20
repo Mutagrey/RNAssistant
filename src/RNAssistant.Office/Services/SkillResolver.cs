@@ -24,8 +24,7 @@ namespace RNAssistant.Office.Services
     {
         public static SkillResolution Resolve(
             IEnumerable<SkillDefinition> catalog,
-            IEnumerable<string> requestedIds,
-            string taskText = null)
+            IEnumerable<string> requestedIds)
         {
             var result = new SkillResolution();
             var byId = (catalog ?? new SkillDefinition[0])
@@ -37,12 +36,6 @@ namespace RNAssistant.Office.Services
                 .Select(id => id.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
-
-            if (requested.Any(id => string.Equals(id, "common.skill_authoring", StringComparison.OrdinalIgnoreCase)) &&
-                AgentText.ContainsAny(taskText, "executable", "исполня", "tool", "инструмент", "pipeline", "vba"))
-            {
-                requested.Add("common.tool_authoring");
-            }
 
             var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var added = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -216,8 +209,7 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             IEnumerable<SkillDefinition> catalog,
             IEnumerable<string> requestedIds,
-            string mode,
-            string taskText = null)
+            string mode)
         {
             var catalogList = (catalog ?? new SkillDefinition[0]).Where(skill => skill != null && skill.Enabled).ToList();
             var existing = session == null || session.ActiveSkillIds == null
@@ -229,7 +221,7 @@ namespace RNAssistant.Office.Services
                 var visibleIds = new HashSet<string>(catalogList.Select(skill => skill.Id), StringComparer.OrdinalIgnoreCase);
                 ids = existing.Where(id => !string.IsNullOrWhiteSpace(id) && visibleIds.Contains(id)).Concat(ids);
             }
-            var resolution = Resolve(catalogList, ids, string.IsNullOrWhiteSpace(taskText) ? LatestUserText(session) : taskText);
+            var resolution = Resolve(catalogList, ids);
             if (!resolution.Success || session == null) return resolution;
             var selected = resolution.Skills.Select(skill => skill.Id).ToList();
             session.ActiveSkillIds = selected;
@@ -244,13 +236,15 @@ namespace RNAssistant.Office.Services
             var skillList = (catalog ?? new SkillDefinition[0]).Where(skill => skill != null && skill.Enabled).ToList();
             if (skillList.Count == 0) return (tools ?? new ToolDefinition[0]).Where(tool => tool != null).ToList();
             var activeIds = new HashSet<string>((activeSkills ?? new SkillDefinition[0]).Where(skill => skill != null).Select(skill => skill.Id), StringComparer.OrdinalIgnoreCase);
-            var result = new List<ToolDefinition>();
+            var control = new List<ToolDefinition>();
+            var activeOwned = new List<ToolDefinition>();
+            var unowned = new List<ToolDefinition>();
             foreach (var tool in tools ?? new ToolDefinition[0])
             {
                 if (tool == null) continue;
                 if (string.Equals(tool.Id, "common.skills_load", StringComparison.OrdinalIgnoreCase))
                 {
-                    result.Add(tool);
+                    control.Add(tool);
                     continue;
                 }
                 var owners = skillList.Where(skill => (skill.ToolCapabilities ?? new List<string>()).Any(capability => MatchesCapability(tool.Id, capability))).ToList();
@@ -258,9 +252,16 @@ namespace RNAssistant.Office.Services
                 {
                     owners = owners.Where(skill => skill.BuiltIn).ToList();
                 }
-                if (owners.Count == 0 || owners.Any(skill => activeIds.Contains(skill.Id))) result.Add(tool);
+                if (owners.Count == 0)
+                {
+                    unowned.Add(tool);
+                }
+                else if (owners.Any(skill => activeIds.Contains(skill.Id)))
+                {
+                    activeOwned.Add(tool);
+                }
             }
-            return result;
+            return control.Concat(activeOwned).Concat(unowned).ToList();
         }
 
         public static void ActivateExplicitMentions(ChatSession session, string userText, IEnumerable<SkillDefinition> catalog)
@@ -272,15 +273,7 @@ namespace RNAssistant.Office.Services
                 .Select(skill => skill.Id)
                 .ToList();
             if (ids.Count == 0) return;
-            Activate(session, catalog, ids, "add", userText);
-        }
-
-        private static string LatestUserText(ChatSession session)
-        {
-            return session == null || session.Messages == null
-                ? string.Empty
-                : session.Messages.LastOrDefault(message => message != null && !message.ProtocolMessage &&
-                    string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase))?.Content ?? string.Empty;
+            Activate(session, catalog, ids, "add");
         }
 
         private static bool AddWithDependencies(
