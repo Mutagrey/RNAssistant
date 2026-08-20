@@ -262,7 +262,11 @@ namespace RNAssistant.Office.WebView
                         responsePayload = _controller.CancelAgentTool(cancelAgentTool.PendingId, cancelAgentTool.ChatId);
                         break;
                     case "getVbaProject":
-                        responsePayload = _controller.GetVbaProject(Payload<VbaProjectPayload>(payload).MaxChars ?? 30000);
+                        responsePayload = _controller.GetVbaProject();
+                        break;
+                    case "getVbaModule":
+                        var getVbaModule = Payload<VbaModulePayload>(payload);
+                        responsePayload = _controller.GetVbaModule(getVbaModule.ModuleName);
                         break;
                     case "saveVbaModule":
                         var saveVbaModule = Payload<VbaModulePayload>(payload);

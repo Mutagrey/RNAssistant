@@ -65,7 +65,7 @@ function renderVbaProject() {
   if (state.bridgeUnavailable) {
     $("vbaStatus").textContent = "Office bridge недоступен. VBA загрузится внутри add-in.";
   } else if (!state.vba.modules.length) {
-    $("vbaStatus").textContent = "VBA-контекст не загружен.";
+    $("vbaStatus").textContent = "VBA-проект не загружен.";
   }
 
   if (state.vba.selectedModule && selectHasOption(moduleSelect, state.vba.selectedModule)) {
@@ -109,7 +109,7 @@ function renderVbaModuleList(modules, query) {
         enabled: null,
         active: name === selectedName,
         meta: type + (lineCount ? " - " + lineCount + " строк" : ""),
-        description: firstVbaProcedureName(vbaModuleCode(module)) || "VBA module",
+        description: hasVbaModuleCode(module) ? (firstVbaProcedureName(vbaModuleCode(module)) || "VBA module") : "Код загружается по выбору",
         compact: true,
         icon: vbaModuleIcon(type),
         depth: 1,
@@ -118,6 +118,7 @@ function renderVbaModuleList(modules, query) {
           state.vba.selectedModule = name;
           renderVbaModuleList(modules, query);
           renderSelectedVbaModule();
+          loadSelectedVbaModule();
         }
       });
       item.setAttribute("role", "treeitem");
@@ -223,26 +224,28 @@ function vbaModuleMatchesSearch(module, query) {
 
 function renderSelectedVbaModule() {
   var module = selectedVbaModule();
+  var loaded = hasVbaModuleCode(module);
+  var loading = module && state.vba.loadingModule === vbaModuleName(module);
   state.vba.selectedModule = vbaModuleName(module);
-  setVbaEditorCode(module ? vbaModuleCode(module) : "");
+  setVbaEditorCode(loaded ? vbaModuleCode(module) : "");
   $("vbaModuleTitle").textContent = module ? vbaModuleName(module) : "Модуль не выбран";
-  $("vbaModuleMeta").textContent = module ? vbaModuleMetaText(module) : "";
+  $("vbaModuleMeta").textContent = module ? vbaModuleMetaText(module) + (loaded ? "" : (loading ? " - читаю код..." : " - код не загружен")) : "";
   $("vbaMetaBox").textContent = module ? JSON.stringify({
     name: vbaModuleName(module),
     type: module.type || module.Type,
     lineCount: module.lineCount || module.LineCount
   }, null, 2) : "";
   renderVbaDiff({
-    summary: module ? "Нажмите «Показать diff», чтобы посмотреть изменения." : (state.bridgeUnavailable ? "Office bridge недоступен." : "Модуль не выбран."),
+    summary: module && loaded ? "Нажмите «Показать diff», чтобы посмотреть изменения." : (module ? "Код модуля еще не загружен." : (state.bridgeUnavailable ? "Office bridge недоступен." : "Модуль не выбран.")),
     lines: []
   });
   if (typeof setCodeEditorReadOnly === "function") {
-    setCodeEditorReadOnly("vbaCodeInput", !module || state.bridgeUnavailable);
+    setCodeEditorReadOnly("vbaCodeInput", !module || !loaded || state.bridgeUnavailable);
   }
-  $("previewVbaDiffButton").disabled = !module || state.bridgeUnavailable;
-  $("saveVbaButton").disabled = !module || state.bridgeUnavailable;
-  $("restoreVbaButton").disabled = state.bridgeUnavailable || !$("vbaBackupSelect").value || !module;
-  $("reviewVbaButton").disabled = !module || state.bridgeUnavailable;
+  $("previewVbaDiffButton").disabled = !module || !loaded || state.bridgeUnavailable;
+  $("saveVbaButton").disabled = !module || !loaded || state.bridgeUnavailable;
+  $("restoreVbaButton").disabled = state.bridgeUnavailable || !$("vbaBackupSelect").value || !module || !loaded;
+  $("reviewVbaButton").disabled = !module || !loaded || state.bridgeUnavailable;
   renderVbaCodePreview();
   applyVbaMode();
   updateVbaMacroSuggestion();
@@ -265,6 +268,48 @@ function vbaModuleName(module) {
 
 function vbaModuleCode(module) {
   return module ? (module.code || module.Code || "") : "";
+}
+
+function hasVbaModuleCode(module) {
+  return !!module && (Object.prototype.hasOwnProperty.call(module, "code") || Object.prototype.hasOwnProperty.call(module, "Code"));
+}
+
+async function loadSelectedVbaModule() {
+  var module = selectedVbaModule();
+  if (!module || hasVbaModuleCode(module) || state.bridgeUnavailable) {
+    return;
+  }
+
+  var moduleName = vbaModuleName(module);
+  state.vba.loadingModule = moduleName;
+  renderSelectedVbaModule();
+  try {
+    var response = await send("getVbaModule", { moduleName: moduleName });
+    if (response.Success === false || response.success === false) {
+      throw new Error(response.Message || response.message || "VBA-модуль не прочитан.");
+    }
+    var dataJson = response.DataJson || response.dataJson || "{}";
+    var data = JSON.parse(dataJson);
+    module.code = data.code !== undefined ? data.code : (data.Code || "");
+    module.type = data.type || data.Type || module.type || module.Type;
+    module.lineCount = data.lineCount || data.LineCount || module.lineCount || module.LineCount;
+    module.codeSha256 = data.codeSha256 || data.CodeSha256 || "";
+    $("vbaStatus").textContent = response.Message || response.message || "VBA-модуль загружен.";
+  } catch (error) {
+    $("vbaStatus").textContent = error.message;
+    log(error.detail || error.message);
+  } finally {
+    if (state.vba.loadingModule === moduleName) {
+      state.vba.loadingModule = "";
+    }
+    if (vbaModuleName(selectedVbaModule()) === moduleName) {
+      renderSelectedVbaModule();
+    }
+    renderVbaModuleList(state.vba.modules.filter(function (item) {
+      var query = (($("vbaModuleSearchInput") && $("vbaModuleSearchInput").value) || "").trim().toLowerCase();
+      return !query || vbaModuleMatchesSearch(item, query);
+    }), (($("vbaModuleSearchInput") && $("vbaModuleSearchInput").value) || "").trim().toLowerCase());
+  }
 }
 
 function vbaModuleMetaText(module) {
@@ -308,6 +353,10 @@ function renderVbaCodePreview() {
   preview.innerHTML = "";
   if (!module) {
     preview.textContent = state.bridgeUnavailable ? "Office bridge недоступен." : "Модуль не выбран.";
+    return;
+  }
+  if (!hasVbaModuleCode(module)) {
+    preview.textContent = "Код модуля еще не загружен.";
     return;
   }
 
@@ -484,8 +533,9 @@ function readVbaResult(response) {
 
 async function refreshVbaProject() {
   await withVbaActivity("Читаю VBA проект...", async function () {
-    var response = await send("getVbaProject", { maxChars: Number($("vbaContextLimitInput").value || 30000) });
+    var response = await send("getVbaProject", {});
     readVbaResult(response);
+    await loadSelectedVbaModule();
   });
 }
 
@@ -516,13 +566,15 @@ async function restoreVbaBackup() {
 }
 
 function reviewVbaInChat() {
+  var module = selectedVbaModule();
+  if (!module) {
+    return;
+  }
+  var host = (state.host || "excel").toLowerCase();
+  var readTool = host + ".vba_read_module";
   var patchTool = (state.host || "excel").toLowerCase() + ".vba_apply_patch";
-  ensureVbaContextAttached().then(function () {
-    switchTab("chat");
-    setChatInputText("Проверь VBA код из добавленного контекста: найди ошибки, риски и места для улучшения. Если нужны небольшие правки, используй " + patchTool + "; полную замену модуля предлагай только когда это реально нужно.", true);
-  }).catch(function (error) {
-    log(error.detail || error.message);
-  });
+  switchTab("chat");
+  setChatInputText("Проверь VBA-модуль " + vbaModuleName(module) + ": сначала прочитай его через " + readTool + ", затем найди ошибки, риски и места для улучшения. Для небольших правок используй " + patchTool + ".", true);
 }
 
 function firstVbaProcedureName(code) {
@@ -625,7 +677,10 @@ function bindVbaActions() {
   $("refreshVbaButton").addEventListener("click", refreshVbaProject);
   $("refreshVbaEmptyButton").addEventListener("click", refreshVbaProject);
   $("vbaModuleSearchInput").addEventListener("input", renderVbaProject);
-  $("vbaModuleSelect").addEventListener("change", renderSelectedVbaModule);
+  $("vbaModuleSelect").addEventListener("change", function () {
+    renderSelectedVbaModule();
+    loadSelectedVbaModule();
+  });
   $("vbaCodeInput").addEventListener("input", markVbaEditorDirty);
   $("vbaMacroInput").addEventListener("input", updateVbaMacroRunState);
   Array.prototype.slice.call(document.querySelectorAll(".vba-mode-button")).forEach(function (button) {

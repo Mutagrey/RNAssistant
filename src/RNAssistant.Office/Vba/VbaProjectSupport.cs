@@ -34,35 +34,21 @@ namespace RNAssistant.Office
             }
         }
 
-        public static string GetSnapshot(object documentObject, string title, int maxChars)
-        {
-            try
-            {
-                return Trim(ReadProjectText(GetVbaProject(documentObject), title, maxChars), maxChars);
-            }
-            catch (Exception ex)
-            {
-                return "VBA project could not be read. Enable 'Trust access to the VBA project object model'. " + ex.Message;
-            }
-        }
-
-        public static ToolResult ReadProject(object documentObject, string title, int maxChars)
+        public static ToolResult ListProjectComponents(object documentObject, string title)
         {
             dynamic vbProject = GetVbaProject(documentObject);
             var modules = new List<object>();
             foreach (dynamic component in vbProject.VBComponents)
             {
-                var code = ReadComponentCode(component);
                 modules.Add(new
                 {
                     name = (string)component.Name,
                     type = ComponentTypeName((int)component.Type),
-                    lineCount = (int)component.CodeModule.CountOfLines,
-                    code = Trim(code, maxChars)
+                    lineCount = (int)component.CodeModule.CountOfLines
                 });
             }
 
-            return ToolResult.Ok("VBA project read.", JsonConvert.SerializeObject(new { title = title, modules = modules }));
+            return ToolResult.Ok("VBA components listed.", JsonConvert.SerializeObject(new { title = title, modules = modules }));
         }
 
         public static ToolResult ReadModule(object documentObject, string moduleName, int maxChars)
@@ -73,13 +59,16 @@ namespace RNAssistant.Office
                 return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
             }
 
-            var code = Trim(ReadComponentCode(component), maxChars);
+            var fullCode = ReadComponentCode(component);
+            var code = Trim(fullCode, maxChars);
             return ToolResult.Ok("VBA module read: " + component.Name, JsonConvert.SerializeObject(new
             {
                 name = (string)component.Name,
                 type = ComponentTypeName((int)component.Type),
                 lineCount = (int)component.CodeModule.CountOfLines,
-                code = code
+                code = code,
+                codeSha256 = VbaToolManifestParser.CodeSha256(fullCode),
+                truncated = !string.Equals(code, fullCode, StringComparison.Ordinal)
             }));
         }
 
@@ -448,25 +437,6 @@ namespace RNAssistant.Office
             }
 
             return null;
-        }
-
-        private static string ReadProjectText(object vbProjectObject, string title, int maxChars)
-        {
-            dynamic vbProject = vbProjectObject;
-            var builder = new StringBuilder();
-            builder.AppendLine("VBA Project: " + title);
-            foreach (dynamic component in vbProject.VBComponents)
-            {
-                builder.AppendLine();
-                builder.AppendLine("===== " + component.Name + " (" + ComponentTypeName((int)component.Type) + ") =====");
-                builder.AppendLine(ReadComponentCode(component));
-                if (builder.Length >= maxChars)
-                {
-                    break;
-                }
-            }
-
-            return builder.ToString();
         }
 
         private static string ReadComponentCode(dynamic component)

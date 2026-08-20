@@ -218,8 +218,7 @@ namespace RNAssistant.OfficeHosts
                 Skill("powerpoint.add_table", "Mutates document: Add a table to a slide.", "{\"slideIndex\":1,\"rows\":2,\"columns\":2,\"values\":[[\"Header\",\"Value\"],[\"A\",\"1\"]],\"left\":60,\"top\":120,\"width\":520,\"height\":160}", true, true, 1),
                 Skill("powerpoint.duplicate_slide", "Mutates document: Duplicate one slide.", "{\"slideIndex\":1}", true, true, 1),
                 Skill("powerpoint.move_slide", "Mutates document: Move a slide to a new position.", "{\"slideIndex\":2,\"toIndex\":1}", true, false, 2),
-                Skill("powerpoint.vba_read_project", "Read-only: Read VBA project modules and source code when Trust Access to VBA project is enabled.", "{\"maxChars\":30000}"),
-                Skill("powerpoint.vba_read_module", "Read-only: Read one VBA module by name.", "{\"moduleName\":\"Module1\",\"maxChars\":30000}"),
+                Skill("powerpoint.vba_read_module", "Read-only: Read one VBA component by exact name from vba_list_modules; returns source and full code hash.", "{\"moduleName\":\"Module1\",\"maxChars\":30000}"),
                 Skill("powerpoint.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}", true, false, 3),
                 Skill("powerpoint.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}", true, false, 3),
                 Skill("powerpoint.run_macro", "Mutates document: Run a PowerPoint VBA macro by name.", "{\"macroName\":\"Module1.Test\"}", true, false, 3)
@@ -392,8 +391,8 @@ namespace RNAssistant.OfficeHosts
                         return DuplicateSlide(command);
                     case "powerpoint.move_slide":
                         return MoveSlide(command);
-                    case "powerpoint.vba_read_project":
-                        return ReadVbaProject(command);
+                    case "powerpoint.vba_list_project_components_internal":
+                        return ListVbaProjectComponents();
                     case "powerpoint.vba_read_module":
                         return ReadVbaModule(command);
                     case "powerpoint.vba_replace_module":
@@ -824,10 +823,10 @@ namespace RNAssistant.OfficeHosts
             return ToolResult.Ok("Slide moved to " + toIndex);
         }
 
-        private ToolResult ReadVbaProject(ToolCommand command)
+        private ToolResult ListVbaProjectComponents()
         {
             var presentation = RequirePresentation();
-            return VbaProjectSupport.ReadProject(presentation, presentation.Name, ToolArgumentReader.Int32(command.Arguments, "maxChars", 30000));
+            return VbaProjectSupport.ListProjectComponents(presentation, presentation.Name);
         }
 
         private ToolResult ReadVbaModule(ToolCommand command)

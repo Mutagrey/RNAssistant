@@ -27,7 +27,7 @@ namespace RNAssistant.Office.Services
                     "VBA code editing",
                     "Inspect, search, patch, create, and delete VBA components safely.",
                     new[] { "vba", "code", "patch", "regexp", "module", "макрос", "модуль" },
-                    "# VBA Code Editing\n\n- Start with vba_list_modules or vba_search_code, then read the exact target module.\n- Prefer structured vba_apply_patch over replacing the whole module. regexReplace supports bounded regexp changes and capture groups.\n- Every mutation creates a backup and requires confirmation; verify the code hash afterward.\n- Create/delete is limited to StdModule and ClassModule. Document modules and UserForms are read/search/patch only.\n- For delete, pass the current codeSha256 from list/search and never bypass a stale hash."),
+                    "# VBA Code Editing\n\n- Start with vba_list_modules, then read only the exact modules needed with vba_read_module. Use vba_search_code only when a project-wide search is required.\n- Prefer structured vba_apply_patch over replacing the whole module. regexReplace supports bounded regexp changes and capture groups.\n- Every mutation creates a backup and requires confirmation; verify the code hash afterward.\n- Create/delete is limited to StdModule and ClassModule. Document modules and UserForms are read/search/patch only.\n- For delete, pass the current codeSha256 from read/search and never bypass a stale hash."),
                 Skill(
                     "common.tool_authoring",
                     "Tool authoring",

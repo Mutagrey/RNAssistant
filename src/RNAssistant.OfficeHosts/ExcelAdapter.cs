@@ -223,8 +223,7 @@ namespace RNAssistant.OfficeHosts
                 Skill("excel.clear_range", "Mutates document: Clear cell values, formats, or both in a range.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"clearWhat\":\"values\"}", true, false, 3),
                 Skill("excel.sort_range", "Mutates document: Sort rows in a range by one key column.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"keyColumn\":1,\"descending\":false,\"hasHeaders\":true}", true, false, 2),
                 Skill("excel.filter_range", "Mutates document: Apply AutoFilter criteria to a range.", "{\"sheet\":\"\",\"address\":\"A1:D20\",\"field\":1,\"criteria\":\"North\"}", true, false, 2),
-                Skill("excel.vba_read_project", "Read-only: Read VBA project modules and source code when Trust Access to VBA project is enabled.", "{\"maxChars\":30000}"),
-                Skill("excel.vba_read_module", "Read-only: Read one VBA module by name.", "{\"moduleName\":\"Module1\",\"maxChars\":30000}"),
+                Skill("excel.vba_read_module", "Read-only: Read one VBA component by exact name from vba_list_modules; returns source and full code hash.", "{\"moduleName\":\"Module1\",\"maxChars\":30000}"),
                 Skill("excel.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}", true, false, 3),
                 Skill("excel.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}", true, false, 3),
                 Skill("excel.run_macro", "Mutates document: Run an Excel VBA macro by name.", "{\"macroName\":\"Module1.Test\"}", true, false, 3)
@@ -413,8 +412,8 @@ namespace RNAssistant.OfficeHosts
                         return SortRange(command);
                     case "excel.filter_range":
                         return FilterRange(command);
-                    case "excel.vba_read_project":
-                        return ReadVbaProject(command);
+                    case "excel.vba_list_project_components_internal":
+                        return ListVbaProjectComponents();
                     case "excel.vba_read_module":
                         return ReadVbaModule(command);
                     case "excel.vba_replace_module":
@@ -1239,11 +1238,10 @@ namespace RNAssistant.OfficeHosts
             return ToolResult.Ok("Range filtered: " + sheet.Name + "!" + address);
         }
 
-        private ToolResult ReadVbaProject(ToolCommand command)
+        private ToolResult ListVbaProjectComponents()
         {
             var workbook = RequireWorkbook();
-            var maxChars = ToolArgumentReader.Int32(command.Arguments, "maxChars", 30000);
-            return VbaProjectSupport.ReadProject(workbook, workbook.Name, maxChars);
+            return VbaProjectSupport.ListProjectComponents(workbook, workbook.Name);
         }
 
         private ToolResult ReadVbaModule(ToolCommand command)

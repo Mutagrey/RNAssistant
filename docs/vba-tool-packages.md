@@ -96,7 +96,7 @@ Discovery читает VBProject активного документа, нахо
 
 Для чтения/import/remove VBProject в Trust Center должен быть включён `Trust access to the VBA project object model`. Новосозданный mutating tool по умолчанию должен иметь `agentCanRun:false` и `requiresConfirmation:true`. Не храните в исходниках секреты, credentials, machine-specific paths и скрытый network/shell запуск.
 
-Для безопасной работы с кодом доступны host-prefixed controller tools: `vba_list_modules`, `vba_search_code`, `vba_replace_text`, `vba_apply_patch`, `vba_create_module`, `vba_delete_module`, backup list/restore. Поиск поддерживает literal/regexp, а `regexReplace` в structured patch — capture groups, timeout и лимит замен. Перед каждой записью/удалением создаётся backup; delete дополнительно требует актуальный `expectedCodeSha256`.
+Для безопасной работы с кодом доступны host-prefixed controller tools: `vba_list_modules`, `vba_search_code`, `vba_replace_text`, `vba_apply_patch`, `vba_create_module`, `vba_delete_module`, backup list/restore. `vba_list_modules` возвращает только имена, типы и размеры компонентов; исходник читается по имени через host `vba_read_module`. Поиск поддерживает literal/regexp, а `regexReplace` в structured patch — capture groups, timeout и лимит замен. Перед каждой записью/удалением создаётся backup; delete дополнительно требует актуальный `expectedCodeSha256` из `vba_read_module` или `vba_search_code`.
 
 Создавать и удалять можно только `StdModule` и `ClassModule`. Document modules и UserForms разрешено читать, искать и патчить, но нельзя создавать/удалять через RNAssistant. Все VBA mutations требуют подтверждения.
 

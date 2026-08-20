@@ -203,8 +203,7 @@ namespace RNAssistant.OfficeHosts
                 Skill("word.add_table", "Mutates document: Insert a table at selection, start, or end.", "{\"rows\":2,\"columns\":2,\"values\":[[\"Header\",\"Value\"],[\"A\",\"1\"]],\"location\":\"selection\"}", true, true, 2),
                 Skill("word.insert_page_break", "Mutates document: Insert a page break at the current cursor position.", "{}", true, true, 1),
                 Skill("word.add_comment", "Mutates document: Add a comment to the current selection.", "{\"text\":\"Comment text\"}", true, true, 1),
-                Skill("word.vba_read_project", "Read-only: Read VBA project modules and source code when Trust Access to VBA project is enabled.", "{\"maxChars\":30000}"),
-                Skill("word.vba_read_module", "Read-only: Read one VBA module by name.", "{\"moduleName\":\"Module1\",\"maxChars\":30000}"),
+                Skill("word.vba_read_module", "Read-only: Read one VBA component by exact name from vba_list_modules; returns source and full code hash.", "{\"moduleName\":\"Module1\",\"maxChars\":30000}"),
                 Skill("word.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\",\"createIfMissing\":true}", true, false, 3),
                 Skill("word.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"moduleName\":\"Module1\",\"code\":\"Sub Test()\\nEnd Sub\"}", true, false, 3),
                 Skill("word.run_macro", "Mutates document: Run a Word VBA macro by name.", "{\"macroName\":\"Module1.Test\"}", true, false, 3)
@@ -340,8 +339,8 @@ namespace RNAssistant.OfficeHosts
                         var doc = RequireDocument();
                         doc.Comments.Add(ResolveSelectionRange(doc), ToolArgumentReader.String(command.Arguments, "text", string.Empty));
                         return ToolResult.Ok("Comment added.");
-                    case "word.vba_read_project":
-                        return ReadVbaProject(command);
+                    case "word.vba_list_project_components_internal":
+                        return ListVbaProjectComponents();
                     case "word.vba_read_module":
                         return ReadVbaModule(command);
                     case "word.vba_replace_module":
@@ -715,10 +714,10 @@ namespace RNAssistant.OfficeHosts
             return ToolResult.Ok("Page break inserted.");
         }
 
-        private ToolResult ReadVbaProject(ToolCommand command)
+        private ToolResult ListVbaProjectComponents()
         {
             var doc = RequireDocument();
-            return VbaProjectSupport.ReadProject(doc, doc.Name, ToolArgumentReader.Int32(command.Arguments, "maxChars", 30000));
+            return VbaProjectSupport.ListProjectComponents(doc, doc.Name);
         }
 
         private ToolResult ReadVbaModule(ToolCommand command)

@@ -289,12 +289,12 @@ namespace RNAssistant.Harness
                 return fakeResult;
             }
 
-            if ((command.ToolId ?? string.Empty).EndsWith(".vba_read_project", StringComparison.OrdinalIgnoreCase))
+            if ((command.ToolId ?? string.Empty).EndsWith(".vba_list_project_components_internal", StringComparison.OrdinalIgnoreCase))
             {
                 return ToolResult.Ok("read " + command.ToolId, JsonConvert.SerializeObject(new
                 {
                     title = DocumentTitle,
-                    modules = _vbaModules.Values.Select(module => new { name = module.Name, type = module.Type, code = module.Code }).ToArray()
+                    modules = _vbaModules.Values.Select(module => new { name = module.Name, type = module.Type, lineCount = LineCount(module.Code) }).ToArray()
                 }));
             }
 
@@ -307,7 +307,14 @@ namespace RNAssistant.Harness
                     return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
                 }
 
-                return ToolResult.Ok("read " + command.ToolId, JsonConvert.SerializeObject(new { name = module.Name, code = module.Code, type = module.Type }));
+                return ToolResult.Ok("read " + command.ToolId, JsonConvert.SerializeObject(new
+                {
+                    name = module.Name,
+                    code = module.Code,
+                    type = module.Type,
+                    lineCount = LineCount(module.Code),
+                    codeSha256 = VbaToolManifestParser.CodeSha256(module.Code)
+                }));
             }
 
             if ((command.ToolId ?? string.Empty).EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase))
@@ -1087,7 +1094,6 @@ namespace RNAssistant.Harness
                 BuiltIn("Excel", "excel.clear_range", false, true, false, 3),
                 BuiltIn("Excel", "excel.sort_range", false, true, false),
                 BuiltIn("Excel", "excel.filter_range", false, true, false),
-                BuiltIn("Excel", "excel.vba_read_project", false, false, true),
                 BuiltIn("Excel", "excel.vba_read_module", false, false, true),
                 BuiltIn("Excel", "excel.vba_replace_module", false, true, false, 3),
                 BuiltIn("Excel", "excel.insert_vba_module", false, true, false, 3),
@@ -1118,7 +1124,6 @@ namespace RNAssistant.Harness
                 BuiltIn("Word", "word.add_table", false, true, true),
                 BuiltIn("Word", "word.insert_page_break", false, true, true, 1),
                 BuiltIn("Word", "word.add_comment", false, true, true, 1),
-                BuiltIn("Word", "word.vba_read_project", false, false, true),
                 BuiltIn("Word", "word.vba_read_module", false, false, true),
                 BuiltIn("Word", "word.vba_replace_module", false, true, false, 3),
                 BuiltIn("Word", "word.insert_vba_module", false, true, false, 3),
@@ -1146,7 +1151,6 @@ namespace RNAssistant.Harness
                 BuiltIn("PowerPoint", "powerpoint.add_table", false, true, true, 1),
                 BuiltIn("PowerPoint", "powerpoint.duplicate_slide", false, true, true, 1),
                 BuiltIn("PowerPoint", "powerpoint.move_slide", false, true, false),
-                BuiltIn("PowerPoint", "powerpoint.vba_read_project", false, false, true),
                 BuiltIn("PowerPoint", "powerpoint.vba_read_module", false, false, true),
                 BuiltIn("PowerPoint", "powerpoint.vba_replace_module", false, true, false, 3),
                 BuiltIn("PowerPoint", "powerpoint.insert_vba_module", false, true, false, 3),
@@ -1252,6 +1256,12 @@ namespace RNAssistant.Harness
         {
             value = value ?? string.Empty;
             return maxChars > 0 && value.Length > maxChars ? value.Substring(0, maxChars) : value;
+        }
+
+        private static int LineCount(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return 0;
+            return value.Replace("\r\n", "\n").Split('\n').Length;
         }
 
         private sealed class FakeVbaModule

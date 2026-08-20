@@ -560,6 +560,13 @@ namespace RNAssistant.Harness
             var controller = new AssistantController();
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
+            var readResponseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"b5-read\",\"type\":\"getVbaModule\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"moduleName\":\"Module2\"}}")
+                .GetAwaiter()
+                .GetResult();
+            AssertTrue(JObject.Parse(readResponseJson)["ok"].Value<bool>(), "VBA read bridge response ok");
+            AssertEqual("Module2", controller.LastModuleName, "read module name");
+
             var responseJson = bridge.HandleMessageAsync(
                 "{\"id\":\"b5\",\"type\":\"saveVbaModule\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"moduleName\":\"Module1\",\"code\":\"Sub Main()\\nEnd Sub\"}}")
                 .GetAwaiter()

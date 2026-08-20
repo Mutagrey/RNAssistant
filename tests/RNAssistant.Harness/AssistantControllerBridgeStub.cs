@@ -176,7 +176,8 @@ namespace RNAssistant.Office
             return Task.FromResult(ChatState(pendingId, chatId));
         }
         public ChatStateResponse CancelAgentTool(string pendingId, string chatId = null) { return ChatState(pendingId, chatId); }
-        public VbaProjectResponse GetVbaProject(int maxChars) { return new VbaProjectResponse { Result = ToolResult.Ok("ok") }; }
+        public VbaProjectResponse GetVbaProject() { return new VbaProjectResponse { Result = ToolResult.Ok("ok") }; }
+        public ToolResult GetVbaModule(string moduleName) { LastModuleName = moduleName; return ToolResult.Ok("read"); }
 
         public ToolResult SaveVbaModule(string moduleName, string code)
         {

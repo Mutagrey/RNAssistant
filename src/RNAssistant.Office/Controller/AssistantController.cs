@@ -803,18 +803,25 @@ namespace RNAssistant.Office
             return result;
         }
 
-        public VbaProjectResponse GetVbaProject(int maxChars)
+        public VbaProjectResponse GetVbaProject()
         {
             var settings = _settingsService.Load();
-            var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_read_project") };
-            command.Arguments["maxChars"] = maxChars <= 0 ? settings.VbaContextCharLimit : maxChars;
-            var result = _toolExecutor.Execute(command, tools, settings, false, true);
+            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_list_modules") };
+            var result = _toolExecutor.Execute(command, new ToolDefinition[0], settings, false, true);
             return new VbaProjectResponse
             {
                 Result = result,
                 Backups = _vbaBackupStore.List(_adapter.HostName, _adapter.DocumentKey)
             };
+        }
+
+        public ToolResult GetVbaModule(string moduleName)
+        {
+            var settings = _settingsService.Load();
+            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_read_module") };
+            command.Arguments["moduleName"] = moduleName;
+            command.Arguments["maxChars"] = 1000000;
+            return _toolExecutor.Execute(command, new ToolDefinition[0], settings, false, true);
         }
 
         public ToolResult SaveVbaModule(string moduleName, string code)

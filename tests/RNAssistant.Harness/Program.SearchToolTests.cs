@@ -45,8 +45,11 @@ namespace RNAssistant.Harness
                 var settings = new AppSettings { AutoConfirmToolActions = true };
 
                 var listed = executor.Execute(Command("excel.vba_list_modules"), tools, settings, false, false);
+                var read = executor.Execute(Command("excel.vba_read_module", "moduleName", "Module1"), tools, settings, false, false);
                 var searched = executor.Execute(Command("excel.vba_search_code", "query", "old(Value)", "mode", "regex", "matchCase", true), tools, settings, false, false);
                 AssertTrue(listed.Success, "VBA module list succeeds");
+                AssertTrue(!listed.DataJson.Contains("Option Explicit"), "VBA module list omits source code");
+                AssertContains(read.DataJson, "codeSha256", "VBA module read returns code hash");
                 AssertContains(searched.DataJson, "Module1", "VBA regexp search returns module");
 
                 var patch = "[{\"op\":\"regexReplace\",\"pattern\":\"old(Value)\",\"text\":\"new$1\",\"replaceAll\":true}]";
