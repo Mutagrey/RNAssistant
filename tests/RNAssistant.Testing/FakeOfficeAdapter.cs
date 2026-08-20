@@ -1187,7 +1187,7 @@ namespace RNAssistant.Harness
                 Host = host,
                 Name = id,
                 Description = (mutatesDocument ? "Mutates document: " : "Read-only: ") + id,
-                ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":true}",
+                ArgumentSchemaJson = FakeSchema(host, id),
                 Enabled = true,
                 BuiltIn = true,
                 RequiresConfirmation = requiresConfirmation,
@@ -1195,6 +1195,97 @@ namespace RNAssistant.Harness
                 AgentCanRun = agentCanRun,
                 RiskLevel = mutatesDocument && riskLevel <= 0 ? 2 : riskLevel
             };
+        }
+
+        private static string FakeSchema(string host, string id)
+        {
+            var names = string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase)
+                ? ExcelFakeArguments(id)
+                : string.Equals(host, "Word", StringComparison.OrdinalIgnoreCase)
+                    ? "maxChars start end query scope mode matchCase wholeWord maxResults contextChars maxTables maxRows text location find replace replaceAll expectedMatches expectedScopeSha256 maxReplacements style target bold italic underline fontSize fontName rows columns values moduleName code createIfMissing macroName"
+                    : string.Equals(host, "PowerPoint", StringComparison.OrdinalIgnoreCase)
+                        ? "maxSlides slideIndex query scope includeNotes mode matchCase wholeWord maxResults contextChars title body text notes left top width height fontSize shapeName find replace replaceAll expectedMatches expectedScopeSha256 maxReplacements path rows columns values toIndex moduleName maxChars code createIfMissing macroName"
+                        : "maxChars entryId query mode matchCase wholeWord fields maxItems maxResults maxBodyChars contextChars to cc bcc subject body categories";
+            var booleans = new HashSet<string>(new[] { "matchCase", "wholeWord", "replaceAll", "hasHeaders", "bold", "italic", "underline", "descending", "includeNotes", "createIfMissing", "sourceSuccess" }, StringComparer.Ordinal);
+            var integers = new HashSet<string>(new[] { "maxResults", "contextChars", "expectedMatches", "maxReplacements", "left", "top", "width", "height", "keyColumn", "field", "maxChars", "start", "end", "maxTables", "maxRows", "fontSize", "rows", "columns", "maxSlides", "slideIndex", "toIndex", "maxItems", "maxBodyChars" }, StringComparer.Ordinal);
+            var properties = new JObject();
+            foreach (var name in names.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var definition = new JObject
+                {
+                    ["type"] = string.Equals(name, "values", StringComparison.Ordinal)
+                        ? "array"
+                        : booleans.Contains(name) ? "boolean" : integers.Contains(name) ? "integer" : "string",
+                    ["description"] = string.Equals(name, "sheet", StringComparison.Ordinal)
+                        ? "Worksheet name."
+                        : "Test argument " + name + "."
+                };
+                if (string.Equals(name, "values", StringComparison.Ordinal)) definition["items"] = new JObject();
+                properties[name] = definition;
+            }
+            return new JObject
+            {
+                ["type"] = "object",
+                ["properties"] = properties,
+                ["required"] = new JArray(),
+                ["additionalProperties"] = false
+            }.ToString(Formatting.None);
+        }
+
+        private static string ExcelFakeArguments(string id)
+        {
+            switch (id)
+            {
+                case "excel.read_range":
+                case "excel.read_formula_range":
+                case "excel.profile_range":
+                case "excel.autofit":
+                    return "sheet address range";
+                case "excel.find_cells":
+                    return "sheet address scope query mode matchCase wholeWord lookIn maxResults contextChars";
+                case "excel.create_chat_chart":
+                    return "sheet address chartType title";
+                case "excel.list_charts":
+                case "excel.list_tables":
+                case "excel.list_shapes":
+                    return "sheet";
+                case "excel.get_chart":
+                case "excel.delete_chart":
+                    return "sheet chartName";
+                case "excel.write_range":
+                    return "sheet address value values";
+                case "excel.write_table":
+                    return "sheet startAddress values sourceMessage sourceSuccess";
+                case "excel.set_formula":
+                    return "sheet address formula";
+                case "excel.add_table":
+                    return "sheet sourceRange name hasHeaders style";
+                case "excel.add_chart":
+                case "excel.update_chart":
+                    return "sheet sourceRange chartType title chartName categoryLabelsRange xAxisTitle yAxisTitle left top width height";
+                case "excel.format_range":
+                    return "sheet address numberFormat bold italic fillColor fontColor horizontalAlignment";
+                case "excel.add_sheet":
+                    return "name";
+                case "excel.rename_sheet":
+                    return "sheet newName";
+                case "excel.clear_range":
+                    return "sheet address clearWhat";
+                case "excel.sort_range":
+                    return "sheet address keyColumn descending hasHeaders";
+                case "excel.filter_range":
+                    return "sheet address field criteria";
+                case "excel.vba_read_module":
+                    return "moduleName maxChars";
+                case "excel.vba_replace_module":
+                    return "moduleName code createIfMissing";
+                case "excel.insert_vba_module":
+                    return "moduleName code";
+                case "excel.run_macro":
+                    return "macroName";
+                default:
+                    return string.Empty;
+            }
         }
 
         private static SkillDefinition BuiltInSkill(string id, string host, string name, string description)

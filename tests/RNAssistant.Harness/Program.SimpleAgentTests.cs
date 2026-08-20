@@ -101,13 +101,55 @@ namespace RNAssistant.Harness
                 NewSession(adapter), null);
             var prompt = FlattenSimple(messages);
             AssertContains(prompt, "\"type\":\"function\"", "native-like tool JSON");
+            AssertContains(prompt, "\"description\":\"Worksheet name.\"", "argument description present");
             AssertContains(prompt, "excel.add_sheet", "first tool present");
             AssertContains(prompt, "excel.read_range", "second tool present");
-            AssertContains(prompt, "TEST_SKILL_SENTINEL", "full skill present");
-            AssertContains(prompt, "\"format\":\"markdown\"", "skill format is explicit");
+            AssertContains(prompt, "common.test", "skill id present");
+            AssertContains(prompt, "Test workflow", "skill description present");
+            AssertTrue(prompt.IndexOf("TEST_SKILL_SENTINEL", StringComparison.Ordinal) < 0, "full skill is not in catalog");
+            AssertContains(prompt, "common.skills_read", "skill loading guidance present");
             AssertContains(prompt, "several tool_calls", "multi-tool guidance present");
             AssertTrue(prompt.IndexOf("ROUTE:", StringComparison.OrdinalIgnoreCase) < 0, "no route wrapper");
             AssertTrue(prompt.IndexOf("NEXT_ACTION_POLICY", StringComparison.OrdinalIgnoreCase) < 0, "no action heuristic");
+        }
+
+        private static void SimpleAgentLoadsFullSkillThroughTool()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var skill = new SkillDefinition
+                {
+                    Id = "common.test",
+                    Name = "Test",
+                    Description = "Test workflow",
+                    Version = "2.0.0",
+                    BodyMarkdown = "Follow TEST_SKILL_SENTINEL.",
+                    Enabled = true
+                };
+                var responses = new Queue<string>(new[]
+                {
+                    "{\"message\":\"Читаю подходящий skill.\",\"tool_calls\":[{\"id\":\"call_skill\",\"name\":\"common.skills_read\",\"arguments\":{\"id\":\"common.test\"}}]}",
+                    "{\"message\":\"Инструкции учтены.\",\"tool_calls\":[]}"
+                });
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
+                {
+                    calls.Add(messages.ToList());
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var result = new AgentRunService(adapter, executor, completion).ExecuteAsync(
+                    "Do the test workflow.", NewSession(adapter), NewContext(adapter), new AppSettings(),
+                    tools, null, null, null, new[] { skill }, CancellationToken.None, true).GetAwaiter().GetResult();
+
+                AssertEqual("Инструкции учтены.", result.AssistantText, "skill-assisted response");
+                AssertTrue(FlattenSimple(calls[0]).IndexOf("TEST_SKILL_SENTINEL", StringComparison.Ordinal) < 0,
+                    "first request contains only catalog");
+                var replay = FlattenSimple(calls[1]);
+                AssertContains(replay, "TEST_SKILL_SENTINEL", "full instructions returned by tool");
+                AssertContains(replay, "\"format\":\"markdown\"", "loaded skill format");
+                AssertContains(replay, "\"version\":\"2.0.0\"", "loaded skill version");
+            });
         }
 
         private static void SimpleAgentPromptSkipsInvalidToolSchema()
@@ -129,13 +171,48 @@ namespace RNAssistant.Harness
                     Description = "Bad",
                     Enabled = true,
                     AgentCanRun = true,
-                    ArgumentSchemaJson = "{}"
+                    ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}"
                 }
             };
             var prompt = FlattenSimple(new AgentPromptComposer().BuildMessages(
                 "Test", adapter, tools, null, new DocumentContext(), new AppSettings(), NewSession(adapter), null));
             AssertContains(prompt, "excel.good", "valid tool included");
             AssertTrue(prompt.IndexOf("excel.bad", StringComparison.OrdinalIgnoreCase) < 0, "invalid tool excluded");
+        }
+
+        private static void StrictToolSchemaValidatesMetadataAndConstraints()
+        {
+            var tool = new ToolDefinition
+            {
+                Id = "common.strict_test",
+                ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Item count.\",\"default\":2,\"minimum\":1,\"maximum\":3}},\"required\":[],\"additionalProperties\":false}"
+            };
+            Newtonsoft.Json.Linq.JObject schema;
+            string error;
+            AssertTrue(ToolSchemaSupport.TryParse(tool, out schema, out error), "strict schema parses");
+
+            var arguments = new Newtonsoft.Json.Linq.JObject();
+            AssertTrue(ToolSchemaSupport.ValidateArguments(arguments, schema, true, out error), "default is applied");
+            AssertEqual(2L, Convert.ToInt64(arguments["count"]), "declared default value");
+            arguments["count"] = 4;
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(arguments, schema, false, out error), "maximum is enforced");
+
+            tool.ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"count\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}";
+            AssertTrue(!ToolSchemaSupport.TryParse(tool, out schema, out error), "undocumented argument is rejected");
+            AssertContains(error, "description", "missing description diagnostic");
+        }
+
+        private static void ControllerToolCatalogUsesStrictSchemas()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                foreach (var tool in executor.GetControllerTools())
+                {
+                    Newtonsoft.Json.Linq.JObject schema;
+                    string error;
+                    AssertTrue(ToolSchemaSupport.TryParse(tool, out schema, out error), tool.Id + ": " + error);
+                }
+            });
         }
 
         private static void SimpleAgentExecutesToolAndReceivesJsonResult()

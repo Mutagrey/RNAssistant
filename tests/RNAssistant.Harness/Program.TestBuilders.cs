@@ -18,7 +18,7 @@ namespace RNAssistant.Harness
     internal static partial class Program
     {
         private const string EmptyFormalToolSchema = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}";
-        private const string SheetFormalToolSchema = "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\"}},\"required\":[\"sheet\"],\"additionalProperties\":false}";
+        private const string SheetFormalToolSchema = "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name.\"}},\"required\":[\"sheet\"],\"additionalProperties\":false}";
 
         private static ToolDefinition CustomTool(string host, string id)
         {

@@ -222,7 +222,7 @@ namespace RNAssistant.Office.Tools
         {
             JObject schema;
             string schemaError;
-            if (!ToolSchemaSupport.TryNormalize(tool, out schema, out schemaError))
+            if (!ToolSchemaSupport.TryParse(tool, out schema, out schemaError))
             {
                 return ToolResult.Fail(schemaError, null, "invalid_tool_schema", false);
             }

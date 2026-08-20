@@ -77,7 +77,7 @@ namespace RNAssistant.Office.Services
             {
                 Id = "compat.echo",
                 Description = "Compatibility probe.",
-                ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}},\"required\":[\"value\"],\"additionalProperties\":false}"
+                ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\",\"description\":\"Compatibility probe value.\"}},\"required\":[\"value\"],\"additionalProperties\":false}"
             };
             return RunAsync(
                 settings,

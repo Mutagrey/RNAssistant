@@ -133,7 +133,7 @@ namespace RNAssistant.Core.Tools
 
             JObject normalizedSchema;
             string schemaError;
-            if (!ToolSchemaSupport.TryNormalize(tool, out normalizedSchema, out schemaError)) return VbaToolManifestParseResult.Fail("parameters_schema", schemaError);
+            if (!ToolSchemaSupport.TryParse(tool, out normalizedSchema, out schemaError)) return VbaToolManifestParseResult.Fail("parameters_schema", schemaError);
             var signature = ParseFunctionSignature(code.Substring(end + CloseMarker.Length), entryPoint);
             if (!signature.Success) return VbaToolManifestParseResult.Fail(signature.ErrorCode, signature.ErrorMessage);
             if (signature.Parameters.Count != argumentOrder.Count) return VbaToolManifestParseResult.Fail("signature_arguments", "Function parameters must match argumentOrder exactly.");

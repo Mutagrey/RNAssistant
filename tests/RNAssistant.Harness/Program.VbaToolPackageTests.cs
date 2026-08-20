@@ -178,7 +178,7 @@ namespace RNAssistant.Harness
             var entryCode =
                 "Option Explicit\n" +
                 "' <RNAssistantTool>\n" +
-                "' {\"protocolVersion\":1,\"id\":\"excel.echo_vba\",\"name\":\"Echo VBA\",\"description\":\"Return typed arguments.\",\"host\":\"Excel\",\"packageVersion\":\"1.0.0\",\"entryPoint\":\"Echo\",\"components\":[\"RNA_Echo\",\"RNA_EchoService\"],\"argumentOrder\":[\"text\",\"count\",\"ratio\",\"enabled\"],\"parameters\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"},\"count\":{\"type\":\"integer\"},\"ratio\":{\"type\":\"number\"},\"enabled\":{\"type\":\"boolean\",\"default\":true}},\"required\":[\"text\",\"count\",\"ratio\"],\"additionalProperties\":false},\"mutatesDocument\":true,\"agentCanRun\":false,\"requiresConfirmation\":true}\n" +
+                "' {\"protocolVersion\":1,\"id\":\"excel.echo_vba\",\"name\":\"Echo VBA\",\"description\":\"Return typed arguments.\",\"host\":\"Excel\",\"packageVersion\":\"1.0.0\",\"entryPoint\":\"Echo\",\"components\":[\"RNA_Echo\",\"RNA_EchoService\"],\"argumentOrder\":[\"text\",\"count\",\"ratio\",\"enabled\"],\"parameters\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Text value.\"},\"count\":{\"type\":\"integer\",\"description\":\"Integer value.\"},\"ratio\":{\"type\":\"number\",\"description\":\"Numeric value.\"},\"enabled\":{\"type\":\"boolean\",\"description\":\"Boolean value.\",\"default\":true}},\"required\":[\"text\",\"count\",\"ratio\"],\"additionalProperties\":false},\"mutatesDocument\":true,\"agentCanRun\":false,\"requiresConfirmation\":true}\n" +
                 "' </RNAssistantTool>\n" +
                 "Public Function Echo(ByVal text As String, ByVal count As Long, ByVal ratio As Double, ByVal enabled As Boolean) As String\n" +
                 "    Echo = text & CStr(count) & CStr(ratio) & CStr(enabled)\n" +
@@ -190,7 +190,7 @@ namespace RNAssistant.Harness
                 Host = "Excel",
                 Name = "Echo VBA",
                 Description = "Return typed arguments.",
-                ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"},\"count\":{\"type\":\"integer\"},\"ratio\":{\"type\":\"number\"},\"enabled\":{\"type\":\"boolean\",\"default\":true}},\"required\":[\"text\",\"count\",\"ratio\"],\"additionalProperties\":false}",
+                ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Text value.\"},\"count\":{\"type\":\"integer\",\"description\":\"Integer value.\"},\"ratio\":{\"type\":\"number\",\"description\":\"Numeric value.\"},\"enabled\":{\"type\":\"boolean\",\"description\":\"Boolean value.\",\"default\":true}},\"required\":[\"text\",\"count\",\"ratio\"],\"additionalProperties\":false}",
                 Executor = "vba",
                 Code = entryCode,
                 Enabled = true,

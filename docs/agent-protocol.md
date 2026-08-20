@@ -11,10 +11,10 @@ Every Agent request contains the editable `SystemPrompt` and one `RUNTIME_CONTEX
 
 - current host and document identity;
 - every enabled tool that the agent may run;
-- every enabled skill with its full Markdown instructions;
+- the enabled skill catalog with `id`, `name`, and `description` only;
 - chat-owned user context and artifact references.
 
-Every skill entry contains `id`, `name`, `description`, `format: "markdown"`, and the complete Markdown body in `instructions`. Skills are guidance already present in the prompt; the agent does not load or activate them through a tool. Skill tools exist only for explicit skill inspection and authoring.
+When a catalog description matches the task, the model calls `common.skills_read` with the exact id. Its `TOOL_RESULT.data` contains `id`, `name`, `description`, `version`, `format: "markdown"`, and the complete body in `instructions`. Several clearly relevant skills may be read as independent calls. The result is normal conversation history; there is no router or activation state.
 
 Tools use a native-like description:
 
@@ -43,7 +43,7 @@ Tools use a native-like description:
 }
 ```
 
-Custom tools must have a formal object JSON Schema. Safety metadata is resolved locally and cannot be overridden by a prompt or skill.
+Custom tools must have a strict object JSON Schema with explicit `properties`, `required`, and `additionalProperties:false`. Every argument requires a type and useful description; real defaults, enums, limits, and array items belong in that same schema. Safety metadata is resolved locally and cannot be overridden by a prompt or skill.
 
 ## Model response
 

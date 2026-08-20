@@ -30,11 +30,11 @@ namespace RNAssistant.Office.Tools
                 "Common",
                 "Mutates settings: Update RNAssistant Agent, Chat, compaction, or title prompts after the user asks to edit them.",
                 "{\"type\":\"object\",\"properties\":{" +
-                    "\"systemPrompt\":{\"type\":\"string\"}," +
-                    "\"chatSystemPrompt\":{\"type\":\"string\"}," +
-                    "\"systemPromptRole\":{\"type\":\"string\",\"enum\":[\"developer\",\"system\",\"user\"]}," +
-                    "\"contextCompactionPrompt\":{\"type\":\"string\"}," +
-                    "\"chatTitlePrompt\":{\"type\":\"string\"}}," +
+                    "\"systemPrompt\":{\"type\":\"string\",\"description\":\"Complete Agent-mode system prompt.\"}," +
+                    "\"chatSystemPrompt\":{\"type\":\"string\",\"description\":\"Complete tool-free Chat-mode system prompt.\"}," +
+                    "\"systemPromptRole\":{\"type\":\"string\",\"description\":\"Message role used for the Agent prompt.\",\"enum\":[\"developer\",\"system\",\"user\"]}," +
+                    "\"contextCompactionPrompt\":{\"type\":\"string\",\"description\":\"Prompt used to compact completed history.\"}," +
+                    "\"chatTitlePrompt\":{\"type\":\"string\",\"description\":\"Prompt used to generate chat titles.\"}}," +
                     "\"required\":[],\"additionalProperties\":false}",
                 mutatesLocalState: true,
                 requiresConfirmation: true,

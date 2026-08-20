@@ -109,7 +109,7 @@ namespace RNAssistant.Office.Services
                 if (tool == null || string.IsNullOrWhiteSpace(tool.Id)) continue;
                 JObject schema;
                 string schemaError;
-                if (!ToolSchemaSupport.TryNormalize(tool, out schema, out schemaError))
+                if (!ToolSchemaSupport.TryParse(tool, out schema, out schemaError))
                 {
                     continue;
                 }
@@ -152,9 +152,7 @@ namespace RNAssistant.Office.Services
                 {
                     ["id"] = skill.Id ?? string.Empty,
                     ["name"] = skill.Name ?? string.Empty,
-                    ["description"] = skill.Description ?? string.Empty,
-                    ["format"] = "markdown",
-                    ["instructions"] = skill.BodyMarkdown ?? string.Empty
+                    ["description"] = skill.Description ?? string.Empty
                 }));
         }
 

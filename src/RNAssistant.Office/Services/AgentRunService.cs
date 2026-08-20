@@ -317,7 +317,7 @@ namespace RNAssistant.Office.Services
                 if (!safety.TryGetValue(tool.Id, out profile) || !profile.Valid || !profile.AgentCanRun) continue;
                 JObject schema;
                 string schemaError;
-                if (!ToolSchemaSupport.TryNormalize(tool, out schema, out schemaError)) continue;
+                if (!ToolSchemaSupport.TryParse(tool, out schema, out schemaError)) continue;
                 if (!string.IsNullOrWhiteSpace(tool.CapabilityStatus) &&
                     !string.Equals(tool.CapabilityStatus, "available", StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(tool.CapabilityStatus, "partial", StringComparison.OrdinalIgnoreCase)) continue;

@@ -40,9 +40,9 @@ Option Explicit
 '   "parameters": {
 '     "type": "object",
 '     "properties": {
-'       "text": { "type": "string" },
-'       "count": { "type": "integer" },
-'       "enabled": { "type": "boolean", "default": true }
+'       "text": { "type": "string", "description": "Text to echo." },
+'       "count": { "type": "integer", "description": "Repeat count." },
+'       "enabled": { "type": "boolean", "description": "Whether output is enabled.", "default": true }
 '     },
 '     "required": ["text", "count"],
 '     "additionalProperties": false
@@ -66,7 +66,7 @@ End Function
 - `protocolVersion` равен `1`; `host` — `Excel`, `Word` или `PowerPoint`.
 - `components` содержит уникальные имена и первым указывает entry module.
 - Имена VBA components и entry point начинаются с латинской буквы, содержат только буквы/цифры/underscore и не длиннее 40 символов.
-- `parameters` — формальный object JSON Schema; `argumentOrder` в точности совпадает с его properties и с сигнатурой функции.
+- `parameters` — strict object JSON Schema с `required`, `additionalProperties:false`, явным типом и полезным `description` каждого параметра; `argumentOrder` в точности совпадает с его properties и с сигнатурой функции.
 - Каждый параметр объявлен `ByVal` и имеет тип `String`, `Long`, `Double` или `Boolean`. JSON `integer` соответствует VBA `Long`.
 - Entry function принимает не более 30 позиционных аргументов.
 - Необязательный параметр имеет `default` в schema, потому что `Application.Run` получает позиционные аргументы.
@@ -96,7 +96,7 @@ Discovery читает VBProject активного документа, нахо
 
 Для чтения/import/remove VBProject в Trust Center должен быть включён `Trust access to the VBA project object model`. Новосозданный mutating tool по умолчанию должен иметь `agentCanRun:false` и `requiresConfirmation:true`. Не храните в исходниках секреты, credentials, machine-specific paths и скрытый network/shell запуск.
 
-Для безопасной работы с кодом доступны host-prefixed controller tools: `vba_list_modules`, `vba_search_code`, `vba_replace_text`, `vba_apply_patch`, `vba_create_module`, `vba_delete_module`, backup list/restore. `vba_list_modules` возвращает только имена, типы и размеры компонентов; исходник читается по имени через host `vba_read_module`. Поиск поддерживает literal/regexp, а `regexReplace` в structured patch — capture groups, timeout и лимит замен. Перед каждой записью/удалением создаётся backup; delete дополнительно требует актуальный `expectedCodeSha256` из `vba_read_module` или `vba_search_code`.
+Для безопасной работы с кодом доступны host-prefixed controller tools: `vba_list_modules`, `vba_search_code`, `vba_replace_text`, `vba_apply_patch`, `vba_create_module`, `vba_delete_module`, backup list/restore. `vba_list_modules` возвращает только имена, типы и размеры компонентов; исходник читается по имени через host `vba_read_module`. Поиск поддерживает literal/regex, а `regexReplace` в structured patch — capture groups, timeout и лимит замен. Перед каждой записью/удалением создаётся backup; delete дополнительно требует актуальный `expectedCodeSha256` из `vba_read_module` или `vba_search_code`.
 
 Создавать и удалять можно только `StdModule` и `ClassModule`. Document modules и UserForms разрешено читать, искать и патчить, но нельзя создавать/удалять через RNAssistant. Все VBA mutations требуют подтверждения.
 

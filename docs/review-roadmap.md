@@ -3,7 +3,7 @@
 The agent runtime now has one direct flow:
 
 ```text
-request + full tool/skill context
+request + full tool catalog + compact skill catalog
     -> model JSON
         -> zero or more sequential local tools
             -> one TOOL_RESULT JSON per call id
@@ -25,9 +25,9 @@ Future changes should prefer extending the editable prompt, skill text, native-l
 
 Known trade-offs of this simpler design:
 
-- the full enabled tool/skill catalog consumes context and can outgrow a small model window;
+- the full enabled tool catalog consumes context and can outgrow a small model window; skill bodies consume context only after `common.skills_read`;
 - independent multi-tool calls reduce model round trips, but result-dependent calls still require another model turn;
-- built-in tool schemas are formal but still need richer per-argument descriptions, enums, defaults, and required-field coverage;
+- strict tool schemas improve selection and validation, but their descriptions, defaults, enums, and required fields must stay synchronized with executor behavior;
 - the selected endpoint must reliably support `json_object`, because invalid JSON is not repaired;
 - without a separate verifier, correctness depends on explicit tool results and tool-internal hash/backup/stale-state checks;
 - attachments use the selected model and fail explicitly when its declared media capabilities are insufficient.

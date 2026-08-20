@@ -46,7 +46,7 @@ namespace RNAssistant.Core.Storage
                 tool.Readme = ReadOptional(Path.Combine(directory, "README.md"), tool.Readme);
                 JObject schema;
                 string schemaError;
-                if (!ToolSchemaSupport.TryNormalize(tool, out schema, out schemaError) ||
+                if (!ToolSchemaSupport.TryParse(tool, out schema, out schemaError) ||
                     string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(tool.Code))
                 {
                     continue;

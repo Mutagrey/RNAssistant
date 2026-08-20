@@ -22,9 +22,9 @@ namespace RNAssistant.Office.Tools
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
             yield return ControllerToolDefinition.Create("common.skills_list", "Common", "Read-only: List markdown skills visible to the current Office host.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}");
-            yield return ControllerToolDefinition.Create("common.skills_read", "Common", "Read-only: Read one markdown skill by id.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}");
-            yield return ControllerToolDefinition.Create("common.skills_save", "Common", "Mutates settings: Create or update a markdown skill included in Agent context.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"host\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"version\":{\"type\":\"string\"},\"bodyMarkdown\":{\"type\":\"string\"},\"enabled\":{\"type\":\"boolean\"}},\"required\":[\"id\",\"description\",\"bodyMarkdown\"],\"additionalProperties\":false}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
-            yield return ControllerToolDefinition.Create("common.skills_delete", "Common", "Mutates settings: Delete a custom markdown skill by id.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
+            yield return ControllerToolDefinition.Create("common.skills_read", "Common", "Read-only: Load the complete Markdown instructions for one skill from RUNTIME_CONTEXT.skills.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact skill id from RUNTIME_CONTEXT.skills.\"}},\"required\":[\"id\"],\"additionalProperties\":false}");
+            yield return ControllerToolDefinition.Create("common.skills_save", "Common", "Mutates settings: Create or update a markdown skill included in Agent context.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable identifier.\"},\"host\":{\"type\":\"string\",\"description\":\"Office host name: Common, Excel, Word, PowerPoint, or Outlook.\",\"default\":\"Common\",\"enum\":[\"Common\",\"Excel\",\"Word\",\"PowerPoint\",\"Outlook\"]},\"name\":{\"type\":\"string\",\"description\":\"Human-readable name or exact saved item name, as required by the tool.\"},\"description\":{\"type\":\"string\",\"description\":\"Clear model-facing description of what the item does.\"},\"version\":{\"type\":\"string\",\"description\":\"Semantic version such as 1.0.0.\",\"default\":\"1.0.0\"},\"bodyMarkdown\":{\"type\":\"string\",\"description\":\"Complete Markdown instructions stored in the skill.\"},\"enabled\":{\"type\":\"boolean\",\"description\":\"Whether the saved item is enabled.\",\"default\":true}},\"required\":[\"id\",\"description\",\"bodyMarkdown\"],\"additionalProperties\":false}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
+            yield return ControllerToolDefinition.Create("common.skills_delete", "Common", "Mutates settings: Delete a custom markdown skill by id.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable identifier.\"}},\"required\":[\"id\"],\"additionalProperties\":false}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
         }
 
         public ToolResult ExecuteControllerTool(
@@ -82,7 +82,15 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Fail("Skill not found: " + id);
             }
 
-            return ToolResult.Ok("Skill read: " + skill.Id, JsonConvert.SerializeObject(skill));
+            return ToolResult.Ok("Skill loaded: " + skill.Id, JsonConvert.SerializeObject(new
+            {
+                id = skill.Id,
+                name = skill.Name,
+                description = skill.Description,
+                version = string.IsNullOrWhiteSpace(skill.Version) ? "1.0.0" : skill.Version,
+                format = "markdown",
+                instructions = skill.BodyMarkdown ?? string.Empty
+            }));
         }
 
         private ToolResult SaveSkill(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun, IReadOnlyList<SkillDefinition> runtimeSkills)

@@ -187,7 +187,7 @@ Each chat stores an explicit execution mode:
 
 Editable Agent instructions use `developer` by default and may use `system` or `user`. The Prompts page edits the Agent prompt, Chat prompt, context-compaction prompt, and title prompt. Agent-side prompt changes use `common.prompts_read_defaults` and confirmed `common.prompts_save`.
 
-In Agent mode the prompt contains all runnable tools in native-like function JSON and the full Markdown bodies of all enabled skills. The model returns one raw JSON object. A tool turn contains one or more calls:
+In Agent mode the prompt contains all runnable tools in native-like function JSON and a compact catalog (`id`, `name`, `description`) of enabled skills. When a catalog description is relevant, the model loads that skill's complete versioned Markdown through `common.skills_read`. The model returns one raw JSON object. A tool turn contains one or more calls:
 
 ```json
 {
@@ -273,7 +273,7 @@ Markdown skills are stored under:
 
 `%AppData%\RNAssistant\skills`
 
-Each custom skill is a `SKILL.md` guidance file with simple metadata (`id`, `host`, `name`, `description`, `version`, `enabled`) and markdown instructions. Every enabled visible skill is included in full in each Agent request. There is no skill router, activation state, dependency graph, or hidden tool ownership. Agent mode can inspect and edit custom skills through `common.skills_list`, `common.skills_read`, `common.skills_save`, and `common.skills_delete`; save/delete requires confirmation unless auto-confirm is enabled.
+Each custom skill is a `SKILL.md` guidance file with simple metadata (`id`, `host`, `name`, `description`, `version`, `enabled`) and Markdown instructions. Every enabled visible skill contributes only `id`, `name`, and `description` to `RUNTIME_CONTEXT.skills`. There is no skill router, activation state, dependency graph, or hidden tool ownership. The model calls `common.skills_read` for each clearly relevant catalog entry before following its complete instructions. Agent mode can inspect and edit custom skills through `common.skills_list`, `common.skills_read`, `common.skills_save`, and `common.skills_delete`; save/delete requires confirmation unless auto-confirm is enabled.
 
 ```markdown
 ---
@@ -291,7 +291,7 @@ enabled: true
 - Preserve the requested column order.
 ```
 
-At runtime this becomes one JSON entry with `id`, `name`, `description`, `format: "markdown"`, and the complete body in `instructions`. `common.skills_read` is for explicit inspection/editing, not activation.
+At runtime the catalog entry is `{"id","name","description"}`. `common.skills_read` returns `{"id","name","description","version","format":"markdown","instructions":"..."}` in a normal `TOOL_RESULT.data` object. That result remains in conversation history; there is no separate activation state.
 
 ## VBA Workflow
 

@@ -15,9 +15,9 @@ namespace RNAssistant.Harness
             var found = TextPatternEngine.Find("Code-12 code-345 decoder-7", "code-(\\d+)", options, 10, 5);
             var replaced = TextPatternEngine.Replace("Code-12 code-345 decoder-7", "code-(\\d+)", "item-$1", options, true, 10);
 
-            AssertEqual(2, found.MatchCount, "regexp match count");
-            AssertEqual("item-12 item-345 decoder-7", replaced.Text, "regexp capture replacement");
-            AssertEqual(2, replaced.MatchCount, "regexp replacement count");
+            AssertEqual(2, found.MatchCount, "regex match count");
+            AssertEqual("item-12 item-345 decoder-7", replaced.Text, "regex capture replacement");
+            AssertEqual(2, replaced.MatchCount, "regex replacement count");
         }
 
         private static void PipelineExecutionValidatesArgumentsAndNestedBudget()
@@ -50,12 +50,12 @@ namespace RNAssistant.Harness
                 AssertTrue(listed.Success, "VBA module list succeeds");
                 AssertTrue(!listed.DataJson.Contains("Option Explicit"), "VBA module list omits source code");
                 AssertContains(read.DataJson, "codeSha256", "VBA module read returns code hash");
-                AssertContains(searched.DataJson, "Module1", "VBA regexp search returns module");
+                AssertContains(searched.DataJson, "Module1", "VBA regex search returns module");
 
                 var patch = "[{\"op\":\"regexReplace\",\"pattern\":\"old(Value)\",\"text\":\"new$1\",\"replaceAll\":true}]";
                 var patched = executor.Execute(Command("excel.vba_apply_patch", "moduleName", "Module1", "patch", patch), tools, settings, false, false);
-                AssertTrue(patched.Success, "VBA regexp patch succeeds");
-                AssertContains(adapter.GetVbaModuleCode("Module1"), "newValue", "VBA regexp patch applies captures");
+                AssertTrue(patched.Success, "VBA regex patch succeeds");
+                AssertContains(adapter.GetVbaModuleCode("Module1"), "newValue", "VBA regex patch applies captures");
 
                 var blockedDelete = executor.Execute(Command("excel.vba_delete_module", "moduleName", "ThisWorkbook", "expectedCodeSha256", VbaToolManifestParser.CodeSha256(adapter.GetVbaModuleCode("ThisWorkbook"))), tools, settings, false, false);
                 AssertEqual("vba_component_type_read_only", blockedDelete.ErrorCode, "document module delete blocked");

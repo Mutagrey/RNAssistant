@@ -522,7 +522,7 @@
                 <label><span>Макс. итераций агента</span><input id="maxAgentIterationsInput" type="number" min="1"></label>
                 <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1"></label>
               </div>
-              <div class="setting-note">Agent получает все tools и полные skills в одном JSON-контексте. Независимые tools могут выполняться последовательно за один model turn; каждый возвращает свой TOOL_RESULT JSON.</div>
+              <div class="setting-note">Agent получает все tools и компактный каталог skills в JSON-контексте; полный skill читает по необходимости. Независимые tools могут выполняться последовательно за один model turn; каждый возвращает свой TOOL_RESULT JSON.</div>
               <section class="model-compatibility-panel" aria-labelledby="modelCompatibilityTitle">
                 <div class="model-compatibility-head">
                   <div>

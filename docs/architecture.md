@@ -27,7 +27,7 @@ There are exactly two persisted modes.
 - `Chat` uses `PlainChatService`: normal history plus `ChatSystemPrompt`; no tools, skills, agent JSON, or Office execution.
 - `Agent` uses `AgentRunService`: prompt assembly, one model JSON response, zero or more sequential local tools, JSON results, and the next model turn.
 
-`AgentPromptComposer` creates one `RUNTIME_CONTEXT` JSON object containing document identity, all runnable tools in native-like function format, every enabled skill body, chat context, and artifact references. It does not inspect or classify request wording and does not capture Office content eagerly.
+`AgentPromptComposer` creates one `RUNTIME_CONTEXT` JSON object containing document identity, all runnable tools in native-like function format, a compact enabled-skill catalog, chat context, and artifact references. Relevant complete skill Markdown is loaded by the model through `common.skills_read`. The composer does not inspect or classify request wording and does not capture Office content eagerly.
 
 `AgentResponseParser` accepts either a final `message` or one or more `tool_calls` entries with unique ids. `OfficeToolExecutor` remains the authority for formal argument schemas, effective pipeline safety, confirmation, and dispatch. `AgentJsonProtocol` serializes each result to `{ok, tool_call_id, name, status, message, data, error}`.
 
@@ -36,9 +36,9 @@ See [agent-protocol.md](agent-protocol.md).
 ## Important boundaries
 
 - Controller files coordinate bridge requests; reusable behavior stays in services and executor logic stays in `RNAssistant.Office/Tools`.
-- Tools are executable capabilities. Skills are prompt instructions; all enabled skills are included directly and have no activation/dependency runtime.
+- Tools are executable capabilities. Skills are Markdown instructions discovered through the compact catalog and read through one normal tool; there is no activation/dependency runtime.
 - Tool safety lives in `ToolDefinition`: mutation, local-state, confirmation, risk, capability, and `AgentCanRun` metadata. Prompts cannot bypass it.
-- Custom tools require a formal object JSON Schema. Pipelines invoke existing ids through `OfficeToolExecutor` and cannot call adapters directly.
+- Custom tools require a strict object JSON Schema with documented arguments. Pipelines invoke existing ids through `OfficeToolExecutor` and cannot call adapters directly.
 - VBA tools are manifest packages. Backup, ownership, hash, and stale-state protections remain inside VBA execution; see [vba-tool-packages.md](vba-tool-packages.md).
 - Accepted agent calls/results are hidden protocol messages. Visible tool activity is presentation only and is excluded from model context.
 - Provider reasoning is stored separately from agent JSON.
