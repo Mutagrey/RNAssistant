@@ -128,6 +128,7 @@ namespace RNAssistant.Office
                     _attachmentStore.CloneMessageAttachments(fork.Id, message);
                 }
                 ChatArtifactService.LinkMessageArtifacts(fork, 0);
+                ChatArtifactService.RestoreActivePlanFromMessages(fork);
                 NormalizeContext(fork.Context, fork);
                 SaveSessionChanges(fork);
                 _chatSessions.SetActiveSession(fork);
@@ -315,6 +316,7 @@ namespace RNAssistant.Office
                 session.ContextCheckpoints = new List<ContextCheckpoint>();
                 session.ActiveContextCheckpointId = null;
                 session.ActiveHtmlArtifactId = null;
+                session.ActivePlanArtifactId = null;
                 NormalizeContext(session.Context, session);
                 SaveSessionChanges(session);
             }
@@ -398,6 +400,7 @@ namespace RNAssistant.Office
                 Artifacts = ChatArtifactDto.From(session == null ? null : session.Artifacts),
                 ActiveContextCheckpointId = session == null ? string.Empty : session.ActiveContextCheckpointId,
                 ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId,
+                ActivePlanArtifactId = session == null ? string.Empty : session.ActivePlanArtifactId,
                 ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load()),
                 HtmlWorkspace = session == null ? new HtmlWorkspace() : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace)
             };

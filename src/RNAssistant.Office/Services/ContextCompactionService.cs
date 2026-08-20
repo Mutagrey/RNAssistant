@@ -279,6 +279,7 @@ namespace RNAssistant.Office.Services
                     .Where(id => !string.IsNullOrWhiteSpace(id)),
                 StringComparer.OrdinalIgnoreCase);
             if (session != null && !string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId)) referencedArtifactIds.Add(session.ActiveHtmlArtifactId);
+            if (session != null && !string.IsNullOrWhiteSpace(session.ActivePlanArtifactId)) referencedArtifactIds.Add(session.ActivePlanArtifactId);
             builder.AppendLine("ARTIFACT_INDEX:");
             var artifacts = (session == null || session.Artifacts == null ? new List<ChatArtifact>() : session.Artifacts)
                 .Where(artifact => artifact != null && referencedArtifactIds.Contains(artifact.Id))

@@ -128,6 +128,7 @@ namespace RNAssistant.Core.Models
         public string ActiveContextCheckpointId { get; set; }
         public List<ChatArtifact> Artifacts { get; set; }
         public string ActiveHtmlArtifactId { get; set; }
+        public string ActivePlanArtifactId { get; set; }
 
         public ChatSession()
         {

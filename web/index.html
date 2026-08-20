@@ -34,10 +34,10 @@
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260702-2">
-  <link rel="stylesheet" href="css/app-artifacts.css?v=context-20260807-1">
+  <link rel="stylesheet" href="css/app-artifacts.css?v=plan-tools-20260821-1">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=chatui-20260702-2">
   <link rel="stylesheet" href="css/app-responsive.css?v=message-edit-20260806-1">
-  <link rel="stylesheet" href="css/app-agent.css?v=agent-actions-20260820-1">
+  <link rel="stylesheet" href="css/app-agent.css?v=plan-tools-20260821-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=agent-transcript-20260805-3">
   <link rel="stylesheet" href="css/app-theme.css?v=message-edit-20260806-1">
 </head>
@@ -99,6 +99,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
           </button>
         </div>
+        <div class="agent-plan-dock hidden" id="agentPlanDock" aria-live="polite"></div>
         <div class="agent-approval-dock hidden" id="agentApprovalDock" aria-live="polite"></div>
         <form class="composer" id="chatForm">
           <div class="composer-edit-bar hidden" id="messageEditBar" aria-hidden="true">
@@ -700,7 +701,7 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=agent-progress-20260820-1"></script>
+  <script src="js/app-core.js?v=plan-tools-20260821-1"></script>
   <script src="js/app-utils.js?v=runtime-20260807-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
@@ -712,7 +713,7 @@
   <script src="js/app-model-render.js?v=model-capabilities-20260820-1"></script>
   <script src="js/app-models.js?v=agent-reliability-20260819-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=model-capabilities-20260820-1"></script>
+  <script src="js/app-chat-state.js?v=plan-tools-20260821-1"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
   <script src="js/app-tools.js?v=chatui-20260622-4"></script>
   <script src="js/app-skills.js?v=chatui-20260622-4"></script>
@@ -723,12 +724,13 @@
   <script src="js/app-agent-model.js?v=agent-reliability-20260819-1"></script>
   <script src="js/app-chart-artifacts.js?v=chatui-20260622-2"></script>
   <script src="js/app-html-artifacts.js?v=chatui-20260702-2"></script>
-  <script src="js/app-artifacts.js?v=context-20260807-1"></script>
+  <script src="js/app-artifacts.js?v=plan-tools-20260821-1"></script>
+  <script src="js/app-plan.js?v=plan-tools-20260821-1"></script>
   <script src="js/app-agent.js?v=agent-actions-20260820-1"></script>
-  <script src="js/app-messages.js?v=reasoning-ui-20260819-1"></script>
+  <script src="js/app-messages.js?v=plan-tools-20260821-1"></script>
   <script src="js/app-reasoning.js?v=reasoning-ui-20260819-1"></script>
   <script src="js/app-attachments.js?v=media-20260820-1"></script>
-  <script src="js/app-chat.js?v=reasoning-ui-20260819-1"></script>
+  <script src="js/app-chat.js?v=plan-tools-20260821-1"></script>
   <script src="js/app-chat-edit.js?v=runtime-20260807-1"></script>
   <script src="js/app.js?v=agent-progress-20260820-1"></script>
 </body>

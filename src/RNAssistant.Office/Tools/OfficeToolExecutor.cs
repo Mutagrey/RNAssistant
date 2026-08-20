@@ -20,6 +20,7 @@ namespace RNAssistant.Office.Tools
         private readonly ToolAuthoringExecutor _toolAuthoringExecutor;
         private readonly PromptToolExecutor _promptToolExecutor;
         private readonly HtmlArtifactToolExecutor _htmlArtifactExecutor;
+        private readonly PlanToolExecutor _planToolExecutor;
         private readonly IReadOnlyList<ToolDefinition> _controllerTools;
         private readonly IDictionary<string, ControllerExecutorKind> _controllerExecutors;
         private readonly object _mutationGateSync = new object();
@@ -41,6 +42,7 @@ namespace RNAssistant.Office.Tools
             _toolAuthoringExecutor = new ToolAuthoringExecutor(adapter, toolStore);
             _promptToolExecutor = new PromptToolExecutor(loadSettings, saveSettings);
             _htmlArtifactExecutor = new HtmlArtifactToolExecutor();
+            _planToolExecutor = new PlanToolExecutor();
             var controllerTools = new List<ToolDefinition>();
             _controllerExecutors = new Dictionary<string, ControllerExecutorKind>(StringComparer.OrdinalIgnoreCase);
             RegisterControllerTools(controllerTools, _vbaExecutor.GetControllerTools(), ControllerExecutorKind.Vba);
@@ -48,6 +50,7 @@ namespace RNAssistant.Office.Tools
             RegisterControllerTools(controllerTools, _toolAuthoringExecutor.GetControllerTools(), ControllerExecutorKind.ToolAuthoring);
             RegisterControllerTools(controllerTools, _promptToolExecutor.GetControllerTools(), ControllerExecutorKind.Prompt);
             RegisterControllerTools(controllerTools, _htmlArtifactExecutor.GetControllerTools(), ControllerExecutorKind.HtmlArtifact);
+            RegisterControllerTools(controllerTools, _planToolExecutor.GetControllerTools(), ControllerExecutorKind.Plan);
             _controllerTools = controllerTools.ToArray();
             var duplicate = _adapterTools.FirstOrDefault(tool => tool != null && _controllerExecutors.ContainsKey(tool.Id ?? string.Empty));
             if (duplicate != null)
@@ -382,6 +385,8 @@ namespace RNAssistant.Office.Tools
                     return _promptToolExecutor.ExecuteControllerTool(command, context.Settings, dryRun);
                 case ControllerExecutorKind.HtmlArtifact:
                     return _htmlArtifactExecutor.ExecuteControllerTool(command, context.Session, dryRun);
+                case ControllerExecutorKind.Plan:
+                    return _planToolExecutor.ExecuteControllerTool(command, context.Session, dryRun);
                 default:
                     return ToolResult.Fail("Unknown controller executor for tool: " + command.ToolId);
             }
@@ -560,7 +565,8 @@ namespace RNAssistant.Office.Tools
             Skill,
             ToolAuthoring,
             Prompt,
-            HtmlArtifact
+            HtmlArtifact,
+            Plan
         }
     }
 }

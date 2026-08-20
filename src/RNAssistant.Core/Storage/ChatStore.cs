@@ -418,6 +418,13 @@ namespace RNAssistant.Core.Storage
             {
                 session.ActiveHtmlArtifactId = null;
             }
+            var activePlan = session.Artifacts.FirstOrDefault(item =>
+                string.Equals(item.Id, session.ActivePlanArtifactId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.Kind, ChatArtifactKinds.Plan, StringComparison.OrdinalIgnoreCase));
+            if (activePlan == null)
+            {
+                session.ActivePlanArtifactId = null;
+            }
         }
 
         private static bool IsSupported(ChatSession session)

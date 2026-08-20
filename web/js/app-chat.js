@@ -268,6 +268,7 @@ function applyInitState(init) {
   state.artifacts = init.artifacts || init.Artifacts || [];
   state.activeContextCheckpointId = init.activeContextCheckpointId || init.ActiveContextCheckpointId || "";
   state.activeHtmlArtifactId = init.activeHtmlArtifactId || init.ActiveHtmlArtifactId || "";
+  state.activePlanArtifactId = init.activePlanArtifactId || init.ActivePlanArtifactId || "";
   $("toolsPath").textContent = state.toolsPath ? "Хранилище: " + state.toolsPath : "";
   $("skillsPath").textContent = state.skillsPath ? "Хранилище: " + state.skillsPath : "";
   renderSettings();
@@ -306,6 +307,7 @@ function applyBridgeUnavailableState(error) {
   state.artifacts = [];
   state.activeContextCheckpointId = "";
   state.activeHtmlArtifactId = "";
+  state.activePlanArtifactId = "";
   state.tools = [];
   state.skills = [];
   state.vba = { modules: [], backups: [], selectedModule: "" };

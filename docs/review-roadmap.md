@@ -10,7 +10,7 @@ request + full tool catalog + compact skill catalog
                 -> next model turn
 ```
 
-Removed layers include offline mode, automatic mode selection, task routing, phase state, tool catalog slicing, progressive skill activation, plans, observations, repair state machines, transport fallback, persistent batch orchestration, automatic tool retry, and separate mutation verification. Format recovery is a bounded 1–5 stateless retry loop; each attempt uses the same clean accepted prompt plus one current error and persists no rejected data.
+Removed layers include offline mode, automatic mode selection, task routing, hidden planner/phase state, tool catalog slicing, progressive skill activation, observations, repair state machines, transport fallback, persistent batch orchestration, automatic tool retry, and separate mutation verification. Optional visible plans are explicit versioned chat artifacts controlled by model-selected CRUD tools. Format recovery is a bounded 1–5 stateless retry loop; each attempt uses the same clean accepted prompt plus one current error and persists no rejected data.
 
 The remaining runtime responsibilities are intentionally small:
 

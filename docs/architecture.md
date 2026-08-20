@@ -27,7 +27,7 @@ There are exactly two persisted modes.
 - `Chat` uses `PlainChatService`: normal history plus `ChatSystemPrompt`; no tools, skills, agent JSON, or Office execution.
 - `Agent` uses `AgentRunService`: prompt assembly, one model JSON response, zero or more sequential local tools, JSON results, and the next model turn.
 
-`AgentPromptComposer` creates one `RUNTIME_CONTEXT` JSON object containing document identity, all runnable tools in native-like function format, a compact enabled-skill catalog, chat context, and artifact references. Relevant complete skill Markdown is loaded by the model through `common.skills_read`. The composer does not inspect or classify request wording and does not capture Office content eagerly.
+`AgentPromptComposer` creates one `RUNTIME_CONTEXT` JSON object containing document identity, all runnable tools in native-like function format, a compact enabled-skill catalog, chat context, and artifact references. Relevant complete skill Markdown is loaded by the model through `common.skills_read`. The composer does not inspect or classify request wording and does not capture Office content eagerly. A visible plan, when useful, is an ordinary versioned chat artifact written explicitly through plan CRUD tools rather than runtime planner state.
 
 `AgentResponseParser` accepts either a final `message` or one or more `tool_calls` entries with unique ids. Invalid output gets a bounded 1–5 ephemeral format-correction attempts; each starts from clean accepted history and invalid content never enters replay. `OfficeToolExecutor` remains the authority for formal argument schemas, effective pipeline safety, confirmation, and dispatch. `AgentJsonProtocol` serializes each result to `{ok, tool_call_id, name, status, message, data, error}`.
 

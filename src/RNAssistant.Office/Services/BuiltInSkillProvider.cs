@@ -13,8 +13,8 @@ namespace RNAssistant.Office.Services
                 Skill(
                     "common.task_planning",
                     "Task planning",
-                    "Break Office requests into safe, executable tool steps.",
-                    "# Task Planning\n\nUse this skill when the user asks RNAssistant to act on Office content.\n\n- Decide whether the task needs document inspection, mutation, or only prose.\n- Use existing tools exactly by id; never invent tool ids.\n- Prefer small steps with clear arguments.\n- If data is missing, inspect the document or ask a concise question.\n- Stop after the local tool result is sufficient and answer normally."),
+                    "Create and maintain a visible step plan for complex Agent tasks.",
+                    "# Task Planning\n\nUse a visible plan only when a task has several meaningful stages or the user asks for one. Do not create a plan for a direct answer or a single obvious action.\n\n- Call common.plan_create once with a concise goal and stable ordered step ids. Use only pending, in_progress, completed, blocked, or cancelled statuses.\n- A plan is presentation data, not execution authority and not proof of success. Continue to use exact tools normally.\n- After material progress, call common.plan_update with the stable plan id and the complete updated step list. Preserve step ids and mark completed only after the relevant TOOL_RESULT has ok=true.\n- If the current plan id or contents are not present in the conversation, call common.plan_read without id to read the active plan before updating it.\n- Mark a step blocked when work genuinely cannot continue; explain the blocker in the final answer.\n- Create a new plan for a different goal. Delete a plan only when the user asks or it was created by mistake.\n- Do not update the plan after every trivial tool call and do not expose hidden reasoning in plan text."),
                 Skill(
                     "common.text_search_replace",
                     "Text search and replace",

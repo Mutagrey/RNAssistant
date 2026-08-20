@@ -14,6 +14,8 @@ Every Agent request contains the editable `SystemPrompt` and one `RUNTIME_CONTEX
 - the enabled skill catalog with `id`, `name`, and `description` only;
 - chat-owned user context and artifact references.
 
+Visible planning is optional data, not a protocol phase. `common.plan_create/read/update/delete` stores a versioned plan artifact for the active chat. The model explicitly supplies every step status; runtime does not infer progress from tool calls. The active plan artifact id appears in the artifact index.
+
 When a catalog description matches the task, the model calls `common.skills_read` with the exact id. Its `TOOL_RESULT.data` contains `id`, `host`, `name`, `description`, `version`, `enabled`, `format: "markdown"`, and the complete body in both authoring-compatible `bodyMarkdown` and model-facing `instructions`. Several clearly relevant skills may be read as independent calls. The result is normal conversation history; there is no router or activation state.
 
 Tools use a native-like description:

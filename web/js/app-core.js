@@ -25,6 +25,8 @@ var state = {
   artifacts: [],
   activeContextCheckpointId: "",
   activeHtmlArtifactId: "",
+  activePlanArtifactId: "",
+  agentPlanExpanded: {},
   draftAttachments: [],
   failedSend: null,
   activeSends: {},

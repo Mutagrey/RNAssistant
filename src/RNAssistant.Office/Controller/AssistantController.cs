@@ -138,6 +138,7 @@ namespace RNAssistant.Office
                 Artifacts = ChatArtifactDto.From(session.Artifacts),
                 ActiveContextCheckpointId = session.ActiveContextCheckpointId,
                 ActiveHtmlArtifactId = session.ActiveHtmlArtifactId,
+                ActivePlanArtifactId = session.ActivePlanArtifactId,
                 ContextUsage = ContextUsageEstimator.FromSession(session, settings),
                 HtmlWorkspace = session == null ? new HtmlWorkspace() : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace),
                 QuickAction = DequeueQuickAction()
@@ -593,6 +594,7 @@ namespace RNAssistant.Office
                 Artifacts = ChatArtifactDto.From(session == null ? null : session.Artifacts),
                 ActiveContextCheckpointId = session == null ? string.Empty : session.ActiveContextCheckpointId,
                 ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId,
+                ActivePlanArtifactId = session == null ? string.Empty : session.ActivePlanArtifactId,
                 ContextUsage = completion == null
                     ? ContextUsageEstimator.FromSession(session, settings)
                     : completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings),
@@ -637,7 +639,8 @@ namespace RNAssistant.Office
                 Documents = ListOpenDocuments(),
                 Artifacts = ChatArtifactDto.From(active == null ? null : active.Artifacts),
                 ActiveContextCheckpointId = active == null ? string.Empty : active.ActiveContextCheckpointId,
-                ActiveHtmlArtifactId = active == null ? string.Empty : active.ActiveHtmlArtifactId
+                ActiveHtmlArtifactId = active == null ? string.Empty : active.ActiveHtmlArtifactId,
+                ActivePlanArtifactId = active == null ? string.Empty : active.ActivePlanArtifactId
             };
         }
 
@@ -769,7 +772,7 @@ namespace RNAssistant.Office
 
             ReportProgress(progress, dryRun ? "checking" : "executing", (dryRun ? "Проверяю tool: " : "Исполняю tool: ") + toolId);
             var result = _toolExecutor.Execute(command, tools, settings, dryRun, true, session, cancellationToken);
-            if (!dryRun && IsHtmlWorkspaceTool(toolId))
+            if (!dryRun && IsSessionArtifactTool(toolId))
             {
                 SaveSessionChanges(session);
             }
@@ -892,13 +895,16 @@ namespace RNAssistant.Office
             }
         }
 
-        private static bool IsHtmlWorkspaceTool(string toolId)
+        private static bool IsSessionArtifactTool(string toolId)
         {
             return string.Equals(toolId, HtmlArtifactToolExecutor.UpsertFileToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlArtifactToolExecutor.UpsertDataToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlArtifactToolExecutor.DeleteFileToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlArtifactToolExecutor.DeleteDataToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, HtmlArtifactToolExecutor.SetActiveToolId, StringComparison.OrdinalIgnoreCase);
+                string.Equals(toolId, HtmlArtifactToolExecutor.SetActiveToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, PlanToolExecutor.CreateToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, PlanToolExecutor.UpdateToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, PlanToolExecutor.DeleteToolId, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

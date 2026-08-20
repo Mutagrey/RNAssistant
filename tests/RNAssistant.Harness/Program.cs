@@ -125,6 +125,8 @@ namespace RNAssistant.Harness
                 Test("tools: html workspace undo", HtmlWorkspaceUndoRestoresPreviousVersion),
                 Test("storage: html workspace persists", HtmlWorkspacePersistsWithChatSession),
                 Test("tools: validate payload without saving", ToolValidateChecksPayloadWithoutSaving),
+                Test("plans: CRUD creates revisions and rewinds", PlanCrudCreatesRevisionsAndRewindsCleanly),
+                Test("plans: duplicate step ids rejected", PlanCrudRejectsAmbiguousSteps),
 
                 Test("vba: replace text backs up module", VbaReplaceTextBacksUpModule),
                 Test("vba: apply patch targets module", VbaApplyPatchTargetsNamedModule),

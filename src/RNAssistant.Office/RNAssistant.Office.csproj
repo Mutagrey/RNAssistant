@@ -111,6 +111,7 @@
     <Compile Include="Tools\ToolAuthoringExecutor.cs" />
     <Compile Include="Tools\PromptToolExecutor.cs" />
     <Compile Include="Tools\HtmlArtifactToolExecutor.cs" />
+    <Compile Include="Tools\PlanToolExecutor.cs" />
     <Compile Include="Tools\ToolSafetyPolicy.cs" />
     <Compile Include="Tools\VbaToolExecutor.cs" />
     <Compile Include="WebView\AssistantPaneControl.cs" />

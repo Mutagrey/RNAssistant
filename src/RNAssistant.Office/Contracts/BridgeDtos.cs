@@ -644,6 +644,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("activeHtmlArtifactId")]
         public string ActiveHtmlArtifactId { get; set; }
 
+        [JsonProperty("activePlanArtifactId")]
+        public string ActivePlanArtifactId { get; set; }
+
         [JsonProperty("contextUsage")]
         public object ContextUsage { get; set; }
 
@@ -718,6 +721,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("activeHtmlArtifactId")]
         public string ActiveHtmlArtifactId { get; set; }
+
+        [JsonProperty("activePlanArtifactId")]
+        public string ActivePlanArtifactId { get; set; }
 
         [JsonProperty("contextUsage")]
         public object ContextUsage { get; set; }

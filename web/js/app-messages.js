@@ -397,6 +397,7 @@ function renderMessages(options) {
   var visibleMessages = (state.messages || []).filter(function (message) { return !messageProtocolMessage(message); });
   if (!visibleMessages.length && !state.liveStreamContent && !state.liveReasoning && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
     box.appendChild(renderChatEmptyState());
+    renderAgentPlanDock();
     renderAgentApprovalDock();
     syncChatScroll(false, false);
     return;
@@ -430,6 +431,7 @@ function renderMessages(options) {
     box.appendChild(stream);
   }
 
+  renderAgentPlanDock();
   renderAgentApprovalDock();
   syncChatScroll(shouldScroll, false);
 }

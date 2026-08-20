@@ -204,9 +204,11 @@ In Agent mode the prompt contains all runnable tools in native-like function JSO
 
 Independent calls may be placed in the same array and execute locally in order. Dependent calls and calls that may require confirmation are emitted one at a time. If confirmation pauses a multi-call response, calls after it are not executed; the model selects them again after the confirmed result. There is no persistent batch state.
 
-To answer, clarify, or refuse, the model returns `{"message":"...","tool_calls":[]}`. Agent mode always requests `json_object`; there are no response-mode fallbacks, native tool-call transport, plans, router, tool slicer, skill activation, automatic tool retries, or separate verification phase. Invalid output gets up to `MaxAgentFormatRetries` ephemeral correction requests (default 2, range 1–5); every retry starts from the original accepted prompt and neither rejected output nor correction instructions enter chat history.
+To answer, clarify, or refuse, the model returns `{"message":"...","tool_calls":[]}`. Agent mode always requests `json_object`; there are no response-mode fallbacks, native tool-call transport, planner state machine, router, tool slicer, skill activation, automatic tool retries, or separate verification phase. Invalid output gets up to `MaxAgentFormatRetries` ephemeral correction requests (default 2, range 1–5); every retry starts from the original accepted prompt and neither rejected output nor correction instructions enter chat history.
 
 Office tools execute locally. The next model turn receives a string protocol message such as `TOOL_RESULT:\n{"ok":true,"tool_call_id":"call_1","name":"excel.read_range","status":"completed","message":"Range read.","data":{...},"error":null}`. The model decides what to do next. The runtime only enforces exact tool ids, formal argument schemas, safety/confirmation metadata, and iteration/tool-step limits.
+
+For complex work, the model can explicitly create and maintain one visible plan through `common.plan_create/read/update/delete`. Each update creates a chat-artifact revision and the UI shows the active goal, progress count, and step statuses. The runtime never infers a plan, maps tool calls to steps, or changes statuses automatically.
 
 Context compaction preserves the full stored transcript and replays a checkpoint plus an exact tail. Pipeline safety is resolved recursively, so nested mutation, risk, confirmation, missing-reference, and cycle errors cannot be hidden by top-level metadata.
 

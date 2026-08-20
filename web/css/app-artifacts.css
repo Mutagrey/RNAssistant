@@ -39,6 +39,30 @@
   font-size: 11px;
 }
 
+.artifact-plan-list {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0 22px;
+  padding: 0;
+  color: var(--muted, #4b5563);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.artifact-plan-list .status-completed,
+.artifact-plan-list .status-cancelled {
+  text-decoration: line-through;
+  opacity: .72;
+}
+
+.artifact-plan-list .status-in_progress::marker {
+  color: var(--accent, #2563eb);
+}
+
+.artifact-plan-list .status-blocked::marker {
+  color: #d97706;
+}
+
 .chat-artifact-action {
   margin-top: 8px;
   border: 0;

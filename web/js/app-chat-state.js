@@ -118,6 +118,9 @@ function applyChatState(response) {
   if (response.activeHtmlArtifactId !== undefined || response.ActiveHtmlArtifactId !== undefined) {
     state.activeHtmlArtifactId = response.activeHtmlArtifactId || response.ActiveHtmlArtifactId || "";
   }
+  if (response.activePlanArtifactId !== undefined || response.ActivePlanArtifactId !== undefined) {
+    state.activePlanArtifactId = response.activePlanArtifactId || response.ActivePlanArtifactId || "";
+  }
   if (response.contextUsage || response.ContextUsage) {
     state.contextUsage = response.contextUsage || response.ContextUsage || {};
   }
