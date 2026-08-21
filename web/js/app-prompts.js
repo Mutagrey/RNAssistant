@@ -51,6 +51,8 @@
   function syncSelectedInstruction() {
     if (state.selectedInstructionKind === "skill") {
       if (typeof syncSelectedSkillFromEditor === "function") syncSelectedSkillFromEditor();
+    } else if (state.selectedInstructionKind === "tool") {
+      if (typeof syncSelectedToolFromEditor === "function") syncSelectedToolFromEditor();
     } else {
       syncSelectedPromptFromEditor();
     }
@@ -58,28 +60,107 @@
 
   function instructionRows() {
     var query = (($("skillSearchInput") && $("skillSearchInput").value) || "").trim().toLowerCase();
-    var filter = state.instructionFilter || "all";
     var rows = [];
-    if (filter === "all" || filter === "prompt") {
-      promptDefinitions.forEach(function (def, index) {
-        if (!query || promptMatchesSearch(def, query)) rows.push({ kind: "prompt", index: index, value: def });
-      });
-    }
-    if (filter === "all" || filter === "skill") {
-      (state.skills || []).forEach(function (skill, index) {
-        if (!query || (typeof skillMatchesSearch === "function" && skillMatchesSearch(skill, query))) rows.push({ kind: "skill", index: index, value: skill });
-      });
-    }
+    promptDefinitions.forEach(function (def, index) {
+      if (!query || promptMatchesSearch(def, query)) rows.push({ kind: "prompt", index: index, value: def });
+    });
+    (state.skills || []).forEach(function (skill, index) {
+      if (!query || (typeof skillMatchesSearch === "function" && skillMatchesSearch(skill, query))) rows.push({ kind: "skill", index: index, value: skill });
+    });
+    (state.tools || []).forEach(function (tool, index) {
+      if (!query || (typeof toolMatchesSearch === "function" && toolMatchesSearch(tool, query))) rows.push({ kind: "tool", index: index, value: tool });
+    });
     return rows;
   }
 
-  function instructionGroup(row) {
-    if (row.kind === "prompt") return "Промпты";
-    return row.value && row.value.BuiltIn ? "Встроенные навыки" : "Пользовательские навыки";
+  function instructionRowKey(row) {
+    return row.kind + ":" + row.index;
   }
 
   function selectedInstructionKey() {
-    return state.selectedInstructionKind + ":" + (state.selectedInstructionKind === "skill" ? state.selectedSkillIndex : state.selectedPromptIndex);
+    var index = state.selectedInstructionKind === "skill"
+      ? state.selectedSkillIndex
+      : (state.selectedInstructionKind === "tool" ? state.selectedToolIndex : state.selectedPromptIndex);
+    return state.selectedInstructionKind + ":" + index;
+  }
+
+  function selectInstructionRow(row) {
+    state.selectedInstructionKind = row.kind;
+    if (row.kind === "skill") state.selectedSkillIndex = row.index;
+    else if (row.kind === "tool") {
+      state.selectedToolIndex = row.index;
+      state.selectedToolComponentIndex = 0;
+    } else state.selectedPromptIndex = row.index;
+  }
+
+  function hostName(row) {
+    return String((row.value && row.value.Host) || "Common");
+  }
+
+  function orderedHosts(rows) {
+    var preferred = ["Common", "Excel", "Word", "PowerPoint", "Outlook"];
+    var found = {};
+    rows.forEach(function (row) { found[hostName(row)] = true; });
+    return Object.keys(found).sort(function (left, right) {
+      var leftIndex = preferred.indexOf(left);
+      var rightIndex = preferred.indexOf(right);
+      if (leftIndex < 0) leftIndex = preferred.length;
+      if (rightIndex < 0) rightIndex = preferred.length;
+      return leftIndex === rightIndex ? left.localeCompare(right) : leftIndex - rightIndex;
+    });
+  }
+
+  function resourceGroup(key, title, count, nested) {
+    var group = createResourceGroup({ key: key, title: title, count: count });
+    if (nested) group.className += " resource-tree-subgroup";
+    return group;
+  }
+
+  function appendInstructionItem(parent, row, activeKey) {
+    var value = row.value || {};
+    var meta = "Промпт";
+    if (row.kind === "skill") meta = value.BuiltIn ? "Встроенный" : "Пользовательский";
+    if (row.kind === "tool") meta = value.BuiltIn ? "Встроенный" : (value.Executor || "pipeline");
+    parent.appendChild(createResourceListItem({
+      title: row.kind === "prompt" ? value.label : (value.Id || value.Name || (row.kind === "tool" ? "Инструмент" : "Навык")),
+      meta: meta,
+      description: row.kind === "prompt" ? value.description : (value.Description || (row.kind === "tool" ? "Office-инструмент" : "Инструкция навыка")),
+      enabled: row.kind === "prompt" ? null : value.Enabled !== false,
+      active: instructionRowKey(row) === activeKey,
+      compact: true,
+      onClick: function () {
+        syncSelectedInstruction();
+        selectInstructionRow(row);
+        renderInstructions();
+      }
+    }));
+  }
+
+  function appendPromptGroups(parent, rows, activeKey) {
+    var prompts = resourceGroup("library:instructions:prompts", "Промпты", rows.length, true);
+    parent.appendChild(prompts);
+    ["Основные", "Служебные"].forEach(function (name) {
+      var grouped = rows.filter(function (row) { return row.value.group === name; });
+      if (!grouped.length) return;
+      var group = resourceGroup("library:prompts:" + name, name, grouped.length, true);
+      prompts.treeChildren.appendChild(group);
+      grouped.forEach(function (row) { appendInstructionItem(group.treeChildren, row, activeKey); });
+    });
+  }
+
+  function appendHostedGroups(parent, key, title, rows, activeKey) {
+    var root = resourceGroup("library:" + key, title, rows.length, true);
+    parent.appendChild(root);
+    appendHostGroups(root.treeChildren, key, rows, activeKey);
+  }
+
+  function appendHostGroups(parent, key, rows, activeKey) {
+    orderedHosts(rows).forEach(function (host) {
+      var hosted = rows.filter(function (row) { return hostName(row) === host; });
+      var group = resourceGroup("library:" + key + ":" + host, host, hosted.length, true);
+      parent.appendChild(group);
+      hosted.forEach(function (row) { appendInstructionItem(group.treeChildren, row, activeKey); });
+    });
   }
 
   function renderInstructions() {
@@ -87,46 +168,30 @@
     if (!list) return;
     var rows = instructionRows();
     list.innerHTML = "";
-    Array.prototype.slice.call(document.querySelectorAll("[data-instruction-filter]")).forEach(function (button) {
-      button.classList.toggle("active", button.getAttribute("data-instruction-filter") === (state.instructionFilter || "all"));
-    });
     if (!rows.length) {
-      list.appendChild(createResourceEmptyState("Инструкции не найдены."));
+      list.appendChild(createResourceEmptyState("В библиотеке ничего не найдено."));
       renderInstructionEditor();
       return;
     }
     var key = selectedInstructionKey();
-    if (!rows.some(function (row) { return row.kind + ":" + row.index === key; })) {
-      state.selectedInstructionKind = rows[0].kind;
-      if (rows[0].kind === "skill") state.selectedSkillIndex = rows[0].index;
-      else state.selectedPromptIndex = rows[0].index;
-      key = rows[0].kind + ":" + rows[0].index;
+    if (!rows.some(function (row) { return instructionRowKey(row) === key; })) {
+      selectInstructionRow(rows[0]);
+      key = instructionRowKey(rows[0]);
     }
-    var groups = {};
-    rows.forEach(function (row) {
-      var label = instructionGroup(row);
-      if (!groups[label]) {
-        groups[label] = createResourceGroup({ key: "instructions:" + label, title: label, count: rows.filter(function (candidate) { return instructionGroup(candidate) === label; }).length });
-        list.appendChild(groups[label]);
-      }
-      var value = row.value || {};
-      var item = createResourceListItem({
-        title: row.kind === "prompt" ? value.label : (value.Id || value.Name || "Навык"),
-        meta: row.kind === "prompt" ? "Промпт" : ((value.Host || "Common") + (value.BuiltIn ? " · built-in" : " · custom")),
-        description: row.kind === "prompt" ? value.description : (value.Description || "Инструкция навыка"),
-        enabled: row.kind === "skill" ? value.Enabled !== false : null,
-        active: row.kind + ":" + row.index === key,
-        compact: true,
-        onClick: function () {
-          syncSelectedInstruction();
-          state.selectedInstructionKind = row.kind;
-          if (row.kind === "skill") state.selectedSkillIndex = row.index;
-          else state.selectedPromptIndex = row.index;
-          renderInstructions();
-        }
-      });
-      (groups[label].treeChildren || groups[label]).appendChild(item);
-    });
+    var prompts = rows.filter(function (row) { return row.kind === "prompt"; });
+    var skills = rows.filter(function (row) { return row.kind === "skill"; });
+    var tools = rows.filter(function (row) { return row.kind === "tool"; });
+    if (prompts.length || skills.length) {
+      var instructions = resourceGroup("library:instructions", "Инструкции", prompts.length + skills.length, false);
+      list.appendChild(instructions);
+      if (prompts.length) appendPromptGroups(instructions.treeChildren, prompts, key);
+      if (skills.length) appendHostedGroups(instructions.treeChildren, "skills", "Навыки", skills, key);
+    }
+    if (tools.length) {
+      var toolRoot = resourceGroup("library:tools", "Инструменты", tools.length, false);
+      list.appendChild(toolRoot);
+      appendHostGroups(toolRoot.treeChildren, "tools", tools, key);
+    }
     renderInstructionEditor();
   }
 
@@ -136,13 +201,25 @@
     var empty = $("instructionEditorEmpty");
     var promptSelected = state.selectedInstructionKind === "prompt" && !!selectedPromptDefinition();
     var skillSelected = state.selectedInstructionKind === "skill" && !!state.skills[state.selectedSkillIndex];
+    var toolSelected = state.selectedInstructionKind === "tool" && !!state.tools[state.selectedToolIndex];
+    var instructionPanel = $("instructionEditorPanel");
+    var toolPanel = $("toolEditorPanel");
+    if (instructionPanel) instructionPanel.classList.toggle("hidden", toolSelected);
+    if (toolPanel) toolPanel.classList.toggle("hidden", !toolSelected);
     if (empty) empty.style.display = promptSelected || skillSelected ? "none" : "grid";
     if (promptPanel) promptPanel.classList.toggle("hidden", !promptSelected);
     if (skillPanel) skillPanel.classList.toggle("hidden", !skillSelected);
     if (promptSelected) renderPromptEditor();
     if (skillSelected && typeof renderSkillEditor === "function") renderSkillEditor();
-    if ($("addSkillButton")) $("addSkillButton").hidden = state.instructionFilter === "prompt";
-    if ($("cloneSkillButton")) $("cloneSkillButton").hidden = !skillSelected;
+    if (toolSelected && typeof renderToolEditor === "function") renderToolEditor();
+    if ($("cloneSkillButton")) $("cloneSkillButton").classList.toggle("hidden", !skillSelected);
+    if ($("cloneToolButton")) $("cloneToolButton").classList.toggle("hidden", !toolSelected);
+  }
+
+  function mountUnifiedLibrary() {
+    var layout = $("instructionsLayout");
+    var toolPanel = $("toolEditorPanel");
+    if (layout && toolPanel && toolPanel.parentNode !== layout) layout.appendChild(toolPanel);
   }
 
   function renderPromptPreview(def) {
@@ -269,9 +346,10 @@
   }
 
   function bindPromptSettingsActions() {
-    $("skillSearchInput").addEventListener("input", renderInstructions);
-    Array.prototype.slice.call(document.querySelectorAll("[data-instruction-filter]")).forEach(function (button) {
-      button.addEventListener("click", function () { syncSelectedInstruction(); state.instructionFilter = button.getAttribute("data-instruction-filter") || "all"; renderInstructions(); });
+    mountUnifiedLibrary();
+    $("skillSearchInput").addEventListener("input", function () {
+      syncSelectedInstruction();
+      renderInstructions();
     });
     $("promptEditInput").addEventListener("input", function () {
       syncSelectedPromptFromEditor();
@@ -324,4 +402,5 @@
   window.markPromptEditorDirty = markPromptEditorDirty;
   window.renderInstructions = renderInstructions;
   window.renderInstructionEditor = renderInstructionEditor;
+  window.syncSelectedLibraryItem = syncSelectedInstruction;
 }());

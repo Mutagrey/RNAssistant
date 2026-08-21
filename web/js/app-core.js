@@ -54,7 +54,6 @@ var state = {
   selectedSkillIndex: -1,
   selectedPromptIndex: -1,
   selectedInstructionKind: "prompt",
-  instructionFilter: "all",
   promptEditorMode: "edit",
   toolEditorPage: "main",
   toolSchemaMode: "form",

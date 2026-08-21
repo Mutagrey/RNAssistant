@@ -1,4 +1,4 @@
-#tab-html.panel {
+#tab-artifacts.panel {
   padding: 0;
   overflow: hidden;
 }
@@ -29,8 +29,13 @@
 }
 
 .html-workspace-add-actions button {
-  min-width: 0;
+  min-width: 54px;
+  flex: 1 1 calc(33.333% - 6px);
   padding: 0 8px;
+}
+
+.html-workspace-add-actions {
+  flex-wrap: wrap;
 }
 
 .html-workspace-create {
@@ -131,6 +136,102 @@
   border: 0;
   border-radius: 0;
   background: #fff;
+}
+
+.artifact-detail-preview {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 22px clamp(16px, 4vw, 42px);
+  background: #fff;
+  color: var(--text);
+}
+
+.artifact-detail-preview h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: var(--title-font-weight);
+}
+
+.artifact-plan-summary {
+  margin-bottom: 18px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.artifact-plan-steps {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.artifact-plan-steps li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 42px;
+  border-bottom: 1px solid var(--section-line);
+  font-size: 13px;
+}
+
+.artifact-plan-steps li.status-completed > span:nth-child(2),
+.artifact-plan-steps li.status-cancelled > span:nth-child(2) {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.artifact-plan-mark {
+  color: var(--accent);
+  font-weight: 600;
+  text-align: center;
+}
+
+.artifact-plan-steps em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.artifact-detail-error {
+  padding: 12px;
+  border: 1px solid #efc4c0;
+  border-radius: var(--control-radius);
+  color: var(--danger);
+}
+
+.artifact-metadata {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
+  gap: 7px 14px;
+  margin: 0 0 18px;
+  font-size: 12px;
+}
+
+.artifact-metadata dt {
+  color: var(--muted);
+}
+
+.artifact-metadata dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.artifact-detail-preview pre {
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  background: var(--secondary-bg);
+  color: var(--code-text);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
 
 .html-workspace-edit {

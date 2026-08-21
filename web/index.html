@@ -20,42 +20,35 @@
   <link rel="stylesheet" href="css/vendor/katex.min.css">
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
-  <link rel="stylesheet" href="css/app.css?v=ui-simplify-20260821-4">
+  <link rel="stylesheet" href="css/app.css?v=unified-ui-20260821-1">
   <link rel="stylesheet" href="css/app-chat.css?v=agent-reliability-20260819-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-composer.css?v=message-edit-20260806-1">
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-capabilities-20260820-1">
-  <link rel="stylesheet" href="css/app-workspace.css?v=library-ui-20260821-1">
-  <link rel="stylesheet" href="css/app-tools.css?v=library-ui-20260821-1">
+  <link rel="stylesheet" href="css/app-workspace.css?v=unified-ui-20260821-1">
+  <link rel="stylesheet" href="css/app-tools.css?v=unified-ui-20260821-1">
   <link rel="stylesheet" href="css/app-prompts.css?v=library-ui-20260821-1">
   <link rel="stylesheet" href="css/app-vba.css?v=library-ui-20260821-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260702-2">
   <link rel="stylesheet" href="css/app-artifacts.css?v=ui-simplify-20260821-3">
-  <link rel="stylesheet" href="css/app-html-workspace.css?v=chatui-20260702-2">
-  <link rel="stylesheet" href="css/app-responsive.css?v=library-ui-20260821-1">
+  <link rel="stylesheet" href="css/app-html-workspace.css?v=unified-ui-20260821-1">
+  <link rel="stylesheet" href="css/app-responsive.css?v=unified-ui-20260821-1">
   <link rel="stylesheet" href="css/app-agent.css?v=ui-simplify-20260821-4">
   <link rel="stylesheet" href="css/app-agent-data.css?v=agent-ui-20260821-2">
-  <link rel="stylesheet" href="css/app-theme.css?v=agent-protocol-20260821-2">
+  <link rel="stylesheet" href="css/app-theme.css?v=unified-ui-20260821-1">
 </head>
 <body>
   <div class="shell">
     <nav class="tabs" aria-label="Разделы ассистента">
       <button class="tab active" data-section="chat" data-tab="chat">Чат</button>
       <button class="tab" id="libraryRootTab" data-section="library" data-default-tab="instructions">Библиотека</button>
-      <button class="tab" id="codeRootTab" data-section="code" data-default-tab="vba">Код</button>
+      <button class="tab" data-section="vba" data-tab="vba">VBA</button>
+      <button class="tab" data-section="artifacts" data-tab="artifacts">Артефакты</button>
       <button class="tab" data-section="settings" data-tab="settings">Настройки</button>
-    </nav>
-    <nav class="workspace-tabs section-tabs hidden" data-section-tabs="library" aria-label="Разделы библиотеки">
-      <button class="workspace-tab section-tab active" data-tab="instructions">Инструкции</button>
-      <button class="workspace-tab section-tab" data-tab="tools">Инструменты</button>
-    </nav>
-    <nav class="workspace-tabs section-tabs hidden" data-section-tabs="code" aria-label="Разделы кода">
-      <button class="workspace-tab section-tab active" data-tab="vba">VBA</button>
-      <button class="workspace-tab section-tab" data-tab="html">HTML</button>
     </nav>
 
     <main class="content">
@@ -207,27 +200,9 @@
         </div>
       </section>
 
-      <section class="panel" id="tab-tools">
-        <div class="tool-layout split-layout" id="toolsLayout" data-split-key="resources" data-default-ratio="0.28" data-min-left="160" data-min-ratio="0.18" data-max-ratio="0.46">
-          <div class="tool-list-panel surface-panel">
-            <div class="tool-list-status" id="toolsPath"></div>
-            <div class="tool-list-controls">
-              <div class="tool-list-actions">
-                <button class="primary icon-text-button" id="addToolButton" type="button" title="Новый инструмент">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-                  <span>Новый</span>
-                </button>
-                <button class="secondary icon-text-button" id="cloneToolButton" type="button" title="Создать копию инструмента">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                  <span>Копия</span>
-                </button>
-              </div>
-              <input class="tool-search" id="toolSearchInput" placeholder="Поиск инструментов..." autocomplete="off">
-            </div>
-            <aside class="tool-list" id="toolsList"></aside>
-          </div>
-          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка инструментов"></div>
-          <section class="tool-editor surface-panel" id="toolEditorPanel">
+      <div class="hidden" id="libraryToolEditorSource">
+          <div id="toolsPath" hidden></div>
+          <section class="tool-editor surface-panel hidden" id="toolEditorPanel">
             <div class="resource-editor-empty" id="toolEditorEmpty">
               <div class="resource-editor-empty-title">Инструмент не выбран</div>
               <div class="resource-editor-empty-text">Выберите инструмент слева или создайте новый.</div>
@@ -254,15 +229,15 @@
               <div class="tool-editor-page hidden" data-tool-page-view="schema">
                 <div class="editor-section-head"><div><strong>Параметры вызова</strong><span>Strict object JSON Schema</span></div><div class="mode-toggle compact-toggle"><button class="mode-button tool-schema-mode active" type="button" data-tool-schema-mode="form">Форма</button><button class="mode-button tool-schema-mode" type="button" data-tool-schema-mode="json">JSON</button></div></div>
                 <div id="toolSchemaVisual" class="structured-editor"></div>
-                <label class="wide tool-schema-json hidden">JSON-схема<textarea id="toolSchemaInput" rows="12"></textarea></label>
-                <div class="editor-inline-error" id="toolSchemaError"></div>
+                <div class="wide tool-schema-json hidden"><div class="json-editor-toolbar"><span>JSON-схема</span><button class="secondary" id="formatToolSchemaButton" type="button">Форматировать</button></div><textarea id="toolSchemaInput" rows="12"></textarea></div>
+                <div class="editor-inline-error" id="toolSchemaError" role="alert"></div>
               </div>
               <div class="tool-editor-page hidden" data-tool-page-view="implementation">
                 <div class="pipeline-tool-editor" id="pipelineToolEditor">
-                  <div class="editor-section-head"><div><strong>Pipeline</strong><span>Последовательность существующих tools</span></div><div class="mode-toggle compact-toggle"><button class="mode-button tool-pipeline-mode active" type="button" data-tool-pipeline-mode="form">Шаги</button><button class="mode-button tool-pipeline-mode" type="button" data-tool-pipeline-mode="json">JSON</button></div></div>
+                  <div class="editor-section-head"><div><strong>Pipeline</strong><span>Последовательность существующих tools</span></div><div class="mode-toggle compact-toggle"><button class="mode-button tool-pipeline-mode active" type="button" data-tool-pipeline-mode="form">Форма</button><button class="mode-button tool-pipeline-mode" type="button" data-tool-pipeline-mode="json">JSON</button></div></div>
                   <div id="toolPipelineVisual" class="structured-editor"></div>
-                  <label class="tool-pipeline-json hidden">Pipeline JSON<textarea id="toolPipelineInput" rows="14" spellcheck="false"></textarea></label>
-                  <div class="editor-inline-error" id="toolPipelineError"></div>
+                  <div class="tool-pipeline-json hidden"><div class="json-editor-toolbar"><span>Pipeline JSON</span><button class="secondary" id="formatToolPipelineButton" type="button">Форматировать</button></div><textarea id="toolPipelineInput" rows="14" spellcheck="false"></textarea></div>
+                  <div class="editor-inline-error" id="toolPipelineError" role="alert"></div>
                 </div>
                 <div class="vba-package-editor hidden" id="vbaToolEditor">
                   <div class="component-toolbar"><label>Компонент<select id="toolComponentSelect"></select></label><button class="secondary" id="addToolModuleButton" type="button">+ Module</button><button class="secondary" id="addToolClassButton" type="button">+ Class</button><button class="secondary danger-soft" id="deleteToolComponentButton" type="button">Удалить</button></div>
@@ -294,7 +269,6 @@
             </div>
           </section>
         </div>
-      </section>
 
       <section class="panel" id="tab-instructions">
         <div class="tool-layout instruction-layout split-layout" id="instructionsLayout" data-split-key="instructions" data-default-ratio="0.3" data-min-left="180" data-min-ratio="0.2" data-max-ratio="0.48">
@@ -303,19 +277,22 @@
               <div class="tool-list-actions">
                 <button class="primary icon-text-button" id="addSkillButton" type="button" title="Новый навык">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-                  <span>Новый</span>
+                  <span>Навык</span>
+                </button>
+                <button class="secondary icon-text-button" id="addToolButton" type="button" title="Новый инструмент">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                  <span>Инструмент</span>
                 </button>
                 <button class="secondary icon-text-button" id="cloneSkillButton" type="button" title="Создать копию навыка">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                   <span>Копия</span>
                 </button>
+                <button class="secondary icon-text-button hidden" id="cloneToolButton" type="button" title="Создать копию инструмента">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  <span>Копия</span>
+                </button>
               </div>
-              <div class="resource-filter" role="group" aria-label="Тип инструкций">
-                <button class="active" type="button" data-instruction-filter="all">Все</button>
-                <button type="button" data-instruction-filter="prompt">Промпты</button>
-                <button type="button" data-instruction-filter="skill">Навыки</button>
-              </div>
-              <input class="tool-search" id="skillSearchInput" placeholder="Поиск инструкций..." autocomplete="off">
+              <input class="tool-search" id="skillSearchInput" placeholder="Поиск в библиотеке..." autocomplete="off">
             </div>
             <aside class="tool-list" id="instructionsList"></aside>
           </div>
@@ -429,13 +406,14 @@
         </div>
       </section>
 
-      <section class="panel" id="tab-html">
+      <section class="panel" id="tab-artifacts">
         <div class="tool-layout html-workspace-layout split-layout" id="htmlWorkspaceLayout" data-split-key="html-workspace" data-default-ratio="0.3" data-min-left="180" data-min-ratio="0.18" data-max-ratio="0.5">
           <aside class="tool-list-panel html-workspace-sidebar" id="htmlWorkspaceSidebar">
-            <div class="tool-list-status" id="htmlWorkspaceStatus">HTML workspace пуст.</div>
+            <div class="tool-list-status" id="htmlWorkspaceStatus">Артефактов пока нет.</div>
             <div class="tool-list-controls">
-              <input class="tool-search" id="htmlWorkspaceSearchInput" placeholder="Поиск HTML..." autocomplete="off">
+              <input class="tool-search" id="htmlWorkspaceSearchInput" placeholder="Поиск артефактов..." autocomplete="off">
               <div class="tool-list-actions html-workspace-add-actions">
+                <button class="secondary" id="addPlanButton" type="button">План</button>
                 <button class="secondary" id="addHtmlFileButton" type="button">HTML</button>
                 <button class="secondary" id="addCssFileButton" type="button">CSS</button>
                 <button class="secondary" id="addJsFileButton" type="button">JS</button>
@@ -449,35 +427,36 @@
                 </div>
               </div>
             </div>
-            <div class="tool-list html-workspace-tree" id="htmlWorkspaceTree" role="tree" aria-label="HTML workspace"></div>
+            <div class="tool-list html-workspace-tree" id="htmlWorkspaceTree" role="tree" aria-label="Артефакты чата"></div>
           </aside>
-          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка HTML"></div>
+          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка артефактов"></div>
           <section class="html-workspace-editor surface-panel padded tool-editor" id="htmlWorkspaceEditor">
             <div class="resource-editor-head html-workspace-head">
               <button class="icon-button secondary html-sidebar-toggle-button" id="toggleHtmlSidebarButton" type="button" title="Скрыть список" aria-label="Скрыть список">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></svg>
               </button>
               <div class="resource-editor-titlebox">
-                <div class="resource-editor-title" id="htmlWorkspaceTitle">HTML не выбран</div>
+                <div class="resource-editor-title" id="htmlWorkspaceTitle">Артефакт не выбран</div>
                 <div class="resource-editor-meta" id="htmlWorkspaceMeta"></div>
               </div>
-              <div class="mode-toggle html-workspace-mode-toggle" role="group" aria-label="Режим HTML">
-                <button class="mode-button html-workspace-mode-button active" type="button" data-html-mode="preview">Preview</button>
-                <button class="mode-button html-workspace-mode-button" type="button" data-html-mode="edit">Edit</button>
+              <div class="mode-toggle html-workspace-mode-toggle" role="group" aria-label="Режим артефакта">
+                <button class="mode-button html-workspace-mode-button active" type="button" data-html-mode="preview">Просмотр</button>
+                <button class="mode-button html-workspace-mode-button" type="button" data-html-mode="edit">Код</button>
               </div>
               <div class="resource-editor-actions">
-                <button class="secondary" id="undoHtmlWorkspaceButton" type="button">Undo</button>
-                <button class="secondary" id="redoHtmlWorkspaceButton" type="button">Redo</button>
+                <button class="secondary" id="undoHtmlWorkspaceButton" type="button">Отменить</button>
+                <button class="secondary" id="redoHtmlWorkspaceButton" type="button">Повторить</button>
                 <button class="secondary danger-soft" id="deleteHtmlWorkspaceButton" type="button">Удалить</button>
                 <button class="accent-soft" id="saveHtmlWorkspaceButton" type="button">Сохранить</button>
               </div>
             </div>
             <div class="resource-editor-empty" id="htmlWorkspaceEmptyState">
-              <div class="resource-editor-empty-title">HTML workspace пуст</div>
-              <div class="resource-editor-empty-text">Создайте HTML через чат или добавьте файл слева.</div>
+              <div class="resource-editor-empty-title">Артефакт не выбран</div>
+              <div class="resource-editor-empty-text">Создайте план или HTML, либо выберите артефакт слева.</div>
             </div>
             <div class="html-workspace-preview html-workspace-view" id="htmlWorkspacePreview" data-html-view="preview">
               <iframe class="html-workspace-frame" id="htmlWorkspacePreviewFrame" title="HTML preview" sandbox="allow-scripts allow-forms allow-modals allow-popups" referrerpolicy="no-referrer"></iframe>
+              <div class="artifact-detail-preview hidden" id="artifactDetailPreview"></div>
             </div>
             <div class="html-workspace-edit html-workspace-view hidden" id="htmlWorkspaceEdit" data-html-view="edit">
               <textarea id="htmlWorkspaceEditorInput" spellcheck="false" placeholder="Выберите HTML файл или JSON источник."></textarea>
@@ -653,26 +632,18 @@
             <section class="settings-page" data-settings-page="service">
               <div class="settings-heading">
                 <h2>Диагностика</h2>
-                <p>Журналы, отладка и очистка локальных данных.</p>
+                <p>События текущей сессии и очистка локальных данных.</p>
               </div>
-              <div class="form-grid">
-                <label class="checkline"><input id="debugModelTrafficInput" type="checkbox"><span>Debug: логировать сырые запросы и ответы модели</span></label>
-              </div>
-              <div class="setting-note">Запросы и ответы пишутся как форматированный JSON в Runtime-журнал ниже. API-ключ и HTTP-заголовки не пишутся, но в сообщениях могут быть текст документа и другие чувствительные данные.</div>
-              <div class="mode-toggle log-view-tabs" role="tablist" aria-label="Тип журнала">
-                <button class="mode-button log-view-button active" type="button" role="tab" aria-selected="true" data-log-view="session">Сессия</button>
-                <button class="mode-button log-view-button" type="button" role="tab" aria-selected="false" data-log-view="runtime">Runtime</button>
-              </div>
-              <div class="logs-workspace diagnostics-logs">
-                <section class="log-section surface-panel padded" data-log-view-section="session"><div class="log-section-head"><strong>UI-события</strong><button class="secondary" id="clearLogButton" type="button">Очистить</button></div><pre class="log-box" id="logBox"></pre></section>
-                <section class="log-section surface-panel padded hidden" data-log-view-section="runtime"><div class="log-section-head"><div><strong>Runtime / model traffic</strong><span id="runtimeLogPath"></span></div><div class="log-section-actions"><button class="secondary" id="refreshRuntimeLogButton" type="button">Обновить</button><button class="secondary" id="clearRuntimeLogButton" type="button">Очистить файл</button></div></div><pre class="log-box" id="runtimeLogBox"></pre></section>
-              </div>
+              <input id="debugModelTrafficInput" type="checkbox" hidden>
               <div class="danger-zone">
                 <div>
                   <div class="danger-zone-title">Сброс локальных данных</div>
                   <div class="danger-zone-text">Удаляет чаты, контекст, резервные копии VBA и кеш WebView.</div>
                 </div>
                 <button class="danger" id="clearRuntimeDataButton" type="button">Очистить данные</button>
+              </div>
+              <div class="logs-workspace diagnostics-logs">
+                <section class="log-section surface-panel padded"><div class="log-section-head"><strong>События текущей сессии</strong><button class="secondary" id="clearLogButton" type="button">Очистить</button></div><pre class="log-box" id="logBox"></pre></section>
               </div>
             </section>
             <div class="settings-actions-row action-bar" hidden>
@@ -698,30 +669,30 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=library-ui-20260821-1"></script>
+  <script src="js/app-core.js?v=unified-ui-20260821-1"></script>
   <script src="js/app-utils.js?v=runtime-20260807-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js?v=agent-protocol-20260821-2"></script>
   <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js?v=library-ui-20260821-1"></script>
-  <script src="js/app-logs.js?v=library-ui-20260821-1"></script>
-  <script src="js/app-prompts.js?v=library-ui-20260821-1"></script>
+  <script src="js/app-settings.js?v=unified-ui-20260821-1"></script>
+  <script src="js/app-logs.js?v=unified-ui-20260821-1"></script>
+  <script src="js/app-prompts.js?v=unified-ui-20260821-1"></script>
   <script src="js/app-model-data.js?v=model-capabilities-20260820-1"></script>
   <script src="js/app-model-render.js?v=model-capabilities-20260820-1"></script>
   <script src="js/app-models.js?v=agent-reliability-20260819-1"></script>
   <script src="js/app-context-data.js"></script>
   <script src="js/app-chat-state.js?v=plan-tools-20260821-1"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
-  <script src="js/app-tools.js?v=library-ui-20260821-1"></script>
-  <script src="js/app-skills.js?v=library-ui-20260821-1"></script>
+  <script src="js/app-tools.js?v=unified-ui-20260821-1"></script>
+  <script src="js/app-skills.js?v=unified-ui-20260821-1"></script>
   <script src="js/app-vba.js?v=library-ui-20260821-1"></script>
-  <script src="js/app-html-workspace.js?v=agent-ui-20260821-2"></script>
+  <script src="js/app-html-workspace.js?v=unified-ui-20260821-1"></script>
   <script src="js/app-context.js?v=ui-simplify-20260821-3"></script>
   <script src="js/app-agent-data.js?v=agent-ui-20260821-2"></script>
   <script src="js/app-agent-model.js?v=agent-ui-20260821-3"></script>
   <script src="js/app-chart-artifacts.js?v=chatui-20260622-2"></script>
   <script src="js/app-html-artifacts.js?v=chatui-20260702-2"></script>
-  <script src="js/app-artifacts.js?v=ui-simplify-20260821-3"></script>
+  <script src="js/app-artifacts.js?v=unified-ui-20260821-1"></script>
   <script src="js/app-plan.js?v=ui-simplify-20260821-3"></script>
   <script src="js/app-agent.js?v=ui-simplify-20260821-4"></script>
   <script src="js/app-messages.js?v=agent-ui-20260821-2"></script>
@@ -729,6 +700,6 @@
   <script src="js/app-attachments.js?v=agent-ui-20260821-2"></script>
   <script src="js/app-chat.js?v=library-ui-20260821-1"></script>
   <script src="js/app-chat-edit.js?v=agent-ui-20260821-2"></script>
-  <script src="js/app.js?v=library-ui-20260821-2"></script>
+  <script src="js/app.js?v=unified-ui-20260821-1"></script>
 </body>
 </html>

@@ -55,6 +55,64 @@
     return workspace().dataSources;
   }
 
+  function artifactId(artifact) {
+    return prop(artifact, "Id", "id", "");
+  }
+
+  function artifactKind(artifact) {
+    return String(prop(artifact, "Kind", "kind", "file") || "file").toLowerCase();
+  }
+
+  function artifactTitle(artifact) {
+    return prop(artifact, "Title", "title", "Артефакт") || "Артефакт";
+  }
+
+  function artifactRevision(artifact) {
+    return Number(prop(artifact, "Revision", "revision", 1) || 1);
+  }
+
+  function artifactInlineText(artifact) {
+    return prop(artifact, "InlineText", "inlineText", "") || "";
+  }
+
+  function setArtifactInlineText(artifact, value) {
+    if (!artifact) return;
+    if (artifact.inlineText !== undefined || artifact.InlineText === undefined) artifact.inlineText = value || "";
+    else artifact.InlineText = value || "";
+  }
+
+  function artifactById(id) {
+    return (state.artifacts || []).filter(function (artifact) { return artifactId(artifact) === id; })[0] || null;
+  }
+
+  function planJson(artifact) {
+    if (!artifact || artifactKind(artifact) !== "plan") return null;
+    try { return JSON.parse(artifactInlineText(artifact)); } catch (error) { return null; }
+  }
+
+  function planStableId(artifact) {
+    var plan = planJson(artifact);
+    return plan && (plan.id || plan.Id) || artifactId(artifact);
+  }
+
+  function storedPlanId(artifact) {
+    try {
+      var metadata = JSON.parse(prop(artifact, "MetadataJson", "metadataJson", "{}") || "{}");
+      if (metadata.planId || metadata.PlanId) return metadata.planId || metadata.PlanId;
+    } catch (ignore) {}
+    return planStableId(artifact);
+  }
+
+  function latestPlanArtifacts() {
+    var latest = {};
+    (state.artifacts || []).forEach(function (artifact) {
+      if (artifactKind(artifact) !== "plan") return;
+      var id = planStableId(artifact);
+      if (!latest[id] || artifactRevision(artifact) > artifactRevision(latest[id])) latest[id] = artifact;
+    });
+    return Object.keys(latest).map(function (id) { return latest[id]; });
+  }
+
   function historyItems() {
     return workspace().history || [];
   }
@@ -78,6 +136,14 @@
   function isScriptFile(file) {
     var kind = fileKind(file);
     return kind === "script" || kind === "js" || /\.js$/i.test(filePath(file));
+  }
+
+  function isStyleFile(file) {
+    return fileKind(file) === "css" || /\.css$/i.test(filePath(file));
+  }
+
+  function isHtmlFile(file) {
+    return fileKind(file) === "html" || /\.html?$/i.test(filePath(file));
   }
 
   function fileContent(file) {
@@ -130,6 +196,10 @@
     var selection = state.htmlWorkspaceSelection || {};
     var id = selection.id || "";
     var result = null;
+    if (selection.type === "plan" || selection.type === "artifact") {
+      var artifact = artifactById(id);
+      return artifact ? { type: selection.type, item: artifact } : null;
+    }
     if (selection.type === "data") {
       dataSources().forEach(function (item) {
         if (dataId(item) === id) {
@@ -171,6 +241,10 @@
       return;
     }
 
+    if (state.activePlanArtifactId && artifactById(state.activePlanArtifactId)) {
+      state.htmlWorkspaceSelection = { type: "plan", id: state.activePlanArtifactId };
+      return;
+    }
     var active = activeHtmlFile();
     if (active) {
       state.htmlWorkspaceSelection = { type: "file", id: fileId(active) };
@@ -184,6 +258,10 @@
       state.htmlWorkspaceSelection = { type: "data", id: dataId(dataSources()[0]) };
       return;
     }
+    if ((state.artifacts || []).length) {
+      state.htmlWorkspaceSelection = { type: "artifact", id: artifactId(state.artifacts[0]) };
+      return;
+    }
     state.htmlWorkspaceSelection = { type: "file", id: "" };
   }
 
@@ -195,7 +273,11 @@
     var value = typeof getCodeEditorValue === "function"
       ? getCodeEditorValue("htmlWorkspaceEditorInput")
       : ($("htmlWorkspaceEditorInput").value || "");
-    if (selected.type === "data") {
+    if (selected.type === "plan") {
+      setArtifactInlineText(selected.item, value);
+    } else if (selected.type === "artifact") {
+      return;
+    } else if (selected.type === "data") {
       setDataJson(selected.item, value);
     } else {
       setFileContent(selected.item, value);
@@ -203,6 +285,8 @@
   }
 
   function markHtmlWorkspaceDirty() {
+    var selected = selectedItem();
+    if (!selected || selected.type === "artifact") return;
     syncHtmlEditorToState();
     state.htmlWorkspaceDirty = true;
     updateHtmlWorkspaceStatus();
@@ -214,7 +298,7 @@
       return true;
     }
     return window.confirm(
-      "В HTML workspace есть несохраненные изменения. " +
+      "В артефакте есть несохраненные изменения. " +
       (action || "Продолжить") +
       " и потерять их?"
     );
@@ -234,32 +318,38 @@
     var status = $("htmlWorkspaceStatus");
     var save = $("saveHtmlWorkspaceButton");
     var selected = selectedItem();
+    if ($("addPlanButton")) $("addPlanButton").disabled = !!state.bridgeUnavailable;
+    ["addHtmlFileButton", "addCssFileButton", "addJsFileButton", "addHtmlDataButton"].forEach(function (id) {
+      if ($(id)) $(id).disabled = !!state.bridgeUnavailable;
+    });
     if (status) {
       if (state.bridgeUnavailable) {
         status.textContent = "Office bridge недоступен.";
-      } else if (!files().length && !dataSources().length) {
-        status.textContent = "HTML workspace пуст.";
+      } else if (!files().length && !dataSources().length && !(state.artifacts || []).length) {
+        status.textContent = "Артефактов пока нет.";
       } else {
-        status.textContent = (files().length || 0) + " file(s), " + (dataSources().length || 0) + " data source(s), " + historyItems().length + " undo, " + redoItems().length + " redo" + (state.htmlWorkspaceDirty ? " · не сохранено" : "");
+        status.textContent = (state.artifacts || []).length + " артефактов · " + files().length + " файлов · " + dataSources().length + " наборов данных" + (state.htmlWorkspaceDirty ? " · не сохранено" : "");
       }
     }
     if (save) {
-      save.disabled = state.bridgeUnavailable || !selected || !state.htmlWorkspaceDirty;
+      save.disabled = state.bridgeUnavailable || !selected || selected.type === "artifact" || !state.htmlWorkspaceDirty;
       save.title = "Сохранить изменения (Ctrl+S)";
     }
     if ($("deleteHtmlWorkspaceButton")) {
-      $("deleteHtmlWorkspaceButton").disabled = state.bridgeUnavailable || !selected;
+      $("deleteHtmlWorkspaceButton").disabled = state.bridgeUnavailable || !selected || selected.type === "artifact";
       $("deleteHtmlWorkspaceButton").title = selected
-        ? "Удалить выбранный файл или источник данных"
-        : "Выберите файл или источник данных";
+        ? (selected.type === "plan" ? "Удалить план" : "Удалить выбранный файл или источник данных")
+        : "Выберите артефакт";
     }
     if ($("undoHtmlWorkspaceButton")) {
+      $("undoHtmlWorkspaceButton").classList.toggle("hidden", !!selected && (selected.type === "plan" || selected.type === "artifact"));
       $("undoHtmlWorkspaceButton").disabled = state.bridgeUnavailable || !historyItems().length;
       $("undoHtmlWorkspaceButton").title = historyItems().length
         ? "Вернуть: " + snapshotLabel(historyItems()[0])
         : "Нет предыдущих версий";
     }
     if ($("redoHtmlWorkspaceButton")) {
+      $("redoHtmlWorkspaceButton").classList.toggle("hidden", !!selected && (selected.type === "plan" || selected.type === "artifact"));
       $("redoHtmlWorkspaceButton").disabled = state.bridgeUnavailable || !redoItems().length;
       $("redoHtmlWorkspaceButton").title = redoItems().length
         ? "Повторить: " + snapshotLabel(redoItems()[0])
@@ -301,11 +391,29 @@
     tree.innerHTML = "";
     var rendered = 0;
     var workspaceFiles = files();
-    rendered += renderFileGroup(tree, "Artifacts", "html-artifacts", workspaceFiles.filter(function (file) { return !isScriptFile(file); }), query);
-    rendered += renderFileGroup(tree, "Scripts", "html-scripts", workspaceFiles.filter(isScriptFile), query);
-    rendered += renderDataGroup(tree, "Data", "html-data", dataSources(), query);
+    var htmlRoot = createResourceGroup({ key: "artifacts:html", title: "HTML", count: workspaceFiles.length + dataSources().length });
+    var htmlRendered = 0;
+    htmlRoot.className += " artifact-root-group";
+    htmlRendered += renderFileGroup(htmlRoot.treeChildren, "Страницы", "html-pages", workspaceFiles.filter(isHtmlFile), query);
+    htmlRendered += renderFileGroup(htmlRoot.treeChildren, "Стили", "html-styles", workspaceFiles.filter(isStyleFile), query);
+    htmlRendered += renderFileGroup(htmlRoot.treeChildren, "Скрипты", "html-scripts", workspaceFiles.filter(isScriptFile), query);
+    htmlRendered += renderFileGroup(htmlRoot.treeChildren, "Файлы", "html-files", workspaceFiles.filter(function (file) {
+      return !isHtmlFile(file) && !isStyleFile(file) && !isScriptFile(file);
+    }), query);
+    htmlRendered += renderDataGroup(htmlRoot.treeChildren, "Данные", "html-data", dataSources(), query);
+    if (htmlRendered) {
+      tree.appendChild(htmlRoot);
+      rendered += htmlRendered;
+    }
+    rendered += renderArtifactGroup(tree, "Планы", "artifact-plans", latestPlanArtifacts(), query, "plan");
+    rendered += renderArtifactGroup(tree, "Вложения", "artifact-attachments", (state.artifacts || []).filter(function (artifact) {
+      return ["attachment", "image", "file"].indexOf(artifactKind(artifact)) >= 0;
+    }), query, "artifact");
+    rendered += renderArtifactGroup(tree, "Другие", "artifact-other", (state.artifacts || []).filter(function (artifact) {
+      return ["plan", "attachment", "image", "file", "html_workspace"].indexOf(artifactKind(artifact)) < 0;
+    }), query, "artifact");
     if (!rendered) {
-      tree.appendChild(createResourceEmptyState(query ? "Ничего не найдено." : "Workspace пуст."));
+      tree.appendChild(createResourceEmptyState(query ? "Ничего не найдено." : "Артефактов пока нет."));
     }
   }
 
@@ -367,6 +475,48 @@
       parent.appendChild(group);
     }
     return count;
+  }
+
+  function renderArtifactGroup(parent, label, key, items, query, selectionType) {
+    var matched = (items || []).filter(function (artifact) {
+      return matchesText([
+        artifactTitle(artifact),
+        artifactKind(artifact),
+        prop(artifact, "MimeType", "mimeType", ""),
+        prop(artifact, "RelativePath", "relativePath", ""),
+        artifactInlineText(artifact)
+      ].join(" "), query);
+    });
+    if (!matched.length) return 0;
+    var group = createResourceGroup({ key: key, title: label, count: matched.length });
+    group.className += " artifact-root-group";
+    matched.sort(function (left, right) { return artifactTitle(left).localeCompare(artifactTitle(right)); }).forEach(function (artifact) {
+      var kind = artifactKind(artifact);
+      var meta = kind === "plan" ? planSummary(artifact) : artifactTypeLabel(kind);
+      group.treeChildren.appendChild(createResourceListItem({
+        title: artifactTitle(artifact),
+        active: selectedKey() === selectionKey(selectionType, artifactId(artifact)),
+        meta: meta,
+        description: firstLine(artifactInlineText(artifact)) || prop(artifact, "RelativePath", "relativePath", "") || prop(artifact, "MimeType", "mimeType", ""),
+        compact: true,
+        depth: 1,
+        onClick: function () { selectHtmlWorkspaceItem(selectionType, artifactId(artifact)); }
+      }));
+    });
+    parent.appendChild(group);
+    return matched.length;
+  }
+
+  function artifactTypeLabel(kind) {
+    var labels = { attachment: "Вложение", image: "Изображение", file: "Файл", markdown: "Markdown", chart: "Диаграмма", compaction: "Контекст", tool_result: "Результат" };
+    return labels[kind] || kind;
+  }
+
+  function planSummary(artifact) {
+    var plan = planJson(artifact);
+    var steps = plan && (plan.steps || plan.Steps) || [];
+    var completed = steps.filter(function (step) { return String(step.status || step.Status || "pending") === "completed"; }).length;
+    return completed + "/" + steps.length;
   }
 
   function firstLine(value) {
@@ -453,7 +603,7 @@
 
   function selectHtmlWorkspaceItem(type, id) {
     if (state.htmlWorkspaceDirty && selectedKey() !== selectionKey(type, id)) {
-      window.alert("Сначала сохраните текущие изменения HTML workspace.");
+      window.alert("Сначала сохраните изменения текущего артефакта.");
       return;
     }
     state.htmlWorkspaceSelection = { type: type, id: id };
@@ -464,6 +614,11 @@
     if (!selected) {
       return "";
     }
+    if (selected.type === "plan") {
+      try { return JSON.stringify(JSON.parse(artifactInlineText(selected.item)), null, 2); }
+      catch (error) { return artifactInlineText(selected.item); }
+    }
+    if (selected.type === "artifact") return artifactInlineText(selected.item);
     return selected.type === "data" ? dataJson(selected.item) : fileContent(selected.item);
   }
 
@@ -474,6 +629,8 @@
     var title = $("htmlWorkspaceTitle");
     var meta = $("htmlWorkspaceMeta");
     var hasItems = !!selected;
+    var isPlan = !!selected && selected.type === "plan";
+    var isArtifact = !!selected && selected.type === "artifact";
     if (editor) {
       editor.classList.toggle("is-empty", !hasItems);
     }
@@ -482,19 +639,30 @@
     }
     if (title) {
       title.textContent = selected
-        ? (selected.type === "data" ? dataName(selected.item) : filePath(selected.item))
-        : "HTML не выбран";
+        ? (isPlan || isArtifact ? artifactTitle(selected.item) : (selected.type === "data" ? dataName(selected.item) : filePath(selected.item)))
+        : "Артефакт не выбран";
     }
     if (meta) {
       meta.textContent = selected
-        ? (selected.type === "data" ? "JSON data source" : (fileKind(selected.item) || "file"))
+        ? (isPlan ? "План · JSON · v" + artifactRevision(selected.item) : (isArtifact ? artifactTypeLabel(artifactKind(selected.item)) + " · только чтение" : (selected.type === "data" ? "JSON data source" : (fileKind(selected.item) || "file"))))
         : "";
     }
+    var previewButton = document.querySelector('.html-workspace-mode-button[data-html-mode="preview"]');
+    var editButton = document.querySelector('.html-workspace-mode-button[data-html-mode="edit"]');
+    if (previewButton) previewButton.textContent = isPlan ? "План" : "Просмотр";
+    if (editButton) {
+      editButton.textContent = isPlan ? "JSON" : "Код";
+      editButton.classList.toggle("hidden", isArtifact);
+    }
+    if (isArtifact) state.htmlWorkspaceMode = "preview";
+    if ($("saveHtmlWorkspaceButton")) $("saveHtmlWorkspaceButton").classList.toggle("hidden", isArtifact);
+    if ($("deleteHtmlWorkspaceButton")) $("deleteHtmlWorkspaceButton").classList.toggle("hidden", isArtifact);
     if (typeof setCodeEditorValue === "function") {
       setCodeEditorValue("htmlWorkspaceEditorInput", selectedEditorValue(selected));
     } else if ($("htmlWorkspaceEditorInput")) {
       $("htmlWorkspaceEditorInput").value = selectedEditorValue(selected);
     }
+    if (typeof setCodeEditorReadOnly === "function") setCodeEditorReadOnly("htmlWorkspaceEditorInput", isArtifact);
     renderHtmlWorkspacePreview();
   }
 
@@ -586,11 +754,91 @@
 
   function renderHtmlWorkspacePreview() {
     var frame = $("htmlWorkspacePreviewFrame");
-    if (!frame) {
+    var detail = $("artifactDetailPreview");
+    if (!frame || !detail) {
       return;
     }
+    var selected = selectedItem();
+    var special = selected && (selected.type === "plan" || selected.type === "artifact");
+    frame.classList.toggle("hidden", !!special);
+    detail.classList.toggle("hidden", !special);
+    if (special) {
+      renderArtifactDetail(detail, selected);
+      frame.removeAttribute("src");
+      frame.srcdoc = "";
+      return;
+    }
+    detail.replaceChildren();
     frame.removeAttribute("src");
     frame.srcdoc = buildPreviewHtml();
+  }
+
+  function renderArtifactDetail(root, selected) {
+    root.replaceChildren();
+    if (selected.type === "plan") {
+      var plan = null;
+      try { plan = JSON.parse(selectedEditorValue(selected)); }
+      catch (error) {
+        var invalid = document.createElement("div");
+        invalid.className = "artifact-detail-error";
+        invalid.textContent = "Некорректный JSON: " + error.message;
+        root.appendChild(invalid);
+        return;
+      }
+      var goal = document.createElement("h2");
+      goal.textContent = plan.goal || plan.Goal || "План без цели";
+      root.appendChild(goal);
+      var steps = plan.steps || plan.Steps || [];
+      var summary = document.createElement("div");
+      summary.className = "artifact-plan-summary";
+      summary.textContent = steps.filter(function (step) { return String(step.status || step.Status || "pending") === "completed"; }).length + " из " + steps.length + " шагов выполнено";
+      root.appendChild(summary);
+      var list = document.createElement("ol");
+      list.className = "artifact-plan-steps";
+      steps.forEach(function (step) {
+        var status = String(step.status || step.Status || "pending");
+        var row = document.createElement("li");
+        row.className = "status-" + status;
+        var mark = document.createElement("span");
+        mark.className = "artifact-plan-mark";
+        mark.textContent = status === "completed" ? "✓" : (status === "in_progress" ? "•" : (status === "blocked" ? "!" : ""));
+        var text = document.createElement("span");
+        text.textContent = step.text || step.Text || step.id || step.Id || "Шаг";
+        var badge = document.createElement("em");
+        badge.textContent = planStatusLabel(status);
+        row.appendChild(mark);
+        row.appendChild(text);
+        row.appendChild(badge);
+        list.appendChild(row);
+      });
+      root.appendChild(list);
+      return;
+    }
+    var metadata = document.createElement("dl");
+    metadata.className = "artifact-metadata";
+    [
+      ["Тип", artifactTypeLabel(artifactKind(selected.item))],
+      ["Формат", prop(selected.item, "MimeType", "mimeType", "—") || "—"],
+      ["Путь", prop(selected.item, "RelativePath", "relativePath", "—") || "—"],
+      ["Версия", String(artifactRevision(selected.item))]
+    ].forEach(function (pair) {
+      var term = document.createElement("dt"); term.textContent = pair[0];
+      var value = document.createElement("dd"); value.textContent = pair[1];
+      metadata.appendChild(term); metadata.appendChild(value);
+    });
+    root.appendChild(metadata);
+    var content = artifactInlineText(selected.item) || prop(selected.item, "MetadataJson", "metadataJson", "");
+    if (content) {
+      var pre = document.createElement("pre");
+      try { pre.textContent = JSON.stringify(JSON.parse(content), null, 2); }
+      catch (error) { pre.textContent = content; }
+      root.appendChild(pre);
+    }
+  }
+
+  function planStatusLabel(status) {
+    var labels = { pending: "Ожидает", in_progress: "В работе", completed: "Готово", blocked: "Заблокирован", cancelled: "Отменён" };
+    return labels[status] || status;
   }
 
   function applyHtmlWorkspaceResponse(response) {
@@ -607,7 +855,10 @@
     }
     syncHtmlEditorToState();
     try {
-      if (selected.type === "data") {
+      if (selected.type === "plan") {
+        await savePlanArtifact(selected.item);
+        return;
+      } else if (selected.type === "data") {
         applyHtmlWorkspaceResponse(await send("saveHtmlWorkspaceData", {
           chatId: state.activeChatId,
           name: dataName(selected.item),
@@ -622,11 +873,65 @@
           setActive: fileKind(selected.item) === "html"
         }));
       }
-      log("HTML workspace сохранен.");
+      log("Артефакт сохранён.");
     } catch (error) {
       log(error.detail || error.message);
-      window.alert(error.message || "HTML workspace не сохранен.");
+      window.alert(error.message || "Артефакт не сохранён.");
     }
+  }
+
+  function validatePlanDraft(artifact) {
+    var plan;
+    try { plan = JSON.parse(artifactInlineText(artifact)); }
+    catch (error) { throw new Error("Некорректный JSON плана: " + error.message); }
+    if (!plan || Array.isArray(plan) || typeof plan !== "object") throw new Error("План должен быть JSON-объектом.");
+    var currentId = storedPlanId(artifact);
+    var id = String(plan.id || plan.Id || "").trim();
+    if (!id || id !== currentId) throw new Error("ID плана нельзя изменять.");
+    var goal = String(plan.goal || plan.Goal || "").trim();
+    if (!goal || goal.length > 500) throw new Error("Цель плана должна содержать от 1 до 500 символов.");
+    var steps = plan.steps || plan.Steps;
+    if (!Array.isArray(steps) || !steps.length || steps.length > 32) throw new Error("План должен содержать от 1 до 32 шагов.");
+    var ids = {};
+    var statuses = ["pending", "in_progress", "completed", "blocked", "cancelled"];
+    steps = steps.map(function (step) {
+      if (!step || Array.isArray(step) || typeof step !== "object") throw new Error("Каждый шаг должен быть объектом.");
+      var stepId = String(step.id || step.Id || "").trim();
+      var text = String(step.text || step.Text || "").trim();
+      var status = String(step.status || step.Status || "pending").toLowerCase();
+      if (!stepId || /\s/.test(stepId) || stepId.length > 80) throw new Error("У каждого шага нужен ID без пробелов длиной до 80 символов.");
+      if (ids[stepId.toLowerCase()]) throw new Error("Повторяется ID шага: " + stepId);
+      if (!text || text.length > 500) throw new Error("Описание каждого шага должно содержать от 1 до 500 символов.");
+      if (statuses.indexOf(status) < 0) throw new Error("Неизвестный статус шага: " + status);
+      ids[stepId.toLowerCase()] = true;
+      return { id: stepId, text: text, status: status };
+    });
+    return { id: id, goal: goal, steps: steps };
+  }
+
+  async function refreshArtifactsAfterPlanChange(planId) {
+    var response = await send("selectChat", { chatId: state.activeChatId });
+    if (typeof applyChatState === "function") applyChatState(response);
+    var latest = latestPlanArtifacts().filter(function (artifact) { return planStableId(artifact) === planId; })[0] || null;
+    state.htmlWorkspaceSelection = latest
+      ? { type: "plan", id: artifactId(latest) }
+      : { type: "file", id: "" };
+    state.htmlWorkspaceDirty = false;
+    renderHtmlWorkspace();
+  }
+
+  async function savePlanArtifact(artifact) {
+    var plan = validatePlanDraft(artifact);
+    var result = await send("runTool", {
+      toolId: "common.plan_update",
+      arguments: { id: plan.id, goal: plan.goal, steps: plan.steps },
+      dryRun: false
+    });
+    if (!(result && (result.Success === true || result.success === true))) {
+      throw new Error(result && (result.Message || result.message) || "План не сохранён.");
+    }
+    await refreshArtifactsAfterPlanChange(plan.id);
+    log("План сохранён как новая версия.");
   }
 
   async function deleteHtmlWorkspaceSelection() {
@@ -635,8 +940,10 @@
       return;
     }
 
-    var label = selected.type === "data" ? dataName(selected.item) : filePath(selected.item);
-    var warning = "Удалить «" + label + "» из HTML workspace? Удаление можно отменить через Undo.";
+    var label = selected.type === "plan" ? artifactTitle(selected.item) : (selected.type === "data" ? dataName(selected.item) : filePath(selected.item));
+    var warning = selected.type === "plan"
+      ? "Удалить план «" + label + "» и все его версии?"
+      : "Удалить «" + label + "» из HTML? Удаление можно отменить через Undo.";
     if (state.htmlWorkspaceDirty) {
       warning = "Есть несохраненные изменения. " + warning;
     }
@@ -645,6 +952,14 @@
     }
 
     try {
+      if (selected.type === "plan") {
+        var planId = planStableId(selected.item);
+        var result = await send("runTool", { toolId: "common.plan_delete", arguments: { id: planId }, dryRun: false });
+        if (!(result && (result.Success === true || result.success === true))) throw new Error(result && (result.Message || result.message) || "План не удалён.");
+        await refreshArtifactsAfterPlanChange(planId);
+        log("План удалён: " + label);
+        return;
+      }
       var response = selected.type === "data"
         ? await send("deleteHtmlWorkspaceData", {
           chatId: state.activeChatId,
@@ -656,7 +971,7 @@
         });
       state.htmlWorkspaceSelection = { type: "file", id: "" };
       applyHtmlWorkspaceResponse(response);
-      log("Удалено из HTML workspace: " + label);
+      log("Удалено из HTML: " + label);
     } catch (error) {
       log(error.detail || error.message);
       window.alert(error.message || "Элемент HTML workspace не удален.");
@@ -709,6 +1024,31 @@
     }
     var fallback = kind === "css" ? "styles.css" : (kind === "script" ? "app.js" : "index.html");
     showHtmlWorkspaceCreate(kind, fallback);
+  }
+
+  async function addPlan() {
+    if (state.bridgeUnavailable) return;
+    try {
+      var result = await send("runTool", {
+        toolId: "common.plan_create",
+        arguments: {
+          goal: "Новый план",
+          steps: [{ id: "step_1", text: "Опишите первый шаг", status: "pending" }]
+        },
+        dryRun: false
+      });
+      if (!(result && (result.Success === true || result.success === true))) throw new Error(result && (result.Message || result.message) || "План не создан.");
+      var payload = {};
+      try { payload = JSON.parse(result.DataJson || result.dataJson || "{}"); } catch (ignore) {}
+      var plan = payload.plan || payload.Plan || {};
+      await refreshArtifactsAfterPlanChange(plan.id || plan.Id || "");
+      state.htmlWorkspaceMode = "preview";
+      renderHtmlWorkspace();
+      log("План создан.");
+    } catch (error) {
+      log(error.detail || error.message);
+      window.alert(error.message || "План не создан.");
+    }
   }
 
   function showHtmlWorkspaceCreate(kind, fallback) {
@@ -833,6 +1173,7 @@
     $("undoHtmlWorkspaceButton").addEventListener("click", undoHtmlWorkspace);
     $("redoHtmlWorkspaceButton").addEventListener("click", redoHtmlWorkspace);
     $("toggleHtmlSidebarButton").addEventListener("click", toggleHtmlWorkspaceSidebar);
+    $("addPlanButton").addEventListener("click", addPlan);
     $("addHtmlFileButton").addEventListener("click", function () { addHtmlWorkspaceFile("html"); });
     $("addCssFileButton").addEventListener("click", function () { addHtmlWorkspaceFile("css"); });
     $("addJsFileButton").addEventListener("click", function () { addHtmlWorkspaceFile("script"); });

@@ -1,4 +1,8 @@
 function renderTools() {
+  if (typeof renderInstructions === "function" && $("instructionsList")) {
+    renderInstructions();
+    return;
+  }
   renderResourceList({
     listId: "toolsList",
     searchInputId: "toolSearchInput",
@@ -129,6 +133,18 @@ function toolJsonError(id, message) {
   if ($(id)) $(id).textContent = message || "";
 }
 
+function formatToolJson(id, errorId) {
+  try {
+    var value = toolEditorJson(id);
+    setToolEditorJson(id, value);
+    toolJsonError(errorId, "");
+    return value;
+  } catch (error) {
+    toolJsonError(errorId, "Не удалось открыть форму: исправьте JSON — " + error.message);
+    return null;
+  }
+}
+
 function schemaDefaultText(value) {
   return value === undefined ? "" : (typeof value === "string" ? value : JSON.stringify(value));
 }
@@ -234,14 +250,27 @@ function renderToolRunArgsVisual() {
 }
 
 function setToolStructuredMode(kind, mode) {
-  var isSchema = kind === "schema"; var valid = isSchema ? syncSchemaDraft() : syncPipelineDraft();
-  if (mode === "form" && !valid) return;
+  var isSchema = kind === "schema";
+  var editorId = isSchema ? "toolSchemaInput" : "toolPipelineInput";
+  var errorId = isSchema ? "toolSchemaError" : "toolPipelineError";
+  var valid = isSchema ? syncSchemaDraft() : syncPipelineDraft();
+  if (mode === "json" && valid) {
+    var formatted = formatToolJson(editorId, errorId);
+    if (formatted) {
+      if (isSchema) state.toolSchemaVisualDraft = formatted;
+      else {
+        state.toolPipelineVisualDraft = formatted;
+        state.toolPipelineVisualDraft.steps = Array.isArray(formatted.steps) ? formatted.steps : [];
+      }
+    }
+  }
+  if (mode === "form" && !valid) mode = "json";
   if (isSchema) state.toolSchemaMode = mode; else state.toolPipelineMode = mode;
   Array.prototype.slice.call(document.querySelectorAll(isSchema ? ".tool-schema-mode" : ".tool-pipeline-mode")).forEach(function (button) { button.classList.toggle("active", button.getAttribute(isSchema ? "data-tool-schema-mode" : "data-tool-pipeline-mode") === mode); });
   var visual = $(isSchema ? "toolSchemaVisual" : "toolPipelineVisual"); if (visual) visual.classList.toggle("hidden", mode !== "form");
   Array.prototype.slice.call(document.querySelectorAll(isSchema ? ".tool-schema-json" : ".tool-pipeline-json")).forEach(function (node) { node.classList.toggle("hidden", mode !== "json"); });
   if (mode === "form") { if (isSchema) renderToolSchemaVisual(); else renderToolPipelineVisual(); }
-  else if (typeof refreshCodeEditors === "function") refreshCodeEditors([isSchema ? "toolSchemaInput" : "toolPipelineInput"]);
+  else if (typeof refreshCodeEditors === "function") refreshCodeEditors([editorId]);
 }
 
 function applyToolEditorPage() {
@@ -588,10 +617,21 @@ async function runSelectedTool(dryRun) {
 }
 
 function bindToolActions() {
-  $("toolSearchInput").addEventListener("input", renderTools);
+  if ($("toolSearchInput")) $("toolSearchInput").addEventListener("input", renderTools);
   Array.prototype.slice.call(document.querySelectorAll(".tool-page-button")).forEach(function (button) { button.addEventListener("click", function () { syncSelectedToolFromEditor(); state.toolEditorPage = button.getAttribute("data-tool-page") || "main"; applyToolEditorPage(); }); });
   Array.prototype.slice.call(document.querySelectorAll(".tool-schema-mode")).forEach(function (button) { button.addEventListener("click", function () { setToolStructuredMode("schema", button.getAttribute("data-tool-schema-mode")); }); });
   Array.prototype.slice.call(document.querySelectorAll(".tool-pipeline-mode")).forEach(function (button) { button.addEventListener("click", function () { setToolStructuredMode("pipeline", button.getAttribute("data-tool-pipeline-mode")); }); });
+  $("formatToolSchemaButton").addEventListener("click", function () {
+    var value = formatToolJson("toolSchemaInput", "toolSchemaError");
+    if (value) state.toolSchemaVisualDraft = value;
+  });
+  $("formatToolPipelineButton").addEventListener("click", function () {
+    var value = formatToolJson("toolPipelineInput", "toolPipelineError");
+    if (value) {
+      state.toolPipelineVisualDraft = value;
+      state.toolPipelineVisualDraft.steps = Array.isArray(value.steps) ? value.steps : [];
+    }
+  });
 
   $("toolComponentSelect").addEventListener("change", function () {
     var tool = state.tools[state.selectedToolIndex];
@@ -625,7 +665,8 @@ function bindToolActions() {
   $("uninstallVbaToolButton").addEventListener("click", function () { changeVbaInstallation("uninstallVbaTool"); });
 
   $("addToolButton").addEventListener("click", function () {
-    syncSelectedToolFromEditor();
+    if (typeof syncSelectedLibraryItem === "function") syncSelectedLibraryItem();
+    else if (state.selectedInstructionKind === "tool") syncSelectedToolFromEditor();
     state.tools.push({
       Id: (state.host || "common").toLowerCase() + ".new_tool",
       Host: state.host || "Common",
@@ -648,6 +689,7 @@ function bindToolActions() {
       Components: []
     });
     state.selectedToolIndex = state.tools.length - 1;
+    state.selectedInstructionKind = "tool";
     renderTools();
   });
 
@@ -688,6 +730,7 @@ function bindToolActions() {
       InstallationStatus: "not_installed"
     });
     state.selectedToolIndex = state.tools.length - 1;
+    state.selectedInstructionKind = "tool";
     renderTools();
   });
 

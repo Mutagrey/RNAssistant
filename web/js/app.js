@@ -1,18 +1,13 @@
 function switchTab(name) {
-  var libraryNames = ["instructions", "tools"];
-  var codeNames = ["vba", "html"];
-  var section = libraryNames.indexOf(name) >= 0 ? "library" : (codeNames.indexOf(name) >= 0 ? "code" : name);
+  if ($("tab-instructions") && $("tab-instructions").classList.contains("active") && name !== "instructions" && typeof syncSelectedLibraryItem === "function") {
+    syncSelectedLibraryItem();
+  }
+  if (name === "tools") name = "instructions";
+  if (name === "html") name = "artifacts";
+  var section = name === "instructions" ? "library" : name;
   Array.prototype.slice.call(document.querySelectorAll(".tab")).forEach(function (tab) {
     tab.classList.toggle("active", tab.dataset.section === section);
   });
-  Array.prototype.slice.call(document.querySelectorAll(".section-tab")).forEach(function (tab) {
-    tab.classList.toggle("active", tab.dataset.tab === name);
-  });
-  Array.prototype.slice.call(document.querySelectorAll(".section-tabs")).forEach(function (tabs) {
-    tabs.classList.toggle("hidden", tabs.dataset.sectionTabs !== section);
-  });
-  var sectionRoot = section === "library" ? $("libraryRootTab") : (section === "code" ? $("codeRootTab") : null);
-  if (sectionRoot) sectionRoot.dataset.activeTab = name;
   Array.prototype.slice.call(document.querySelectorAll(".panel")).forEach(function (panel) {
     panel.classList.toggle("active", panel.id === "tab-" + name);
   });
@@ -21,9 +16,6 @@ function switchTab(name) {
   }
   if (typeof refreshSplitPanes === "function") {
     refreshSplitPanes();
-  }
-  if (name === "logs" && typeof runtimeLogVisible === "function" && runtimeLogVisible()) {
-    refreshRuntimeLog();
   }
 }
 
@@ -42,13 +34,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
   Array.prototype.slice.call(document.querySelectorAll(".tab")).forEach(function (tab) {
     tab.addEventListener("click", function () {
-      switchTab(tab.dataset.section === "library" || tab.dataset.section === "code"
-        ? (tab.dataset.activeTab || tab.dataset.defaultTab || "instructions")
-        : tab.dataset.tab);
+      switchTab(tab.dataset.defaultTab || tab.dataset.tab);
     });
-  });
-  Array.prototype.slice.call(document.querySelectorAll(".section-tab")).forEach(function (tab) {
-    tab.addEventListener("click", function () { switchTab(tab.dataset.tab); });
   });
 
   bindChatActions();

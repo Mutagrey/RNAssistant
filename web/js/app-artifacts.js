@@ -92,7 +92,7 @@
       button.type = "button";
       button.className = "chat-artifact-action";
       button.textContent = "Открыть текущий HTML";
-      button.addEventListener("click", function () { switchTab("html"); });
+      button.addEventListener("click", function () { switchTab("artifacts"); });
       card.appendChild(button);
     }
     return card;

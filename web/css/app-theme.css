@@ -234,10 +234,6 @@ html[data-theme="dark"] .tabs {
   background: rgba(16, 18, 22, .97);
 }
 
-html[data-theme="dark"] .workspace-tabs {
-  background: var(--bg);
-}
-
 html[data-theme="dark"] .tab,
 html[data-theme="dark"] .tab.active {
   background: var(--bg);
@@ -629,7 +625,8 @@ html[data-theme="dark"] .vba-diff-line.remove code {
 }
 
 html[data-theme="dark"] .html-workspace-editor,
-html[data-theme="dark"] .html-workspace-head {
+html[data-theme="dark"] .html-workspace-head,
+html[data-theme="dark"] .artifact-detail-preview {
   background: #14171c;
 }
 

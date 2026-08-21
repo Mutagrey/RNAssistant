@@ -194,7 +194,8 @@ function bindSkillActions() {
   });
 
   $("addSkillButton").addEventListener("click", function () {
-    syncSelectedSkillFromEditor();
+    if (typeof syncSelectedLibraryItem === "function") syncSelectedLibraryItem();
+    else if (state.selectedInstructionKind === "skill") syncSelectedSkillFromEditor();
     state.skills.push({
       Id: "common.new_skill",
       Host: "Common",
@@ -206,7 +207,6 @@ function bindSkillActions() {
     });
     state.selectedSkillIndex = state.skills.length - 1;
     state.selectedInstructionKind = "skill";
-    state.instructionFilter = "all";
     renderSkills();
   });
 

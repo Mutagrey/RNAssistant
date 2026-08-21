@@ -42,6 +42,8 @@
 
 .settings-pages {
   min-width: 0;
+  min-height: 0;
+  overflow: auto;
 }
 
 .resource-editor-head {
@@ -508,32 +510,9 @@
   font-size: 11px;
 }
 
-.log-section-head > div {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.log-section-head .log-section-actions {
-  display: flex;
-  flex: none;
-  grid-auto-flow: column;
-  gap: 6px;
-}
-
-.log-view-tabs {
-  margin-left: auto;
-}
-
 .log-section-head strong {
   color: var(--text);
   font-size: 12px;
-}
-
-#runtimeLogPath {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .danger-zone {
@@ -563,6 +542,7 @@
 @media (max-width: 760px) {
   .settings-shell {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .settings-nav {
@@ -598,6 +578,7 @@
 @media (max-width: 480px) {
   .settings-shell {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
     gap: 8px;
   }
 
@@ -627,5 +608,19 @@
   }
 }
 
-.diagnostics-logs { min-height: 260px; max-height: 48vh; }
-.diagnostics-logs .log-section { min-height: 240px; }
+.settings-page[data-settings-page="service"].active {
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.diagnostics-logs {
+  min-height: 0;
+  max-height: none;
+}
+
+.diagnostics-logs .log-section,
+.diagnostics-logs .log-box {
+  min-height: 0;
+}
