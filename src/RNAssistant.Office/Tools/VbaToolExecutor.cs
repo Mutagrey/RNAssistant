@@ -34,7 +34,7 @@ namespace RNAssistant.Office.Tools
             yield return ControllerToolDefinition.Create(ToolId("vba_search_code"), _adapter.HostName, "Read-only: Search literal or regex patterns across VBA component code.", "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Non-empty literal or regular-expression search query.\",\"minLength\":1,\"maxLength\":2048},\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"maxResults\":{\"type\":\"integer\",\"description\":\"Maximum number of matches returned.\",\"default\":100,\"minimum\":1,\"maximum\":500},\"contextChars\":{\"type\":\"integer\",\"description\":\"Maximum context characters returned around each match.\",\"default\":80,\"minimum\":0,\"maximum\":1000}},\"required\":[\"query\"],\"additionalProperties\":false}");
             yield return ControllerToolDefinition.Create(ToolId("vba_restore_backup"), _adapter.HostName, "Mutates document: Restore a VBA module from an exact backupId, or restore the latest backup for moduleName when backupId is omitted.", "{\"type\":\"object\",\"properties\":{\"backupId\":{\"type\":\"string\",\"description\":\"Exact rollback backup identifier from vba_list_backups.\"},\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name; used only to select its latest backup when backupId is omitted.\"}},\"required\":[],\"additionalProperties\":false}", mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_replace_text"), _adapter.HostName, "Mutates document: Replace one exact text fragment, or all exact occurrences when replaceAll=true. Requires the current module hash and creates a rollback backup.", ReplaceTextSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
-            yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), _adapter.HostName, "Mutates document: Apply ordered structured literal, regex, insertion, or line patches. patch must be a native JSON array, not a JSON string. Requires the current module hash and creates a rollback backup.", ApplyPatchSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), _adapter.HostName, "Mutates document: Apply ordered structured literal, regex, insertion, or line patches. patch must be a native JSON array, not a JSON string. Use text (or replace) for replacement content; never misuse insertBefore/insertAfter as replacement. Requires the current module hash and creates a rollback backup.", ApplyPatchSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_create_module"), _adapter.HostName, "Mutates document: Create a new StdModule or ClassModule and return its code hash. Document modules and UserForms cannot be created.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact new VBA component name.\"},\"componentType\":{\"type\":\"string\",\"description\":\"VBA component type.\",\"default\":\"StdModule\",\"enum\":[\"StdModule\",\"ClassModule\"]},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code, normally beginning with Option Explicit.\",\"minLength\":1}},\"required\":[\"moduleName\",\"code\"],\"additionalProperties\":false}", mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_delete_module"), _adapter.HostName, "Mutates document: Delete a StdModule or ClassModule after current-hash validation and backup. Document modules and UserForms cannot be deleted.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"expectedCodeSha256\":{\"type\":\"string\",\"description\":\"Exact current codeSha256 returned by vba_read_module, vba_read_lines, or vba_search_code.\"}},\"required\":[\"moduleName\",\"expectedCodeSha256\"],\"additionalProperties\":false}", mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
         }
@@ -1034,9 +1034,9 @@ namespace RNAssistant.Office.Tools
         private static ToolResult ApplyPatchOperation(string current, JObject operation, out string updated)
         {
             updated = current;
-            var op = ((string)(operation["op"] ?? operation["type"]) ?? string.Empty).Trim();
-            var find = MatchLineEndings((string)(operation["find"] ?? operation["anchor"]), current);
-            var text = MatchLineEndings((string)(operation["text"] ?? operation["replace"] ?? operation["code"]) ?? string.Empty, current);
+            var op = ((string)operation["op"] ?? string.Empty).Trim();
+            var find = MatchLineEndings((string)operation["find"], current);
+            var text = MatchLineEndings((string)(operation["text"] ?? operation["replace"]) ?? string.Empty, current);
             switch (op.ToLowerInvariant())
             {
                 case "replace":
@@ -1073,9 +1073,9 @@ namespace RNAssistant.Office.Tools
                 case "replacefirst":
                     return ReplaceAtMatch(current, find, text, out updated);
                 case "insertbefore":
-                    return ReplaceAtUniqueMatch(current, find, text + find, out updated);
+                    return InsertAtUniqueMatch(current, find, text, true, out updated);
                 case "insertafter":
-                    return ReplaceAtUniqueMatch(current, find, find + text, out updated);
+                    return InsertAtUniqueMatch(current, find, text, false, out updated);
                 case "replacelines":
                     return ReplaceLines(current, operation, text, out updated);
                 case "regexreplace":
@@ -1118,10 +1118,11 @@ namespace RNAssistant.Office.Tools
             return ToolResult.Ok("Patched first occurrence.");
         }
 
-        private static ToolResult ReplaceAtUniqueMatch(string current, string find, string replacement, out string updated)
+        private static ToolResult InsertAtUniqueMatch(string current, string find, string text, bool before, out string updated)
         {
             updated = current;
             if (string.IsNullOrEmpty(find)) return ToolResult.Fail("Patch insertion requires a non-empty anchor.");
+            if (string.IsNullOrEmpty(text)) return ToolResult.Fail("Patch insertion requires non-empty text.", null, "vba_patch_invalid", true);
             var count = CountOccurrences(current, find);
             if (count == 0) return ToolResult.Fail("Patch insertion anchor was not found.");
             if (count != 1)
@@ -1132,7 +1133,19 @@ namespace RNAssistant.Office.Tools
                     "vba_patch_ambiguous",
                     true);
             }
-            return ReplaceAtMatch(current, find, replacement, out updated);
+            var index = current.IndexOf(find, StringComparison.Ordinal);
+            var insertionIndex = before ? index : index + find.Length;
+            var newline = CurrentNewLine(current);
+            if (insertionIndex > 0 && !IsLineBreak(current[insertionIndex - 1]) && !StartsWithLineBreak(text))
+            {
+                text = newline + text;
+            }
+            if (insertionIndex < current.Length && !IsLineBreak(current[insertionIndex]) && !EndsWithLineBreak(text))
+            {
+                text += newline;
+            }
+            updated = current.Insert(insertionIndex, text);
+            return ToolResult.Ok("Inserted a line-safe block " + (before ? "before" : "after") + " the unique anchor.");
         }
 
         private static string ReplaceFirst(string current, string find, string replacement)
@@ -1146,10 +1159,30 @@ namespace RNAssistant.Office.Tools
         private static string MatchLineEndings(string value, string current)
         {
             if (value == null) return null;
-            var newline = (current ?? string.Empty).IndexOf("\r\n", StringComparison.Ordinal) >= 0
-                ? "\r\n"
-                : (current ?? string.Empty).IndexOf('\r') >= 0 ? "\r" : "\n";
+            var newline = CurrentNewLine(current);
             return value.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", newline);
+        }
+
+        private static string CurrentNewLine(string value)
+        {
+            return (value ?? string.Empty).IndexOf("\r\n", StringComparison.Ordinal) >= 0
+                ? "\r\n"
+                : (value ?? string.Empty).IndexOf('\r') >= 0 ? "\r" : "\n";
+        }
+
+        private static bool StartsWithLineBreak(string value)
+        {
+            return !string.IsNullOrEmpty(value) && IsLineBreak(value[0]);
+        }
+
+        private static bool EndsWithLineBreak(string value)
+        {
+            return !string.IsNullOrEmpty(value) && IsLineBreak(value[value.Length - 1]);
+        }
+
+        private static bool IsLineBreak(char value)
+        {
+            return value == '\r' || value == '\n';
         }
 
         private static ToolResult ReplaceLines(string current, JObject operation, string text, out string updated)
@@ -1230,10 +1263,11 @@ namespace RNAssistant.Office.Tools
                 "\"expectedCodeSha256\":{\"type\":\"string\",\"description\":\"Exact current codeSha256 returned by vba_read_module, vba_read_lines, or vba_search_code.\"}," +
                 "\"patch\":{\"type\":\"array\",\"description\":\"Native JSON array of ordered patch operations applied to one current module snapshot; never encode this array as a string.\",\"minItems\":1,\"maxItems\":100,\"items\":{" +
                     "\"type\":\"object\",\"properties\":{" +
-                        "\"op\":{\"type\":\"string\",\"description\":\"Operation: replace requires one exact match; replaceAll is explicit; replaceFirst changes the first; insertBefore/insertAfter require one unique anchor; replaceLines uses current sequential line coordinates; regexReplace uses pattern.\",\"enum\":[\"replace\",\"replaceAll\",\"replaceFirst\",\"insertBefore\",\"insertAfter\",\"replaceLines\",\"regexReplace\"]}," +
-                        "\"find\":{\"type\":\"string\",\"description\":\"Exact text or unique insertion anchor for literal operations.\"}," +
-                        "\"pattern\":{\"type\":\"string\",\"description\":\"Regular expression for regexReplace.\"}," +
-                        "\"text\":{\"type\":\"string\",\"description\":\"Replacement or inserted VBA code; regex capture groups such as $1 are supported.\"}," +
+                        "\"op\":{\"type\":\"string\",\"description\":\"Operation: replace requires one exact match; replaceAll is explicit; replaceFirst changes the first; insertBefore/insertAfter insert a line-safe block around one unique anchor; replaceLines uses current sequential line coordinates; regexReplace uses pattern.\",\"enum\":[\"replace\",\"replaceAll\",\"replaceFirst\",\"insertBefore\",\"insertAfter\",\"replaceLines\",\"regexReplace\"]}," +
+                        "\"find\":{\"type\":\"string\",\"description\":\"Non-empty exact text or unique insertion anchor for literal operations.\",\"minLength\":1}," +
+                        "\"pattern\":{\"type\":\"string\",\"description\":\"Non-empty regular expression for regexReplace.\",\"minLength\":1}," +
+                        "\"text\":{\"type\":\"string\",\"description\":\"Preferred field for replacement or inserted VBA code; regex capture groups such as $1 are supported.\"}," +
+                        "\"replace\":{\"type\":\"string\",\"description\":\"Alias for text, accepted as replacement content. Do not supply both text and replace.\"}," +
                         "\"startLine\":{\"type\":\"integer\",\"description\":\"One-based first line for replaceLines, evaluated after all preceding patch operations.\",\"minimum\":1}," +
                         "\"deleteCount\":{\"type\":\"integer\",\"description\":\"Number of existing lines removed by replaceLines.\",\"minimum\":0}," +
                         "\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether regexReplace is case-sensitive.\",\"default\":true}," +

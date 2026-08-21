@@ -278,8 +278,12 @@ namespace RNAssistant.Office.Tools
                 {
                     arguments[property.Name] = JToken.Parse(value.Value<string>());
                 }
-                catch (JsonException)
+                catch (JsonException ex)
                 {
+                    throw new JsonException(
+                        "$." + property.Name + " must be a native JSON " + type +
+                        ", not quoted/stringified JSON. The supplied string could not be parsed: " + ex.Message,
+                        ex);
                 }
             }
         }

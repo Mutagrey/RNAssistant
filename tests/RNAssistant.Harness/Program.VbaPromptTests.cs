@@ -64,17 +64,50 @@ namespace RNAssistant.Harness
                 var command = new ToolCommand { ToolId = executor.VbaToolId("vba_apply_patch") };
                 command.Arguments["moduleName"] = "Module2";
                 command.Arguments["expectedCodeSha256"] = VbaToolManifestParser.LiveCodeSha256(adapter.GetVbaModuleCode("Module2"));
-                command.Arguments["patch"] = "[{\"op\":\"replaceFirst\",\"find\":\"\\\"old\\\"\",\"text\":\"\\\"new\\\"\"}]";
+                command.Arguments["patch"] = new JArray
+                {
+                    new JObject
+                    {
+                        ["op"] = "replace",
+                        ["find"] = "\"old\"",
+                        ["replace"] = "\"new\""
+                    },
+                    new JObject
+                    {
+                        ["op"] = "insertAfter",
+                        ["find"] = "End Sub",
+                        ["text"] = "Public Sub Added()\nEnd Sub"
+                    }
+                };
 
                 var result = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
 
                 AssertTrue(result.Success, "patch result");
                 AssertContains(adapter.GetVbaModuleCode("Module2"), "\"new\"", "module2 updated");
+                AssertContains(adapter.GetVbaModuleCode("Module2"), "End Sub\nPublic Sub Added()", "insertAfter adds a safe line boundary");
+                AssertTrue(adapter.GetVbaModuleCode("Module2").IndexOf("End SubPublic", StringComparison.Ordinal) < 0, "insertAfter does not concatenate procedures");
                 AssertContains(adapter.GetVbaModuleCode("Module1"), "\"untouched\"", "module1 untouched");
                 var backups = backupStore.List("Excel", "doc");
                 AssertEqual(1, backups.Count, "backup count");
                 AssertEqual("Module2", backups[0].ModuleName, "backup module");
                 AssertContains(backups[0].Code, "\"old\"", "backup code");
+
+                var malformed = new ToolCommand { ToolId = executor.VbaToolId("vba_apply_patch") };
+                malformed.Arguments["moduleName"] = "Module2";
+                malformed.Arguments["expectedCodeSha256"] = VbaToolManifestParser.LiveCodeSha256(adapter.GetVbaModuleCode("Module2"));
+                malformed.Arguments["patch"] = "[{\"op\":\"replace\"}}trailing";
+                var malformedResult = executor.Execute(malformed, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
+                AssertTrue(!malformedResult.Success, "malformed patch rejected");
+                AssertContains(malformedResult.Message, "$.patch must be a native JSON array", "malformed patch diagnostic");
+
+                var emptyAnchor = Command(
+                    "excel.vba_apply_patch",
+                    "moduleName", "Module2",
+                    "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(adapter.GetVbaModuleCode("Module2")),
+                    "patch", new JArray(new JObject { ["op"] = "insertBefore", ["find"] = string.Empty, ["text"] = "Debug.Print 1" }));
+                var emptyAnchorResult = executor.Execute(emptyAnchor, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
+                AssertTrue(!emptyAnchorResult.Success, "empty insertion anchor rejected");
+                AssertContains(emptyAnchorResult.Message, "shorter than minLength", "empty insertion anchor schema diagnostic");
             });
         }
 
@@ -283,6 +316,27 @@ namespace RNAssistant.Harness
             AssertTrue(!result.Success, "hidden BOM rejected");
             AssertEqual("vba_code_invalid", result.ErrorCode, "hidden BOM error code");
             AssertContains(component.CodeModule.Code, "Sub Main", "invalid write leaves code unchanged");
+
+            var rawControl = VbaProjectSupport.ReplaceModule(document, "Module1", "Sub Changed()\nDebug.Print \"a\u000bb\"\nEnd Sub", false);
+            AssertTrue(!rawControl.Success, "raw control character rejected");
+            AssertContains(rawControl.Message, "U+000B", "control character code reported");
+            AssertContains(rawControl.Message, "ChrW$(11)", "control character fix explained");
+
+            var joinedProcedures = VbaProjectSupport.ReplaceModule(
+                document,
+                "Module1",
+                "Public Function One() As Long\nOne = 1\nEnd FunctionPublic Function Two() As Long\nTwo = 2\nEnd Function",
+                false);
+            AssertTrue(!joinedProcedures.Success, "joined procedures rejected");
+            AssertContains(joinedProcedures.Message, "join a block terminator", "joined procedure diagnostic");
+            AssertContains(component.CodeModule.Code, "Sub Main", "joined procedure write leaves code unchanged");
+
+            var commentText = VbaProjectSupport.ReplaceModule(
+                document,
+                "Module1",
+                "Sub Main()\nRem End FunctionPublic Function is diagnostic text\nEnd Sub",
+                false);
+            AssertTrue(commentText.Success, "Rem comment does not trigger joined procedure guard");
 
             var cleared = VbaProjectSupport.ReplaceModule(document, "Module1", string.Empty, false);
             AssertTrue(cleared.Success, "existing module can be cleared");

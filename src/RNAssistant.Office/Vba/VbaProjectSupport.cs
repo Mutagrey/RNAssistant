@@ -639,12 +639,91 @@ namespace RNAssistant.Office
                 }
                 if (char.IsControl(value) && value != '\r' && value != '\n' && value != '\t')
                 {
-                    error = "VBA code contains an unsupported control character at character " + index + ".";
+                    error = "VBA code contains raw control character U+" + ((int)value).ToString("X4") +
+                        " at character " + index + ". Use a VBA expression such as ChrW$(" + ((int)value) +
+                        ") instead of embedding the control character in source text.";
                     return false;
                 }
             }
+            int joinedLine;
+            string joinedFragment;
+            if (TryFindJoinedVbaBlock(code, out joinedLine, out joinedFragment))
+            {
+                error = "VBA code appears to join a block terminator and following code on line " + joinedLine +
+                    " near '" + joinedFragment + "'. Insert a line break before writing.";
+                return false;
+            }
             error = null;
             return true;
+        }
+
+        private static bool TryFindJoinedVbaBlock(string code, out int lineNumber, out string fragment)
+        {
+            var terminators = new[] { "End Sub", "End Function", "End Property", "End Type", "End Enum" };
+            var lines = (code ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+            for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++)
+            {
+                var executable = VbaCodeOutsideStringsAndComments(lines[lineIndex]);
+                foreach (var terminator in terminators)
+                {
+                    var searchFrom = 0;
+                    while (searchFrom < executable.Length)
+                    {
+                        var found = executable.IndexOf(terminator, searchFrom, StringComparison.OrdinalIgnoreCase);
+                        if (found < 0) break;
+                        var after = found + terminator.Length;
+                        var remainder = executable.Substring(after).Trim();
+                        if (remainder.Length > 0)
+                        {
+                            lineNumber = lineIndex + 1;
+                            var sourceFragment = lines[lineIndex].Substring(found).Trim();
+                            fragment = sourceFragment.Substring(0, Math.Min(80, sourceFragment.Length));
+                            return true;
+                        }
+                        searchFrom = after;
+                    }
+                }
+            }
+            lineNumber = 0;
+            fragment = string.Empty;
+            return false;
+        }
+
+        private static string VbaCodeOutsideStringsAndComments(string line)
+        {
+            var source = line ?? string.Empty;
+            var output = new StringBuilder(source.Length);
+            var inString = false;
+            for (var index = 0; index < source.Length; index++)
+            {
+                var value = source[index];
+                if (!inString && value == '\'') break;
+                if (!inString && IsVbaRemComment(source, index)) break;
+                if (value == '"')
+                {
+                    output.Append(' ');
+                    if (inString && index + 1 < source.Length && source[index + 1] == '"')
+                    {
+                        output.Append(' ');
+                        index++;
+                        continue;
+                    }
+                    inString = !inString;
+                    continue;
+                }
+                output.Append(inString ? ' ' : value);
+            }
+            return output.ToString();
+        }
+
+        private static bool IsVbaRemComment(string source, int index)
+        {
+            if (index < 0 || index + 3 > (source ?? string.Empty).Length ||
+                !string.Equals(source.Substring(index, 3), "Rem", StringComparison.OrdinalIgnoreCase)) return false;
+            var validBefore = index == 0 || char.IsWhiteSpace(source[index - 1]) || source[index - 1] == ':';
+            var after = index + 3;
+            var validAfter = after >= source.Length || char.IsWhiteSpace(source[after]);
+            return validBefore && validAfter;
         }
 
         private static string ComponentTypeName(int type)
