@@ -144,6 +144,8 @@ namespace RNAssistant.Harness
                 Test("vba: backup failure blocks replacement", VbaBackupFailureBlocksReplacement),
                 Test("vba: patch rejects line overrun", VbaPatchRejectsLineOverrun),
                 Test("vba: live hash preserves line structure", VbaLiveHashPreservesLineStructure),
+                Test("vba: VBE normalization is accepted", VbaReadBackAcceptsVbeNormalization),
+                Test("vba: COM write accepts VBE line metadata", VbaProjectWriteAcceptsVbeNormalization),
                 Test("vba: read lines returns exact range", VbaReadLinesReturnsExactRange),
                 Test("vba: patch rejects ambiguous anchors", VbaPatchRejectsAmbiguousAnchors),
                 Test("vba: line patch ignores one terminator", VbaLinePatchDoesNotInsertTrailingBlankLine),

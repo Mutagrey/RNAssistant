@@ -36,7 +36,7 @@ namespace RNAssistant.Office.Tools
             yield return ControllerToolDefinition.Create(ToolId("vba_search_code"), _adapter.HostName, "Read-only: Search literal or regex patterns across VBA component code.", "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Non-empty literal or regular-expression search query.\",\"minLength\":1,\"maxLength\":2048},\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"maxResults\":{\"type\":\"integer\",\"description\":\"Maximum number of matches returned.\",\"default\":100,\"minimum\":1,\"maximum\":500},\"contextChars\":{\"type\":\"integer\",\"description\":\"Maximum context characters returned around each match.\",\"default\":80,\"minimum\":0,\"maximum\":1000}},\"required\":[\"query\"],\"additionalProperties\":false}");
             yield return ControllerToolDefinition.Create(ToolId("vba_restore_backup"), _adapter.HostName, "Mutates document: Restore a VBA module from an exact backupId, or restore the latest backup for moduleName when backupId is omitted.", "{\"type\":\"object\",\"properties\":{\"backupId\":{\"type\":\"string\",\"description\":\"Exact rollback backup identifier from vba_list_backups.\"},\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name; used only to select its latest backup when backupId is omitted.\"}},\"required\":[],\"additionalProperties\":false}", mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_replace_text"), _adapter.HostName, "Mutates document: Replace one exact text fragment, or all exact occurrences when replaceAll=true. Requires the current module hash and creates a rollback backup.", ReplaceTextSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
-            yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), _adapter.HostName, "Mutates document: Apply ordered structured literal, regex, insertion, or line patches. Requires the current module hash and creates a rollback backup.", ApplyPatchSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), _adapter.HostName, "Mutates document: Apply ordered structured literal, regex, insertion, or line patches. patch must be a native JSON array, not a JSON string. Requires the current module hash and creates a rollback backup.", ApplyPatchSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_create_module"), _adapter.HostName, "Mutates document: Create a new StdModule or ClassModule and return its code hash. Document modules and UserForms cannot be created.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact new VBA component name.\"},\"componentType\":{\"type\":\"string\",\"description\":\"VBA component type.\",\"default\":\"StdModule\",\"enum\":[\"StdModule\",\"ClassModule\"]},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code, normally beginning with Option Explicit.\",\"minLength\":1}},\"required\":[\"moduleName\",\"code\"],\"additionalProperties\":false}", mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_delete_module"), _adapter.HostName, "Mutates document: Delete a StdModule or ClassModule after current-hash validation and backup. Document modules and UserForms cannot be deleted.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"expectedCodeSha256\":{\"type\":\"string\",\"description\":\"Exact current codeSha256 returned by vba_read_module, vba_read_lines, or vba_search_code.\"}},\"required\":[\"moduleName\",\"expectedCodeSha256\"],\"additionalProperties\":false}", mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
         }
@@ -526,6 +526,8 @@ namespace RNAssistant.Office.Tools
             }
 
             var code = module.Code;
+            find = MatchLineEndings(find, code);
+            replace = MatchLineEndings(replace, code);
             var expectedHash = ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", string.Empty);
             var currentHash = CodeSha256(code);
             if (string.IsNullOrWhiteSpace(expectedHash) || !string.Equals(expectedHash, currentHash, StringComparison.OrdinalIgnoreCase))
@@ -734,6 +736,7 @@ namespace RNAssistant.Office.Tools
             string expectedComponentType = null)
         {
             var expectedHash = CodeSha256(expectedCode);
+            var expectedComparableHash = VbaToolManifestParser.VbeComparableCodeSha256(expectedCode);
             var expectedLineCount = VbaToolManifestParser.LiveCodeLineCount(expectedCode);
             VbaModuleState actual;
             ToolResult readError;
@@ -747,20 +750,49 @@ namespace RNAssistant.Office.Tools
             }
 
             var actualHash = CodeSha256(actual.Code);
-            var lineCountMatches = expectedLineCount == actual.LineCount;
+            var actualComparableHash = VbaToolManifestParser.VbeComparableCodeSha256(actual.Code);
+            var codeMatches = string.Equals(expectedComparableHash, actualComparableHash, StringComparison.OrdinalIgnoreCase);
             var componentTypeMatches = string.IsNullOrWhiteSpace(expectedComponentType) ||
                 string.Equals(expectedComponentType, actual.ComponentType, StringComparison.OrdinalIgnoreCase);
-            if (!string.Equals(expectedHash, actualHash, StringComparison.OrdinalIgnoreCase) || !lineCountMatches || !componentTypeMatches)
+            if (!codeMatches || !componentTypeMatches)
             {
                 return ToolResult.PartialFailure(
                     "VBA write verification failed for " + moduleName +
-                    ": final code hash, line count, or component type differs from the requested state.",
+                    ": final code or component type differs from the requested state.",
                     VerificationData(moduleName, expectedHash, actualHash, successDataJson, expectedComponentType, actual.ComponentType, expectedLineCount, actual.LineCount),
                     (errorPrefix ?? "vba_write") + "_verify_mismatch");
             }
 
-            return ToolResult.Ok(successMessage, successDataJson ?? VerificationData(
-                moduleName, expectedHash, actualHash, null, expectedComponentType, actual.ComponentType));
+            return ToolResult.Ok(successMessage, SuccessfulVerificationData(
+                moduleName,
+                expectedHash,
+                actualHash,
+                successDataJson,
+                actual.ComponentType,
+                actual.LineCount));
+        }
+
+        private static string SuccessfulVerificationData(
+            string moduleName,
+            string requestedHash,
+            string actualHash,
+            string operationDataJson,
+            string actualComponentType,
+            int actualLineCount)
+        {
+            JObject data;
+            try { data = string.IsNullOrWhiteSpace(operationDataJson) ? new JObject() : JObject.Parse(operationDataJson); }
+            catch (JsonException) { data = new JObject { ["operationData"] = operationDataJson ?? string.Empty }; }
+            data["moduleName"] = moduleName ?? string.Empty;
+            data["codeSha256"] = actualHash;
+            data["lineCount"] = actualLineCount;
+            data["componentType"] = actualComponentType ?? string.Empty;
+            data["vbeNormalized"] = !string.Equals(requestedHash, actualHash, StringComparison.OrdinalIgnoreCase);
+            if (!string.Equals(requestedHash, actualHash, StringComparison.OrdinalIgnoreCase))
+            {
+                data["requestedCodeSha256"] = requestedHash;
+            }
+            return data.ToString(Formatting.None);
         }
 
         private static string VerificationData(
@@ -1005,8 +1037,8 @@ namespace RNAssistant.Office.Tools
         {
             updated = current;
             var op = ((string)(operation["op"] ?? operation["type"]) ?? string.Empty).Trim();
-            var find = (string)(operation["find"] ?? operation["anchor"]);
-            var text = (string)(operation["text"] ?? operation["replace"] ?? operation["code"]) ?? string.Empty;
+            var find = MatchLineEndings((string)(operation["find"] ?? operation["anchor"]), current);
+            var text = MatchLineEndings((string)(operation["text"] ?? operation["replace"] ?? operation["code"]) ?? string.Empty, current);
             switch (op.ToLowerInvariant())
             {
                 case "replace":
@@ -1113,6 +1145,15 @@ namespace RNAssistant.Office.Tools
                 : current.Substring(0, index) + replacement + current.Substring(index + find.Length);
         }
 
+        private static string MatchLineEndings(string value, string current)
+        {
+            if (value == null) return null;
+            var newline = (current ?? string.Empty).IndexOf("\r\n", StringComparison.Ordinal) >= 0
+                ? "\r\n"
+                : (current ?? string.Empty).IndexOf('\r') >= 0 ? "\r" : "\n";
+            return value.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", newline);
+        }
+
         private static ToolResult ReplaceLines(string current, JObject operation, string text, out string updated)
         {
             updated = current;
@@ -1189,7 +1230,7 @@ namespace RNAssistant.Office.Tools
             return "{\"type\":\"object\",\"properties\":{" +
                 "\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"}," +
                 "\"expectedCodeSha256\":{\"type\":\"string\",\"description\":\"Exact current codeSha256 returned by vba_read_module, vba_read_lines, or vba_search_code.\"}," +
-                "\"patch\":{\"type\":\"array\",\"description\":\"Ordered patch operations applied to one current module snapshot.\",\"minItems\":1,\"maxItems\":100,\"items\":{" +
+                "\"patch\":{\"type\":\"array\",\"description\":\"Native JSON array of ordered patch operations applied to one current module snapshot; never encode this array as a string.\",\"minItems\":1,\"maxItems\":100,\"items\":{" +
                     "\"type\":\"object\",\"properties\":{" +
                         "\"op\":{\"type\":\"string\",\"description\":\"Operation: replace requires one exact match; replaceAll is explicit; replaceFirst changes the first; insertBefore/insertAfter require one unique anchor; replaceLines uses current sequential line coordinates; regexReplace uses pattern.\",\"enum\":[\"replace\",\"replaceAll\",\"replaceFirst\",\"insertBefore\",\"insertAfter\",\"replaceLines\",\"regexReplace\"]}," +
                         "\"find\":{\"type\":\"string\",\"description\":\"Exact text or unique insertion anchor for literal operations.\"}," +

@@ -138,6 +138,80 @@ namespace RNAssistant.Harness
             AssertTrue(
                 !string.Equals(VbaToolManifestParser.LiveCodeSha256("' RNAssistantSession: id=x\nOption Explicit"), VbaToolManifestParser.LiveCodeSha256("Option Explicit"), StringComparison.Ordinal),
                 "runtime marker changes live hash");
+            AssertEqual(
+                VbaToolManifestParser.VbeComparableCodeSha256("Sub Main()\n    Debug.Print \"Value\"\nEnd Sub"),
+                VbaToolManifestParser.VbeComparableCodeSha256("sub Main ( )\r\nDebug.Print \"Value\"\r\nend sub\r\n\r\n"),
+                "VBE-only formatting is comparable");
+            AssertTrue(
+                !string.Equals(
+                    VbaToolManifestParser.VbeComparableCodeSha256("Debug.Print \"Value\""),
+                    VbaToolManifestParser.VbeComparableCodeSha256("Debug.Print \"Changed\""),
+                    StringComparison.Ordinal),
+                "string literal changes remain significant");
+            AssertTrue(
+                !string.Equals(
+                    VbaToolManifestParser.VbeComparableCodeSha256("End Sub"),
+                    VbaToolManifestParser.VbeComparableCodeSha256("EndSub"),
+                    StringComparison.Ordinal),
+                "token boundaries remain significant");
+        }
+
+        private static void VbaReadBackAcceptsVbeNormalization()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                adapter.VbaModuleCode = "Sub Main()\r\nDebug.Print \"old\"\r\nEnd Sub";
+                adapter.VbaReportedLineCountOffset = 1;
+                adapter.VbaWriteTransform = code =>
+                    code.Replace("Sub Main()", "sub Main ( )") + "\r\n\r\n";
+                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths));
+                var patch = new JArray
+                {
+                    new JObject
+                    {
+                        ["op"] = "replace",
+                        ["find"] = "Sub Main()\nDebug.Print \"old\"",
+                        ["text"] = "Sub Main()\nDebug.Print \"new\""
+                    }
+                };
+                var command = Command(
+                    "excel.vba_apply_patch",
+                    "moduleName", "Module1",
+                    "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode),
+                    "patch", patch);
+
+                var result = executor.Execute(
+                    command,
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false);
+
+                AssertTrue(result.Success, "VBE-normalized patch result");
+                AssertContains(adapter.VbaModuleCode, "\"new\"", "patch was applied");
+                var data = JObject.Parse(result.DataJson);
+                AssertEqual(true, (bool)data["vbeNormalized"], "VBE normalization reported");
+                AssertEqual(VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode), (string)data["codeSha256"], "actual read-back hash returned");
+            });
+        }
+
+        private static void VbaProjectWriteAcceptsVbeNormalization()
+        {
+            var document = new FakeVbaDocumentObject();
+            var component = document.VBProject.VBComponents.Seed("Module1", "Sub Original()\nEnd Sub");
+            component.CodeModule.ReportedLineCountOffset = 1;
+            component.CodeModule.WriteTransform = code =>
+                code.Replace("Sub Changed()", "sub Changed ( )") + "\r\n\r\n";
+
+            var result = VbaProjectSupport.ReplaceModule(document, "Module1", "Sub Changed()\nEnd Sub\n", false);
+
+            AssertTrue(result.Success, "COM write accepts VBE normalization and phantom line count");
+            AssertContains(component.CodeModule.Code, "Changed", "changed code remains in module");
+            AssertEqual(
+                VbaToolManifestParser.VbeComparableCodeSha256("Sub Changed()\nEnd Sub"),
+                VbaToolManifestParser.VbeComparableCodeSha256(component.CodeModule.Code),
+                "read-back code is VBE-equivalent");
         }
 
         private static void VbaReadLinesReturnsExactRange()

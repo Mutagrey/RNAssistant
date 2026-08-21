@@ -519,15 +519,15 @@ namespace RNAssistant.Office
                 throw new InvalidOperationException((operation ?? "VBA write") + " verification found no component.");
             }
             var expectedHash = VbaToolManifestParser.LiveCodeSha256(expectedCode);
-            var actualHash = VbaToolManifestParser.LiveCodeSha256(ReadComponentCode(componentObject));
-            dynamic component = componentObject;
-            var expectedLineCount = VbaToolManifestParser.LiveCodeLineCount(expectedCode);
-            var actualLineCount = (int)component.CodeModule.CountOfLines;
-            if (!string.Equals(expectedHash, actualHash, StringComparison.OrdinalIgnoreCase) || expectedLineCount != actualLineCount)
+            var actualCode = ReadComponentCode(componentObject);
+            var actualHash = VbaToolManifestParser.LiveCodeSha256(actualCode);
+            var expectedComparableHash = VbaToolManifestParser.VbeComparableCodeSha256(expectedCode);
+            var actualComparableHash = VbaToolManifestParser.VbeComparableCodeSha256(actualCode);
+            if (!string.Equals(expectedComparableHash, actualComparableHash, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
-                    (operation ?? "VBA write") + " verification failed: expected hash/lines " + expectedHash + "/" + expectedLineCount +
-                    ", actual " + actualHash + "/" + actualLineCount + ".");
+                    (operation ?? "VBA write") + " verification failed: expected/actual live hashes " + expectedHash + "/" + actualHash +
+                    ", VBE-comparable hashes " + expectedComparableHash + "/" + actualComparableHash + ".");
             }
         }
 
@@ -611,8 +611,8 @@ namespace RNAssistant.Office
             {
                 throw new InvalidOperationException(validationError);
             }
-            var normalized = (code ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
-            if (VbaToolManifestParser.NormalizeLiveCode(normalized).Length == 0) return string.Empty;
+            var normalized = VbaToolManifestParser.NormalizeLiveCode(code ?? string.Empty);
+            if (normalized.Length == 0) return string.Empty;
             return normalized.Replace("\n", "\r\n");
         }
 

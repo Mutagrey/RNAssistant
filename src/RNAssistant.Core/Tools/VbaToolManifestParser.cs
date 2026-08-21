@@ -178,6 +178,11 @@ namespace RNAssistant.Core.Tools
             return Sha256(NormalizeLiveCode(code));
         }
 
+        public static string VbeComparableCodeSha256(string code)
+        {
+            return Sha256(NormalizeVbeComparableCode(code));
+        }
+
         public static string NormalizeLiveCode(string code)
         {
             var normalized = (code ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
@@ -198,6 +203,90 @@ namespace RNAssistant.Core.Tools
                 if (normalized[index] == '\n') count++;
             }
             return count;
+        }
+
+        public static string NormalizeVbeComparableCode(string code)
+        {
+            var lines = (code ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').ToList();
+            while (lines.Count > 0 && string.IsNullOrWhiteSpace(lines[lines.Count - 1]))
+            {
+                lines.RemoveAt(lines.Count - 1);
+            }
+
+            return string.Join("\n", lines.Select(NormalizeVbeComparableLine).ToArray());
+        }
+
+        private static string NormalizeVbeComparableLine(string line)
+        {
+            var output = new StringBuilder();
+            line = line ?? string.Empty;
+            var index = 0;
+            while (index < line.Length)
+            {
+                var value = line[index];
+                if (char.IsWhiteSpace(value))
+                {
+                    index++;
+                    continue;
+                }
+                if (value == '\'')
+                {
+                    AppendVbeToken(output, line.Substring(index).TrimEnd());
+                    break;
+                }
+                if (value == '"' || value == '[')
+                {
+                    var start = index++;
+                    var terminator = value == '"' ? '"' : ']';
+                    while (index < line.Length)
+                    {
+                        if (line[index] != terminator)
+                        {
+                            index++;
+                            continue;
+                        }
+                        if (terminator == '"' && index + 1 < line.Length && line[index + 1] == '"')
+                        {
+                            index += 2;
+                            continue;
+                        }
+                        index++;
+                        break;
+                    }
+                    AppendVbeToken(output, line.Substring(start, index - start));
+                    continue;
+                }
+                if (char.IsLetterOrDigit(value) || value == '_')
+                {
+                    var start = index++;
+                    while (index < line.Length && (char.IsLetterOrDigit(line[index]) || line[index] == '_')) index++;
+                    if (index < line.Length && "%&@!#$".IndexOf(line[index]) >= 0) index++;
+                    AppendVbeToken(output, line.Substring(start, index - start).ToLowerInvariant());
+                    continue;
+                }
+
+                var token = value.ToString();
+                if (index + 1 < line.Length && IsVbaCompoundOperator(value, line[index + 1]))
+                {
+                    token += line[++index];
+                }
+                AppendVbeToken(output, token.ToLowerInvariant());
+                index++;
+            }
+            return output.ToString();
+        }
+
+        private static bool IsVbaCompoundOperator(char first, char second)
+        {
+            return first == '<' && (second == '=' || second == '>') ||
+                   first == '>' && second == '=' ||
+                   first == ':' && second == '=' ||
+                   (first == '+' || first == '-' || first == '*' || first == '/' || first == '\\' || first == '^' || first == '&') && second == '=';
+        }
+
+        private static void AppendVbeToken(StringBuilder output, string token)
+        {
+            output.Append((token ?? string.Empty).Length).Append(':').Append(token).Append(';');
         }
 
         private static string Sha256(string value)

@@ -17,6 +17,8 @@ namespace RNAssistant.Harness
         public readonly List<string> RanMacros = new List<string>();
         public bool FailUnknownSkills { get; set; }
         public string ThrowOnToolId { get; set; }
+        public Func<string, string> VbaWriteTransform { get; set; }
+        public int VbaReportedLineCountOffset { get; set; }
         public string DocumentKeyValue { get; set; }
         public string RuntimeDocumentKeyValue { get; set; }
 
@@ -294,7 +296,7 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("read " + command.ToolId, JsonConvert.SerializeObject(new
                 {
                     title = DocumentTitle,
-                    modules = _vbaModules.Values.Select(module => new { name = module.Name, type = module.Type, lineCount = LineCount(module.Code) }).ToArray()
+                    modules = _vbaModules.Values.Select(module => new { name = module.Name, type = module.Type, lineCount = LineCount(module.Code) + VbaReportedLineCountOffset }).ToArray()
                 }));
             }
 
@@ -314,7 +316,7 @@ namespace RNAssistant.Harness
                     name = module.Name,
                     code = returnedCode,
                     type = module.Type,
-                    lineCount = LineCount(module.Code),
+                    lineCount = LineCount(module.Code) + VbaReportedLineCountOffset,
                     codeSha256 = VbaToolManifestParser.LiveCodeSha256(module.Code),
                     truncated = !string.Equals(returnedCode, module.Code, StringComparison.Ordinal)
                 }));
@@ -355,7 +357,8 @@ namespace RNAssistant.Harness
 
             if ((command.ToolId ?? string.Empty).EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase))
             {
-                SetVbaModule(Argument(command, "moduleName", "Module1"), Argument(command, "code", string.Empty), VbaModuleType);
+                var code = Argument(command, "code", string.Empty);
+                SetVbaModule(Argument(command, "moduleName", "Module1"), VbaWriteTransform == null ? code : VbaWriteTransform(code), VbaModuleType);
                 return ToolResult.Ok("replaced " + command.ToolId);
             }
 
@@ -405,7 +408,8 @@ namespace RNAssistant.Harness
             {
                 var name = Argument(command, "moduleName", "Module1");
                 if (_vbaModules.ContainsKey(name)) return ToolResult.Fail("VBA module already exists: " + name, null, "vba_module_exists", false);
-                SetVbaModule(name, Argument(command, "code", string.Empty), Argument(command, "componentType", "StdModule"));
+                var code = Argument(command, "code", string.Empty);
+                SetVbaModule(name, VbaWriteTransform == null ? code : VbaWriteTransform(code), Argument(command, "componentType", "StdModule"));
                 return ToolResult.Ok("fake VBA module created");
             }
 

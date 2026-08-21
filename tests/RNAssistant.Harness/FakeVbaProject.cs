@@ -84,8 +84,10 @@ namespace RNAssistant.Harness
         }
 
         public bool FailNextAdd { get; set; }
+        public Func<string, string> WriteTransform { get; set; }
+        public int ReportedLineCountOffset { get; set; }
         public string Code { get { return _code; } }
-        public int CountOfLines { get { return VbaToolManifestParser.LiveCodeLineCount(_code); } }
+        public int CountOfLines { get { return string.IsNullOrEmpty(_code) ? 0 : VbaToolManifestParser.LiveCodeLineCount(_code) + ReportedLineCountOffset; } }
         public FakeVbaLines Lines { get; private set; }
 
         public void DeleteLines(int startLine, int count)
@@ -104,7 +106,7 @@ namespace RNAssistant.Harness
                 FailNextAdd = false;
                 throw new InvalidOperationException("scripted VBA write failure");
             }
-            _code = code ?? string.Empty;
+            _code = WriteTransform == null ? code ?? string.Empty : WriteTransform(code ?? string.Empty);
         }
 
         public void InsertLines(int startLine, string code)

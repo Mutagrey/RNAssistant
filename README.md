@@ -307,7 +307,7 @@ Office VBA support requires Office setting `Trust access to the VBA project obje
 - `Save Module` replaces the selected module and stores the previous version under `%AppData%\RNAssistant\vba-backups`.
 - `Restore Backup` restores the selected backup; restoring also backs up the current module first.
 - Existing-module writes fail closed when a rollback backup cannot be created. A failed code write restores the original module when Office still permits access.
-- VBA writes retain local backup, strict live-code expected-hash, ownership, stale-state, and post-write read-back checks inside the VBA tools. Line endings are canonicalized for VBIDE, while leading/trailing blank-line structure and service markers remain hash-visible.
+- VBA writes retain local backup, strict live-code expected-hash, ownership, stale-state, and post-write read-back checks inside the VBA tools. The concurrency hash represents the exact code read from VBIDE; post-write verification accepts only VBE-equivalent case/spacing/terminal-line normalization and returns the actual read-back hash.
 - `Review in Chat` sends loaded VBA modules to chat for review and improvement suggestions.
 
 The Agent can list/read/search VBA, read an exact range through `*.vba_read_lines`, and use the public `*.vba_replace_text`, `*.vba_apply_patch`, `*.vba_create_module`, `*.vba_delete_module`, and backup restore tools. Mutations require confirmation and create rollback backups. Edit/delete calls require the current `codeSha256` from read/search; stale code is rejected. The raw whole-module replacement, insert, and arbitrary macro backend tools remain hidden from Agent selection.
