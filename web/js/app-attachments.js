@@ -45,7 +45,6 @@ async function addAttachmentFiles(files) {
     log("Лимит: 20 МБ на файл и 50 МБ на сообщение.");
     return;
   }
-  setActivity("uploading", "Добавляю вложения...");
   try {
     for (var index = 0; index < files.length; index += 1) {
       var file = files[index];
@@ -62,8 +61,6 @@ async function addAttachmentFiles(files) {
   } catch (error) {
     log(error.detail || error.message);
     return;
-  } finally {
-    clearActivity();
   }
 }
 

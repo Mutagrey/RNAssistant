@@ -8,7 +8,6 @@
   function artifactKind(artifact) { return value(artifact, "Kind", "kind", "file"); }
   function artifactTitle(artifact) { return value(artifact, "Title", "title", "Артефакт"); }
   function artifactRevision(artifact) { return Number(value(artifact, "Revision", "revision", 1) || 1); }
-  function artifactInlineText(artifact) { return value(artifact, "InlineText", "inlineText", "") || ""; }
   function artifactById(id) {
     return (state.artifacts || []).filter(function (artifact) { return artifactId(artifact) === id; })[0] || null;
   }
@@ -30,23 +29,6 @@
       tool_result: "Результат"
     };
     return labels[kind] || "Артефакт";
-  }
-
-  function planDetails(artifact) {
-    var parsed;
-    try { parsed = JSON.parse(artifactInlineText(artifact)); } catch (error) { return null; }
-    var steps = parsed && (parsed.steps || parsed.Steps);
-    if (!Array.isArray(steps)) return null;
-    var list = document.createElement("ol");
-    list.className = "artifact-plan-list";
-    steps.forEach(function (step) {
-      var item = document.createElement("li");
-      var status = String((step && (step.status || step.Status)) || "pending").toLowerCase();
-      item.className = "status-" + status;
-      item.textContent = (step && (step.text || step.Text)) || String(step || "");
-      list.appendChild(item);
-    });
-    return list;
   }
 
   function artifactCard(artifact) {
@@ -71,9 +53,6 @@
     header.appendChild(meta);
     card.appendChild(header);
 
-    var detail = kind === "plan" ? planDetails(artifact) : null;
-    if (detail) card.appendChild(detail);
-
     if (kind === "html_workspace" && artifactId(artifact) === state.activeHtmlArtifactId) {
       var button = document.createElement("button");
       button.type = "button";
@@ -89,7 +68,7 @@
     if (!parent || !message) return;
     var artifacts = messageArtifactIds(message).map(artifactById).filter(Boolean).filter(function (artifact) {
       var kind = artifactKind(artifact);
-      return kind !== "attachment" && kind !== "image";
+      return kind !== "attachment" && kind !== "image" && kind !== "plan";
     });
     if (!artifacts.length) return;
     var wrap = document.createElement("div");

@@ -76,7 +76,6 @@ namespace RNAssistant.Core.Models
         public double TopP { get; set; }
         public int ContextWindowOverrideTokens { get; set; }
         public bool StreamResponses { get; set; }
-        public bool AutoRunToolCalls { get; set; }
         public bool AutoConfirmToolActions { get; set; }
         public bool SmartChatTitles { get; set; }
         public int MaxAgentIterations { get; set; }
@@ -125,7 +124,6 @@ namespace RNAssistant.Core.Models
             TopP = 1.0;
             ContextWindowOverrideTokens = 0;
             StreamResponses = true;
-            AutoRunToolCalls = true;
             AutoConfirmToolActions = false;
             SmartChatTitles = true;
             MaxAgentIterations = 8;

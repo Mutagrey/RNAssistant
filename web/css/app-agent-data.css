@@ -43,6 +43,11 @@
   font-weight: var(--button-font-weight);
 }
 
+.agent-table-note {
+  display: inline-block;
+  margin: 8px;
+}
+
 .agent-copy-button:hover,
 .agent-table-toggle:hover {
   border-color: var(--button-border-hover);

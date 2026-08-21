@@ -3,15 +3,12 @@ async function createChat() {
       !confirmDiscardHtmlWorkspaceChanges("Создать новый чат")) {
     return;
   }
-  setActivity("loading", "Создаю чат...");
   try {
     applyChatState(await send("createChat", { title: "Новый чат" }));
     clearSendError();
     log("Чат создан.");
   } catch (error) {
     log(error.detail || error.message);
-  } finally {
-    clearActivity();
   }
 }
 
@@ -23,7 +20,6 @@ async function createDocumentChat(documentItem) {
   }
 
   delete state.collapsedChatDocuments[documentItem.key];
-  setActivity("loading", "Создаю чат для «" + documentItem.title + "»...");
   try {
     applyChatState(await send("createDocumentChat", {
       title: "Новый чат",
@@ -36,8 +32,6 @@ async function createDocumentChat(documentItem) {
     log("Чат для документа создан.");
   } catch (error) {
     log(error.detail || error.message);
-  } finally {
-    clearActivity();
   }
 }
 
@@ -51,7 +45,6 @@ async function selectChat(id) {
     return;
   }
 
-  setActivity("loading", "Открываю чат...");
   try {
     applyChatState(await send("selectChat", { chatId: id }));
     restoreActiveChatRun();
@@ -60,8 +53,6 @@ async function selectChat(id) {
   } catch (error) {
     log(error.detail || error.message);
     renderChatSessions();
-  } finally {
-    clearActivity();
   }
 }
 
@@ -85,15 +76,12 @@ async function activateDocument(documentKey) {
       !confirmDiscardHtmlWorkspaceChanges("Переключить документ")) {
     return;
   }
-  setActivity("loading", "Активирую документ...");
   try {
     applyChatState(await send("activateDocument", { documentKey: documentKey }));
     log("Документ активирован.");
   } catch (error) {
     log(error.detail || error.message);
     window.alert(error.detail || error.message);
-  } finally {
-    clearActivity();
   }
 }
 
@@ -105,7 +93,6 @@ async function deleteDocument(host, documentKey, title) {
     return;
   }
 
-  setActivity("clearing", "Удаляю историю документа...");
   try {
     applyChatState(await send("deleteDocument", { host: host, documentKey: documentKey }));
     clearSendError();
@@ -113,8 +100,6 @@ async function deleteDocument(host, documentKey, title) {
   } catch (error) {
     log(error.detail || error.message);
     window.alert(error.detail || error.message);
-  } finally {
-    clearActivity();
   }
 }
 
@@ -152,22 +137,18 @@ async function clearChat() {
     return;
   }
 
-  setActivity("clearing", "Очищаю чат...");
   try {
     applyChatState(await send("clearChat", { chatId: state.activeChatId }));
     clearSendError();
     log("Чат очищен.");
   } catch (error) {
     log(error.detail || error.message);
-  } finally {
-    clearActivity();
   }
 }
 
 async function compactChatContext() {
   if (!state.activeChatId || currentActiveSend()) return;
   var previousCheckpointId = state.activeContextCheckpointId || "";
-  setActivity("compacting", "Сжимаю ранний контекст...");
   try {
     applyChatState(await send("compactChatContext", { chatId: state.activeChatId }));
     log(state.activeContextCheckpointId && state.activeContextCheckpointId !== previousCheckpointId
@@ -175,8 +156,6 @@ async function compactChatContext() {
       : "Контекст пока не требует сжатия.");
   } catch (error) {
     log(error.detail || error.message);
-  } finally {
-    clearActivity();
   }
 }
 
@@ -190,15 +169,12 @@ async function deleteChat(chatIdValue) {
     return;
   }
 
-  setActivity("clearing", "Удаляю чат...");
   try {
     applyChatState(await send("deleteChat", { chatId: targetChatId }));
     clearSendError();
     log("Чат удален.");
   } catch (error) {
     log(error.detail || error.message);
-  } finally {
-    clearActivity();
   }
 }
 
@@ -373,14 +349,11 @@ async function initialize() {
       !confirmDiscardHtmlWorkspaceChanges("Обновить состояние")) {
     return;
   }
-  setActivity("loading", "Загружаю состояние...");
   try {
     var init = await send("init");
     applyInitState(init);
   } catch (error) {
     applyBridgeUnavailableState(error);
-  } finally {
-    clearActivity();
   }
 }
 
@@ -389,15 +362,12 @@ async function clearRuntimeData() {
     return;
   }
 
-  setActivity("clearing", "Очищаю локальные данные...");
   try {
     var init = await send("clearRuntimeData", {});
     applyInitState(init);
     log("Локальные данные очищены.");
   } catch (error) {
     log(error.detail || error.message);
-  } finally {
-    clearActivity();
   }
 }
 
@@ -640,7 +610,6 @@ function removeLocalMessage(text) {
 async function sendChat(text, attachments) {
   attachments = attachments || [];
   var sentChatId = state.activeChatId;
-  setActivity("thinking", "Модель думает...");
   var request = send("sendChat", {
     chatId: state.activeChatId,
     text: text,
@@ -691,7 +660,6 @@ async function sendChat(text, attachments) {
     renderChatSessions();
     renderModelControls();
     renderSendControls();
-    if (state.activeChatId === sentChatId) clearActivity();
   }
 }
 
@@ -752,7 +720,6 @@ function stopActiveSend() {
   }
 
   activeSend.canceling = true;
-  setActivity("canceling", "Отменяю ответ...");
   renderSendControls();
   var run = state.chatRuns[state.activeChatId] || {};
   var cancellation = run.runId
@@ -832,7 +799,6 @@ async function confirmAgentTool(pendingId) {
     confirming: true
   };
   beginChatRunTracking(chatId);
-  setActivity("executing", "Исполняю подтвержденный tool...");
   renderChatRunControls();
   try {
     var response = await request;
@@ -845,7 +811,6 @@ async function confirmAgentTool(pendingId) {
     delete state.activeSends[chatId];
     endChatRunTracking(chatId);
     renderChatRunControls();
-    if (state.activeChatId === chatId) clearActivity();
   }
 }
 
@@ -854,14 +819,18 @@ async function cancelAgentTool(pendingId) {
     return;
   }
 
-  setActivity("canceling", "Отменяю tool...");
+  var approvalDock = $("agentApprovalDock");
+  if (approvalDock) {
+    Array.prototype.slice.call(approvalDock.querySelectorAll("button")).forEach(function (button) {
+      button.disabled = true;
+    });
+  }
   try {
     applyChatState(await send("cancelAgentTool", { chatId: state.activeChatId, pendingId: pendingId }));
     log("Agent tool cancelled.");
   } catch (error) {
     log(error.detail || error.message);
-  } finally {
-    clearActivity();
+    if (typeof renderAgentApprovalDock === "function") renderAgentApprovalDock();
   }
 }
 
@@ -887,7 +856,6 @@ async function toggleChatHtmlMode() {
     return;
   }
 
-  setActivity("saving", "Переключаю HTML mode...");
   try {
     applyChatState(await send("setChatHtmlMode", {
       chatId: state.activeChatId,
@@ -896,8 +864,6 @@ async function toggleChatHtmlMode() {
     log(state.activeChatHtmlMode ? "HTML mode включен." : "HTML mode выключен.");
   } catch (error) {
     log(error.detail || error.message);
-  } finally {
-    clearActivity();
   }
 }
 

@@ -98,6 +98,8 @@ namespace RNAssistant.Office
                         runCancellation.Token);
                     UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
                     pendingResolved = true;
+                    ReportProgress(runProgress, "tool_result", result == null ? string.Empty : result.Message,
+                        AgentTranscript.CreateToolActivity(CloneCommand(pending.Command), result, "tool"));
                     tools = _toolCatalog.GetVisibleTools().Where(tool => tool.Enabled).ToList();
                     var context = LoadContext(session);
                     var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();

@@ -66,7 +66,6 @@ var state = {
   toolsPath: "",
   skillsPath: "",
   vba: { modules: [], backups: [], selectedModule: "" },
-  activity: { visible: false, phase: "", message: "" },
   pending: {},
   seq: 1,
   focusReportTimer: null,
@@ -120,14 +119,6 @@ function logOnce(message) {
   }
   state.highlightLog[message] = true;
   log(message);
-}
-
-function setActivity(phase, message) {
-  state.activity = { visible: true, phase: phase || "working", message: message || "Выполняю..." };
-}
-
-function clearActivity() {
-  state.activity = { visible: false, phase: "", message: "" };
 }
 
 function send(type, payload) {
@@ -247,7 +238,6 @@ if (window.chrome && window.chrome.webview) {
             state.liveActivity = state.liveAgentRun[state.liveAgentRun.length - 1];
           }
         }
-        setActivity("streaming", "Модель формирует ответ...");
         if (typeof scheduleLiveStreamRender === "function") {
           scheduleLiveStreamRender();
         } else {
@@ -282,7 +272,6 @@ if (window.chrome && window.chrome.webview) {
         }
       }
       if (progressChatId !== state.activeChatId) { renderChatSessions(); return; }
-      setActivity(progress.phase || "working", progress.message || "Выполняю...");
       if (isChatProgress) {
         renderMessages();
       }

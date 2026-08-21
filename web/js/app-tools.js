@@ -344,7 +344,6 @@ async function changeVbaInstallation(action) {
   if (!tool) {
     return;
   }
-  setActivity("executing", action === "installVbaTool" ? "Устанавливаю VBA package..." : "Удаляю VBA package...");
   try {
     if (action === "installVbaTool") {
       var selectedId = tool.Id;
@@ -368,8 +367,6 @@ async function changeVbaInstallation(action) {
   } catch (error) {
     $("toolRunOutput").textContent = error.detail || error.message;
     log(error.message);
-  } finally {
-    clearActivity();
   }
 }
 
@@ -392,7 +389,6 @@ async function runSelectedTool(dryRun) {
     return;
   }
 
-  setActivity(dryRun ? "checking" : "executing", dryRun ? "Проверяю инструмент..." : "Запускаю инструмент...");
   $("toolRunOutput").textContent = dryRun ? "Проверка..." : "Выполняю...";
   try {
     var response = await send("runTool", {
@@ -405,8 +401,6 @@ async function runSelectedTool(dryRun) {
   } catch (error) {
     $("toolRunOutput").textContent = error.detail || error.message;
     log(error.message);
-  } finally {
-    clearActivity();
   }
 }
 

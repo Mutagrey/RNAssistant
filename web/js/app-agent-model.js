@@ -72,10 +72,6 @@ function activityPendingId(activity) {
   return activityValue(activity, "PendingId", "pendingId", "") || "";
 }
 
-function activityExecutionStatus(activity) {
-  return activityValue(activity, "ExecutionStatus", "executionStatus", "") || "";
-}
-
 function activityArgumentsJson(activity) {
   return activityValue(activity, "ArgumentsJson", "argumentsJson", "") || "";
 }
@@ -171,17 +167,6 @@ function cloneActivity(activity) {
   return JSON.parse(JSON.stringify(activity));
 }
 
-function recordLiveAgentActivity(activity) {
-  if (!activity) {
-    return;
-  }
-
-  if (!state.liveAgentRun) {
-    state.liveAgentRun = [];
-  }
-  return recordActivityTimeline(state.liveAgentRun, activity);
-}
-
 function activityCountStatus(activity, counts) {
   if (!activity || !counts) {
     return;
@@ -190,9 +175,6 @@ function activityCountStatus(activity, counts) {
   var status = activityStatus(activity);
   counts.total += 1;
   counts[status] = (counts[status] || 0) + 1;
-  activityChildren(activity).forEach(function (child) {
-    activityCountStatus(child, counts);
-  });
 }
 
 function collectRunActivities(items) {
@@ -214,7 +196,10 @@ function collectRunActivities(items) {
   return activities;
 }
 
-function currentRunActivity(activities) {
+function currentRunActivity(activities, finished) {
+  if (finished) {
+    return activities.length ? activities[activities.length - 1] : null;
+  }
   var preferred = ["running", "waiting", "failed", "cancelled"];
   for (var i = 0; i < preferred.length; i += 1) {
     for (var j = activities.length - 1; j >= 0; j -= 1) {
@@ -256,47 +241,22 @@ function agentRunElapsedText(items) {
   return formatElapsedTime(Math.max.apply(Math, dates) - Math.min.apply(Math, dates));
 }
 
-function agentRunStats(items) {
+function agentRunStats(items, finished) {
   var counts = { total: 0 };
   var activities = collectRunActivities(items || []);
   activities.forEach(function (activity) {
     activityCountStatus(activity, counts);
   });
-  var current = currentRunActivity(activities);
+  var current = currentRunActivity(activities, !!finished);
   var elapsed = agentRunElapsedText(items || []);
 
-  var parts = [];
-  if (counts.total) {
-    parts.push((counts.completed || 0) + "/" + counts.total + " completed");
-  }
-  if (counts.failed) {
-    parts.push(counts.failed + " failed");
-  }
-  if (counts.cancelled) {
-    parts.push(counts.cancelled + " cancelled");
-  }
-  if (counts.running) {
-    parts.push(counts.running + " running");
-  }
-  if (counts.waiting) {
-    parts.push(counts.waiting + " waiting");
-  }
-  if (elapsed) {
-    parts.push("elapsed " + elapsed);
-  }
-  if (current) {
-    parts.push("current: " + activityTitle(current));
-  }
-  if (!parts.length) {
-    parts.push("completed");
-  }
-
   return {
-    text: parts.join(" · "),
     current: current,
     counts: counts,
     elapsed: elapsed,
-    status: counts.failed ? "failed" : (counts.running ? "running" : (counts.waiting ? "waiting" : (counts.cancelled ? "cancelled" : "completed")))
+    status: finished
+      ? (counts.failed ? "completed_with_errors" : "completed")
+      : (counts.failed ? "failed" : (counts.running ? "running" : (counts.waiting ? "waiting" : (counts.cancelled ? "cancelled" : "completed"))))
   };
 }
 
@@ -334,15 +294,14 @@ function messageRunId(message) {
 
 function collectAgentRun(startIndex) {
   var items = [{ message: state.messages[startIndex], index: startIndex, activity: messageActivity(state.messages[startIndex]) }];
-  var runId = messageRunId(state.messages[startIndex]);
   var index = startIndex + 1;
   while (index < state.messages.length) {
     var candidate = state.messages[index];
-    if (messageProtocolMessage(candidate) && (!runId || messageRunId(candidate) === runId)) {
+    if (messageProtocolMessage(candidate)) {
       index += 1;
       continue;
     }
-    if (!(runId ? (messageRunId(candidate) === runId && !!messageActivity(candidate)) : isAgentRunContinuation(candidate))) {
+    if (!isAgentRunContinuation(candidate)) {
       break;
     }
     items.push({ message: candidate, index: index, activity: messageActivity(candidate) });
@@ -350,10 +309,8 @@ function collectAgentRun(startIndex) {
   }
 
   var finalMessage = null;
-  while (index < state.messages.length && messageProtocolMessage(state.messages[index]) &&
-      (!runId || messageRunId(state.messages[index]) === runId)) index += 1;
-  if (index < state.messages.length && isAgentRunFinalMessage(state.messages[index]) &&
-      (!runId || messageRunId(state.messages[index]) === runId)) {
+  while (index < state.messages.length && messageProtocolMessage(state.messages[index])) index += 1;
+  if (index < state.messages.length && isAgentRunFinalMessage(state.messages[index])) {
     finalMessage = { message: state.messages[index], index: index };
     index += 1;
   }

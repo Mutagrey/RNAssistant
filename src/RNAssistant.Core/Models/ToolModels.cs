@@ -133,11 +133,6 @@ namespace RNAssistant.Core.Models
             return new ToolResult { Success = false, Status = "waiting_confirmation", Retryable = false, Message = message };
         }
 
-        public static ToolResult SkippedAutoRun(string message)
-        {
-            return new ToolResult { Success = false, Status = "skipped_auto_run", Retryable = false, Message = message };
-        }
-
         public static ToolResult Cancelled(string message)
         {
             return new ToolResult { Success = false, Status = "cancelled", Retryable = false, Message = message };

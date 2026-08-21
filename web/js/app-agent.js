@@ -232,6 +232,7 @@ function appendActivityArtifacts(node, activity, context) {
 function agentStatusLabel(status) {
   var labels = {
     completed: "Готово",
+    completed_with_errors: "Завершено с ошибками",
     running: "Выполняю",
     waiting: "Нужно подтверждение",
     failed: "Ошибка",
@@ -546,7 +547,7 @@ function renderAgentRunArticle(run) {
   var items = run.items || [];
   var finalMessage = run.finalMessage || null;
   var timeline = collectVisibleAgentTimelineItems(items);
-  var stats = agentRunStats(items);
+  var stats = agentRunStats(items, !!finalMessage && !run.live);
   var node = document.createElement("article");
   node.className = "message assistant agent-run status-" + stats.status + (run.live ? " live" : "");
 

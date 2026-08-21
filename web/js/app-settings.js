@@ -109,7 +109,6 @@ function renderSettings() {
   });
   $("contextLimitInput").value = s.ContextWindowOverrideTokens || s.contextWindowOverrideTokens || 0;
   $("streamInput").checked = !!(s.StreamResponses || s.streamResponses);
-  $("autoRunToolsInput").checked = (s.AutoRunToolCalls !== false && s.autoRunToolCalls !== false);
   $("autoConfirmToolsInput").checked = !!(s.AutoConfirmToolActions || s.autoConfirmToolActions);
   $("autoCompressContextInput").checked = (s.AutoCompressContext !== false && s.autoCompressContext !== false);
   $("debugModelTrafficInput").checked = !!(s.DebugModelTraffic || s.debugModelTraffic);
@@ -159,7 +158,6 @@ function readSettings() {
     UiTheme: normalizeUiTheme((document.querySelector('input[name="uiTheme"]:checked') || {}).value),
     ContextWindowOverrideTokens: Number($("contextLimitInput").value || 0),
     StreamResponses: $("streamInput").checked,
-    AutoRunToolCalls: $("autoRunToolsInput").checked,
     AutoConfirmToolActions: $("autoConfirmToolsInput").checked,
     AutoCompressContext: $("autoCompressContextInput").checked,
     DebugModelTraffic: $("debugModelTrafficInput").checked,

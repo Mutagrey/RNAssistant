@@ -107,8 +107,7 @@ namespace RNAssistant.Office
         public static bool IsWaitingResult(ToolResult result)
         {
             var status = NormalizeExecutionStatus(result);
-            return string.Equals(status, "waiting_confirmation", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(status, "skipped_auto_run", StringComparison.OrdinalIgnoreCase);
+            return string.Equals(status, "waiting_confirmation", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string ToActivityStatus(ToolResult result)
@@ -119,8 +118,7 @@ namespace RNAssistant.Office
             }
 
             var status = NormalizeExecutionStatus(result);
-            if (string.Equals(status, "waiting_confirmation", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(status, "skipped_auto_run", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(status, "waiting_confirmation", StringComparison.OrdinalIgnoreCase))
             {
                 return "waiting";
             }

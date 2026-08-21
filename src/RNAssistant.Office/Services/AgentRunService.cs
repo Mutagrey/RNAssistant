@@ -211,10 +211,6 @@ namespace RNAssistant.Office.Services
                     {
                         toolResult = ToolResult.Fail("Agent tool step limit reached.", null, "tool_step_limit_reached", false);
                     }
-                    else if (!settings.AutoRunToolCalls)
-                    {
-                        toolResult = ToolResult.SkippedAutoRun("Automatic tool execution is disabled.");
-                    }
                     else
                     {
                         toolResult = _toolExecutor.Execute(

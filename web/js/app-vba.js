@@ -506,8 +506,7 @@ function previewVbaDiff() {
   $("vbaStatus").textContent = "Сравнение готово.";
 }
 
-async function withVbaActivity(message, work) {
-  setActivity("vba", message);
+async function runVbaWork(work) {
   try {
     await work();
     return true;
@@ -515,8 +514,6 @@ async function withVbaActivity(message, work) {
     $("vbaStatus").textContent = error.message;
     log(error.detail || error.message);
     return false;
-  } finally {
-    clearActivity();
   }
 }
 
@@ -532,7 +529,7 @@ function readVbaResult(response) {
 }
 
 async function refreshVbaProject() {
-  await withVbaActivity("Читаю VBA проект...", async function () {
+  await runVbaWork(async function () {
     var response = await send("getVbaProject", {});
     readVbaResult(response);
     await loadSelectedVbaModule();
@@ -546,7 +543,7 @@ async function saveVbaModule() {
   }
 
   previewVbaDiff();
-  if (await withVbaActivity("Сохраняю VBA-модуль...", async function () {
+  if (await runVbaWork(async function () {
     var response = await send("saveVbaModule", { moduleName: moduleName, code: vbaEditorCode() });
     $("vbaStatus").textContent = response.Message || response.message || "VBA-модуль сохранен.";
   })) {
@@ -557,7 +554,7 @@ async function saveVbaModule() {
 async function restoreVbaBackup() {
   var backupId = $("vbaBackupSelect").value;
   var moduleName = $("vbaModuleSelect").value;
-  if (await withVbaActivity("Восстанавливаю резервную копию VBA...", async function () {
+  if (await runVbaWork(async function () {
     var response = await send("restoreVbaBackup", { backupId: backupId, moduleName: moduleName });
     $("vbaStatus").textContent = response.Message || response.message || "Резервная копия VBA восстановлена.";
   })) {
@@ -654,7 +651,6 @@ async function runVbaMacro() {
     return;
   }
 
-  setActivity("vba", "Запускаю макрос...");
   $("runVbaMacroButton").disabled = true;
   try {
     var response = await send("runTool", {
@@ -668,7 +664,6 @@ async function runVbaMacro() {
     setVbaMacroStatus(error.detail || error.message, "error");
     log(error.detail || error.message);
   } finally {
-    clearActivity();
     updateVbaMacroRunState();
   }
 }

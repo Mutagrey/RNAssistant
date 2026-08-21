@@ -606,7 +606,6 @@
       return;
     }
     syncHtmlEditorToState();
-    setActivity("saving", "Сохраняю HTML workspace...");
     try {
       if (selected.type === "data") {
         applyHtmlWorkspaceResponse(await send("saveHtmlWorkspaceData", {
@@ -627,8 +626,6 @@
     } catch (error) {
       log(error.detail || error.message);
       window.alert(error.message || "HTML workspace не сохранен.");
-    } finally {
-      clearActivity();
     }
   }
 
@@ -647,7 +644,6 @@
       return;
     }
 
-    setActivity("deleting", "Удаляю из HTML workspace...");
     try {
       var response = selected.type === "data"
         ? await send("deleteHtmlWorkspaceData", {
@@ -664,8 +660,6 @@
     } catch (error) {
       log(error.detail || error.message);
       window.alert(error.message || "Элемент HTML workspace не удален.");
-    } finally {
-      clearActivity();
     }
   }
 
@@ -677,7 +671,6 @@
       return;
     }
 
-    setActivity("restoring", "Восстанавливаю HTML workspace...");
     try {
       applyHtmlWorkspaceResponse(await send("restoreHtmlWorkspaceSnapshot", {
         chatId: state.activeChatId,
@@ -687,8 +680,6 @@
     } catch (error) {
       log(error.detail || error.message);
       window.alert(error.message || "HTML workspace не восстановлен.");
-    } finally {
-      clearActivity();
     }
   }
 
@@ -700,7 +691,6 @@
       return;
     }
 
-    setActivity("restoring", "Повторяю HTML workspace...");
     try {
       applyHtmlWorkspaceResponse(await send("redoHtmlWorkspaceSnapshot", {
         chatId: state.activeChatId,
@@ -710,8 +700,6 @@
     } catch (error) {
       log(error.detail || error.message);
       window.alert(error.message || "HTML workspace redo не выполнен.");
-    } finally {
-      clearActivity();
     }
   }
 
@@ -769,7 +757,6 @@
       : (kind === "script"
         ? "(function () {\n  var data = window.RNAssistantData || {};\n  console.log(\"HTML workspace data\", data);\n}());\n"
         : "<!doctype html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <title>HTML Workspace</title>\n</head>\n<body>\n  <h1>HTML Workspace</h1>\n</body>\n</html>\n");
-    setActivity("saving", "Создаю файл HTML workspace...");
     try {
       applyHtmlWorkspaceResponse(await send("saveHtmlWorkspaceFile", {
         chatId: state.activeChatId,
@@ -784,8 +771,6 @@
     } catch (error) {
       log(error.detail || error.message);
       window.alert(error.message || "Файл не создан.");
-    } finally {
-      clearActivity();
     }
   }
 
@@ -797,7 +782,6 @@
   }
 
   async function createHtmlWorkspaceData(name) {
-    setActivity("saving", "Создаю JSON data source...");
     try {
       applyHtmlWorkspaceResponse(await send("saveHtmlWorkspaceData", {
         chatId: state.activeChatId,
@@ -810,8 +794,6 @@
     } catch (error) {
       log(error.detail || error.message);
       window.alert(error.message || "Data source не создан.");
-    } finally {
-      clearActivity();
     }
   }
 

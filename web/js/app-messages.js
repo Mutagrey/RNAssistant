@@ -292,45 +292,6 @@ function renderMessageArticle(message, index) {
   return node;
 }
 
-function getLiveActivityState() {
-  var activities = state.liveAgentRun && state.liveAgentRun.length ? state.liveAgentRun : null;
-  if (!activities && !state.liveActivity) {
-    return null;
-  }
-
-  var current = activities ? activities[activities.length - 1] : state.liveActivity;
-  var trail = [];
-  if (activities && activities.length) {
-    var currentIndex = Math.max(activities.length - 1, 0);
-    trail = activities.slice(0, currentIndex);
-  }
-
-  return {
-    trail: trail,
-    current: current
-  };
-}
-
-function renderLiveActivityTrail() {
-  var liveState = getLiveActivityState();
-  if (!liveState || !liveState.trail.length) {
-    return [];
-  }
-
-  return liveState.trail.map(function (activity) {
-    return renderActivityArticle(null, -1, activity, { live: true, current: false });
-  });
-}
-
-function renderLiveActivity() {
-  var liveState = getLiveActivityState();
-  if (!liveState || !liveState.current) {
-    return null;
-  }
-
-  return renderActivityArticle(null, -1, liveState.current, { live: true, current: true });
-}
-
 function renderLiveAgentRun() {
   var activities = state.liveAgentRun && state.liveAgentRun.length
     ? state.liveAgentRun

@@ -194,8 +194,6 @@ async function saveMessageEdit() {
   state.editingBusy = true;
   clearSendError();
   applyEditedMessagePreview(target, text);
-  setActivity("editing", "Перестраиваю чат с этого сообщения...");
-
   var request = send("editMessage", {
     chatId: sentChatId,
     id: sentMessageId,
@@ -231,8 +229,5 @@ async function saveMessageEdit() {
       resetMessageEditState();
     }
     renderChatRunControls();
-    if (state.activeChatId === sentChatId) {
-      clearActivity();
-    }
   }
 }

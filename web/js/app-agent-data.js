@@ -1,3 +1,7 @@
+var AGENT_DATA_LIST_ITEM_LIMIT = 20;
+var AGENT_DATA_TABLE_ROW_LIMIT = 100;
+var AGENT_DATA_OBJECT_KEY_LIMIT = 100;
+
 function prettyJsonText(text) {
   if (!text) {
     return "";
@@ -30,7 +34,8 @@ function createAgentCopyButton(label, text) {
   button.addEventListener("click", function (event) {
     event.preventDefault();
     event.stopPropagation();
-    copyText(text || "");
+    var value = typeof text === "function" ? text() : text;
+    copyText(value || "");
   });
   return button;
 }
@@ -89,7 +94,7 @@ function renderJsonArray(value, depth) {
   }
 
   var tableKeys = tableKeysForArray(value);
-  var allRowsAreObjects = value.every(function (item) {
+  var allRowsAreObjects = value.slice(0, AGENT_DATA_TABLE_ROW_LIMIT).every(function (item) {
     return item && typeof item === "object" && !Array.isArray(item);
   });
   if (allRowsAreObjects && tableKeys.length) {
@@ -98,24 +103,25 @@ function renderJsonArray(value, depth) {
 
   var list = document.createElement("ol");
   list.className = "agent-data-list";
-  value.slice(0, 20).forEach(function (item) {
+  value.slice(0, AGENT_DATA_LIST_ITEM_LIMIT).forEach(function (item) {
     var li = document.createElement("li");
     li.appendChild(renderJsonValue(item, depth + 1));
     list.appendChild(li);
   });
-  if (value.length > 20) {
+  if (value.length > AGENT_DATA_LIST_ITEM_LIMIT) {
     var more = document.createElement("li");
     more.className = "agent-data-note";
-    more.textContent = "Еще " + (value.length - 20);
+    more.textContent = "Еще " + (value.length - AGENT_DATA_LIST_ITEM_LIMIT);
     list.appendChild(more);
   }
   return list;
 }
 
 function renderJsonTable(value, tableKeys) {
+  var rows = value.slice(0, AGENT_DATA_TABLE_ROW_LIMIT);
   var wrap = document.createElement("div");
   wrap.className = "agent-data-table-wrap";
-  if (value.length > 10) {
+  if (rows.length > 10) {
     wrap.className += " collapsed";
   }
   var table = document.createElement("table");
@@ -131,7 +137,7 @@ function renderJsonTable(value, tableKeys) {
   table.appendChild(thead);
 
   var tbody = document.createElement("tbody");
-  value.forEach(function (item) {
+  rows.forEach(function (item) {
     var row = document.createElement("tr");
     tableKeys.forEach(function (key) {
       var cell = document.createElement("td");
@@ -142,16 +148,25 @@ function renderJsonTable(value, tableKeys) {
   });
   table.appendChild(tbody);
   wrap.appendChild(table);
-  if (value.length > 10) {
+  if (rows.length > 10) {
     var toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "agent-table-toggle";
-    toggle.textContent = "Показать все " + value.length + " строк";
+    var expandedLabel = value.length > rows.length
+      ? "Развернуть первые " + rows.length + " из " + value.length + " строк"
+      : "Показать все " + rows.length + " строк";
+    toggle.textContent = expandedLabel;
     toggle.addEventListener("click", function () {
       var collapsed = wrap.classList.toggle("collapsed");
-      toggle.textContent = collapsed ? "Показать все " + value.length + " строк" : "Свернуть";
+      toggle.textContent = collapsed ? expandedLabel : "Свернуть";
     });
     wrap.appendChild(toggle);
+  }
+  if (value.length > rows.length) {
+    var note = document.createElement("span");
+    note.className = "agent-data-note agent-table-note";
+    note.textContent = "Показаны первые " + rows.length + " строк. Полный JSON доступен ниже.";
+    wrap.appendChild(note);
   }
   return wrap;
 }
@@ -168,13 +183,13 @@ function renderJsonObject(value, depth) {
   if (depth > 3) {
     var compact = document.createElement("code");
     compact.className = "agent-data-compact";
-    compact.textContent = JSON.stringify(value);
+    compact.textContent = "Объект: " + keys.length + " полей";
     return compact;
   }
 
   var grid = document.createElement("dl");
   grid.className = "agent-data-grid";
-  keys.forEach(function (key) {
+  keys.slice(0, AGENT_DATA_OBJECT_KEY_LIMIT).forEach(function (key) {
     var dt = document.createElement("dt");
     dt.textContent = key;
     var dd = document.createElement("dd");
@@ -182,6 +197,15 @@ function renderJsonObject(value, depth) {
     grid.appendChild(dt);
     grid.appendChild(dd);
   });
+  if (keys.length > AGENT_DATA_OBJECT_KEY_LIMIT) {
+    var moreKey = document.createElement("dt");
+    moreKey.textContent = "…";
+    var moreValue = document.createElement("dd");
+    moreValue.className = "agent-data-note";
+    moreValue.textContent = "Еще " + (keys.length - AGENT_DATA_OBJECT_KEY_LIMIT) + " полей";
+    grid.appendChild(moreKey);
+    grid.appendChild(moreValue);
+  }
   return grid;
 }
 
@@ -196,79 +220,74 @@ function appendRawJson(parent, label, text, open) {
   var summary = document.createElement("summary");
   summary.textContent = label;
   details.appendChild(summary);
+  var loaded = false;
+  function load() {
+    if (loaded) {
+      return;
+    }
+    loaded = true;
+    var actions = document.createElement("div");
+    actions.className = "agent-detail-actions";
+    actions.appendChild(createAgentCopyButton("Копировать JSON", function () { return prettyJsonText(text); }));
+    details.appendChild(actions);
 
-  var actions = document.createElement("div");
-  actions.className = "agent-detail-actions";
-  actions.appendChild(createAgentCopyButton("Копировать JSON", prettyJsonText(text)));
-  details.appendChild(actions);
+    var pre = document.createElement("pre");
+    var code = document.createElement("code");
+    code.className = "language-json";
+    code.textContent = prettyJsonText(text);
+    pre.appendChild(code);
+    details.appendChild(pre);
+  }
+  details.addEventListener("toggle", function () {
+    if (details.open) {
+      load();
+    }
+  });
+  parent.appendChild(details);
+  if (details.open) {
+    load();
+  }
+}
 
-  var pre = document.createElement("pre");
-  var code = document.createElement("code");
-  code.className = "language-json";
-  code.textContent = prettyJsonText(text);
-  pre.appendChild(code);
-  details.appendChild(pre);
+function appendStructuredAgentData(parent, label, text, copyLabel, className) {
+  if (!text) {
+    return;
+  }
+
+  var details = document.createElement("details");
+  details.className = className || "agent-data";
+  var summary = document.createElement("summary");
+  summary.textContent = label;
+  details.appendChild(summary);
+  var loaded = false;
+  details.addEventListener("toggle", function () {
+    if (!details.open || loaded) {
+      return;
+    }
+    loaded = true;
+    var parsed = tryParseJson(text);
+    if (!parsed.ok) {
+      appendRawJson(details, "Исходный JSON", text, true);
+      return;
+    }
+    var actions = document.createElement("div");
+    actions.className = "agent-detail-actions";
+    actions.appendChild(createAgentCopyButton(copyLabel, function () { return prettyJsonText(text); }));
+    details.appendChild(actions);
+
+    var view = document.createElement("div");
+    view.className = "agent-data-view";
+    view.appendChild(renderJsonValue(parsed.value, 0));
+    details.appendChild(view);
+    appendRawJson(details, "Исходный JSON", text, false);
+  });
   parent.appendChild(details);
 }
 
 function appendArgumentsData(parent, text) {
-  if (!text) {
-    return;
-  }
-
-  var parsed = tryParseJson(text);
-  if (!parsed.ok) {
-    appendRawJson(parent, "Аргументы", text, true);
-    return;
-  }
-
-  var details = document.createElement("details");
-  details.className = "agent-data agent-arguments";
-  var summary = document.createElement("summary");
-  summary.textContent = "Аргументы";
-  details.appendChild(summary);
-
-  var actions = document.createElement("div");
-  actions.className = "agent-detail-actions";
-  actions.appendChild(createAgentCopyButton("Копировать аргументы", prettyJsonText(text)));
-  details.appendChild(actions);
-
-  var view = document.createElement("div");
-  view.className = "agent-data-view";
-  view.appendChild(renderJsonValue(parsed.value, 0));
-  details.appendChild(view);
-
-  appendRawJson(details, "Исходный JSON", text, false);
-  parent.appendChild(details);
+  appendStructuredAgentData(parent, "Аргументы", text, "Копировать аргументы", "agent-data agent-arguments");
 }
 
 function appendActivityData(parent, label, text, copyLabel) {
-  if (!text) {
-    return;
-  }
-
-  var parsed = tryParseJson(text);
-  if (!parsed.ok) {
-    appendRawJson(parent, label, text, true);
-    return;
-  }
-
-  var details = document.createElement("details");
-  details.className = "agent-data";
-  var summary = document.createElement("summary");
-  summary.textContent = label;
-  details.appendChild(summary);
-
-  var actions = document.createElement("div");
-  actions.className = "agent-detail-actions";
-  actions.appendChild(createAgentCopyButton(copyLabel || "Копировать результат", prettyJsonText(text)));
-  details.appendChild(actions);
-
-  var view = document.createElement("div");
-  view.className = "agent-data-view";
-  view.appendChild(renderJsonValue(parsed.value, 0));
-  details.appendChild(view);
-
-  appendRawJson(details, "Исходный JSON", text, false);
-  parent.appendChild(details);
+  appendStructuredAgentData(parent, label, text, copyLabel || "Копировать результат", "agent-data");
 }

@@ -98,7 +98,7 @@ On failure, `ok` is `false`, `data` may still contain partial details, and `erro
 
 - Disabled, unavailable, or `AgentCanRun=false` tools are not exposed to Agent mode.
 - Confirmation and mutation safety remain local executor rules.
-- `AutoRunToolCalls`, maximum iterations, and maximum tool steps bound execution.
+- Maximum iterations and maximum tool steps bound execution.
 - Pipelines call existing tool ids through `OfficeToolExecutor`; nested safety is resolved recursively.
 - VBA mutations keep their backup/hash/stale-state checks inside the VBA tool implementation and may require confirmation.
 - Provider reasoning is transport metadata, not part of the agent JSON or replay history.
