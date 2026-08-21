@@ -3,12 +3,15 @@ async function createChat() {
       !confirmDiscardHtmlWorkspaceChanges("Создать новый чат")) {
     return;
   }
+  setControlBusy("newChatButton", true);
   try {
     applyChatState(await send("createChat", { title: "Новый чат" }));
     clearSendError();
     log("Чат создан.");
   } catch (error) {
     log(error.detail || error.message);
+  } finally {
+    setControlBusy("newChatButton", false);
   }
 }
 
@@ -61,12 +64,15 @@ async function openActiveDocument(chatIdValue) {
   if (!targetChatId) {
     return;
   }
+  setControlBusy("openDocumentButton", true);
   try {
     var result = await send("openDocument", { chatId: targetChatId });
     log(result && result.launched ? "Документ открыт." : "Документ уже активен.");
   } catch (error) {
     log(error.detail || error.message);
     window.alert(error.message || "Не удалось открыть документ.");
+  } finally {
+    setControlBusy("openDocumentButton", false);
   }
 }
 
@@ -137,18 +143,22 @@ async function clearChat() {
     return;
   }
 
+  setControlBusy("clearChatButton", true);
   try {
     applyChatState(await send("clearChat", { chatId: state.activeChatId }));
     clearSendError();
     log("Чат очищен.");
   } catch (error) {
     log(error.detail || error.message);
+  } finally {
+    setControlBusy("clearChatButton", false);
   }
 }
 
 async function compactChatContext() {
   if (!state.activeChatId || currentActiveSend()) return;
   var previousCheckpointId = state.activeContextCheckpointId || "";
+  setControlBusy("compactContextButton", true);
   try {
     applyChatState(await send("compactChatContext", { chatId: state.activeChatId }));
     log(state.activeContextCheckpointId && state.activeContextCheckpointId !== previousCheckpointId
@@ -156,6 +166,8 @@ async function compactChatContext() {
       : "Контекст пока не требует сжатия.");
   } catch (error) {
     log(error.detail || error.message);
+  } finally {
+    setControlBusy("compactContextButton", false);
   }
 }
 
@@ -362,12 +374,15 @@ async function clearRuntimeData() {
     return;
   }
 
+  setControlBusy("clearRuntimeDataButton", true);
   try {
     var init = await send("clearRuntimeData", {});
     applyInitState(init);
     log("Локальные данные очищены.");
   } catch (error) {
     log(error.detail || error.message);
+  } finally {
+    setControlBusy("clearRuntimeDataButton", false);
   }
 }
 

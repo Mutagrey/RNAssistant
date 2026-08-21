@@ -20,7 +20,7 @@
   <link rel="stylesheet" href="css/vendor/katex.min.css">
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
-  <link rel="stylesheet" href="css/app.css?v=scrollbar-hover-20260723-1">
+  <link rel="stylesheet" href="css/app.css?v=ui-simplify-20260821-3">
   <link rel="stylesheet" href="css/app-chat.css?v=agent-reliability-20260819-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-composer.css?v=message-edit-20260806-1">
@@ -34,23 +34,26 @@
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260702-2">
-  <link rel="stylesheet" href="css/app-artifacts.css?v=agent-ui-20260821-2">
+  <link rel="stylesheet" href="css/app-artifacts.css?v=ui-simplify-20260821-3">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=chatui-20260702-2">
-  <link rel="stylesheet" href="css/app-responsive.css?v=message-edit-20260806-1">
-  <link rel="stylesheet" href="css/app-agent.css?v=agent-ui-20260821-2">
+  <link rel="stylesheet" href="css/app-responsive.css?v=ui-simplify-20260821-3">
+  <link rel="stylesheet" href="css/app-agent.css?v=ui-simplify-20260821-3">
   <link rel="stylesheet" href="css/app-agent-data.css?v=agent-ui-20260821-2">
-  <link rel="stylesheet" href="css/app-theme.css?v=message-edit-20260806-1">
+  <link rel="stylesheet" href="css/app-theme.css?v=ui-simplify-20260821-3">
 </head>
 <body>
   <div class="shell">
     <nav class="tabs" aria-label="Разделы ассистента">
-      <button class="tab active" data-tab="chat">Чат</button>
-      <button class="tab" data-tab="tools">Инструменты</button>
-      <button class="tab" data-tab="skills">Навыки</button>
-      <button class="tab" data-tab="vba">VBA</button>
-      <button class="tab" data-tab="html">HTML</button>
-      <button class="tab" data-tab="settings">Настройки</button>
-      <button class="tab" data-tab="logs">Журнал</button>
+      <button class="tab active" data-section="chat" data-tab="chat">Чат</button>
+      <button class="tab" id="workspaceRootTab" data-section="workspace" data-default-tab="tools">Рабочая область</button>
+      <button class="tab" data-section="settings" data-tab="settings">Настройки</button>
+    </nav>
+    <nav class="workspace-tabs hidden" id="workspaceTabs" aria-label="Разделы рабочей области">
+      <button class="workspace-tab active" data-tab="tools">Инструменты</button>
+      <button class="workspace-tab" data-tab="skills">Навыки</button>
+      <button class="workspace-tab" data-tab="vba">VBA</button>
+      <button class="workspace-tab" data-tab="html">HTML</button>
+      <button class="workspace-tab" data-tab="logs">Журнал</button>
     </nav>
 
     <main class="content">
@@ -643,7 +646,7 @@
               <div class="form-grid">
                 <label class="checkline"><input id="debugModelTrafficInput" type="checkbox"><span>Debug: логировать сырые запросы и ответы модели</span></label>
               </div>
-              <div class="setting-note">Запросы и ответы пишутся pretty printed JSON во вкладку «Логи» и файл runtime-журнала. API-ключ и HTTP-заголовки не пишутся, но в сообщениях могут быть текст документа и другие чувствительные данные.</div>
+              <div class="setting-note">Запросы и ответы пишутся как форматированный JSON в раздел «Журнал» рабочей области и файл runtime-журнала. API-ключ и HTTP-заголовки не пишутся, но в сообщениях могут быть текст документа и другие чувствительные данные.</div>
               <div class="danger-zone">
                 <div>
                   <div class="danger-zone-title">Сброс локальных данных</div>
@@ -700,7 +703,7 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=agent-ui-20260821-2"></script>
+  <script src="js/app-core.js?v=ui-simplify-20260821-3"></script>
   <script src="js/app-utils.js?v=runtime-20260807-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js"></script>
@@ -714,23 +717,23 @@
   <script src="js/app-context-data.js"></script>
   <script src="js/app-chat-state.js?v=plan-tools-20260821-1"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
-  <script src="js/app-tools.js?v=agent-ui-20260821-2"></script>
-  <script src="js/app-skills.js?v=chatui-20260622-4"></script>
+  <script src="js/app-tools.js?v=ui-simplify-20260821-3"></script>
+  <script src="js/app-skills.js?v=ui-simplify-20260821-3"></script>
   <script src="js/app-vba.js?v=agent-ui-20260821-2"></script>
   <script src="js/app-html-workspace.js?v=agent-ui-20260821-2"></script>
-  <script src="js/app-context.js?v=agent-ui-20260821-2"></script>
+  <script src="js/app-context.js?v=ui-simplify-20260821-3"></script>
   <script src="js/app-agent-data.js?v=agent-ui-20260821-2"></script>
   <script src="js/app-agent-model.js?v=agent-ui-20260821-2"></script>
   <script src="js/app-chart-artifacts.js?v=chatui-20260622-2"></script>
   <script src="js/app-html-artifacts.js?v=chatui-20260702-2"></script>
-  <script src="js/app-artifacts.js?v=agent-ui-20260821-2"></script>
-  <script src="js/app-plan.js?v=plan-tools-20260821-1"></script>
-  <script src="js/app-agent.js?v=agent-ui-20260821-2"></script>
+  <script src="js/app-artifacts.js?v=ui-simplify-20260821-3"></script>
+  <script src="js/app-plan.js?v=ui-simplify-20260821-3"></script>
+  <script src="js/app-agent.js?v=ui-simplify-20260821-3"></script>
   <script src="js/app-messages.js?v=agent-ui-20260821-2"></script>
   <script src="js/app-reasoning.js?v=reasoning-ui-20260819-1"></script>
   <script src="js/app-attachments.js?v=agent-ui-20260821-2"></script>
-  <script src="js/app-chat.js?v=agent-ui-20260821-2"></script>
+  <script src="js/app-chat.js?v=ui-simplify-20260821-3"></script>
   <script src="js/app-chat-edit.js?v=agent-ui-20260821-2"></script>
-  <script src="js/app.js?v=agent-progress-20260820-1"></script>
+  <script src="js/app.js?v=ui-simplify-20260821-3"></script>
 </body>
 </html>

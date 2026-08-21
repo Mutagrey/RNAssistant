@@ -80,14 +80,13 @@
 
 @media (max-width: 480px) {
   .tabs {
-    display: flex;
-    overflow-x: auto;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .tab {
-    flex: 0 0 auto;
     min-width: 0;
-    padding: 8px 7px;
+    padding: 8px 4px;
     font-size: 11.5px;
   }
 

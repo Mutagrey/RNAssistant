@@ -210,6 +210,7 @@ function bindSkillActions() {
   });
 
   $("saveSkillsButton").addEventListener("click", async function () {
+    setControlBusy("saveSkillsButton", true);
     try {
       var response = await send("saveSkills", { skills: readSkills() });
       state.skills = response || [];
@@ -217,6 +218,8 @@ function bindSkillActions() {
       log("Навыки сохранены.");
     } catch (error) {
       log(error.message);
+    } finally {
+      setControlBusy("saveSkillsButton", false);
     }
   });
 

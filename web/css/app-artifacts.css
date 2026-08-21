@@ -11,6 +11,15 @@
   padding: 9px 10px;
 }
 
+.chat-artifact-card.kind-plan {
+  padding: 7px 9px;
+  background: color-mix(in srgb, var(--accent) 3%, var(--surface, #fff));
+}
+
+.chat-artifact-card.kind-plan .chat-artifact-badge {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
 .chat-artifact-header {
   display: flex;
   align-items: center;

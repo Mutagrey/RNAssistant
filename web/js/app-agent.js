@@ -38,12 +38,6 @@ function renderActivityRow(activity, current, expandable, context) {
   var copy = document.createElement("span");
   copy.className = "agent-activity-copy";
 
-  var operation = toolActionLabel(activity);
-  var operationNode = document.createElement("span");
-  operationNode.className = "agent-activity-action" + (operation ? "" : " is-empty");
-  operationNode.textContent = operation;
-  copy.appendChild(operationNode);
-
   var name = document.createElement("span");
   name.className = "agent-activity-name";
   name.textContent = title;
@@ -87,7 +81,16 @@ function activityPrimaryText(activity) {
       title.toLowerCase().indexOf("deterministic") !== 0) {
     return title.charAt(0).toUpperCase() + title.slice(1);
   }
-  if (toolId) return toolId;
+  if (toolId) {
+    var statusLabels = {
+      completed: "Действие выполнено",
+      running: "Выполняю действие",
+      waiting: "Подтвердите действие",
+      failed: "Действие завершилось ошибкой",
+      cancelled: "Действие отменено"
+    };
+    return statusLabels[activityStatus(activity)] || "Выполняю действие";
+  }
 
   var labels = {
     reasoning: "Анализирую задачу",
@@ -98,18 +101,9 @@ function activityPrimaryText(activity) {
   return labels[activityKind(activity)] || toolId || title || "Выполняю шаг";
 }
 
-function toolActionLabel(activity) {
-  var kind = activityKind(activity);
-  return (kind === "tool" || kind === "control") && activityToolId(activity) ? "TOOL" : "";
-}
-
 function activityCommentText(activity) {
   var toolId = activityToolId(activity);
-  var title = activityTitle(activity);
   var subtitle = activityValue(activity, "Subtitle", "subtitle", "");
-  if (toolId && toolId !== title) {
-    return toolId;
-  }
   return subtitle && subtitle !== toolId ? subtitle : "";
 }
 
@@ -421,7 +415,7 @@ function renderAgentApprovalDock() {
   copy.appendChild(title);
   var meta = document.createElement("div");
   meta.className = "agent-approval-meta";
-  meta.textContent = ["Нужно подтверждение", activityToolId(activity)].filter(Boolean).join(" · ");
+  meta.textContent = "Нужно подтверждение";
   copy.appendChild(meta);
   var reason = activityResultMessage(activity);
   if (reason) {
@@ -482,7 +476,7 @@ async function deleteAgentRun(items, finalMessage) {
 
 function agentActionCountLabel(count) {
   if (!count) return "Ход выполнения";
-  return "Инструменты · " + count;
+  return "Действия · " + count;
 }
 
 function agentToolCallCount(timeline) {

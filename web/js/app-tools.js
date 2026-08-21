@@ -344,6 +344,8 @@ async function changeVbaInstallation(action) {
   if (!tool) {
     return;
   }
+  var actionButtonId = action === "installVbaTool" ? "installVbaToolButton" : "uninstallVbaToolButton";
+  setControlBusy(actionButtonId, true);
   try {
     if (action === "installVbaTool") {
       var selectedId = tool.Id;
@@ -367,6 +369,9 @@ async function changeVbaInstallation(action) {
   } catch (error) {
     $("toolRunOutput").textContent = error.detail || error.message;
     log(error.message);
+  } finally {
+    setControlBusy(actionButtonId, false);
+    renderToolEditor();
   }
 }
 
@@ -389,6 +394,8 @@ async function runSelectedTool(dryRun) {
     return;
   }
 
+  var runButtonId = dryRun ? "dryRunToolButton" : "runToolButton";
+  setControlBusy(runButtonId, true);
   $("toolRunOutput").textContent = dryRun ? "Проверка..." : "Выполняю...";
   try {
     var response = await send("runTool", {
@@ -401,6 +408,8 @@ async function runSelectedTool(dryRun) {
   } catch (error) {
     $("toolRunOutput").textContent = error.detail || error.message;
     log(error.message);
+  } finally {
+    setControlBusy(runButtonId, false);
   }
 }
 
@@ -503,6 +512,7 @@ function bindToolActions() {
   });
 
   $("saveToolsButton").addEventListener("click", async function () {
+    setControlBusy("saveToolsButton", true);
     try {
       syncSelectedToolFromEditor();
       var selected = state.tools[state.selectedToolIndex];
@@ -516,6 +526,8 @@ function bindToolActions() {
       log("Инструменты сохранены.");
     } catch (error) {
       log(error.message);
+    } finally {
+      setControlBusy("saveToolsButton", false);
     }
   });
 

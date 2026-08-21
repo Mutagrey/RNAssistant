@@ -231,36 +231,18 @@
 
 .agent-activity-copy {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 6px;
   align-items: baseline;
   min-width: 0;
 }
 
 .agent-activity-name,
-.agent-activity-action,
 .agent-activity-comment,
 .agent-activity-meta {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.agent-activity-action {
-  padding: 1px 5px;
-  border: 1px solid #d0d5dd;
-  border-radius: 4px;
-  color: #475467;
-  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1.35;
-  letter-spacing: .04em;
-  white-space: nowrap;
-}
-
-.agent-activity-action.is-empty {
-  display: none;
 }
 
 .agent-activity-name {

@@ -132,11 +132,12 @@
 
     var info = planInfo(plan);
     var expansionKey = plan.artifactId || plan.id;
+    var approvalPending = typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity();
     var details = document.createElement("details");
     details.className = "agent-plan-card status-" + info.status;
-    details.open = state.agentPlanExpanded[expansionKey] !== undefined
+    details.open = !approvalPending && (state.agentPlanExpanded[expansionKey] !== undefined
       ? !!state.agentPlanExpanded[expansionKey]
-      : info.status !== "completed";
+      : info.status !== "completed");
     details.addEventListener("toggle", function () { state.agentPlanExpanded[expansionKey] = details.open; });
 
     var summary = document.createElement("summary");

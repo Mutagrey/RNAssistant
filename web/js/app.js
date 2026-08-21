@@ -1,7 +1,16 @@
 function switchTab(name) {
+  var workspaceNames = ["tools", "skills", "vba", "html", "logs"];
+  var section = workspaceNames.indexOf(name) >= 0 ? "workspace" : name;
   Array.prototype.slice.call(document.querySelectorAll(".tab")).forEach(function (tab) {
+    tab.classList.toggle("active", tab.dataset.section === section);
+  });
+  Array.prototype.slice.call(document.querySelectorAll(".workspace-tab")).forEach(function (tab) {
     tab.classList.toggle("active", tab.dataset.tab === name);
   });
+  var workspaceTabs = $("workspaceTabs");
+  if (workspaceTabs) workspaceTabs.classList.toggle("hidden", section !== "workspace");
+  var workspaceRoot = $("workspaceRootTab");
+  if (workspaceRoot && section === "workspace") workspaceRoot.dataset.activeTab = name;
   Array.prototype.slice.call(document.querySelectorAll(".panel")).forEach(function (panel) {
     panel.classList.toggle("active", panel.id === "tab-" + name);
   });
@@ -30,6 +39,13 @@ document.addEventListener("DOMContentLoaded", function () {
   scheduleFocusStateReport();
 
   Array.prototype.slice.call(document.querySelectorAll(".tab")).forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      switchTab(tab.dataset.section === "workspace"
+        ? (tab.dataset.activeTab || tab.dataset.defaultTab || "tools")
+        : tab.dataset.tab);
+    });
+  });
+  Array.prototype.slice.call(document.querySelectorAll(".workspace-tab")).forEach(function (tab) {
     tab.addEventListener("click", function () { switchTab(tab.dataset.tab); });
   });
 

@@ -121,6 +121,22 @@ function logOnce(message) {
   log(message);
 }
 
+function setControlBusy(target, busy) {
+  var control = typeof target === "string" ? $(target) : target;
+  if (!control) return;
+  if (busy) {
+    control.dataset.busyWasDisabled = control.disabled ? "1" : "0";
+    control.disabled = true;
+    control.classList.add("is-busy");
+    control.setAttribute("aria-busy", "true");
+    return;
+  }
+  control.classList.remove("is-busy");
+  control.removeAttribute("aria-busy");
+  control.disabled = control.dataset.busyWasDisabled === "1";
+  delete control.dataset.busyWasDisabled;
+}
+
 function send(type, payload) {
   var id = String(state.seq++);
   var promise = new Promise(function (resolve, reject) {

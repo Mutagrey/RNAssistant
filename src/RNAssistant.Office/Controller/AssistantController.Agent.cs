@@ -58,7 +58,7 @@ namespace RNAssistant.Office
                     RuntimeId = RuntimeId,
                     Status = "running",
                     Phase = "executing",
-                    CurrentAction = "Executing confirmed tool.",
+                    CurrentAction = "Выполняю подтверждённое действие.",
                     StartedUtc = DateTime.UtcNow
                 };
                 SaveSessionChanges(session);
@@ -87,7 +87,7 @@ namespace RNAssistant.Office
                 var pendingResolved = false;
                 try
                 {
-                    ReportProgress(runProgress, "executing", "Executing confirmed tool...");
+                    ReportProgress(runProgress, "executing", "Выполняю подтверждённое действие...");
                     var result = _toolExecutor.Execute(
                         CloneCommand(pending.Command),
                         tools,
@@ -412,7 +412,7 @@ namespace RNAssistant.Office
 
                 activity.Status = "running";
                 activity.ExecutionStatus = "executing";
-                activity.ResultMessage = "Executing confirmed tool.";
+                activity.ResultMessage = "Выполняю подтверждённое действие.";
                 return true;
             }
 

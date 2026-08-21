@@ -542,7 +542,7 @@ namespace RNAssistant.Office
                     ChatTitleBuilder.ApplyFallback(session, text, completion.AssistantText);
                 }
 
-                ReportProgress(runProgress, "saving", "Saving chat history...");
+                ReportProgress(runProgress, "saving", "Сохраняю историю чата...");
                 if (input.CommitUserAttachments)
                 {
                     _attachmentStore.Commit(sessionId, LatestUserMessage(session));

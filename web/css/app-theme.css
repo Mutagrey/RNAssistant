@@ -234,6 +234,10 @@ html[data-theme="dark"] .tabs {
   background: rgba(16, 18, 22, .97);
 }
 
+html[data-theme="dark"] .workspace-tabs {
+  background: var(--bg);
+}
+
 html[data-theme="dark"] .tab,
 html[data-theme="dark"] .tab.active {
   background: var(--bg);

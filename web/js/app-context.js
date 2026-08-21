@@ -181,6 +181,7 @@ async function refreshContext() {
 }
 
 async function addSelectionContext(mode) {
+  setControlBusy("addSelectionContextButton", true);
   try {
     if (document.activeElement && typeof document.activeElement.blur === "function") {
       document.activeElement.blur();
@@ -191,6 +192,8 @@ async function addSelectionContext(mode) {
     log("Выделение добавлено в контекст.");
   } catch (error) {
     log(error.detail || error.message);
+  } finally {
+    setControlBusy("addSelectionContextButton", false);
   }
 }
 
@@ -264,12 +267,15 @@ function bindContextActions() {
   $("openContextTabButton").addEventListener("click", toggleContextManager);
   $("addSelectionContextButton").addEventListener("click", function () { addSelectionContext("full"); });
   $("clearContextButton").addEventListener("click", async function () {
+    setControlBusy("clearContextButton", true);
     try {
       await send("clearContext", { chatId: state.activeChatId });
       await syncActiveChatState();
       log("Контекст очищен.");
     } catch (error) {
       log(error.message);
+    } finally {
+      setControlBusy("clearContextButton", false);
     }
   });
 }
