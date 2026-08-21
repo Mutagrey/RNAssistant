@@ -1,5 +1,5 @@
 function switchTab(name) {
-  var workspaceNames = ["tools", "skills", "vba", "html", "logs"];
+  var workspaceNames = ["tools", "skills", "vba", "logs"];
   var section = workspaceNames.indexOf(name) >= 0 ? "workspace" : name;
   Array.prototype.slice.call(document.querySelectorAll(".tab")).forEach(function (tab) {
     tab.classList.toggle("active", tab.dataset.section === section);

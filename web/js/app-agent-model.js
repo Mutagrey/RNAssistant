@@ -36,11 +36,12 @@ function normalizeProgressActivity(progress) {
     return copy;
   }
 
+  var phase = (progress.phase || progress.Phase || "").toLowerCase();
   return {
     kind: "notice",
-    title: progress.message || progress.Message || "Выполняю...",
-    subtitle: progress.phase || progress.Phase || "working",
-    status: activityStatusFromPhase(progress.phase || progress.Phase)
+    title: phase === "thinking" ? "Думаю…" : (progress.message || progress.Message || "Выполняю…"),
+    subtitle: phase || "working",
+    status: activityStatusFromPhase(phase)
   };
 }
 
@@ -161,7 +162,12 @@ function recordActivityTimeline(items, activity) {
     var existingStatus = activityStatus(existing);
     if (isActiveTimelineStatus(existingStatus) ||
         (existingStatus === nextStatus && activityResultMessage(existing) === activityResultMessage(copy))) {
-      items[i] = copy;
+      if (activityKind(copy) === "notice" && i < items.length - 1) {
+        items.splice(i, 1);
+        items.push(copy);
+      } else {
+        items[i] = copy;
+      }
       return copy;
     }
     break;

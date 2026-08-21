@@ -77,7 +77,7 @@ Final answer or clarification:
 }
 ```
 
-The parser accepts one or more calls, requires unique call ids, and checks each exact tool name. The executor validates every argument object against its tool schema immediately before execution. Calls execute locally and sequentially in array order. A multi-call response is appropriate only when calls are independent and later arguments do not depend on earlier results.
+The parser accepts one or more calls, requires a non-empty user-facing `message` for every tool turn, requires unique call ids, and checks each exact tool name. The executor validates every argument object against its tool schema immediately before execution. Calls execute locally and sequentially in array order. A multi-call response is appropriate only when calls are independent and later arguments do not depend on earlier results.
 
 If a call needs confirmation, execution pauses at that call and later calls from the same response are not retained or executed. After confirmation, the model receives that result and chooses the remaining work normally. There is no separate batch state. Additional root fields are allowed so the prompt can evolve without a protocol migration.
 

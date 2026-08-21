@@ -56,6 +56,10 @@ namespace RNAssistant.Core.Tools
                     ? AgentResponseParseResult.Fail("Final agent response requires a non-empty message.")
                     : AgentResponseParseResult.Ok(response);
             }
+            if (string.IsNullOrWhiteSpace(response.Message))
+            {
+                return AgentResponseParseResult.Fail("Tool response requires a non-empty message describing the current step.");
+            }
             var knownTools = (tools ?? new ToolDefinition[0])
                 .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
                 .GroupBy(item => item.Id, StringComparer.Ordinal)

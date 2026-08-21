@@ -228,8 +228,10 @@ namespace RNAssistant.Office.Services
                     session.Messages.Add(callMessage);
                     messages.Add(callMessage);
 
-                    Report(progress, "tool_running", "Выполняю действие", AgentTranscript.CreateRunningToolActivity(
-                        command, stepId, stepMessage));
+                    Report(progress, "tool_running",
+                        string.IsNullOrWhiteSpace(stepMessage) ? "Выполняю действие" : stepMessage,
+                        AgentTranscript.CreateRunningToolActivity(
+                            command, stepId, stepMessage));
 
                     ToolResult toolResult;
                     if (toolSteps >= Math.Max(1, settings.MaxAgentToolSteps))

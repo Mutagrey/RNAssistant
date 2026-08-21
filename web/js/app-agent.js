@@ -81,15 +81,17 @@ function activityPrimaryText(activity) {
       title.toLowerCase().indexOf("deterministic") !== 0) {
     return title.charAt(0).toUpperCase() + title.slice(1);
   }
+  var resultMessage = activityResultMessage(activity);
+  var status = activityStatus(activity);
+  if (resultMessage && (status === "completed" || status === "failed" || status === "cancelled")) {
+    return resultMessage;
+  }
+  var stepMessage = typeof activityStepMessage === "function" ? activityStepMessage(activity) : "";
+  if (stepMessage) {
+    return stepMessage;
+  }
   if (toolId) {
-    var statusLabels = {
-      completed: "Действие выполнено",
-      running: "Выполняю действие",
-      waiting: "Подтвердите действие",
-      failed: "Действие завершилось ошибкой",
-      cancelled: "Действие отменено"
-    };
-    return statusLabels[activityStatus(activity)] || "Выполняю действие";
+    return toolId;
   }
 
   var labels = {
@@ -481,9 +483,13 @@ async function deleteAgentRun(items, finalMessage) {
   }
 }
 
-function agentActionCountLabel(count) {
-  if (!count) return "Ход выполнения";
-  return "Действия · " + count;
+function completedAgentActionCountLabel(count) {
+  var lastTwo = count % 100;
+  var last = count % 10;
+  var noun = lastTwo >= 11 && lastTwo <= 14
+    ? "действий"
+    : (last === 1 ? "действие" : (last >= 2 && last <= 4 ? "действия" : "действий"));
+  return "Выполнено " + count + " " + noun;
 }
 
 function agentToolCallCount(timeline) {
@@ -585,6 +591,15 @@ function appendCollapsedAgentStep(parent, step, isCurrent, finished) {
     : null);
   var effectiveStatus = active ? activityStatus(active) : stats.status;
   var actionCount = agentToolCallCount(timeline);
+  var lastAction = null;
+  for (var actionIndex = timeline.length - 1; actionIndex >= 0; actionIndex -= 1) {
+    var actionKind = activityKind(timeline[actionIndex].activity);
+    if (actionKind === "tool" || actionKind === "control" || actionKind === "diagnostic") {
+      lastAction = timeline[actionIndex].activity;
+      break;
+    }
+  }
+  var completedBatch = !active && effectiveStatus === "completed" && actionCount > 1;
   var transcript = buildAgentRunTranscript(step.items, timeline, stats);
   var details = document.createElement("details");
   details.className = "agent-run-history agent-step-actions status-" + effectiveStatus;
@@ -599,12 +614,16 @@ function appendCollapsedAgentStep(parent, step, isCurrent, finished) {
   title.className = "agent-run-history-title";
   title.textContent = active
     ? activityPrimaryText(active)
-    : (actionCount ? agentActionCountLabel(actionCount) : "Выполняю действие");
+    : (completedBatch
+      ? completedAgentActionCountLabel(actionCount)
+      : (lastAction ? activityPrimaryText(lastAction) : (step.message || "Выполняю…")));
   summary.appendChild(title);
   var meta = document.createElement("span");
   meta.className = "agent-run-history-meta";
-  meta.textContent = [active && actionCount ? agentActionCountLabel(actionCount) : "", stats.elapsed,
-    agentStatusLabel(effectiveStatus)].filter(Boolean).join(" · ");
+  var exceptionalStatus = effectiveStatus === "waiting" || effectiveStatus === "failed" || effectiveStatus === "cancelled"
+    ? agentStatusLabel(effectiveStatus)
+    : "";
+  meta.textContent = [stats.elapsed, exceptionalStatus].filter(Boolean).join(" · ");
   summary.appendChild(meta);
   var caret = document.createElement("span");
   caret.className = "agent-run-history-caret";

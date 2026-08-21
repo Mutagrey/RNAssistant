@@ -40,6 +40,7 @@ namespace RNAssistant.Harness
                 Test("agent: parses final JSON", SimpleAgentParsesFinalJson),
                 Test("agent: parses one tool call", SimpleAgentParsesToolCall),
                 Test("agent: parses multiple tool calls", SimpleAgentParsesMultipleToolCalls),
+                Test("agent: tool call requires visible step message", SimpleAgentRejectsToolCallWithoutMessage),
                 Test("agent: rejects duplicate tool call ids", SimpleAgentRejectsDuplicateToolCallIds),
                 Test("agent: requires exact tool names", SimpleAgentRequiresExactToolNames),
                 Test("agent: rejects tool call without id", SimpleAgentRejectsMissingToolCallId),

@@ -52,6 +52,15 @@ namespace RNAssistant.Harness
             AssertEqual("call_charts", parsed.Response.ToolCalls[1].Id, "call order preserved");
         }
 
+        private static void SimpleAgentRejectsToolCallWithoutMessage()
+        {
+            var parsed = new AgentResponseParser().Parse(
+                "{\"message\":\"\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.list_sheets\",\"arguments\":{}}]}",
+                new[] { new ToolDefinition { Id = "excel.list_sheets" } });
+            AssertTrue(!parsed.Success, "tool step without visible message is rejected");
+            AssertContains(parsed.Error, "non-empty message", "missing step message diagnostic");
+        }
+
         private static void SimpleAgentRejectsDuplicateToolCallIds()
         {
             var parsed = new AgentResponseParser().Parse(

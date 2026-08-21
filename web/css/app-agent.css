@@ -179,6 +179,15 @@
   font-weight: var(--label-font-weight);
 }
 
+.agent-step-actions.status-running .agent-run-history-title {
+  background: linear-gradient(90deg, #98a2b3 4%, #475467 36%, #c7cdd6 50%, #475467 64%, #98a2b3 96%);
+  background-size: 260% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: agent-text-shimmer 1.7s linear infinite;
+}
+
 .agent-run-history-meta {
   flex: 0 1 auto;
   color: #98a2b3;
@@ -726,6 +735,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .agent-activity.status-running.current .agent-activity-name,
+  .agent-step-actions.status-running .agent-run-history-title,
   .agent-run-history.status-running .agent-run-history-icon::after {
     animation: none;
   }
