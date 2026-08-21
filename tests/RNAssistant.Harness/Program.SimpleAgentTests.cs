@@ -109,6 +109,7 @@ namespace RNAssistant.Harness
             AssertTrue(prompt.IndexOf("TEST_SKILL_SENTINEL", StringComparison.Ordinal) < 0, "full skill is not in catalog");
             AssertContains(prompt, "common.skills_read", "skill loading guidance present");
             AssertContains(prompt, "several tool_calls", "multi-tool guidance present");
+            AssertContains(prompt, "data.truncated=true", "bounded tool-result guidance present");
             AssertTrue(prompt.IndexOf("ROUTE:", StringComparison.OrdinalIgnoreCase) < 0, "no route wrapper");
             AssertTrue(prompt.IndexOf("NEXT_ACTION_POLICY", StringComparison.OrdinalIgnoreCase) < 0, "no action heuristic");
         }

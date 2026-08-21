@@ -2,12 +2,16 @@ using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Services
 {
     internal static class AgentJsonProtocol
     {
+        internal const int DefaultMaxToolResultDataTokens = 8192;
+        private const int MaxToolResultMessageTokens = 512;
+
         public static ChatMessage CreateFormatRepairMessage(string error, int attempt, int maxAttempts)
         {
             var root = new JObject
@@ -43,14 +47,22 @@ namespace RNAssistant.Office.Services
 
         public static string BuildToolResult(ToolCommand command, ToolResult result)
         {
+            return BuildToolResult(command, result, DefaultMaxToolResultDataTokens);
+        }
+
+        internal static string BuildToolResult(ToolCommand command, ToolResult result, int maxDataTokens)
+        {
+            var message = BoundText(
+                result == null ? "Tool returned no result." : result.Message ?? string.Empty,
+                MaxToolResultMessageTokens);
             var root = new JObject
             {
                 ["ok"] = result != null && result.Success,
                 ["tool_call_id"] = command == null ? string.Empty : command.ToolCallId ?? string.Empty,
                 ["name"] = command == null ? string.Empty : command.ToolId ?? string.Empty,
                 ["status"] = result == null ? "failed" : result.Status ?? (result.Success ? "completed" : "failed"),
-                ["message"] = result == null ? "Tool returned no result." : result.Message ?? string.Empty,
-                ["data"] = ParseData(result == null ? null : result.DataJson),
+                ["message"] = message,
+                ["data"] = ParseData(result == null ? null : result.DataJson, maxDataTokens),
                 ["error"] = result != null && result.Success
                     ? null
                     : new JObject
@@ -58,7 +70,7 @@ namespace RNAssistant.Office.Services
                         ["code"] = result == null
                             ? "missing_result"
                             : string.IsNullOrWhiteSpace(result.ErrorCode) ? "tool_failed" : result.ErrorCode,
-                        ["message"] = result == null ? "Tool returned no result." : result.Message,
+                        ["message"] = message,
                         ["retryable"] = result == null ? false : result.Retryable ?? false
                     }
             };
@@ -67,10 +79,15 @@ namespace RNAssistant.Office.Services
 
         public static ChatMessage CreateToolResultMessage(ToolCommand command, ToolResult result)
         {
+            return CreateToolResultMessage(command, result, DefaultMaxToolResultDataTokens);
+        }
+
+        internal static ChatMessage CreateToolResultMessage(ToolCommand command, ToolResult result, int maxDataTokens)
+        {
             return new ChatMessage
             {
                 Role = "user",
-                Content = "TOOL_RESULT:\n" + BuildToolResult(command, result),
+                Content = "TOOL_RESULT:\n" + BuildToolResult(command, result, maxDataTokens),
                 ProtocolMessage = true
             };
         }
@@ -100,17 +117,43 @@ namespace RNAssistant.Office.Services
             return protocolMessage;
         }
 
-        private static JToken ParseData(string dataJson)
+        private static JToken ParseData(string dataJson, int maxDataTokens)
         {
             if (string.IsNullOrWhiteSpace(dataJson)) return JValue.CreateNull();
+            JToken parsed;
             try
             {
-                return JToken.Parse(dataJson);
+                parsed = JToken.Parse(dataJson);
             }
             catch (JsonException)
             {
-                return new JValue(dataJson);
+                parsed = new JValue(dataJson);
             }
+
+            var compact = parsed.ToString(Formatting.None);
+            var estimatedTokens = ModelContextBudget.EstimateTextTokens(compact);
+            var boundedTokens = Math.Max(0, maxDataTokens);
+            if (estimatedTokens <= boundedTokens)
+            {
+                return parsed;
+            }
+
+            var previewBudget = Math.Max(0, boundedTokens - 96);
+            return new JObject
+            {
+                ["truncated"] = true,
+                ["original_chars"] = compact.Length,
+                ["original_estimated_tokens"] = estimatedTokens,
+                ["preview"] = ModelContextBudget.TruncateText(compact, previewBudget),
+                ["hint"] = "The tool result was too large for the model context. Request a smaller scope."
+            };
+        }
+
+        private static string BoundText(string value, int maxTokens)
+        {
+            var text = value ?? string.Empty;
+            if (ModelContextBudget.EstimateTextTokens(text) <= maxTokens) return text;
+            return ModelContextBudget.TruncateText(text, Math.Max(1, maxTokens - 8)) + "...[truncated]";
         }
     }
 }

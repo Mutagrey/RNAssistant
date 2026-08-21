@@ -173,6 +173,8 @@ Runtime data is stored under:
 
 Settings has `Clear Chats/Data` for development resets. It clears chats, chat context, VBA backups and WebView user data, while keeping settings, saved API key and custom tools and skills.
 
+For an explicit factory reset, close all Office/RNAssistant processes and run `reset-local-data.cmd`. It validates and deletes only `%AppData%\RNAssistant`; pass `-Force` to skip the typed confirmation. This also removes settings, the DPAPI API key, custom tools/skills and runtime logs. It does not modify document-local VBA modules or RNAssistant properties already saved inside Office documents.
+
 Word, Excel and PowerPoint documents are identified by a custom document property named `RNAssistantDocumentId` when available, so chat sessions and context survive file rename/move. If the property cannot be read or written, RNAssistant falls back to the document path.
 
 ## Tool Protocol
@@ -206,7 +208,7 @@ Independent calls may be placed in the same array and execute locally in order. 
 
 To answer, clarify, or refuse, the model returns `{"message":"...","tool_calls":[]}`. Agent mode always requests `json_object`; there are no response-mode fallbacks, native tool-call transport, planner state machine, router, tool slicer, skill activation, automatic tool retries, or separate verification phase. Invalid output gets up to `MaxAgentFormatRetries` ephemeral correction requests (default 2, range 1–5); every retry starts from the original accepted prompt and neither rejected output nor correction instructions enter chat history.
 
-Office tools execute locally. The next model turn receives a string protocol message such as `TOOL_RESULT:\n{"ok":true,"tool_call_id":"call_1","name":"excel.read_range","status":"completed","message":"Range read.","data":{...},"error":null}`. The model decides what to do next. The runtime only enforces exact tool ids, formal argument schemas, safety/confirmation metadata, and iteration/tool-step limits.
+Office tools execute locally. The next model turn receives a string protocol message such as `TOOL_RESULT:\n{"ok":true,"tool_call_id":"call_1","name":"excel.read_range","status":"completed","message":"Range read.","data":{...},"error":null}`. The model decides what to do next. Tool-result data is bounded and oversized data is replaced by a structured preview; the prompt budget is checked before every model request. Excel value/formula/profile reads reject ranges above 100000 cells before loading COM `Value2`. The runtime also enforces exact tool ids, formal argument schemas, safety/confirmation metadata, and iteration/tool-step limits.
 
 For complex work, the model can explicitly create and maintain one visible plan through `common.plan_create/read/update/delete`. Each update creates a chat-artifact revision and the UI shows the active goal, progress count, and step statuses. The runtime never infers a plan, maps tool calls to steps, or changes statuses automatically.
 
@@ -300,15 +302,15 @@ At runtime the catalog entry is `{"id","name","description"}`. `common.skills_re
 Office VBA support requires Office setting `Trust access to the VBA project object model`.
 
 - Settings has request timeout seconds; increase it for slow local or proxy LLM endpoints.
-- Excel, Word, and PowerPoint can read VBA modules, show source code, and list RNAssistant rollback backups.
+- Excel, Word, and PowerPoint can read whole VBA modules or exact line ranges, show source code, and list RNAssistant rollback backups.
 - `Preview Diff` shows the current editor changes before saving.
 - `Save Module` replaces the selected module and stores the previous version under `%AppData%\RNAssistant\vba-backups`.
 - `Restore Backup` restores the selected backup; restoring also backs up the current module first.
 - Existing-module writes fail closed when a rollback backup cannot be created. A failed code write restores the original module when Office still permits access.
-- VBA writes retain local backup, expected-hash, ownership, and stale-state checks inside the VBA tools.
+- VBA writes retain local backup, strict live-code expected-hash, ownership, stale-state, and post-write read-back checks inside the VBA tools. Line endings are canonicalized for VBIDE, while leading/trailing blank-line structure and service markers remain hash-visible.
 - `Review in Chat` sends loaded VBA modules to chat for review and improvement suggestions.
 
-The Agent can list/read/search VBA and use the public `*.vba_replace_text`, `*.vba_apply_patch`, `*.vba_create_module`, `*.vba_delete_module`, and backup restore tools. Mutations require confirmation and create rollback backups. Edit/delete calls require the current `codeSha256` from read/search; stale code is rejected. The raw whole-module replacement, insert, and arbitrary macro backend tools remain hidden from Agent selection.
+The Agent can list/read/search VBA, read an exact range through `*.vba_read_lines`, and use the public `*.vba_replace_text`, `*.vba_apply_patch`, `*.vba_create_module`, `*.vba_delete_module`, and backup restore tools. Mutations require confirmation and create rollback backups. Edit/delete calls require the current `codeSha256` from read/search; stale code is rejected. The raw whole-module replacement, insert, and arbitrary macro backend tools remain hidden from Agent selection.
 
 Patch operations support:
 

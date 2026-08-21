@@ -170,9 +170,41 @@ namespace RNAssistant.Core.Tools
         public static string CodeSha256(string code)
         {
             var normalized = NormalizeCode(code);
+            return Sha256(normalized);
+        }
+
+        public static string LiveCodeSha256(string code)
+        {
+            return Sha256(NormalizeLiveCode(code));
+        }
+
+        public static string NormalizeLiveCode(string code)
+        {
+            var normalized = (code ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
+            // A final line terminator is a transport detail of CodeModule.Lines/InsertLines.
+            // Preserve all other leading/trailing whitespace and blank lines for exact edit hashes.
+            return normalized.EndsWith("\n", StringComparison.Ordinal)
+                ? normalized.Substring(0, normalized.Length - 1)
+                : normalized;
+        }
+
+        public static int LiveCodeLineCount(string code)
+        {
+            var normalized = NormalizeLiveCode(code);
+            if (normalized.Length == 0) return 0;
+            var count = 1;
+            for (var index = 0; index < normalized.Length; index++)
+            {
+                if (normalized[index] == '\n') count++;
+            }
+            return count;
+        }
+
+        private static string Sha256(string value)
+        {
             using (var sha = SHA256.Create())
             {
-                return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(normalized))).Replace("-", string.Empty).ToLowerInvariant();
+                return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(value ?? string.Empty))).Replace("-", string.Empty).ToLowerInvariant();
             }
         }
 

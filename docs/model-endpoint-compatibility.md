@@ -13,7 +13,7 @@ RNAssistant uses an OpenAI-compatible Chat Completions endpoint.
 
 Chat mode expects ordinary assistant text. Agent mode expects the JSON described in [agent-protocol.md](agent-protocol.md). RNAssistant does not switch between structured-output profiles, native tool calls, result roles, or fallback transports.
 
-Settings → Agent → «Запустить тест» checks only three things: the selected instruction role, one `json_object` tool-shaped response, and consumption of a `TOOL_RESULT` JSON string. The probes do not execute Office actions.
+Settings → Agent → «Запустить тест» checks three exact sentinels: `ROLE_OK` through the selected instruction role, the requested `TOOL_OK` Agent JSON call with exact id/name/arguments, and `RESULT_OK` after a `TOOL_RESULT` JSON string. The probes do not execute Office actions.
 
 ## Optional capabilities
 

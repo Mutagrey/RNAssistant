@@ -65,9 +65,9 @@ namespace RNAssistant.Office.Services
                     new ChatMessage { Role = "user", Content = "Reply with ROLE_OK." }
                 },
                 new LlmRequestOptions { ResponseFormat = LlmResponseFormats.Text },
-                completion => completion != null && !string.IsNullOrWhiteSpace(completion.Content)
+                completion => completion != null && string.Equals((completion.Content ?? string.Empty).Trim(), "ROLE_OK", StringComparison.Ordinal)
                     ? null
-                    : "Endpoint returned no text.",
+                    : "Endpoint did not follow the selected instruction role exactly (expected ROLE_OK).",
                 cancellationToken);
         }
 
@@ -95,9 +95,21 @@ namespace RNAssistant.Office.Services
                 completion =>
                 {
                     var parsed = new AgentResponseParser().Parse(completion == null ? null : completion.Content, new[] { tool });
-                    return parsed.Success && parsed.Response.ToolCalls.Count == 1
+                    if (!parsed.Success) return parsed.Error ?? "Endpoint returned no tool call.";
+                    if (!string.Equals(parsed.Response.Message, "TOOL_OK", StringComparison.Ordinal) || parsed.Response.ToolCalls.Count != 1)
+                    {
+                        return "Endpoint did not return the exact Agent JSON sentinel.";
+                    }
+                    var call = parsed.Response.ToolCalls[0];
+                    object value;
+                    return string.Equals(call.Id, "call_1", StringComparison.Ordinal) &&
+                           string.Equals(call.Name, "compat.echo", StringComparison.Ordinal) &&
+                           call.Arguments != null && call.Arguments.Count == 1 &&
+                           string.Equals(call.Arguments.Keys.Single(), "value", StringComparison.Ordinal) &&
+                           call.Arguments.TryGetValue("value", out value) &&
+                           string.Equals(Convert.ToString(value), "A", StringComparison.Ordinal)
                         ? null
-                        : parsed.Error ?? "Endpoint returned no tool call.";
+                        : "Endpoint changed the required tool id, name, or arguments.";
                 },
                 cancellationToken);
         }
@@ -116,9 +128,10 @@ namespace RNAssistant.Office.Services
                 completion =>
                 {
                     var parsed = new AgentResponseParser().Parse(completion == null ? null : completion.Content, new ToolDefinition[0]);
-                    return parsed.Success && parsed.Response.ToolCalls.Count == 0
+                    return parsed.Success && parsed.Response.ToolCalls.Count == 0 &&
+                           string.Equals(parsed.Response.Message, "RESULT_OK", StringComparison.Ordinal)
                         ? null
-                        : parsed.Error ?? "Endpoint did not consume the tool result.";
+                        : parsed.Error ?? "Endpoint did not return the exact RESULT_OK sentinel after TOOL_RESULT.";
                 },
                 cancellationToken);
         }

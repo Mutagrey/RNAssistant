@@ -15,6 +15,9 @@ namespace RNAssistant.OfficeHosts
 {
     public sealed class ExcelAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog
     {
+        private const long MaxReadableCellCount = 100000;
+        private const int MaxContextPreviewCells = 2000;
+
         private readonly Excel.Application _application;
         private readonly OfficeTargetDescriptor _target;
 
@@ -194,12 +197,12 @@ namespace RNAssistant.OfficeHosts
             return new[]
             {
                 Tool("excel.get_context", "Read-only: Return active workbook, sheet, and selection context.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
-                Tool("excel.get_selection", "Read-only: Read the current or launcher-captured selection values.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.get_selection", "Read-only: Read the current or launcher-captured selection values. Rejects selections larger than 100000 cells.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
                 Tool("excel.workbook_summary", "Read-only: Return workbook metadata, sheets, and used ranges.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
                 Tool("excel.list_sheets", "Read-only: List workbook sheet names.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
-                Tool("excel.read_range", "Read-only: Read worksheet values from an A1 range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address.\",\"default\":\"A1\"}},\"required\":[],\"additionalProperties\":false}"),
-                Tool("excel.read_formula_range", "Read-only: Read formulas from an A1 range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address.\",\"default\":\"A1\"}},\"required\":[],\"additionalProperties\":false}"),
-                Tool("excel.profile_range", "Read-only: Profile a range or selection for dimensions, blanks, formulas, headers, and numeric columns.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address.\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.read_range", "Read-only: Read worksheet values from an A1 range. Hard limit: 100000 cells; split larger ranges.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address containing at most 100000 cells.\",\"default\":\"A1\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.read_formula_range", "Read-only: Read formulas from an A1 range. Hard limit: 100000 cells; split larger ranges.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address containing at most 100000 cells.\",\"default\":\"A1\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.profile_range", "Read-only: Profile a range or selection for dimensions, blanks, formulas, headers, and numeric columns. Hard limit: 100000 cells.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address containing at most 100000 cells.\"}},\"required\":[],\"additionalProperties\":false}"),
                 Tool("excel.find_cells", "Read-only: Find literal or regex matches in cell values or formulas and return stable scope coordinates/hash.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet filter; provide it for sheet or range scope.\"},\"address\":{\"type\":\"string\",\"description\":\"A1 range; required when scope is range.\"},\"scope\":{\"type\":\"string\",\"description\":\"Search or operation scope supported by the tool.\",\"enum\":[\"workbook\",\"sheet\",\"range\",\"selection\"]},\"query\":{\"type\":\"string\",\"description\":\"Non-empty literal or regular-expression search query.\",\"minLength\":1},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"lookIn\":{\"type\":\"string\",\"description\":\"Cell content to inspect: values or formulas.\",\"default\":\"values\",\"enum\":[\"values\",\"formulas\",\"both\"]},\"maxResults\":{\"type\":\"integer\",\"description\":\"Maximum number of matches returned.\",\"default\":50},\"contextChars\":{\"type\":\"integer\",\"description\":\"Maximum context characters returned around each match.\",\"default\":80}},\"required\":[\"query\"],\"additionalProperties\":false}"),
                 Tool("excel.create_chat_chart", "Read-only: Create an interactive chart artifact in chat from a selection or range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet containing address; omit when charting the current selection.\"},\"address\":{\"type\":\"string\",\"description\":\"A1 range to chart; omit to use the current selection.\"},\"chartType\":{\"type\":\"string\",\"description\":\"Chart type supported by the current host; use auto when available.\",\"default\":\"auto\"},\"title\":{\"type\":\"string\",\"description\":\"Human-readable title.\",\"default\":\"Excel chart\"}},\"required\":[],\"additionalProperties\":false}"),
                 Tool("excel.list_charts", "Read-only: List chart objects in the workbook or one sheet.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Optional worksheet filter; omit to list charts from all sheets.\"}},\"required\":[],\"additionalProperties\":false}"),
@@ -222,7 +225,8 @@ namespace RNAssistant.OfficeHosts
                 Tool("excel.clear_range", "Mutates document: Clear cell values, formats, or both in a range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address.\"},\"clearWhat\":{\"type\":\"string\",\"description\":\"Content to clear: values, formats, or all.\",\"default\":\"values\",\"enum\":[\"values\",\"formats\",\"all\"]}},\"required\":[\"address\"],\"additionalProperties\":false}", true, true, 3, true),
                 Tool("excel.sort_range", "Mutates document: Sort rows in a range by one key column.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address.\"},\"keyColumn\":{\"type\":\"integer\",\"description\":\"One-based sort-key column index within the range.\",\"default\":1},\"descending\":{\"type\":\"boolean\",\"description\":\"Whether to sort in descending order.\",\"default\":false},\"hasHeaders\":{\"type\":\"boolean\",\"description\":\"Whether the first row contains headers.\",\"default\":true}},\"required\":[\"address\"],\"additionalProperties\":false}", true, true, 2, true),
                 Tool("excel.filter_range", "Mutates document: Apply AutoFilter criteria to a range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address.\"},\"field\":{\"type\":\"integer\",\"description\":\"One-based column index within the filter range.\",\"default\":1},\"criteria\":{\"type\":\"string\",\"description\":\"AutoFilter criterion understood by Excel.\"}},\"required\":[\"address\"],\"additionalProperties\":false}", true, true, 2, true),
-                Tool("excel.vba_read_module", "Read-only: Read one VBA component by exact name from vba_list_modules; returns source and full code hash.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum number of text characters returned.\",\"default\":30000}},\"required\":[\"moduleName\"],\"additionalProperties\":false}"),
+                Tool("excel.vba_read_module", "Read-only: Read one VBA component by exact name from vba_list_modules; returns source and full code hash.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum number of text characters returned.\",\"default\":30000,\"minimum\":1,\"maximum\":1000000}},\"required\":[\"moduleName\"],\"additionalProperties\":false}"),
+                Tool("excel.vba_read_lines", "Read-only: Read an exact one-based line range from a VBA component; returns the full-module code hash.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"startLine\":{\"type\":\"integer\",\"description\":\"One-based first line.\",\"default\":1,\"minimum\":1},\"lineCount\":{\"type\":\"integer\",\"description\":\"Maximum consecutive lines returned.\",\"default\":200,\"minimum\":1,\"maximum\":500}},\"required\":[\"moduleName\"],\"additionalProperties\":false}"),
                 Tool("excel.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code.\"},\"createIfMissing\":{\"type\":\"boolean\",\"description\":\"Whether a missing VBA standard module may be created.\",\"default\":true}},\"required\":[\"moduleName\",\"code\"],\"additionalProperties\":false}", true, false, 3),
                 Tool("excel.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\",\"default\":\"RNAssistantModule\"},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code.\"}},\"required\":[\"code\"],\"additionalProperties\":false}", true, false, 3),
                 Tool("excel.run_macro", "Mutates document: Run an Excel VBA macro by name.", "{\"type\":\"object\",\"properties\":{\"macroName\":{\"type\":\"string\",\"description\":\"Exact public VBA macro name.\"}},\"required\":[\"macroName\"],\"additionalProperties\":false}", true, false, 3)
@@ -398,6 +402,8 @@ namespace RNAssistant.OfficeHosts
                         return ListVbaProjectComponents();
                     case "excel.vba_read_module":
                         return ReadVbaModule(command);
+                    case "excel.vba_read_lines":
+                        return ReadVbaLines(command);
                     case "excel.vba_replace_module":
                         return ReplaceVbaModule(command);
                     case "excel.insert_vba_module":
@@ -437,6 +443,9 @@ namespace RNAssistant.OfficeHosts
             {
                 return ToolResult.Fail("Select an Excel range first.");
             }
+
+            var sizeError = ValidateReadableRange(range, "Selection");
+            if (sizeError != null) return sizeError;
 
             var sheet = range.Worksheet as Excel.Worksheet;
             return ToolResult.Ok("Selection read.", JsonConvert.SerializeObject(new
@@ -482,6 +491,8 @@ namespace RNAssistant.OfficeHosts
             var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
             var address = ToolArgumentReader.String(command.Arguments, "address", "A1");
             var range = sheet.Range[address];
+            var sizeError = ValidateReadableRange(range, "Range");
+            if (sizeError != null) return sizeError;
             var rows = RangeToRows(range);
             return ToolResult.Ok("Range read: " + sheet.Name + "!" + address, JsonConvert.SerializeObject(rows));
         }
@@ -491,6 +502,8 @@ namespace RNAssistant.OfficeHosts
             var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
             var address = ToolArgumentReader.String(command.Arguments, "address", "A1");
             var range = sheet.Range[address];
+            var sizeError = ValidateReadableRange(range, "Formula range");
+            if (sizeError != null) return sizeError;
             var rows = RangeToFormulaRows(range);
             return ToolResult.Ok("Formula range read: " + sheet.Name + "!" + address, JsonConvert.SerializeObject(rows));
         }
@@ -503,6 +516,8 @@ namespace RNAssistant.OfficeHosts
             var range = string.IsNullOrWhiteSpace(address)
                 ? ResolveSelectionRange(RequireWorkbook()) ?? sheet.UsedRange
                 : sheet.Range[address];
+            var sizeError = ValidateReadableRange(range, "Profile range");
+            if (sizeError != null) return sizeError;
             var rows = RangeToRows(range);
             var formulaRows = RangeToFormulaRows(range);
             var rowCount = rows.Count;
@@ -1231,6 +1246,15 @@ namespace RNAssistant.OfficeHosts
             return VbaProjectSupport.ReadModule(workbook, moduleName, maxChars);
         }
 
+        private ToolResult ReadVbaLines(ToolCommand command)
+        {
+            return VbaProjectSupport.ReadModuleLines(
+                RequireWorkbook(),
+                ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
+                ToolArgumentReader.Int32(command.Arguments, "startLine", 1),
+                ToolArgumentReader.Int32(command.Arguments, "lineCount", 200));
+        }
+
         private ToolResult ReplaceVbaModule(ToolCommand command)
         {
             var workbook = RequireWorkbook();
@@ -1584,6 +1608,48 @@ namespace RNAssistant.OfficeHosts
             return rows;
         }
 
+        private static ToolResult ValidateReadableRange(Excel.Range range, string operation)
+        {
+            var cellCount = RangeCellCount(range);
+            if (cellCount <= MaxReadableCellCount) return null;
+            var address = range == null ? string.Empty : range.Address[false, false];
+            return ToolResult.Fail(
+                (operation ?? "Excel read") + " is too large: " + cellCount +
+                " cells. Limit is " + MaxReadableCellCount + "; split the request into smaller ranges.",
+                JsonConvert.SerializeObject(new
+                {
+                    address = address,
+                    cellCount = cellCount,
+                    maxCells = MaxReadableCellCount
+                }),
+                "excel_range_too_large",
+                true);
+        }
+
+        private static long RangeCellCount(Excel.Range range)
+        {
+            if (range == null) return 0;
+            long total = 0;
+            foreach (Excel.Range area in range.Areas)
+            {
+                var count = (long)Convert.ToInt32(area.Rows.Count) * Convert.ToInt32(area.Columns.Count);
+                if (long.MaxValue - total < count) return long.MaxValue;
+                total += count;
+            }
+            return total;
+        }
+
+        private static Excel.Range ContextPreviewRange(Excel.Range range, int maxCells)
+        {
+            if (range == null || RangeCellCount(range) <= maxCells) return range;
+            var totalRows = Math.Max(1, Convert.ToInt32(range.Rows.Count));
+            var totalColumns = Math.Max(1, Convert.ToInt32(range.Columns.Count));
+            var columns = Math.Min(totalColumns, Math.Max(1, maxCells));
+            var rows = Math.Min(totalRows, Math.Max(1, maxCells / columns));
+            var start = range.Cells[1, 1] as Excel.Range;
+            return start == null ? range : start.Resize[rows, columns];
+        }
+
         private static string HeaderAt(IReadOnlyList<List<object>> rows, int columnIndex)
         {
             return rows != null && rows.Count > 0 && columnIndex >= 0 && columnIndex < rows[0].Count
@@ -1823,7 +1889,9 @@ namespace RNAssistant.OfficeHosts
 
         private static void AppendRangeValues(StringBuilder builder, Excel.Range range, int maxChars)
         {
-            foreach (var row in RangeToRows(range))
+            var previewCells = Math.Max(1, Math.Min(MaxContextPreviewCells, Math.Max(1, maxChars / 2)));
+            var preview = ContextPreviewRange(range, previewCells);
+            foreach (var row in RangeToRows(preview))
             {
                 builder.AppendLine(string.Join("\t", row));
                 if (builder.Length >= maxChars)

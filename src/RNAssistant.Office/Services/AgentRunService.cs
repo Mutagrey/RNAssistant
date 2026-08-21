@@ -21,6 +21,8 @@ namespace RNAssistant.Office.Services
 
     public sealed class AgentRunService
     {
+        private const int ToolResultEnvelopeReserveTokens = 1200;
+
         public delegate string PendingToolRegistrar(ChatSession session, ToolCommand command, ToolResult result);
 
         private readonly IOfficeApplicationAdapter _adapter;
@@ -139,7 +141,7 @@ namespace RNAssistant.Office.Services
 
             if (initialCommand != null && initialResult != null)
             {
-                var confirmed = AgentJsonProtocol.CreateToolResultMessage(initialCommand, initialResult);
+                var confirmed = CreateBoundedToolResultMessage(initialCommand, initialResult, messages, settings);
                 session.Messages.Add(confirmed);
                 messages.Add(confirmed);
                 results.Add(AgentTranscript.DescribeResult(initialCommand, initialResult));
@@ -156,6 +158,12 @@ namespace RNAssistant.Office.Services
                     ReasoningEnabled = session == null ? (bool?)null : session.ReasoningEnabled,
                     RunCache = runCache
                 };
+                string budgetError;
+                if (!TryValidatePromptBudget(messages, settings, options, out budgetError))
+                {
+                    return FinishWithDiagnostic(session, results, contextUsage, budgetError,
+                        "Контекст переполнен", "prompt_budget_exceeded");
+                }
                 var completion = await CompleteAsync(settings, messages, options, progress, cancellationToken).ConfigureAwait(false);
                 contextUsage = ContextUsageEstimator.FromPrompt(messages, settings,
                     completion == null ? null : completion.PromptTokens, options);
@@ -171,6 +179,11 @@ namespace RNAssistant.Office.Services
                     {
                         AgentJsonProtocol.CreateFormatRepairMessage(parsed.Error, retry, maxFormatRetries)
                     };
+                    if (!TryValidatePromptBudget(repairMessages, settings, options, out budgetError))
+                    {
+                        return FinishWithDiagnostic(session, results, contextUsage, budgetError,
+                            "Контекст переполнен", "prompt_budget_exceeded");
+                    }
                     completion = await CompleteAsync(settings, repairMessages, options, progress, cancellationToken).ConfigureAwait(false);
                     contextUsage = ContextUsageEstimator.FromPrompt(repairMessages, settings,
                         completion == null ? null : completion.PromptTokens, options);
@@ -232,7 +245,7 @@ namespace RNAssistant.Office.Services
 
                     if (!AgentTranscript.IsWaitingResult(toolResult))
                     {
-                        var resultMessage = AgentJsonProtocol.CreateToolResultMessage(command, toolResult);
+                        var resultMessage = CreateBoundedToolResultMessage(command, toolResult, messages, settings);
                         session.Messages.Add(resultMessage);
                         messages.Add(resultMessage);
                     }
@@ -346,14 +359,16 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             IReadOnlyList<object> results,
             object contextUsage,
-            string text)
+            string text,
+            string title = "Некорректный ответ агента",
+            string executionStatus = "invalid_agent_response")
         {
             var activity = new ChatActivity
             {
                 Kind = "diagnostic",
-                Title = "Некорректный ответ агента",
+                Title = title,
                 Status = "failed",
-                ExecutionStatus = "invalid_agent_response",
+                ExecutionStatus = executionStatus,
                 ResultMessage = text
             };
             session.Messages.Add(AgentTranscript.CreateAssistantMessage(text, null, activity));
@@ -368,6 +383,40 @@ namespace RNAssistant.Office.Services
                 ToolResults = results ?? new object[0],
                 ContextUsage = contextUsage
             };
+        }
+
+        private static ChatMessage CreateBoundedToolResultMessage(
+            ToolCommand command,
+            ToolResult result,
+            IReadOnlyList<ChatMessage> messages,
+            AppSettings settings)
+        {
+            var inputBudget = ModelContextBudget.InputBudgetTokens(settings);
+            var used = ModelContextBudget.EstimateMessagesTokens(messages);
+            var availableForData = Math.Max(0, inputBudget - used - ToolResultEnvelopeReserveTokens);
+            var maxDataTokens = Math.Min(AgentJsonProtocol.DefaultMaxToolResultDataTokens, availableForData);
+            return AgentJsonProtocol.CreateToolResultMessage(command, result, maxDataTokens);
+        }
+
+        private static bool TryValidatePromptBudget(
+            IReadOnlyList<ChatMessage> messages,
+            AppSettings settings,
+            LlmRequestOptions options,
+            out string error)
+        {
+            var inputBudget = ModelContextBudget.InputBudgetTokens(settings);
+            var estimated = ModelContextBudget.EstimateMessagesTokens(messages) +
+                ModelContextBudget.EstimateRequestOptionsTokens(options);
+            if (estimated <= inputBudget)
+            {
+                error = null;
+                return true;
+            }
+
+            error = "Агент остановлен до следующего запроса модели: контекст занимает примерно " + estimated +
+                " токенов при доступном лимите " + inputBudget +
+                ". Сузьте диапазон/объём результата или начните новый чат.";
+            return false;
         }
 
         private static string LatestUserRequest(ChatSession session)

@@ -10,13 +10,15 @@ namespace RNAssistant.ExcelAddIn
     public sealed partial class ThisAddIn
     {
         private AssistantRuntime _runtime;
+        private OfficeUiDispatcher _officeDispatcher;
         private readonly Dictionary<int, PaneEntry> _panes = new Dictionary<int, PaneEntry>();
         private bool _assistantVisible;
         private readonly List<CommandBarButton> _contextButtons = new List<CommandBarButton>();
 
         private void ThisAddIn_Startup(object sender, EventArgs e)
         {
-            _runtime = new AssistantRuntime(new ExcelAdapter(Application));
+            _officeDispatcher = new OfficeUiDispatcher();
+            _runtime = new AssistantRuntime(new UiThreadOfficeApplicationAdapter(new ExcelAdapter(Application), _officeDispatcher));
             Application.SheetSelectionChange += Application_SheetSelectionChange;
             Application.WorkbookActivate += Application_WorkbookChanged;
             Application.WorkbookOpen += Application_WorkbookChanged;
@@ -38,6 +40,7 @@ namespace RNAssistant.ExcelAddIn
             }
             _panes.Clear();
             RemoveContextMenus();
+            if (_officeDispatcher != null) _officeDispatcher.Dispose();
         }
 
         public void ShowAssistant(string quickAction = null)
@@ -126,7 +129,7 @@ namespace RNAssistant.ExcelAddIn
                 FullName = fullName,
                 Path = fullName
             };
-            var runtime = new AssistantRuntime(new ExcelAdapter(Application, descriptor));
+            var runtime = new AssistantRuntime(new UiThreadOfficeApplicationAdapter(new ExcelAdapter(Application, descriptor), _officeDispatcher));
             var pane = CustomTaskPanes.Add(runtime.CreatePaneControl(), "RN Assistant", window);
             pane.Width = 1200;
             entry = new PaneEntry { Window = window, Pane = pane, Runtime = runtime };

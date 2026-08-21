@@ -9,18 +9,21 @@ namespace RNAssistant.WordAddIn
     public sealed partial class ThisAddIn
     {
         private AssistantRuntime _runtime;
+        private OfficeUiDispatcher _officeDispatcher;
         private Microsoft.Office.Tools.CustomTaskPane _pane;
         private readonly List<CommandBarButton> _contextButtons = new List<CommandBarButton>();
 
         private void ThisAddIn_Startup(object sender, EventArgs e)
         {
-            _runtime = new AssistantRuntime(new WordAdapter(Application));
+            _officeDispatcher = new OfficeUiDispatcher();
+            _runtime = new AssistantRuntime(new UiThreadOfficeApplicationAdapter(new WordAdapter(Application), _officeDispatcher));
             InstallContextMenus();
         }
 
         private void ThisAddIn_Shutdown(object sender, EventArgs e)
         {
             RemoveContextMenus();
+            if (_officeDispatcher != null) _officeDispatcher.Dispose();
         }
 
         public void ShowAssistant(string quickAction = null)

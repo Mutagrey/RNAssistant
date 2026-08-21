@@ -10,12 +10,14 @@ namespace RNAssistant.OutlookAddIn
     public sealed partial class ThisAddIn
     {
         private AssistantRuntime _runtime;
+        private OfficeUiDispatcher _officeDispatcher;
         private Microsoft.Office.Tools.CustomTaskPane _pane;
         private readonly List<CommandBarButton> _contextButtons = new List<CommandBarButton>();
 
         private void ThisAddIn_Startup(object sender, EventArgs e)
         {
-            _runtime = new AssistantRuntime(new OutlookAdapter(Application));
+            _officeDispatcher = new OfficeUiDispatcher();
+            _runtime = new AssistantRuntime(new UiThreadOfficeApplicationAdapter(new OutlookAdapter(Application), _officeDispatcher));
             Application.ItemContextMenuDisplay += Application_ItemContextMenuDisplay;
             InstallContextMenus();
         }
@@ -24,6 +26,7 @@ namespace RNAssistant.OutlookAddIn
         {
             Application.ItemContextMenuDisplay -= Application_ItemContextMenuDisplay;
             RemoveContextMenus();
+            if (_officeDispatcher != null) _officeDispatcher.Dispose();
         }
 
         public void ShowAssistant(string quickAction = null)

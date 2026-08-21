@@ -94,12 +94,14 @@ TOOL_RESULT:
 
 On failure, `ok` is `false`, `data` may still contain partial details, and `error` contains `code`, `message`, and `retryable`. The model chooses the next step from this JSON; the runtime does not infer one.
 
+`message` and `data` are bounded before they enter model context. Oversized `data` is replaced with `{truncated, original_chars, original_estimated_tokens, preview, hint}` so the model can request a smaller scope. Before every model request, including format repair and continuation after confirmation, the runtime verifies the estimated prompt against the current input budget and stops with a visible diagnostic instead of sending an oversized request.
+
 ## Local invariants
 
 - Disabled, unavailable, or `AgentCanRun=false` tools are not exposed to Agent mode.
 - Confirmation and mutation safety remain local executor rules.
 - Maximum iterations and maximum tool steps bound execution.
 - Pipelines call existing tool ids through `OfficeToolExecutor`; nested safety is resolved recursively.
-- VBA mutations keep their backup/hash/stale-state checks inside the VBA tool implementation and may require confirmation.
+- VBA mutations keep backup/strict-live-hash/stale-state checks inside the VBA tool implementation, verify final module/package state by read-back, expose bounded exact-range reads through `vba_read_lines`, and may require confirmation. Export-aware package hashes are separate from live module hashes.
 - Provider reasoning is transport metadata, not part of the agent JSON or replay history.
 - Context compaction may replace the replay prefix with a stored checkpoint, but it does not change the agent protocol or repeat Office tools.

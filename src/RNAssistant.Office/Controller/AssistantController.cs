@@ -895,6 +895,14 @@ namespace RNAssistant.Office
             }
         }
 
+        private static void ReportProgress(Action<string, string, ChatActivity> progress, string phase, string message, ChatActivity activity)
+        {
+            if (progress != null)
+            {
+                progress(phase, message, activity);
+            }
+        }
+
         private static bool IsSessionArtifactTool(string toolId)
         {
             return string.Equals(toolId, HtmlArtifactToolExecutor.UpsertFileToolId, StringComparison.OrdinalIgnoreCase) ||

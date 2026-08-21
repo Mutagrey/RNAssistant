@@ -74,6 +74,8 @@
     <Compile Include="Agent\AgentTranscript.cs" />
     <Compile Include="Runtime\DocumentIdentity.cs" />
     <Compile Include="Runtime\OfficeStaDispatcher.cs" />
+    <Compile Include="Runtime\OfficeUiDispatcher.cs" />
+    <Compile Include="Runtime\UiThreadOfficeApplicationAdapter.cs" />
     <Compile Include="Contracts\IOfficeApplicationAdapter.cs" />
     <Compile Include="Vba\VbaProjectSupport.cs" />
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />

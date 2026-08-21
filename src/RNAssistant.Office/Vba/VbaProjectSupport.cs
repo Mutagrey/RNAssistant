@@ -60,15 +60,70 @@ namespace RNAssistant.Office
             }
 
             var fullCode = ReadComponentCode(component);
-            var code = Trim(fullCode, maxChars);
+            var code = Trim(fullCode, Math.Max(1, Math.Min(1000000, maxChars)));
             return ToolResult.Ok("VBA module read: " + component.Name, JsonConvert.SerializeObject(new
             {
                 name = (string)component.Name,
                 type = ComponentTypeName((int)component.Type),
                 lineCount = (int)component.CodeModule.CountOfLines,
                 code = code,
-                codeSha256 = VbaToolManifestParser.CodeSha256(fullCode),
+                codeSha256 = VbaToolManifestParser.LiveCodeSha256(fullCode),
                 truncated = !string.Equals(code, fullCode, StringComparison.Ordinal)
+            }));
+        }
+
+        public static ToolResult ReadModuleLines(object documentObject, string moduleName, int startLine, int lineCount)
+        {
+            dynamic component = FindComponent(GetVbaProject(documentObject), moduleName);
+            if (component == null)
+            {
+                return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
+            }
+
+            dynamic module = component.CodeModule;
+            var totalLineCount = (int)module.CountOfLines;
+            startLine = Math.Max(1, startLine);
+            lineCount = Math.Max(1, Math.Min(500, lineCount));
+            if (totalLineCount > 0 && startLine > totalLineCount)
+            {
+                return ToolResult.Fail(
+                    "VBA startLine is outside the module.",
+                    JsonConvert.SerializeObject(new { moduleName = moduleName, startLine = startLine, totalLineCount = totalLineCount }),
+                    "vba_line_range_invalid",
+                    true);
+            }
+
+            var returnedLineCount = totalLineCount == 0 ? 0 : Math.Min(lineCount, totalLineCount - startLine + 1);
+            var code = returnedLineCount == 0 ? string.Empty : (string)module.Lines[startLine, returnedLineCount];
+            var rangeLimitedByChars = false;
+            while (code.Length > 30000 && returnedLineCount > 1)
+            {
+                returnedLineCount = Math.Max(1, returnedLineCount / 2);
+                code = (string)module.Lines[startLine, returnedLineCount];
+                rangeLimitedByChars = true;
+            }
+            if (code.Length > 30000)
+            {
+                return ToolResult.Fail(
+                    "One VBA source line exceeds the safe read limit.",
+                    JsonConvert.SerializeObject(new { moduleName = moduleName, startLine = startLine, lineChars = code.Length }),
+                    "vba_line_too_large",
+                    false);
+            }
+            var fullCode = ReadComponentCode(component);
+            return ToolResult.Ok("VBA module lines read: " + component.Name, JsonConvert.SerializeObject(new
+            {
+                name = (string)component.Name,
+                type = ComponentTypeName((int)component.Type),
+                startLine = totalLineCount == 0 ? 1 : startLine,
+                endLine = returnedLineCount == 0 ? 0 : startLine + returnedLineCount - 1,
+                returnedLineCount = returnedLineCount,
+                totalLineCount = totalLineCount,
+                code = code,
+                codeSha256 = VbaToolManifestParser.LiveCodeSha256(fullCode),
+                rangeLimitedByChars = rangeLimitedByChars,
+                hasMoreBefore = totalLineCount > 0 && startLine > 1,
+                hasMoreAfter = totalLineCount > 0 && startLine + returnedLineCount - 1 < totalLineCount
             }));
         }
 
@@ -78,10 +133,9 @@ namespace RNAssistant.Office
             {
                 return ToolResult.Fail("No moduleName provided.");
             }
-            if (string.IsNullOrWhiteSpace(code))
-            {
-                return ToolResult.Fail("No VBA code provided.");
-            }
+            code = code ?? string.Empty;
+            string validationError;
+            if (!TryValidateLiveCode(code, out validationError)) return ToolResult.Fail(validationError, null, "vba_code_invalid", true);
 
             dynamic vbProject = GetVbaProject(documentObject);
             dynamic component = FindComponent(vbProject, moduleName);
@@ -105,6 +159,7 @@ namespace RNAssistant.Office
                 module = component.CodeModule;
                 originalCode = created ? string.Empty : ReadComponentCode(component);
                 ReplaceCode(module, code);
+                VerifyComponentLiveCode(component, code, "VBA module replacement");
             }
             catch (Exception ex)
             {
@@ -114,10 +169,15 @@ namespace RNAssistant.Office
                     if (created)
                     {
                         vbProject.VBComponents.Remove(component);
+                        if (FindComponent(vbProject, moduleName) != null)
+                        {
+                            throw new InvalidOperationException("Incomplete VBA module is still present after rollback: " + moduleName);
+                        }
                     }
                     else
                     {
                         ReplaceCode(module, originalCode);
+                        VerifyComponentLiveCode(component, originalCode, "VBA module rollback");
                     }
                 }
                 catch (Exception rollbackException)
@@ -138,7 +198,12 @@ namespace RNAssistant.Office
                         : "VBA module replacement failed; the original code was restored.",
                     ex);
             }
-            return ToolResult.Ok("VBA module replaced: " + component.Name, JsonConvert.SerializeObject(new { moduleName = (string)component.Name, lineCount = (int)component.CodeModule.CountOfLines }));
+            return ToolResult.Ok("VBA module replaced: " + component.Name, JsonConvert.SerializeObject(new
+            {
+                moduleName = (string)component.Name,
+                lineCount = (int)component.CodeModule.CountOfLines,
+                codeSha256 = VbaToolManifestParser.LiveCodeSha256(ReadComponentCode(component))
+            }));
         }
 
         public static ToolResult InsertModule(object documentObject, string moduleName, string code)
@@ -153,6 +218,8 @@ namespace RNAssistant.Office
             {
                 return ToolResult.Fail("No VBA code provided.");
             }
+            string validationError;
+            if (!TryValidateLiveCode(code, out validationError)) return ToolResult.Fail(validationError, null, "vba_code_invalid", true);
 
             var type = string.Equals(componentType, "ClassModule", StringComparison.OrdinalIgnoreCase) ? ClassModuleType :
                 string.Equals(componentType, "StdModule", StringComparison.OrdinalIgnoreCase) ? StdModuleType : 0;
@@ -165,24 +232,38 @@ namespace RNAssistant.Office
             {
                 component = vbProject.VBComponents.Add(type);
                 component.Name = moduleName;
-                component.CodeModule.AddFromString(code);
+                ReplaceCode(component.CodeModule, code);
+                VerifyComponentLiveCode(component, code, "VBA module creation");
                 return ToolResult.Ok("Inserted VBA module: " + moduleName, JsonConvert.SerializeObject(new
                 {
                     moduleName = (string)component.Name,
-                    lineCount = (int)component.CodeModule.CountOfLines
+                    lineCount = (int)component.CodeModule.CountOfLines,
+                    codeSha256 = VbaToolManifestParser.LiveCodeSha256(ReadComponentCode(component))
                 }));
             }
-            catch
+            catch (Exception ex)
             {
+                Exception cleanupError = null;
                 if (component != null)
                 {
                     try
                     {
                         vbProject.VBComponents.Remove(component);
+                        if (FindComponent(vbProject, moduleName) != null)
+                        {
+                            throw new InvalidOperationException("Incomplete VBA module is still present after create rollback: " + moduleName);
+                        }
                     }
-                    catch
+                    catch (Exception cleanupException)
                     {
+                        cleanupError = cleanupException;
                     }
+                }
+                if (cleanupError != null)
+                {
+                    throw new InvalidOperationException(
+                        "VBA module creation failed and the incomplete component could not be removed: " + cleanupError.Message,
+                        ex);
                 }
                 throw;
             }
@@ -197,6 +278,13 @@ namespace RNAssistant.Office
             if (type != StdModuleType && type != ClassModuleType)
                 return ToolResult.Fail("Document modules and UserForms are read/search/patch only and cannot be deleted.", null, "vba_component_type_read_only", false);
             vbProject.VBComponents.Remove(component);
+            if (FindComponent(vbProject, moduleName) != null)
+            {
+                return ToolResult.PartialFailure(
+                    "VBA module deletion returned success but the module is still present: " + moduleName,
+                    JsonConvert.SerializeObject(new { moduleName = moduleName, type = ComponentTypeName(type) }),
+                    "vba_delete_verify_failed");
+            }
             return ToolResult.Ok("VBA module deleted: " + moduleName, JsonConvert.SerializeObject(new { moduleName = moduleName, type = ComponentTypeName(type) }));
         }
 
@@ -249,6 +337,14 @@ namespace RNAssistant.Office
             {
                 return ToolResult.Fail("VBA package contains a duplicate component: " + duplicate.Key, null, "vba_component_duplicate", false);
             }
+            foreach (var component in components)
+            {
+                string validationError;
+                if (!TryValidateLiveCode(component.Code, out validationError))
+                {
+                    return ToolResult.Fail(component.Name + ": " + validationError, null, "vba_code_invalid", true);
+                }
+            }
 
             dynamic vbProject = GetVbaProject(documentObject);
             var tempDirectory = Path.Combine(Path.GetTempPath(), "RNAssistant-Vba-" + Guid.NewGuid().ToString("N"));
@@ -278,6 +374,15 @@ namespace RNAssistant.Office
                         imported.Name = component.Name;
                         installedNames[installedNames.Count - 1] = component.Name;
                     }
+                }
+                foreach (var component in components)
+                {
+                    dynamic installed = FindComponent(vbProject, component.Name);
+                    if (installed == null)
+                    {
+                        throw new InvalidOperationException("VBA package verification could not find component: " + component.Name);
+                    }
+                    VerifyComponentPackageCode(installed, component.Code, "VBA package installation");
                 }
                 return ToolResult.Ok("VBA package installed.", JsonConvert.SerializeObject(new
                 {
@@ -357,6 +462,13 @@ namespace RNAssistant.Office
                     vbProject.VBComponents.Remove(component);
                     removed.Add(property.Name);
                 }
+                foreach (var property in expected.Properties())
+                {
+                    if (FindComponent(vbProject, property.Name) != null)
+                    {
+                        throw new InvalidOperationException("VBA package removal verification found component: " + property.Name);
+                    }
+                }
                 return ToolResult.Ok("VBA package components removed.", JsonConvert.SerializeObject(new { components = removed }));
             }
             catch (Exception ex)
@@ -398,6 +510,40 @@ namespace RNAssistant.Office
             }
             if (code.StartsWith("Attribute VB_Name", StringComparison.OrdinalIgnoreCase)) return InsertMarkerAfterAttributes(code, markerLine);
             return "Attribute VB_Name = \"" + component.Name + "\"\r\n" + markerLine + code;
+        }
+
+        private static void VerifyComponentLiveCode(object componentObject, string expectedCode, string operation)
+        {
+            if (componentObject == null)
+            {
+                throw new InvalidOperationException((operation ?? "VBA write") + " verification found no component.");
+            }
+            var expectedHash = VbaToolManifestParser.LiveCodeSha256(expectedCode);
+            var actualHash = VbaToolManifestParser.LiveCodeSha256(ReadComponentCode(componentObject));
+            dynamic component = componentObject;
+            var expectedLineCount = VbaToolManifestParser.LiveCodeLineCount(expectedCode);
+            var actualLineCount = (int)component.CodeModule.CountOfLines;
+            if (!string.Equals(expectedHash, actualHash, StringComparison.OrdinalIgnoreCase) || expectedLineCount != actualLineCount)
+            {
+                throw new InvalidOperationException(
+                    (operation ?? "VBA write") + " verification failed: expected hash/lines " + expectedHash + "/" + expectedLineCount +
+                    ", actual " + actualHash + "/" + actualLineCount + ".");
+            }
+        }
+
+        private static void VerifyComponentPackageCode(object componentObject, string expectedCode, string operation)
+        {
+            if (componentObject == null)
+            {
+                throw new InvalidOperationException((operation ?? "VBA package write") + " verification found no component.");
+            }
+            var expectedHash = VbaToolManifestParser.CodeSha256(expectedCode);
+            var actualHash = VbaToolManifestParser.CodeSha256(ReadComponentCode(componentObject));
+            if (!string.Equals(expectedHash, actualHash, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    (operation ?? "VBA package write") + " verification failed: expected " + expectedHash + ", actual " + actualHash + ".");
+            }
         }
 
         private static string InsertMarkerAfterAttributes(string code, string marker)
@@ -447,14 +593,58 @@ namespace RNAssistant.Office
 
         private static void ReplaceCode(dynamic module, string code)
         {
+            code = PrepareLiveCodeForWrite(code);
             if ((int)module.CountOfLines > 0)
             {
                 module.DeleteLines(1, (int)module.CountOfLines);
             }
             if (!string.IsNullOrEmpty(code))
             {
-                module.AddFromString(code);
+                module.InsertLines(1, code);
             }
+        }
+
+        private static string PrepareLiveCodeForWrite(string code)
+        {
+            string validationError;
+            if (!TryValidateLiveCode(code ?? string.Empty, out validationError))
+            {
+                throw new InvalidOperationException(validationError);
+            }
+            var normalized = (code ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
+            if (VbaToolManifestParser.NormalizeLiveCode(normalized).Length == 0) return string.Empty;
+            return normalized.Replace("\n", "\r\n");
+        }
+
+        private static bool TryValidateLiveCode(string code, out string error)
+        {
+            code = code ?? string.Empty;
+            for (var index = 0; index < code.Length; index++)
+            {
+                var value = code[index];
+                if (value == '\uFEFF')
+                {
+                    error = "VBA code contains a BOM/zero-width no-break space at character " + index + ". Remove the hidden character before writing.";
+                    return false;
+                }
+                if (value == '\u2028' || value == '\u2029')
+                {
+                    error = "VBA code contains an unsupported Unicode line separator at character " + index + ". Use CRLF or LF line endings.";
+                    return false;
+                }
+                if (char.GetUnicodeCategory(value) == System.Globalization.UnicodeCategory.Format)
+                {
+                    error = "VBA code contains a hidden Unicode formatting character at character " + index + ".";
+                    return false;
+                }
+                if (char.IsControl(value) && value != '\r' && value != '\n' && value != '\t')
+                {
+                    error = "VBA code contains an unsupported control character at character " + index + ".";
+                    return false;
+                }
+            }
+            error = null;
+            return true;
         }
 
         private static string ComponentTypeName(int type)

@@ -202,7 +202,8 @@ namespace RNAssistant.OfficeHosts
                 Tool("word.add_table", "Mutates document: Insert a table at selection, start, or end.", "{\"type\":\"object\",\"properties\":{\"rows\":{\"type\":\"integer\",\"description\":\"Number of table rows.\",\"default\":2},\"columns\":{\"type\":\"integer\",\"description\":\"Number of table columns.\",\"default\":2},\"values\":{\"type\":\"array\",\"items\":{\"type\":\"array\",\"items\":{\"type\":[\"string\",\"number\",\"boolean\",\"null\"]}},\"description\":\"Two-dimensional JSON array of row arrays.\"},\"location\":{\"type\":\"string\",\"description\":\"Insertion target supported by the tool.\",\"default\":\"selection\",\"enum\":[\"selection\",\"start\",\"end\"]}},\"required\":[],\"additionalProperties\":false}", true, true, 2),
                 Tool("word.insert_page_break", "Mutates document: Insert a page break at the current cursor position.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}", true, true, 1),
                 Tool("word.add_comment", "Mutates document: Add a comment to the current selection.", "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Complete text to insert, replace, or assign.\"}},\"required\":[\"text\"],\"additionalProperties\":false}", true, true, 1),
-                Tool("word.vba_read_module", "Read-only: Read one VBA component by exact name from vba_list_modules; returns source and full code hash.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum number of text characters returned.\",\"default\":30000}},\"required\":[\"moduleName\"],\"additionalProperties\":false}"),
+                Tool("word.vba_read_module", "Read-only: Read one VBA component by exact name from vba_list_modules; returns source and full code hash.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum number of text characters returned.\",\"default\":30000,\"minimum\":1,\"maximum\":1000000}},\"required\":[\"moduleName\"],\"additionalProperties\":false}"),
+                Tool("word.vba_read_lines", "Read-only: Read an exact one-based line range from a VBA component; returns the full-module code hash.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"startLine\":{\"type\":\"integer\",\"description\":\"One-based first line.\",\"default\":1,\"minimum\":1},\"lineCount\":{\"type\":\"integer\",\"description\":\"Maximum consecutive lines returned.\",\"default\":200,\"minimum\":1,\"maximum\":500}},\"required\":[\"moduleName\"],\"additionalProperties\":false}"),
                 Tool("word.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code.\"},\"createIfMissing\":{\"type\":\"boolean\",\"description\":\"Whether a missing VBA standard module may be created.\",\"default\":true}},\"required\":[\"moduleName\",\"code\"],\"additionalProperties\":false}", true, false, 3),
                 Tool("word.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\",\"default\":\"RNAssistantModule\"},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code.\"}},\"required\":[\"code\"],\"additionalProperties\":false}", true, false, 3),
                 Tool("word.run_macro", "Mutates document: Run a Word VBA macro by name.", "{\"type\":\"object\",\"properties\":{\"macroName\":{\"type\":\"string\",\"description\":\"Exact public VBA macro name.\"}},\"required\":[\"macroName\"],\"additionalProperties\":false}", true, false, 3)
@@ -341,6 +342,8 @@ namespace RNAssistant.OfficeHosts
                         return ListVbaProjectComponents();
                     case "word.vba_read_module":
                         return ReadVbaModule(command);
+                    case "word.vba_read_lines":
+                        return ReadVbaLines(command);
                     case "word.vba_replace_module":
                         return ReplaceVbaModule(command);
                     case "word.insert_vba_module":
@@ -721,6 +724,15 @@ namespace RNAssistant.OfficeHosts
                 RequireDocument(),
                 ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
                 ToolArgumentReader.Int32(command.Arguments, "maxChars", 30000));
+        }
+
+        private ToolResult ReadVbaLines(ToolCommand command)
+        {
+            return VbaProjectSupport.ReadModuleLines(
+                RequireDocument(),
+                ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
+                ToolArgumentReader.Int32(command.Arguments, "startLine", 1),
+                ToolArgumentReader.Int32(command.Arguments, "lineCount", 200));
         }
 
         private ToolResult ReplaceVbaModule(ToolCommand command)

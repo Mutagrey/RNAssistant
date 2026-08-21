@@ -46,7 +46,7 @@ See [agent-protocol.md](agent-protocol.md).
 - Attachments use the selected model. There is no automatic attachment-model router or endpoint failover.
 - Different chats may run concurrently; one chat has one active run and document mutations are serialized by host/document identity.
 - HTML workspace state belongs to the chat, is revisioned as artifacts, and remains sandboxed with explicit network-origin permission.
-- Desktop COM calls enter adapters through the STA dispatcher. VSTO/COM changes require Windows validation.
+- Desktop COM calls enter adapters through the dedicated STA dispatcher. In-process VSTO adapters marshal every Office call back to the host UI thread through `OfficeUiDispatcher`; VSTO/COM changes still require Windows validation.
 
 ## Main code zones
 

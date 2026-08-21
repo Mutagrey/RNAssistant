@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Harness
 {
@@ -84,7 +85,7 @@ namespace RNAssistant.Harness
 
         public bool FailNextAdd { get; set; }
         public string Code { get { return _code; } }
-        public int CountOfLines { get { return string.IsNullOrEmpty(_code) ? 0 : _code.Replace("\r\n", "\n").Split('\n').Length; } }
+        public int CountOfLines { get { return VbaToolManifestParser.LiveCodeLineCount(_code); } }
         public FakeVbaLines Lines { get; private set; }
 
         public void DeleteLines(int startLine, int count)
@@ -104,6 +105,15 @@ namespace RNAssistant.Harness
                 throw new InvalidOperationException("scripted VBA write failure");
             }
             _code = code ?? string.Empty;
+        }
+
+        public void InsertLines(int startLine, string code)
+        {
+            if (startLine != 1 || CountOfLines != 0)
+            {
+                throw new InvalidOperationException("Fake code module only supports insertion into an empty module at line 1.");
+            }
+            AddFromString(code);
         }
     }
 

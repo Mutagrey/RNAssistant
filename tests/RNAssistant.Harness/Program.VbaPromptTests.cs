@@ -32,7 +32,7 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var command = new ToolCommand { ToolId = executor.VbaToolId("vba_replace_text") };
                 command.Arguments["moduleName"] = "Module1";
-                command.Arguments["expectedCodeSha256"] = VbaToolManifestParser.CodeSha256(adapter.VbaModuleCode);
+                command.Arguments["expectedCodeSha256"] = VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode);
                 command.Arguments["find"] = "\"old\"";
                 command.Arguments["replace"] = "\"new\"";
 
@@ -63,7 +63,7 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var command = new ToolCommand { ToolId = executor.VbaToolId("vba_apply_patch") };
                 command.Arguments["moduleName"] = "Module2";
-                command.Arguments["expectedCodeSha256"] = VbaToolManifestParser.CodeSha256(adapter.GetVbaModuleCode("Module2"));
+                command.Arguments["expectedCodeSha256"] = VbaToolManifestParser.LiveCodeSha256(adapter.GetVbaModuleCode("Module2"));
                 command.Arguments["patch"] = "[{\"op\":\"replaceFirst\",\"find\":\"\\\"old\\\"\",\"text\":\"\\\"new\\\"\"}]";
 
                 var result = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
@@ -112,7 +112,7 @@ namespace RNAssistant.Harness
                 var command = Command(
                     executor.VbaToolId("vba_apply_patch"),
                     "moduleName", "Module1",
-                    "expectedCodeSha256", VbaToolManifestParser.CodeSha256(adapter.VbaModuleCode),
+                    "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode),
                     "patch", "[{\"op\":\"replaceLines\",\"startLine\":2,\"deleteCount\":5,\"text\":\"End Sub\"}]");
 
                 var result = executor.Execute(command, adapter.GetBuiltInTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
@@ -121,6 +121,98 @@ namespace RNAssistant.Harness
                 AssertContains(result.Message, "past the end", "line overrun message");
                 AssertEqual("Sub Main()\nEnd Sub", adapter.VbaModuleCode, "line overrun leaves module unchanged");
             });
+        }
+
+        private static void VbaLiveHashPreservesLineStructure()
+        {
+            AssertEqual(
+                VbaToolManifestParser.LiveCodeSha256("Option Explicit\r\nSub Main()\r\nEnd Sub"),
+                VbaToolManifestParser.LiveCodeSha256("Option Explicit\nSub Main()\nEnd Sub\n"),
+                "line ending transport is normalized");
+            AssertTrue(
+                !string.Equals(VbaToolManifestParser.LiveCodeSha256("\nOption Explicit"), VbaToolManifestParser.LiveCodeSha256("Option Explicit"), StringComparison.Ordinal),
+                "leading blank line changes live hash");
+            AssertTrue(
+                !string.Equals(VbaToolManifestParser.LiveCodeSha256("Option Explicit\n\n"), VbaToolManifestParser.LiveCodeSha256("Option Explicit\n"), StringComparison.Ordinal),
+                "trailing blank line changes live hash");
+            AssertTrue(
+                !string.Equals(VbaToolManifestParser.LiveCodeSha256("' RNAssistantSession: id=x\nOption Explicit"), VbaToolManifestParser.LiveCodeSha256("Option Explicit"), StringComparison.Ordinal),
+                "runtime marker changes live hash");
+        }
+
+        private static void VbaReadLinesReturnsExactRange()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.VbaModuleCode = "one\ntwo\nthree\nfour";
+                var result = executor.Execute(
+                    Command("excel.vba_read_lines", "moduleName", "Module1", "startLine", 2, "lineCount", 2),
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    new AppSettings(),
+                    false,
+                    false);
+                var data = JObject.Parse(result.DataJson);
+                AssertTrue(result.Success, "read lines result");
+                AssertEqual("two\nthree", (string)data["code"], "exact line range");
+                AssertEqual(2, (int)data["returnedLineCount"], "returned line count");
+                AssertEqual(4, (int)data["totalLineCount"], "total line count");
+                AssertEqual(VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode), (string)data["codeSha256"], "full module live hash");
+            });
+        }
+
+        private static void VbaPatchRejectsAmbiguousAnchors()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.VbaModuleCode = "Sub One()\nEnd Sub\nSub Two()\nEnd Sub";
+                var result = executor.Execute(
+                    Command(
+                        "excel.vba_apply_patch",
+                        "moduleName", "Module1",
+                        "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode),
+                        "patch", "[{\"op\":\"insertBefore\",\"find\":\"End Sub\",\"text\":\"Debug.Print 1\\n\"}]"),
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false);
+                AssertTrue(!result.Success, "ambiguous anchor rejected");
+                AssertEqual("vba_patch_ambiguous", result.ErrorCode, "ambiguous anchor error");
+                AssertTrue(adapter.VbaModuleCode.IndexOf("Debug.Print", StringComparison.Ordinal) < 0, "module unchanged");
+            });
+        }
+
+        private static void VbaLinePatchDoesNotInsertTrailingBlankLine()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.VbaModuleCode = "A\nB\nC";
+                var result = executor.Execute(
+                    Command(
+                        "excel.vba_apply_patch",
+                        "moduleName", "Module1",
+                        "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode),
+                        "patch", "[{\"op\":\"replaceLines\",\"startLine\":2,\"deleteCount\":1,\"text\":\"X\\n\"}]"),
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false);
+                AssertTrue(result.Success, "line patch result");
+                AssertEqual("A\nX\nC", adapter.VbaModuleCode, "single text terminator does not add a blank line");
+            });
+        }
+
+        private static void VbaWriteRejectsHiddenControlCharacters()
+        {
+            var document = new FakeVbaDocumentObject();
+            var component = document.VBProject.VBComponents.Seed("Module1", "Sub Main()\nEnd Sub");
+            var result = VbaProjectSupport.ReplaceModule(document, "Module1", "\uFEFFSub Changed()\nEnd Sub", false);
+            AssertTrue(!result.Success, "hidden BOM rejected");
+            AssertEqual("vba_code_invalid", result.ErrorCode, "hidden BOM error code");
+            AssertContains(component.CodeModule.Code, "Sub Main", "invalid write leaves code unchanged");
+
+            var cleared = VbaProjectSupport.ReplaceModule(document, "Module1", string.Empty, false);
+            AssertTrue(cleared.Success, "existing module can be cleared");
+            AssertEqual(string.Empty, component.CodeModule.Code, "module cleared");
         }
 
         private static void VbaCustomMacroFailureCleansSession()
@@ -179,7 +271,10 @@ namespace RNAssistant.Harness
                 AssertContains(ex.Message, "original code was restored", "atomic replacement diagnostic");
             }
 
-            AssertEqual("Sub Original()\nEnd Sub", component.CodeModule.Code, "original code restored");
+            AssertEqual(
+                VbaToolManifestParser.NormalizeLiveCode("Sub Original()\nEnd Sub"),
+                VbaToolManifestParser.NormalizeLiveCode(component.CodeModule.Code),
+                "original code restored");
 
             var newDocument = new FakeVbaDocumentObject();
             newDocument.VBProject.VBComponents.FailNextAddedModuleWrite = true;
@@ -193,6 +288,56 @@ namespace RNAssistant.Harness
                 AssertContains(ex.Message, "incomplete module was removed", "new module cleanup diagnostic");
             }
             AssertEqual(0, newDocument.VBProject.VBComponents.Count, "incomplete module removed");
+        }
+
+        private static void VbaReadBackRejectsWriteDrift()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"old\"\nEnd Sub";
+                adapter.QueueResult("excel.vba_replace_module", ToolResult.Ok("scripted success without write"));
+                var backupStore = new VbaBackupStore(paths);
+                var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
+                var command = Command(
+                    executor.VbaToolId("vba_replace_text"),
+                    "moduleName", "Module1",
+                    "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode),
+                    "find", "\"old\"",
+                    "replace", "\"new\"");
+
+                var result = executor.Execute(command, adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    new AppSettings { AutoConfirmToolActions = true }, false, false);
+
+                AssertTrue(!result.Success, "write drift is not reported as success");
+                AssertEqual("partial_failure", result.Status, "write drift status");
+                AssertEqual("vba_replace_verify_mismatch", result.ErrorCode, "write drift error code");
+                AssertContains(result.DataJson, "expectedCodeSha256", "expected hash returned");
+                AssertContains(result.DataJson, "actualCodeSha256", "actual hash returned");
+                AssertEqual(1, backupStore.List("Excel", "doc").Count, "rollback backup retained");
+            });
+        }
+
+        private static void VbaReadBackRejectsDeleteDrift()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                adapter.VbaModuleCode = "Sub Main()\nEnd Sub";
+                adapter.QueueResult("excel.vba_delete_module_internal", ToolResult.Ok("scripted success without delete"));
+                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths));
+                var command = Command(
+                    executor.VbaToolId("vba_delete_module"),
+                    "moduleName", "Module1",
+                    "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode));
+
+                var result = executor.Execute(command, adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    new AppSettings { AutoConfirmToolActions = true }, false, false);
+
+                AssertTrue(!result.Success, "delete drift is not reported as success");
+                AssertEqual("vba_delete_verify_failed", result.ErrorCode, "delete drift error code");
+                AssertContains(adapter.VbaModuleCode, "Sub Main", "module remains visible");
+            });
         }
 
         private static void VbaRestoreAppliesBackup()

@@ -89,6 +89,7 @@ End Function
 - Перед постоянной перезаписью создаются VBA backups. Components получают ownership marker с id/version/hash.
 - Uninstall удаляет только owned и не изменённые components. Чужой код, частичный package или hash drift удалять автоматически нельзя.
 - Временный запуск не сохраняет книгу сам. Постоянный install изменяет VBA project, но сохранение документа остаётся отдельным действием Office/пользователя.
+- Create/replace/patch/restore/delete проверяют итоговое состояние повторным чтением и строгим live-code SHA-256: нормализуется только представление переносов и один финальный line terminator; пробелы, граничные пустые строки и служебные marker lines остаются значимыми. Package install/remove использует отдельный package hash, который игнорирует export headers и ownership markers. Несовпадение не возвращается как success, а сохранённый backup остаётся доступен для rollback.
 
 ## Discovery и безопасность
 
@@ -96,7 +97,9 @@ Discovery читает VBProject активного документа, нахо
 
 Для чтения/import/remove VBProject в Trust Center должен быть включён `Trust access to the VBA project object model`. Новосозданный mutating tool по умолчанию должен иметь `agentCanRun:false` и `requiresConfirmation:true`. Не храните в исходниках секреты, credentials, machine-specific paths и скрытый network/shell запуск.
 
-Для безопасной работы с кодом доступны host-prefixed controller tools: `vba_list_modules`, `vba_search_code`, `vba_replace_text`, `vba_apply_patch`, `vba_create_module`, `vba_delete_module`, backup list/restore. `vba_list_modules` возвращает только имена, типы и размеры компонентов; исходник читается по имени через host `vba_read_module`. Поиск поддерживает literal/regex. Structured patch явно описывает `replace`, `replaceAll`, `replaceFirst`, `insertBefore`, `insertAfter`, `replaceLines`, `regexReplace`; regex поддерживает capture groups, timeout и лимит замен. Перед каждой записью/удалением создаётся backup; edit/delete требуют актуальный `expectedCodeSha256` из `vba_read_module` или `vba_search_code`, а результат edit возвращает новый hash.
+Для безопасной работы с кодом доступны host-prefixed controller tools: `vba_list_modules`, `vba_search_code`, `vba_replace_text`, `vba_apply_patch`, `vba_create_module`, `vba_delete_module`, backup list/restore. `vba_list_modules` возвращает только имена, типы и размеры компонентов; малый исходник читается через `vba_read_module`, точный диапазон до 500 строк — через `vba_read_lines`. Поиск поддерживает literal/regex, timeout и bounded output. Structured patch явно описывает `replace`, `replaceAll`, `replaceFirst`, `insertBefore`, `insertAfter`, `replaceLines`, `regexReplace`: `replace` требует одно совпадение, insertion anchors должны быть уникальны, координаты последовательных line operations считаются по результату предыдущей операции, один финальный перенос в replacement text считается terminator. Перед каждой записью/удалением создаётся backup; edit/delete требуют актуальный `expectedCodeSha256` из read/search, а результат edit возвращает новый hash.
+
+Whole-module запись удаляет текущие строки и вставляет канонический CRLF source через `CodeModule.InsertLines(1, ...)`, затем немедленно читает модуль обратно. BOM, NUL/другие control characters и Unicode line separators отклоняются до удаления исходного кода.
 
 Создавать и удалять можно только `StdModule` и `ClassModule`. Document modules и UserForms разрешено читать, искать и патчить, но нельзя создавать/удалять через RNAssistant. Public VBA mutations доступны Agent, но всегда требуют подтверждения при выключенном auto-confirm. Низкоуровневые whole-module replacement/insert/run_macro tools в Agent catalog не входят.
 
@@ -104,4 +107,4 @@ Discovery читает VBProject активного документа, нахо
 
 ## Обязательная проверка на Windows
 
-Изменения COM/VBA lifecycle нельзя полноценно проверить на macOS. Перед merge нужны Windows x64 + Office x64 + VS 2022 smoke tests для Excel, Word и PowerPoint: discovery, typed `Application.Run`, cleanup после успеха/ошибки, permanent install/uninstall, hash drift, Trust Access off и macro-free document.
+Изменения COM/VBA lifecycle нельзя полноценно проверить на macOS. Перед merge нужны Windows x64 + Office x64 + VS 2022 smoke tests для Excel, Word и PowerPoint: LF/CRLF/final newline и граничные blank lines, кириллица, `vba_read_lines`, create/patch/clear/rollback, Office busy/modal state, discovery, typed `Application.Run`, cleanup после успеха/ошибки, permanent install/uninstall, hash drift, Trust Access off и macro-free document.

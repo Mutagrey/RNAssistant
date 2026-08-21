@@ -111,7 +111,8 @@ namespace RNAssistant.Core.Models
                 "Additional JSON fields are allowed, but message and tool_calls keep these meanings.\n\n" +
                 "Choose the next step yourself from the request, loaded skills, tools, conversation, and TOOL_RESULT messages. " +
                 "Each TOOL_RESULT is JSON with ok, tool_call_id, name, status, message, data, and error. Read current Office state when you need it, inspect an error before deciding whether to retry, " +
-                "and do not claim that an action succeeded unless its TOOL_RESULT has ok=true. Finish when the user's request is complete.";
+                "and when data.truncated=true, request a smaller range or scope instead of assuming omitted content. " +
+                "Do not claim that an action succeeded unless its TOOL_RESULT has ok=true. Finish when the user's request is complete.";
             ChatSystemPrompt = "You are RNAssistant in Chat mode. Answer the user directly and concisely in natural language. This mode has no tools: do not return tool calls or claim that Office content was inspected or changed unless that fact is explicitly present in supplied context.";
             ChatTitlePrompt = "Ты называешь чаты. Верни только короткое название на языке пользователя: 2-6 слов, без кавычек, точки, markdown и пояснений.";
             ContextCompactionPrompt = "Compress the supplied completed conversation prefix into a concise durable summary. Preserve user goals, requirements, decisions, constraints, verified facts, completed actions, pending work, blockers, exact stable identifiers and hashes, and artifact or attachment references. Separate verified facts from assumptions. Omit hidden reasoning and obsolete retries. Return one JSON object with one non-empty summary string.";

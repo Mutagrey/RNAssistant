@@ -217,7 +217,8 @@ namespace RNAssistant.OfficeHosts
                 Tool("powerpoint.add_table", "Mutates document: Add a table to a slide.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based slide index.\",\"default\":1},\"rows\":{\"type\":\"integer\",\"description\":\"Number of table rows.\",\"default\":2},\"columns\":{\"type\":\"integer\",\"description\":\"Number of table columns.\",\"default\":2},\"values\":{\"type\":\"array\",\"items\":{\"type\":\"array\",\"items\":{\"type\":[\"string\",\"number\",\"boolean\",\"null\"]}},\"description\":\"Two-dimensional JSON array of row arrays.\"},\"left\":{\"type\":\"integer\",\"description\":\"Horizontal position in points from the slide or sheet origin.\",\"default\":60},\"top\":{\"type\":\"integer\",\"description\":\"Vertical position in points from the slide or sheet origin.\",\"default\":120},\"width\":{\"type\":\"integer\",\"description\":\"Width in points.\",\"default\":520},\"height\":{\"type\":\"integer\",\"description\":\"Height in points.\",\"default\":160}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
                 Tool("powerpoint.duplicate_slide", "Mutates document: Duplicate one slide.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based slide index.\"}},\"required\":[\"slideIndex\"],\"additionalProperties\":false}", true, true, 1),
                 Tool("powerpoint.move_slide", "Mutates document: Move a slide to a new position.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based slide index.\"},\"toIndex\":{\"type\":\"integer\",\"description\":\"One-based destination slide index.\"}},\"required\":[\"slideIndex\",\"toIndex\"],\"additionalProperties\":false}", true, true, 2, true),
-                Tool("powerpoint.vba_read_module", "Read-only: Read one VBA component by exact name from vba_list_modules; returns source and full code hash.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum number of text characters returned.\",\"default\":30000}},\"required\":[\"moduleName\"],\"additionalProperties\":false}"),
+                Tool("powerpoint.vba_read_module", "Read-only: Read one VBA component by exact name from vba_list_modules; returns source and full code hash.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum number of text characters returned.\",\"default\":30000,\"minimum\":1,\"maximum\":1000000}},\"required\":[\"moduleName\"],\"additionalProperties\":false}"),
+                Tool("powerpoint.vba_read_lines", "Read-only: Read an exact one-based line range from a VBA component; returns the full-module code hash.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"startLine\":{\"type\":\"integer\",\"description\":\"One-based first line.\",\"default\":1,\"minimum\":1},\"lineCount\":{\"type\":\"integer\",\"description\":\"Maximum consecutive lines returned.\",\"default\":200,\"minimum\":1,\"maximum\":500}},\"required\":[\"moduleName\"],\"additionalProperties\":false}"),
                 Tool("powerpoint.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code.\"},\"createIfMissing\":{\"type\":\"boolean\",\"description\":\"Whether a missing VBA standard module may be created.\",\"default\":true}},\"required\":[\"moduleName\",\"code\"],\"additionalProperties\":false}", true, false, 3),
                 Tool("powerpoint.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\",\"default\":\"RNAssistantModule\"},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code.\"}},\"required\":[\"code\"],\"additionalProperties\":false}", true, false, 3),
                 Tool("powerpoint.run_macro", "Mutates document: Run a PowerPoint VBA macro by name.", "{\"type\":\"object\",\"properties\":{\"macroName\":{\"type\":\"string\",\"description\":\"Exact public VBA macro name.\"}},\"required\":[\"macroName\"],\"additionalProperties\":false}", true, false, 3)
@@ -393,6 +394,8 @@ namespace RNAssistant.OfficeHosts
                         return ListVbaProjectComponents();
                     case "powerpoint.vba_read_module":
                         return ReadVbaModule(command);
+                    case "powerpoint.vba_read_lines":
+                        return ReadVbaLines(command);
                     case "powerpoint.vba_replace_module":
                         return ReplaceVbaModule(command);
                     case "powerpoint.insert_vba_module":
@@ -830,6 +833,15 @@ namespace RNAssistant.OfficeHosts
                 RequirePresentation(),
                 ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
                 ToolArgumentReader.Int32(command.Arguments, "maxChars", 30000));
+        }
+
+        private ToolResult ReadVbaLines(ToolCommand command)
+        {
+            return VbaProjectSupport.ReadModuleLines(
+                RequirePresentation(),
+                ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
+                ToolArgumentReader.Int32(command.Arguments, "startLine", 1),
+                ToolArgumentReader.Int32(command.Arguments, "lineCount", 200));
         }
 
         private ToolResult ReplaceVbaModule(ToolCommand command)

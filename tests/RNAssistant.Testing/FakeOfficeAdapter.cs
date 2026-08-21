@@ -307,13 +307,49 @@ namespace RNAssistant.Harness
                     return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
                 }
 
+                var maxChars = Math.Max(1, Math.Min(1000000, ArgumentInt(command, "maxChars", 30000)));
+                var returnedCode = module.Code.Length > maxChars ? module.Code.Substring(0, maxChars) + "\n...[truncated]" : module.Code;
                 return ToolResult.Ok("read " + command.ToolId, JsonConvert.SerializeObject(new
                 {
                     name = module.Name,
-                    code = module.Code,
+                    code = returnedCode,
                     type = module.Type,
                     lineCount = LineCount(module.Code),
-                    codeSha256 = VbaToolManifestParser.CodeSha256(module.Code)
+                    codeSha256 = VbaToolManifestParser.LiveCodeSha256(module.Code),
+                    truncated = !string.Equals(returnedCode, module.Code, StringComparison.Ordinal)
+                }));
+            }
+
+            if ((command.ToolId ?? string.Empty).EndsWith(".vba_read_lines", StringComparison.OrdinalIgnoreCase))
+            {
+                var moduleName = Argument(command, "moduleName", "Module1");
+                FakeVbaModule module;
+                if (!_vbaModules.TryGetValue(moduleName, out module))
+                {
+                    return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
+                }
+                var lines = (module.Code ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+                var totalLineCount = string.IsNullOrEmpty(module.Code) ? 0 : lines.Length;
+                var startLine = Math.Max(1, ArgumentInt(command, "startLine", 1));
+                var requested = Math.Max(1, Math.Min(500, ArgumentInt(command, "lineCount", 200)));
+                if (totalLineCount > 0 && startLine > totalLineCount)
+                {
+                    return ToolResult.Fail("VBA startLine is outside the module.", null, "vba_line_range_invalid", true);
+                }
+                var returned = totalLineCount == 0 ? 0 : Math.Min(requested, totalLineCount - startLine + 1);
+                var code = returned == 0 ? string.Empty : string.Join("\n", lines.Skip(startLine - 1).Take(returned).ToArray());
+                return ToolResult.Ok("read " + command.ToolId, JsonConvert.SerializeObject(new
+                {
+                    name = module.Name,
+                    type = module.Type,
+                    startLine = totalLineCount == 0 ? 1 : startLine,
+                    endLine = returned == 0 ? 0 : startLine + returned - 1,
+                    returnedLineCount = returned,
+                    totalLineCount = totalLineCount,
+                    code = code,
+                    codeSha256 = VbaToolManifestParser.LiveCodeSha256(module.Code),
+                    hasMoreBefore = totalLineCount > 0 && startLine > 1,
+                    hasMoreAfter = totalLineCount > 0 && startLine + returned - 1 < totalLineCount
                 }));
             }
 
@@ -1044,6 +1080,12 @@ namespace RNAssistant.Harness
                 : fallback;
         }
 
+        private static int ArgumentInt(ToolCommand command, string name, int fallback)
+        {
+            int parsed;
+            return int.TryParse(Argument(command, name, Convert.ToString(fallback)), out parsed) ? parsed : fallback;
+        }
+
         private bool TryDequeueResult(string toolId, out ToolResult result)
         {
             result = null;
@@ -1095,6 +1137,7 @@ namespace RNAssistant.Harness
                 BuiltIn("Excel", "excel.sort_range", false, true, false),
                 BuiltIn("Excel", "excel.filter_range", false, true, false),
                 BuiltIn("Excel", "excel.vba_read_module", false, false, true),
+                BuiltIn("Excel", "excel.vba_read_lines", false, false, true),
                 BuiltIn("Excel", "excel.vba_replace_module", false, true, false, 3),
                 BuiltIn("Excel", "excel.insert_vba_module", false, true, false, 3),
                 BuiltIn("Excel", "excel.run_macro", false, true, false, 3)
@@ -1125,6 +1168,7 @@ namespace RNAssistant.Harness
                 BuiltIn("Word", "word.insert_page_break", false, true, true, 1),
                 BuiltIn("Word", "word.add_comment", false, true, true, 1),
                 BuiltIn("Word", "word.vba_read_module", false, false, true),
+                BuiltIn("Word", "word.vba_read_lines", false, false, true),
                 BuiltIn("Word", "word.vba_replace_module", false, true, false, 3),
                 BuiltIn("Word", "word.insert_vba_module", false, true, false, 3),
                 BuiltIn("Word", "word.run_macro", false, true, false, 3)
@@ -1152,6 +1196,7 @@ namespace RNAssistant.Harness
                 BuiltIn("PowerPoint", "powerpoint.duplicate_slide", false, true, true, 1),
                 BuiltIn("PowerPoint", "powerpoint.move_slide", false, true, false),
                 BuiltIn("PowerPoint", "powerpoint.vba_read_module", false, false, true),
+                BuiltIn("PowerPoint", "powerpoint.vba_read_lines", false, false, true),
                 BuiltIn("PowerPoint", "powerpoint.vba_replace_module", false, true, false, 3),
                 BuiltIn("PowerPoint", "powerpoint.insert_vba_module", false, true, false, 3),
                 BuiltIn("PowerPoint", "powerpoint.run_macro", false, true, false, 3)
@@ -1202,12 +1247,12 @@ namespace RNAssistant.Harness
             var names = string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase)
                 ? ExcelFakeArguments(id)
                 : string.Equals(host, "Word", StringComparison.OrdinalIgnoreCase)
-                    ? "maxChars start end query scope mode matchCase wholeWord maxResults contextChars maxTables maxRows text location find replace replaceAll expectedMatches expectedScopeSha256 maxReplacements style target bold italic underline fontSize fontName rows columns values moduleName code createIfMissing macroName"
+                    ? "maxChars start end startLine lineCount query scope mode matchCase wholeWord maxResults contextChars maxTables maxRows text location find replace replaceAll expectedMatches expectedScopeSha256 maxReplacements style target bold italic underline fontSize fontName rows columns values moduleName code createIfMissing macroName"
                     : string.Equals(host, "PowerPoint", StringComparison.OrdinalIgnoreCase)
-                        ? "maxSlides slideIndex query scope includeNotes mode matchCase wholeWord maxResults contextChars title body text notes left top width height fontSize shapeName find replace replaceAll expectedMatches expectedScopeSha256 maxReplacements path rows columns values toIndex moduleName maxChars code createIfMissing macroName"
+                        ? "maxSlides slideIndex query scope includeNotes mode matchCase wholeWord maxResults contextChars title body text notes left top width height fontSize shapeName find replace replaceAll expectedMatches expectedScopeSha256 maxReplacements path rows columns values toIndex moduleName maxChars startLine lineCount code createIfMissing macroName"
                         : "maxChars entryId query mode matchCase wholeWord fields maxItems maxResults maxBodyChars contextChars to cc bcc subject body categories";
             var booleans = new HashSet<string>(new[] { "matchCase", "wholeWord", "replaceAll", "hasHeaders", "bold", "italic", "underline", "descending", "includeNotes", "createIfMissing", "sourceSuccess" }, StringComparer.Ordinal);
-            var integers = new HashSet<string>(new[] { "maxResults", "contextChars", "expectedMatches", "maxReplacements", "left", "top", "width", "height", "keyColumn", "field", "maxChars", "start", "end", "maxTables", "maxRows", "fontSize", "rows", "columns", "maxSlides", "slideIndex", "toIndex", "maxItems", "maxBodyChars" }, StringComparer.Ordinal);
+            var integers = new HashSet<string>(new[] { "maxResults", "contextChars", "expectedMatches", "maxReplacements", "left", "top", "width", "height", "keyColumn", "field", "maxChars", "start", "end", "startLine", "lineCount", "maxTables", "maxRows", "fontSize", "rows", "columns", "maxSlides", "slideIndex", "toIndex", "maxItems", "maxBodyChars" }, StringComparer.Ordinal);
             var properties = new JObject();
             foreach (var name in names.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
             {
@@ -1277,6 +1322,8 @@ namespace RNAssistant.Harness
                     return "sheet address field criteria";
                 case "excel.vba_read_module":
                     return "moduleName maxChars";
+                case "excel.vba_read_lines":
+                    return "moduleName startLine lineCount";
                 case "excel.vba_replace_module":
                     return "moduleName code createIfMissing";
                 case "excel.insert_vba_module":
@@ -1348,8 +1395,7 @@ namespace RNAssistant.Harness
 
         private static int LineCount(string value)
         {
-            if (string.IsNullOrEmpty(value)) return 0;
-            return value.Replace("\r\n", "\n").Split('\n').Length;
+            return VbaToolManifestParser.LiveCodeLineCount(value);
         }
 
         private sealed class FakeVbaModule
