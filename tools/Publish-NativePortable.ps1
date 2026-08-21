@@ -1,6 +1,6 @@
 param(
     [ValidateSet("Debug", "Release")]
-    [string]$Configuration = "Debug",
+    [string]$Configuration = "Release",
 
     [ValidateSet("x64", "x86")]
     [string]$Architecture = "x64",
