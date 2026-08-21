@@ -423,6 +423,30 @@ namespace RNAssistant.Core.Llm
             {
                 body["response_format"] = new JObject { ["type"] = "json_object" };
             }
+            else if (string.Equals(requestOptions.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.OrdinalIgnoreCase))
+            {
+                JObject schema;
+                try
+                {
+                    schema = JObject.Parse(requestOptions.ResponseSchemaJson ?? string.Empty);
+                }
+                catch (JsonException ex)
+                {
+                    throw new InvalidOperationException("Response JSON Schema is invalid: " + ex.Message, ex);
+                }
+                body["response_format"] = new JObject
+                {
+                    ["type"] = "json_schema",
+                    ["json_schema"] = new JObject
+                    {
+                        ["name"] = string.IsNullOrWhiteSpace(requestOptions.ResponseSchemaName)
+                            ? "response"
+                            : requestOptions.ResponseSchemaName,
+                        ["strict"] = true,
+                        ["schema"] = schema
+                    }
+                };
+            }
             return body;
         }
 

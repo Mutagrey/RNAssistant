@@ -1,5 +1,13 @@
 namespace RNAssistant.Core.Llm
 {
+    public sealed class LlmToolCall
+    {
+        public string Id { get; set; }
+        public string Type { get; set; }
+        public string Name { get; set; }
+        public string ArgumentsJson { get; set; }
+    }
+
     public sealed class LlmCompletionResult
     {
         public string Content { get; set; }

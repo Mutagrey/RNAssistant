@@ -80,6 +80,8 @@ namespace RNAssistant.Core.Storage
                 settings.ChatSystemPrompt = defaults.ChatSystemPrompt;
             }
             settings.SystemPromptRole = NormalizePromptRole(settings.SystemPromptRole, defaults.SystemPromptRole);
+            settings.AgentResponseMode = AgentResponseModes.Normalize(settings.AgentResponseMode);
+            settings.ToolResultRole = ToolResultRoles.Normalize(settings.ToolResultRole);
             settings.ReasoningRequestMode = ReasoningRequestModes.Normalize(settings.ReasoningRequestMode);
             settings.ReasoningCustomJson = string.IsNullOrWhiteSpace(settings.ReasoningCustomJson)
                 ? defaults.ReasoningCustomJson

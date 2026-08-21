@@ -9,11 +9,12 @@ RNAssistant uses an OpenAI-compatible Chat Completions endpoint.
 - non-stream `choices[0].message` or SSE `choices[0].delta`;
 - `user` and `assistant` roles;
 - the configured Agent instruction role: `developer` by default, optionally `system` or `user`;
-- `response_format: {"type":"json_object"}` for Agent mode.
+- the selected Agent response format: `json_object` by default or strict `json_schema`;
+- the selected tool-result role: `user` by default, optionally `developer` or a matched `assistant.tool_calls` → `tool` pair.
 
-Chat mode expects ordinary assistant text. Agent mode expects the JSON described in [agent-protocol.md](agent-protocol.md). RNAssistant does not switch between structured-output profiles, native tool calls, result roles, or fallback transports.
+Chat mode expects ordinary assistant text. Agent mode expects the JSON described in [agent-protocol.md](agent-protocol.md). The response format and tool-result role are explicit settings; RNAssistant does not auto-select them. Optional `json_schema` fallback is limited to an endpoint rejection and lasts only for the current run.
 
-Settings → Agent → «Запустить тест» checks three exact sentinels: `ROLE_OK` through the selected instruction role, the requested `TOOL_OK` Agent JSON call with exact id/name/arguments, and `RESULT_OK` after a `TOOL_RESULT` JSON string. The probes do not execute Office actions.
+Settings → Agent → «Запустить тест» checks three exact sentinels using the currently selected instruction role, response format, and result role: `ROLE_OK`, the requested `TOOL_OK` Agent JSON call with exact id/name/arguments, and `RESULT_OK` after the chosen result transport. The probes do not execute Office actions.
 
 ## Optional capabilities
 
@@ -30,6 +31,6 @@ Attachments never trigger automatic model routing or failover. RNAssistant uses 
 ## Failure behavior
 
 - Invalid Agent JSON receives up to `MaxAgentFormatRetries` clean format-correction requests (1–5, default 2). Raw invalid responses and temporary instructions are not persisted; exhausting the limit stops the run.
-- Network, timeout, rate-limit, server, or provider-refusal errors are returned without an automatic duplicate request.
+- An explicit endpoint rejection of selected `json_schema` may make one request-local `json_object` retry when fallback is enabled. Network, timeout, rate-limit, server, or provider-refusal errors are returned without an automatic duplicate request.
 - Unknown tools and invalid arguments are rejected locally before Office execution.
 - A tool failure is returned to the model as `TOOL_RESULT`; the model decides whether to retry, change arguments, ask the user, or finish.

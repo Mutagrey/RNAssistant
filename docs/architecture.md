@@ -29,7 +29,9 @@ There are exactly two persisted modes.
 
 `AgentPromptComposer` creates one `RUNTIME_CONTEXT` JSON object containing document identity, all runnable tools in native-like function format, a compact enabled-skill catalog, chat context, and artifact references. Relevant complete skill Markdown is loaded by the model through `common.skills_read`. The composer does not inspect or classify request wording and does not capture Office content eagerly. A visible plan, when useful, is an ordinary versioned chat artifact written explicitly through plan CRUD tools rather than runtime planner state.
 
-`AgentResponseParser` accepts either a final `message` or one or more `tool_calls` entries with unique ids. Invalid output gets a bounded 1–5 ephemeral format-correction attempts; each starts from clean accepted history and invalid content never enters replay. `OfficeToolExecutor` remains the authority for formal argument schemas, effective pipeline safety, confirmation, and dispatch. `AgentJsonProtocol` serializes each result to `{ok, tool_call_id, name, status, message, data, error}`.
+Editable Agent, Chat, title, and compaction prompts are stored as Markdown. Their instruction role (`developer`/`system`/`user`) is independent from Agent response format (`json_object`/strict `json_schema`) and tool-result role (`user`/`developer`/matched `tool`).
+
+`AgentResponseParser` accepts either a final `message` or one or more `tool_calls` entries with unique ids. `json_schema` derives a strict response contract from the current runnable tools; `json_object` uses the same envelope with local validation. Invalid output gets bounded 1–5 ephemeral format-correction attempts; each starts from clean accepted history and invalid content never enters replay. `OfficeToolExecutor` remains the authority for formal argument schemas, effective pipeline safety, confirmation, and dispatch. `AgentJsonProtocol` serializes each result to `{ok, tool_call_id, name, status, message, data, error}` and emits the selected replay role.
 
 See [agent-protocol.md](agent-protocol.md).
 

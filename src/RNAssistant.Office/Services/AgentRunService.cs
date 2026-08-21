@@ -138,6 +138,7 @@ namespace RNAssistant.Office.Services
             var toolSteps = 0;
             object contextUsage = null;
             var runCache = new LlmRunCache();
+            var responseMode = AgentResponseModes.Normalize(settings.AgentResponseMode);
 
             if (initialCommand != null && initialResult != null)
             {
@@ -152,19 +153,33 @@ namespace RNAssistant.Office.Services
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 Report(progress, "thinking", "Агент выбирает следующий шаг...", null);
-                var options = new LlmRequestOptions
-                {
-                    ResponseFormat = LlmResponseFormats.JsonObject,
-                    ReasoningEnabled = session == null ? (bool?)null : session.ReasoningEnabled,
-                    RunCache = runCache
-                };
+                var options = BuildAgentRequestOptions(responseMode, availableTools, session, runCache);
                 string budgetError;
                 if (!TryValidatePromptBudget(messages, settings, options, out budgetError))
                 {
                     return FinishWithDiagnostic(session, results, contextUsage, budgetError,
                         "Контекст переполнен", "prompt_budget_exceeded");
                 }
-                var completion = await CompleteAsync(settings, messages, options, progress, cancellationToken).ConfigureAwait(false);
+                LlmCompletionResult completion;
+                try
+                {
+                    completion = await CompleteAsync(settings, messages, options, progress, cancellationToken).ConfigureAwait(false);
+                }
+                catch (LlmRequestException ex) when (
+                    ex.Kind == LlmFailureKind.ResponseFormatUnsupported &&
+                    string.Equals(responseMode, AgentResponseModes.JsonSchema, StringComparison.Ordinal) &&
+                    settings.FallbackToJsonObject)
+                {
+                    responseMode = AgentResponseModes.JsonObject;
+                    options = BuildAgentRequestOptions(responseMode, availableTools, session, runCache);
+                    Report(progress, "thinking", "Endpoint не поддерживает json_schema; продолжаю с json_object.", null);
+                    if (!TryValidatePromptBudget(messages, settings, options, out budgetError))
+                    {
+                        return FinishWithDiagnostic(session, results, contextUsage, budgetError,
+                            "Контекст переполнен", "prompt_budget_exceeded");
+                    }
+                    completion = await CompleteAsync(settings, messages, options, progress, cancellationToken).ConfigureAwait(false);
+                }
                 contextUsage = ContextUsageEstimator.FromPrompt(messages, settings,
                     completion == null ? null : completion.PromptTokens, options);
                 var parsed = _responseParser.Parse(completion == null ? null : completion.Content, availableTools);
@@ -224,7 +239,8 @@ namespace RNAssistant.Office.Services
                     var callMessage = AgentJsonProtocol.CreateToolCallMessage(
                         call,
                         callIndex == 0 ? response.Message : string.Empty,
-                        callIndex == 0 ? completion : null);
+                        callIndex == 0 ? completion : null,
+                        settings.ToolResultRole);
                     session.Messages.Add(callMessage);
                     messages.Add(callMessage);
 
@@ -284,6 +300,26 @@ namespace RNAssistant.Office.Services
             var limitText = "Агент остановлен: достигнут лимит шагов.";
             session.Messages.Add(AgentTranscript.CreateAssistantMessage(limitText, null));
             return Result(limitText, results, contextUsage);
+        }
+
+        private static LlmRequestOptions BuildAgentRequestOptions(
+            string responseMode,
+            IReadOnlyList<ToolDefinition> tools,
+            ChatSession session,
+            LlmRunCache runCache)
+        {
+            var jsonSchema = string.Equals(
+                AgentResponseModes.Normalize(responseMode),
+                AgentResponseModes.JsonSchema,
+                StringComparison.Ordinal);
+            return new LlmRequestOptions
+            {
+                ResponseFormat = jsonSchema ? LlmResponseFormats.JsonSchema : LlmResponseFormats.JsonObject,
+                ResponseSchemaName = jsonSchema ? AgentResponseSchemaBuilder.SchemaName : null,
+                ResponseSchemaJson = jsonSchema ? AgentResponseSchemaBuilder.Build(tools) : null,
+                ReasoningEnabled = session == null ? (bool?)null : session.ReasoningEnabled,
+                RunCache = runCache
+            };
         }
 
         private async Task<List<ChatMessage>> BuildMessagesAsync(
@@ -409,7 +445,7 @@ namespace RNAssistant.Office.Services
             var used = ModelContextBudget.EstimateMessagesTokens(messages);
             var availableForData = Math.Max(0, inputBudget - used - ToolResultEnvelopeReserveTokens);
             var maxDataTokens = Math.Min(AgentJsonProtocol.DefaultMaxToolResultDataTokens, availableForData);
-            return AgentJsonProtocol.CreateToolResultMessage(command, result, maxDataTokens);
+            return AgentJsonProtocol.CreateToolResultMessage(command, result, maxDataTokens, settings.ToolResultRole);
         }
 
         private static bool TryValidatePromptBudget(

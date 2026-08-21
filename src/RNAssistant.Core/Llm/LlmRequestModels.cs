@@ -9,6 +9,7 @@ namespace RNAssistant.Core.Llm
     public enum LlmFailureKind
     {
         Http,
+        ResponseFormatUnsupported,
         RateLimited,
         TransientServer,
         Network,
@@ -50,11 +51,14 @@ namespace RNAssistant.Core.Llm
     {
         public const string Text = "text";
         public const string JsonObject = "json_object";
+        public const string JsonSchema = "json_schema";
     }
 
     public sealed class LlmRequestOptions
     {
         public string ResponseFormat { get; set; }
+        public string ResponseSchemaName { get; set; }
+        public string ResponseSchemaJson { get; set; }
         public LlmRunCache RunCache { get; set; }
         public bool? ReasoningEnabled { get; set; }
 

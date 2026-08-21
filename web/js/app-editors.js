@@ -7,6 +7,7 @@
     toolCodeInput: { mode: "vb", minHeight: 210 },
     toolReadmeInput: { mode: "markdown", minHeight: 150, lineWrapping: true },
     skillBodyInput: { mode: "markdown", minHeight: 360, lineWrapping: true },
+    promptEditInput: { mode: "markdown", minHeight: 280, lineWrapping: true },
     vbaCodeInput: { mode: "vb", minHeight: 440 },
     htmlWorkspaceEditorInput: { mode: "javascript", minHeight: 440, lineWrapping: true }
   };
@@ -70,6 +71,9 @@
       }
       if (id === "htmlWorkspaceEditorInput" && typeof markHtmlWorkspaceDirty === "function") {
         markHtmlWorkspaceDirty();
+      }
+      if (id === "promptEditInput" && typeof markPromptEditorDirty === "function") {
+        markPromptEditorDirty();
       }
     });
 
@@ -137,6 +141,20 @@
     if (editors[id]) {
       editors[id].setOption("readOnly", readOnly ? "nocursor" : false);
       editors[id].getWrapperElement().classList.toggle("cm-readonly", !!readOnly);
+    }
+  };
+
+  window.setCodeEditorVisible = function (id, visible) {
+    if (editors[id]) {
+      editors[id].getWrapperElement().classList.toggle("hidden", !visible);
+      if (visible) {
+        window.setTimeout(function () { editors[id].refresh(); }, 0);
+      }
+      return;
+    }
+    var node = textarea(id);
+    if (node) {
+      node.classList.toggle("hidden", !visible);
     }
   };
 }());

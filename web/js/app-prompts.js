@@ -1,9 +1,9 @@
 (function () {
   var promptDefinitions = [
-    { key: "systemPrompt", label: "Главный промпт агента", group: "Base", source: "root", field: "SystemPrompt", description: "Полностью описывает Agent JSON-поток и правила работы с tools и skills." },
-    { key: "chatSystemPrompt", label: "Базовый промпт чата", group: "Base", source: "root", field: "ChatSystemPrompt", description: "Прямой текстовый ответ без tools." },
-    { key: "contextCompactionPrompt", label: "Compact context", group: "Memory", source: "root", field: "ContextCompactionPrompt", description: "Критерии model-generated checkpoint без удаления исходной истории." },
-    { key: "chatTitlePrompt", label: "Название чата", group: "Utility", source: "root", field: "ChatTitlePrompt", description: "Отдельный короткий запрос для генерации названия чата." }
+    { key: "systemPrompt", label: "Агент", group: "Основные", source: "root", field: "SystemPrompt", description: "Главные правила Agent-потока, tools и skills." },
+    { key: "chatSystemPrompt", label: "Чат", group: "Основные", source: "root", field: "ChatSystemPrompt", description: "Прямой ответ без локальных tools." },
+    { key: "contextCompactionPrompt", label: "Сжатие контекста", group: "Служебные", source: "root", field: "ContextCompactionPrompt", description: "Правила создания checkpoint активной истории." },
+    { key: "chatTitlePrompt", label: "Название чата", group: "Служебные", source: "root", field: "ChatTitlePrompt", description: "Короткий запрос для генерации названия." }
   ];
 
   function promptValue(settings, def) {
@@ -21,6 +21,20 @@
 
   function promptText(def) {
     return def ? (state.promptDrafts[def.key] || "") : "";
+  }
+
+  function promptEditorValue() {
+    return typeof getCodeEditorValue === "function"
+      ? getCodeEditorValue("promptEditInput")
+      : ($("promptEditInput") ? $("promptEditInput").value : "");
+  }
+
+  function setPromptEditorValue(value) {
+    if (typeof setCodeEditorValue === "function") {
+      setCodeEditorValue("promptEditInput", value || "");
+    } else if ($("promptEditInput")) {
+      $("promptEditInput").value = value || "";
+    }
   }
 
   function promptMatchesSearch(def, query) {
@@ -67,7 +81,7 @@
       title: function (def) { return def.label; },
       enabled: function () { return null; },
       icon: function () { return "PRM"; },
-      meta: function (def) { return def.group + " - " + def.field; },
+      meta: function (def) { return "Markdown · " + def.field + ".md"; },
       description: function (def) { return def.description; },
       groupKey: function (def) { return def.group; },
       groupLabel: function (def) { return def.group; },
@@ -100,8 +114,8 @@
     }
 
     $("promptTitle").textContent = def.label;
-    $("promptMeta").textContent = def.group + " - " + def.field;
-    $("promptEditInput").value = promptText(def);
+    $("promptMeta").textContent = def.group + " · Markdown · " + def.field + ".md";
+    setPromptEditorValue(promptText(def));
     $("copyPromptButton").disabled = false;
     $("addPromptToChatButton").disabled = !!state.bridgeUnavailable;
     renderPromptPreview(def);
@@ -114,7 +128,7 @@
     if (!def || !input) {
       return;
     }
-    state.promptDrafts[def.key] = input.value;
+    state.promptDrafts[def.key] = promptEditorValue();
   }
 
   function setPromptMode(mode) {
@@ -130,7 +144,11 @@
       button.classList.toggle("active", button.getAttribute("data-prompt-mode") === mode);
     });
     $("promptPreview").classList.toggle("hidden", mode !== "preview");
-    $("promptEditInput").classList.toggle("hidden", mode !== "edit");
+    if (typeof setCodeEditorVisible === "function") {
+      setCodeEditorVisible("promptEditInput", mode === "edit");
+    } else {
+      $("promptEditInput").classList.toggle("hidden", mode !== "edit");
+    }
   }
 
   function selectedPromptContext() {
@@ -209,13 +227,18 @@
       promptDefinitions.forEach(function (def) {
         state.promptDrafts[def.key] = "";
       });
-      $("promptEditInput").value = "";
-      $("systemPromptRoleInput").value = "developer";
+      setPromptEditorValue("");
       settingsDirty = true;
       renderPromptList();
       updateSettingsSaveButton();
       log("Все промпты будут сброшены после сохранения настроек.");
     });
+  }
+
+  function markPromptEditorDirty() {
+    syncSelectedPromptFromEditor();
+    settingsDirty = true;
+    updateSettingsSaveButton();
   }
 
   window.renderPromptSettings = renderPromptSettings;
@@ -224,4 +247,5 @@
   window.syncSelectedPromptFromEditor = syncSelectedPromptFromEditor;
   window.readPromptSettings = readPromptSettings;
   window.bindPromptSettingsActions = bindPromptSettingsActions;
+  window.markPromptEditorDirty = markPromptEditorDirty;
 }());

@@ -629,6 +629,31 @@ namespace RNAssistant.Harness
             };
             var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
             session.Messages.Add(new ChatMessage { Role = "user", Content = "Create a report." });
+            session.Messages.Add(new ChatMessage
+            {
+                Role = "assistant",
+                Content = "Inspecting.",
+                ProtocolMessage = true,
+                RunId = "run_tool",
+                ToolCalls = new List<LlmToolCall>
+                {
+                    new LlmToolCall
+                    {
+                        Id = "call_1",
+                        Type = "function",
+                        Name = "rna_excel_read_range",
+                        ArgumentsJson = "{\"range\":\"COMPACTION_TOOL_ARGUMENT\"}"
+                    }
+                }
+            });
+            session.Messages.Add(new ChatMessage
+            {
+                Role = "tool",
+                ToolCallId = "call_1",
+                Content = "{\"ok\":true,\"tool_call_id\":\"call_1\",\"name\":\"excel.read_range\"}",
+                ProtocolMessage = true,
+                RunId = "run_tool"
+            });
             session.Messages.Add(new ChatMessage { Role = "assistant", Content = "I will inspect the data." });
             session.Messages.Add(new ChatMessage { Role = "user", Content = "Keep the original formatting." });
             session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Understood." });
@@ -640,6 +665,7 @@ namespace RNAssistant.Harness
             AssertEqual("Goal preserved; first step complete.", checkpoint.SummaryMarkdown, "summary used directly");
             var request = FlattenSimple(captured);
             AssertContains(request, "\"required\":[\"summary\"]", "single-field schema requested");
+            AssertContains(request, "COMPACTION_TOOL_ARGUMENT", "native tool arguments preserved for compaction");
             AssertTrue(request.IndexOf("\"goals\"", StringComparison.Ordinal) < 0, "no fixed summary sections");
         }
 

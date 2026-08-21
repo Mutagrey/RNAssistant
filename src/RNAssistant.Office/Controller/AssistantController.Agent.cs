@@ -83,6 +83,7 @@ namespace RNAssistant.Office
 
                 var firstRunMessageIndex = session.Messages == null ? 0 : session.Messages.Count;
                 var settings = _settingsService.Load();
+                settings.ToolResultRole = PendingToolResultRole(session, pending.Command, settings.ToolResultRole);
                 var tools = _toolCatalog.GetVisibleTools().Where(tool => tool.Enabled).ToList();
                 var pendingResolved = false;
                 try
@@ -176,7 +177,12 @@ namespace RNAssistant.Office
                 result.PendingId = pending.PendingId;
                 UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
                 var protocolStart = session.Messages.Count;
-                session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(CloneCommand(pending.Command), result));
+                var settings = _settingsService.Load();
+                settings.ToolResultRole = PendingToolResultRole(session, pending.Command, settings.ToolResultRole);
+                session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(
+                    CloneCommand(pending.Command),
+                    result,
+                    settings.ToolResultRole));
                 AnnotateRunMessages(session, protocolStart, "cancel_" + Guid.NewGuid().ToString("N"));
                 // Explicit user cancellation is terminal for this run: persist it, but do not invoke the model.
                 SaveSessionChanges(session);
@@ -312,6 +318,28 @@ namespace RNAssistant.Office
             }
 
             return clone;
+        }
+
+        private static string PendingToolResultRole(ChatSession session, ToolCommand command, string fallback)
+        {
+            var callId = command == null ? string.Empty : command.ToolCallId ?? string.Empty;
+            for (var index = session == null || session.Messages == null ? -1 : session.Messages.Count - 1;
+                 index >= 0;
+                 index--)
+            {
+                var message = session.Messages[index];
+                if (message == null || !message.ProtocolMessage || string.IsNullOrWhiteSpace(message.ToolResultRole)) continue;
+                if (string.Equals(message.ToolCallId, callId, StringComparison.Ordinal))
+                {
+                    return ToolResultRoles.Normalize(message.ToolResultRole);
+                }
+                if (message.ToolCalls != null && message.ToolCalls.Any(call =>
+                    call != null && string.Equals(call.Id, callId, StringComparison.Ordinal)))
+                {
+                    return ToolResultRoles.Normalize(message.ToolResultRole);
+                }
+            }
+            return ToolResultRoles.Normalize(fallback);
         }
 
         private static void EnsurePendingChatMatches(PendingAgentTool pending, string chatId)

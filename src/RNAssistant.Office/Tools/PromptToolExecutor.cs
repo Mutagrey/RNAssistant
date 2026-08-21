@@ -23,18 +23,18 @@ namespace RNAssistant.Office.Tools
                 yield break;
             }
 
-            yield return ControllerToolDefinition.Create("common.prompts_read", "Common", "Read-only: Read RNAssistant editable chat and agent prompt templates from Settings.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}", name: "prompts_read");
-            yield return ControllerToolDefinition.Create("common.prompts_read_defaults", "Common", "Read-only: Read current RNAssistant prompts and built-in default prompt templates.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}", name: "prompts_read_defaults");
+            yield return ControllerToolDefinition.Create("common.prompts_read", "Common", "Read-only: Read RNAssistant editable Markdown prompt templates from Settings.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}", name: "prompts_read");
+            yield return ControllerToolDefinition.Create("common.prompts_read_defaults", "Common", "Read-only: Read current and built-in default RNAssistant Markdown prompt templates.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}", name: "prompts_read_defaults");
             yield return ControllerToolDefinition.Create(
                 "common.prompts_save",
                 "Common",
                 "Mutates settings: Update RNAssistant Agent, Chat, compaction, or title prompts after the user asks to edit them.",
                 "{\"type\":\"object\",\"properties\":{" +
-                    "\"systemPrompt\":{\"type\":\"string\",\"description\":\"Complete Agent-mode system prompt.\"}," +
-                    "\"chatSystemPrompt\":{\"type\":\"string\",\"description\":\"Complete tool-free Chat-mode system prompt.\"}," +
-                    "\"systemPromptRole\":{\"type\":\"string\",\"description\":\"Message role used for the Agent prompt.\",\"enum\":[\"developer\",\"system\",\"user\"]}," +
-                    "\"contextCompactionPrompt\":{\"type\":\"string\",\"description\":\"Prompt used to compact completed history.\"}," +
-                    "\"chatTitlePrompt\":{\"type\":\"string\",\"description\":\"Prompt used to generate chat titles.\"}}," +
+                    "\"systemPrompt\":{\"type\":\"string\",\"description\":\"Complete Agent-mode Markdown prompt.\"}," +
+                    "\"chatSystemPrompt\":{\"type\":\"string\",\"description\":\"Complete tool-free Chat-mode Markdown prompt.\"}," +
+                    "\"systemPromptRole\":{\"type\":\"string\",\"description\":\"Message role used for prompt instructions.\",\"enum\":[\"developer\",\"system\",\"user\"]}," +
+                    "\"contextCompactionPrompt\":{\"type\":\"string\",\"description\":\"Markdown prompt used to compact completed history.\"}," +
+                    "\"chatTitlePrompt\":{\"type\":\"string\",\"description\":\"Markdown prompt used to generate chat titles.\"}}," +
                     "\"required\":[],\"additionalProperties\":false}",
                 mutatesLocalState: true,
                 requiresConfirmation: true,
@@ -115,6 +115,7 @@ namespace RNAssistant.Office.Tools
             settings = settings ?? new AppSettings();
             return new
             {
+                format = "markdown",
                 systemPrompt = settings.SystemPrompt,
                 chatSystemPrompt = settings.ChatSystemPrompt,
                 systemPromptRole = settings.SystemPromptRole,

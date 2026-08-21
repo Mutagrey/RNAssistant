@@ -45,6 +45,16 @@ function updateReasoningCustomJsonVisibility() {
   field.setAttribute("aria-hidden", visible ? "false" : "true");
 }
 
+function updateAgentProtocolControls() {
+  var field = $("agentJsonFallbackField");
+  if (!field) {
+    return;
+  }
+  var visible = $("agentResponseModeInput").value === "json_schema";
+  field.classList.toggle("hidden", !visible);
+  field.setAttribute("aria-hidden", visible ? "false" : "true");
+}
+
 function readReasoningCustomJson(mode) {
   var text = $("reasoningCustomJsonInput").value.trim();
   if (!text) {
@@ -94,6 +104,12 @@ function renderSettings() {
   $("modelInput").value = s.Model || s.model || "";
   var instructionRole = String(s.SystemPromptRole || s.systemPromptRole || "developer").toLowerCase();
   $("systemPromptRoleInput").value = instructionRole === "system" || instructionRole === "user" ? instructionRole : "developer";
+  var responseMode = String(s.AgentResponseMode || s.agentResponseMode || "json_object").toLowerCase();
+  $("agentResponseModeInput").value = responseMode === "json_schema" ? "json_schema" : "json_object";
+  var toolResultRole = String(s.ToolResultRole || s.toolResultRole || "user").toLowerCase();
+  $("toolResultRoleInput").value = toolResultRole === "developer" || toolResultRole === "tool" ? toolResultRole : "user";
+  $("fallbackJsonObjectInput").checked = compatibilityValue(s, "FallbackToJsonObject", "fallbackToJsonObject", true) !== false;
+  updateAgentProtocolControls();
   var reasoningRequestMode = String(s.ReasoningRequestMode || s.reasoningRequestMode || "auto").toLowerCase();
   var reasoningModes = ["auto", "reasoning_effort", "enable_thinking", "chat_template_kwargs", "reasoning_enabled", "custom_json"];
   $("reasoningRequestModeInput").value = reasoningModes.indexOf(reasoningRequestMode) >= 0 ? reasoningRequestMode : "auto";
@@ -165,6 +181,9 @@ function readSettings() {
     MaxAgentIterations: Number($("maxAgentIterationsInput").value || 8),
     MaxAgentFormatRetries: Math.max(1, Math.min(5, Number($("maxAgentFormatRetriesInput").value || 2))),
     MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || 40),
+    AgentResponseMode: $("agentResponseModeInput").value,
+    ToolResultRole: $("toolResultRoleInput").value,
+    FallbackToJsonObject: $("fallbackJsonObjectInput").checked,
     SystemPrompt: promptSettings.SystemPrompt,
     ChatSystemPrompt: promptSettings.ChatSystemPrompt,
     SystemPromptRole: $("systemPromptRoleInput").value,
@@ -211,7 +230,9 @@ function renderModelCompatibilityResult(result) {
   meta.className = "model-compatibility-meta";
   meta.textContent = [
     compatibilityValue(result, "Model", "model", ""),
-    "instruction: " + compatibilityValue(result, "InstructionRole", "instructionRole", "")
+    "instruction: " + compatibilityValue(result, "InstructionRole", "instructionRole", ""),
+    "agent: " + compatibilityValue(result, "ResponseMode", "responseMode", ""),
+    "tool result: " + compatibilityValue(result, "ToolResultRole", "toolResultRole", "")
   ].filter(Boolean).join(" · ");
   root.appendChild(meta);
 
@@ -262,6 +283,7 @@ function bindSettingsActions() {
   });
 
   $("reasoningRequestModeInput").addEventListener("change", updateReasoningCustomJsonVisibility);
+  $("agentResponseModeInput").addEventListener("change", updateAgentProtocolControls);
 
   Array.prototype.slice.call(document.querySelectorAll('input[name="uiTheme"]')).forEach(function (input) {
     input.addEventListener("change", function () {

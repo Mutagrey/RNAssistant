@@ -53,6 +53,48 @@ namespace RNAssistant.Core.Llm
                     continue;
                 }
 
+                var toolCalls = (message.ToolCalls ?? new List<LlmToolCall>())
+                    .Where(call => call != null)
+                    .ToList();
+                if (toolCalls.Count > 0)
+                {
+                    build.Messages.Add(new JObject
+                    {
+                        ["role"] = message.Role,
+                        ["content"] = message.Content ?? string.Empty,
+                        ["tool_calls"] = new JArray(toolCalls.Select(call => new JObject
+                        {
+                            ["id"] = call.Id,
+                            ["type"] = string.IsNullOrWhiteSpace(call.Type) ? "function" : call.Type,
+                            ["function"] = new JObject
+                            {
+                                ["name"] = call.Name,
+                                ["arguments"] = string.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson
+                            }
+                        }))
+                    });
+                    build.EstimatedPromptTokens += ModelContextBudget.EstimateMessageTokens(message, false);
+                    continue;
+                }
+
+                if (string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (string.IsNullOrWhiteSpace(message.ToolCallId))
+                    {
+                        throw new InvalidOperationException("A role=tool message requires ToolCallId.");
+                    }
+                    var toolMessage = new JObject
+                    {
+                        ["role"] = "tool",
+                        ["tool_call_id"] = message.ToolCallId,
+                        ["content"] = message.Content ?? string.Empty
+                    };
+                    if (!string.IsNullOrWhiteSpace(message.ToolName)) toolMessage["name"] = message.ToolName;
+                    build.Messages.Add(toolMessage);
+                    build.EstimatedPromptTokens += ModelContextBudget.EstimateMessageTokens(message, false);
+                    continue;
+                }
+
                 var attachments = message.Attachments ?? new List<ChatAttachment>();
                 var text = AppendExtractedText(message.Content ?? string.Empty, attachments, ref remainingAttachmentTokens, runCache, cancellationToken);
                 var imageParts = new List<ModelImagePart>();

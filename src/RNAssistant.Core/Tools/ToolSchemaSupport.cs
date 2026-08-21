@@ -107,6 +107,13 @@ namespace RNAssistant.Core.Tools
             return true;
         }
 
+        public static JObject ForStructuredOutput(JObject schema)
+        {
+            var clone = schema == null ? EmptyObjectSchema() : (JObject)schema.DeepClone();
+            MakeObjectSchemasStrict(clone);
+            return clone;
+        }
+
         public static bool ValidateArguments(JObject arguments, JObject schema, bool applyDefaults, out string error)
         {
             arguments = arguments ?? new JObject();
@@ -291,6 +298,31 @@ namespace RNAssistant.Core.Tools
             return typeToken.Type == JTokenType.Array
                 ? ((JArray)typeToken).Values<string>().Any(type => string.Equals(type, expected, StringComparison.OrdinalIgnoreCase))
                 : string.Equals((string)typeToken, expected, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void MakeObjectSchemasStrict(JToken token)
+        {
+            var obj = token as JObject;
+            if (obj != null)
+            {
+                if (string.Equals((string)obj["type"], "object", StringComparison.OrdinalIgnoreCase))
+                {
+                    var properties = obj["properties"] as JObject ?? new JObject();
+                    obj["properties"] = properties;
+                    obj["required"] = new JArray(properties.Properties().Select(property => property.Name));
+                    obj["additionalProperties"] = false;
+                }
+                foreach (var property in obj.Properties().ToList())
+                {
+                    MakeObjectSchemasStrict(property.Value);
+                }
+                return;
+            }
+            var array = token as JArray;
+            if (array != null)
+            {
+                foreach (var item in array) MakeObjectSchemasStrict(item);
+            }
         }
 
     }

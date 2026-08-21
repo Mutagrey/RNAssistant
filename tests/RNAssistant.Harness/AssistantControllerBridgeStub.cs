@@ -123,6 +123,9 @@ namespace RNAssistant.Office
             {
                 Compatible = true,
                 Model = "harness-model",
+                InstructionRole = "developer",
+                ResponseMode = AgentResponseModes.JsonObject,
+                ToolResultRole = ToolResultRoles.User,
                 Checks = new[]
                 {
                     new ModelCompatibilityCheckDto { Id = "user_role", Title = "Роль user", Passed = true, Required = true }

@@ -179,6 +179,185 @@
   line-height: 1.4;
 }
 
+.settings-subheading {
+  display: grid;
+  gap: 3px;
+  padding-top: 3px;
+}
+
+.settings-subheading h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: var(--title-font-weight);
+}
+
+.settings-subheading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.agent-protocol-panel {
+  display: grid;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--secondary-bg);
+}
+
+.agent-protocol-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.agent-protocol-head h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: var(--title-font-weight);
+}
+
+.agent-protocol-head p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.agent-protocol-badge {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border: 1px solid var(--button-accent-border);
+  border-radius: 999px;
+  background: var(--button-accent-bg);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: var(--label-font-weight);
+  white-space: nowrap;
+}
+
+.agent-protocol-content {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 7px;
+}
+
+.agent-protocol-control,
+.agent-protocol-fact {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+}
+
+.agent-protocol-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  min-width: 0;
+}
+
+.agent-protocol-control {
+  display: grid;
+  gap: 5px;
+  padding: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--label-font-weight);
+}
+
+.agent-protocol-control select,
+.prompt-role-control select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  padding: 0 7px;
+  background: #fff;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.agent-protocol-control small,
+.prompt-role-control small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: var(--meta-font-weight);
+}
+
+.agent-protocol-fallback {
+  grid-column: 1 / -1;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+  font-size: 10.5px;
+}
+
+.agent-protocol-fallback.hidden {
+  display: none !important;
+}
+
+.agent-protocol-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.prompt-settings-bar {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+  justify-content: space-between;
+}
+
+.prompt-role-control {
+  display: grid;
+  gap: 4px;
+  width: min(100%, 360px);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--label-font-weight);
+}
+
+.prompt-settings-bar > button {
+  flex: 0 0 auto;
+}
+
+.agent-protocol-fact {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+}
+
+.agent-protocol-fact span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: var(--label-font-weight);
+}
+
+.agent-protocol-fact code {
+  overflow: hidden;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  text-align: right;
+  white-space: nowrap;
+}
+
 .model-compatibility-panel {
   display: grid;
   gap: 9px;
@@ -397,11 +576,48 @@
     grid-template-columns: 1fr;
   }
 
+  .agent-protocol-content {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-protocol-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-protocol-fallback {
+    grid-column: auto;
+  }
+
 }
 
 @media (max-width: 480px) {
   .settings-shell {
     grid-template-columns: 116px minmax(0, 1fr);
     gap: 8px;
+  }
+
+  .agent-protocol-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .prompt-settings-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .prompt-role-control {
+    width: 100%;
+  }
+
+  .agent-protocol-fact {
+    grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr);
+    align-items: center;
+    gap: 7px;
+    padding: 6px 8px;
+  }
+
+  .agent-protocol-fact code {
+    font-size: 9.5px;
+    text-align: right;
   }
 }

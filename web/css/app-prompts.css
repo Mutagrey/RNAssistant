@@ -30,6 +30,21 @@
   min-height: 0;
 }
 
+.prompt-preview,
+.rn-code-editor-promptEditInput.CodeMirror {
+  grid-row: 3;
+  min-height: 0;
+}
+
+.rn-code-editor-promptEditInput.CodeMirror {
+  height: 100%;
+}
+
+.rn-code-editor-promptEditInput .CodeMirror-scroll {
+  height: 100%;
+  min-height: 0;
+}
+
 .prompt-layout .resource-item-title,
 .prompt-layout .resource-item-meta,
 .prompt-layout .resource-item-description {

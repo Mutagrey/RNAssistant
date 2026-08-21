@@ -25,6 +25,10 @@ namespace RNAssistant.Core.Models
         public bool ExcludeFromModelContext { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool ProtocolMessage { get; set; }
+        public string ToolCallId { get; set; }
+        public string ToolName { get; set; }
+        public string ToolResultRole { get; set; }
+        public List<RNAssistant.Core.Llm.LlmToolCall> ToolCalls { get; set; }
         public List<ChatAttachment> Attachments { get; set; }
         public List<string> ArtifactIds { get; set; }
         public string HtmlWorkspaceCheckpointId { get; set; }
@@ -45,6 +49,7 @@ namespace RNAssistant.Core.Models
             Id = Guid.NewGuid().ToString("N");
             CreatedUtc = DateTime.UtcNow;
             Attachments = new List<ChatAttachment>();
+            ToolCalls = new List<RNAssistant.Core.Llm.LlmToolCall>();
             ArtifactIds = new List<string>();
         }
     }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
@@ -79,15 +80,39 @@ namespace RNAssistant.Office.Services
 
         public static ChatMessage CreateToolResultMessage(ToolCommand command, ToolResult result)
         {
-            return CreateToolResultMessage(command, result, DefaultMaxToolResultDataTokens);
+            return CreateToolResultMessage(command, result, DefaultMaxToolResultDataTokens, ToolResultRoles.User);
         }
 
-        internal static ChatMessage CreateToolResultMessage(ToolCommand command, ToolResult result, int maxDataTokens)
+        public static ChatMessage CreateToolResultMessage(ToolCommand command, ToolResult result, string role)
         {
+            return CreateToolResultMessage(command, result, DefaultMaxToolResultDataTokens, role);
+        }
+
+        internal static ChatMessage CreateToolResultMessage(
+            ToolCommand command,
+            ToolResult result,
+            int maxDataTokens,
+            string role)
+        {
+            var normalizedRole = ToolResultRoles.Normalize(role);
+            var resultJson = BuildToolResult(command, result, maxDataTokens);
+            if (string.Equals(normalizedRole, ToolResultRoles.Tool, StringComparison.Ordinal))
+            {
+                return new ChatMessage
+                {
+                    Role = ToolResultRoles.Tool,
+                    ToolCallId = command == null ? string.Empty : command.ToolCallId ?? string.Empty,
+                    ToolName = ApiToolName(command == null ? null : command.ToolId),
+                    ToolResultRole = ToolResultRoles.Tool,
+                    Content = resultJson,
+                    ProtocolMessage = true
+                };
+            }
             return new ChatMessage
             {
-                Role = "user",
-                Content = "TOOL_RESULT:\n" + BuildToolResult(command, result, maxDataTokens),
+                Role = normalizedRole,
+                ToolResultRole = normalizedRole,
+                Content = "TOOL_RESULT:\n" + resultJson,
                 ProtocolMessage = true
             };
         }
@@ -95,8 +120,32 @@ namespace RNAssistant.Office.Services
         public static ChatMessage CreateToolCallMessage(
             AgentToolCall call,
             string message,
-            RNAssistant.Core.Llm.LlmCompletionResult completion)
+            RNAssistant.Core.Llm.LlmCompletionResult completion,
+            string toolResultRole)
         {
+            var normalizedRole = ToolResultRoles.Normalize(toolResultRole);
+            if (string.Equals(normalizedRole, ToolResultRoles.Tool, StringComparison.Ordinal))
+            {
+                var nativeMessage = AgentTranscript.CreateAssistantMessage(message ?? string.Empty, completion);
+                nativeMessage.ToolResultRole = normalizedRole;
+                nativeMessage.ToolCallId = call == null ? string.Empty : call.Id ?? string.Empty;
+                nativeMessage.ToolName = ApiToolName(call == null ? null : call.Name);
+                nativeMessage.ToolCalls = new List<LlmToolCall>
+                {
+                    new LlmToolCall
+                    {
+                        Id = call == null ? string.Empty : call.Id ?? string.Empty,
+                        Type = "function",
+                        Name = ApiToolName(call == null ? null : call.Name),
+                        ArgumentsJson = JsonConvert.SerializeObject(
+                            call == null || call.Arguments == null
+                                ? new Dictionary<string, object>()
+                                : call.Arguments)
+                    }
+                };
+                nativeMessage.ProtocolMessage = true;
+                return nativeMessage;
+            }
             var content = new JObject
             {
                 ["message"] = message ?? string.Empty,
@@ -114,7 +163,24 @@ namespace RNAssistant.Office.Services
             }.ToString(Formatting.None);
             var protocolMessage = AgentTranscript.CreateAssistantMessage(content, completion);
             protocolMessage.ProtocolMessage = true;
+            protocolMessage.ToolResultRole = normalizedRole;
+            protocolMessage.ToolCallId = call == null ? string.Empty : call.Id ?? string.Empty;
+            protocolMessage.ToolName = call == null ? string.Empty : call.Name ?? string.Empty;
             return protocolMessage;
+        }
+
+        internal static string ApiToolName(string toolId)
+        {
+            var source = string.IsNullOrWhiteSpace(toolId) ? "tool" : toolId;
+            var chars = source.Select(character =>
+                (character >= 'a' && character <= 'z' ||
+                 character >= 'A' && character <= 'Z' ||
+                 character >= '0' && character <= '9' ||
+                 character == '_' || character == '-')
+                    ? character
+                    : '_').ToArray();
+            var value = "rna_" + new string(chars);
+            return value.Length <= 64 ? value : value.Substring(0, 64);
         }
 
         private static JToken ParseData(string dataJson, int maxDataTokens)

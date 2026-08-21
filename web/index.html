@@ -27,9 +27,9 @@
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-capabilities-20260820-1">
-  <link rel="stylesheet" href="css/app-workspace.css?v=agent-progress-20260820-1">
+  <link rel="stylesheet" href="css/app-workspace.css?v=agent-protocol-20260821-4">
   <link rel="stylesheet" href="css/app-tools.css?v=sidebar-polish-20260723-1">
-  <link rel="stylesheet" href="css/app-prompts.css?v=sidebar-polish-20260723-1">
+  <link rel="stylesheet" href="css/app-prompts.css?v=agent-protocol-20260821-2">
   <link rel="stylesheet" href="css/app-vba.css?v=chatui-20260622-7">
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
@@ -39,7 +39,7 @@
   <link rel="stylesheet" href="css/app-responsive.css?v=ui-simplify-20260821-4">
   <link rel="stylesheet" href="css/app-agent.css?v=ui-simplify-20260821-4">
   <link rel="stylesheet" href="css/app-agent-data.css?v=agent-ui-20260821-2">
-  <link rel="stylesheet" href="css/app-theme.css?v=ui-simplify-20260821-3">
+  <link rel="stylesheet" href="css/app-theme.css?v=agent-protocol-20260821-2">
 </head>
 <body>
   <div class="shell">
@@ -461,7 +461,6 @@
             <button class="settings-nav-button" type="button" data-settings-page="model">Модель</button>
             <button class="settings-nav-button" type="button" data-settings-page="agent">Агент</button>
             <button class="settings-nav-button" type="button" data-settings-page="interface">Интерфейс</button>
-            <button class="settings-nav-button" type="button" data-settings-page="theme">Тема</button>
             <button class="settings-nav-button" type="button" data-settings-page="prompts">Промпты</button>
             <button class="settings-nav-button" type="button" data-settings-page="service">Сервис</button>
           </nav>
@@ -517,16 +516,54 @@
             <section class="settings-page" data-settings-page="agent">
               <div class="settings-heading">
                 <h2>Агент</h2>
-                <p>Управляет выполнением инструментов и поведением при ошибках.</p>
+                <p>Протокол, выполнение инструментов и поведение при ошибках.</p>
               </div>
-              <div class="form-grid">
+              <section class="agent-protocol-panel" aria-labelledby="agentProtocolTitle">
+                <div class="agent-protocol-head">
+                  <div>
+                    <h3 id="agentProtocolTitle">Протокол</h3>
+                    <p>Фактический контракт текущего Agent runtime.</p>
+                  </div>
+                  <span class="agent-protocol-badge">единый JSON-поток</span>
+                </div>
+                <div class="agent-protocol-content">
+                  <div class="agent-protocol-controls">
+                    <label class="agent-protocol-control">
+                      <span>Формат ответа модели</span>
+                      <select id="agentResponseModeInput">
+                        <option value="json_object">json_object — совместимый</option>
+                        <option value="json_schema">json_schema — строгий</option>
+                      </select>
+                      <small>В обоих режимах ответ — объект message + tool_calls.</small>
+                    </label>
+                    <label class="agent-protocol-control">
+                      <span>Роль результата tool</span>
+                      <select id="toolResultRoleInput">
+                        <option value="user">user · TOOL_RESULT — совместимый</option>
+                        <option value="developer">developer · TOOL_RESULT</option>
+                        <option value="tool">tool · native pair</option>
+                      </select>
+                      <small>Для tool runtime добавляет парный assistant.tool_calls.</small>
+                    </label>
+                    <label class="checkline agent-protocol-fallback" id="agentJsonFallbackField">
+                      <input id="fallbackJsonObjectInput" type="checkbox">
+                      <span>При отказе endpoint повторить через json_object</span>
+                    </label>
+                  </div>
+                  <div class="agent-protocol-facts">
+                    <div class="agent-protocol-fact"><span>Agent envelope</span><code>message + tool_calls[]</code></div>
+                    <div class="agent-protocol-fact"><span>Аргументы tools</span><code>strict JSON Schema</code></div>
+                  </div>
+                </div>
+              </section>
+              <div class="form-grid two-columns agent-settings-grid">
                 <label class="checkline"><input id="autoConfirmToolsInput" type="checkbox"><span>Автоподтверждение действий</span></label>
                 <label class="checkline"><input id="autoCompressContextInput" type="checkbox"><span>Создавать summary при заполнении контекста</span></label>
                 <label><span>Макс. итераций агента</span><input id="maxAgentIterationsInput" type="number" min="1"></label>
                 <label><span>Повторов при ошибке формата</span><input id="maxAgentFormatRetriesInput" type="number" min="1" max="5"></label>
                 <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1"></label>
               </div>
-              <div class="setting-note">Agent получает все tools и компактный каталог skills в JSON-контексте; полный skill читает по необходимости. Независимые tools могут выполняться последовательно за один model turn; каждый возвращает свой TOOL_RESULT JSON.</div>
+              <div class="setting-note">Agent получает tools и каталог skills в RUNTIME_CONTEXT. Независимые вызовы выполняются последовательно за один model turn; зависимые и требующие подтверждения выбираются по одному.</div>
               <section class="model-compatibility-panel" aria-labelledby="modelCompatibilityTitle">
                 <div class="model-compatibility-head">
                   <div>
@@ -542,19 +579,15 @@
             <section class="settings-page" data-settings-page="interface">
               <div class="settings-heading">
                 <h2>Интерфейс</h2>
-                <p>Размер интерфейса и автоматические названия новых чатов.</p>
+                <p>Оформление, размер элементов и поведение списка чатов.</p>
               </div>
               <div class="form-grid two-columns">
                 <label><span>Размер шрифта, %</span><input id="uiFontScaleInput" type="number" min="85" max="130" step="5"></label>
                 <label class="checkline"><input id="smartChatTitlesInput" type="checkbox"><span>Умные названия чатов</span></label>
               </div>
-              <div class="setting-note">HTML preview и его скрипты всегда доступны в sandboxed iframe.</div>
-            </section>
-
-            <section class="settings-page" data-settings-page="theme">
-              <div class="settings-heading">
-                <h2>Тема</h2>
-                <p>Цветовая схема применяется ко всему интерфейсу, меню и рабочим областям.</p>
+              <div class="settings-subheading">
+                <h3>Тема</h3>
+                <p>Цветовая схема всего интерфейса и рабочих областей.</p>
               </div>
               <div class="theme-choice-grid" role="radiogroup" aria-label="Тема интерфейса">
                 <label class="theme-choice">
@@ -580,25 +613,27 @@
                   </span>
                 </label>
               </div>
+              <div class="setting-note">HTML preview и его скрипты всегда доступны в sandboxed iframe.</div>
             </section>
 
             <section class="settings-page" data-settings-page="prompts">
               <div class="settings-heading">
                 <h2>Промпты</h2>
-                <p>Главные инструкции и короткие служебные prompts текущего harness. Текст можно писать как Markdown.</p>
+                <p>Основные и служебные инструкции хранятся и редактируются как Markdown.</p>
               </div>
-              <div class="form-grid two-columns">
-                <label>
-                  <span>Роль инструкций</span>
+              <div class="prompt-settings-bar">
+                <label class="prompt-role-control">
+                  <span>Роль инструкций API</span>
                   <select id="systemPromptRoleInput">
                     <option value="developer">developer — по умолчанию</option>
                     <option value="system">system</option>
                     <option value="user">user</option>
                   </select>
+                  <small>Применяется к Agent, Chat и служебным запросам.</small>
                 </label>
                 <button class="secondary" id="resetAllPromptsButton" type="button" title="Вернуть встроенные значения всех промптов">Сбросить все промпты</button>
               </div>
-              <div class="setting-note">Роль применяется к инструкциям Agent, Chat и генератору названий. В Agent runtime добавляет один JSON-контекст с tools, skills, документом и пользовательским контекстом.</div>
+              <div class="setting-note">Agent runtime добавляет к главному Markdown-промпту JSON-контекст с tools, skills, документом и пользовательским контекстом.</div>
               <div class="prompt-layout split-layout" id="promptsLayout" data-split-key="prompts" data-default-ratio="0.3" data-min-left="180" data-min-ratio="0.2" data-max-ratio="0.48">
                 <div class="tool-list-panel surface-panel">
                   <input class="tool-search" id="promptSearchInput" placeholder="Поиск промптов..." autocomplete="off">
@@ -706,11 +741,11 @@
   <script src="js/app-core.js?v=ui-simplify-20260821-3"></script>
   <script src="js/app-utils.js?v=runtime-20260807-1"></script>
   <script src="js/app-layout.js"></script>
-  <script src="js/app-editors.js"></script>
+  <script src="js/app-editors.js?v=agent-protocol-20260821-2"></script>
   <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js?v=agent-ui-20260821-2"></script>
+  <script src="js/app-settings.js?v=agent-protocol-20260821-2"></script>
   <script src="js/app-logs.js?v=agent-progress-20260820-1"></script>
-  <script src="js/app-prompts.js?v=runtime-20260807-1"></script>
+  <script src="js/app-prompts.js?v=agent-protocol-20260821-2"></script>
   <script src="js/app-model-data.js?v=model-capabilities-20260820-1"></script>
   <script src="js/app-model-render.js?v=model-capabilities-20260820-1"></script>
   <script src="js/app-models.js?v=agent-reliability-20260819-1"></script>

@@ -28,13 +28,15 @@ namespace RNAssistant.Office.Services
             settings.Temperature = 0;
             settings.TopP = 1;
             var instructionRole = NormalizeInstructionRole(settings.SystemPromptRole);
+            var responseMode = AgentResponseModes.Normalize(settings.AgentResponseMode);
+            var toolResultRole = ToolResultRoles.Normalize(settings.ToolResultRole);
             var checks = new List<ModelCompatibilityCheckDto>();
             using (var total = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
             {
                 total.CancelAfter(TimeSpan.FromSeconds(90));
                 checks.Add(await ProbeTextAsync(settings, instructionRole, total.Token).ConfigureAwait(false));
-                checks.Add(await ProbeAgentJsonAsync(settings, total.Token).ConfigureAwait(false));
-                checks.Add(await ProbeToolResultAsync(settings, total.Token).ConfigureAwait(false));
+                checks.Add(await ProbeAgentJsonAsync(settings, responseMode, total.Token).ConfigureAwait(false));
+                checks.Add(await ProbeToolResultAsync(settings, responseMode, toolResultRole, total.Token).ConfigureAwait(false));
             }
             var compatible = checks.All(check => check.Passed);
             return new ModelCompatibilityResponse
@@ -43,9 +45,11 @@ namespace RNAssistant.Office.Services
                 Endpoint = settings.BaseUrl ?? string.Empty,
                 Model = settings.Model ?? string.Empty,
                 InstructionRole = instructionRole,
+                ResponseMode = responseMode,
+                ToolResultRole = toolResultRole,
                 Summary = compatible
-                    ? "Модель совместима с простым Agent JSON-потоком."
-                    : "Модель не прошла обязательную проверку Agent JSON-потока.",
+                    ? "Модель совместима с выбранным Agent-протоколом."
+                    : "Модель не прошла обязательную проверку выбранного Agent-протокола.",
                 Checks = checks
             };
         }
@@ -71,7 +75,10 @@ namespace RNAssistant.Office.Services
                 cancellationToken);
         }
 
-        private Task<ModelCompatibilityCheckDto> ProbeAgentJsonAsync(AppSettings settings, CancellationToken cancellationToken)
+        private Task<ModelCompatibilityCheckDto> ProbeAgentJsonAsync(
+            AppSettings settings,
+            string responseMode,
+            CancellationToken cancellationToken)
         {
             var tool = new ToolDefinition
             {
@@ -82,7 +89,7 @@ namespace RNAssistant.Office.Services
             return RunAsync(
                 settings,
                 "agent_json",
-                "Agent JSON",
+                "Agent " + responseMode,
                 new[]
                 {
                     new ChatMessage
@@ -91,7 +98,7 @@ namespace RNAssistant.Office.Services
                         Content = "Return exactly one JSON object: {\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}"
                     }
                 },
-                new LlmRequestOptions { ResponseFormat = LlmResponseFormats.JsonObject },
+                AgentOptions(responseMode, new[] { tool }),
                 completion =>
                 {
                     var parsed = new AgentResponseParser().Parse(completion == null ? null : completion.Content, new[] { tool });
@@ -114,17 +121,19 @@ namespace RNAssistant.Office.Services
                 cancellationToken);
         }
 
-        private Task<ModelCompatibilityCheckDto> ProbeToolResultAsync(AppSettings settings, CancellationToken cancellationToken)
+        private Task<ModelCompatibilityCheckDto> ProbeToolResultAsync(
+            AppSettings settings,
+            string responseMode,
+            string toolResultRole,
+            CancellationToken cancellationToken)
         {
+            var messages = ToolResultProbeMessages(toolResultRole);
             return RunAsync(
                 settings,
                 "tool_result_json",
-                "TOOL_RESULT JSON",
-                new[]
-                {
-                    new ChatMessage { Role = "user", Content = "TOOL_RESULT:\n{\"ok\":true,\"name\":\"compat.echo\",\"data\":{\"value\":\"A\"},\"error\":null}\nReply with {\"message\":\"RESULT_OK\",\"tool_calls\":[]}." }
-                },
-                new LlmRequestOptions { ResponseFormat = LlmResponseFormats.JsonObject },
+                "Tool result · " + toolResultRole,
+                messages,
+                AgentOptions(responseMode, new ToolDefinition[0]),
                 completion =>
                 {
                     var parsed = new AgentResponseParser().Parse(completion == null ? null : completion.Content, new ToolDefinition[0]);
@@ -134,6 +143,76 @@ namespace RNAssistant.Office.Services
                         : parsed.Error ?? "Endpoint did not return the exact RESULT_OK sentinel after TOOL_RESULT.";
                 },
                 cancellationToken);
+        }
+
+        private static IEnumerable<ChatMessage> ToolResultProbeMessages(string role)
+        {
+            role = ToolResultRoles.Normalize(role);
+            const string resultJson = "{\"ok\":true,\"tool_call_id\":\"call_1\",\"name\":\"compat.echo\",\"status\":\"success\",\"message\":\"\",\"data\":{\"value\":\"A\"},\"error\":null}";
+            var messages = new List<ChatMessage>();
+            if (string.Equals(role, ToolResultRoles.Tool, StringComparison.Ordinal))
+            {
+                var apiName = AgentJsonProtocol.ApiToolName("compat.echo");
+                messages.Add(new ChatMessage
+                {
+                    Role = "assistant",
+                    Content = "TOOL_OK",
+                    ProtocolMessage = true,
+                    ToolCalls = new List<LlmToolCall>
+                    {
+                        new LlmToolCall
+                        {
+                            Id = "call_1",
+                            Type = "function",
+                            Name = apiName,
+                            ArgumentsJson = "{\"value\":\"A\"}"
+                        }
+                    }
+                });
+                messages.Add(new ChatMessage
+                {
+                    Role = ToolResultRoles.Tool,
+                    ToolCallId = "call_1",
+                    ToolName = apiName,
+                    Content = resultJson,
+                    ProtocolMessage = true
+                });
+            }
+            else
+            {
+                messages.Add(new ChatMessage
+                {
+                    Role = "assistant",
+                    Content = "{\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}",
+                    ProtocolMessage = true
+                });
+                messages.Add(new ChatMessage
+                {
+                    Role = role,
+                    Content = "TOOL_RESULT:\n" + resultJson,
+                    ProtocolMessage = true
+                });
+            }
+            messages.Add(new ChatMessage
+            {
+                Role = "user",
+                Content = "Reply with {\"message\":\"RESULT_OK\",\"tool_calls\":[]}."
+            });
+            return messages;
+        }
+
+        private static LlmRequestOptions AgentOptions(string responseMode, IEnumerable<ToolDefinition> tools)
+        {
+            var jsonSchema = string.Equals(
+                AgentResponseModes.Normalize(responseMode),
+                AgentResponseModes.JsonSchema,
+                StringComparison.Ordinal);
+            return new LlmRequestOptions
+            {
+                ResponseFormat = jsonSchema ? LlmResponseFormats.JsonSchema : LlmResponseFormats.JsonObject,
+                ResponseSchemaName = jsonSchema ? AgentResponseSchemaBuilder.SchemaName : null,
+                ResponseSchemaJson = jsonSchema ? AgentResponseSchemaBuilder.Build(tools) : null
+            };
         }
 
         private async Task<ModelCompatibilityCheckDto> RunAsync(

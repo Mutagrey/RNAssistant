@@ -116,6 +116,7 @@ namespace RNAssistant.Core.Llm
             var status = (int)statusCode;
             if (status == 429) return LlmFailureKind.RateLimited;
             if (status >= 500) return LlmFailureKind.TransientServer;
+            if (IsResponseFormatUnsupported(status, body, options)) return LlmFailureKind.ResponseFormatUnsupported;
             return LlmFailureKind.Http;
         }
 
@@ -168,6 +169,25 @@ namespace RNAssistant.Core.Llm
         private static LlmRequestException TooLarge()
         {
             return new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM response exceeds the configured safety limit.");
+        }
+
+        private static bool IsResponseFormatUnsupported(int statusCode, string body, LlmRequestOptions options)
+        {
+            if (options == null ||
+                !string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.OrdinalIgnoreCase) ||
+                statusCode != 400 && statusCode != 404 && statusCode != 422)
+            {
+                return false;
+            }
+            var value = body ?? string.Empty;
+            var mentionsFormat = value.IndexOf("response_format", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("json_schema", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("structured output", StringComparison.OrdinalIgnoreCase) >= 0;
+            var rejected = value.IndexOf("unsupported", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("not support", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("unknown", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("invalid", StringComparison.OrdinalIgnoreCase) >= 0;
+            return mentionsFormat && rejected;
         }
 
     }

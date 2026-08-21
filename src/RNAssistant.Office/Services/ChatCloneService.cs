@@ -88,6 +88,18 @@ namespace RNAssistant.Office.Services
                 Content = message.Content,
                 ExcludeFromModelContext = message.ExcludeFromModelContext,
                 ProtocolMessage = message.ProtocolMessage,
+                ToolCallId = message.ToolCallId,
+                ToolName = message.ToolName,
+                ToolResultRole = message.ToolResultRole,
+                ToolCalls = message.ToolCalls == null
+                    ? new List<LlmToolCall>()
+                    : message.ToolCalls.Where(call => call != null).Select(call => new LlmToolCall
+                    {
+                        Id = call.Id,
+                        Type = call.Type,
+                        Name = call.Name,
+                        ArgumentsJson = call.ArgumentsJson
+                    }).ToList(),
                 Attachments = message.Attachments == null
                     ? new List<ChatAttachment>()
                     : message.Attachments.Select(CloneAttachment).ToList(),

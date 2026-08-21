@@ -223,7 +223,9 @@ namespace RNAssistant.Office.Services
             {
                 if (string.IsNullOrWhiteSpace(message.RunId)) return false;
                 return string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase);
+                    string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(message.Role, "developer", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase);
             }
             return !string.IsNullOrWhiteSpace(message.Content) &&
                 (string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ||
@@ -304,6 +306,19 @@ namespace RNAssistant.Office.Services
                 if (message == null) continue;
                 builder.Append('[').Append(message.Role ?? "unknown").Append("] ");
                 builder.Append(message.Content ?? string.Empty);
+                var toolCalls = (message.ToolCalls ?? new List<LlmToolCall>())
+                    .Where(call => call != null)
+                    .Select(call => new
+                    {
+                        id = call.Id,
+                        name = call.Name,
+                        argumentsJson = call.ArgumentsJson
+                    })
+                    .ToList();
+                if (toolCalls.Count > 0)
+                {
+                    builder.Append(" [tool_calls:").Append(JsonConvert.SerializeObject(toolCalls)).Append(']');
+                }
                 var artifactIds = message.ArtifactIds == null ? string.Empty : string.Join(",", message.ArtifactIds.ToArray());
                 if (!string.IsNullOrWhiteSpace(artifactIds)) builder.Append(" [artifacts:").Append(artifactIds).Append(']');
                 var attachmentNames = (message.Attachments ?? new List<ChatAttachment>())

@@ -123,6 +123,18 @@ namespace RNAssistant.Office.Services
                 Role = source == null ? string.Empty : source.Role,
                 Content = AppendHistoricalReferences(source, sourceAttachments),
                 ProtocolMessage = source != null && source.ProtocolMessage,
+                ToolCallId = source == null ? null : source.ToolCallId,
+                ToolName = source == null ? null : source.ToolName,
+                ToolResultRole = source == null ? null : source.ToolResultRole,
+                ToolCalls = source == null || source.ToolCalls == null
+                    ? new List<LlmToolCall>()
+                    : source.ToolCalls.Where(call => call != null).Select(call => new LlmToolCall
+                    {
+                        Id = call.Id,
+                        Type = call.Type,
+                        Name = call.Name,
+                        ArgumentsJson = call.ArgumentsJson
+                    }).ToList(),
                 Attachments = sourceAttachments
                         .Where(attachment =>
                             !string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) &&

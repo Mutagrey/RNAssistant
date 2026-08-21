@@ -60,6 +60,13 @@ namespace RNAssistant.Harness
                 Content = "Done",
                 ExcludeFromModelContext = true,
                 ProtocolMessage = true,
+                ToolCallId = "call-1",
+                ToolName = "rna_excel_read_range",
+                ToolResultRole = ToolResultRoles.Tool,
+                ToolCalls = new List<LlmToolCall>
+                {
+                    new LlmToolCall { Id = "call-1", Type = "function", Name = "rna_excel_read_range", ArgumentsJson = "{}" }
+                },
                 ArtifactIds = new List<string> { "plan-1" },
                 HtmlWorkspaceCheckpointId = "html-2",
                 PromptTokens = 10,
@@ -93,6 +100,9 @@ namespace RNAssistant.Harness
             AssertEqual("assistant", clonedMessages[0].Role, "message role");
             AssertTrue(clonedMessages[0].ExcludeFromModelContext, "message context exclusion");
             AssertTrue(clonedMessages[0].ProtocolMessage, "protocol marker cloned");
+            AssertEqual("call-1", clonedMessages[0].ToolCallId, "tool call id cloned");
+            AssertEqual(ToolResultRoles.Tool, clonedMessages[0].ToolResultRole, "tool result role cloned");
+            AssertTrue(!object.ReferenceEquals(sourceMessage.ToolCalls[0], clonedMessages[0].ToolCalls[0]), "tool call cloned");
             AssertEqual("plan-1", clonedMessages[0].ArtifactIds[0], "artifact reference cloned");
             AssertEqual("html-2", clonedMessages[0].HtmlWorkspaceCheckpointId, "html checkpoint cloned");
             AssertEqual(12, clonedMessages[0].TotalTokens, "message tokens");
@@ -441,7 +451,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"uiTheme\":\"dark\",\"debugModelTraffic\":true,\"reasoningRequestMode\":\"custom_json\",\"reasoningCustomJson\":\"{\\\"thinking\\\":{\\\"budget\\\":4096}}\",\"systemPromptRole\":\"system\",\"maxAgentFormatRetries\":4,\"modelImageSupportOverrides\":{\"gpt-test\":true},\"modelAudioSupportOverrides\":{\"gpt-audio\":true}},\"apiKey\":\"secret\"}}")
+                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"uiTheme\":\"dark\",\"debugModelTraffic\":true,\"reasoningRequestMode\":\"custom_json\",\"reasoningCustomJson\":\"{\\\"thinking\\\":{\\\"budget\\\":4096}}\",\"systemPromptRole\":\"system\",\"agentResponseMode\":\"json_schema\",\"toolResultRole\":\"tool\",\"fallbackToJsonObject\":false,\"maxAgentFormatRetries\":4,\"modelImageSupportOverrides\":{\"gpt-test\":true},\"modelAudioSupportOverrides\":{\"gpt-audio\":true}},\"apiKey\":\"secret\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -453,6 +463,9 @@ namespace RNAssistant.Harness
             AssertEqual(ReasoningRequestModes.CustomJson, controller.LastSettings.ReasoningRequestMode, "settings custom reasoning mode");
             AssertContains(controller.LastSettings.ReasoningCustomJson, "budget", "settings custom reasoning json");
             AssertEqual("system", controller.LastSettings.SystemPromptRole, "system prompt role");
+            AssertEqual(AgentResponseModes.JsonSchema, controller.LastSettings.AgentResponseMode, "agent response mode");
+            AssertEqual(ToolResultRoles.Tool, controller.LastSettings.ToolResultRole, "tool result role");
+            AssertTrue(!controller.LastSettings.FallbackToJsonObject, "json schema fallback setting");
             AssertEqual(4, controller.LastSettings.MaxAgentFormatRetries, "format retry limit");
             AssertEqual(true, controller.LastSettings.ModelImageSupportOverrides["gpt-test"].Value, "model image override");
             AssertEqual(true, controller.LastSettings.ModelAudioSupportOverrides["gpt-audio"].Value, "model audio override");
