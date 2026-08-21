@@ -64,6 +64,18 @@ namespace RNAssistant.Harness
             AssertTrue(schema["additionalProperties"].Value<bool>() == false, "agent response root is strict");
         }
 
+        private static void AgentJsonSchemaSupportsTypeNamedArguments()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var tool = executor.GetControllerTools().Single(candidate => candidate.Id == "common.tools_create");
+                var schema = JObject.Parse(AgentResponseSchemaBuilder.Build(new[] { tool }));
+                AssertEqual("string",
+                    (string)schema.SelectToken("properties.tool_calls.items.anyOf[0].properties.arguments.properties.parameters.properties.type.type"),
+                    "schema property named type");
+            });
+        }
+
         private static void AgentSupportsSelectableToolResultRoles()
         {
             var call = new AgentToolCall

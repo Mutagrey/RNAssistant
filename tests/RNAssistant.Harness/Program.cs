@@ -50,6 +50,7 @@ namespace RNAssistant.Harness
                 Test("agent: default prompts are structured Markdown", DefaultPromptsAreStructuredMarkdown),
                 Test("agent: supports selectable response formats", AgentSupportsSelectableResponseFormats),
                 Test("agent: json schema mirrors tool contracts", AgentJsonSchemaMirrorsToolContracts),
+                Test("agent: json schema supports type-named arguments", AgentJsonSchemaSupportsTypeNamedArguments),
                 Test("agent: supports selectable tool result roles", AgentSupportsSelectableToolResultRoles),
                 Test("agent: json schema fallback is request-local", AgentJsonSchemaFallbackIsRequestLocal),
                 Test("tools: strict schema validates metadata and constraints", StrictToolSchemaValidatesMetadataAndConstraints),

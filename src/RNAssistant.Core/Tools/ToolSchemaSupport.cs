@@ -295,9 +295,14 @@ namespace RNAssistant.Core.Tools
         private static bool ContainsType(JToken typeToken, string expected)
         {
             if (typeToken == null) return false;
-            return typeToken.Type == JTokenType.Array
-                ? ((JArray)typeToken).Values<string>().Any(type => string.Equals(type, expected, StringComparison.OrdinalIgnoreCase))
-                : string.Equals((string)typeToken, expected, StringComparison.OrdinalIgnoreCase);
+            if (typeToken.Type == JTokenType.String)
+            {
+                return string.Equals((string)typeToken, expected, StringComparison.OrdinalIgnoreCase);
+            }
+            var types = typeToken as JArray;
+            return types != null && types.Any(type =>
+                type.Type == JTokenType.String &&
+                string.Equals((string)type, expected, StringComparison.OrdinalIgnoreCase));
         }
 
         private static void MakeObjectSchemasStrict(JToken token)
@@ -305,7 +310,7 @@ namespace RNAssistant.Core.Tools
             var obj = token as JObject;
             if (obj != null)
             {
-                if (string.Equals((string)obj["type"], "object", StringComparison.OrdinalIgnoreCase))
+                if (ContainsType(obj["type"], "object"))
                 {
                     var properties = obj["properties"] as JObject ?? new JObject();
                     obj["properties"] = properties;
