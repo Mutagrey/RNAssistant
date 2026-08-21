@@ -182,6 +182,25 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void AddressedTransientSessionSurvivesDocumentSwitch()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var service = new ChatSessionService(adapter, store);
+                var draft = service.LoadSession(null);
+
+                adapter.DocumentKeyValue = "other-doc";
+                adapter.RuntimeDocumentKeyValue = "other-runtime-doc";
+                var loaded = service.LoadAddressedSession(draft.Id);
+
+                AssertEqual(draft.Id, loaded.Id, "addressed transient id");
+                AssertEqual("doc", loaded.DocumentKey, "transient keeps original document");
+                AssertTrue(!service.IsCurrentDocument(loaded), "transient is not rebound to another document");
+            });
+        }
+
         private static void AddressedSessionDoesNotFallbackToDifferentChat()
         {
             WithTempPaths(delegate(AppDataPaths paths)

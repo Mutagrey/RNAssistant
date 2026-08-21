@@ -65,6 +65,7 @@ namespace RNAssistant.Core.Tools
                 .GroupBy(item => item.Id, StringComparer.Ordinal)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
             var callIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var containsConfirmationCall = false;
             foreach (var token in calls)
             {
                 var call = token as JObject;
@@ -86,6 +87,7 @@ namespace RNAssistant.Core.Tools
                 {
                     return AgentResponseParseResult.Fail("Unknown tool: " + name + ". Use an exact name from tools.");
                 }
+                containsConfirmationCall |= tool.RequiresConfirmation;
 
                 var parsedArguments = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
                 ToolArgumentNormalizer.AddProperties(arguments, parsedArguments);
@@ -95,6 +97,12 @@ namespace RNAssistant.Core.Tools
                     Name = tool.Id,
                     Arguments = parsedArguments
                 });
+            }
+            if (calls.Count > 1 && containsConfirmationCall)
+            {
+                return AgentResponseParseResult.Fail(
+                    "Tool calls that may require confirmation must be returned one at a time. " +
+                    "Return exactly one tool call and wait for its TOOL_RESULT before choosing the next action.");
             }
             return AgentResponseParseResult.Ok(response);
         }

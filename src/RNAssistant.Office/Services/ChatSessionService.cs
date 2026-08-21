@@ -128,9 +128,8 @@ namespace RNAssistant.Office.Services
                 }
                 if (_activeSession != null &&
                     session == null &&
-                    string.Equals(requestedSessionId, _activeSessionId, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(_activeHost, host, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(_activeDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))
+                    !allowMissingRequestedFallback &&
+                    string.Equals(requestedSessionId, _activeSessionId, StringComparison.OrdinalIgnoreCase))
                 {
                     session = _activeSession;
                 }

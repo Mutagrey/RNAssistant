@@ -52,6 +52,24 @@ namespace RNAssistant.Harness
             AssertEqual("call_charts", parsed.Response.ToolCalls[1].Id, "call order preserved");
         }
 
+        private static void SimpleAgentRejectsBatchedConfirmationCalls()
+        {
+            var tool = new ToolDefinition
+            {
+                Id = "excel.vba_apply_patch",
+                RequiresConfirmation = true
+            };
+            var parsed = new AgentResponseParser().Parse(
+                "{\"message\":\"Applying patches.\",\"tool_calls\":[" +
+                "{\"id\":\"call_patch_1\",\"name\":\"excel.vba_apply_patch\",\"arguments\":{}}," +
+                "{\"id\":\"call_patch_2\",\"name\":\"excel.vba_apply_patch\",\"arguments\":{}}]}",
+                new[] { tool });
+
+            AssertTrue(!parsed.Success, "confirmation calls cannot be batched");
+            AssertContains(parsed.Error, "one at a time", "batch rejection explains recovery");
+            AssertContains(parsed.Error, "TOOL_RESULT", "batch rejection requires fresh result");
+        }
+
         private static void SimpleAgentRejectsToolCallWithoutMessage()
         {
             var parsed = new AgentResponseParser().Parse(
@@ -409,6 +427,35 @@ namespace RNAssistant.Harness
                 AssertContains(prompt, "expectedCodeSha256", "VBA edit schema requires current hash");
                 AssertTrue(prompt.IndexOf("\"name\":\"excel.vba_replace_module\"", StringComparison.Ordinal) < 0,
                     "raw whole-module backend remains hidden");
+                AssertTrue(prompt.IndexOf("\"name\":\"excel.run_macro\"", StringComparison.Ordinal) < 0,
+                    "macro execution backend remains hidden");
+            });
+        }
+
+        private static void SimpleAgentRejectsHiddenVbaBackendCalls()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var responses = new Queue<string>(new[]
+                {
+                    "{\"message\":\"Запускаю макрос напрямую.\",\"tool_calls\":[{\"id\":\"call_macro\",\"name\":\"excel.run_macro\",\"arguments\":{\"macroName\":\"MigrateApiKey\"}}]}",
+                    "{\"message\":\"Скрытый backend недоступен; нужен безопасный публичный инструмент.\",\"tool_calls\":[]}"
+                });
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
+                {
+                    calls.Add(messages.ToList());
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var result = new AgentRunService(adapter, executor, completion).ExecuteAsync(
+                    "Bypass a failed patch.", NewSession(adapter), NewContext(adapter), new AppSettings(), tools, null)
+                    .GetAwaiter().GetResult();
+
+                AssertEqual(2, calls.Count, "hidden backend response repaired once");
+                AssertEqual(0, adapter.Executed.Count(command => command.ToolId == "excel.run_macro"), "hidden macro was not executed");
+                AssertContains(FlattenSimple(calls[1]), "Unknown tool: excel.run_macro", "repair explains hidden tool rejection");
+                AssertContains(result.AssistantText, "недоступен", "model recovers without hidden execution");
             });
         }
 
@@ -471,8 +518,7 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     "{\"message\":\"Создаю skill.\",\"tool_calls\":[" +
-                    "{\"id\":\"call_skill\",\"name\":\"common.skills_create\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}," +
-                    "{\"id\":\"call_after\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"MustWait\"}}]}",
+                    "{\"id\":\"call_skill\",\"name\":\"common.skills_create\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
                     "{\"message\":\"Skill сохранён.\",\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
@@ -494,10 +540,6 @@ namespace RNAssistant.Harness
                 AssertTrue(!session.Messages.Any(message => message.ProtocolMessage &&
                     (message.Content ?? string.Empty).IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) >= 0),
                     "waiting result not replayed");
-                AssertTrue(!adapter.HasSheet("MustWait"), "calls after confirmation are not executed");
-                AssertTrue(!session.Messages.Any(message => message.ProtocolMessage &&
-                    (message.Content ?? string.Empty).IndexOf("call_after", StringComparison.OrdinalIgnoreCase) >= 0),
-                    "calls after confirmation are not retained");
                 AssertEqual("call_skill", session.Messages.Last(message => message.Activity != null).Activity.ToolCallId,
                     "pending activity keeps tool call id");
                 foreach (var message in session.Messages)
