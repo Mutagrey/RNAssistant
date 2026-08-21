@@ -85,7 +85,7 @@ namespace RNAssistant.Office.Tools
                     var path = ToolArgumentReader.String(command.Arguments, "path", string.Empty);
                     if (dryRun)
                     {
-                        FindFile(session, path);
+                        FindFile(NormalizedWorkspaceCopy(session.HtmlWorkspace), path, false);
                         return ToolResult.Ok("Dry run: would delete HTML workspace file " + NormalizePath(path) + ".", WorkspaceDataJson(session.HtmlWorkspace));
                     }
 
@@ -98,7 +98,7 @@ namespace RNAssistant.Office.Tools
                     var name = ToolArgumentReader.String(command.Arguments, "name", string.Empty);
                     if (dryRun)
                     {
-                        FindDataSource(session, name);
+                        FindDataSource(NormalizedWorkspaceCopy(session.HtmlWorkspace), name);
                         return ToolResult.Ok("Dry run: would delete HTML workspace data source " + NormalizeDataName(name) + ".", WorkspaceDataJson(session.HtmlWorkspace));
                     }
 
@@ -111,7 +111,7 @@ namespace RNAssistant.Office.Tools
                     var path = ToolArgumentReader.String(command.Arguments, "path", "index.html");
                     if (dryRun)
                     {
-                        ValidatePath(path);
+                        FindFile(NormalizedWorkspaceCopy(session.HtmlWorkspace), path, true);
                         return ToolResult.Ok("Dry run: would select HTML workspace file " + NormalizePath(path) + ".", WorkspaceDataJson(session.HtmlWorkspace));
                     }
 
@@ -190,11 +190,12 @@ namespace RNAssistant.Office.Tools
             workspace.RedoHistory = NormalizeSnapshots(workspace.RedoHistory);
 
             if (string.IsNullOrWhiteSpace(workspace.ActiveFileId) ||
-                !workspace.Files.Any(f => f != null && string.Equals(f.Id, workspace.ActiveFileId, StringComparison.OrdinalIgnoreCase)))
+                !workspace.Files.Any(f => f != null &&
+                    string.Equals(f.Id, workspace.ActiveFileId, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(f.Kind, "html", StringComparison.OrdinalIgnoreCase)))
             {
                 var firstHtml = workspace.Files.FirstOrDefault(f => f != null && string.Equals(f.Kind, "html", StringComparison.OrdinalIgnoreCase));
-                var first = firstHtml ?? workspace.Files.FirstOrDefault(f => f != null);
-                workspace.ActiveFileId = first == null ? string.Empty : first.Id;
+                workspace.ActiveFileId = firstHtml == null ? string.Empty : firstHtml.Id;
             }
 
             if (workspace.UpdatedUtc == default(DateTime))
@@ -237,9 +238,16 @@ namespace RNAssistant.Office.Tools
             file.Content = content ?? string.Empty;
             file.UpdatedUtc = now;
             session.HtmlWorkspace.UpdatedUtc = now;
-            if (setActive || string.IsNullOrWhiteSpace(session.HtmlWorkspace.ActiveFileId))
+            if (string.Equals(file.Kind, "html", StringComparison.OrdinalIgnoreCase) &&
+                (setActive || string.IsNullOrWhiteSpace(session.HtmlWorkspace.ActiveFileId)))
             {
                 session.HtmlWorkspace.ActiveFileId = file.Id;
+            }
+            else if (!string.Equals(file.Kind, "html", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(session.HtmlWorkspace.ActiveFileId, file.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                session.HtmlWorkspace.ActiveFileId = string.Empty;
+                NormalizeWorkspace(session.HtmlWorkspace);
             }
 
             HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML: " + normalizedPath);
@@ -291,15 +299,9 @@ namespace RNAssistant.Office.Tools
 
             ValidatePath(path);
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
+            var file = FindFile(session.HtmlWorkspace, path, true);
             PushHistory(session.HtmlWorkspace, "Before selecting " + NormalizePath(path));
             ClearRedoHistory(session.HtmlWorkspace);
-            var id = FileId(NormalizePath(path));
-            var file = session.HtmlWorkspace.Files.FirstOrDefault(f =>
-                f != null && string.Equals(f.Id, id, StringComparison.OrdinalIgnoreCase));
-            if (file == null)
-            {
-                throw new InvalidOperationException("HTML workspace file was not found: " + NormalizePath(path));
-            }
 
             session.HtmlWorkspace.ActiveFileId = file.Id;
             session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
@@ -565,13 +567,23 @@ namespace RNAssistant.Office.Tools
 
             ValidatePath(path);
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
+            return FindFile(session.HtmlWorkspace, path, false);
+        }
+
+        private static HtmlWorkspaceFile FindFile(HtmlWorkspace workspace, string path, bool requireHtml)
+        {
+            ValidatePath(path);
             var normalizedPath = NormalizePath(path);
             var id = FileId(normalizedPath);
-            var file = session.HtmlWorkspace.Files.FirstOrDefault(item =>
+            var file = (workspace == null ? new List<HtmlWorkspaceFile>() : workspace.Files ?? new List<HtmlWorkspaceFile>()).FirstOrDefault(item =>
                 item != null && string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
             if (file == null)
             {
                 throw new InvalidOperationException("HTML workspace file was not found: " + normalizedPath);
+            }
+            if (requireHtml && !string.Equals(file.Kind, "html", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("HTML workspace active file must have kind html: " + normalizedPath);
             }
             return file;
         }
@@ -584,9 +596,14 @@ namespace RNAssistant.Office.Tools
             }
 
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
+            return FindDataSource(session.HtmlWorkspace, name);
+        }
+
+        private static HtmlWorkspaceDataSource FindDataSource(HtmlWorkspace workspace, string name)
+        {
             var normalizedName = NormalizeDataName(name);
             var id = DataSourceId(normalizedName);
-            var data = session.HtmlWorkspace.DataSources.FirstOrDefault(item =>
+            var data = (workspace == null ? new List<HtmlWorkspaceDataSource>() : workspace.DataSources ?? new List<HtmlWorkspaceDataSource>()).FirstOrDefault(item =>
                 item != null && string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
             if (data == null)
             {
@@ -617,7 +634,7 @@ namespace RNAssistant.Office.Tools
 
         private static string NormalizePath(string path)
         {
-            var value = (path ?? string.Empty).Replace('\\', '/').Trim().TrimStart('/');
+            var value = (path ?? string.Empty).Replace('\\', '/').Trim();
             if (string.IsNullOrWhiteSpace(value))
             {
                 value = "index.html";
@@ -627,6 +644,14 @@ namespace RNAssistant.Office.Tools
                 throw new InvalidOperationException("Invalid HTML workspace path: " + path);
             }
             return value;
+        }
+
+        private static HtmlWorkspace NormalizedWorkspaceCopy(HtmlWorkspace workspace)
+        {
+            var copy = workspace == null
+                ? new HtmlWorkspace()
+                : JsonConvert.DeserializeObject<HtmlWorkspace>(JsonConvert.SerializeObject(workspace));
+            return NormalizeWorkspace(copy);
         }
 
         private static string NormalizeKind(string kind, string path)

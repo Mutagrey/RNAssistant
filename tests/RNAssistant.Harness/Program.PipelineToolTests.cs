@@ -71,6 +71,21 @@ namespace RNAssistant.Harness
                 AssertEqual(2, adapter.Executed.Count, "adapter execution count");
                 AssertEqual("added sheet Report", adapter.Executed[1].Arguments["sourceMessage"], "step message placeholder");
                 AssertEqual(true, adapter.Executed[1].Arguments["sourceSuccess"], "step success placeholder");
+
+                var nested = new ToolDefinition
+                {
+                    Id = "excel.nested_placeholder",
+                    Host = "Excel",
+                    Name = "Nested placeholder",
+                    Executor = "pipeline",
+                    Enabled = true,
+                    ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\",\"description\":\"Header text.\"}},\"required\":[\"header\"],\"additionalProperties\":false}",
+                    PipelineJson = "{\"steps\":[{\"id\":\"table\",\"toolId\":\"excel.write_table\",\"arguments\":{\"sheet\":\"Nested\",\"startAddress\":\"A1\",\"values\":[[\"{{args.header}}\"]]}}]}"
+                };
+                var nestedTools = adapter.GetBuiltInTools().Concat(new[] { nested }).ToList();
+                var nestedResult = executor.Execute(Command(nested.Id, "header", "Revenue"), nestedTools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+                AssertTrue(nestedResult.Success, "nested pipeline placeholder result");
+                AssertEqual("Revenue", adapter.CellValue("Nested", "A1"), "nested pipeline placeholder value");
             });
         }
 

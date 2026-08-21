@@ -381,7 +381,7 @@ namespace RNAssistant.OfficeHosts
         private ToolResult ReadRange(ToolCommand command)
         {
             var doc = RequireDocument();
-            var start = Math.Max(0, ToolArgumentReader.Int32(command.Arguments, "start", 0));
+            var start = Math.Max(0, Math.Min(doc.Content.End, ToolArgumentReader.Int32(command.Arguments, "start", 0)));
             var end = ToolArgumentReader.Int32(command.Arguments, "end", Math.Min(doc.Content.End, start + 12000));
             var maxChars = ToolArgumentReader.Int32(command.Arguments, "maxChars", 12000);
             end = Math.Max(start, Math.Min(doc.Content.End, end));
@@ -552,21 +552,32 @@ namespace RNAssistant.OfficeHosts
             var ranges = new List<WordSearchRange>(SearchRanges(scope));
             var hash = new System.Text.StringBuilder();
             var plans = new List<WordReplacementPlan>();
+            var options = PatternOptions(command);
+            var observedMatches = 0;
+            var replacementPlanned = false;
             try
             {
                 foreach (var story in ranges)
                 {
                     var text = story.Range.Text ?? string.Empty;
                     hash.Append(story.Kind).Append('\n').Append(story.Range.Start).Append(':').Append(story.Range.End).Append('\n').Append(text).Append('\n');
-                    var edits = TextPatternEngine.PlanReplacements(text, find, replace, PatternOptions(command), replaceAll, maxReplacements);
-                    if (edits.Count > 0) plans.Add(new WordReplacementPlan { Story = story, Edits = edits });
-                    if (!replaceAll && edits.Count > 0) break;
+                    var found = TextPatternEngine.Find(text, find, options, 1, 0);
+                    observedMatches += found.MatchCount;
+                    if (found.MatchCount > 0 && (replaceAll || !replacementPlanned))
+                    {
+                        var edits = TextPatternEngine.PlanReplacements(text, find, replace, options, replaceAll, maxReplacements);
+                        if (edits.Count > 0)
+                        {
+                            plans.Add(new WordReplacementPlan { Story = story, Edits = edits });
+                            replacementPlanned = true;
+                        }
+                    }
                 }
-                var total = 0;
-                foreach (var plan in plans) total += plan.Edits.Count;
-                if (!string.Equals(expectedHash, TextPatternEngine.Sha256(hash.ToString()), StringComparison.OrdinalIgnoreCase) || total != expectedMatches)
+                var replacements = 0;
+                foreach (var plan in plans) replacements += plan.Edits.Count;
+                if (!string.Equals(expectedHash, TextPatternEngine.Sha256(hash.ToString()), StringComparison.OrdinalIgnoreCase) || observedMatches != expectedMatches)
                     return ToolResult.Fail("Word search scope changed after preview.", null, "stale_search_scope", true);
-                if (total > maxReplacements) return ToolResult.Fail("Replacement count exceeds maxReplacements=" + maxReplacements + ".", null, "replacement_limit_exceeded", false);
+                if (replacements > maxReplacements) return ToolResult.Fail("Replacement count exceeds maxReplacements=" + maxReplacements + ".", null, "replacement_limit_exceeded", false);
                 for (var p = plans.Count - 1; p >= 0; p--)
                 {
                     var plan = plans[p];
@@ -587,7 +598,7 @@ namespace RNAssistant.OfficeHosts
                 var post = FindText(verify);
                 if (!post.Success) return post;
                 var postHash = Convert.ToString(JObject.Parse(post.DataJson ?? "{}")["scopeSha256"]);
-                return ToolResult.Ok("Word replacements completed: " + total + ".", JsonConvert.SerializeObject(new { replacements = total, scopeSha256 = postHash }));
+                return ToolResult.Ok("Word replacements completed: " + replacements + ".", JsonConvert.SerializeObject(new { replacements = replacements, scopeSha256 = postHash }));
             }
             catch (TextPatternException ex)
             {
@@ -1036,6 +1047,8 @@ namespace RNAssistant.OfficeHosts
 
         private static string Trim(string text, int maxChars)
         {
+            maxChars = Math.Max(0, maxChars);
+            if (maxChars == 0) return string.Empty;
             if (string.IsNullOrEmpty(text) || text.Length <= maxChars)
             {
                 return text;

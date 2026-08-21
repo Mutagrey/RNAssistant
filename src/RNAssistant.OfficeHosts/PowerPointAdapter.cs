@@ -565,21 +565,32 @@ namespace RNAssistant.OfficeHosts
             var targets = new List<PptTextTarget>(TextTargets(command));
             var hash = new StringBuilder();
             var plans = new List<PptReplacementPlan>();
+            var options = PatternOptions(command);
+            var observedMatches = 0;
+            var replacementPlanned = false;
             try
             {
                 foreach (var target in targets)
                 {
                     var text = ShapeText(target.Shape);
                     hash.Append(target.SlideIndex).Append(':').Append(target.Kind).Append(':').Append(target.Shape.Name).Append('\n').Append(text).Append('\n');
-                    var edits = TextPatternEngine.PlanReplacements(text, find, replacement, PatternOptions(command), replaceAll, maxReplacements);
-                    if (edits.Count > 0) plans.Add(new PptReplacementPlan { Target = target, Edits = edits });
-                    if (!replaceAll && edits.Count > 0) break;
+                    var found = TextPatternEngine.Find(text, find, options, 1, 0);
+                    observedMatches += found.MatchCount;
+                    if (found.MatchCount > 0 && (replaceAll || !replacementPlanned))
+                    {
+                        var edits = TextPatternEngine.PlanReplacements(text, find, replacement, options, replaceAll, maxReplacements);
+                        if (edits.Count > 0)
+                        {
+                            plans.Add(new PptReplacementPlan { Target = target, Edits = edits });
+                            replacementPlanned = true;
+                        }
+                    }
                 }
-                var total = 0;
-                foreach (var plan in plans) total += plan.Edits.Count;
-                if (!string.Equals(expectedHash, TextPatternEngine.Sha256(hash.ToString()), StringComparison.OrdinalIgnoreCase) || total != expectedMatches)
+                var replacements = 0;
+                foreach (var plan in plans) replacements += plan.Edits.Count;
+                if (!string.Equals(expectedHash, TextPatternEngine.Sha256(hash.ToString()), StringComparison.OrdinalIgnoreCase) || observedMatches != expectedMatches)
                     return ToolResult.Fail("PowerPoint search scope changed after preview.", null, "stale_search_scope", true);
-                if (total > maxReplacements) return ToolResult.Fail("Replacement count exceeds maxReplacements=" + maxReplacements + ".", null, "replacement_limit_exceeded", false);
+                if (replacements > maxReplacements) return ToolResult.Fail("Replacement count exceeds maxReplacements=" + maxReplacements + ".", null, "replacement_limit_exceeded", false);
                 for (var p = plans.Count - 1; p >= 0; p--)
                 {
                     var plan = plans[p];
@@ -593,7 +604,7 @@ namespace RNAssistant.OfficeHosts
                 var post = SearchText(verify);
                 if (!post.Success) return post;
                 var postHash = Convert.ToString(JObject.Parse(post.DataJson ?? "{}")["scopeSha256"]);
-                return ToolResult.Ok("PowerPoint replacements completed: " + total + ".", JsonConvert.SerializeObject(new { replacements = total, scopeSha256 = postHash }));
+                return ToolResult.Ok("PowerPoint replacements completed: " + replacements + ".", JsonConvert.SerializeObject(new { replacements = replacements, scopeSha256 = postHash }));
             }
             catch (TextPatternException ex) { return ToolResult.Fail(ex.Message, null, ex.ErrorCode, false); }
         }
@@ -619,6 +630,10 @@ namespace RNAssistant.OfficeHosts
             var scope = ToolArgumentReader.String(command.Arguments, "scope", "deck");
             var slideIndex = ToolArgumentReader.Int32(command.Arguments, "slideIndex", 0);
             var includeNotes = ToolArgumentReader.Boolean(command.Arguments, "includeNotes", true);
+            if (slideIndex < 0 || slideIndex > presentation.Slides.Count)
+            {
+                throw new InvalidOperationException("slideIndex is outside the presentation: " + slideIndex + ".");
+            }
             if (string.Equals(scope, "selection", StringComparison.OrdinalIgnoreCase))
             {
                 var activeSlide = TryGetActiveSlide();
@@ -629,7 +644,7 @@ namespace RNAssistant.OfficeHosts
             }
             foreach (PowerPoint.Slide slide in presentation.Slides)
             {
-                if ((string.Equals(scope, "slide", StringComparison.OrdinalIgnoreCase) || slideIndex > 0) && slide.SlideIndex != slideIndex) continue;
+                if (slideIndex > 0 && slide.SlideIndex != slideIndex) continue;
                 foreach (PowerPoint.Shape shape in slide.Shapes)
                     if (!string.IsNullOrEmpty(ShapeText(shape))) yield return new PptTextTarget { SlideIndex = slide.SlideIndex, Kind = "shape", Shape = shape };
                 if (includeNotes)
@@ -817,7 +832,12 @@ namespace RNAssistant.OfficeHosts
         private ToolResult MoveSlide(ToolCommand command)
         {
             var slide = ResolveSlide(ToolArgumentReader.Int32(command.Arguments, "slideIndex", 1));
-            var toIndex = Math.Max(1, ToolArgumentReader.Int32(command.Arguments, "toIndex", 1));
+            var toIndex = ToolArgumentReader.Int32(command.Arguments, "toIndex", 1);
+            var slideCount = RequirePresentation().Slides.Count;
+            if (toIndex < 1 || toIndex > slideCount)
+            {
+                throw new InvalidOperationException("toIndex is outside the presentation: " + toIndex + ".");
+            }
             slide.MoveTo(toIndex);
             return ToolResult.Ok("Slide moved to " + toIndex);
         }
@@ -914,8 +934,12 @@ namespace RNAssistant.OfficeHosts
                 throw new InvalidOperationException("Presentation has no slides.");
             }
 
-            var index = Math.Max(1, Math.Min(presentation.Slides.Count, slideIndex));
-            return presentation.Slides[index];
+            if (slideIndex < 1 || slideIndex > presentation.Slides.Count)
+            {
+                throw new InvalidOperationException("slideIndex is outside the presentation: " + slideIndex + ".");
+            }
+
+            return presentation.Slides[slideIndex];
         }
 
         private static string SlideTitle(PowerPoint.Slide slide)
@@ -1251,6 +1275,8 @@ namespace RNAssistant.OfficeHosts
 
         private static string Trim(string text, int maxChars)
         {
+            maxChars = Math.Max(0, maxChars);
+            if (maxChars == 0) return string.Empty;
             if (string.IsNullOrEmpty(text) || text.Length <= maxChars)
             {
                 return text;

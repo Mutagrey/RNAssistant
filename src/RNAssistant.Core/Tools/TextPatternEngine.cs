@@ -98,7 +98,6 @@ namespace RNAssistant.Core.Tools
                     else
                     {
                         result.Truncated = true;
-                        break;
                     }
                 }
                 return result;

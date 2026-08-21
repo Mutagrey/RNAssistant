@@ -101,6 +101,10 @@ namespace RNAssistant.Office.Tools
             var positional = new JArray((package.ArgumentOrder ?? new List<string>()).Select(name => argumentObject[name] == null ? JValue.CreateNull() : argumentObject[name].DeepClone()));
 
             var probe = ProbeInstallation(package);
+            if (probe.Status == "unavailable")
+            {
+                return ToolResult.Fail("VBA package state could not be read. Execution was blocked.", probe.DataJson, "vba_package_probe_failed", true);
+            }
             if (probe.Status == "modified_local" || probe.Status == "partial")
             {
                 return ToolResult.Fail("VBA package components collide with modified or partial document code. Review and explicitly reinstall the package.", probe.DataJson, "vba_package_drift", false);
@@ -355,7 +359,6 @@ namespace RNAssistant.Office.Tools
                     var moduleHash = CodeSha256(code);
                     var found = TextPatternEngine.Find(code, query, new TextPatternOptions { Mode = ToolArgumentReader.String(command.Arguments, "mode", "literal"), MatchCase = ToolArgumentReader.Boolean(command.Arguments, "matchCase", false), WholeWord = ToolArgumentReader.Boolean(command.Arguments, "wholeWord", false) }, Math.Max(1, maxResults - rows.Count), contextChars);
                     observedMatches += found.MatchCount;
-                    truncated = truncated || found.Truncated;
                     var scannedIndex = 0;
                     var currentLine = 1;
                     foreach (var match in found.Matches)
@@ -369,16 +372,12 @@ namespace RNAssistant.Office.Tools
                         }
                         rows.Add(new { moduleName = name, componentType = moduleState.ComponentType, line = currentLine, start = match.Index, end = match.Index + match.Length, preview = match.Preview, codeSha256 = moduleHash });
                     }
-                    if (rows.Count >= maxResults)
-                    {
-                        truncated = true;
-                        break;
-                    }
                 }
                 if (!matchedModule) return ToolResult.Fail("VBA module not found: " + moduleFilter, null, "vba_module_not_found", true);
+                truncated = observedMatches > rows.Count;
                 return ToolResult.Ok(
-                    "VBA code matches returned: " + rows.Count + (truncated ? " (more may exist)." : "."),
-                    JsonConvert.SerializeObject(new { matchCount = observedMatches, matchCountIsExact = !truncated, returnedCount = rows.Count, truncated = truncated, matches = rows }));
+                    "VBA code matches returned: " + rows.Count + (truncated ? " (results truncated)." : "."),
+                    JsonConvert.SerializeObject(new { matchCount = observedMatches, matchCountIsExact = true, returnedCount = rows.Count, truncated = truncated, matches = rows }));
             }
             catch (TextPatternException ex) { return ToolResult.Fail(ex.Message, null, ex.ErrorCode, false); }
             catch (JsonException ex) { return ToolResult.Fail("Could not parse VBA project: " + ex.Message, null, "vba_read_invalid", true); }
@@ -467,8 +466,19 @@ namespace RNAssistant.Office.Tools
 
             VbaModuleState current;
             ToolResult readError;
+            var moduleExists = false;
             if (TryReadVbaModule(backup.ModuleName, 1000000, out current, out readError))
             {
+                moduleExists = true;
+                if (!string.IsNullOrWhiteSpace(backup.ComponentType) &&
+                    !string.Equals(backup.ComponentType, current.ComponentType, StringComparison.OrdinalIgnoreCase))
+                {
+                    return ToolResult.Fail(
+                        "VBA restore was blocked because the current component type differs from the backup.",
+                        JsonConvert.SerializeObject(new { moduleName = backup.ModuleName, backupType = backup.ComponentType, currentType = current.ComponentType }),
+                        "vba_restore_component_type_mismatch",
+                        false);
+                }
                 ToolResult backupError;
                 if (!TrySaveBackup(backup.ModuleName, current, "restore", out backupError))
                 {
@@ -485,7 +495,22 @@ namespace RNAssistant.Office.Tools
                     false);
             }
 
-            var result = WriteModule(backup.ModuleName, backup.Code, true);
+            ToolResult result;
+            var componentType = string.IsNullOrWhiteSpace(backup.ComponentType)
+                ? (moduleExists ? current.ComponentType : "StdModule")
+                : backup.ComponentType;
+            if (moduleExists)
+            {
+                result = WriteModule(backup.ModuleName, backup.Code, false);
+            }
+            else
+            {
+                var create = new ToolCommand { ToolId = ToolId("vba_create_module_internal") };
+                create.Arguments["moduleName"] = backup.ModuleName;
+                create.Arguments["componentType"] = componentType;
+                create.Arguments["code"] = backup.Code ?? string.Empty;
+                result = _adapter.ExecuteTool(create);
+            }
             if (result == null || !result.Success)
             {
                 return result ?? ToolResult.Fail("VBA restore write returned no result.", null, "vba_restore_failed", false);
@@ -502,7 +527,8 @@ namespace RNAssistant.Office.Tools
                     codeSha256 = CodeSha256(backup.Code),
                     restore = result
                 }),
-                "vba_restore");
+                "vba_restore",
+                componentType);
         }
 
         private ToolResult ReplaceVbaText(ToolCommand command, bool dryRun, CancellationToken cancellationToken)

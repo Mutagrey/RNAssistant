@@ -214,10 +214,7 @@ namespace RNAssistant.Office
         public static ToolResult CreateModule(object documentObject, string moduleName, string componentType, string code)
         {
             if (!VbaToolManifestParser.ValidIdentifier(moduleName)) return ToolResult.Fail("Invalid VBA module name.", null, "vba_module_name_invalid", false);
-            if (string.IsNullOrWhiteSpace(code))
-            {
-                return ToolResult.Fail("No VBA code provided.");
-            }
+            code = code ?? string.Empty;
             string validationError;
             if (!TryValidateLiveCode(code, out validationError)) return ToolResult.Fail(validationError, null, "vba_code_invalid", true);
 

@@ -609,10 +609,21 @@ namespace RNAssistant.OfficeHosts
                     {
                         var value = Convert.ToString(cell.Value2) ?? string.Empty;
                         var formula = Convert.ToString(cell.Formula) ?? string.Empty;
+                        var hasFormula = Convert.ToBoolean(cell.HasFormula);
                         hashBuilder.Append(item.Sheet.Name).Append('!').Append(cell.Address[false, false]).Append('\n').Append(value).Append('\n').Append(formula).Append('\n');
-                        var fields = string.Equals(lookIn, "both", StringComparison.OrdinalIgnoreCase)
-                            ? new[] { new { Name = "value", Text = value }, new { Name = "formula", Text = formula } }
-                            : new[] { new { Name = string.Equals(lookIn, "formulas", StringComparison.OrdinalIgnoreCase) ? "formula" : "value", Text = string.Equals(lookIn, "formulas", StringComparison.OrdinalIgnoreCase) ? formula : value } };
+                        var fields = new List<ExcelSearchField>();
+                        if (!hasFormula && !string.Equals(lookIn, "formulas", StringComparison.OrdinalIgnoreCase))
+                        {
+                            fields.Add(new ExcelSearchField { Name = "value", Text = value });
+                        }
+                        if (hasFormula && !string.Equals(lookIn, "values", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (string.Equals(lookIn, "both", StringComparison.OrdinalIgnoreCase))
+                            {
+                                fields.Add(new ExcelSearchField { Name = "value", Text = value });
+                            }
+                            fields.Add(new ExcelSearchField { Name = "formula", Text = formula });
+                        }
                         foreach (var field in fields)
                         {
                             var found = TextPatternEngine.Find(field.Text, query, options, Math.Max(1, maxResults - matches.Count), contextChars);
@@ -652,6 +663,8 @@ namespace RNAssistant.OfficeHosts
             var options = PatternOptions(command);
             var targets = new List<ExcelCellReplacement>();
             var hashBuilder = new StringBuilder();
+            var observedMatches = 0;
+            var replacementPlanned = false;
             try
             {
                 foreach (var item in SearchRanges(scope, sheet, address))
@@ -660,17 +673,28 @@ namespace RNAssistant.OfficeHosts
                     {
                         var value = Convert.ToString(cell.Value2) ?? string.Empty;
                         var formula = Convert.ToString(cell.Formula) ?? string.Empty;
+                        var hasFormula = Convert.ToBoolean(cell.HasFormula);
                         hashBuilder.Append(item.Sheet.Name).Append('!').Append(cell.Address[false, false]).Append('\n').Append(value).Append('\n').Append(formula).Append('\n');
-                        if (string.Equals(lookIn, "values", StringComparison.OrdinalIgnoreCase) && Convert.ToBoolean(cell.HasFormula)) continue;
+                        if (string.Equals(lookIn, "values", StringComparison.OrdinalIgnoreCase) && hasFormula) continue;
+                        if (string.Equals(lookIn, "formulas", StringComparison.OrdinalIgnoreCase) && !hasFormula) continue;
                         var current = string.Equals(lookIn, "formulas", StringComparison.OrdinalIgnoreCase) ? formula : value;
-                        var replaced = TextPatternEngine.Replace(current, find, replacement, options, replaceAll, maxReplacements);
-                        if (replaced.MatchCount > 0) targets.Add(new ExcelCellReplacement { Cell = cell, Formula = string.Equals(lookIn, "formulas", StringComparison.OrdinalIgnoreCase), Text = replaced.Text, Count = replaced.MatchCount });
+                        var found = TextPatternEngine.Find(current, find, options, 1, 0);
+                        observedMatches += found.MatchCount;
+                        if (found.MatchCount > 0 && (replaceAll || !replacementPlanned))
+                        {
+                            var replaced = TextPatternEngine.Replace(current, find, replacement, options, replaceAll, maxReplacements);
+                            if (replaced.MatchCount > 0)
+                            {
+                                targets.Add(new ExcelCellReplacement { Cell = cell, Formula = string.Equals(lookIn, "formulas", StringComparison.OrdinalIgnoreCase), Text = replaced.Text, Count = replaced.MatchCount });
+                                replacementPlanned = true;
+                            }
+                        }
                     }
                 }
                 var currentHash = TextPatternEngine.Sha256(hashBuilder.ToString());
                 var total = targets.Sum(target => target.Count);
                 if (!string.Equals(expectedHash, currentHash, StringComparison.OrdinalIgnoreCase)) return ToolResult.Fail("Excel search scope changed after preview.", null, "stale_search_scope", true);
-                if (total != expectedMatches) return ToolResult.Fail("Excel match count changed after preview: expected " + expectedMatches + " but found " + total + ".", null, "stale_search_scope", true);
+                if (observedMatches != expectedMatches) return ToolResult.Fail("Excel match count changed after preview: expected " + expectedMatches + " but found " + observedMatches + ".", null, "stale_search_scope", true);
                 if (total > maxReplacements) return ToolResult.Fail("Replacement count exceeds maxReplacements=" + maxReplacements + ".", null, "replacement_limit_exceeded", false);
                 foreach (var target in targets)
                 {
@@ -723,15 +747,20 @@ namespace RNAssistant.OfficeHosts
                 yield return new ExcelSearchRange { Sheet = rangeSheet, Range = rangeSheet.Range[address] };
                 yield break;
             }
+            if (string.Equals(scope, "sheet", StringComparison.OrdinalIgnoreCase) || !string.IsNullOrWhiteSpace(sheetName))
+            {
+                var selectedSheet = ResolveSheet(sheetName);
+                yield return new ExcelSearchRange { Sheet = selectedSheet, Range = selectedSheet.UsedRange };
+                yield break;
+            }
             foreach (Excel.Worksheet candidate in workbook.Worksheets)
             {
-                if (!string.IsNullOrWhiteSpace(sheetName) && !string.Equals(candidate.Name, sheetName, StringComparison.OrdinalIgnoreCase)) continue;
                 yield return new ExcelSearchRange { Sheet = candidate, Range = candidate.UsedRange };
-                if (string.Equals(scope, "sheet", StringComparison.OrdinalIgnoreCase)) yield break;
             }
         }
 
         private sealed class ExcelSearchRange { public Excel.Worksheet Sheet { get; set; } public Excel.Range Range { get; set; } }
+        private sealed class ExcelSearchField { public string Name { get; set; } public string Text { get; set; } }
         private sealed class ExcelCellReplacement { public Excel.Range Cell { get; set; } public bool Formula { get; set; } public string Text { get; set; } public int Count { get; set; } }
 
         private ToolResult ListCharts(ToolCommand command)
@@ -1132,8 +1161,33 @@ namespace RNAssistant.OfficeHosts
         {
             var workbook = RequireWorkbook();
             var name = ToolArgumentReader.String(command.Arguments, "name", "AI Sheet");
-            var sheet = (Excel.Worksheet)workbook.Worksheets.Add();
-            sheet.Name = name;
+            ValidateWorksheetName(workbook, name, null);
+            Excel.Worksheet sheet = null;
+            try
+            {
+                sheet = (Excel.Worksheet)workbook.Worksheets.Add();
+                sheet.Name = name;
+            }
+            catch
+            {
+                if (sheet != null)
+                {
+                    var displayAlerts = _application.DisplayAlerts;
+                    try
+                    {
+                        _application.DisplayAlerts = false;
+                        sheet.Delete();
+                    }
+                    catch
+                    {
+                    }
+                    finally
+                    {
+                        _application.DisplayAlerts = displayAlerts;
+                    }
+                }
+                throw;
+            }
             return ToolResult.Ok("Added sheet: " + name);
         }
 
@@ -1147,6 +1201,7 @@ namespace RNAssistant.OfficeHosts
             }
 
             var oldName = sheet.Name;
+            ValidateWorksheetName(RequireWorkbook(), newName, oldName);
             sheet.Name = newName;
             return ToolResult.Ok("Renamed sheet " + oldName + " to " + newName);
         }
@@ -1512,6 +1567,21 @@ namespace RNAssistant.OfficeHosts
             }
 
             return null;
+        }
+
+        private static void ValidateWorksheetName(Excel.Workbook workbook, string name, string currentName)
+        {
+            if (string.IsNullOrWhiteSpace(name) || name.Length > 31 || name.IndexOfAny(new[] { ':', '\\', '/', '?', '*', '[', ']' }) >= 0 ||
+                name[0] == '\'' || name[name.Length - 1] == '\'')
+            {
+                throw new InvalidOperationException("Invalid Excel worksheet name: " + (name ?? string.Empty));
+            }
+
+            var existing = FindWorksheet(workbook, name);
+            if (existing != null && !string.Equals(name, currentName, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Worksheet already exists: " + name);
+            }
         }
 
         private static bool RangeBelongsToWorkbook(Excel.Range range, Excel.Workbook workbook)
@@ -1911,6 +1981,8 @@ namespace RNAssistant.OfficeHosts
 
         private static string Trim(string text, int maxChars)
         {
+            maxChars = Math.Max(0, maxChars);
+            if (maxChars == 0) return string.Empty;
             if (string.IsNullOrEmpty(text) || text.Length <= maxChars)
             {
                 return text;

@@ -284,6 +284,8 @@ namespace RNAssistant.Harness
                     false);
                 AssertTrue(!result.Success, "ambiguous anchor rejected");
                 AssertEqual("vba_patch_ambiguous", result.ErrorCode, "ambiguous anchor error");
+                AssertContains(result.Message, "replaceLines", "ambiguous anchor recovery guidance");
+                AssertContains(result.Message, "do not bypass", "ambiguous anchor bypass guidance");
                 AssertTrue(adapter.VbaModuleCode.IndexOf("Debug.Print", StringComparison.Ordinal) < 0, "module unchanged");
             });
         }
@@ -485,6 +487,20 @@ namespace RNAssistant.Harness
                 AssertTrue(result.Success, "restore result");
                 AssertContains(adapter.VbaModuleCode, "Restored", "restored module code");
                 AssertEqual(2, backupStore.List("Excel", "doc").Count, "restore preserves current version as backup");
+
+                var classBackup = backupStore.Save("Excel", "doc", "Harness.xlsx", "RestoredClass", "ClassModule", "Option Explicit\nPublic Value As String");
+                var classRestore = executor.Execute(
+                    Command(executor.VbaToolId("vba_restore_backup"), "backupId", classBackup.BackupId),
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false);
+                AssertTrue(classRestore.Success, "missing class module restore result");
+                var modules = executor.Execute(Command(executor.VbaToolId("vba_list_modules")), tools, new AppSettings(), false, false);
+                var restoredClass = (JObject.Parse(modules.DataJson ?? "{}")["modules"] as JArray ?? new JArray())
+                    .OfType<JObject>()
+                    .First(item => string.Equals((string)item["name"], "RestoredClass", StringComparison.OrdinalIgnoreCase));
+                AssertEqual("ClassModule", (string)restoredClass["type"], "restore preserves class module type");
             });
         }
 

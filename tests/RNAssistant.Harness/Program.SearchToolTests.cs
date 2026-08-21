@@ -18,6 +18,11 @@ namespace RNAssistant.Harness
             AssertEqual(2, found.MatchCount, "regex match count");
             AssertEqual("item-12 item-345 decoder-7", replaced.Text, "regex capture replacement");
             AssertEqual(2, replaced.MatchCount, "regex replacement count");
+
+            var limited = TextPatternEngine.Find("x x x", "x", new TextPatternOptions(), 1, 0);
+            AssertEqual(3, limited.MatchCount, "truncated search keeps exact match count");
+            AssertEqual(1, limited.Matches.Count, "truncated search limits returned matches");
+            AssertTrue(limited.Truncated, "truncated search flag");
         }
 
         private static void PipelineExecutionValidatesArgumentsAndNestedBudget()
@@ -51,6 +56,12 @@ namespace RNAssistant.Harness
                 AssertTrue(!listed.DataJson.Contains("Option Explicit"), "VBA module list omits source code");
                 AssertContains(read.DataJson, "codeSha256", "VBA module read returns code hash");
                 AssertContains(searched.DataJson, "Module1", "VBA regex search returns module");
+
+                var limitedSearch = executor.Execute(Command("excel.vba_search_code", "query", "Sub", "maxResults", 1), tools, settings, false, false);
+                var limitedData = JObject.Parse(limitedSearch.DataJson ?? "{}");
+                AssertEqual(4, (int)limitedData["matchCount"], "VBA truncated search counts all modules");
+                AssertEqual(true, (bool)limitedData["matchCountIsExact"], "VBA truncated count is exact");
+                AssertEqual(true, (bool)limitedData["truncated"], "VBA search result list is truncated");
 
                 var patch = "[{\"op\":\"regexReplace\",\"pattern\":\"old(Value)\",\"text\":\"new$1\",\"replaceAll\":true}]";
                 var stale = executor.Execute(Command("excel.vba_apply_patch", "moduleName", "Module1", "expectedCodeSha256", "stale", "patch", patch), tools, settings, false, false);

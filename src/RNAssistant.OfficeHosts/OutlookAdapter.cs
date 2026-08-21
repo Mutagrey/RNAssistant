@@ -293,7 +293,26 @@ namespace RNAssistant.OfficeHosts
             var maxResults = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxResults", 50)));
             var maxBodyChars = ToolArgumentReader.Int32(command.Arguments, "maxBodyChars", 1000);
             var contextChars = Math.Max(0, Math.Min(1000, ToolArgumentReader.Int32(command.Arguments, "contextChars", 80)));
-            var requestedFields = new HashSet<string>((ToolArgumentReader.String(command.Arguments, "fields", "subject,sender,body") ?? string.Empty).Split(','), StringComparer.OrdinalIgnoreCase);
+            var requestedFields = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var requested in (ToolArgumentReader.String(command.Arguments, "fields", "subject,sender,body") ?? string.Empty).Split(','))
+            {
+                var field = (requested ?? string.Empty).Trim();
+                if (!string.IsNullOrWhiteSpace(field)) requestedFields.Add(field);
+            }
+            if (requestedFields.Count == 0)
+            {
+                return ToolResult.Fail("fields must contain at least one mail field.", null, "invalid_arguments", false);
+            }
+            foreach (var field in requestedFields)
+            {
+                if (!string.Equals(field, "subject", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(field, "sender", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(field, "recipients", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(field, "body", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ToolResult.Fail("Unsupported Outlook search field: " + field + ".", null, "invalid_arguments", false);
+                }
+            }
             var options = new TextPatternOptions { Mode = ToolArgumentReader.String(command.Arguments, "mode", "literal"), MatchCase = ToolArgumentReader.Boolean(command.Arguments, "matchCase", false), WholeWord = ToolArgumentReader.Boolean(command.Arguments, "wholeWord", false) };
             var matches = new List<object>();
             var total = 0;
@@ -309,6 +328,7 @@ namespace RNAssistant.OfficeHosts
                     {
                         { "subject", mail.Subject ?? string.Empty },
                         { "sender", (mail.SenderName ?? string.Empty) + " <" + (mail.SenderEmailAddress ?? string.Empty) + ">" },
+                        { "recipients", "To: " + (mail.To ?? string.Empty) + "; CC: " + (mail.CC ?? string.Empty) + "; BCC: " + (mail.BCC ?? string.Empty) },
                         { "body", mail.Body ?? string.Empty }
                     };
                     foreach (var field in fields)
@@ -698,6 +718,11 @@ namespace RNAssistant.OfficeHosts
 
         private static string Trim(string text, int maxChars)
         {
+            maxChars = Math.Max(0, maxChars);
+            if (maxChars == 0)
+            {
+                return string.Empty;
+            }
             if (string.IsNullOrEmpty(text) || text.Length <= maxChars)
             {
                 return text;

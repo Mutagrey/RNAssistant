@@ -66,6 +66,9 @@ namespace RNAssistant.Harness
                 };
 
                 AssertTrue(executor.ValidateToolDefinition(valid).Success, "valid tool accepted");
+                var invalidHost = valid.Clone();
+                invalidHost.Host = "UnknownOffice";
+                AssertEqual("invalid_tool_host", executor.ValidateToolDefinition(invalidHost).ErrorCode, "unknown tool host rejected");
                 store.SaveOne(valid);
                 var loaded = store.Load().First(t => string.Equals(t.Id, valid.Id, StringComparison.OrdinalIgnoreCase));
                 AssertTrue(loaded.MutatesDocument, "mutation metadata preserved");
@@ -281,6 +284,15 @@ namespace RNAssistant.Harness
                 AssertTrue(HasTool(store.Load(), second.Id), "other tool preserved");
                 AssertTrue(store.Delete(first.Id), "first tool deleted");
                 AssertTrue(HasTool(store.Load(), second.Id), "other tool survives delete");
+
+                var dotted = CustomTool("Excel", "excel.collision");
+                var underscored = CustomTool("Excel", "excel_collision");
+                store.SaveOne(dotted);
+                store.SaveOne(underscored);
+                var collisionTools = store.Load();
+                AssertTrue(HasTool(collisionTools, dotted.Id), "dotted tool id survives storage collision");
+                AssertTrue(HasTool(collisionTools, underscored.Id), "underscored tool id survives storage collision");
+                AssertTrue(!string.Equals(FindTool(collisionTools, dotted.Id).StoragePath, FindTool(collisionTools, underscored.Id).StoragePath, StringComparison.OrdinalIgnoreCase), "colliding safe ids use distinct directories");
                 AssertEqual(0, Directory.GetFiles(paths.ToolsDirectory, "*.tmp", SearchOption.AllDirectories).Length, "no tool temp files");
             });
         }

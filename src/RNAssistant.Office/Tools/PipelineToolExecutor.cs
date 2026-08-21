@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Threading;
 using Newtonsoft.Json;
@@ -60,14 +61,33 @@ namespace RNAssistant.Office.Tools
 
         private static object ResolvePipelineValue(JToken token, IDictionary<string, object> inputArgs, IDictionary<string, ToolResult> stepResults)
         {
-            if (token == null || token.Type == JTokenType.Null) return null;
-            if (token.Type != JTokenType.String)
+            return ToolArgumentNormalizer.NormalizeToken(ResolvePipelineToken(token, inputArgs, stepResults));
+        }
+
+        private static JToken ResolvePipelineToken(JToken token, IDictionary<string, object> inputArgs, IDictionary<string, ToolResult> stepResults)
+        {
+            if (token == null || token.Type == JTokenType.Null) return JValue.CreateNull();
+            if (token.Type == JTokenType.Object)
             {
-                return ToolArgumentNormalizer.NormalizeToken(token);
+                var result = new JObject();
+                foreach (var property in ((JObject)token).Properties())
+                {
+                    result[property.Name] = ResolvePipelineToken(property.Value, inputArgs, stepResults);
+                }
+                return result;
             }
-            var value = token.Type == JTokenType.String
-                ? token.Value<string>()
-                : token.ToString(Formatting.None);
+            if (token.Type == JTokenType.Array)
+            {
+                var result = new JArray();
+                foreach (var item in (JArray)token)
+                {
+                    result.Add(ResolvePipelineToken(item, inputArgs, stepResults));
+                }
+                return result;
+            }
+            if (token.Type != JTokenType.String) return token.DeepClone();
+
+            var value = token.Value<string>();
 
             var whole = Regex.Match(value ?? string.Empty, "^\\{\\{\\s*([^}]+)\\s*\\}\\}$");
             if (whole.Success)
@@ -75,11 +95,14 @@ namespace RNAssistant.Office.Tools
                 object resolved;
                 if (TryResolvePlaceholder(whole.Groups[1].Value.Trim(), inputArgs, stepResults, out resolved))
                 {
-                    return resolved;
+                    var resolvedToken = resolved as JToken;
+                    return resolvedToken == null
+                        ? (resolved == null ? JValue.CreateNull() : JToken.FromObject(resolved))
+                        : resolvedToken.DeepClone();
                 }
             }
 
-            return ReplacePlaceholders(value, inputArgs, stepResults);
+            return new JValue(ReplacePlaceholders(value, inputArgs, stepResults));
         }
 
         private static string ReplacePlaceholders(string value, IDictionary<string, object> inputArgs, IDictionary<string, ToolResult> stepResults)
@@ -94,7 +117,7 @@ namespace RNAssistant.Office.Tools
                 var key = match.Groups[1].Value.Trim();
                 object resolved;
                 return TryResolvePlaceholder(key, inputArgs, stepResults, out resolved)
-                    ? Convert.ToString(resolved)
+                    ? Convert.ToString(resolved, CultureInfo.InvariantCulture)
                     : match.Value;
             });
         }

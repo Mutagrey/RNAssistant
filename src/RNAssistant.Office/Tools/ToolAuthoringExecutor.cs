@@ -493,6 +493,11 @@ namespace RNAssistant.Office.Tools
             {
                 return ToolResult.Fail("Tool host is required.");
             }
+            if (!new[] { "Common", "Excel", "Word", "PowerPoint", "Outlook" }
+                .Any(host => string.Equals(host, tool.Host, StringComparison.OrdinalIgnoreCase)))
+            {
+                return ToolResult.Fail("Unsupported tool host: " + tool.Host + ".", null, "invalid_tool_host", false);
+            }
             if (tool.RiskLevel < 0 || tool.RiskLevel > 3)
             {
                 return ToolResult.Fail("Tool riskLevel must be between 0 and 3.");

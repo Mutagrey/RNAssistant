@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Tools;
@@ -316,7 +318,19 @@ namespace RNAssistant.Core.Storage
 
         private static string ToolFolder(string id)
         {
-            return StorageFileSystem.SafeSegment((id ?? "tool").ToLowerInvariant(), "tool");
+            var normalized = string.IsNullOrWhiteSpace(id) ? "tool" : id.Trim().ToLowerInvariant();
+            var readable = StorageFileSystem.SafeSegment(normalized, "tool");
+            if (readable.Length > 40)
+            {
+                readable = readable.Substring(0, 40).TrimEnd('_');
+            }
+            using (var sha = SHA256.Create())
+            {
+                var hash = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(normalized)))
+                    .Replace("-", string.Empty)
+                    .ToLowerInvariant();
+                return readable + "_" + hash;
+            }
         }
     }
 }

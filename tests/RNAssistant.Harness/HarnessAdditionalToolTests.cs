@@ -250,6 +250,33 @@ namespace RNAssistant.Harness
                 var invalidResult = executor.Execute(invalidData, tools, new AppSettings(), false, false, session);
                 AssertTrue(!invalidResult.Success, "invalid html data fails");
                 AssertContains(invalidResult.Message, "Invalid HTML workspace JSON", "invalid html data message");
+
+                HtmlArtifactToolExecutor.UpsertFile(session, "styles.css", "css", "body{}", false);
+                var cssActive = new ToolCommand { ToolId = "common.html_workspace_set_active" };
+                cssActive.Arguments["path"] = "styles.css";
+                var cssActiveResult = executor.Execute(cssActive, tools, new AppSettings(), false, false, session);
+                AssertTrue(!cssActiveResult.Success, "non-html file cannot become active preview");
+
+                var failedSession = new ChatSession { Title = "HTML failed mutation" };
+                HtmlArtifactToolExecutor.UpsertFile(failedSession, "index.html", "html", "<h1>First</h1>", true);
+                HtmlArtifactToolExecutor.UpsertFile(failedSession, "index.html", "html", "<h1>Second</h1>", true);
+                HtmlArtifactToolExecutor.RestoreSnapshot(failedSession, failedSession.HtmlWorkspace.History[0].Id);
+                var failedHistoryCount = failedSession.HtmlWorkspace.History.Count;
+                var failedRedoCount = failedSession.HtmlWorkspace.RedoHistory.Count;
+                var missingActive = new ToolCommand { ToolId = "common.html_workspace_set_active" };
+                missingActive.Arguments["path"] = "missing.html";
+                var missingResult = executor.Execute(missingActive, tools, new AppSettings(), false, false, failedSession);
+                AssertTrue(!missingResult.Success, "missing active HTML file fails");
+                AssertEqual(failedHistoryCount, failedSession.HtmlWorkspace.History.Count, "failed set-active preserves history");
+                AssertEqual(failedRedoCount, failedSession.HtmlWorkspace.RedoHistory.Count, "failed set-active preserves redo");
+                var missingDryRun = executor.Execute(missingActive, tools, new AppSettings(), true, false, failedSession);
+                AssertTrue(!missingDryRun.Success, "set-active dry run validates file existence");
+
+                var absolutePath = new ToolCommand { ToolId = "common.html_workspace_upsert_file" };
+                absolutePath.Arguments["path"] = "/index.html";
+                absolutePath.Arguments["content"] = "<h1>Absolute</h1>";
+                var absoluteResult = executor.Execute(absolutePath, tools, new AppSettings(), true, false, failedSession);
+                AssertTrue(!absoluteResult.Success, "absolute workspace path rejected");
             });
         }
 

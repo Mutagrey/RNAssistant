@@ -98,6 +98,12 @@ namespace RNAssistant.Harness
                 AssertEqual("[\"hello\",2,1.5,true]", Convert.ToString(run.Arguments["argumentsJson"]), "typed positional arguments and default");
                 AssertEqual(string.Empty, adapter.GetVbaModuleCode("RNA_Echo"), "entry module cleaned");
                 AssertEqual(string.Empty, adapter.GetVbaModuleCode("RNA_EchoService"), "class module cleaned");
+
+                adapter.QueueResult("excel.vba_read_module", ToolResult.Fail("VBA project is unavailable.", null, "vba_access_error", true));
+                var blocked = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+                AssertTrue(!blocked.Success, "unreadable VBA package state blocks execution");
+                AssertEqual("vba_package_probe_failed", blocked.ErrorCode, "unreadable VBA package error code");
+                AssertEqual(1, adapter.RanMacros.Count, "probe failure does not run macro");
             });
         }
 
