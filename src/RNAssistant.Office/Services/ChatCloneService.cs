@@ -166,6 +166,8 @@ namespace RNAssistant.Office.Services
             {
                 RunId = activity.RunId,
                 Sequence = activity.Sequence,
+                StepId = activity.StepId,
+                StepMessage = activity.StepMessage,
                 Kind = activity.Kind,
                 Title = activity.Title,
                 Subtitle = activity.Subtitle,
@@ -175,6 +177,7 @@ namespace RNAssistant.Office.Services
                 Retryable = activity.Retryable,
                 PendingId = activity.PendingId,
                 ToolId = activity.ToolId,
+                ToolCallId = activity.ToolCallId,
                 ArgumentsJson = activity.ArgumentsJson,
                 ResultMessage = activity.ResultMessage,
                 DataJson = activity.DataJson,

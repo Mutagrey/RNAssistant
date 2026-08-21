@@ -81,6 +81,8 @@ namespace RNAssistant.Core.Models
     {
         public string RunId { get; set; }
         public int? Sequence { get; set; }
+        public string StepId { get; set; }
+        public string StepMessage { get; set; }
         public string Kind { get; set; }
         public string Title { get; set; }
         public string Subtitle { get; set; }

@@ -203,9 +203,18 @@ namespace RNAssistant.Office.Services
                     return Result(finalText, results, contextUsage);
                 }
 
-                if (!string.IsNullOrWhiteSpace(response.Message))
+                var stepId = Guid.NewGuid().ToString("N");
+                var stepMessage = string.IsNullOrWhiteSpace(response.Message) ? string.Empty : response.Message.Trim();
+                if (!string.IsNullOrWhiteSpace(stepMessage))
                 {
-                    Report(progress, "acting", response.Message.Trim(), null);
+                    Report(progress, "acting", stepMessage, new ChatActivity
+                    {
+                        StepId = stepId,
+                        StepMessage = stepMessage,
+                        Kind = "step",
+                        Title = stepMessage,
+                        Status = "running"
+                    });
                 }
                 for (var callIndex = 0; callIndex < response.ToolCalls.Count; callIndex++)
                 {
@@ -218,6 +227,9 @@ namespace RNAssistant.Office.Services
                         callIndex == 0 ? completion : null);
                     session.Messages.Add(callMessage);
                     messages.Add(callMessage);
+
+                    Report(progress, "tool_running", "Выполняю действие", AgentTranscript.CreateRunningToolActivity(
+                        command, stepId, stepMessage));
 
                     ToolResult toolResult;
                     if (toolSteps >= Math.Max(1, settings.MaxAgentToolSteps))
@@ -249,7 +261,7 @@ namespace RNAssistant.Office.Services
                         session.Messages.Add(resultMessage);
                         messages.Add(resultMessage);
                     }
-                    var activityMessage = AgentTranscript.CreateLocalResultMessage(command, toolResult);
+                    var activityMessage = AgentTranscript.CreateLocalResultMessage(command, toolResult, stepId, stepMessage);
                     activityMessage.HtmlWorkspaceCheckpointId = session.ActiveHtmlArtifactId;
                     session.Messages.Add(activityMessage);
                     results.Add(AgentTranscript.DescribeResult(command, toolResult));

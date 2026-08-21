@@ -60,6 +60,14 @@ function activityProgressTitle(activity) {
   return activityValue(activity, "ProgressTitle", "progressTitle", "") || "";
 }
 
+function activityStepId(activity) {
+  return activityValue(activity, "StepId", "stepId", "") || "";
+}
+
+function activityStepMessage(activity) {
+  return activityValue(activity, "StepMessage", "stepMessage", "") || "";
+}
+
 function activityToolId(activity) {
   return activityValue(activity, "ToolId", "toolId", "") || "";
 }
@@ -110,6 +118,10 @@ function activityText(activity) {
 }
 
 function activityTimelineKey(activity) {
+  var stepId = activityStepId(activity);
+  if (stepId && activityKind(activity) === "step") {
+    return "step:" + stepId;
+  }
   var pendingId = activityPendingId(activity);
   if (pendingId && !activityToolId(activity)) {
     return "pending:" + pendingId;

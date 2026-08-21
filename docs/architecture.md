@@ -40,7 +40,7 @@ See [agent-protocol.md](agent-protocol.md).
 - Tool safety lives in `ToolDefinition`: mutation, local-state, confirmation, risk, capability, and `AgentCanRun` metadata. Prompts cannot bypass it.
 - Custom tools require a strict object JSON Schema with documented arguments. Pipelines invoke existing ids through `OfficeToolExecutor` and cannot call adapters directly.
 - VBA tools are manifest packages. Backup, ownership, hash, and stale-state protections remain inside VBA execution; see [vba-tool-packages.md](vba-tool-packages.md).
-- Accepted agent calls/results are hidden protocol messages. Visible tool activity is presentation only and is excluded from model context.
+- Accepted agent calls/results are hidden protocol messages. Visible tool activity is presentation only and is excluded from model context. Activities from one accepted model turn share a `StepId` and its user-facing `message`, so the UI can group batch calls and results without inferring boundaries from tool names or ordering heuristics.
 - Provider reasoning is stored separately from agent JSON.
 - Context belongs to the active chat. Compaction stores a model-produced checkpoint and an exact raw tail without deleting the source transcript.
 - Attachments use the selected model. There is no automatic attachment-model router or endpoint failover.

@@ -15,9 +15,15 @@ namespace RNAssistant.Office
     {
         private const int MaxTranscriptReasoningChars = 24000;
 
-        public static ChatMessage CreateLocalResultMessage(ToolCommand command, ToolResult result)
+        public static ChatMessage CreateLocalResultMessage(
+            ToolCommand command,
+            ToolResult result,
+            string stepId = null,
+            string stepMessage = null)
         {
             var activity = CreateToolActivity(command, result, "tool");
+            activity.StepId = stepId;
+            activity.StepMessage = stepMessage;
             return new ChatMessage
             {
                 Role = "assistant",
@@ -25,6 +31,24 @@ namespace RNAssistant.Office
                 ExcludeFromModelContext = true,
                 Activity = activity
             };
+        }
+
+        public static ChatActivity CreateRunningToolActivity(
+            ToolCommand command,
+            string stepId,
+            string stepMessage)
+        {
+            var activity = CreateToolActivity(command, new ToolResult
+            {
+                Success = false,
+                Status = "running"
+            }, "tool");
+            activity.StepId = stepId;
+            activity.StepMessage = stepMessage;
+            activity.Status = "running";
+            activity.ExecutionStatus = "executing";
+            activity.ResultMessage = null;
+            return activity;
         }
 
         public static ChatMessage CreateAssistantMessage(

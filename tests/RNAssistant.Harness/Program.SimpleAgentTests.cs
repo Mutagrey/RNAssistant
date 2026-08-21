@@ -415,6 +415,7 @@ namespace RNAssistant.Harness
                     "{\"message\":\"Оба листа созданы.\",\"tool_calls\":[]}"
                 });
                 IReadOnlyList<ChatMessage> secondTurn = null;
+                var progressActivities = new List<ChatActivity>();
                 var callCount = 0;
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
@@ -422,10 +423,14 @@ namespace RNAssistant.Harness
                     if (callCount == 2) secondTurn = messages.ToList();
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
+                var session = NewSession(adapter);
                 var result = new AgentRunService(adapter, executor, completion).ExecuteAsync(
-                    "Создай листы First и Second.", NewSession(adapter), NewContext(adapter),
+                    "Создай листы First и Second.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, MaxAgentIterations = 4 },
-                    adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
+                    adapter.GetBuiltInTools().ToList(), (phase, message, activity) =>
+                    {
+                        if (activity != null) progressActivities.Add(activity);
+                    }).GetAwaiter().GetResult();
 
                 AssertEqual("Оба листа созданы.", result.AssistantText, "multi-tool final response");
                 AssertTrue(adapter.HasSheet("First") && adapter.HasSheet("Second"), "both tools executed");
@@ -436,6 +441,17 @@ namespace RNAssistant.Harness
                 AssertEqual(2, replay.Split(new[] { "TOOL_RESULT:" }, StringSplitOptions.None).Length - 1, "two results replayed");
                 AssertContains(replay, "call_first", "first call id replayed");
                 AssertContains(replay, "call_second", "second call id replayed");
+                var activities = session.Messages
+                    .Where(message => message != null && message.Activity != null && message.Activity.Kind == "tool")
+                    .Select(message => message.Activity)
+                    .ToList();
+                AssertEqual(2, activities.Count, "two visible tool activities");
+                AssertTrue(!string.IsNullOrWhiteSpace(activities[0].StepId), "model step id stored");
+                AssertEqual(activities[0].StepId, activities[1].StepId, "batch tools share one model step");
+                AssertEqual("Создаю два независимых листа.", activities[0].StepMessage, "model step message stored");
+                var marker = progressActivities.First(activity => activity.Kind == "step");
+                var running = progressActivities.First(activity => activity.Kind == "tool" && activity.Status == "running");
+                AssertEqual(marker.StepId, running.StepId, "live tool belongs to visible model step");
             });
         }
 

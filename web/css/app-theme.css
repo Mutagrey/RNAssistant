@@ -472,6 +472,7 @@ html[data-theme="dark"] .context-popover-preview {
 }
 
 html[data-theme="dark"] .agent-diagnostic-message,
+html[data-theme="dark"] .agent-step-message,
 html[data-theme="dark"] .agent-run-history-summary:hover,
 html[data-theme="dark"] .agent-activity-row:hover,
 html[data-theme="dark"] .agent-activity.status-running .agent-activity-name,
@@ -499,7 +500,12 @@ html[data-theme="dark"] .agent-activity-detail-body {
   color: #b6bfcc;
 }
 
-html[data-theme="dark"] .agent-activity-result {
+html[data-theme="dark"] .agent-run-history-content {
+  border-left-color: #303844;
+}
+
+html[data-theme="dark"] .agent-activity-result,
+html[data-theme="dark"] .agent-activity-tool-id {
   color: #b6bfcc;
 }
 

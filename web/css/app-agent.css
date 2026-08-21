@@ -11,7 +11,37 @@
 
 .agent-run-wrap {
   display: grid;
-  gap: 3px;
+  gap: 0;
+}
+
+.agent-model-step {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.agent-model-step + .agent-model-step,
+.agent-final-step {
+  margin-top: 18px;
+}
+
+.agent-step-message {
+  color: #344054;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.agent-step-message.markdown > :first-child {
+  margin-top: 0;
+}
+
+.agent-step-message.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.agent-final-step {
+  min-width: 0;
 }
 
 .agent-run-transcript,
@@ -66,6 +96,10 @@
   color: #667085;
 }
 
+.agent-step-actions {
+  max-width: 94%;
+}
+
 .agent-run-history > summary,
 .agent-activity-toggle > summary {
   list-style: none;
@@ -102,6 +136,20 @@
 
 .agent-run-history-icon::after {
   content: "✓";
+}
+
+.agent-run-history.status-running .agent-run-history-icon::after {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2563eb;
+  content: "";
+  animation: agent-activity-pulse 1.35s ease-in-out infinite;
+}
+
+.agent-run-history.status-waiting .agent-run-history-icon::after {
+  color: #b54708;
+  content: "!";
 }
 
 .agent-run-history.status-failed .agent-run-history-icon::after {
@@ -158,8 +206,8 @@
 
 .agent-run-history-content {
   margin: 3px 0 4px;
-  padding: 2px 0;
-  border: 0;
+  padding: 2px 0 2px 10px;
+  border-left: 1px solid #eaecf0;
 }
 
 .agent-activity {
@@ -345,6 +393,14 @@
   color: #475467;
   font-size: 11px;
   line-height: 1.45;
+}
+
+.agent-activity-tool-id {
+  color: #667085;
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: 10px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .agent-activity-children {
@@ -669,7 +725,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .agent-activity.status-running.current .agent-activity-name {
+  .agent-activity.status-running.current .agent-activity-name,
+  .agent-run-history.status-running .agent-run-history-icon::after {
     animation: none;
   }
 
