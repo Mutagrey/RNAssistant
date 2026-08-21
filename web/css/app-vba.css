@@ -40,6 +40,7 @@
 }
 
 .vba-editor.is-empty .resource-editor-actions,
+.vba-editor.is-empty .vba-mode-toggle,
 .vba-editor.is-empty .vba-view {
   display: none;
 }

@@ -113,12 +113,151 @@ function toolMatchesSearch(skill, query) {
   return text.indexOf(query) >= 0;
 }
 
+function toolEditorJson(id) {
+  if (typeof syncCodeEditors === "function") syncCodeEditors([id]);
+  var text = typeof getCodeEditorValue === "function" ? getCodeEditorValue(id) : $(id).value;
+  return JSON.parse(text || "{}");
+}
+
+function setToolEditorJson(id, value) {
+  var text = JSON.stringify(value, null, 2);
+  $(id).value = text;
+  if (typeof setCodeEditorValue === "function") setCodeEditorValue(id, text);
+}
+
+function toolJsonError(id, message) {
+  if ($(id)) $(id).textContent = message || "";
+}
+
+function schemaDefaultText(value) {
+  return value === undefined ? "" : (typeof value === "string" ? value : JSON.stringify(value));
+}
+
+function parseSchemaDefault(text, type) {
+  if (text === "") return undefined;
+  if (type === "boolean") return String(text).toLowerCase() === "true";
+  if (type === "number" || type === "integer") return Number(text);
+  if (type === "array" || type === "object") return JSON.parse(text);
+  return text;
+}
+
+function syncSchemaDraft() {
+  try {
+    state.toolSchemaVisualDraft = toolEditorJson("toolSchemaInput");
+    toolJsonError("toolSchemaError", "");
+    return true;
+  } catch (error) {
+    toolJsonError("toolSchemaError", "Ошибка JSON: " + error.message);
+    return false;
+  }
+}
+
+function renderToolSchemaVisual() {
+  var root = $("toolSchemaVisual");
+  if (!root) return;
+  if (!state.toolSchemaVisualDraft && !syncSchemaDraft()) return;
+  var schema = state.toolSchemaVisualDraft || {};
+  schema.type = "object";
+  schema.properties = schema.properties || {};
+  schema.required = Array.isArray(schema.required) ? schema.required : [];
+  schema.additionalProperties = false;
+  root.innerHTML = "";
+  Object.keys(schema.properties).forEach(function (name) {
+    var property = schema.properties[name] || {};
+    var row = document.createElement("div");
+    row.className = "schema-property-row";
+    var nameInput = document.createElement("input"); nameInput.value = name; nameInput.placeholder = "name"; nameInput.title = "Имя параметра";
+    var type = document.createElement("select");
+    ["string", "integer", "number", "boolean", "array", "object"].forEach(function (value) { var option = document.createElement("option"); option.value = value; option.textContent = value; type.appendChild(option); });
+    type.value = property.type || "string";
+    var required = document.createElement("input"); required.type = "checkbox"; required.checked = schema.required.indexOf(name) >= 0; required.title = "Обязательный";
+    var description = document.createElement("input"); description.value = property.description || ""; description.placeholder = "Описание";
+    var defaultValue = document.createElement("input"); defaultValue.value = schemaDefaultText(property.default); defaultValue.placeholder = "Default";
+    var remove = document.createElement("button"); remove.type = "button"; remove.className = "secondary danger-soft"; remove.textContent = "×"; remove.title = "Удалить параметр";
+    nameInput.addEventListener("change", function () {
+      var next = nameInput.value.trim(); if (!next || next === name || schema.properties[next]) { nameInput.value = name; return; }
+      schema.properties[next] = property; delete schema.properties[name]; schema.required = schema.required.map(function (item) { return item === name ? next : item; }); setToolEditorJson("toolSchemaInput", schema); renderToolSchemaVisual();
+    });
+    type.addEventListener("change", function () { property.type = type.value; setToolEditorJson("toolSchemaInput", schema); });
+    required.addEventListener("change", function () { schema.required = schema.required.filter(function (item) { return item !== name; }); if (required.checked) schema.required.push(name); setToolEditorJson("toolSchemaInput", schema); });
+    description.addEventListener("input", function () { property.description = description.value; setToolEditorJson("toolSchemaInput", schema); });
+    defaultValue.addEventListener("change", function () { try { var parsed = parseSchemaDefault(defaultValue.value, property.type); if (parsed === undefined) delete property.default; else property.default = parsed; toolJsonError("toolSchemaError", ""); setToolEditorJson("toolSchemaInput", schema); } catch (error) { toolJsonError("toolSchemaError", "Некорректный default: " + error.message); } });
+    remove.addEventListener("click", function () { delete schema.properties[name]; schema.required = schema.required.filter(function (item) { return item !== name; }); setToolEditorJson("toolSchemaInput", schema); renderToolSchemaVisual(); });
+    [nameInput, type, required, description, defaultValue, remove].forEach(function (node) { row.appendChild(node); }); root.appendChild(row);
+  });
+  var add = document.createElement("button"); add.type = "button"; add.className = "secondary"; add.textContent = "+ Параметр";
+  add.addEventListener("click", function () { var index = 1; var name = "argument"; while (schema.properties[name]) name = "argument" + (++index); schema.properties[name] = { type: "string", description: "" }; setToolEditorJson("toolSchemaInput", schema); renderToolSchemaVisual(); });
+  root.appendChild(add);
+  Array.prototype.slice.call(root.querySelectorAll("input,select,textarea,button")).forEach(function (control) { control.disabled = !!state.toolBuilderReadOnly; });
+  renderToolRunArgsVisual();
+}
+
+function syncPipelineDraft() {
+  try {
+    state.toolPipelineVisualDraft = toolEditorJson("toolPipelineInput");
+    state.toolPipelineVisualDraft.steps = Array.isArray(state.toolPipelineVisualDraft.steps) ? state.toolPipelineVisualDraft.steps : [];
+    toolJsonError("toolPipelineError", ""); return true;
+  } catch (error) { toolJsonError("toolPipelineError", "Ошибка JSON: " + error.message); return false; }
+}
+
+function renderToolPipelineVisual() {
+  var root = $("toolPipelineVisual"); if (!root) return;
+  if (!state.toolPipelineVisualDraft && !syncPipelineDraft()) return;
+  var pipeline = state.toolPipelineVisualDraft; root.innerHTML = "";
+  pipeline.steps.forEach(function (step, index) {
+    var card = document.createElement("div"); card.className = "pipeline-step-card";
+    var number = document.createElement("strong"); number.textContent = String(index + 1);
+    var id = document.createElement("input"); id.value = step.id || ""; id.placeholder = "ID шага";
+    var toolId = document.createElement("input"); toolId.value = step.toolId || ""; toolId.placeholder = "excel.read_range";
+    var args = document.createElement("textarea"); args.rows = 3; args.value = JSON.stringify(step.arguments || {}, null, 2); args.placeholder = "Arguments JSON";
+    var controls = document.createElement("div"); controls.className = "pipeline-step-actions";
+    [["↑", -1], ["↓", 1]].forEach(function (move) { var button = document.createElement("button"); button.type = "button"; button.className = "secondary"; button.textContent = move[0]; button.disabled = index + move[1] < 0 || index + move[1] >= pipeline.steps.length; button.addEventListener("click", function () { var target = index + move[1]; var item = pipeline.steps.splice(index, 1)[0]; pipeline.steps.splice(target, 0, item); setToolEditorJson("toolPipelineInput", pipeline); renderToolPipelineVisual(); }); controls.appendChild(button); });
+    var remove = document.createElement("button"); remove.type = "button"; remove.className = "secondary danger-soft"; remove.textContent = "Удалить"; remove.addEventListener("click", function () { pipeline.steps.splice(index, 1); setToolEditorJson("toolPipelineInput", pipeline); renderToolPipelineVisual(); }); controls.appendChild(remove);
+    id.addEventListener("input", function () { step.id = id.value; setToolEditorJson("toolPipelineInput", pipeline); });
+    toolId.addEventListener("input", function () { step.toolId = toolId.value; setToolEditorJson("toolPipelineInput", pipeline); });
+    args.addEventListener("change", function () { try { var value = JSON.parse(args.value || "{}"); if (!value || Array.isArray(value) || typeof value !== "object") throw new Error("ожидается object"); step.arguments = value; toolJsonError("toolPipelineError", ""); setToolEditorJson("toolPipelineInput", pipeline); } catch (error) { toolJsonError("toolPipelineError", "Аргументы шага: " + error.message); } });
+    [number, id, toolId, args, controls].forEach(function (node) { card.appendChild(node); }); root.appendChild(card);
+  });
+  var add = document.createElement("button"); add.type = "button"; add.className = "secondary"; add.textContent = "+ Шаг"; add.addEventListener("click", function () { pipeline.steps.push({ id: "step" + (pipeline.steps.length + 1), toolId: "", arguments: {} }); setToolEditorJson("toolPipelineInput", pipeline); renderToolPipelineVisual(); }); root.appendChild(add);
+  Array.prototype.slice.call(root.querySelectorAll("input,select,textarea,button")).forEach(function (control) { control.disabled = !!state.toolBuilderReadOnly; });
+}
+
+function renderToolRunArgsVisual() {
+  var root = $("toolRunArgsVisual"); if (!root) return; root.innerHTML = "";
+  var schema = state.toolSchemaVisualDraft || {}; var properties = schema.properties || {}; var args = {};
+  try { args = toolEditorJson("toolRunArgsInput"); } catch (error) { args = {}; }
+  Object.keys(properties).forEach(function (name) {
+    var property = properties[name] || {}; var label = document.createElement("label"); label.textContent = name; var input = document.createElement("input"); input.value = args[name] === undefined ? "" : (typeof args[name] === "string" ? args[name] : JSON.stringify(args[name])); input.placeholder = property.description || property.type || "value";
+    input.addEventListener("change", function () { if (!input.value) delete args[name]; else { try { args[name] = parseSchemaDefault(input.value, property.type || "string"); } catch (error) { args[name] = input.value; } } setToolEditorJson("toolRunArgsInput", args); }); label.appendChild(input); root.appendChild(label);
+  });
+  if (!Object.keys(properties).length) root.appendChild(createResourceEmptyState("У инструмента нет параметров."));
+}
+
+function setToolStructuredMode(kind, mode) {
+  var isSchema = kind === "schema"; var valid = isSchema ? syncSchemaDraft() : syncPipelineDraft();
+  if (mode === "form" && !valid) return;
+  if (isSchema) state.toolSchemaMode = mode; else state.toolPipelineMode = mode;
+  Array.prototype.slice.call(document.querySelectorAll(isSchema ? ".tool-schema-mode" : ".tool-pipeline-mode")).forEach(function (button) { button.classList.toggle("active", button.getAttribute(isSchema ? "data-tool-schema-mode" : "data-tool-pipeline-mode") === mode); });
+  var visual = $(isSchema ? "toolSchemaVisual" : "toolPipelineVisual"); if (visual) visual.classList.toggle("hidden", mode !== "form");
+  Array.prototype.slice.call(document.querySelectorAll(isSchema ? ".tool-schema-json" : ".tool-pipeline-json")).forEach(function (node) { node.classList.toggle("hidden", mode !== "json"); });
+  if (mode === "form") { if (isSchema) renderToolSchemaVisual(); else renderToolPipelineVisual(); }
+  else if (typeof refreshCodeEditors === "function") refreshCodeEditors([isSchema ? "toolSchemaInput" : "toolPipelineInput"]);
+}
+
+function applyToolEditorPage() {
+  var page = state.toolEditorPage || "main";
+  Array.prototype.slice.call(document.querySelectorAll(".tool-page-button")).forEach(function (button) { button.classList.toggle("active", button.getAttribute("data-tool-page") === page); });
+  Array.prototype.slice.call(document.querySelectorAll("[data-tool-page-view]")).forEach(function (view) { view.classList.toggle("hidden", view.getAttribute("data-tool-page-view") !== page); });
+  if (typeof refreshCodeEditors === "function") refreshCodeEditors();
+}
+
 function renderToolEditor() {
   var skill = state.tools[state.selectedToolIndex] || null;
   var disabled = !skill;
   var builtIn = !!(skill && skill.BuiltIn);
   var documentLocal = !!(skill && String(skill.Scope || skill.scope || "").toLowerCase() === "document");
   var readOnly = builtIn || documentLocal;
+  state.toolBuilderReadOnly = disabled || readOnly;
   var isVba = !!(skill && String(skill.Executor || "").toLowerCase() === "vba");
   var panel = $("toolEditorPanel");
   var empty = $("toolEditorEmpty");
@@ -131,6 +270,8 @@ function renderToolEditor() {
       ? "Откройте RNAssistant внутри Office, чтобы загрузить built-in и пользовательские инструменты."
       : "Выберите инструмент слева или создайте новый.";
   }
+  if ($("toolEditorTitle")) $("toolEditorTitle").textContent = skill ? (skill.Id || skill.Name || "Инструмент") : "Инструмент";
+  if ($("toolEditorMeta")) $("toolEditorMeta").textContent = skill ? ((builtIn ? "Встроенный" : "Пользовательский") + " · " + (skill.Host || "Common") + " · " + (skill.Executor || "pipeline")) : "";
   $("toolEnabledInput").checked = skill ? skill.Enabled !== false : false;
   $("toolIdInput").value = skill ? (skill.Id || "") : "";
   $("toolHostInput").value = skill ? (skill.Host || "Common") : "Common";
@@ -169,6 +310,15 @@ function renderToolEditor() {
     setCodeEditorValue("toolReadmeInput", $("toolReadmeInput").value);
   }
   $("toolRunOutput").textContent = "";
+  state.toolSchemaVisualDraft = null;
+  state.toolPipelineVisualDraft = null;
+  syncSchemaDraft();
+  syncPipelineDraft();
+  setToolStructuredMode("schema", state.toolSchemaMode || "form");
+  setToolStructuredMode("pipeline", state.toolPipelineMode || "form");
+  if ($("pipelineToolEditor")) $("pipelineToolEditor").classList.toggle("hidden", !skill || String(skill.Executor || "").toLowerCase() !== "pipeline");
+  if ($("vbaToolEditor")) $("vbaToolEditor").classList.toggle("hidden", !isVba);
+  applyToolEditorPage();
 
   [
     "toolEnabledInput",
@@ -237,6 +387,26 @@ function syncSelectedToolFromEditor() {
   skill.Readme = $("toolReadmeInput").value;
   skill.Enabled = $("toolEnabledInput").checked;
   skill.BuiltIn = false;
+}
+
+function validateSelectedToolEditors() {
+  var tool = state.tools[state.selectedToolIndex];
+  if (!tool) return true;
+  if (!syncSchemaDraft()) { state.toolEditorPage = "schema"; applyToolEditorPage(); return false; }
+  if (String($("toolExecutorInput").value || "").toLowerCase() === "pipeline" && !syncPipelineDraft()) { state.toolEditorPage = "implementation"; applyToolEditorPage(); return false; }
+  return true;
+}
+
+function validateAllToolDefinitions() {
+  for (var index = 0; index < state.tools.length; index += 1) {
+    var tool = state.tools[index] || {};
+    try { JSON.parse(tool.ArgumentSchemaJson || emptyToolSchema()); }
+    catch (error) { throw new Error("Некорректная schema у " + (tool.Id || "инструмента") + ": " + error.message); }
+    if (String(tool.Executor || "").toLowerCase() === "pipeline") {
+      try { JSON.parse(tool.PipelineJson || "{}"); }
+      catch (error2) { throw new Error("Некорректный pipeline у " + (tool.Id || "инструмента") + ": " + error2.message); }
+    }
+  }
 }
 
 function readTools() {
@@ -388,6 +558,10 @@ function parseRunArguments() {
 }
 
 async function runSelectedTool(dryRun) {
+  if (!validateSelectedToolEditors()) {
+    log("Исправьте JSON инструмента перед запуском.");
+    return;
+  }
   syncSelectedToolFromEditor();
   var skill = state.tools[state.selectedToolIndex];
   if (!skill) {
@@ -415,6 +589,9 @@ async function runSelectedTool(dryRun) {
 
 function bindToolActions() {
   $("toolSearchInput").addEventListener("input", renderTools);
+  Array.prototype.slice.call(document.querySelectorAll(".tool-page-button")).forEach(function (button) { button.addEventListener("click", function () { syncSelectedToolFromEditor(); state.toolEditorPage = button.getAttribute("data-tool-page") || "main"; applyToolEditorPage(); }); });
+  Array.prototype.slice.call(document.querySelectorAll(".tool-schema-mode")).forEach(function (button) { button.addEventListener("click", function () { setToolStructuredMode("schema", button.getAttribute("data-tool-schema-mode")); }); });
+  Array.prototype.slice.call(document.querySelectorAll(".tool-pipeline-mode")).forEach(function (button) { button.addEventListener("click", function () { setToolStructuredMode("pipeline", button.getAttribute("data-tool-pipeline-mode")); }); });
 
   $("toolComponentSelect").addEventListener("change", function () {
     var tool = state.tools[state.selectedToolIndex];
@@ -435,10 +612,13 @@ function bindToolActions() {
   });
   $("toolExecutorInput").addEventListener("change", function () {
     var tool = state.tools[state.selectedToolIndex];
-    if (!tool || $("toolExecutorInput").value !== "vba" || toolComponents(tool).length) return;
-    var name = inferredVbaComponentName(tool);
-    tool.Components = [{ Name: name, Type: "StdModule", FileName: name + ".bas", Code: "Option Explicit\n" }];
-    state.selectedToolComponentIndex = 0;
+    if (!tool) return;
+    tool.Executor = $("toolExecutorInput").value;
+    if (tool.Executor === "vba" && !toolComponents(tool).length) {
+      var name = inferredVbaComponentName(tool);
+      tool.Components = [{ Name: name, Type: "StdModule", FileName: name + ".bas", Code: "Option Explicit\n" }];
+      state.selectedToolComponentIndex = 0;
+    }
     renderToolEditor();
   });
   $("installVbaToolButton").addEventListener("click", function () { changeVbaInstallation("installVbaTool"); });
@@ -514,7 +694,9 @@ function bindToolActions() {
   $("saveToolsButton").addEventListener("click", async function () {
     setControlBusy("saveToolsButton", true);
     try {
+      if (!validateSelectedToolEditors()) throw new Error("Исправьте JSON перед сохранением.");
       syncSelectedToolFromEditor();
+      validateAllToolDefinitions();
       var selected = state.tools[state.selectedToolIndex];
       var selectedId = selected ? selected.Id : "";
       var response = await send("saveTools", { tools: readTools() });

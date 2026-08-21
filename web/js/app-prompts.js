@@ -48,6 +48,103 @@
     return text.indexOf(query) >= 0;
   }
 
+  function syncSelectedInstruction() {
+    if (state.selectedInstructionKind === "skill") {
+      if (typeof syncSelectedSkillFromEditor === "function") syncSelectedSkillFromEditor();
+    } else {
+      syncSelectedPromptFromEditor();
+    }
+  }
+
+  function instructionRows() {
+    var query = (($("skillSearchInput") && $("skillSearchInput").value) || "").trim().toLowerCase();
+    var filter = state.instructionFilter || "all";
+    var rows = [];
+    if (filter === "all" || filter === "prompt") {
+      promptDefinitions.forEach(function (def, index) {
+        if (!query || promptMatchesSearch(def, query)) rows.push({ kind: "prompt", index: index, value: def });
+      });
+    }
+    if (filter === "all" || filter === "skill") {
+      (state.skills || []).forEach(function (skill, index) {
+        if (!query || (typeof skillMatchesSearch === "function" && skillMatchesSearch(skill, query))) rows.push({ kind: "skill", index: index, value: skill });
+      });
+    }
+    return rows;
+  }
+
+  function instructionGroup(row) {
+    if (row.kind === "prompt") return "Промпты";
+    return row.value && row.value.BuiltIn ? "Встроенные навыки" : "Пользовательские навыки";
+  }
+
+  function selectedInstructionKey() {
+    return state.selectedInstructionKind + ":" + (state.selectedInstructionKind === "skill" ? state.selectedSkillIndex : state.selectedPromptIndex);
+  }
+
+  function renderInstructions() {
+    var list = $("instructionsList");
+    if (!list) return;
+    var rows = instructionRows();
+    list.innerHTML = "";
+    Array.prototype.slice.call(document.querySelectorAll("[data-instruction-filter]")).forEach(function (button) {
+      button.classList.toggle("active", button.getAttribute("data-instruction-filter") === (state.instructionFilter || "all"));
+    });
+    if (!rows.length) {
+      list.appendChild(createResourceEmptyState("Инструкции не найдены."));
+      renderInstructionEditor();
+      return;
+    }
+    var key = selectedInstructionKey();
+    if (!rows.some(function (row) { return row.kind + ":" + row.index === key; })) {
+      state.selectedInstructionKind = rows[0].kind;
+      if (rows[0].kind === "skill") state.selectedSkillIndex = rows[0].index;
+      else state.selectedPromptIndex = rows[0].index;
+      key = rows[0].kind + ":" + rows[0].index;
+    }
+    var groups = {};
+    rows.forEach(function (row) {
+      var label = instructionGroup(row);
+      if (!groups[label]) {
+        groups[label] = createResourceGroup({ key: "instructions:" + label, title: label, count: rows.filter(function (candidate) { return instructionGroup(candidate) === label; }).length });
+        list.appendChild(groups[label]);
+      }
+      var value = row.value || {};
+      var item = createResourceListItem({
+        title: row.kind === "prompt" ? value.label : (value.Id || value.Name || "Навык"),
+        meta: row.kind === "prompt" ? "Промпт" : ((value.Host || "Common") + (value.BuiltIn ? " · built-in" : " · custom")),
+        description: row.kind === "prompt" ? value.description : (value.Description || "Инструкция навыка"),
+        enabled: row.kind === "skill" ? value.Enabled !== false : null,
+        active: row.kind + ":" + row.index === key,
+        compact: true,
+        onClick: function () {
+          syncSelectedInstruction();
+          state.selectedInstructionKind = row.kind;
+          if (row.kind === "skill") state.selectedSkillIndex = row.index;
+          else state.selectedPromptIndex = row.index;
+          renderInstructions();
+        }
+      });
+      (groups[label].treeChildren || groups[label]).appendChild(item);
+    });
+    renderInstructionEditor();
+  }
+
+  function renderInstructionEditor() {
+    var promptPanel = $("promptEditorPanel");
+    var skillPanel = $("skillEditorPanel");
+    var empty = $("instructionEditorEmpty");
+    var promptSelected = state.selectedInstructionKind === "prompt" && !!selectedPromptDefinition();
+    var skillSelected = state.selectedInstructionKind === "skill" && !!state.skills[state.selectedSkillIndex];
+    if (empty) empty.style.display = promptSelected || skillSelected ? "none" : "grid";
+    if (promptPanel) promptPanel.classList.toggle("hidden", !promptSelected);
+    if (skillPanel) skillPanel.classList.toggle("hidden", !skillSelected);
+    if (promptSelected) renderPromptEditor();
+    if (skillSelected && typeof renderSkillEditor === "function") renderSkillEditor();
+    if ($("addSkillButton")) $("addSkillButton").hidden = state.instructionFilter === "prompt";
+    if ($("cloneSkillButton")) $("cloneSkillButton").hidden = !skillSelected;
+  }
+
   function renderPromptPreview(def) {
     var preview = $("promptPreview");
     if (!preview) {
@@ -70,45 +167,14 @@
   }
 
   function renderPromptList() {
-    renderResourceList({
-      listId: "promptList",
-      searchInputId: "promptSearchInput",
-      items: promptDefinitions,
-      emptyText: "Промпты не найдены.",
-      getSelectedIndex: function () { return state.selectedPromptIndex; },
-      setSelectedIndex: function (index) { state.selectedPromptIndex = index; },
-      matches: promptMatchesSearch,
-      title: function (def) { return def.label; },
-      enabled: function () { return null; },
-      icon: function () { return "PRM"; },
-      meta: function (def) { return "Markdown · " + def.field + ".md"; },
-      description: function (def) { return def.description; },
-      groupKey: function (def) { return def.group; },
-      groupLabel: function (def) { return def.group; },
-      groupStoragePrefix: "prompts",
-      compact: true,
-      syncEditor: syncSelectedPromptFromEditor,
-      renderEditor: renderPromptEditor,
-      renderList: renderPromptList
-    });
+    renderInstructions();
   }
 
   function renderPromptEditor() {
     var def = selectedPromptDefinition();
     var disabled = !def;
     var panel = $("promptEditorPanel");
-    var content = $("promptEditorContent");
-    var empty = $("promptEditorEmpty");
-    if (panel) {
-      panel.classList.toggle("is-empty", disabled);
-    }
-    if (content) {
-      content.hidden = disabled;
-    }
-    if (empty) {
-      empty.querySelector(".resource-editor-empty-title").textContent = "Промпт не выбран";
-      empty.querySelector(".resource-editor-empty-text").textContent = "Выберите prompt-блок слева.";
-    }
+    if (panel) panel.classList.toggle("hidden", disabled);
     if (disabled) {
       return;
     }
@@ -133,13 +199,13 @@
 
   function setPromptMode(mode) {
     syncSelectedPromptFromEditor();
-    state.promptEditorMode = mode === "edit" ? "edit" : "preview";
+    state.promptEditorMode = mode === "preview" ? "preview" : "edit";
     renderPromptPreview(selectedPromptDefinition());
     applyPromptMode();
   }
 
   function applyPromptMode() {
-    var mode = state.promptEditorMode === "edit" ? "edit" : "preview";
+    var mode = state.promptEditorMode === "preview" ? "preview" : "edit";
     Array.prototype.slice.call(document.querySelectorAll(".prompt-mode-button")).forEach(function (button) {
       button.classList.toggle("active", button.getAttribute("data-prompt-mode") === mode);
     });
@@ -203,7 +269,10 @@
   }
 
   function bindPromptSettingsActions() {
-    $("promptSearchInput").addEventListener("input", renderPromptList);
+    $("skillSearchInput").addEventListener("input", renderInstructions);
+    Array.prototype.slice.call(document.querySelectorAll("[data-instruction-filter]")).forEach(function (button) {
+      button.addEventListener("click", function () { syncSelectedInstruction(); state.instructionFilter = button.getAttribute("data-instruction-filter") || "all"; renderInstructions(); });
+    });
     $("promptEditInput").addEventListener("input", function () {
       syncSelectedPromptFromEditor();
       settingsDirty = true;
@@ -223,15 +292,20 @@
         log(error.detail || error.message);
       });
     });
-    $("resetAllPromptsButton").addEventListener("click", function () {
-      promptDefinitions.forEach(function (def) {
-        state.promptDrafts[def.key] = "";
-      });
+    $("resetCurrentPromptButton").addEventListener("click", function () {
+      var def = selectedPromptDefinition();
+      if (def) state.promptDrafts[def.key] = "";
       setPromptEditorValue("");
       settingsDirty = true;
-      renderPromptList();
+      renderPromptEditor();
       updateSettingsSaveButton();
-      log("Все промпты будут сброшены после сохранения настроек.");
+      log("Промпт будет сброшен после сохранения.");
+    });
+    $("savePromptButton").addEventListener("click", async function () {
+      setControlBusy("savePromptButton", true);
+      try { await persistSettingsFromForm(); log("Промпт сохранён."); }
+      catch (error) { log(error.message); }
+      finally { setControlBusy("savePromptButton", false); renderInstructions(); }
     });
   }
 
@@ -248,4 +322,6 @@
   window.readPromptSettings = readPromptSettings;
   window.bindPromptSettingsActions = bindPromptSettingsActions;
   window.markPromptEditorDirty = markPromptEditorDirty;
+  window.renderInstructions = renderInstructions;
+  window.renderInstructionEditor = renderInstructionEditor;
 }());

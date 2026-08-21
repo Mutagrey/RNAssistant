@@ -258,7 +258,7 @@ function applyInitState(init) {
   state.activeHtmlArtifactId = init.activeHtmlArtifactId || init.ActiveHtmlArtifactId || "";
   state.activePlanArtifactId = init.activePlanArtifactId || init.ActivePlanArtifactId || "";
   $("toolsPath").textContent = state.toolsPath ? "Хранилище: " + state.toolsPath : "";
-  $("skillsPath").textContent = state.skillsPath ? "Хранилище: " + state.skillsPath : "";
+  if ($("skillsPath")) $("skillsPath").textContent = state.skillsPath ? "Хранилище: " + state.skillsPath : "";
   renderSettings();
   renderTools();
   renderSkills();
@@ -307,7 +307,7 @@ function applyBridgeUnavailableState(error) {
   state.htmlWorkspaceDirty = false;
 
   $("toolsPath").textContent = "";
-  $("skillsPath").textContent = "";
+  if ($("skillsPath")) $("skillsPath").textContent = "";
   renderSettings();
   renderTools();
   renderSkills();

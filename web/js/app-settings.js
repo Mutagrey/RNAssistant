@@ -274,6 +274,7 @@ function bindSettingsActions() {
       Array.prototype.slice.call(document.querySelectorAll(".settings-page")).forEach(function (item) {
         item.classList.toggle("active", item.getAttribute("data-settings-page") === page);
       });
+      if (page === "service" && typeof runtimeLogVisible === "function" && runtimeLogVisible()) refreshRuntimeLog();
       updateSettingsSaveButton();
     });
   });

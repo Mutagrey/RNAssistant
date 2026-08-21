@@ -562,15 +562,20 @@
 
 @media (max-width: 760px) {
   .settings-shell {
-    grid-template-columns: 142px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .settings-nav {
-    overflow: visible;
-    padding: 0 8px 0 0;
-    border-right: 1px solid rgba(226, 231, 239, 0.82);
-    border-bottom: 0;
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+    padding: 0 0 6px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(226, 231, 239, 0.82);
   }
+
+  .settings-nav-button { width: auto; flex: 0 0 auto; min-height: 29px; padding: 0 9px; border-radius: 6px; }
+  .settings-nav-button.active { box-shadow: inset 0 -2px 0 var(--accent); }
 
   .form-grid.two-columns {
     grid-template-columns: 1fr;
@@ -592,7 +597,7 @@
 
 @media (max-width: 480px) {
   .settings-shell {
-    grid-template-columns: 116px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
   }
 
@@ -621,3 +626,6 @@
     text-align: right;
   }
 }
+
+.diagnostics-logs { min-height: 260px; max-height: 48vh; }
+.diagnostics-logs .log-section { min-height: 240px; }

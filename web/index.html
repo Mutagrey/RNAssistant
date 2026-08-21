@@ -27,16 +27,16 @@
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-capabilities-20260820-1">
-  <link rel="stylesheet" href="css/app-workspace.css?v=agent-protocol-20260821-4">
-  <link rel="stylesheet" href="css/app-tools.css?v=sidebar-polish-20260723-1">
-  <link rel="stylesheet" href="css/app-prompts.css?v=agent-protocol-20260821-2">
-  <link rel="stylesheet" href="css/app-vba.css?v=chatui-20260622-7">
+  <link rel="stylesheet" href="css/app-workspace.css?v=library-ui-20260821-1">
+  <link rel="stylesheet" href="css/app-tools.css?v=library-ui-20260821-1">
+  <link rel="stylesheet" href="css/app-prompts.css?v=library-ui-20260821-1">
+  <link rel="stylesheet" href="css/app-vba.css?v=library-ui-20260821-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260702-2">
   <link rel="stylesheet" href="css/app-artifacts.css?v=ui-simplify-20260821-3">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=chatui-20260702-2">
-  <link rel="stylesheet" href="css/app-responsive.css?v=ui-simplify-20260821-4">
+  <link rel="stylesheet" href="css/app-responsive.css?v=library-ui-20260821-1">
   <link rel="stylesheet" href="css/app-agent.css?v=ui-simplify-20260821-4">
   <link rel="stylesheet" href="css/app-agent-data.css?v=agent-ui-20260821-2">
   <link rel="stylesheet" href="css/app-theme.css?v=agent-protocol-20260821-2">
@@ -45,15 +45,17 @@
   <div class="shell">
     <nav class="tabs" aria-label="Разделы ассистента">
       <button class="tab active" data-section="chat" data-tab="chat">Чат</button>
-      <button class="tab" id="workspaceRootTab" data-section="workspace" data-default-tab="tools">Рабочая область</button>
-      <button class="tab" data-section="html" data-tab="html">HTML</button>
+      <button class="tab" id="libraryRootTab" data-section="library" data-default-tab="instructions">Библиотека</button>
+      <button class="tab" id="codeRootTab" data-section="code" data-default-tab="vba">Код</button>
       <button class="tab" data-section="settings" data-tab="settings">Настройки</button>
     </nav>
-    <nav class="workspace-tabs hidden" id="workspaceTabs" aria-label="Разделы рабочей области">
-      <button class="workspace-tab active" data-tab="tools">Инструменты</button>
-      <button class="workspace-tab" data-tab="skills">Навыки</button>
-      <button class="workspace-tab" data-tab="vba">VBA</button>
-      <button class="workspace-tab" data-tab="logs">Журнал</button>
+    <nav class="workspace-tabs section-tabs hidden" data-section-tabs="library" aria-label="Разделы библиотеки">
+      <button class="workspace-tab section-tab active" data-tab="instructions">Инструкции</button>
+      <button class="workspace-tab section-tab" data-tab="tools">Инструменты</button>
+    </nav>
+    <nav class="workspace-tabs section-tabs hidden" data-section-tabs="code" aria-label="Разделы кода">
+      <button class="workspace-tab section-tab active" data-tab="vba">VBA</button>
+      <button class="workspace-tab section-tab" data-tab="html">HTML</button>
     </nav>
 
     <main class="content">
@@ -230,43 +232,55 @@
               <div class="resource-editor-empty-title">Инструмент не выбран</div>
               <div class="resource-editor-empty-text">Выберите инструмент слева или создайте новый.</div>
             </div>
-            <div class="form-grid tool-form" id="toolForm">
-              <div class="tool-form-section">Основное</div>
-              <label>ID инструмента<input id="toolIdInput" placeholder="excel.normalize_table"></label>
-              <label>Приложение<select id="toolHostInput"><option>Common</option><option>Excel</option><option>Word</option><option>PowerPoint</option><option>Outlook</option></select></label>
-              <label>Исполнитель<select id="toolExecutorInput"><option>pipeline</option><option>vba</option><option>builtin</option></select></label>
-              <div class="tool-form-flags">
-                <label class="checkline"><input type="checkbox" id="toolEnabledInput"> Включен</label>
-                <label class="checkline"><input type="checkbox" id="toolConfirmInput"> Требует подтверждения</label>
-              </div>
-              <label class="wide">Описание<textarea id="toolDescriptionInput" rows="3" placeholder="Описание для модели"></textarea></label>
-              <div class="setting-note wide" id="toolPackageMeta"></div>
-              <div class="tool-form-section">Контракт и запуск</div>
-              <label>JSON-схема аргументов<textarea id="toolSchemaInput" rows="4" placeholder="{&quot;type&quot;:&quot;object&quot;,&quot;properties&quot;:{},&quot;required&quot;:[],&quot;additionalProperties&quot;:false}"></textarea></label>
-              <label>Аргументы запуска JSON<textarea id="toolRunArgsInput" rows="4" spellcheck="false" placeholder="{&quot;address&quot;:&quot;A1:D20&quot;}"></textarea></label>
-              <div class="tool-form-section">Исполнение</div>
-              <label>Pipeline JSON<textarea id="toolPipelineInput" rows="10" spellcheck="false" placeholder="{&quot;version&quot;:1,&quot;steps&quot;:[{&quot;id&quot;:&quot;read&quot;,&quot;toolId&quot;:&quot;excel.read_range&quot;,&quot;arguments&quot;:{&quot;address&quot;:&quot;{{args.address}}&quot;}}]}"></textarea></label>
-              <div class="vba-package-editor wide">
-                <label>Компонент<select id="toolComponentSelect"></select></label>
-                <div class="tool-form-flags">
-                  <button class="secondary" id="addToolModuleButton" type="button">+ Module</button>
-                  <button class="secondary" id="addToolClassButton" type="button">+ Class</button>
-                  <button class="secondary danger-soft" id="deleteToolComponentButton" type="button">Удалить компонент</button>
-                </div>
-                <label>Имя компонента<input id="toolComponentNameInput" maxlength="40" placeholder="RNA_MyTool"></label>
-                <label>Тип<select id="toolComponentTypeInput"><option value="StdModule">Standard module</option><option value="ClassModule">Class module</option></select></label>
-                <label class="wide">VBA source<textarea id="toolCodeInput" rows="14" spellcheck="false" placeholder="Option Explicit"></textarea></label>
-              </div>
-              <label class="wide">README / заметки<textarea id="toolReadmeInput" rows="5" spellcheck="false" placeholder="Заметки по использованию и реализации"></textarea></label>
+            <div class="resource-editor-head tool-editor-head" id="toolEditorHead">
+              <div class="resource-editor-titlebox"><div class="resource-editor-title" id="toolEditorTitle">Инструмент</div><div class="resource-editor-meta" id="toolEditorMeta"></div></div>
             </div>
-            <pre class="json-box tool-run-output" id="toolRunOutput"></pre>
+            <div class="mode-toggle tool-page-tabs" role="tablist" aria-label="Раздел инструмента">
+              <button class="mode-button tool-page-button active" type="button" data-tool-page="main">Основное</button>
+              <button class="mode-button tool-page-button" type="button" data-tool-page="schema">Параметры</button>
+              <button class="mode-button tool-page-button" type="button" data-tool-page="implementation">Реализация</button>
+              <button class="mode-button tool-page-button" type="button" data-tool-page="test">Тест</button>
+              <button class="mode-button tool-page-button" type="button" data-tool-page="docs">Документация</button>
+            </div>
+            <div class="tool-form" id="toolForm">
+              <div class="form-grid tool-editor-page" data-tool-page-view="main">
+                <label>ID инструмента<input id="toolIdInput" placeholder="excel.normalize_table"></label>
+                <label>Приложение<select id="toolHostInput"><option>Common</option><option>Excel</option><option>Word</option><option>PowerPoint</option><option>Outlook</option></select></label>
+                <label>Исполнитель<select id="toolExecutorInput"><option>pipeline</option><option>vba</option><option>builtin</option></select></label>
+                <div class="tool-form-flags"><label class="checkline"><input type="checkbox" id="toolEnabledInput"> Включён</label><label class="checkline"><input type="checkbox" id="toolConfirmInput"> Требует подтверждения</label></div>
+                <label class="wide">Описание<textarea id="toolDescriptionInput" rows="4" placeholder="Описание для модели"></textarea></label>
+                <div class="setting-note wide" id="toolPackageMeta"></div>
+              </div>
+              <div class="tool-editor-page hidden" data-tool-page-view="schema">
+                <div class="editor-section-head"><div><strong>Параметры вызова</strong><span>Strict object JSON Schema</span></div><div class="mode-toggle compact-toggle"><button class="mode-button tool-schema-mode active" type="button" data-tool-schema-mode="form">Форма</button><button class="mode-button tool-schema-mode" type="button" data-tool-schema-mode="json">JSON</button></div></div>
+                <div id="toolSchemaVisual" class="structured-editor"></div>
+                <label class="wide tool-schema-json hidden">JSON-схема<textarea id="toolSchemaInput" rows="12"></textarea></label>
+                <div class="editor-inline-error" id="toolSchemaError"></div>
+              </div>
+              <div class="tool-editor-page hidden" data-tool-page-view="implementation">
+                <div class="pipeline-tool-editor" id="pipelineToolEditor">
+                  <div class="editor-section-head"><div><strong>Pipeline</strong><span>Последовательность существующих tools</span></div><div class="mode-toggle compact-toggle"><button class="mode-button tool-pipeline-mode active" type="button" data-tool-pipeline-mode="form">Шаги</button><button class="mode-button tool-pipeline-mode" type="button" data-tool-pipeline-mode="json">JSON</button></div></div>
+                  <div id="toolPipelineVisual" class="structured-editor"></div>
+                  <label class="tool-pipeline-json hidden">Pipeline JSON<textarea id="toolPipelineInput" rows="14" spellcheck="false"></textarea></label>
+                  <div class="editor-inline-error" id="toolPipelineError"></div>
+                </div>
+                <div class="vba-package-editor hidden" id="vbaToolEditor">
+                  <div class="component-toolbar"><label>Компонент<select id="toolComponentSelect"></select></label><button class="secondary" id="addToolModuleButton" type="button">+ Module</button><button class="secondary" id="addToolClassButton" type="button">+ Class</button><button class="secondary danger-soft" id="deleteToolComponentButton" type="button">Удалить</button></div>
+                  <div class="form-grid"><label>Имя компонента<input id="toolComponentNameInput" maxlength="40" placeholder="RNA_MyTool"></label><label>Тип<select id="toolComponentTypeInput"><option value="StdModule">Standard module</option><option value="ClassModule">Class module</option></select></label><label class="wide">VBA source<textarea id="toolCodeInput" rows="14" spellcheck="false" placeholder="Option Explicit"></textarea></label></div>
+                </div>
+              </div>
+              <div class="tool-editor-page hidden" data-tool-page-view="test">
+                <div class="editor-section-head"><div><strong>Проверка инструмента</strong><span>Аргументы и локальный результат</span></div></div>
+                <div id="toolRunArgsVisual" class="structured-editor"></div>
+                <details class="advanced-json"><summary>Аргументы JSON</summary><textarea id="toolRunArgsInput" rows="7" spellcheck="false">{}</textarea></details>
+                <div class="tool-test-actions"><button class="secondary" id="dryRunToolButton" type="button">Проверить</button><button class="primary" id="runToolButton" type="button">Запустить</button></div>
+                <pre class="json-box tool-run-output" id="toolRunOutput"></pre>
+              </div>
+              <div class="tool-editor-page hidden" data-tool-page-view="docs"><label>README / заметки<textarea id="toolReadmeInput" rows="16" spellcheck="false" placeholder="Заметки по использованию и реализации"></textarea></label></div>
+            </div>
             <div class="toolbar tool-editor-actions action-bar">
               <div class="action-group">
-                <button class="secondary" id="dryRunToolButton" type="button">Проверить</button>
-                <button class="primary" id="runToolButton" type="button">Запустить</button>
-              </div>
-              <div class="action-group">
-                <button class="secondary" id="copyToolContextButton" type="button">Добавить в контекст</button>
+                <button class="secondary" id="copyToolContextButton" type="button">Копировать</button>
                 <button class="secondary" id="askToolBuilderButton" type="button">Обсудить</button>
               </div>
               <div class="action-group" id="vbaPackageActions">
@@ -282,10 +296,9 @@
         </div>
       </section>
 
-      <section class="panel" id="tab-skills">
-        <div class="tool-layout split-layout" id="skillsLayout" data-split-key="resources" data-default-ratio="0.28" data-min-left="160" data-min-ratio="0.18" data-max-ratio="0.46">
+      <section class="panel" id="tab-instructions">
+        <div class="tool-layout instruction-layout split-layout" id="instructionsLayout" data-split-key="instructions" data-default-ratio="0.3" data-min-left="180" data-min-ratio="0.2" data-max-ratio="0.48">
           <div class="tool-list-panel surface-panel">
-            <div class="tool-list-status" id="skillsPath"></div>
             <div class="tool-list-controls">
               <div class="tool-list-actions">
                 <button class="primary icon-text-button" id="addSkillButton" type="button" title="Новый навык">
@@ -297,35 +310,56 @@
                   <span>Копия</span>
                 </button>
               </div>
-              <input class="tool-search" id="skillSearchInput" placeholder="Поиск навыков..." autocomplete="off">
+              <div class="resource-filter" role="group" aria-label="Тип инструкций">
+                <button class="active" type="button" data-instruction-filter="all">Все</button>
+                <button type="button" data-instruction-filter="prompt">Промпты</button>
+                <button type="button" data-instruction-filter="skill">Навыки</button>
+              </div>
+              <input class="tool-search" id="skillSearchInput" placeholder="Поиск инструкций..." autocomplete="off">
             </div>
-            <aside class="tool-list" id="skillsList"></aside>
+            <aside class="tool-list" id="instructionsList"></aside>
           </div>
-          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка навыков"></div>
-          <section class="tool-editor surface-panel" id="skillEditorPanel">
-            <div class="resource-editor-empty" id="skillEditorEmpty">
-              <div class="resource-editor-empty-title">Навык не выбран</div>
-              <div class="resource-editor-empty-text">Выберите навык слева или создайте новый.</div>
+          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка инструкций"></div>
+          <section class="tool-editor instruction-editor surface-panel" id="instructionEditorPanel">
+            <div class="resource-editor-empty" id="instructionEditorEmpty">
+              <div class="resource-editor-empty-title">Инструкция не выбрана</div>
+              <div class="resource-editor-empty-text">Выберите промпт или навык слева.</div>
             </div>
-            <div class="form-grid tool-form" id="skillForm">
-              <div class="tool-form-section">Основное</div>
-              <label>ID навыка<input id="skillIdInput" placeholder="common.review_contract"></label>
-              <label>Приложение<select id="skillHostInput"><option>Common</option><option>Excel</option><option>Word</option><option>PowerPoint</option><option>Outlook</option></select></label>
-              <div class="tool-form-flags">
-                <label class="checkline"><input type="checkbox" id="skillEnabledInput"> Включен</label>
+            <div class="instruction-editor-content" id="skillEditorPanel">
+              <div class="resource-editor-head">
+                <div class="resource-editor-titlebox"><div class="resource-editor-title" id="skillTitle">Навык</div><div class="resource-editor-meta" id="skillMeta"></div></div>
               </div>
-              <label class="wide">Описание<textarea id="skillDescriptionInput" rows="3" placeholder="Когда агенту использовать этот навык"></textarea></label>
-              <div class="tool-form-section">Инструкции агента</div>
-              <label class="wide">SKILL.md<textarea id="skillBodyInput" rows="18" spellcheck="false" placeholder="# Название навыка&#10;&#10;Используйте этот навык, когда..."></textarea></label>
+              <div class="form-grid tool-form" id="skillForm">
+                <label>ID навыка<input id="skillIdInput" placeholder="common.review_contract"></label>
+                <label>Приложение<select id="skillHostInput"><option>Common</option><option>Excel</option><option>Word</option><option>PowerPoint</option><option>Outlook</option></select></label>
+                <label class="checkline"><input type="checkbox" id="skillEnabledInput"> <span>Включён</span></label>
+                <label class="wide">Описание<textarea id="skillDescriptionInput" rows="3" placeholder="Когда агенту использовать этот навык"></textarea></label>
+                <div class="mode-toggle instruction-mode-toggle" role="group" aria-label="Режим навыка">
+                  <button class="mode-button instruction-mode-button active" type="button" data-instruction-mode="edit">Редактор</button>
+                  <button class="mode-button instruction-mode-button" type="button" data-instruction-mode="preview">Просмотр</button>
+                </div>
+                <label class="wide instruction-edit-view">SKILL.md<textarea id="skillBodyInput" rows="18" spellcheck="false"></textarea></label>
+                <div class="editor-preview markdown wide instruction-preview-view hidden" id="skillPreview"></div>
+              </div>
+              <div class="toolbar tool-editor-actions action-bar">
+                <div class="action-group"><button class="secondary" id="copySkillContextButton" type="button">Копировать</button><button class="secondary" id="askSkillBuilderButton" type="button">Обсудить</button></div>
+                <div class="action-group action-group-end"><button class="accent-soft" id="saveSkillsButton" type="button">Сохранить</button><button class="secondary danger-soft" id="deleteSkillButton" type="button">Удалить</button></div>
+              </div>
             </div>
-            <div class="toolbar tool-editor-actions action-bar">
-              <div class="action-group">
-                <button class="secondary" id="copySkillContextButton" type="button">Добавить в контекст</button>
-                <button class="secondary" id="askSkillBuilderButton" type="button">Обсудить</button>
+            <div class="instruction-editor-content hidden" id="promptEditorPanel">
+              <div class="resource-editor-head">
+                <div class="resource-editor-titlebox"><div class="resource-editor-title" id="promptTitle"></div><div class="resource-editor-meta" id="promptMeta"></div></div>
+                <div class="resource-editor-actions"><button class="icon-button secondary" id="copyPromptButton" type="button" title="Скопировать промпт" aria-label="Скопировать промпт">⧉</button></div>
               </div>
-              <div class="action-group action-group-end">
-                <button class="accent-soft" id="saveSkillsButton" type="button">Сохранить</button>
-                <button class="secondary danger-soft" id="deleteSkillButton" type="button">Удалить</button>
+              <div class="mode-toggle prompt-mode-toggle" role="group" aria-label="Режим промпта">
+                <button class="mode-button prompt-mode-button active" type="button" data-prompt-mode="edit">Редактор</button>
+                <button class="mode-button prompt-mode-button" type="button" data-prompt-mode="preview">Просмотр</button>
+              </div>
+              <div class="editor-preview prompt-preview markdown hidden" id="promptPreview"></div>
+              <textarea class="editor-edit-input prompt-edit-input" id="promptEditInput" rows="16" spellcheck="false"></textarea>
+              <div class="toolbar tool-editor-actions action-bar">
+                <div class="action-group"><button class="secondary" id="addPromptToChatButton" type="button">В контекст</button><button class="secondary" id="resetCurrentPromptButton" type="button">Сбросить</button></div>
+                <div class="action-group action-group-end"><button class="accent-soft" id="savePromptButton" type="button">Сохранить</button></div>
               </div>
             </div>
           </section>
@@ -358,19 +392,17 @@
               </div>
             </div>
             <div class="mode-toggle vba-mode-toggle" role="group" aria-label="Раздел VBA">
-              <button class="mode-button vba-mode-button active" type="button" data-vba-mode="preview">Preview</button>
-              <button class="mode-button vba-mode-button" type="button" data-vba-mode="edit">Edit</button>
-              <button class="mode-button vba-mode-button" type="button" data-vba-mode="diff">Diff</button>
-              <button class="mode-button vba-mode-button" type="button" data-vba-mode="run">Run</button>
-              <button class="mode-button vba-mode-button" type="button" data-vba-mode="info">Info</button>
+              <button class="mode-button vba-mode-button active" type="button" data-vba-mode="edit">Код</button>
+              <button class="mode-button vba-mode-button" type="button" data-vba-mode="diff">Изменения</button>
+              <button class="mode-button vba-mode-button" type="button" data-vba-mode="run">Запуск</button>
+              <button class="mode-button vba-mode-button" type="button" data-vba-mode="info">Информация</button>
             </div>
             <div class="resource-editor-empty" id="vbaEmptyState">
               <div class="resource-editor-empty-title">VBA не загружен</div>
               <div class="resource-editor-empty-text">Загрузите VBA-проект, чтобы редактировать модули, сравнивать diff и сохранять изменения.</div>
               <button class="primary" id="refreshVbaEmptyButton" type="button">Загрузить VBA</button>
             </div>
-            <div class="editor-preview vba-code-preview markdown vba-view" id="vbaCodePreview" data-vba-view="preview"></div>
-            <div class="vba-code-pane vba-view hidden" id="vbaCodePane" data-vba-view="edit">
+            <div class="vba-code-pane vba-view" id="vbaCodePane" data-vba-view="edit">
               <textarea id="vbaCodeInput" spellcheck="false" placeholder="Обновите VBA, чтобы загрузить модули."></textarea>
             </div>
             <div class="vba-diff-view vba-view hidden" data-vba-view="diff">
@@ -461,8 +493,7 @@
             <button class="settings-nav-button" type="button" data-settings-page="model">Модель</button>
             <button class="settings-nav-button" type="button" data-settings-page="agent">Агент</button>
             <button class="settings-nav-button" type="button" data-settings-page="interface">Интерфейс</button>
-            <button class="settings-nav-button" type="button" data-settings-page="prompts">Промпты</button>
-            <button class="settings-nav-button" type="button" data-settings-page="service">Сервис</button>
+            <button class="settings-nav-button" type="button" data-settings-page="service">Диагностика</button>
           </nav>
 
           <div class="settings-pages">
@@ -517,6 +548,9 @@
               <div class="settings-heading">
                 <h2>Агент</h2>
                 <p>Протокол, выполнение инструментов и поведение при ошибках.</p>
+              </div>
+              <div class="form-grid two-columns agent-instruction-settings">
+                <label><span>Роль Markdown-инструкций</span><select id="systemPromptRoleInput"><option value="developer">developer — по умолчанию</option><option value="system">system</option><option value="user">user</option></select><small>Применяется к Agent, Chat и служебным запросам.</small></label>
               </div>
               <section class="agent-protocol-panel" aria-labelledby="agentProtocolTitle">
                 <div class="agent-protocol-head">
@@ -616,72 +650,23 @@
               <div class="setting-note">HTML preview и его скрипты всегда доступны в sandboxed iframe.</div>
             </section>
 
-            <section class="settings-page" data-settings-page="prompts">
-              <div class="settings-heading">
-                <h2>Промпты</h2>
-                <p>Основные и служебные инструкции хранятся и редактируются как Markdown.</p>
-              </div>
-              <div class="prompt-settings-bar">
-                <label class="prompt-role-control">
-                  <span>Роль инструкций API</span>
-                  <select id="systemPromptRoleInput">
-                    <option value="developer">developer — по умолчанию</option>
-                    <option value="system">system</option>
-                    <option value="user">user</option>
-                  </select>
-                  <small>Применяется к Agent, Chat и служебным запросам.</small>
-                </label>
-                <button class="secondary" id="resetAllPromptsButton" type="button" title="Вернуть встроенные значения всех промптов">Сбросить все промпты</button>
-              </div>
-              <div class="setting-note">Agent runtime добавляет к главному Markdown-промпту JSON-контекст с tools, skills, документом и пользовательским контекстом.</div>
-              <div class="prompt-layout split-layout" id="promptsLayout" data-split-key="prompts" data-default-ratio="0.3" data-min-left="180" data-min-ratio="0.2" data-max-ratio="0.48">
-                <div class="tool-list-panel surface-panel">
-                  <input class="tool-search" id="promptSearchInput" placeholder="Поиск промптов..." autocomplete="off">
-                  <aside class="tool-list" id="promptList"></aside>
-                </div>
-                <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка промптов"></div>
-                <section class="prompt-editor surface-panel" id="promptEditorPanel">
-                  <div class="resource-editor-empty" id="promptEditorEmpty">
-                    <div class="resource-editor-empty-title">Промпт не выбран</div>
-                    <div class="resource-editor-empty-text">Выберите prompt-блок слева.</div>
-                  </div>
-                  <div class="prompt-editor-content" id="promptEditorContent">
-                    <div class="resource-editor-head">
-                      <div class="resource-editor-titlebox">
-                        <div class="resource-editor-title" id="promptTitle"></div>
-                        <div class="resource-editor-meta" id="promptMeta"></div>
-                      </div>
-                      <div class="resource-editor-actions">
-                        <button class="icon-button secondary" id="copyPromptButton" type="button" title="Скопировать промпт" aria-label="Скопировать промпт">
-                          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                        </button>
-                        <button class="secondary icon-text-button" id="addPromptToChatButton" type="button">
-                          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-                          <span>В чат</span>
-                        </button>
-                      </div>
-                    </div>
-                    <div class="mode-toggle prompt-mode-toggle" role="group" aria-label="Режим промпта">
-                      <button class="mode-button prompt-mode-button active" type="button" data-prompt-mode="preview">Preview</button>
-                      <button class="mode-button prompt-mode-button" type="button" data-prompt-mode="edit">Edit</button>
-                    </div>
-                    <div class="editor-preview prompt-preview markdown" id="promptPreview"></div>
-                    <textarea class="editor-edit-input prompt-edit-input hidden" id="promptEditInput" rows="16" spellcheck="false"></textarea>
-                  </div>
-                </section>
-              </div>
-              <div class="status">Пустое поле после сохранения восстанавливает встроенное значение. Агент может читать и менять эти поля через common.prompts_read_defaults и common.prompts_save с подтверждением.</div>
-            </section>
-
             <section class="settings-page" data-settings-page="service">
               <div class="settings-heading">
-                <h2>Сервис</h2>
-                <p>Диагностика и очистка локальных данных.</p>
+                <h2>Диагностика</h2>
+                <p>Журналы, отладка и очистка локальных данных.</p>
               </div>
               <div class="form-grid">
                 <label class="checkline"><input id="debugModelTrafficInput" type="checkbox"><span>Debug: логировать сырые запросы и ответы модели</span></label>
               </div>
-              <div class="setting-note">Запросы и ответы пишутся как форматированный JSON в раздел «Журнал» рабочей области и файл runtime-журнала. API-ключ и HTTP-заголовки не пишутся, но в сообщениях могут быть текст документа и другие чувствительные данные.</div>
+              <div class="setting-note">Запросы и ответы пишутся как форматированный JSON в Runtime-журнал ниже. API-ключ и HTTP-заголовки не пишутся, но в сообщениях могут быть текст документа и другие чувствительные данные.</div>
+              <div class="mode-toggle log-view-tabs" role="tablist" aria-label="Тип журнала">
+                <button class="mode-button log-view-button active" type="button" role="tab" aria-selected="true" data-log-view="session">Сессия</button>
+                <button class="mode-button log-view-button" type="button" role="tab" aria-selected="false" data-log-view="runtime">Runtime</button>
+              </div>
+              <div class="logs-workspace diagnostics-logs">
+                <section class="log-section surface-panel padded" data-log-view-section="session"><div class="log-section-head"><strong>UI-события</strong><button class="secondary" id="clearLogButton" type="button">Очистить</button></div><pre class="log-box" id="logBox"></pre></section>
+                <section class="log-section surface-panel padded hidden" data-log-view-section="runtime"><div class="log-section-head"><div><strong>Runtime / model traffic</strong><span id="runtimeLogPath"></span></div><div class="log-section-actions"><button class="secondary" id="refreshRuntimeLogButton" type="button">Обновить</button><button class="secondary" id="clearRuntimeLogButton" type="button">Очистить файл</button></div></div><pre class="log-box" id="runtimeLogBox"></pre></section>
+              </div>
               <div class="danger-zone">
                 <div>
                   <div class="danger-zone-title">Сброс локальных данных</div>
@@ -697,31 +682,6 @@
         </div>
       </section>
 
-      <section class="panel" id="tab-logs">
-        <div class="panel-head">
-          <div class="panel-status">Журналы диагностики</div>
-          <div class="mode-toggle log-view-tabs" role="tablist" aria-label="Тип журнала">
-            <button class="mode-button log-view-button active" type="button" role="tab" aria-selected="true" data-log-view="session">Сессия</button>
-            <button class="mode-button log-view-button" type="button" role="tab" aria-selected="false" data-log-view="runtime">Runtime</button>
-          </div>
-        </div>
-        <div class="logs-workspace">
-          <section class="log-section surface-panel padded" data-log-view-section="session">
-            <div class="log-section-head"><strong>UI-события сессии</strong><button class="secondary" id="clearLogButton" type="button">Очистить</button></div>
-            <pre class="log-box" id="logBox"></pre>
-          </section>
-          <section class="log-section surface-panel padded hidden" data-log-view-section="runtime">
-            <div class="log-section-head">
-              <div><strong>Runtime / model traffic</strong><span id="runtimeLogPath"></span></div>
-              <div class="log-section-actions">
-                <button class="secondary" id="refreshRuntimeLogButton" type="button">Обновить</button>
-                <button class="secondary" id="clearRuntimeLogButton" type="button">Очистить файл</button>
-              </div>
-            </div>
-            <pre class="log-box" id="runtimeLogBox"></pre>
-          </section>
-        </div>
-      </section>
     </main>
   </div>
 
@@ -738,23 +698,23 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=ui-simplify-20260821-3"></script>
+  <script src="js/app-core.js?v=library-ui-20260821-1"></script>
   <script src="js/app-utils.js?v=runtime-20260807-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js?v=agent-protocol-20260821-2"></script>
   <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js?v=agent-protocol-20260821-2"></script>
-  <script src="js/app-logs.js?v=agent-progress-20260820-1"></script>
-  <script src="js/app-prompts.js?v=agent-protocol-20260821-2"></script>
+  <script src="js/app-settings.js?v=library-ui-20260821-1"></script>
+  <script src="js/app-logs.js?v=library-ui-20260821-1"></script>
+  <script src="js/app-prompts.js?v=library-ui-20260821-1"></script>
   <script src="js/app-model-data.js?v=model-capabilities-20260820-1"></script>
   <script src="js/app-model-render.js?v=model-capabilities-20260820-1"></script>
   <script src="js/app-models.js?v=agent-reliability-20260819-1"></script>
   <script src="js/app-context-data.js"></script>
   <script src="js/app-chat-state.js?v=plan-tools-20260821-1"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
-  <script src="js/app-tools.js?v=ui-simplify-20260821-3"></script>
-  <script src="js/app-skills.js?v=ui-simplify-20260821-3"></script>
-  <script src="js/app-vba.js?v=agent-ui-20260821-2"></script>
+  <script src="js/app-tools.js?v=library-ui-20260821-1"></script>
+  <script src="js/app-skills.js?v=library-ui-20260821-1"></script>
+  <script src="js/app-vba.js?v=library-ui-20260821-1"></script>
   <script src="js/app-html-workspace.js?v=agent-ui-20260821-2"></script>
   <script src="js/app-context.js?v=ui-simplify-20260821-3"></script>
   <script src="js/app-agent-data.js?v=agent-ui-20260821-2"></script>
@@ -767,8 +727,8 @@
   <script src="js/app-messages.js?v=agent-ui-20260821-2"></script>
   <script src="js/app-reasoning.js?v=reasoning-ui-20260819-1"></script>
   <script src="js/app-attachments.js?v=agent-ui-20260821-2"></script>
-  <script src="js/app-chat.js?v=ui-simplify-20260821-3"></script>
+  <script src="js/app-chat.js?v=library-ui-20260821-1"></script>
   <script src="js/app-chat-edit.js?v=agent-ui-20260821-2"></script>
-  <script src="js/app.js?v=ui-simplify-20260821-4"></script>
+  <script src="js/app.js?v=library-ui-20260821-2"></script>
 </body>
 </html>

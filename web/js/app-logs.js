@@ -1,8 +1,9 @@
 var runtimeLogRefreshBusy = false;
 
 function logsTabVisible() {
-  var panel = $("tab-logs");
-  return !!panel && panel.classList.contains("active");
+  var panel = $("tab-settings");
+  var page = document.querySelector('.settings-page[data-settings-page="service"]');
+  return !!panel && panel.classList.contains("active") && !!page && page.classList.contains("active");
 }
 
 function runtimeLogVisible() {

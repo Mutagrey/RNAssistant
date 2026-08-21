@@ -1,16 +1,18 @@
 function switchTab(name) {
-  var workspaceNames = ["tools", "skills", "vba", "logs"];
-  var section = workspaceNames.indexOf(name) >= 0 ? "workspace" : name;
+  var libraryNames = ["instructions", "tools"];
+  var codeNames = ["vba", "html"];
+  var section = libraryNames.indexOf(name) >= 0 ? "library" : (codeNames.indexOf(name) >= 0 ? "code" : name);
   Array.prototype.slice.call(document.querySelectorAll(".tab")).forEach(function (tab) {
     tab.classList.toggle("active", tab.dataset.section === section);
   });
-  Array.prototype.slice.call(document.querySelectorAll(".workspace-tab")).forEach(function (tab) {
+  Array.prototype.slice.call(document.querySelectorAll(".section-tab")).forEach(function (tab) {
     tab.classList.toggle("active", tab.dataset.tab === name);
   });
-  var workspaceTabs = $("workspaceTabs");
-  if (workspaceTabs) workspaceTabs.classList.toggle("hidden", section !== "workspace");
-  var workspaceRoot = $("workspaceRootTab");
-  if (workspaceRoot && section === "workspace") workspaceRoot.dataset.activeTab = name;
+  Array.prototype.slice.call(document.querySelectorAll(".section-tabs")).forEach(function (tabs) {
+    tabs.classList.toggle("hidden", tabs.dataset.sectionTabs !== section);
+  });
+  var sectionRoot = section === "library" ? $("libraryRootTab") : (section === "code" ? $("codeRootTab") : null);
+  if (sectionRoot) sectionRoot.dataset.activeTab = name;
   Array.prototype.slice.call(document.querySelectorAll(".panel")).forEach(function (panel) {
     panel.classList.toggle("active", panel.id === "tab-" + name);
   });
@@ -40,12 +42,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
   Array.prototype.slice.call(document.querySelectorAll(".tab")).forEach(function (tab) {
     tab.addEventListener("click", function () {
-      switchTab(tab.dataset.section === "workspace"
-        ? (tab.dataset.activeTab || tab.dataset.defaultTab || "tools")
+      switchTab(tab.dataset.section === "library" || tab.dataset.section === "code"
+        ? (tab.dataset.activeTab || tab.dataset.defaultTab || "instructions")
         : tab.dataset.tab);
     });
   });
-  Array.prototype.slice.call(document.querySelectorAll(".workspace-tab")).forEach(function (tab) {
+  Array.prototype.slice.call(document.querySelectorAll(".section-tab")).forEach(function (tab) {
     tab.addEventListener("click", function () { switchTab(tab.dataset.tab); });
   });
 

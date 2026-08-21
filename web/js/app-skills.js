@@ -1,4 +1,8 @@
 function renderSkills() {
+  if (typeof renderInstructions === "function" && $("instructionsList")) {
+    renderInstructions();
+    return;
+  }
   renderResourceList({
     listId: "skillsList",
     searchInputId: "skillSearchInput",
@@ -54,16 +58,9 @@ function renderSkillEditor() {
   var disabled = !skill;
   var builtIn = !!(skill && skill.BuiltIn);
   var panel = $("skillEditorPanel");
-  var empty = $("skillEditorEmpty");
-  if (panel) {
-    panel.classList.toggle("is-empty", disabled);
-  }
-  if (empty) {
-    empty.querySelector(".resource-editor-empty-title").textContent = state.bridgeUnavailable ? "Навыки недоступны" : "Навык не выбран";
-    empty.querySelector(".resource-editor-empty-text").textContent = state.bridgeUnavailable
-      ? "Откройте RNAssistant внутри Office, чтобы загрузить built-in и пользовательские навыки."
-      : "Выберите навык слева или создайте новый.";
-  }
+  if (panel) panel.classList.toggle("hidden", disabled);
+  if ($("skillTitle")) $("skillTitle").textContent = skill ? (skill.Id || skill.Name || "Навык") : "Навык";
+  if ($("skillMeta")) $("skillMeta").textContent = skill ? ((skill.BuiltIn ? "Встроенный навык" : "Пользовательский навык") + " · " + (skill.Host || "Common")) : "";
   $("skillEnabledInput").checked = skill ? skill.Enabled !== false : false;
   $("skillIdInput").value = skill ? (skill.Id || "") : "";
   $("skillHostInput").value = skill ? (skill.Host || "Common") : "Common";
@@ -72,6 +69,8 @@ function renderSkillEditor() {
   if (typeof setCodeEditorValue === "function") {
     setCodeEditorValue("skillBodyInput", $("skillBodyInput").value);
   }
+  renderSkillPreview();
+  applyInstructionMode();
 
   [
     "skillEnabledInput",
@@ -110,6 +109,25 @@ function syncSelectedSkillFromEditor() {
   skill.BodyMarkdown = $("skillBodyInput").value;
   skill.Enabled = $("skillEnabledInput").checked;
   skill.BuiltIn = false;
+}
+
+function renderSkillPreview() {
+  var preview = $("skillPreview");
+  if (!preview) return;
+  var value = typeof getCodeEditorValue === "function" ? getCodeEditorValue("skillBodyInput") : $("skillBodyInput").value;
+  preview.innerHTML = markdown(value || "_Навык пуст._");
+  if (typeof enhanceMarkdown === "function") enhanceMarkdown(preview);
+}
+
+function applyInstructionMode() {
+  var mode = state.promptEditorMode === "preview" ? "preview" : "edit";
+  Array.prototype.slice.call(document.querySelectorAll(".instruction-mode-button")).forEach(function (button) {
+    button.classList.toggle("active", button.getAttribute("data-instruction-mode") === mode);
+  });
+  Array.prototype.slice.call(document.querySelectorAll(".instruction-edit-view")).forEach(function (node) { node.classList.toggle("hidden", mode !== "edit"); });
+  Array.prototype.slice.call(document.querySelectorAll(".instruction-preview-view")).forEach(function (node) { node.classList.toggle("hidden", mode !== "preview"); });
+  if (typeof setCodeEditorVisible === "function") setCodeEditorVisible("skillBodyInput", mode === "edit");
+  if (mode === "preview") renderSkillPreview();
 }
 
 function readSkills() {
@@ -171,7 +189,9 @@ async function addSelectedSkillContextToContext() {
 }
 
 function bindSkillActions() {
-  $("skillSearchInput").addEventListener("input", renderSkills);
+  Array.prototype.slice.call(document.querySelectorAll(".instruction-mode-button")).forEach(function (button) {
+    button.addEventListener("click", function () { syncSelectedSkillFromEditor(); state.promptEditorMode = button.getAttribute("data-instruction-mode"); applyInstructionMode(); });
+  });
 
   $("addSkillButton").addEventListener("click", function () {
     syncSelectedSkillFromEditor();
@@ -185,6 +205,8 @@ function bindSkillActions() {
       BuiltIn: false
     });
     state.selectedSkillIndex = state.skills.length - 1;
+    state.selectedInstructionKind = "skill";
+    state.instructionFilter = "all";
     renderSkills();
   });
 
@@ -206,6 +228,7 @@ function bindSkillActions() {
       BuiltIn: false
     });
     state.selectedSkillIndex = state.skills.length - 1;
+    state.selectedInstructionKind = "skill";
     renderSkills();
   });
 

@@ -114,6 +114,8 @@ function renderVbaModuleList(modules, query) {
         icon: vbaModuleIcon(type),
         depth: 1,
         onClick: function () {
+          if (state.vbaEditorDirty && !window.confirm("Отменить несохранённые изменения текущего VBA-модуля?")) return;
+          state.vbaEditorDirty = false;
           $("vbaModuleSelect").value = name;
           state.vba.selectedModule = name;
           renderVbaModuleList(modules, query);
@@ -226,8 +228,14 @@ function renderSelectedVbaModule() {
   var module = selectedVbaModule();
   var loaded = hasVbaModuleCode(module);
   var loading = module && state.vba.loadingModule === vbaModuleName(module);
+  var moduleName = vbaModuleName(module);
+  var keepDraft = state.vbaEditorDirty && state.vbaEditorLoadedModule === moduleName;
   state.vba.selectedModule = vbaModuleName(module);
-  setVbaEditorCode(loaded ? vbaModuleCode(module) : "");
+  if (!keepDraft) {
+    state.vbaEditorDirty = false;
+    state.vbaEditorLoadedModule = moduleName;
+    setVbaEditorCode(loaded ? vbaModuleCode(module) : "");
+  }
   $("vbaModuleTitle").textContent = module ? vbaModuleName(module) : "Модуль не выбран";
   $("vbaModuleMeta").textContent = module ? vbaModuleMetaText(module) + (loaded ? "" : (loading ? " - читаю код..." : " - код не загружен")) : "";
   $("vbaMetaBox").textContent = module ? JSON.stringify({
@@ -246,7 +254,6 @@ function renderSelectedVbaModule() {
   $("saveVbaButton").disabled = !module || !loaded || state.bridgeUnavailable;
   $("restoreVbaButton").disabled = state.bridgeUnavailable || !$("vbaBackupSelect").value || !module || !loaded;
   $("reviewVbaButton").disabled = !module || !loaded || state.bridgeUnavailable;
-  renderVbaCodePreview();
   applyVbaMode();
   updateVbaMacroSuggestion();
 }
@@ -377,17 +384,15 @@ function setVbaMode(mode) {
     syncCodeEditors(["vbaCodeInput"]);
   }
   state.vbaEditorMode = normalizeVbaMode(mode);
-  if (state.vbaEditorMode === "preview") {
-    renderVbaCodePreview();
-  } else if (state.vbaEditorMode === "diff") {
+  if (state.vbaEditorMode === "diff") {
     previewVbaDiff();
   }
   applyVbaMode();
 }
 
 function normalizeVbaMode(mode) {
-  var value = mode || "preview";
-  return value === "edit" || value === "diff" || value === "run" || value === "info" ? value : "preview";
+  var value = mode || "edit";
+  return value === "diff" || value === "run" || value === "info" ? value : "edit";
 }
 
 function applyVbaMode() {
@@ -631,10 +636,8 @@ function updateVbaMacroSuggestion() {
 }
 
 function markVbaEditorDirty() {
+  state.vbaEditorDirty = true;
   updateVbaMacroSuggestion();
-  if (state.vbaEditorMode === "preview") {
-    renderVbaCodePreview();
-  }
   $("vbaStatus").textContent = "Есть несохраненные изменения VBA.";
 }
 
