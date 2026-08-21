@@ -118,13 +118,13 @@ The add-in projects use the VSTO project flavor (`ProjectTypeGuids`) so Visual S
 
 ## Visual Studio Debug
 
-1. Run `install-local.cmd Word` once, replacing `Word` with the host you want to debug.
+1. Run `install-local.cmd Excel` once, replacing `Excel` with the host you want to debug.
 2. Open `RNAssistant.sln`.
 3. Select `Debug | x64`.
-4. Right-click `RNAssistant.WordAddIn`, `RNAssistant.ExcelAddIn`, `RNAssistant.PowerPointAddIn`, or `RNAssistant.OutlookAddIn` and choose `Set as Startup Project`.
+4. Keep the shared `Excel Add-in` launch profile, or set another `RNAssistant.*AddIn` project as startup when debugging a different host.
 5. Press `F5`.
 
-The VSTO project metadata points Visual Studio to the Office host executable through the Office 16.0 registry install path. If F5 says the required Office app is not installed, check that Office is x64 and installed locally, then reload the project in Visual Studio.
+`RNAssistant.ExcelAddIn` is first in the solution and is the default shared launch profile. The VSTO project metadata points Visual Studio to the Office host executable through the Office 16.0 registry install path. If F5 says the required Office app is not installed, check that Office is x64 and installed locally, then reload the project in Visual Studio.
 
 ClickOnce/VSTO manifest signing is disabled in the repository because certificate thumbprints are machine-local. If the Visual Studio Signing page is disabled, run the local helper in Windows PowerShell:
 

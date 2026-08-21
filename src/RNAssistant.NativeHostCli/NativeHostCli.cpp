@@ -248,7 +248,7 @@ private:
 
             _form = gcnew Form();
             _form->Text = "RN Assistant";
-            _form->Width = 480;
+            _form->Width = 1200;
             _form->Height = 720;
             _form->MinimumSize = System::Drawing::Size(420, 300);
             _form->StartPosition = FormStartPosition::Manual;
@@ -338,7 +338,7 @@ private:
 
         System::Drawing::Rectangle workingArea =
             Screen::FromHandle(officeHwnd)->WorkingArea;
-        const int panelWidth = 480;
+        const int panelWidth = 1200;
         const int topOffset = 120;
         const int rightMargin = 20;
         const int bottomMargin = 40;

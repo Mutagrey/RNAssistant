@@ -2,6 +2,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.ExcelAddIn", "src\RNAssistant.ExcelAddIn\RNAssistant.ExcelAddIn.csproj", "{95F1441B-40AA-4C1A-AC3F-A422B11CBFCD}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.Core", "src\RNAssistant.Core\RNAssistant.Core.csproj", "{0D49E2C4-02A1-4CFC-A5AB-C631A674B729}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.Office", "src\RNAssistant.Office\RNAssistant.Office.csproj", "{9B67E963-0E92-4D13-980D-6FF798C61A4F}"
@@ -11,8 +13,6 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.Desktop", "src\RNAssistant.Desktop\RNAssistant.Desktop.csproj", "{AD0F0EE2-91B2-43EA-9237-25C64A5121A1}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.MockDemo", "demo\RNAssistant.MockDemo\RNAssistant.MockDemo.csproj", "{26F75018-13AC-4EB2-A5C9-97E06EF5D5A7}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.ExcelAddIn", "src\RNAssistant.ExcelAddIn\RNAssistant.ExcelAddIn.csproj", "{95F1441B-40AA-4C1A-AC3F-A422B11CBFCD}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNAssistant.WordAddIn", "src\RNAssistant.WordAddIn\RNAssistant.WordAddIn.csproj", "{E8F6DB3D-5628-4F03-BFBE-C4D177686091}"
 EndProject

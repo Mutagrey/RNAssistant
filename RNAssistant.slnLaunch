@@ -1,0 +1,11 @@
+[
+  {
+    "Name": "Excel Add-in",
+    "Projects": [
+      {
+        "Path": "src\\RNAssistant.ExcelAddIn\\RNAssistant.ExcelAddIn.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]
