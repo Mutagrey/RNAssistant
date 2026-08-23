@@ -69,6 +69,7 @@ See [agent-protocol.md](agent-protocol.md).
 - `src/RNAssistant.Office/Controller`: typed bridge-facing orchestration.
 - `src/RNAssistant.OfficeHosts`: Excel/Word/PowerPoint/Outlook COM adapters.
 - `web/js/app-html-workspace.js`: HTML workspace state and bridge orchestration; sandbox document assembly and artifact/plan presentation live in the adjacent `app-html-workspace-preview.js` and `app-html-workspace-artifacts.js` modules.
+- `web/js/app-chat-session.js`: chat/document CRUD, bridge initialization, and navigation synchronization; `app-chat.js` owns composer and active-run orchestration.
 - Other `web/js` files remain static feature modules; no agent routing or business rules.
 
 ## Harness
