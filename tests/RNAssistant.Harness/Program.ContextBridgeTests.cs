@@ -605,6 +605,25 @@ namespace RNAssistant.Harness
             AssertContains(controller.LastModuleCode, "Sub Main", "module code");
         }
 
+        private static void BridgeReportsModelConnectionDiagnostics()
+        {
+            var controller = new AssistantController();
+            var messages = new List<string>();
+            using (var bridge = new AssistantWebBridge(controller, messages.Add))
+            {
+                var token = BridgeToken(bridge);
+                var responseJson = bridge.HandleMessageAsync(
+                    "{\"id\":\"ping1\",\"type\":\"testModelConnection\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
+                    .GetAwaiter().GetResult();
+
+                var response = JObject.Parse(responseJson);
+                AssertTrue(response["ok"].Value<bool>(), "model connection bridge response ok");
+                AssertTrue(response["payload"]["success"].Value<bool>(), "model connection succeeds");
+                AssertEqual("modelDiagnostics", JObject.Parse(messages[0])["type"].Value<string>(), "diagnostics event type");
+                AssertEqual("completed", JObject.Parse(messages[0])["payload"]["phase"].Value<string>(), "diagnostics phase");
+            }
+        }
+
         private static void BridgeUsesTypedHtmlWorkspaceDeletePayloads()
         {
             var controller = new AssistantController();

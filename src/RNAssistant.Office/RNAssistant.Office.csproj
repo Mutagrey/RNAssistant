@@ -97,6 +97,7 @@
     <Compile Include="Services\AttachmentImageService.cs" />
     <Compile Include="Services\ModelAttachmentService.cs" />
     <Compile Include="Services\ModelCapabilityService.cs" />
+    <Compile Include="Services\ModelConnectionTestService.cs" />
     <Compile Include="Services\ModelCompatibilityService.cs" />
     <Compile Include="Services\ChatTitleBuilder.cs" />
     <Compile Include="Services\ChatSessionService.cs" />

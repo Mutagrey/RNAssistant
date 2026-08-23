@@ -73,7 +73,8 @@ namespace RNAssistant.Core.Llm
         public static async Task<string> ReadContentAsStringAsync(
             HttpContent content,
             int maxBytes,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            Action firstBytesRead = null)
         {
             if (content == null) return string.Empty;
             if (content.Headers.ContentLength.HasValue && content.Headers.ContentLength.Value > maxBytes)
@@ -86,6 +87,7 @@ namespace RNAssistant.Core.Llm
             using (var output = new MemoryStream())
             {
                 var buffer = new byte[8192];
+                var firstBytesReported = false;
                 try
                 {
                     while (true)
@@ -93,6 +95,12 @@ namespace RNAssistant.Core.Llm
                         cancellationToken.ThrowIfCancellationRequested();
                         var read = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
                         if (read <= 0) break;
+                        if (!firstBytesReported)
+                        {
+                            firstBytesReported = true;
+                            try { if (firstBytesRead != null) firstBytesRead(); }
+                            catch { }
+                        }
                         if (output.Length + read > maxBytes) throw TooLarge();
                         output.Write(buffer, 0, read);
                     }

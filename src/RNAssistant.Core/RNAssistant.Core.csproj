@@ -91,6 +91,7 @@
     <Compile Include="Llm\LlmClient.cs" />
     <Compile Include="Llm\LlmHttpTransport.cs" />
     <Compile Include="Llm\LlmMessageBuilder.cs" />
+    <Compile Include="Llm\LlmRequestDiagnostics.cs" />
     <Compile Include="Llm\LlmRequestModels.cs" />
     <Compile Include="Llm\LlmResponseModels.cs" />
     <Compile Include="Llm\LlmResponseParser.cs" />

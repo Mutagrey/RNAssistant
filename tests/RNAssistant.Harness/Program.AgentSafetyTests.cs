@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -245,6 +247,94 @@ namespace RNAssistant.Harness
 
             AssertTrue(!result.Compatible, "loose compatibility flow rejected");
             AssertTrue(result.Checks.All(check => !check.Passed), "each loose probe fails");
+        }
+
+        private static void ModelConnectionProbeReportsTimings()
+        {
+            LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
+            {
+                AssertEqual(16, settings.MaxTokens, "probe output is bounded");
+                AssertEqual(false, options.ReasoningEnabled.Value, "probe disables reasoning");
+                options.DiagnosticProgress(new LlmRequestDiagnosticUpdate
+                {
+                    RequestId = "probe-1",
+                    Phase = LlmRequestDiagnosticPhases.Completed,
+                    Model = settings.Model,
+                    StreamRequested = settings.StreamResponses,
+                    ElapsedMs = 25,
+                    PreparationMs = 2,
+                    ResponseHeadersMs = 15,
+                    FirstChunkMs = 20,
+                    TotalMs = 25,
+                    StatusCode = 200
+                });
+                return Task.FromResult(new LlmCompletionResult { Content = "PONG" });
+            };
+
+            var result = new ModelConnectionTestService(completion).TestAsync(new AppSettings(), CancellationToken.None)
+                .GetAwaiter().GetResult();
+
+            AssertTrue(result.Success, "connection probe succeeds on non-empty response");
+            AssertEqual("probe-1", result.Diagnostics.RequestId, "probe diagnostics retained");
+            AssertEqual(20L, result.Diagnostics.FirstChunkMs.Value, "first chunk timing retained");
+            AssertEqual(200, result.Diagnostics.StatusCode.Value, "HTTP status retained");
+        }
+
+        private static void ModelDiagnosticsStreamReportsFirstChunk()
+        {
+            const string sse = "data: {\"choices\":[{\"delta\":{\"content\":\"PONG\"}}]}\n\ndata: [DONE]\n";
+            var firstChunkCount = 0;
+            LlmCompletionResult result;
+            using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(sse)))
+            {
+                result = LlmResponseParser.ReadStreamingOrJsonResponseAsync(
+                    stream,
+                    null,
+                    CancellationToken.None,
+                    null,
+                    () => firstChunkCount++).GetAwaiter().GetResult();
+            }
+
+            AssertEqual("PONG", result.Content, "stream content parsed");
+            AssertEqual(1, firstChunkCount, "first stream chunk reported once");
+        }
+
+        private static void ModelDiagnosticsTrackerReportsOneTerminalLifecycle()
+        {
+            var requestUpdates = new List<LlmRequestDiagnosticUpdate>();
+            var globalUpdates = new List<LlmRequestDiagnosticUpdate>();
+            var tracker = new LlmRequestDiagnosticsTracker(
+                new AppSettings { Model = "diagnostic-model", StreamResponses = true },
+                requestUpdates.Add,
+                globalUpdates.Add,
+                null);
+
+            tracker.Sending(123);
+            tracker.Headers(202);
+            tracker.FirstChunk();
+            tracker.FirstChunk();
+            tracker.Completed();
+            tracker.Failed(new InvalidOperationException("ignored after completion"));
+
+            AssertEqual(
+                "preparing,sending,headers,first_chunk,completed",
+                string.Join(",", requestUpdates.Select(update => update.Phase).ToArray()),
+                "diagnostic lifecycle phases");
+            AssertEqual(requestUpdates.Count, globalUpdates.Count, "request and global diagnostics receive each phase");
+            AssertEqual(123L, requestUpdates.Last().RequestBytes.Value, "request size retained");
+            AssertEqual(202, requestUpdates.Last().StatusCode.Value, "response status retained");
+            AssertTrue(requestUpdates.Last().TotalMs.HasValue, "terminal duration retained");
+
+            var cancelledUpdates = new List<LlmRequestDiagnosticUpdate>();
+            var cancelled = new LlmRequestDiagnosticsTracker(new AppSettings(), cancelledUpdates.Add, null, null);
+            cancelled.Failed(new OperationCanceledException("cancelled"));
+            AssertEqual(LlmRequestDiagnosticPhases.Cancelled, cancelledUpdates.Last().Phase, "cancellation is terminal phase");
+
+            var failedUpdates = new List<LlmRequestDiagnosticUpdate>();
+            var failed = new LlmRequestDiagnosticsTracker(new AppSettings(), failedUpdates.Add, null, null);
+            failed.Failed(new LlmRequestException(LlmFailureKind.Timeout, "timeout"));
+            AssertEqual(LlmRequestDiagnosticPhases.Failed, failedUpdates.Last().Phase, "request error is failed phase");
+            AssertEqual(LlmFailureKind.Timeout, failedUpdates.Last().FailureKind.Value, "failure kind retained");
         }
     }
 }

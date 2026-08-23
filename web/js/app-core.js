@@ -49,6 +49,9 @@ var state = {
   modelCatalog: { configUrl: "", defaultModel: "", models: [], loaded: false, loading: false, error: "" },
   modelSaving: false,
   reasoningSaving: false,
+  modelDiagnostics: null,
+  modelDiagnosticsTimer: null,
+  modelDiagnosticsLocalStart: 0,
   bridgeUnavailable: false,
   selectedToolIndex: -1,
   selectedSkillIndex: -1,
@@ -231,6 +234,12 @@ if (window.chrome && window.chrome.webview) {
     var response = event.data;
     if (typeof response === "string") {
       response = JSON.parse(response);
+    }
+    if (response && response.type === "modelDiagnostics") {
+      if (typeof handleModelDiagnosticsUpdate === "function") {
+        handleModelDiagnosticsUpdate(response.payload || {});
+      }
+      return;
     }
     if (response && response.type === "progress") {
       var progress = response.payload || {};

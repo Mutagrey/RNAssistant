@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
@@ -24,6 +25,7 @@ namespace RNAssistant.Office.WebView
             _postMessageJson = postMessageJson;
             _cancellations = new BridgeRequestCancellationRegistry();
             _bridgeToken = Guid.NewGuid().ToString("N");
+            _controller.ModelRequestDiagnostics += ReportModelRequestDiagnostics;
         }
 
         public async Task<string> HandleMessageAsync(string requestJson)
@@ -209,6 +211,9 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "testModelCompatibility":
                         responsePayload = await _controller.TestModelCompatibilityAsync(cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "testModelConnection":
+                        responsePayload = await _controller.TestModelConnectionAsync(cancellationToken).ConfigureAwait(false);
                         break;
                     case "clearRuntimeData":
                         responsePayload = WithBridgeToken(_controller.ClearRuntimeData());
@@ -399,6 +404,7 @@ namespace RNAssistant.Office.WebView
 
         public void Dispose()
         {
+            _controller.ModelRequestDiagnostics -= ReportModelRequestDiagnostics;
             _cancellations.Dispose();
         }
 
@@ -453,6 +459,20 @@ namespace RNAssistant.Office.WebView
                         ? (bool?)(string.Equals(activity.Status, "completed", StringComparison.OrdinalIgnoreCase))
                         : null
                 }
+            }));
+        }
+
+        private void ReportModelRequestDiagnostics(LlmRequestDiagnosticUpdate update)
+        {
+            if (_postMessageJson == null || update == null)
+            {
+                return;
+            }
+
+            _postMessageJson(JsonConvert.SerializeObject(new ModelRequestDiagnosticsMessage
+            {
+                Type = "modelDiagnostics",
+                Payload = ModelRequestDiagnosticsDto.From(update)
             }));
         }
 

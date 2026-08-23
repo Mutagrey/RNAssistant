@@ -183,6 +183,9 @@
                 <div class="composer-picker-menu composer-model-menu" id="chatModelMenu" role="listbox" aria-label="Выбор модели чата"></div>
               </details>
               <select id="chatModelSelect" class="hidden" aria-label="Модель чата"></select>
+              <span class="model-connection-indicator is-idle" id="modelConnectionIndicator" title="Связь с моделью ещё не проверялась.">
+                <i aria-hidden="true"></i><span id="modelConnectionIndicatorText">—</span>
+              </span>
               <button type="button" class="composer-reasoning-button" id="chatReasoningToggle" title="Reasoning выключен" aria-label="Включить reasoning" aria-pressed="false">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M8.4 14.7A6 6 0 1 1 15.6 14.7c-.9.7-1.4 1.6-1.6 2.3h-4c-.2-.7-.7-1.6-1.6-2.3Z"/><path d="M12 1V0"/><path d="m4.9 4.9-.8-.8"/><path d="m19.9 4.1-.8.8"/></svg>
               </button>
@@ -635,6 +638,16 @@
                 <p>События текущей сессии и очистка локальных данных.</p>
               </div>
               <input id="debugModelTrafficInput" type="checkbox" hidden>
+              <section class="model-compatibility-panel" aria-labelledby="modelConnectionTitle">
+                <div class="model-compatibility-head">
+                  <div>
+                    <h3 id="modelConnectionTitle">Связь с моделью</h3>
+                    <p>Один короткий запрос с текущими настройками. Фоновые проверки не выполняются.</p>
+                  </div>
+                  <button class="secondary" id="testModelConnectionButton" type="button">Проверить модель</button>
+                </div>
+                <div class="model-compatibility-results" id="modelConnectionResults" aria-live="polite"></div>
+              </section>
               <div class="danger-zone">
                 <div>
                   <div class="danger-zone-title">Сброс локальных данных</div>
@@ -676,6 +689,7 @@
   <script src="js/app-markdown.js"></script>
   <script src="js/app-settings.js?v=unified-ui-20260821-1"></script>
   <script src="js/app-logs.js?v=unified-ui-20260821-1"></script>
+  <script src="js/app-diagnostics.js?v=model-diagnostics-20260823-1"></script>
   <script src="js/app-prompts.js?v=unified-ui-20260821-1"></script>
   <script src="js/app-model-data.js?v=model-capabilities-20260820-1"></script>
   <script src="js/app-model-render.js?v=model-capabilities-20260820-1"></script>

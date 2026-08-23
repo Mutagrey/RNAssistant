@@ -461,6 +461,37 @@
   overflow-wrap: anywhere;
 }
 
+.model-connection-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.model-connection-metrics > div {
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 6px 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.model-connection-metrics strong {
+  color: var(--text);
+  font-weight: var(--label-font-weight);
+}
+
+.model-connection-error {
+  margin-top: 6px;
+  color: #991b1b;
+  font-size: 10.5px;
+  overflow-wrap: anywhere;
+}
+
 .stack {
   display: grid;
   gap: 10px;

@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
 
@@ -11,6 +12,8 @@ namespace RNAssistant.Office
 {
     public sealed class AssistantController
     {
+        internal event Action<LlmRequestDiagnosticUpdate> ModelRequestDiagnostics;
+
         public string LastToolId { get; private set; }
         public string LastArgumentsJson { get; private set; }
         public bool LastDryRun { get; private set; }
@@ -130,6 +133,35 @@ namespace RNAssistant.Office
                 {
                     new ModelCompatibilityCheckDto { Id = "user_role", Title = "Роль user", Passed = true, Required = true }
                 }
+            });
+        }
+
+        public Task<ModelConnectionTestResponse> TestModelConnectionAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var update = new LlmRequestDiagnosticUpdate
+            {
+                RequestId = "probe-1",
+                Phase = LlmRequestDiagnosticPhases.Completed,
+                Model = "harness-model",
+                StreamRequested = true,
+                ElapsedMs = 25,
+                PreparationMs = 2,
+                ResponseHeadersMs = 15,
+                FirstChunkMs = 20,
+                TotalMs = 25,
+                StatusCode = 200
+            };
+            var handler = ModelRequestDiagnostics;
+            if (handler != null) handler(update);
+            return Task.FromResult(new ModelConnectionTestResponse
+            {
+                Success = true,
+                Summary = "Модель ответила.",
+                Model = "harness-model",
+                StreamRequested = true,
+                DurationMs = 25,
+                Diagnostics = ModelRequestDiagnosticsDto.From(update)
             });
         }
 

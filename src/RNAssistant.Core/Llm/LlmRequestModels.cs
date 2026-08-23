@@ -61,6 +61,7 @@ namespace RNAssistant.Core.Llm
         public string ResponseSchemaJson { get; set; }
         public LlmRunCache RunCache { get; set; }
         public bool? ReasoningEnabled { get; set; }
+        public Action<LlmRequestDiagnosticUpdate> DiagnosticProgress { get; set; }
 
         public LlmRequestOptions()
         {

@@ -80,7 +80,8 @@ namespace RNAssistant.Core.Llm
             Stream stream,
             Action<LlmStreamUpdate> streamProgress,
             CancellationToken cancellationToken,
-            Action<string> rawJsonProgress)
+            Action<string> rawJsonProgress,
+            Action firstChunkRead = null)
         {
             if (stream == null)
             {
@@ -90,6 +91,7 @@ namespace RNAssistant.Core.Llm
             var state = new StreamingCompletionState(streamProgress);
             var bufferedJson = new StringBuilder();
             bool? isEventStream = null;
+            var firstChunkReported = false;
             using (var reader = new StreamReader(stream, Encoding.UTF8, true, 4096, true))
             using (cancellationToken.Register(streamState => ((Stream)streamState).Dispose(), stream))
             {
@@ -100,6 +102,12 @@ namespace RNAssistant.Core.Llm
                         cancellationToken.ThrowIfCancellationRequested();
                         var line = await reader.ReadLineAsync().ConfigureAwait(false);
                         if (line == null) break;
+                        if (!firstChunkReported)
+                        {
+                            firstChunkReported = true;
+                            try { if (firstChunkRead != null) firstChunkRead(); }
+                            catch { }
+                        }
                         if (line.Length > MaxStoredContentChars)
                         {
                             throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "LLM response line exceeds the safety limit.");

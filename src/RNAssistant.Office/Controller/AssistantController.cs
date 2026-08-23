@@ -86,7 +86,8 @@ namespace RNAssistant.Office
                 (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars),
                 (settings, attachment, maxImages, cancellationToken) =>
                     ModelAttachmentService.ReadForModel(_attachmentStore, settings, attachment, maxImages, cancellationToken),
-                RuntimeLog.Debug);
+                RuntimeLog.Debug,
+                ReportModelRequestDiagnostics);
             LlmCompletionDelegate completion;
             if (completeAsync == null)
             {

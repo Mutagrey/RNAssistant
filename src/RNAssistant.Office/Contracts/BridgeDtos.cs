@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 
@@ -106,6 +107,78 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("contentDelta", NullValueHandling = NullValueHandling.Ignore)]
         public string ContentDelta { get; set; }
+    }
+
+    public sealed class ModelRequestDiagnosticsMessage
+    {
+        [JsonProperty("type")]
+        public string Type { get; set; }
+
+        [JsonProperty("payload")]
+        public ModelRequestDiagnosticsDto Payload { get; set; }
+    }
+
+    public sealed class ModelRequestDiagnosticsDto
+    {
+        [JsonProperty("requestId")]
+        public string RequestId { get; set; }
+
+        [JsonProperty("phase")]
+        public string Phase { get; set; }
+
+        [JsonProperty("model")]
+        public string Model { get; set; }
+
+        [JsonProperty("streamRequested")]
+        public bool StreamRequested { get; set; }
+
+        [JsonProperty("elapsedMs")]
+        public long ElapsedMs { get; set; }
+
+        [JsonProperty("preparationMs", NullValueHandling = NullValueHandling.Ignore)]
+        public long? PreparationMs { get; set; }
+
+        [JsonProperty("responseHeadersMs", NullValueHandling = NullValueHandling.Ignore)]
+        public long? ResponseHeadersMs { get; set; }
+
+        [JsonProperty("firstChunkMs", NullValueHandling = NullValueHandling.Ignore)]
+        public long? FirstChunkMs { get; set; }
+
+        [JsonProperty("totalMs", NullValueHandling = NullValueHandling.Ignore)]
+        public long? TotalMs { get; set; }
+
+        [JsonProperty("requestBytes", NullValueHandling = NullValueHandling.Ignore)]
+        public long? RequestBytes { get; set; }
+
+        [JsonProperty("statusCode", NullValueHandling = NullValueHandling.Ignore)]
+        public int? StatusCode { get; set; }
+
+        [JsonProperty("failureKind", NullValueHandling = NullValueHandling.Ignore)]
+        public string FailureKind { get; set; }
+
+        [JsonProperty("error", NullValueHandling = NullValueHandling.Ignore)]
+        public string Error { get; set; }
+
+        public static ModelRequestDiagnosticsDto From(LlmRequestDiagnosticUpdate source)
+        {
+            if (source == null) return null;
+            return new ModelRequestDiagnosticsDto
+            {
+                RequestId = source.RequestId,
+                Phase = source.Phase,
+                Model = source.Model,
+                StreamRequested = source.StreamRequested,
+                ElapsedMs = source.ElapsedMs,
+                PreparationMs = source.PreparationMs,
+                ResponseHeadersMs = source.ResponseHeadersMs,
+                FirstChunkMs = source.FirstChunkMs,
+                TotalMs = source.TotalMs,
+                RequestBytes = source.RequestBytes,
+                StatusCode = source.StatusCode,
+                FailureKind = source.FailureKind.HasValue ? source.FailureKind.Value.ToString() : null,
+                Error = source.Error
+            };
+        }
     }
 
     public sealed class RuntimeLogResponse
@@ -494,6 +567,33 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("catalog")]
         public JToken Catalog { get; set; }
+    }
+
+    public sealed class ModelConnectionTestResponse
+    {
+        [JsonProperty("success")]
+        public bool Success { get; set; }
+
+        [JsonProperty("summary")]
+        public string Summary { get; set; }
+
+        [JsonProperty("endpoint")]
+        public string Endpoint { get; set; }
+
+        [JsonProperty("model")]
+        public string Model { get; set; }
+
+        [JsonProperty("streamRequested")]
+        public bool StreamRequested { get; set; }
+
+        [JsonProperty("durationMs")]
+        public long DurationMs { get; set; }
+
+        [JsonProperty("diagnostics", NullValueHandling = NullValueHandling.Ignore)]
+        public ModelRequestDiagnosticsDto Diagnostics { get; set; }
+
+        [JsonProperty("error", NullValueHandling = NullValueHandling.Ignore)]
+        public string Error { get; set; }
     }
 
     public sealed class ModelCompatibilityResponse

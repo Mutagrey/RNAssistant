@@ -832,6 +832,60 @@
   margin-top: 0;
 }
 
+.model-connection-indicator {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 5px;
+  align-items: center;
+  height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 7px;
+  background: var(--secondary-bg);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: var(--label-font-weight);
+  cursor: help;
+  white-space: nowrap;
+}
+
+.model-connection-indicator i {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: #98a2b3;
+}
+
+.model-connection-indicator.is-active i {
+  background: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, .12);
+}
+
+.model-connection-indicator.is-slow {
+  color: #92400e;
+}
+
+.model-connection-indicator.is-slow i {
+  background: #d97706;
+}
+
+.model-connection-indicator.is-ok {
+  color: #166534;
+}
+
+.model-connection-indicator.is-ok i {
+  background: #16a34a;
+}
+
+.model-connection-indicator.is-failed {
+  color: #991b1b;
+}
+
+.model-connection-indicator.is-failed i {
+  background: #dc2626;
+}
+
 .composer-reasoning-button,
 .composer-send-button,
 .composer-stop-button {

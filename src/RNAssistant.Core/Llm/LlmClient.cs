@@ -17,6 +17,7 @@ namespace RNAssistant.Core.Llm
         private readonly Func<string> _apiKeyProvider;
         private readonly LlmMessageBuilder _messageBuilder;
         private readonly Action<string> _debugLog;
+        private readonly Action<LlmRequestDiagnosticUpdate> _diagnosticProgress;
 
         public LlmClient(Func<string> apiKeyProvider, Func<ChatAttachment, byte[]> attachmentReader = null)
             : this(apiKeyProvider, attachmentReader, null, null)
@@ -38,10 +39,22 @@ namespace RNAssistant.Core.Llm
             LlmAttachmentTextReader attachmentTextReader,
             LlmModelImageProvider modelImageProvider,
             Action<string> debugLog)
+            : this(apiKeyProvider, attachmentReader, attachmentTextReader, modelImageProvider, debugLog, null)
+        {
+        }
+
+        public LlmClient(
+            Func<string> apiKeyProvider,
+            Func<ChatAttachment, byte[]> attachmentReader,
+            LlmAttachmentTextReader attachmentTextReader,
+            LlmModelImageProvider modelImageProvider,
+            Action<string> debugLog,
+            Action<LlmRequestDiagnosticUpdate> diagnosticProgress)
         {
             _apiKeyProvider = apiKeyProvider;
             _messageBuilder = new LlmMessageBuilder(attachmentReader, attachmentTextReader, modelImageProvider);
             _debugLog = debugLog;
+            _diagnosticProgress = diagnosticProgress;
         }
 
         public async Task<LlmCompletionResult> CompleteAsync(
@@ -55,150 +68,171 @@ namespace RNAssistant.Core.Llm
             {
                 throw new ArgumentNullException("settings");
             }
-
-            var apiKey = _apiKeyProvider == null ? null : _apiKeyProvider();
-            var url = CombineUrl(settings.BaseUrl, "/v1/chat/completions");
-            Uri requestUri;
-            if (!Uri.TryCreate(url, UriKind.Absolute, out requestUri))
-            {
-                throw new InvalidOperationException("Invalid LLM endpoint URL: " + url);
-            }
-
             requestOptions = requestOptions ?? new LlmRequestOptions();
-            var messageList = messages as IList<ChatMessage> ??
-                (messages == null ? new List<ChatMessage>() : messages.ToList());
-            var apiBuild = _messageBuilder.Build(messageList, settings, requestOptions, cancellationToken);
-            var apiMessages = apiBuild.Messages;
-            var hasImages = apiBuild.HasImages;
-            var hasAudio = apiBuild.HasAudio;
-            if (apiMessages.Count == 0)
+            var requestDiagnostics = new LlmRequestDiagnosticsTracker(
+                settings,
+                requestOptions.DiagnosticProgress,
+                _diagnosticProgress,
+                _debugLog);
+            try
             {
-                throw new InvalidOperationException("LLM request has no messages.");
-            }
-
-            var body = BuildRequestBody(settings, apiMessages, apiBuild.EstimatedPromptTokens, requestOptions);
-            var trafficId = settings.DebugModelTraffic ? Guid.NewGuid().ToString("N").Substring(0, 12) : null;
-            if (settings.DebugModelTraffic)
-            {
-                LogModelJson(settings, trafficId, "REQUEST POST " + requestUri, body.ToString(Formatting.Indented));
-            }
-            var content = LlmHttpTransport.CreateJsonContent(body);
-            var diagnostics = CreateDiagnostics(requestUri, settings, apiMessages.Count, !string.IsNullOrWhiteSpace(apiKey));
-            var timeout = TimeSpan.FromSeconds(Math.Max(30, settings.RequestTimeoutSeconds <= 0 ? 300 : settings.RequestTimeoutSeconds));
-            apiBuild = null;
-            apiMessages = null;
-            body = null;
-
-            using (content)
-            using (var timeoutSource = new CancellationTokenSource())
-            using (var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token))
-            {
-                timeoutSource.CancelAfter(timeout);
-                try
+                var apiKey = _apiKeyProvider == null ? null : _apiKeyProvider();
+                var url = CombineUrl(settings.BaseUrl, "/v1/chat/completions");
+                Uri requestUri;
+                if (!Uri.TryCreate(url, UriKind.Absolute, out requestUri))
                 {
-                    requestCancellation.Token.ThrowIfCancellationRequested();
-                    var response = await LlmHttpTransport.SendAsync(
-                        HttpMethod.Post,
-                        requestUri,
-                        content,
-                        settings,
-                        apiKey,
-                        settings.StreamResponses ? "text/event-stream" : "application/json",
-                        requestCancellation.Token).ConfigureAwait(false);
+                    throw new InvalidOperationException("Invalid LLM endpoint URL: " + url);
+                }
 
-                    using (response)
+                var messageList = messages as IList<ChatMessage> ??
+                    (messages == null ? new List<ChatMessage>() : messages.ToList());
+                var apiBuild = _messageBuilder.Build(messageList, settings, requestOptions, cancellationToken);
+                var apiMessages = apiBuild.Messages;
+                var hasImages = apiBuild.HasImages;
+                var hasAudio = apiBuild.HasAudio;
+                if (apiMessages.Count == 0)
+                {
+                    throw new InvalidOperationException("LLM request has no messages.");
+                }
+
+                var body = BuildRequestBody(settings, apiMessages, apiBuild.EstimatedPromptTokens, requestOptions);
+                var trafficId = settings.DebugModelTraffic ? requestDiagnostics.RequestId : null;
+                if (settings.DebugModelTraffic)
+                {
+                    LogModelJson(settings, trafficId, "REQUEST POST " + requestUri, body.ToString(Formatting.Indented));
+                }
+                var content = LlmHttpTransport.CreateJsonContent(body);
+                var diagnostics = CreateDiagnostics(requestUri, settings, apiMessages.Count, !string.IsNullOrWhiteSpace(apiKey));
+                var timeout = TimeSpan.FromSeconds(Math.Max(30, settings.RequestTimeoutSeconds <= 0 ? 300 : settings.RequestTimeoutSeconds));
+                apiBuild = null;
+                apiMessages = null;
+                body = null;
+
+                using (content)
+                using (var timeoutSource = new CancellationTokenSource())
+                using (var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token))
+                {
+                    timeoutSource.CancelAfter(timeout);
+                    try
                     {
-                        if (!response.IsSuccessStatusCode)
+                        requestCancellation.Token.ThrowIfCancellationRequested();
+                        requestDiagnostics.Sending(content.Headers.ContentLength);
+                        var response = await LlmHttpTransport.SendAsync(
+                            HttpMethod.Post,
+                            requestUri,
+                            content,
+                            settings,
+                            apiKey,
+                            settings.StreamResponses ? "text/event-stream" : "application/json",
+                            requestCancellation.Token).ConfigureAwait(false);
+
+                        using (response)
                         {
-                            var errorBody = await LlmHttpTransport.ReadContentAsStringAsync(
-                                response.Content,
-                                LlmHttpTransport.MaxErrorBodyBytes,
-                                requestCancellation.Token).ConfigureAwait(false);
-                            LogModelJson(settings, trafficId, "RESPONSE HTTP " + (int)response.StatusCode, errorBody);
-                            var failureKind = LlmHttpTransport.FailureKind(response.StatusCode, errorBody, requestOptions);
-                            if ((hasImages || hasAudio) && (int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
+                            requestDiagnostics.Headers((int)response.StatusCode);
+                            if (!response.IsSuccessStatusCode)
                             {
-                                var inputKind = hasImages && hasAudio
-                                    ? "изображения и аудио"
-                                    : (hasImages ? "изображения" : "аудио");
+                                var errorBody = await LlmHttpTransport.ReadContentAsStringAsync(
+                                    response.Content,
+                                    LlmHttpTransport.MaxErrorBodyBytes,
+                                    requestCancellation.Token,
+                                    requestDiagnostics.FirstChunk).ConfigureAwait(false);
+                                LogModelJson(settings, trafficId, "RESPONSE HTTP " + (int)response.StatusCode, errorBody);
+                                var failureKind = LlmHttpTransport.FailureKind(response.StatusCode, errorBody, requestOptions);
+                                if ((hasImages || hasAudio) && (int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
+                                {
+                                    var inputKind = hasImages && hasAudio
+                                        ? "изображения и аудио"
+                                        : (hasImages ? "изображения" : "аудио");
+                                    throw new LlmRequestException(
+                                        failureKind,
+                                        "Выбранная модель или endpoint не принял " + inputKind + ". Проверьте capabilities модели и формат мультимодального входа. HTTP " +
+                                        (int)response.StatusCode + ". Response: " + errorBody,
+                                        null,
+                                        (int)response.StatusCode);
+                                }
                                 throw new LlmRequestException(
                                     failureKind,
-                                    "Выбранная модель или endpoint не принял " + inputKind + ". Проверьте capabilities модели и формат мультимодального входа. HTTP " +
-                                    (int)response.StatusCode + ". Response: " + errorBody,
+                                    "LLM request failed: HTTP " + (int)response.StatusCode + " " + response.ReasonPhrase + ". " + diagnostics + ". Response: " + errorBody,
                                     null,
                                     (int)response.StatusCode);
                             }
-                            throw new LlmRequestException(
-                                failureKind,
-                                "LLM request failed: HTTP " + (int)response.StatusCode + " " + response.ReasonPhrase + ". " + diagnostics + ". Response: " + errorBody,
-                                null,
-                                (int)response.StatusCode);
-                        }
 
-                        if (settings.StreamResponses)
-                        {
-                            using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                            if (settings.StreamResponses)
                             {
-                                Action<string> rawResponseLog = null;
-                                if (settings.DebugModelTraffic)
+                                using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
                                 {
-                                    rawResponseLog = rawJson => LogModelJson(
-                                        settings,
-                                        trafficId,
-                                        "RESPONSE HTTP " + (int)response.StatusCode + " SSE CHUNK",
-                                        rawJson);
+                                    Action<string> rawResponseLog = null;
+                                    if (settings.DebugModelTraffic)
+                                    {
+                                        rawResponseLog = rawJson => LogModelJson(
+                                            settings,
+                                            trafficId,
+                                            "RESPONSE HTTP " + (int)response.StatusCode + " SSE CHUNK",
+                                            rawJson);
+                                    }
+                                    var streamed = await LlmResponseParser.ReadStreamingOrJsonResponseAsync(
+                                        stream,
+                                        streamProgress,
+                                        requestCancellation.Token,
+                                        rawResponseLog,
+                                        requestDiagnostics.FirstChunk).ConfigureAwait(false);
+                                    requestDiagnostics.Completed();
+                                    return streamed;
                                 }
-                                return await LlmResponseParser.ReadStreamingOrJsonResponseAsync(
-                                    stream,
-                                    streamProgress,
-                                    requestCancellation.Token,
-                                    rawResponseLog).ConfigureAwait(false);
                             }
-                        }
 
-                        var responseJson = await LlmHttpTransport.ReadContentAsStringAsync(
-                            response.Content,
-                            LlmHttpTransport.MaxResponseBodyBytes,
-                            requestCancellation.Token).ConfigureAwait(false);
-                        LogModelJson(settings, trafficId, "RESPONSE HTTP " + (int)response.StatusCode, responseJson);
-                        return LlmResponseParser.ParseCompletionResponse(responseJson);
+                            var responseJson = await LlmHttpTransport.ReadContentAsStringAsync(
+                                response.Content,
+                                LlmHttpTransport.MaxResponseBodyBytes,
+                                requestCancellation.Token,
+                                requestDiagnostics.FirstChunk).ConfigureAwait(false);
+                            LogModelJson(settings, trafficId, "RESPONSE HTTP " + (int)response.StatusCode, responseJson);
+                            var parsed = LlmResponseParser.ParseCompletionResponse(responseJson);
+                            requestDiagnostics.Completed();
+                            return parsed;
+                        }
                     }
-                }
-                catch (OperationCanceledException ex)
-                {
-                    if (cancellationToken.IsCancellationRequested)
+                    catch (OperationCanceledException ex)
                     {
-                        throw new OperationCanceledException("LLM request cancelled.", ex, cancellationToken);
+                        if (cancellationToken.IsCancellationRequested)
+                        {
+                            throw new OperationCanceledException("LLM request cancelled.", ex, cancellationToken);
+                        }
+                        if (timeoutSource.IsCancellationRequested)
+                        {
+                            throw new LlmRequestException(
+                                LlmFailureKind.Timeout,
+                                "LLM request timed out after " + timeout.TotalSeconds + " seconds. " + diagnostics + ". " + DeepestMessage(ex),
+                                ex);
+                        }
+                        throw;
                     }
-                    if (timeoutSource.IsCancellationRequested)
+                    catch (LlmRequestException)
                     {
-                        throw new LlmRequestException(
-                            LlmFailureKind.Timeout,
-                            "LLM request timed out after " + timeout.TotalSeconds + " seconds. " + diagnostics + ". " + DeepestMessage(ex),
-                            ex);
+                        throw;
                     }
-                    throw;
+                    catch (HttpRequestException ex)
+                    {
+                        throw new LlmRequestException(LlmFailureKind.Network, "LLM request could not be sent. " + diagnostics + ". " + DeepestMessage(ex), ex);
+                    }
+                    catch (WebException ex)
+                    {
+                        throw new LlmRequestException(LlmFailureKind.Network, "LLM network error. " + diagnostics + ". " + DeepestMessage(ex), ex);
+                    }
+                    catch (System.IO.IOException ex)
+                    {
+                        throw new LlmRequestException(LlmFailureKind.Network, "LLM response stream failed. " + diagnostics + ". " + DeepestMessage(ex), ex);
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        throw new LlmRequestException(LlmFailureKind.InvalidResponse, ex.Message, ex);
+                    }
                 }
-                catch (LlmRequestException)
-                {
-                    throw;
-                }
-                catch (HttpRequestException ex)
-                {
-                    throw new LlmRequestException(LlmFailureKind.Network, "LLM request could not be sent. " + diagnostics + ". " + DeepestMessage(ex), ex);
-                }
-                catch (WebException ex)
-                {
-                    throw new LlmRequestException(LlmFailureKind.Network, "LLM network error. " + diagnostics + ". " + DeepestMessage(ex), ex);
-                }
-                catch (System.IO.IOException ex)
-                {
-                    throw new LlmRequestException(LlmFailureKind.Network, "LLM response stream failed. " + diagnostics + ". " + DeepestMessage(ex), ex);
-                }
-                catch (InvalidOperationException ex)
-                {
-                    throw new LlmRequestException(LlmFailureKind.InvalidResponse, ex.Message, ex);
-                }
+            }
+            catch (Exception ex)
+            {
+                requestDiagnostics.Failed(ex);
+                throw;
             }
         }
 

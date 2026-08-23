@@ -14,6 +14,7 @@ namespace RNAssistant.Office.WebView
             "compactChatContext",
             "editMessage",
             "confirmAgentTool",
+            "testModelConnection",
             "testModelCompatibility"
         };
 
