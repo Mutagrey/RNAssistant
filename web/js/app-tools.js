@@ -1,4 +1,19 @@
 var toolStructuredEditor = window.RNAssistantToolStructuredEditor.create({ state: state });
+var toolActions = window.RNAssistantToolActions.create({
+  state: state,
+  send: send,
+  setBusy: setControlBusy,
+  setOutput: function (value) { $("toolRunOutput").textContent = value || ""; },
+  syncSelected: syncSelectedToolFromEditor,
+  validateSelected: validateSelectedToolEditors,
+  validateAll: validateAllToolDefinitions,
+  readTools: readTools,
+  readRunArguments: toolStructuredEditor.readRunArguments,
+  renderTools: renderTools,
+  renderEditor: renderToolEditor,
+  log: log,
+  logToolResult: logToolResult
+});
 
 function renderTools() {
   if (typeof renderInstructions === "function" && $("instructionsList")) {
@@ -383,77 +398,6 @@ function addVbaComponent(type) {
   renderToolEditor();
 }
 
-async function changeVbaInstallation(action) {
-  syncSelectedToolFromEditor();
-  var tool = state.tools[state.selectedToolIndex];
-  if (!tool) {
-    return;
-  }
-  var actionButtonId = action === "installVbaTool" ? "installVbaToolButton" : "uninstallVbaToolButton";
-  setControlBusy(actionButtonId, true);
-  try {
-    if (action === "installVbaTool") {
-      var selectedId = tool.Id;
-      state.tools = await send("saveTools", { tools: readTools() }) || state.tools;
-      state.selectedToolIndex = state.tools.findIndex(function (item) {
-        return item && String(item.Id || "").toLowerCase() === String(selectedId || "").toLowerCase();
-      });
-      tool = state.tools[state.selectedToolIndex];
-      if (!tool) {
-        throw new Error("VBA package was not found after saving.");
-      }
-    }
-    var response = await send(action, { id: tool.Id, dryRun: false });
-    var result = response.result || response.Result || {};
-    state.tools = response.tools || response.Tools || state.tools;
-    state.selectedToolIndex = state.tools.findIndex(function (item) { return item && String(item.Id || "").toLowerCase() === String(tool.Id || "").toLowerCase(); });
-    state.selectedToolComponentIndex = 0;
-    renderTools();
-    $("toolRunOutput").textContent = JSON.stringify(result, null, 2);
-    log(result.Message || result.message || "VBA package state updated.");
-  } catch (error) {
-    $("toolRunOutput").textContent = error.detail || error.message;
-    log(error.message);
-  } finally {
-    setControlBusy(actionButtonId, false);
-    renderToolEditor();
-  }
-}
-
-function parseRunArguments() {
-  return toolStructuredEditor.readRunArguments();
-}
-
-async function runSelectedTool(dryRun) {
-  if (!validateSelectedToolEditors()) {
-    log("Исправьте JSON инструмента перед запуском.");
-    return;
-  }
-  syncSelectedToolFromEditor();
-  var skill = state.tools[state.selectedToolIndex];
-  if (!skill) {
-    return;
-  }
-
-  var runButtonId = dryRun ? "dryRunToolButton" : "runToolButton";
-  setControlBusy(runButtonId, true);
-  $("toolRunOutput").textContent = dryRun ? "Проверка..." : "Выполняю...";
-  try {
-    var response = await send("runTool", {
-      toolId: skill.Id,
-      arguments: parseRunArguments(),
-      dryRun: !!dryRun
-    });
-    $("toolRunOutput").textContent = JSON.stringify(response, null, 2);
-    logToolResult(dryRun ? "Проверка инструмента" : "Запуск инструмента", skill.Id, response);
-  } catch (error) {
-    $("toolRunOutput").textContent = error.detail || error.message;
-    log(error.message);
-  } finally {
-    setControlBusy(runButtonId, false);
-  }
-}
-
 function bindToolActions() {
   if ($("toolSearchInput")) $("toolSearchInput").addEventListener("input", renderTools);
   Array.prototype.slice.call(document.querySelectorAll(".tool-page-button")).forEach(function (button) { button.addEventListener("click", function () { syncSelectedToolFromEditor(); state.toolEditorPage = button.getAttribute("data-tool-page") || "main"; applyToolEditorPage(); }); });
@@ -487,8 +431,8 @@ function bindToolActions() {
     }
     renderToolEditor();
   });
-  $("installVbaToolButton").addEventListener("click", function () { changeVbaInstallation("installVbaTool"); });
-  $("uninstallVbaToolButton").addEventListener("click", function () { changeVbaInstallation("uninstallVbaTool"); });
+  $("installVbaToolButton").addEventListener("click", toolActions.installVba);
+  $("uninstallVbaToolButton").addEventListener("click", toolActions.uninstallVba);
 
   $("addToolButton").addEventListener("click", function () {
     if (typeof syncSelectedLibraryItem === "function") syncSelectedLibraryItem();
@@ -560,27 +504,7 @@ function bindToolActions() {
     renderTools();
   });
 
-  $("saveToolsButton").addEventListener("click", async function () {
-    setControlBusy("saveToolsButton", true);
-    try {
-      if (!validateSelectedToolEditors()) throw new Error("Исправьте JSON перед сохранением.");
-      syncSelectedToolFromEditor();
-      validateAllToolDefinitions();
-      var selected = state.tools[state.selectedToolIndex];
-      var selectedId = selected ? selected.Id : "";
-      var response = await send("saveTools", { tools: readTools() });
-      state.tools = response || [];
-      state.selectedToolIndex = selectedId
-        ? state.tools.findIndex(function (tool) { return tool && String(tool.Id || "").toLowerCase() === String(selectedId).toLowerCase(); })
-        : -1;
-      renderTools();
-      log("Инструменты сохранены.");
-    } catch (error) {
-      log(error.message);
-    } finally {
-      setControlBusy("saveToolsButton", false);
-    }
-  });
+  $("saveToolsButton").addEventListener("click", toolActions.save);
 
   $("deleteToolButton").addEventListener("click", function () {
     var skill = state.tools[state.selectedToolIndex];
@@ -595,13 +519,8 @@ function bindToolActions() {
     renderTools();
   });
 
-  $("dryRunToolButton").addEventListener("click", function () {
-    runSelectedTool(true);
-  });
-
-  $("runToolButton").addEventListener("click", function () {
-    runSelectedTool(false);
-  });
+  $("dryRunToolButton").addEventListener("click", toolActions.validate);
+  $("runToolButton").addEventListener("click", toolActions.run);
 
   $("copyToolContextButton").addEventListener("click", function () {
     copyText(selectedToolContext());
