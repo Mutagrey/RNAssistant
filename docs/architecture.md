@@ -71,7 +71,7 @@ See [agent-protocol.md](agent-protocol.md).
 - `web/js/app-html-workspace.js`: HTML workspace state and view orchestration; sandbox assembly, artifact/plan presentation, resource-tree rendering, and mutation bridge calls live in the adjacent `app-html-workspace-preview.js`, `app-html-workspace-artifacts.js`, `app-html-workspace-tree.js`, and `app-html-workspace-actions.js` modules.
 - `web/js/app-chat-session.js`: chat/document CRUD, bridge initialization, and navigation synchronization; `app-chat.js` owns composer and active-run orchestration.
 - `web/js/app-tools.js`: tool catalog and editor state; schema/pipeline/run-argument editors live in `app-tools-structured.js`, while save/run and VBA package bridge calls live in `app-tools-actions.js`.
-- `web/js/app-agent.js`: Agent run grouping and article composition; individual activity rows, details, diagnostics, and inline artifacts live in `app-agent-activity.js`.
+- `web/js/app-agent.js`: Agent run grouping and article composition; individual activity rendering lives in `app-agent-activity.js`, while pending-confirmation traversal and the approval dock live in `app-agent-approval.js`.
 - Other `web/js` files remain static feature modules; no agent routing or business rules.
 
 ## Harness
