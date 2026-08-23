@@ -169,9 +169,10 @@ Runtime data is stored under:
 - `secret.bin` - API key protected with DPAPI CurrentUser.
 - `tools` - central editable executable tool library.
 - `skills` - markdown guidance files used by the agent when choosing an approach.
-- `chats` - per-document chat session folders; each chat stores the transcript, context checkpoints, attachments, and artifact revisions.
+- `chats` - per-document chat session JSON and compact summary indexes.
+- `html-artifact-bodies` - session-scoped immutable HTML revision bodies, kept outside chat JSON and restored transparently.
 
-Settings has `Clear Chats/Data` for development resets. It clears chats, chat context, VBA backups and WebView user data, while keeping settings, saved API key and custom tools and skills.
+Settings has `Clear Chats/Data` for development resets. It clears chats, attachments, HTML revision bodies, chat context, VBA backups and WebView user data, while keeping settings, saved API key and custom tools and skills.
 
 Diagnostics shows passive timing for real model requests (local preparation, HTTP headers, first response data and total duration) and offers one manual short model check. It does not poll the endpoint in the background.
 
@@ -224,7 +225,7 @@ The HTML tab is tied to the active chat session. Agent-created HTML pages are st
 - Use `common.html_workspace_upsert_data` for JSON data sources. Preview exposes them as `window.RNAssistantData`.
 - Use `common.html_workspace_delete_file` and `common.html_workspace_delete_data` to remove workspace items. Deletions are recorded in workspace history and can be undone.
 - Use `common.html_workspace_read` to inspect the current workspace and `common.html_workspace_set_active` to choose the displayed HTML file.
-- Every workspace mutation also records an immutable chat artifact revision. Editing or forking from an older message restores/copies the exact revision at that point rather than the latest workspace.
+- Every workspace mutation also records an immutable chat artifact revision. Full revision bodies are stored outside chat JSON; editing or forking from an older message still restores/copies the exact revision at that point.
 - Undo/redo history is bounded by item count and stored content size. UI responses carry only snapshot ids/labels/timestamps, and Agent reads return only the current workspace state.
 Edits and deletions of an existing workspace require a successful workspace read in the current agent run.
 HTML preview and its scripts are always enabled inside a sandboxed iframe.

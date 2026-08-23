@@ -113,6 +113,7 @@
     <Compile Include="Storage\AttachmentStore.cs" />
     <Compile Include="Storage\ChatStore.cs" />
     <Compile Include="Storage\ChatIndexStore.cs" />
+    <Compile Include="Storage\HtmlArtifactBodyStore.cs" />
     <Compile Include="Storage\JsonFileStore.cs" />
     <Compile Include="Storage\ProtectedSecretStore.cs" />
     <Compile Include="Storage\SettingsService.cs" />

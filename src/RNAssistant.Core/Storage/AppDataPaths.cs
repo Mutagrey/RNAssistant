@@ -14,6 +14,7 @@ namespace RNAssistant.Core.Storage
         public string SkillsDirectory { get; private set; }
         public string VbaBackupDirectory { get; private set; }
         public string ChatDirectory { get; private set; }
+        public string HtmlArtifactBodyDirectory { get; private set; }
         public string WebViewUserDataDirectory { get; private set; }
         public string AttachmentDirectory { get; private set; }
 
@@ -39,6 +40,7 @@ namespace RNAssistant.Core.Storage
                 SkillsDirectory = Path.Combine(root, "skills"),
                 VbaBackupDirectory = Path.Combine(root, "vba-backups"),
                 ChatDirectory = Path.Combine(root, "chats"),
+                HtmlArtifactBodyDirectory = Path.Combine(root, "html-artifact-bodies"),
                 AttachmentDirectory = Path.Combine(root, "attachments"),
                 WebViewUserDataDirectory = Path.Combine(root, "webview")
             };
@@ -53,6 +55,7 @@ namespace RNAssistant.Core.Storage
             Directory.CreateDirectory(SkillsDirectory);
             Directory.CreateDirectory(VbaBackupDirectory);
             Directory.CreateDirectory(ChatDirectory);
+            Directory.CreateDirectory(HtmlArtifactBodyDirectory);
             Directory.CreateDirectory(AttachmentDirectory);
             Directory.CreateDirectory(WebViewUserDataDirectory);
         }
@@ -60,6 +63,7 @@ namespace RNAssistant.Core.Storage
         public void ClearRuntimeData()
         {
             ClearDirectory(ChatDirectory);
+            ClearDirectory(HtmlArtifactBodyDirectory);
             ClearDirectory(VbaBackupDirectory);
             ClearDirectory(AttachmentDirectory);
             ClearDirectory(WebViewUserDataDirectory);

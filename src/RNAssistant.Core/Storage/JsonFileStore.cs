@@ -35,13 +35,20 @@ namespace RNAssistant.Core.Storage
 
         public void Save<T>(string path, T value)
         {
+            Save(path, value, null);
+        }
+
+        public void Save<T>(string path, T value, JsonSerializerSettings settings)
+        {
             var directory = Path.GetDirectoryName(path);
             if (!string.IsNullOrWhiteSpace(directory))
             {
                 Directory.CreateDirectory(directory);
             }
 
-            var json = JsonConvert.SerializeObject(value, Formatting.Indented);
+            var json = settings == null
+                ? JsonConvert.SerializeObject(value, Formatting.Indented)
+                : JsonConvert.SerializeObject(value, Formatting.Indented, settings);
             StorageFileSystem.WriteAllTextAtomic(path, json);
         }
     }

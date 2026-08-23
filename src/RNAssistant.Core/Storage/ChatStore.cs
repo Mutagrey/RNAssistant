@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 
@@ -12,15 +14,21 @@ namespace RNAssistant.Core.Storage
     public sealed class ChatStore
     {
         private static readonly object PersistenceSync = new object();
+        private static readonly JsonSerializerSettings PersistenceJsonSettings = new JsonSerializerSettings
+        {
+            ContractResolver = new ChatPersistenceContractResolver()
+        };
         private readonly AppDataPaths _paths;
         private readonly JsonFileStore _json;
         private readonly ChatIndexStore _index;
+        private readonly HtmlArtifactBodyStore _htmlArtifactBodies;
 
         public ChatStore(AppDataPaths paths)
         {
             _paths = paths;
             _json = new JsonFileStore();
             _index = new ChatIndexStore();
+            _htmlArtifactBodies = new HtmlArtifactBodyStore(paths);
         }
 
         public ChatSession LoadOrCreateActive(string host, string documentKey, string documentTitle)
@@ -104,8 +112,10 @@ namespace RNAssistant.Core.Storage
                 NormalizeSession(session, session == null ? null : session.Host, session == null ? null : session.DocumentKey, session == null ? null : session.DocumentTitle);
                 session.UpdatedUtc = DateTime.UtcNow;
                 var path = GetSessionPath(session.Host, session.DocumentKey, session.Id);
-                _json.Save(path, session);
+                _htmlArtifactBodies.SaveMissing(session);
+                _json.Save(path, session, PersistenceJsonSettings);
                 _index.Save(path, session);
+                _htmlArtifactBodies.Prune(session);
             }
         }
 
@@ -181,6 +191,7 @@ namespace RNAssistant.Core.Storage
             {
                 File.Delete(path);
                 _index.Delete(path);
+                _htmlArtifactBodies.DeleteSession(sessionId);
             }
             if (string.Equals(LoadActiveSessionId(host, documentKey), sessionId, StringComparison.OrdinalIgnoreCase))
             {
@@ -200,7 +211,16 @@ namespace RNAssistant.Core.Storage
 
             lock (PersistenceSync)
             {
+                var sessionIds = SafeGetSessionFiles(directory)
+                    .Select(ReadSessionId)
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
                 Directory.Delete(directory, true);
+                foreach (var sessionId in sessionIds)
+                {
+                    _htmlArtifactBodies.DeleteSession(sessionId);
+                }
             }
             return true;
         }
@@ -325,7 +345,7 @@ namespace RNAssistant.Core.Storage
                 session.FormatVersion <= ChatSession.CurrentFormatVersion;
         }
 
-        private static ChatSession LoadIndexedSession(string path)
+        private ChatSession LoadIndexedSession(string path)
         {
             var session = LoadSession(path);
             if (!IsSupported(session)) return null;
@@ -333,7 +353,7 @@ namespace RNAssistant.Core.Storage
             return session;
         }
 
-        private static ChatSession LoadIndexedSession(string path, string host, string documentKey, string documentTitle)
+        private ChatSession LoadIndexedSession(string path, string host, string documentKey, string documentTitle)
         {
             var session = LoadSession(path);
             if (!IsSupported(session)) return null;
@@ -341,7 +361,7 @@ namespace RNAssistant.Core.Storage
             return session;
         }
 
-        private static ChatSession LoadSession(string path)
+        private ChatSession LoadSession(string path)
         {
             try
             {
@@ -362,7 +382,9 @@ namespace RNAssistant.Core.Storage
                     return null;
                 }
 
-                return root.ToObject<ChatSession>();
+                var session = root.ToObject<ChatSession>();
+                _htmlArtifactBodies.Hydrate(session);
+                return session;
             }
             catch (IOException)
             {
@@ -375,6 +397,31 @@ namespace RNAssistant.Core.Storage
             catch (JsonException)
             {
                 return null;
+            }
+        }
+
+        private static string ReadSessionId(string path)
+        {
+            try
+            {
+                if (!File.Exists(path))
+                {
+                    return string.Empty;
+                }
+
+                return (string)JObject.Parse(File.ReadAllText(path)).GetValue("Id", StringComparison.OrdinalIgnoreCase) ?? string.Empty;
+            }
+            catch (IOException)
+            {
+                return string.Empty;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return string.Empty;
+            }
+            catch (JsonException)
+            {
+                return string.Empty;
             }
         }
 
@@ -424,6 +471,21 @@ namespace RNAssistant.Core.Storage
             catch (UnauthorizedAccessException)
             {
                 return new string[0];
+            }
+        }
+
+        private sealed class ChatPersistenceContractResolver : DefaultContractResolver
+        {
+            protected override JsonProperty CreateProperty(MemberInfo member, MemberSerialization memberSerialization)
+            {
+                var property = base.CreateProperty(member, memberSerialization);
+                if (member.DeclaringType == typeof(ChatArtifact) &&
+                    string.Equals(member.Name, "InlineText", StringComparison.Ordinal))
+                {
+                    property.ShouldSerialize = value => !HtmlArtifactBodyStore.IsExternalized(value as ChatArtifact);
+                }
+
+                return property;
             }
         }
     }

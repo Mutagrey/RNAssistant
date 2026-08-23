@@ -169,13 +169,21 @@ namespace RNAssistant.Harness
             WithTempPaths(delegate(AppDataPaths paths)
             {
                 var store = new ChatStore(paths);
-                store.Create("Excel", "book-1", "Book1.xlsx", "First");
+                var deletedWithArtifact = store.Create("Excel", "book-1", "Book1.xlsx", "First");
                 store.Create("Excel", "book-1", "Book1.xlsx", "Second");
-                store.Create("Excel", "book-2", "Book2.xlsx", "Keep");
+                var keptWithArtifact = store.Create("Excel", "book-2", "Book2.xlsx", "Keep");
+                HtmlArtifactToolExecutor.UpsertFile(deletedWithArtifact, "index.html", "html", "delete", true);
+                HtmlWorkspaceArtifactService.CaptureCurrent(deletedWithArtifact, "Delete");
+                store.Save(deletedWithArtifact);
+                HtmlArtifactToolExecutor.UpsertFile(keptWithArtifact, "index.html", "html", "keep", true);
+                HtmlWorkspaceArtifactService.CaptureCurrent(keptWithArtifact, "Keep");
+                store.Save(keptWithArtifact);
 
                 AssertTrue(store.DeleteDocument("Excel", "book-1"), "document directory deleted");
                 AssertEqual(0, store.List("Excel", "book-1", "Book1.xlsx").Count, "document chats deleted");
                 AssertEqual(1, store.List("Excel", "book-2", "Book2.xlsx").Count, "other document preserved");
+                AssertTrue(!Directory.Exists(BodyDirectory(paths, deletedWithArtifact.Id)), "deleted document artifact bodies removed");
+                AssertTrue(Directory.Exists(BodyDirectory(paths, keptWithArtifact.Id)), "other document artifact bodies preserved");
             });
         }
 
