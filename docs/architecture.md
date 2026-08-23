@@ -69,7 +69,7 @@ See [agent-protocol.md](agent-protocol.md).
 - `src/RNAssistant.Office/Controller`: typed bridge-facing orchestration.
 - `src/RNAssistant.OfficeHosts`: Excel/Word/PowerPoint/Outlook COM adapters.
 - `web/js/app-html-workspace.js`: HTML workspace state and view orchestration; sandbox assembly, artifact/plan presentation, resource-tree rendering, and mutation bridge calls live in the adjacent `app-html-workspace-preview.js`, `app-html-workspace-artifacts.js`, `app-html-workspace-tree.js`, and `app-html-workspace-actions.js` modules.
-- `web/js/app-chat-session.js`: chat/document CRUD, bridge initialization, and navigation synchronization; `app-chat.js` owns composer and active-run orchestration.
+- `web/js/app-chat-session.js`: chat/document CRUD, bridge initialization, and navigation synchronization; `app-chat.js` owns composer UI and bindings, while `app-chat-run.js` owns send/retry/cancel, run tracking, and Agent tool decisions.
 - `web/js/app-tools.js`: tool catalog and editor state; schema/pipeline/run-argument editors live in `app-tools-structured.js`, while save/run and VBA package bridge calls live in `app-tools-actions.js`.
 - `web/js/app-vba.js`: VBA editor modes and UI bindings; project tree/lazy module loading lives in `app-vba-project.js`, diff calculation/rendering in `app-vba-diff.js`, and save/restore/run bridge calls in `app-vba-actions.js`.
 - `web/js/app-agent.js`: Agent run grouping and article composition; individual activity rendering lives in `app-agent-activity.js`, while pending-confirmation traversal and the approval dock live in `app-agent-approval.js`.
