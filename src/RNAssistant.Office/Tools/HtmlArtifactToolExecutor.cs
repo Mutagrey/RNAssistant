@@ -4,6 +4,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.Tools
@@ -384,21 +385,7 @@ namespace RNAssistant.Office.Tools
 
         private static string WorkspaceDataJson(HtmlWorkspace workspace)
         {
-            var copy = new HtmlWorkspace
-            {
-                ActiveFileId = workspace == null ? string.Empty : workspace.ActiveFileId,
-                Files = (workspace == null ? new List<HtmlWorkspaceFile>() : workspace.Files ?? new List<HtmlWorkspaceFile>())
-                    .Where(file => file != null)
-                    .Select(CloneFile)
-                    .ToList(),
-                DataSources = (workspace == null ? new List<HtmlWorkspaceDataSource>() : workspace.DataSources ?? new List<HtmlWorkspaceDataSource>())
-                    .Where(dataSource => dataSource != null)
-                    .Select(CloneDataSource)
-                    .ToList(),
-                History = new List<HtmlWorkspaceSnapshot>(),
-                RedoHistory = new List<HtmlWorkspaceSnapshot>(),
-                UpdatedUtc = workspace == null ? DateTime.UtcNow : workspace.UpdatedUtc
-            };
+            var copy = HtmlWorkspaceCopyService.CloneCurrent(workspace);
             return JsonConvert.SerializeObject(new
             {
                 type = "rnassistant.htmlWorkspace",
@@ -474,15 +461,9 @@ namespace RNAssistant.Office.Tools
                 return null;
             }
 
-            return new HtmlWorkspaceSnapshot
-            {
-                Id = Guid.NewGuid().ToString("N"),
-                Label = string.IsNullOrWhiteSpace(label) ? "HTML workspace snapshot" : label,
-                ActiveFileId = workspace.ActiveFileId,
-                Files = workspace.Files.Where(f => f != null).Select(CloneFile).ToList(),
-                DataSources = workspace.DataSources.Where(d => d != null).Select(CloneDataSource).ToList(),
-                CreatedUtc = DateTime.UtcNow
-            };
+            return HtmlWorkspaceCopyService.CaptureSnapshot(
+                workspace,
+                string.IsNullOrWhiteSpace(label) ? "HTML workspace snapshot" : label);
         }
 
         private static void InsertSnapshot(List<HtmlWorkspaceSnapshot> snapshots, HtmlWorkspaceSnapshot snapshot)
@@ -504,8 +485,8 @@ namespace RNAssistant.Office.Tools
 
         private static void ApplySnapshot(HtmlWorkspace workspace, HtmlWorkspaceSnapshot snapshot)
         {
-            workspace.Files = (snapshot.Files ?? new List<HtmlWorkspaceFile>()).Where(f => f != null).Select(CloneFile).ToList();
-            workspace.DataSources = (snapshot.DataSources ?? new List<HtmlWorkspaceDataSource>()).Where(d => d != null).Select(CloneDataSource).ToList();
+            workspace.Files = HtmlWorkspaceCopyService.CloneFiles(snapshot.Files);
+            workspace.DataSources = HtmlWorkspaceCopyService.CloneDataSources(snapshot.DataSources);
             workspace.ActiveFileId = snapshot.ActiveFileId;
         }
 
@@ -526,31 +507,6 @@ namespace RNAssistant.Office.Tools
             return string.Equals(left.ActiveFileId, right.ActiveFileId, StringComparison.OrdinalIgnoreCase) &&
                 JsonConvert.SerializeObject(left.Files) == JsonConvert.SerializeObject(right.Files) &&
                 JsonConvert.SerializeObject(left.DataSources) == JsonConvert.SerializeObject(right.DataSources);
-        }
-
-        private static HtmlWorkspaceFile CloneFile(HtmlWorkspaceFile file)
-        {
-            return new HtmlWorkspaceFile
-            {
-                Id = file.Id,
-                Path = file.Path,
-                Kind = file.Kind,
-                Content = file.Content,
-                CreatedUtc = file.CreatedUtc,
-                UpdatedUtc = file.UpdatedUtc
-            };
-        }
-
-        private static HtmlWorkspaceDataSource CloneDataSource(HtmlWorkspaceDataSource dataSource)
-        {
-            return new HtmlWorkspaceDataSource
-            {
-                Id = dataSource.Id,
-                Name = dataSource.Name,
-                Json = dataSource.Json,
-                CreatedUtc = dataSource.CreatedUtc,
-                UpdatedUtc = dataSource.UpdatedUtc
-            };
         }
 
         private static void ValidateFile(string path, string kind, string content)

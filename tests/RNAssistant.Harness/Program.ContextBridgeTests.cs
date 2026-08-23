@@ -53,6 +53,34 @@ namespace RNAssistant.Harness
             context.Notes[0].Text = "Changed";
             AssertEqual("Original note", clonedContext.Notes[0].Text, "context clone independent");
 
+            var sourceWorkspace = new HtmlWorkspace
+            {
+                ActiveFileId = "index.html",
+                Files = new List<HtmlWorkspaceFile>
+                {
+                    new HtmlWorkspaceFile { Id = "index.html", Path = "index.html", Kind = "html", Content = "original html" }
+                },
+                DataSources = new List<HtmlWorkspaceDataSource>
+                {
+                    new HtmlWorkspaceDataSource { Id = "rows", Name = "rows", Json = "{\"value\":1}" }
+                },
+                History = new List<HtmlWorkspaceSnapshot> { new HtmlWorkspaceSnapshot { Label = "old" } }
+            };
+            var clonedWorkspace = ChatCloneService.CloneWorkspaceForFork(sourceWorkspace);
+            AssertEqual("index.html", clonedWorkspace.ActiveFileId, "workspace active file cloned");
+            AssertEqual(0, clonedWorkspace.History.Count, "workspace fork excludes transient undo history");
+            AssertTrue(!object.ReferenceEquals(sourceWorkspace.Files[0], clonedWorkspace.Files[0]), "workspace file cloned");
+            AssertTrue(!object.ReferenceEquals(sourceWorkspace.DataSources[0], clonedWorkspace.DataSources[0]), "workspace data cloned");
+            sourceWorkspace.Files[0].Content = "changed html";
+            sourceWorkspace.DataSources[0].Json = "{\"value\":2}";
+            AssertEqual("original html", clonedWorkspace.Files[0].Content, "workspace file clone independent");
+            AssertEqual("{\"value\":1}", clonedWorkspace.DataSources[0].Json, "workspace data clone independent");
+
+            var snapshot = HtmlWorkspaceCopyService.CaptureSnapshot(clonedWorkspace, "checkpoint");
+            var restoredWorkspace = HtmlWorkspaceCopyService.CreateWorkspaceFromSnapshot(snapshot);
+            snapshot.Files[0].Content = "changed snapshot";
+            AssertEqual("original html", restoredWorkspace.Files[0].Content, "restored workspace is independent from snapshot");
+
             var sourceMessage = new ChatMessage
             {
                 Id = "message-1",

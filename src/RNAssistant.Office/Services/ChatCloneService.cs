@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 
 namespace RNAssistant.Office.Services
 {
@@ -60,18 +61,7 @@ namespace RNAssistant.Office.Services
 
         public static HtmlWorkspace CloneWorkspaceForFork(HtmlWorkspace workspace)
         {
-            if (workspace == null)
-            {
-                return new HtmlWorkspace();
-            }
-
-            return new HtmlWorkspace
-            {
-                ActiveFileId = workspace.ActiveFileId,
-                UpdatedUtc = workspace.UpdatedUtc,
-                Files = workspace.Files == null ? new List<HtmlWorkspaceFile>() : workspace.Files.Select(CloneHtmlFile).ToList(),
-                DataSources = workspace.DataSources == null ? new List<HtmlWorkspaceDataSource>() : workspace.DataSources.Select(CloneHtmlDataSource).ToList()
-            };
+            return HtmlWorkspaceCopyService.CloneCurrent(workspace);
         }
 
         private static ChatMessage CloneMessage(ChatMessage message)
@@ -194,41 +184,6 @@ namespace RNAssistant.Office.Services
                 ResultMessage = activity.ResultMessage,
                 DataJson = activity.DataJson,
                 Children = activity.Children == null ? null : activity.Children.Select(CloneActivity).ToList()
-            };
-        }
-
-        private static HtmlWorkspaceFile CloneHtmlFile(HtmlWorkspaceFile file)
-        {
-            if (file == null)
-            {
-                return null;
-            }
-
-            return new HtmlWorkspaceFile
-            {
-                Id = file.Id,
-                Path = file.Path,
-                Kind = file.Kind,
-                Content = file.Content,
-                CreatedUtc = file.CreatedUtc,
-                UpdatedUtc = file.UpdatedUtc
-            };
-        }
-
-        private static HtmlWorkspaceDataSource CloneHtmlDataSource(HtmlWorkspaceDataSource dataSource)
-        {
-            if (dataSource == null)
-            {
-                return null;
-            }
-
-            return new HtmlWorkspaceDataSource
-            {
-                Id = dataSource.Id,
-                Name = dataSource.Name,
-                Json = dataSource.Json,
-                CreatedUtc = dataSource.CreatedUtc,
-                UpdatedUtc = dataSource.UpdatedUtc
             };
         }
 

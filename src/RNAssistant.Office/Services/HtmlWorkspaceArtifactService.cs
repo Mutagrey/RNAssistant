@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
@@ -14,14 +15,9 @@ namespace RNAssistant.Office.Services
             if (session == null) return string.Empty;
             session.HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace);
             session.Artifacts = session.Artifacts ?? new List<ChatArtifact>();
-            var snapshot = new HtmlWorkspaceSnapshot
-            {
-                Label = string.IsNullOrWhiteSpace(title) ? "HTML workspace" : title,
-                ActiveFileId = session.HtmlWorkspace.ActiveFileId,
-                Files = CloneFiles(session.HtmlWorkspace.Files),
-                DataSources = CloneDataSources(session.HtmlWorkspace.DataSources),
-                CreatedUtc = DateTime.UtcNow
-            };
+            var snapshot = HtmlWorkspaceCopyService.CaptureSnapshot(
+                session.HtmlWorkspace,
+                string.IsNullOrWhiteSpace(title) ? "HTML workspace" : title);
             var stateJson = JsonConvert.SerializeObject(snapshot);
             var current = session.Artifacts.FirstOrDefault(item => item != null &&
                 string.Equals(item.Id, session.ActiveHtmlArtifactId, StringComparison.OrdinalIgnoreCase));
@@ -67,15 +63,8 @@ namespace RNAssistant.Office.Services
                 return false;
             }
             if (snapshot == null) return false;
-            session.HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(new HtmlWorkspace
-            {
-                ActiveFileId = snapshot.ActiveFileId,
-                Files = CloneFiles(snapshot.Files),
-                DataSources = CloneDataSources(snapshot.DataSources),
-                History = new List<HtmlWorkspaceSnapshot>(),
-                RedoHistory = new List<HtmlWorkspaceSnapshot>(),
-                UpdatedUtc = DateTime.UtcNow
-            });
+            session.HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(
+                HtmlWorkspaceCopyService.CreateWorkspaceFromSnapshot(snapshot));
             session.ActiveHtmlArtifactId = artifact.Id;
             return true;
         }
@@ -104,19 +93,6 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        private static List<HtmlWorkspaceFile> CloneFiles(IEnumerable<HtmlWorkspaceFile> files)
-        {
-            return (files ?? new HtmlWorkspaceFile[0]).Where(file => file != null).Select(file => new HtmlWorkspaceFile
-            {
-                Id = file.Id,
-                Path = file.Path,
-                Kind = file.Kind,
-                Content = file.Content,
-                CreatedUtc = file.CreatedUtc,
-                UpdatedUtc = file.UpdatedUtc
-            }).ToList();
-        }
-
         private static bool SameState(string existingJson, HtmlWorkspaceSnapshot candidate)
         {
             if (string.IsNullOrWhiteSpace(existingJson) || candidate == null) return false;
@@ -134,16 +110,5 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        private static List<HtmlWorkspaceDataSource> CloneDataSources(IEnumerable<HtmlWorkspaceDataSource> values)
-        {
-            return (values ?? new HtmlWorkspaceDataSource[0]).Where(value => value != null).Select(value => new HtmlWorkspaceDataSource
-            {
-                Id = value.Id,
-                Name = value.Name,
-                Json = value.Json,
-                CreatedUtc = value.CreatedUtc,
-                UpdatedUtc = value.UpdatedUtc
-            }).ToList();
-        }
     }
 }

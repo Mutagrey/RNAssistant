@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 
 namespace RNAssistant.Office.Contracts
 {
@@ -585,49 +586,12 @@ namespace RNAssistant.Office.Contracts
             return new HtmlWorkspaceDto
             {
                 ActiveFileId = workspace.ActiveFileId,
-                Files = CloneFiles(workspace.Files),
-                DataSources = CloneDataSources(workspace.DataSources),
+                Files = HtmlWorkspaceCopyService.CloneFiles(workspace.Files),
+                DataSources = HtmlWorkspaceCopyService.CloneDataSources(workspace.DataSources),
                 History = SnapshotSummaries(workspace.History),
                 RedoHistory = SnapshotSummaries(workspace.RedoHistory),
                 UpdatedUtc = workspace.UpdatedUtc
             };
-        }
-
-        private static IReadOnlyList<HtmlWorkspaceFile> CloneFiles(IEnumerable<HtmlWorkspaceFile> files)
-        {
-            var result = new List<HtmlWorkspaceFile>();
-            foreach (var file in files ?? new HtmlWorkspaceFile[0])
-            {
-                if (file == null) continue;
-                result.Add(new HtmlWorkspaceFile
-                {
-                    Id = file.Id,
-                    Path = file.Path,
-                    Kind = file.Kind,
-                    Content = file.Content,
-                    CreatedUtc = file.CreatedUtc,
-                    UpdatedUtc = file.UpdatedUtc
-                });
-            }
-            return result;
-        }
-
-        private static IReadOnlyList<HtmlWorkspaceDataSource> CloneDataSources(IEnumerable<HtmlWorkspaceDataSource> dataSources)
-        {
-            var result = new List<HtmlWorkspaceDataSource>();
-            foreach (var dataSource in dataSources ?? new HtmlWorkspaceDataSource[0])
-            {
-                if (dataSource == null) continue;
-                result.Add(new HtmlWorkspaceDataSource
-                {
-                    Id = dataSource.Id,
-                    Name = dataSource.Name,
-                    Json = dataSource.Json,
-                    CreatedUtc = dataSource.CreatedUtc,
-                    UpdatedUtc = dataSource.UpdatedUtc
-                });
-            }
-            return result;
         }
 
         private static IReadOnlyList<HtmlWorkspaceSnapshotDto> SnapshotSummaries(IEnumerable<HtmlWorkspaceSnapshot> snapshots)
