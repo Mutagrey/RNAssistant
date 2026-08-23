@@ -424,17 +424,6 @@ function previewVbaDiff() {
   $("vbaStatus").textContent = "Сравнение готово.";
 }
 
-async function runVbaWork(work) {
-  try {
-    await work();
-    return true;
-  } catch (error) {
-    $("vbaStatus").textContent = error.message;
-    log(error.detail || error.message);
-    return false;
-  }
-}
-
 function readVbaResult(response) {
   var result = response.result || response.Result || response;
   var dataJson = result.DataJson || result.dataJson || "";
@@ -444,40 +433,6 @@ function readVbaResult(response) {
   $("vbaStatus").textContent = result.Message || result.message || "VBA-проект загружен.";
   renderVbaProject();
   updateVbaMacroRunState();
-}
-
-async function refreshVbaProject() {
-  await runVbaWork(async function () {
-    var response = await send("getVbaProject", {});
-    readVbaResult(response);
-    await loadSelectedVbaModule();
-  });
-}
-
-async function saveVbaModule() {
-  var moduleName = $("vbaModuleSelect").value;
-  if (!moduleName) {
-    return;
-  }
-
-  previewVbaDiff();
-  if (await runVbaWork(async function () {
-    var response = await send("saveVbaModule", { moduleName: moduleName, code: vbaEditorCode() });
-    $("vbaStatus").textContent = response.Message || response.message || "VBA-модуль сохранен.";
-  })) {
-    await refreshVbaProject();
-  }
-}
-
-async function restoreVbaBackup() {
-  var backupId = $("vbaBackupSelect").value;
-  var moduleName = $("vbaModuleSelect").value;
-  if (await runVbaWork(async function () {
-    var response = await send("restoreVbaBackup", { backupId: backupId, moduleName: moduleName });
-    $("vbaStatus").textContent = response.Message || response.message || "Резервная копия VBA восстановлена.";
-  })) {
-    await refreshVbaProject();
-  }
 }
 
 function reviewVbaInChat() {
@@ -554,34 +509,41 @@ function markVbaEditorDirty() {
   $("vbaStatus").textContent = "Есть несохраненные изменения VBA.";
 }
 
-async function runVbaMacro() {
-  var toolId = vbaMacroToolId();
-  var input = $("vbaMacroInput");
-  var macroName = (input.value || "").trim() || input.getAttribute("data-suggested") || "";
-  if (!toolId) {
-    setVbaMacroStatus("Текущее приложение не поддерживает запуск макросов.", "error");
-    return;
-  }
-  if (!macroName) {
-    setVbaMacroStatus("Введите имя макроса.", "error");
-    return;
-  }
+var vbaActions = window.RNAssistantVbaActions.create({
+  send: send,
+  log: log,
+  logToolResult: logToolResult,
+  getModuleName: function () { return $("vbaModuleSelect").value; },
+  getEditorCode: vbaEditorCode,
+  getBackupId: function () { return $("vbaBackupSelect").value; },
+  previewDiff: previewVbaDiff,
+  applyProjectResponse: readVbaResult,
+  loadSelectedModule: loadSelectedVbaModule,
+  setStatus: function (text) { $("vbaStatus").textContent = text; },
+  getMacroToolId: vbaMacroToolId,
+  getMacroName: function () {
+    var input = $("vbaMacroInput");
+    return (input.value || "").trim() || input.getAttribute("data-suggested") || "";
+  },
+  setMacroBusy: function (busy) { $("runVbaMacroButton").disabled = !!busy; },
+  setMacroStatus: setVbaMacroStatus,
+  updateMacroRunState: updateVbaMacroRunState
+});
 
-  $("runVbaMacroButton").disabled = true;
-  try {
-    var response = await send("runTool", {
-      toolId: toolId,
-      arguments: { macroName: macroName },
-      dryRun: false
-    });
-    setVbaMacroStatus(response.Message || response.message || "Макрос выполнен: " + macroName, "ok");
-    logToolResult("Запуск макроса", toolId, response);
-  } catch (error) {
-    setVbaMacroStatus(error.detail || error.message, "error");
-    log(error.detail || error.message);
-  } finally {
-    updateVbaMacroRunState();
-  }
+function refreshVbaProject() {
+  return vbaActions.refreshProject();
+}
+
+function saveVbaModule() {
+  return vbaActions.saveModule();
+}
+
+function restoreVbaBackup() {
+  return vbaActions.restoreBackup();
+}
+
+function runVbaMacro() {
+  return vbaActions.runMacro();
 }
 
 function bindVbaActions() {
