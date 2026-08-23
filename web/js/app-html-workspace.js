@@ -3,6 +3,19 @@
   var htmlPreview = window.RNAssistantHtmlWorkspacePreview;
   var workspaceArtifacts = window.RNAssistantHtmlWorkspaceArtifacts;
   var workspaceTree = window.RNAssistantHtmlWorkspaceTree;
+  var workspaceActions = window.RNAssistantHtmlWorkspaceActions.create({
+    state: state,
+    send: send,
+    log: log,
+    getSelection: workspaceActionSelection,
+    getActionState: workspaceActionState,
+    syncEditor: syncHtmlEditorToState,
+    applyWorkspaceResponse: applyHtmlWorkspaceResponse,
+    applyPlanRefresh: applyPlanRefresh,
+    validatePlanDraft: workspaceArtifacts.validatePlanDraft,
+    hideCreate: hideHtmlWorkspaceCreate,
+    render: renderHtmlWorkspace
+  });
 
   window.addEventListener("message", function (event) {
     var frame = $("htmlWorkspacePreviewFrame");
@@ -493,40 +506,39 @@
     renderHtmlWorkspace();
   }
 
-  async function saveHtmlWorkspaceSelection() {
+  function workspaceActionSelection() {
     var selected = selectedItem();
-    if (!selected || state.bridgeUnavailable) {
-      return;
+    if (!selected) return null;
+    var result = { type: selected.type, item: selected.item };
+    if (selected.type === "plan") {
+      result.label = artifactTitle(selected.item);
+      result.planId = planStableId(selected.item);
+    } else if (selected.type === "data") {
+      result.label = dataName(selected.item);
+      result.name = dataName(selected.item);
+      result.json = dataJson(selected.item);
+    } else if (selected.type === "file") {
+      result.label = filePath(selected.item);
+      result.path = filePath(selected.item);
+      result.kind = fileKind(selected.item);
+      result.content = fileContent(selected.item);
     }
-    syncHtmlEditorToState();
-    try {
-      if (selected.type === "plan") {
-        await savePlanArtifact(selected.item);
-        return;
-      } else if (selected.type === "data") {
-        applyHtmlWorkspaceResponse(await send("saveHtmlWorkspaceData", {
-          chatId: state.activeChatId,
-          name: dataName(selected.item),
-          json: dataJson(selected.item)
-        }));
-      } else {
-        applyHtmlWorkspaceResponse(await send("saveHtmlWorkspaceFile", {
-          chatId: state.activeChatId,
-          path: filePath(selected.item),
-          kind: fileKind(selected.item),
-          content: fileContent(selected.item),
-          setActive: fileKind(selected.item) === "html"
-        }));
-      }
-      log("Артефакт сохранён.");
-    } catch (error) {
-      log(error.detail || error.message);
-      window.alert(error.message || "Артефакт не сохранён.");
-    }
+    return result;
   }
 
-  async function refreshArtifactsAfterPlanChange(planId) {
-    var response = await send("selectChat", { chatId: state.activeChatId });
+  function workspaceActionState() {
+    var undo = historyItems()[0];
+    var redo = redoItems()[0];
+    return {
+      bridgeUnavailable: !!state.bridgeUnavailable,
+      chatId: state.activeChatId,
+      dirty: !!state.htmlWorkspaceDirty,
+      undoSnapshotId: undo ? prop(undo, "Id", "id", "") : "",
+      redoSnapshotId: redo ? prop(redo, "Id", "id", "") : ""
+    };
+  }
+
+  function applyPlanRefresh(planId, response) {
     if (typeof applyChatState === "function") applyChatState(response);
     var latest = latestPlanArtifacts().filter(function (artifact) { return planStableId(artifact) === planId; })[0] || null;
     state.htmlWorkspaceSelection = latest
@@ -536,135 +548,10 @@
     renderHtmlWorkspace();
   }
 
-  async function savePlanArtifact(artifact) {
-    var plan = workspaceArtifacts.validatePlanDraft(artifact);
-    var result = await send("runTool", {
-      toolId: "common.plan_update",
-      arguments: { id: plan.id, goal: plan.goal, steps: plan.steps },
-      dryRun: false
-    });
-    if (!(result && (result.Success === true || result.success === true))) {
-      throw new Error(result && (result.Message || result.message) || "План не сохранён.");
-    }
-    await refreshArtifactsAfterPlanChange(plan.id);
-    log("План сохранён как новая версия.");
-  }
-
-  async function deleteHtmlWorkspaceSelection() {
-    var selected = selectedItem();
-    if (!selected || state.bridgeUnavailable) {
-      return;
-    }
-
-    var label = selected.type === "plan" ? artifactTitle(selected.item) : (selected.type === "data" ? dataName(selected.item) : filePath(selected.item));
-    var warning = selected.type === "plan"
-      ? "Удалить план «" + label + "» и все его версии?"
-      : "Удалить «" + label + "» из HTML? Удаление можно отменить через Undo.";
-    if (state.htmlWorkspaceDirty) {
-      warning = "Есть несохраненные изменения. " + warning;
-    }
-    if (!window.confirm(warning)) {
-      return;
-    }
-
-    try {
-      if (selected.type === "plan") {
-        var planId = planStableId(selected.item);
-        var result = await send("runTool", { toolId: "common.plan_delete", arguments: { id: planId }, dryRun: false });
-        if (!(result && (result.Success === true || result.success === true))) throw new Error(result && (result.Message || result.message) || "План не удалён.");
-        await refreshArtifactsAfterPlanChange(planId);
-        log("План удалён: " + label);
-        return;
-      }
-      var response = selected.type === "data"
-        ? await send("deleteHtmlWorkspaceData", {
-          chatId: state.activeChatId,
-          name: dataName(selected.item)
-        })
-        : await send("deleteHtmlWorkspaceFile", {
-          chatId: state.activeChatId,
-          path: filePath(selected.item)
-        });
-      state.htmlWorkspaceSelection = { type: "file", id: "" };
-      applyHtmlWorkspaceResponse(response);
-      log("Удалено из HTML: " + label);
-    } catch (error) {
-      log(error.detail || error.message);
-      window.alert(error.message || "Элемент HTML workspace не удален.");
-    }
-  }
-
-  async function undoHtmlWorkspace() {
-    if (state.bridgeUnavailable || !historyItems().length) {
-      return;
-    }
-    if (state.htmlWorkspaceDirty && !window.confirm("Есть несохраненные изменения. Вернуть предыдущую версию?")) {
-      return;
-    }
-
-    try {
-      applyHtmlWorkspaceResponse(await send("restoreHtmlWorkspaceSnapshot", {
-        chatId: state.activeChatId,
-        snapshotId: prop(historyItems()[0], "Id", "id", "")
-      }));
-      log("HTML workspace восстановлен.");
-    } catch (error) {
-      log(error.detail || error.message);
-      window.alert(error.message || "HTML workspace не восстановлен.");
-    }
-  }
-
-  async function redoHtmlWorkspace() {
-    if (state.bridgeUnavailable || !redoItems().length) {
-      return;
-    }
-    if (state.htmlWorkspaceDirty && !window.confirm("Есть несохраненные изменения. Повторить отмененную версию?")) {
-      return;
-    }
-
-    try {
-      applyHtmlWorkspaceResponse(await send("redoHtmlWorkspaceSnapshot", {
-        chatId: state.activeChatId,
-        snapshotId: prop(redoItems()[0], "Id", "id", "")
-      }));
-      log("HTML workspace redo выполнен.");
-    } catch (error) {
-      log(error.detail || error.message);
-      window.alert(error.message || "HTML workspace redo не выполнен.");
-    }
-  }
-
-  async function addHtmlWorkspaceFile(kind) {
-    if (state.bridgeUnavailable) {
-      return;
-    }
+  function addHtmlWorkspaceFile(kind) {
+    if (state.bridgeUnavailable) return;
     var fallback = kind === "css" ? "styles.css" : (kind === "script" ? "app.js" : "index.html");
     showHtmlWorkspaceCreate(kind, fallback);
-  }
-
-  async function addPlan() {
-    if (state.bridgeUnavailable) return;
-    try {
-      var result = await send("runTool", {
-        toolId: "common.plan_create",
-        arguments: {
-          goal: "Новый план",
-          steps: [{ id: "step_1", text: "Опишите первый шаг", status: "pending" }]
-        },
-        dryRun: false
-      });
-      if (!(result && (result.Success === true || result.success === true))) throw new Error(result && (result.Message || result.message) || "План не создан.");
-      var payload = {};
-      try { payload = JSON.parse(result.DataJson || result.dataJson || "{}"); } catch (ignore) {}
-      var plan = payload.plan || payload.Plan || {};
-      await refreshArtifactsAfterPlanChange(plan.id || plan.Id || "");
-      state.htmlWorkspaceMode = "preview";
-      renderHtmlWorkspace();
-      log("План создан.");
-    } catch (error) {
-      log(error.detail || error.message);
-      window.alert(error.message || "План не создан.");
-    }
   }
 
   function showHtmlWorkspaceCreate(kind, fallback) {
@@ -700,34 +587,11 @@
       return;
     }
     if (kind === "data") {
-      await createHtmlWorkspaceData(path.trim());
+      await workspaceActions.createData(path.trim());
       return;
     }
 
-    await createHtmlWorkspaceFile(kind, path.trim());
-  }
-
-  async function createHtmlWorkspaceFile(kind, path) {
-    var content = kind === "css"
-      ? "body {\n  font-family: Segoe UI, Arial, sans-serif;\n}\n"
-      : (kind === "script"
-        ? "(function () {\n  var data = window.RNAssistantData || {};\n  console.log(\"HTML workspace data\", data);\n}());\n"
-        : "<!doctype html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <title>HTML Workspace</title>\n</head>\n<body>\n  <h1>HTML Workspace</h1>\n</body>\n</html>\n");
-    try {
-      applyHtmlWorkspaceResponse(await send("saveHtmlWorkspaceFile", {
-        chatId: state.activeChatId,
-        path: path,
-        kind: kind,
-        content: content,
-        setActive: kind === "html"
-      }));
-      state.htmlWorkspaceSelection = { type: "file", id: path.toLowerCase() };
-      hideHtmlWorkspaceCreate();
-      renderHtmlWorkspace();
-    } catch (error) {
-      log(error.detail || error.message);
-      window.alert(error.message || "Файл не создан.");
-    }
+    await workspaceActions.createFile(kind, path.trim());
   }
 
   async function addHtmlWorkspaceData() {
@@ -735,22 +599,6 @@
       return;
     }
     showHtmlWorkspaceCreate("data", "data");
-  }
-
-  async function createHtmlWorkspaceData(name) {
-    try {
-      applyHtmlWorkspaceResponse(await send("saveHtmlWorkspaceData", {
-        chatId: state.activeChatId,
-        name: name,
-        json: "{\n  \"items\": []\n}\n"
-      }));
-      state.htmlWorkspaceSelection = { type: "data", id: name.toLowerCase() };
-      hideHtmlWorkspaceCreate();
-      renderHtmlWorkspace();
-    } catch (error) {
-      log(error.detail || error.message);
-      window.alert(error.message || "Data source не создан.");
-    }
   }
 
   function updateHtmlSidebarToggle() {
@@ -784,12 +632,12 @@
 
   function bindHtmlWorkspaceActions() {
     $("htmlWorkspaceSearchInput").addEventListener("input", renderHtmlWorkspaceList);
-    $("saveHtmlWorkspaceButton").addEventListener("click", saveHtmlWorkspaceSelection);
-    $("deleteHtmlWorkspaceButton").addEventListener("click", deleteHtmlWorkspaceSelection);
-    $("undoHtmlWorkspaceButton").addEventListener("click", undoHtmlWorkspace);
-    $("redoHtmlWorkspaceButton").addEventListener("click", redoHtmlWorkspace);
+    $("saveHtmlWorkspaceButton").addEventListener("click", workspaceActions.saveSelection);
+    $("deleteHtmlWorkspaceButton").addEventListener("click", workspaceActions.deleteSelection);
+    $("undoHtmlWorkspaceButton").addEventListener("click", workspaceActions.undo);
+    $("redoHtmlWorkspaceButton").addEventListener("click", workspaceActions.redo);
     $("toggleHtmlSidebarButton").addEventListener("click", toggleHtmlWorkspaceSidebar);
-    $("addPlanButton").addEventListener("click", addPlan);
+    $("addPlanButton").addEventListener("click", workspaceActions.createPlan);
     $("addHtmlFileButton").addEventListener("click", function () { addHtmlWorkspaceFile("html"); });
     $("addCssFileButton").addEventListener("click", function () { addHtmlWorkspaceFile("css"); });
     $("addJsFileButton").addEventListener("click", function () { addHtmlWorkspaceFile("script"); });
@@ -814,7 +662,7 @@
 
   window.renderHtmlWorkspace = renderHtmlWorkspace;
   window.bindHtmlWorkspaceActions = bindHtmlWorkspaceActions;
-  window.saveHtmlWorkspaceSelection = saveHtmlWorkspaceSelection;
+  window.saveHtmlWorkspaceSelection = workspaceActions.saveSelection;
   window.markHtmlWorkspaceDirty = markHtmlWorkspaceDirty;
   window.confirmDiscardHtmlWorkspaceChanges = confirmDiscardHtmlWorkspaceChanges;
 }());
