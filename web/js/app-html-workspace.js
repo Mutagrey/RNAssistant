@@ -2,6 +2,7 @@
   var htmlPreviewRefreshTimer = 0;
   var htmlPreview = window.RNAssistantHtmlWorkspacePreview;
   var workspaceArtifacts = window.RNAssistantHtmlWorkspaceArtifacts;
+  var workspaceTree = window.RNAssistantHtmlWorkspaceTree;
 
   window.addEventListener("message", function (event) {
     var frame = $("htmlWorkspacePreviewFrame");
@@ -127,19 +128,6 @@
     return (prop(file, "Kind", "kind", "") || "").toLowerCase();
   }
 
-  function isScriptFile(file) {
-    var kind = fileKind(file);
-    return kind === "script" || kind === "js" || /\.js$/i.test(filePath(file));
-  }
-
-  function isStyleFile(file) {
-    return fileKind(file) === "css" || /\.css$/i.test(filePath(file));
-  }
-
-  function isHtmlFile(file) {
-    return fileKind(file) === "html" || /\.html?$/i.test(filePath(file));
-  }
-
   function fileContent(file) {
     return prop(file, "Content", "content", "") || "";
   }
@@ -176,14 +164,6 @@
     } else {
       data.Json = value || "{}";
     }
-  }
-
-  function selectionKey(type, id) {
-    return (type || "") + ":" + (id || "");
-  }
-
-  function selectedKey() {
-    return selectionKey(state.htmlWorkspaceSelection.type, state.htmlWorkspaceSelection.id);
   }
 
   function selectedItem() {
@@ -376,215 +356,48 @@
     }
   }
 
+  function workspaceTreeFile(file) {
+    return { id: fileId(file), path: filePath(file), kind: fileKind(file), content: fileContent(file) };
+  }
+
+  function workspaceTreeData(data) {
+    return { id: dataId(data), name: dataName(data), json: dataJson(data) };
+  }
+
+  function workspaceTreeArtifact(artifact) {
+    var kind = artifactKind(artifact);
+    return {
+      id: artifactId(artifact),
+      kind: kind,
+      title: artifactTitle(artifact),
+      mimeType: prop(artifact, "MimeType", "mimeType", ""),
+      relativePath: prop(artifact, "RelativePath", "relativePath", ""),
+      text: artifactInlineText(artifact),
+      meta: kind === "plan" ? workspaceArtifacts.planSummary(artifact) : workspaceArtifacts.typeLabel(kind)
+    };
+  }
+
   function renderHtmlWorkspaceList() {
-    var tree = $("htmlWorkspaceTree");
-    if (!tree) {
-      return;
-    }
-    var query = (($("htmlWorkspaceSearchInput") && $("htmlWorkspaceSearchInput").value) || "").trim().toLowerCase();
-    tree.innerHTML = "";
-    var rendered = 0;
-    var workspaceFiles = files();
-    var htmlRoot = createResourceGroup({ key: "artifacts:html", title: "HTML", count: workspaceFiles.length + dataSources().length });
-    var htmlRendered = 0;
-    htmlRoot.className += " artifact-root-group";
-    htmlRendered += renderFileGroup(htmlRoot.treeChildren, "Страницы", "html-pages", workspaceFiles.filter(isHtmlFile), query);
-    htmlRendered += renderFileGroup(htmlRoot.treeChildren, "Стили", "html-styles", workspaceFiles.filter(isStyleFile), query);
-    htmlRendered += renderFileGroup(htmlRoot.treeChildren, "Скрипты", "html-scripts", workspaceFiles.filter(isScriptFile), query);
-    htmlRendered += renderFileGroup(htmlRoot.treeChildren, "Файлы", "html-files", workspaceFiles.filter(function (file) {
-      return !isHtmlFile(file) && !isStyleFile(file) && !isScriptFile(file);
-    }), query);
-    htmlRendered += renderDataGroup(htmlRoot.treeChildren, "Данные", "html-data", dataSources(), query);
-    if (htmlRendered) {
-      tree.appendChild(htmlRoot);
-      rendered += htmlRendered;
-    }
-    rendered += renderArtifactGroup(tree, "Планы", "artifact-plans", latestPlanArtifacts(), query, "plan");
-    rendered += renderArtifactGroup(tree, "Вложения", "artifact-attachments", (state.artifacts || []).filter(function (artifact) {
-      return ["attachment", "image", "file"].indexOf(artifactKind(artifact)) >= 0;
-    }), query, "artifact");
-    rendered += renderArtifactGroup(tree, "Другие", "artifact-other", (state.artifacts || []).filter(function (artifact) {
-      return ["plan", "attachment", "image", "file", "html_workspace"].indexOf(artifactKind(artifact)) < 0;
-    }), query, "artifact");
-    if (!rendered) {
-      tree.appendChild(createResourceEmptyState(query ? "Ничего не найдено." : "Артефактов пока нет."));
-    }
-  }
-
-  function matchesText(text, query) {
-    return !query || String(text || "").toLowerCase().indexOf(query) >= 0;
-  }
-
-  function renderFileGroup(parent, label, key, items, query) {
-    var count = 0;
-    var group = createResourceGroup({ key: key, title: label, count: items.length });
-    group.className += " html-workspace-group";
-    var body = group.treeChildren || group;
-    renderFileTreeRows(body, key, items.filter(function (file) {
-      var text = [filePath(file), fileKind(file), fileContent(file)].join(" ");
-      return matchesText(text, query);
-    }), function (container, file) {
-      container.appendChild(createResourceListItem({
-        title: fileDisplayName(file),
-        active: selectedKey() === selectionKey("file", fileId(file)),
-        meta: fileMeta(file),
-        tooltip: filePath(file) + " - " + (fileKind(file) || "file"),
-        icon: fileListIcon(file),
-        description: firstLine(fileContent(file)) || "HTML workspace file",
-        compact: true,
-        depth: 1,
-        onClick: function () { selectHtmlWorkspaceItem("file", fileId(file)); }
-      }));
-      count += 1;
-    });
-    if (count) {
-      parent.appendChild(group);
-    }
-    return count;
-  }
-
-  function renderDataGroup(parent, label, key, items, query) {
-    var count = 0;
-    var group = createResourceGroup({ key: key, title: label, count: items.length });
-    group.className += " html-workspace-group";
-    var body = group.treeChildren || group;
-    items.forEach(function (data) {
-      var text = [dataName(data), dataJson(data)].join(" ");
-      if (!matchesText(text, query)) {
-        return;
-      }
-      body.appendChild(createResourceListItem({
-        title: dataName(data),
-        active: selectedKey() === selectionKey("data", dataId(data)),
-        meta: "data/*.json",
-        icon: "JSON",
-        description: firstLine(dataJson(data)) || "JSON data source",
-        compact: true,
-        depth: 1,
-        onClick: function () { selectHtmlWorkspaceItem("data", dataId(data)); }
-      }));
-      count += 1;
-    });
-    if (count) {
-      parent.appendChild(group);
-    }
-    return count;
-  }
-
-  function renderArtifactGroup(parent, label, key, items, query, selectionType) {
-    var matched = (items || []).filter(function (artifact) {
-      return matchesText([
-        artifactTitle(artifact),
-        artifactKind(artifact),
-        prop(artifact, "MimeType", "mimeType", ""),
-        prop(artifact, "RelativePath", "relativePath", ""),
-        artifactInlineText(artifact)
-      ].join(" "), query);
-    });
-    if (!matched.length) return 0;
-    var group = createResourceGroup({ key: key, title: label, count: matched.length });
-    group.className += " artifact-root-group";
-    matched.sort(function (left, right) { return artifactTitle(left).localeCompare(artifactTitle(right)); }).forEach(function (artifact) {
-      var kind = artifactKind(artifact);
-      var meta = kind === "plan" ? workspaceArtifacts.planSummary(artifact) : workspaceArtifacts.typeLabel(kind);
-      group.treeChildren.appendChild(createResourceListItem({
-        title: artifactTitle(artifact),
-        active: selectedKey() === selectionKey(selectionType, artifactId(artifact)),
-        meta: meta,
-        description: firstLine(artifactInlineText(artifact)) || prop(artifact, "RelativePath", "relativePath", "") || prop(artifact, "MimeType", "mimeType", ""),
-        compact: true,
-        depth: 1,
-        onClick: function () { selectHtmlWorkspaceItem(selectionType, artifactId(artifact)); }
-      }));
-    });
-    parent.appendChild(group);
-    return matched.length;
-  }
-
-  function firstLine(value) {
-    return String(value || "").split(/\r?\n/)[0].trim().slice(0, 140);
-  }
-
-  function renderFileTreeRows(parent, key, items, appendFile) {
-    var tree = buildFileTree(items);
-    renderFileTreeNode(parent, key, tree, appendFile);
-  }
-
-  function buildFileTree(items) {
-    var root = { dirs: {}, files: [] };
-    items.forEach(function (file) {
-      var parts = String(filePath(file) || "").split("/").filter(function (part) { return !!part; });
-      var node = root;
-      while (parts.length > 1) {
-        var dir = parts.shift();
-        if (!node.dirs[dir]) {
-          node.dirs[dir] = { name: dir, dirs: {}, files: [] };
-        }
-        node = node.dirs[dir];
-      }
-      node.files.push(file);
-    });
-    return root;
-  }
-
-  function renderFileTreeNode(parent, key, node, appendFile) {
-    Object.keys(node.dirs).sort().forEach(function (dirName) {
-      var dir = node.dirs[dirName];
-      var group = createResourceGroup({
-        key: key + ":dir:" + dirPathKey(dir, dirName),
-        title: dirName,
-        count: countTreeFiles(dir)
-      });
-      group.className += " resource-tree-subgroup";
-      var body = group.treeChildren || group;
-      parent.appendChild(group);
-      renderFileTreeNode(body, key + "/" + dirName, dir, appendFile);
-    });
-    node.files.sort(function (left, right) {
-      return filePath(left).localeCompare(filePath(right));
-    }).forEach(function (file) {
-      appendFile(parent, file);
+    var search = $("htmlWorkspaceSearchInput");
+    workspaceTree.render({
+      root: $("htmlWorkspaceTree"),
+      query: search ? search.value : "",
+      files: files().map(workspaceTreeFile),
+      dataSources: dataSources().map(workspaceTreeData),
+      artifacts: (state.artifacts || []).map(workspaceTreeArtifact),
+      plans: latestPlanArtifacts().map(workspaceTreeArtifact),
+      selected: state.htmlWorkspaceSelection || {},
+      onSelect: selectHtmlWorkspaceItem
     });
   }
-
-  function dirPathKey(dir, fallback) {
-    return fallback || (dir && dir.name) || "folder";
-  }
-
-  function countTreeFiles(node) {
-    var count = (node.files || []).length;
-    Object.keys(node.dirs || {}).forEach(function (key) {
-      count += countTreeFiles(node.dirs[key]);
-    });
-    return count;
-  }
-
-  function fileDisplayName(file) {
-    var parts = String(filePath(file) || "").split("/").filter(function (part) { return !!part; });
-    return parts.length ? parts[parts.length - 1] : filePath(file);
-  }
-
-  function fileMeta(file) {
-    return fileKind(file) || "file";
-  }
-
-  function fileListIcon(file) {
-    var kind = fileKind(file);
-    if (kind === "css") {
-      return "CSS";
-    }
-    if (isScriptFile(file)) {
-      return "JS";
-    }
-    return "HTML";
-  }
-
   function snapshotLabel(snapshot) {
     return prop(snapshot || {}, "Label", "label", "HTML workspace snapshot");
   }
 
   function selectHtmlWorkspaceItem(type, id) {
-    if (state.htmlWorkspaceDirty && selectedKey() !== selectionKey(type, id)) {
+    var selected = state.htmlWorkspaceSelection || {};
+    var changingSelection = String(selected.type || "") !== String(type || "") || String(selected.id || "") !== String(id || "");
+    if (state.htmlWorkspaceDirty && changingSelection) {
       window.alert("Сначала сохраните изменения текущего артефакта.");
       return;
     }
