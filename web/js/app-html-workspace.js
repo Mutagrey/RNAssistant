@@ -3,6 +3,33 @@
   var htmlPreview = window.RNAssistantHtmlWorkspacePreview;
   var workspaceArtifacts = window.RNAssistantHtmlWorkspaceArtifacts;
   var workspaceTree = window.RNAssistantHtmlWorkspaceTree;
+  var workspaceModel = window.RNAssistantHtmlWorkspaceModel.create(state);
+  var prop = workspaceModel.prop;
+  var workspace = workspaceModel.workspace;
+  var files = workspaceModel.files;
+  var dataSources = workspaceModel.dataSources;
+  var artifactId = workspaceModel.artifactId;
+  var artifactKind = workspaceModel.artifactKind;
+  var artifactTitle = workspaceModel.artifactTitle;
+  var artifactRevision = workspaceModel.artifactRevision;
+  var artifactInlineText = workspaceModel.artifactInlineText;
+  var setArtifactInlineText = workspaceModel.setArtifactInlineText;
+  var planStableId = workspaceModel.planStableId;
+  var latestPlanArtifacts = workspaceModel.latestPlanArtifacts;
+  var historyItems = workspaceModel.historyItems;
+  var redoItems = workspaceModel.redoItems;
+  var fileId = workspaceModel.fileId;
+  var filePath = workspaceModel.filePath;
+  var fileKind = workspaceModel.fileKind;
+  var fileContent = workspaceModel.fileContent;
+  var setFileContent = workspaceModel.setFileContent;
+  var dataId = workspaceModel.dataId;
+  var dataName = workspaceModel.dataName;
+  var dataJson = workspaceModel.dataJson;
+  var setDataJson = workspaceModel.setDataJson;
+  var selectedItem = workspaceModel.selectedItem;
+  var ensureSelection = workspaceModel.ensureSelection;
+  var snapshotLabel = workspaceModel.snapshotLabel;
   var workspaceActions = window.RNAssistantHtmlWorkspaceActions.create({
     state: state,
     send: send,
@@ -46,211 +73,6 @@
       reply(false, message);
     });
   });
-
-  function prop(source, pascal, camel, fallback) {
-    source = source || {};
-    return source[camel] !== undefined ? source[camel] : (source[pascal] !== undefined ? source[pascal] : fallback);
-  }
-
-  function workspace() {
-    var current = state.htmlWorkspace || {};
-    current.files = prop(current, "Files", "files", []) || [];
-    current.dataSources = prop(current, "DataSources", "dataSources", []) || [];
-    current.history = prop(current, "History", "history", []) || [];
-    current.redoHistory = prop(current, "RedoHistory", "redoHistory", []) || [];
-    current.activeFileId = prop(current, "ActiveFileId", "activeFileId", "") || "";
-    state.htmlWorkspace = current;
-    return current;
-  }
-
-  function files() {
-    return workspace().files;
-  }
-
-  function dataSources() {
-    return workspace().dataSources;
-  }
-
-  function artifactId(artifact) {
-    return prop(artifact, "Id", "id", "");
-  }
-
-  function artifactKind(artifact) {
-    return String(prop(artifact, "Kind", "kind", "file") || "file").toLowerCase();
-  }
-
-  function artifactTitle(artifact) {
-    return prop(artifact, "Title", "title", "Артефакт") || "Артефакт";
-  }
-
-  function artifactRevision(artifact) {
-    return Number(prop(artifact, "Revision", "revision", 1) || 1);
-  }
-
-  function artifactInlineText(artifact) {
-    return prop(artifact, "InlineText", "inlineText", "") || "";
-  }
-
-  function setArtifactInlineText(artifact, value) {
-    if (!artifact) return;
-    if (artifact.inlineText !== undefined || artifact.InlineText === undefined) artifact.inlineText = value || "";
-    else artifact.InlineText = value || "";
-  }
-
-  function artifactById(id) {
-    return (state.artifacts || []).filter(function (artifact) { return artifactId(artifact) === id; })[0] || null;
-  }
-
-  function planJson(artifact) {
-    if (!artifact || artifactKind(artifact) !== "plan") return null;
-    try { return JSON.parse(artifactInlineText(artifact)); } catch (error) { return null; }
-  }
-
-  function planStableId(artifact) {
-    var plan = planJson(artifact);
-    return plan && (plan.id || plan.Id) || artifactId(artifact);
-  }
-
-  function latestPlanArtifacts() {
-    var latest = {};
-    (state.artifacts || []).forEach(function (artifact) {
-      if (artifactKind(artifact) !== "plan") return;
-      var id = planStableId(artifact);
-      if (!latest[id] || artifactRevision(artifact) > artifactRevision(latest[id])) latest[id] = artifact;
-    });
-    return Object.keys(latest).map(function (id) { return latest[id]; });
-  }
-
-  function historyItems() {
-    return workspace().history || [];
-  }
-
-  function redoItems() {
-    return workspace().redoHistory || [];
-  }
-
-  function fileId(file) {
-    return prop(file, "Id", "id", prop(file, "Path", "path", ""));
-  }
-
-  function filePath(file) {
-    return prop(file, "Path", "path", fileId(file));
-  }
-
-  function fileKind(file) {
-    return (prop(file, "Kind", "kind", "") || "").toLowerCase();
-  }
-
-  function fileContent(file) {
-    return prop(file, "Content", "content", "") || "";
-  }
-
-  function setFileContent(file, value) {
-    if (!file) {
-      return;
-    }
-    if (file.content !== undefined || file.Content === undefined) {
-      file.content = value || "";
-    } else {
-      file.Content = value || "";
-    }
-  }
-
-  function dataId(data) {
-    return prop(data, "Id", "id", prop(data, "Name", "name", ""));
-  }
-
-  function dataName(data) {
-    return prop(data, "Name", "name", dataId(data));
-  }
-
-  function dataJson(data) {
-    return prop(data, "Json", "json", "{}") || "{}";
-  }
-
-  function setDataJson(data, value) {
-    if (!data) {
-      return;
-    }
-    if (data.json !== undefined || data.Json === undefined) {
-      data.json = value || "{}";
-    } else {
-      data.Json = value || "{}";
-    }
-  }
-
-  function selectedItem() {
-    var selection = state.htmlWorkspaceSelection || {};
-    var id = selection.id || "";
-    var result = null;
-    if (selection.type === "plan" || selection.type === "artifact") {
-      var artifact = artifactById(id);
-      return artifact ? { type: selection.type, item: artifact } : null;
-    }
-    if (selection.type === "data") {
-      dataSources().forEach(function (item) {
-        if (dataId(item) === id) {
-          result = { type: "data", item: item };
-        }
-      });
-      return result;
-    }
-
-    files().forEach(function (item) {
-      if (fileId(item) === id) {
-        result = { type: "file", item: item };
-      }
-    });
-    return result;
-  }
-
-  function activeHtmlFile() {
-    var activeId = workspace().activeFileId || "";
-    var active = null;
-    files().forEach(function (file) {
-      if (!active && fileId(file) === activeId && fileKind(file) === "html") {
-        active = file;
-      }
-    });
-    if (active) {
-      return active;
-    }
-    files().forEach(function (file) {
-      if (!active && fileKind(file) === "html") {
-        active = file;
-      }
-    });
-    return active;
-  }
-
-  function ensureSelection() {
-    if (selectedItem()) {
-      return;
-    }
-
-    if (state.activePlanArtifactId && artifactById(state.activePlanArtifactId)) {
-      state.htmlWorkspaceSelection = { type: "plan", id: state.activePlanArtifactId };
-      return;
-    }
-    var active = activeHtmlFile();
-    if (active) {
-      state.htmlWorkspaceSelection = { type: "file", id: fileId(active) };
-      return;
-    }
-    if (files().length) {
-      state.htmlWorkspaceSelection = { type: "file", id: fileId(files()[0]) };
-      return;
-    }
-    if (dataSources().length) {
-      state.htmlWorkspaceSelection = { type: "data", id: dataId(dataSources()[0]) };
-      return;
-    }
-    if ((state.artifacts || []).length) {
-      state.htmlWorkspaceSelection = { type: "artifact", id: artifactId(state.artifacts[0]) };
-      return;
-    }
-    state.htmlWorkspaceSelection = { type: "file", id: "" };
-  }
 
   function syncHtmlEditorToState() {
     var selected = selectedItem();
@@ -403,10 +225,6 @@
       onSelect: selectHtmlWorkspaceItem
     });
   }
-  function snapshotLabel(snapshot) {
-    return prop(snapshot || {}, "Label", "label", "HTML workspace snapshot");
-  }
-
   function selectHtmlWorkspaceItem(type, id) {
     var selected = state.htmlWorkspaceSelection || {};
     var changingSelection = String(selected.type || "") !== String(type || "") || String(selected.id || "") !== String(id || "");
