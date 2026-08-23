@@ -1,0 +1,96 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using RNAssistant.Core.Models;
+using RNAssistant.Office.Tools;
+
+namespace RNAssistant.Office
+{
+    public sealed partial class AssistantController
+    {
+        public IReadOnlyList<ToolDefinition> GetTools()
+        {
+            return _toolCatalog.GetVisibleTools();
+        }
+
+        public IReadOnlyList<ToolDefinition> SaveTools(IEnumerable<ToolDefinition> tools)
+        {
+            var customTools = (tools ?? new ToolDefinition[0]).Where(s =>
+                s != null && !s.BuiltIn && !string.Equals(s.Scope, "document", StringComparison.OrdinalIgnoreCase)).ToList();
+            foreach (var tool in customTools)
+            {
+                var validation = _toolExecutor.ValidateToolDefinition(tool);
+                if (!validation.Success)
+                {
+                    throw new InvalidOperationException(validation.Message);
+                }
+            }
+            _toolStore.Save(customTools, _adapter.HostName);
+            return GetTools();
+        }
+
+        public IReadOnlyList<SkillDefinition> GetSkills()
+        {
+            return _skillCatalog.GetVisibleSkills();
+        }
+
+        public IReadOnlyList<SkillDefinition> SaveSkills(IEnumerable<SkillDefinition> skills)
+        {
+            var custom = (skills ?? new SkillDefinition[0]).Where(s => s != null && !s.BuiltIn).ToList();
+            var builtInIds = new HashSet<string>(
+                _skillCatalog.GetVisibleSkills().Where(s => s.BuiltIn).Select(s => s.Id),
+                StringComparer.OrdinalIgnoreCase);
+            var collision = custom.FirstOrDefault(s => builtInIds.Contains(s.Id ?? string.Empty));
+            if (collision != null) throw new InvalidOperationException("Built-in skill id is reserved: " + collision.Id);
+            _skillStore.Save(custom, _adapter.HostName);
+            return GetSkills();
+        }
+
+        public ToolResult RunTool(
+            string toolId,
+            IDictionary<string, object> arguments,
+            bool dryRun,
+            Action<string, string> progress = null,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            var settings = _settingsService.Load();
+            var session = LoadSession(null);
+            var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
+            var command = new ToolCommand { ToolId = toolId };
+            foreach (var pair in arguments ?? new Dictionary<string, object>())
+            {
+                command.Arguments[pair.Key] = pair.Value;
+            }
+
+            ReportProgress(progress, dryRun ? "checking" : "executing", (dryRun ? "Проверяю tool: " : "Исполняю tool: ") + toolId);
+            var result = _toolExecutor.Execute(command, tools, settings, dryRun, true, session, cancellationToken);
+            if (!dryRun && IsSessionArtifactTool(toolId))
+            {
+                SaveSessionChanges(session);
+            }
+
+            return result;
+        }
+
+        private static void ReportProgress(Action<string, string> progress, string phase, string message)
+        {
+            if (progress != null)
+            {
+                progress(phase, message);
+            }
+        }
+
+        private static bool IsSessionArtifactTool(string toolId)
+        {
+            return string.Equals(toolId, HtmlArtifactToolExecutor.UpsertFileToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, HtmlArtifactToolExecutor.UpsertDataToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, HtmlArtifactToolExecutor.DeleteFileToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, HtmlArtifactToolExecutor.DeleteDataToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, HtmlArtifactToolExecutor.SetActiveToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, PlanToolExecutor.CreateToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, PlanToolExecutor.UpdateToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, PlanToolExecutor.DeleteToolId, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+}

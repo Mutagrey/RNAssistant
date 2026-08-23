@@ -69,6 +69,10 @@
     <Compile Include="Controller\AssistantController.Diagnostics.cs" />
     <Compile Include="Controller\AssistantController.HtmlWorkspace.cs" />
     <Compile Include="Controller\AssistantController.Lifecycle.cs" />
+    <Compile Include="Controller\AssistantController.QuickActions.cs" />
+    <Compile Include="Controller\AssistantController.Settings.cs" />
+    <Compile Include="Controller\AssistantController.Tools.cs" />
+    <Compile Include="Controller\AssistantController.Vba.cs" />
     <Compile Include="Diagnostics\RuntimeLog.cs" />
     <Compile Include="Runtime\AssistantRuntime.cs" />
     <Compile Include="Runtime\DispatchedOfficeApplicationAdapter.cs" />
