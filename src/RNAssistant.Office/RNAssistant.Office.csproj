@@ -123,6 +123,8 @@
     <Compile Include="Tools\PlanToolExecutor.cs" />
     <Compile Include="Tools\ToolSafetyPolicy.cs" />
     <Compile Include="Tools\VbaToolExecutor.cs" />
+    <Compile Include="Tools\VbaToolExecutor.Packages.cs" />
+    <Compile Include="Tools\VbaToolExecutor.Patching.cs" />
     <Compile Include="WebView\AssistantPaneControl.cs" />
     <Compile Include="WebView\AssistantWebBridge.cs" />
     <Compile Include="WebView\BridgeRequestCancellationRegistry.cs" />

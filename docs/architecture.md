@@ -65,6 +65,7 @@ See [agent-protocol.md](agent-protocol.md).
 - `src/RNAssistant.Office/Services/PlainChatService.cs`: plain Chat flow.
 - `src/RNAssistant.Office/Services/ContextCompactionService.cs`: optional checkpointing.
 - `src/RNAssistant.Office/Tools`: dispatch, schemas, pipelines, tool/skill/prompt CRUD, VBA lifecycle.
+- `src/RNAssistant.Office/Tools/VbaToolExecutor*.cs`: VBA host orchestration and verification in the base partial, package install/run/remove lifecycle in `.Packages`, and deterministic text patching in `.Patching`.
 - `src/RNAssistant.Office/Controller`: typed bridge-facing orchestration.
 - `src/RNAssistant.OfficeHosts`: Excel/Word/PowerPoint/Outlook COM adapters.
 - `web/js`: static feature modules; no agent routing or business rules.
