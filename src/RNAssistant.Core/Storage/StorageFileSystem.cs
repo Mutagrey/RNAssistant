@@ -15,8 +15,7 @@ namespace RNAssistant.Core.Storage
 
         public static void WriteAllTextAtomic(string path, string content, Encoding encoding)
         {
-            var tempPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            try
+            WriteAtomic(path, tempPath =>
             {
                 if (encoding == null)
                 {
@@ -26,6 +25,20 @@ namespace RNAssistant.Core.Storage
                 {
                     File.WriteAllText(tempPath, content ?? string.Empty, encoding);
                 }
+            });
+        }
+
+        public static void WriteAtomic(string path, Action<string> writeTempFile)
+        {
+            if (writeTempFile == null)
+            {
+                throw new ArgumentNullException("writeTempFile");
+            }
+
+            var tempPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                writeTempFile(tempPath);
 
                 if (File.Exists(path))
                 {

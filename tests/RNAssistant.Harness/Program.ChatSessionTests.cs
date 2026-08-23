@@ -23,6 +23,27 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void JsonFileStoreWritesAtomicUtf8()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var path = Path.Combine(paths.Root, "streamed.json");
+                var store = new JsonFileStore();
+                store.Save(path, new Dictionary<string, string>
+                {
+                    { "value", "Привет " + new string('x', 100000) }
+                });
+                store.Save(path, new Dictionary<string, string> { { "value", "Готово" } });
+
+                var loaded = store.Load<Dictionary<string, string>>(path, null);
+                AssertEqual("Готово", loaded["value"], "streamed json overwrite");
+                AssertEqual(0, Directory.GetFiles(paths.Root, "streamed.json.*.tmp").Length, "atomic temp files cleaned");
+                var bytes = File.ReadAllBytes(path);
+                AssertTrue(bytes.Length > 3 && !(bytes[0] == 0xef && bytes[1] == 0xbb && bytes[2] == 0xbf),
+                    "streamed json uses utf8 without bom");
+            });
+        }
+
         private static void CreatesAndListsChatsInTempRoot()
         {
             WithTempPaths(delegate(AppDataPaths paths)

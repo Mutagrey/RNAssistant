@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 using Newtonsoft.Json;
 
 namespace RNAssistant.Core.Storage
@@ -46,10 +47,18 @@ namespace RNAssistant.Core.Storage
                 Directory.CreateDirectory(directory);
             }
 
-            var json = settings == null
-                ? JsonConvert.SerializeObject(value, Formatting.Indented)
-                : JsonConvert.SerializeObject(value, Formatting.Indented, settings);
-            StorageFileSystem.WriteAllTextAtomic(path, json);
+            StorageFileSystem.WriteAtomic(path, tempPath =>
+            {
+                using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                using (var textWriter = new StreamWriter(stream, new UTF8Encoding(false)))
+                using (var jsonWriter = new JsonTextWriter(textWriter) { Formatting = Formatting.Indented })
+                {
+                    var serializer = settings == null
+                        ? JsonSerializer.CreateDefault()
+                        : JsonSerializer.Create(settings);
+                    serializer.Serialize(jsonWriter, value);
+                }
+            });
         }
     }
 }

@@ -89,6 +89,7 @@ namespace RNAssistant.Harness
                 Test("documents: unsaved identity is stable", UnsavedDocumentIdentityUsesStoredId),
 
                 Test("storage: chat roundtrip", CreatesAndListsChatsInTempRoot),
+                Test("storage: json save remains atomic", JsonFileStoreWritesAtomicUtf8),
                 Test("storage: chat summary index lifecycle", ChatSummaryIndexTracksSessionLifecycle),
                 Test("storage: broken chat skipped", SkipsBrokenChatFiles),
                 Test("storage: deletes document chats", DeletesDocumentChats),
