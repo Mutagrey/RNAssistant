@@ -111,6 +111,11 @@ namespace RNAssistant.Office
                 fork.Messages = targetIndex < 0
                     ? new List<ChatMessage>()
                     : ChatCloneService.CloneMessages(sourceMessages.Take(targetIndex + 1));
+                _chatStore.LoadHtmlArtifactBodies(
+                    source,
+                    ChatArtifactService.ReachableForMessages(source.Artifacts, fork.Messages)
+                        .Where(artifact => string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
+                        .Select(artifact => artifact.Id));
                 fork.Artifacts = ChatCloneService.CloneArtifactsForMessages(source.Artifacts, fork.Messages);
                 fork.ContextCheckpoints = ChatCloneService.CloneContextCheckpoints(source.ContextCheckpoints, fork.Messages);
                 fork.ActiveContextCheckpointId = fork.ContextCheckpoints.OrderByDescending(checkpoint => checkpoint.CreatedUtc).Select(checkpoint => checkpoint.Id).FirstOrDefault();

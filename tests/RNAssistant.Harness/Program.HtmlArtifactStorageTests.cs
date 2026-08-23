@@ -43,9 +43,11 @@ namespace RNAssistant.Harness
                 AssertEqual(2, Directory.GetFiles(BodyDirectory(paths, session.Id), "*.json").Length, "revision body files");
 
                 var loaded = store.Load(session.Host, session.DocumentKey, session.Id);
-                AssertTrue(loaded.Artifacts
-                    .Where(artifact => string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
-                    .All(artifact => !string.IsNullOrWhiteSpace(artifact.InlineText)), "revision bodies hydrated");
+                AssertTrue(string.IsNullOrWhiteSpace(loaded.Artifacts.Single(artifact => artifact.Id == firstId).InlineText),
+                    "inactive revision remains lazy");
+                AssertTrue(!string.IsNullOrWhiteSpace(loaded.Artifacts.Single(artifact => artifact.Id == secondId).InlineText),
+                    "active revision is hydrated");
+                AssertTrue(store.LoadHtmlArtifactBody(loaded, firstId), "inactive revision loaded on demand");
                 AssertTrue(HtmlWorkspaceArtifactService.Restore(loaded, firstId), "first external revision restored");
                 AssertEqual("<h1>First revision</h1>", loaded.HtmlWorkspace.Files.Single().Content, "first external revision content");
                 AssertTrue(HtmlWorkspaceArtifactService.Restore(loaded, secondId), "second external revision restored");
@@ -95,9 +97,17 @@ namespace RNAssistant.Harness
                     ArtifactIds = new List<string> { secondId }
                 });
                 store.Save(source);
+                source = store.Load(source.Host, source.DocumentKey, source.Id);
+                AssertTrue(string.IsNullOrWhiteSpace(source.Artifacts.Single(artifact => artifact.Id == firstId).InlineText),
+                    "source parent revision remains lazy before fork");
 
                 var fork = store.CreateTransient(source.Host, source.DocumentKey, source.DocumentTitle, "Fork");
                 fork.Messages = ChatCloneService.CloneMessages(source.Messages);
+                store.LoadHtmlArtifactBodies(
+                    source,
+                    ChatArtifactService.ReachableForMessages(source.Artifacts, fork.Messages)
+                        .Where(artifact => string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
+                        .Select(artifact => artifact.Id));
                 fork.Artifacts = ChatCloneService.CloneArtifactsForMessages(source.Artifacts, fork.Messages);
                 fork.ActiveHtmlArtifactId = secondId;
                 AssertTrue(HtmlWorkspaceArtifactService.Restore(fork, secondId), "fork workspace restored before save");
@@ -113,6 +123,7 @@ namespace RNAssistant.Harness
                 AssertTrue(store.Delete(source.Host, source.DocumentKey, source.Id), "source chat deleted");
                 AssertTrue(!Directory.Exists(BodyDirectory(paths, source.Id)), "source body directory deleted");
                 var loadedFork = store.Load(fork.Host, fork.DocumentKey, fork.Id);
+                AssertTrue(store.LoadHtmlArtifactBody(loadedFork, firstId), "fork parent revision loaded on demand");
                 AssertTrue(HtmlWorkspaceArtifactService.Restore(loadedFork, firstId), "fork remains independent after source delete");
                 AssertTrue(store.Delete(fork.Host, fork.DocumentKey, fork.Id), "fork chat deleted");
                 AssertEqual(0, Directory.GetDirectories(paths.HtmlArtifactBodyDirectory).Length, "all body directories deleted");
@@ -134,6 +145,45 @@ namespace RNAssistant.Harness
                 loaded.HtmlWorkspace.Files.Single().Content = "keep current workspace";
                 AssertTrue(!HtmlWorkspaceArtifactService.Restore(loaded, artifactId), "broken revision rejected");
                 AssertEqual("keep current workspace", loaded.HtmlWorkspace.Files.Single().Content, "failed restore leaves workspace unchanged");
+            });
+        }
+
+        private static void LazyHtmlArtifactBodySupportsEditRewind()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Word", "edit-doc", "Edit.docx", "Lazy edit");
+                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "before edit", true);
+                var beforeId = HtmlWorkspaceArtifactService.CaptureCurrent(session, "Before edit");
+                var target = new ChatMessage
+                {
+                    Role = "user",
+                    Content = "Original request",
+                    HtmlWorkspaceCheckpointId = beforeId
+                };
+                session.Messages.Add(target);
+                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Old response" });
+                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "after edit", true);
+                var afterId = HtmlWorkspaceArtifactService.CaptureCurrent(session, "After edit");
+                store.Save(session);
+
+                var loaded = store.Load(session.Host, session.DocumentKey, session.Id);
+                AssertTrue(string.IsNullOrWhiteSpace(loaded.Artifacts.Single(artifact => artifact.Id == beforeId).InlineText),
+                    "edit checkpoint body starts lazy");
+                AssertTrue(!string.IsNullOrWhiteSpace(loaded.Artifacts.Single(artifact => artifact.Id == afterId).InlineText),
+                    "active edit body starts hydrated");
+                var service = new ChatHistoryEditService(
+                    new AttachmentStore(paths),
+                    delegate { },
+                    delegate { },
+                    store.LoadHtmlArtifactBody);
+
+                service.RewriteUserMessage(loaded, loaded.Id, target.Id, -1, "Updated request");
+
+                AssertEqual("before edit", loaded.HtmlWorkspace.Files.Single().Content, "lazy edit restores checkpoint content");
+                AssertEqual(beforeId, loaded.ActiveHtmlArtifactId, "lazy edit restores checkpoint id");
+                AssertTrue(!loaded.Artifacts.Any(artifact => artifact.Id == afterId), "lazy edit prunes future revision");
             });
         }
 

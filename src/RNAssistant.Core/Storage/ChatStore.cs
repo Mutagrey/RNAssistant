@@ -119,6 +119,32 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        public bool LoadHtmlArtifactBody(ChatSession session, string artifactId)
+        {
+            lock (PersistenceSync)
+            {
+                return _htmlArtifactBodies.Hydrate(session, artifactId);
+            }
+        }
+
+        public void LoadHtmlArtifactBodies(ChatSession session, IEnumerable<string> artifactIds)
+        {
+            if (artifactIds == null)
+            {
+                return;
+            }
+
+            lock (PersistenceSync)
+            {
+                foreach (var artifactId in artifactIds
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    _htmlArtifactBodies.Hydrate(session, artifactId);
+                }
+            }
+        }
+
         public ChatSession Move(ChatSession session, string host, string documentKey, string documentTitle)
         {
             if (session == null)
@@ -347,7 +373,7 @@ namespace RNAssistant.Core.Storage
 
         private ChatSession LoadIndexedSession(string path)
         {
-            var session = LoadSession(path);
+            var session = LoadSession(path, false);
             if (!IsSupported(session)) return null;
             NormalizeSession(session, session.Host, session.DocumentKey, session.DocumentTitle);
             return session;
@@ -355,13 +381,18 @@ namespace RNAssistant.Core.Storage
 
         private ChatSession LoadIndexedSession(string path, string host, string documentKey, string documentTitle)
         {
-            var session = LoadSession(path);
+            var session = LoadSession(path, false);
             if (!IsSupported(session)) return null;
             NormalizeSession(session, host, documentKey, documentTitle);
             return session;
         }
 
         private ChatSession LoadSession(string path)
+        {
+            return LoadSession(path, true);
+        }
+
+        private ChatSession LoadSession(string path, bool hydrateActiveHtmlArtifact)
         {
             try
             {
@@ -383,7 +414,10 @@ namespace RNAssistant.Core.Storage
                 }
 
                 var session = root.ToObject<ChatSession>();
-                _htmlArtifactBodies.Hydrate(session);
+                if (hydrateActiveHtmlArtifact)
+                {
+                    _htmlArtifactBodies.Hydrate(session, session == null ? null : session.ActiveHtmlArtifactId);
+                }
                 return session;
             }
             catch (IOException)

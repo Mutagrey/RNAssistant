@@ -78,7 +78,11 @@ namespace RNAssistant.Office
             _chatSessions.RunStateProvider = _chatRuns.Get;
             _chatSessions.RunSessionsProvider = _chatRuns.Sessions;
             _chatSessions.ReconcileInterruptedRuns(RuntimeId);
-            _chatHistoryEditService = new ChatHistoryEditService(_attachmentStore, RemovePendingAgentToolsForSession, CancelPendingActivities);
+            _chatHistoryEditService = new ChatHistoryEditService(
+                _attachmentStore,
+                RemovePendingAgentToolsForSession,
+                CancelPendingActivities,
+                _chatStore.LoadHtmlArtifactBody);
             _htmlNetwork = new HtmlNetworkService(() => _settingsService.Load(), value => _settingsService.Save(value));
             _llmClient = new LlmClient(
                 () => _settingsService.LoadApiKey(),

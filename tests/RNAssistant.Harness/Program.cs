@@ -96,6 +96,7 @@ namespace RNAssistant.Harness
                 Test("storage: inline html artifacts migrate", InlineHtmlArtifactBodiesMigrateOnSave),
                 Test("storage: html artifact bodies follow lifecycle", HtmlArtifactBodiesFollowForkPruneAndDelete),
                 Test("storage: broken html artifact body is safe", BrokenHtmlArtifactBodyDoesNotReplaceWorkspace),
+                Test("storage: lazy html body supports edit rewind", LazyHtmlArtifactBodySupportsEditRewind),
                 Test("chat sessions: document key migration", ChatSessionServiceMigratesDocumentKey),
                 Test("chat sessions: stale requested id fallback", ChatSessionServiceFallsBackForStaleRequestedId),
                 Test("chat sessions: addressed id loads archived chat", AddressedSessionLoadsExplicitChatAcrossDocuments),

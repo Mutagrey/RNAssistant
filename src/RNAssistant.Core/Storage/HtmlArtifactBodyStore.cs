@@ -48,31 +48,41 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        public void Hydrate(ChatSession session)
+        public bool Hydrate(ChatSession session, string artifactId)
         {
-            if (session == null || string.IsNullOrWhiteSpace(session.Id))
+            if (session == null || string.IsNullOrWhiteSpace(session.Id) || string.IsNullOrWhiteSpace(artifactId))
             {
-                return;
+                return false;
             }
 
-            var directory = SessionDirectory(session.Id);
-            foreach (var artifact in HtmlArtifacts(session).Where(item => string.IsNullOrWhiteSpace(item.InlineText)))
+            var artifact = HtmlArtifacts(session).FirstOrDefault(item =>
+                string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase));
+            if (artifact == null)
             {
-                try
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(artifact.InlineText))
+            {
+                return true;
+            }
+
+            try
+            {
+                var path = ArtifactPath(SessionDirectory(session.Id), artifact.Id);
+                if (File.Exists(path))
                 {
-                    var path = ArtifactPath(directory, artifact.Id);
-                    if (File.Exists(path))
-                    {
-                        artifact.InlineText = File.ReadAllText(path);
-                    }
-                }
-                catch (IOException)
-                {
-                }
-                catch (UnauthorizedAccessException)
-                {
+                    artifact.InlineText = File.ReadAllText(path);
                 }
             }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+
+            return !string.IsNullOrWhiteSpace(artifact.InlineText);
         }
 
         public void Prune(ChatSession session)
