@@ -86,6 +86,7 @@ namespace RNAssistant.Harness
                 Test("documents: unsaved identity is stable", UnsavedDocumentIdentityUsesStoredId),
 
                 Test("storage: chat roundtrip", CreatesAndListsChatsInTempRoot),
+                Test("storage: chat summary index lifecycle", ChatSummaryIndexTracksSessionLifecycle),
                 Test("storage: broken chat skipped", SkipsBrokenChatFiles),
                 Test("storage: deletes document chats", DeletesDocumentChats),
                 Test("chat sessions: document key migration", ChatSessionServiceMigratesDocumentKey),

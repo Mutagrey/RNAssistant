@@ -185,6 +185,31 @@ namespace RNAssistant.Core.Models
         public DateTime StartedUtc { get; set; }
     }
 
+    public sealed class ChatSessionHeader
+    {
+        public string Id { get; set; }
+        public string Host { get; set; }
+        public string DocumentKey { get; set; }
+        public string DocumentTitle { get; set; }
+        public string DocumentPath { get; set; }
+        public string Title { get; set; }
+        public string Model { get; set; }
+        public string Mode { get; set; }
+        public bool HtmlModeEnabled { get; set; }
+        public bool ReasoningEnabled { get; set; }
+        public bool HasHtmlWorkspace { get; set; }
+        public int HtmlFileCount { get; set; }
+        public int HtmlDataSourceCount { get; set; }
+        public DateTime CreatedUtc { get; set; }
+        public DateTime UpdatedUtc { get; set; }
+        public int MessageCount { get; set; }
+        public string RunId { get; set; }
+        public string RunRuntimeId { get; set; }
+        public string RunStatus { get; set; }
+        public string RunPhase { get; set; }
+        public DateTime? RunStartedUtc { get; set; }
+    }
+
     public sealed class ChatSessionSummary
     {
         public string Id { get; set; }

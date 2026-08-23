@@ -45,6 +45,7 @@ See [agent-protocol.md](agent-protocol.md).
 - Accepted agent calls/results are hidden protocol messages. Visible tool activity is presentation only and is excluded from model context. Activities from one accepted model turn share a `StepId` and its user-facing `message`, so the UI can group batch calls and results without inferring boundaries from tool names or ordering heuristics.
 - Provider reasoning is stored separately from agent JSON.
 - Context belongs to the active chat. Compaction stores a model-produced checkpoint and an exact raw tail without deleting the source transcript.
+- A chat session JSON remains the canonical record. Small fingerprinted `.summary.json` sidecars provide list/lookup metadata, are updated atomically after a session save, and are rebuilt lazily from supported canonical sessions when missing, stale, or invalid.
 - Attachments use the selected model. There is no automatic attachment-model router or endpoint failover.
 - A chat's non-empty `Model` overrides the global default through one cloned effective-settings resolver; requests, title generation, context budgets, and compaction use the same effective model without mutating stored global settings.
 - Different chats may run concurrently; one chat has one active run and document mutations are serialized by host/document identity.

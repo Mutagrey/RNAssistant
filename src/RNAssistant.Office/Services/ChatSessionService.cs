@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 
 namespace RNAssistant.Office.Services
@@ -28,13 +29,16 @@ namespace RNAssistant.Office.Services
 
         public void ReconcileInterruptedRuns(string runtimeId)
         {
-            foreach (var session in _chatStore.List())
+            foreach (var header in _chatStore.ListHeaders())
             {
+                if (!IsUnfinishedRun(header.RunStatus) || string.Equals(header.RunRuntimeId, runtimeId, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var session = _chatStore.Load(header.Host, header.DocumentKey, header.Id);
                 var run = session == null ? null : session.LastRun;
-                var unfinished = run != null &&
-                    (string.Equals(run.Status, "running", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(run.Status, "cancelling", StringComparison.OrdinalIgnoreCase));
-                if (!unfinished || string.Equals(run.RuntimeId, runtimeId, StringComparison.Ordinal))
+                if (run == null || !IsUnfinishedRun(run.Status) || string.Equals(run.RuntimeId, runtimeId, StringComparison.Ordinal))
                 {
                     continue;
                 }
@@ -59,6 +63,12 @@ namespace RNAssistant.Office.Services
                 });
                 _chatStore.Save(session);
             }
+        }
+
+        private static bool IsUnfinishedRun(string status)
+        {
+            return string.Equals(status, "running", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(status, "cancelling", StringComparison.OrdinalIgnoreCase);
         }
 
         public void Reset()
@@ -206,11 +216,14 @@ namespace RNAssistant.Office.Services
             var documentKey = current == null ? _adapter.DocumentKey : current.DocumentKey;
             var documentTitle = current == null ? _adapter.DocumentTitle : current.DocumentTitle;
             _chatStore.Delete(host, documentKey, sessionId);
-            var next = _chatStore.List(host, documentKey, documentTitle).FirstOrDefault();
+            var nextHeader = _chatStore.ListHeaders(host, documentKey, documentTitle).FirstOrDefault();
+            var next = nextHeader == null ? null : _chatStore.Load(host, documentKey, nextHeader.Id);
             if (next == null)
             {
-                next = _chatStore.List(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle).FirstOrDefault()
-                    ?? _chatStore.CreateTransient(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle, "New chat");
+                nextHeader = _chatStore.ListHeaders(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle).FirstOrDefault();
+                next = nextHeader == null
+                    ? _chatStore.CreateTransient(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle, "New chat")
+                    : _chatStore.Load(_adapter.HostName, _adapter.DocumentKey, nextHeader.Id);
             }
 
             SetActiveSession(next);
@@ -322,66 +335,76 @@ namespace RNAssistant.Office.Services
 
         public IReadOnlyList<ChatSessionSummary> GetChatSummaries(string activeId)
         {
-            var sessions = _chatStore.List().ToList();
+            var summaries = _chatStore.ListHeaders().Select(ToSummary).ToList();
             foreach (var running in RunSessionsProvider == null ? new ChatSession[0] : RunSessionsProvider())
             {
                 var runningId = running.Id;
-                var storedIndex = sessions.FindIndex(item =>
+                var storedIndex = summaries.FindIndex(item =>
                     string.Equals(item.Id, runningId, StringComparison.OrdinalIgnoreCase));
+                var runningSummary = ToSummary(running);
                 if (storedIndex >= 0)
                 {
-                    sessions[storedIndex] = running;
+                    summaries[storedIndex] = runningSummary;
                 }
                 else
                 {
-                    sessions.Insert(0, running);
+                    summaries.Insert(0, runningSummary);
                 }
             }
             if (_activeSession != null && !_activeSessionPersisted &&
                 string.Equals(_activeSession.Id, activeId, StringComparison.OrdinalIgnoreCase) &&
-                sessions.All(item => !string.Equals(item.Id, activeId, StringComparison.OrdinalIgnoreCase)))
+                summaries.All(item => !string.Equals(item.Id, activeId, StringComparison.OrdinalIgnoreCase)))
             {
-                sessions.Insert(0, _activeSession);
+                summaries.Insert(0, ToSummary(_activeSession));
             }
 
-            return sessions.Select(ToSummary).ToList();
+            return summaries;
         }
 
         private ChatSessionSummary ToSummary(ChatSession session)
         {
-            var id = session.Id;
+            return ToSummary(ChatSessionHeaderFactory.Create(session));
+        }
+
+        private ChatSessionSummary ToSummary(ChatSessionHeader header)
+        {
+            var id = header.Id;
             var run = RunStateProvider == null ? null : RunStateProvider(id);
             return new ChatSessionSummary
             {
                 Id = id,
-                Host = session.Host,
-                DocumentKey = session.DocumentKey,
-                DocumentTitle = session.DocumentTitle,
-                DocumentPath = ResolveDocumentPath(session),
-                Title = session.Title,
-                Model = session.Model,
-                Mode = ChatModes.Normalize(session.Mode),
-                HtmlModeEnabled = session.HtmlModeEnabled,
-                ReasoningEnabled = session.ReasoningEnabled,
-                HasHtmlWorkspace = HasHtmlWorkspace(session.HtmlWorkspace),
-                HtmlFileCount = session.HtmlWorkspace == null || session.HtmlWorkspace.Files == null ? 0 : session.HtmlWorkspace.Files.Count,
-                HtmlDataSourceCount = session.HtmlWorkspace == null || session.HtmlWorkspace.DataSources == null ? 0 : session.HtmlWorkspace.DataSources.Count,
-                CreatedUtc = session.CreatedUtc,
-                UpdatedUtc = session.UpdatedUtc,
-                MessageCount = session.Messages == null ? 0 : session.Messages.Count(message => message != null && !message.ProtocolMessage),
-                IsCurrentDocument = IsCurrentDocument(session),
-                RunId = run == null ? (session.LastRun == null ? null : session.LastRun.RunId) : run.RunId,
-                RunStatus = run == null ? (session.LastRun == null ? null : session.LastRun.Status) : run.Status,
-                RunPhase = run == null ? (session.LastRun == null ? null : session.LastRun.Phase) : run.Phase,
-                RunStartedUtc = run == null ? (session.LastRun == null ? (DateTime?)null : session.LastRun.StartedUtc) : run.StartedUtc
+                Host = header.Host,
+                DocumentKey = header.DocumentKey,
+                DocumentTitle = header.DocumentTitle,
+                DocumentPath = ResolveDocumentPath(header.DocumentPath, header.DocumentKey),
+                Title = header.Title,
+                Model = header.Model,
+                Mode = ChatModes.Normalize(header.Mode),
+                HtmlModeEnabled = header.HtmlModeEnabled,
+                ReasoningEnabled = header.ReasoningEnabled,
+                HasHtmlWorkspace = header.HasHtmlWorkspace,
+                HtmlFileCount = header.HtmlFileCount,
+                HtmlDataSourceCount = header.HtmlDataSourceCount,
+                CreatedUtc = header.CreatedUtc,
+                UpdatedUtc = header.UpdatedUtc,
+                MessageCount = header.MessageCount,
+                IsCurrentDocument = IsCurrentDocument(header.Host, header.DocumentKey),
+                RunId = run == null ? header.RunId : run.RunId,
+                RunStatus = run == null ? header.RunStatus : run.Status,
+                RunPhase = run == null ? header.RunPhase : run.Phase,
+                RunStartedUtc = run == null ? header.RunStartedUtc : (DateTime?)run.StartedUtc
             };
         }
 
         public bool IsCurrentDocument(ChatSession session)
         {
-            return session != null &&
-                string.Equals(session.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(session.DocumentKey, _adapter.DocumentKey, StringComparison.OrdinalIgnoreCase);
+            return session != null && IsCurrentDocument(session.Host, session.DocumentKey);
+        }
+
+        private bool IsCurrentDocument(string host, string documentKey)
+        {
+            return string.Equals(host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(documentKey, _adapter.DocumentKey, StringComparison.OrdinalIgnoreCase);
         }
 
         public string GetDocumentPath(ChatSession session)
@@ -411,30 +434,24 @@ namespace RNAssistant.Office.Services
 
         private static string ResolveDocumentPath(ChatSession session)
         {
-            if (session == null)
+            return session == null ? string.Empty : ResolveDocumentPath(session.DocumentPath, session.DocumentKey);
+        }
+
+        private static string ResolveDocumentPath(string documentPath, string documentKey)
+        {
+            if (!string.IsNullOrWhiteSpace(documentPath))
             {
-                return string.Empty;
-            }
-            if (!string.IsNullOrWhiteSpace(session.DocumentPath))
-            {
-                return session.DocumentPath;
+                return documentPath;
             }
 
             var marker = ":Path:";
-            var key = session.DocumentKey ?? string.Empty;
+            var key = documentKey ?? string.Empty;
             var markerIndex = key.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
             if (markerIndex >= 0)
             {
                 return key.Substring(markerIndex + marker.Length);
             }
             return Path.IsPathRooted(key) ? key : string.Empty;
-        }
-
-        private static bool HasHtmlWorkspace(HtmlWorkspace workspace)
-        {
-            return workspace != null &&
-                ((workspace.Files != null && workspace.Files.Count > 0) ||
-                 (workspace.DataSources != null && workspace.DataSources.Count > 0));
         }
 
         public static string BuildForkTitle(ChatSession source)

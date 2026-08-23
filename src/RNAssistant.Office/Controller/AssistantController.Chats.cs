@@ -351,7 +351,7 @@ namespace RNAssistant.Office
                 throw new InvalidOperationException("Сначала остановите запросы в чатах этого документа.");
             }
 
-            var sessions = _chatStore.List(host, documentKey, string.Empty);
+            var sessions = _chatStore.ListHeaders(host, documentKey, string.Empty);
             foreach (var session in sessions)
             {
                 _attachmentStore.DeleteSession(session.Id);

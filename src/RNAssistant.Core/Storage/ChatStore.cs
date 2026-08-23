@@ -11,13 +11,16 @@ namespace RNAssistant.Core.Storage
 {
     public sealed class ChatStore
     {
+        private static readonly object PersistenceSync = new object();
         private readonly AppDataPaths _paths;
         private readonly JsonFileStore _json;
+        private readonly ChatIndexStore _index;
 
         public ChatStore(AppDataPaths paths)
         {
             _paths = paths;
             _json = new JsonFileStore();
+            _index = new ChatIndexStore();
         }
 
         public ChatSession LoadOrCreateActive(string host, string documentKey, string documentTitle)
@@ -26,7 +29,8 @@ namespace RNAssistant.Core.Storage
             var session = string.IsNullOrWhiteSpace(activeId) ? null : Load(host, documentKey, activeId);
             if (session == null)
             {
-                session = List(host, documentKey, documentTitle).FirstOrDefault();
+                var header = ListHeaders(host, documentKey, documentTitle).FirstOrDefault();
+                session = header == null ? null : Load(host, documentKey, header.Id);
             }
             if (session == null)
             {
@@ -86,15 +90,23 @@ namespace RNAssistant.Core.Storage
                 return null;
             }
 
-            return List().FirstOrDefault(s =>
-                string.Equals(s.Id, sessionId, StringComparison.OrdinalIgnoreCase));
+            var header = ListHeaders().FirstOrDefault(item =>
+                string.Equals(item.Id, sessionId, StringComparison.OrdinalIgnoreCase));
+            var session = header == null ? null : Load(header.Host, header.DocumentKey, header.Id);
+            return session ?? List().FirstOrDefault(item =>
+                string.Equals(item.Id, sessionId, StringComparison.OrdinalIgnoreCase));
         }
 
         public void Save(ChatSession session)
         {
-            NormalizeSession(session, session == null ? null : session.Host, session == null ? null : session.DocumentKey, session == null ? null : session.DocumentTitle);
-            session.UpdatedUtc = DateTime.UtcNow;
-            _json.Save(GetSessionPath(session.Host, session.DocumentKey, session.Id), session);
+            lock (PersistenceSync)
+            {
+                NormalizeSession(session, session == null ? null : session.Host, session == null ? null : session.DocumentKey, session == null ? null : session.DocumentTitle);
+                session.UpdatedUtc = DateTime.UtcNow;
+                var path = GetSessionPath(session.Host, session.DocumentKey, session.Id);
+                _json.Save(path, session);
+                _index.Save(path, session);
+            }
         }
 
         public ChatSession Move(ChatSession session, string host, string documentKey, string documentTitle)
@@ -112,9 +124,13 @@ namespace RNAssistant.Core.Storage
             Save(session);
 
             var newPath = GetSessionPath(session.Host, session.DocumentKey, session.Id);
-            if (!string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase) && File.Exists(oldPath))
+            if (!string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase))
             {
-                File.Delete(oldPath);
+                lock (PersistenceSync)
+                {
+                    if (File.Exists(oldPath)) File.Delete(oldPath);
+                    _index.Delete(oldPath);
+                }
             }
 
             SaveActiveSessionId(host, documentKey, session.Id);
@@ -161,7 +177,11 @@ namespace RNAssistant.Core.Storage
                 return false;
             }
 
-            File.Delete(path);
+            lock (PersistenceSync)
+            {
+                File.Delete(path);
+                _index.Delete(path);
+            }
             if (string.Equals(LoadActiveSessionId(host, documentKey), sessionId, StringComparison.OrdinalIgnoreCase))
             {
                 SaveActiveSessionId(host, documentKey, string.Empty);
@@ -178,7 +198,10 @@ namespace RNAssistant.Core.Storage
                 return false;
             }
 
-            Directory.Delete(directory, true);
+            lock (PersistenceSync)
+            {
+                Directory.Delete(directory, true);
+            }
             return true;
         }
 
@@ -198,7 +221,7 @@ namespace RNAssistant.Core.Storage
             var sessions = new List<ChatSession>();
             foreach (var directory in SafeGetDirectories(_paths.ChatDirectory))
             {
-                sessions.AddRange(SafeGetFiles(directory)
+                sessions.AddRange(SafeGetSessionFiles(directory)
                     .Select(LoadSession)
                     .Where(IsSupported)
                     .Select(s =>
@@ -221,7 +244,7 @@ namespace RNAssistant.Core.Storage
                 return new List<ChatSession>();
             }
 
-            return SafeGetFiles(directory)
+            return SafeGetSessionFiles(directory)
                 .Select(LoadSession)
                 .Where(IsSupported)
                 .Select(s =>
@@ -230,6 +253,38 @@ namespace RNAssistant.Core.Storage
                     return s;
                 })
                 .OrderByDescending(s => s.UpdatedUtc)
+                .ToList();
+        }
+
+        public IReadOnlyList<ChatSessionHeader> ListHeaders()
+        {
+            if (!Directory.Exists(_paths.ChatDirectory))
+            {
+                return new List<ChatSessionHeader>();
+            }
+
+            var headers = new List<ChatSessionHeader>();
+            foreach (var directory in SafeGetDirectories(_paths.ChatDirectory))
+            {
+                headers.AddRange(SafeGetSessionFiles(directory)
+                    .Select(path => _index.LoadOrCreate(path, LoadIndexedSession))
+                    .Where(header => header != null));
+            }
+            return headers.OrderByDescending(header => header.UpdatedUtc).ToList();
+        }
+
+        public IReadOnlyList<ChatSessionHeader> ListHeaders(string host, string documentKey, string documentTitle)
+        {
+            var directory = GetDocumentDirectory(host, documentKey);
+            if (!Directory.Exists(directory))
+            {
+                return new List<ChatSessionHeader>();
+            }
+
+            return SafeGetSessionFiles(directory)
+                .Select(path => _index.LoadOrCreate(path, value => LoadIndexedSession(value, host, documentKey, documentTitle)))
+                .Where(header => header != null)
+                .OrderByDescending(header => header.UpdatedUtc)
                 .ToList();
         }
 
@@ -268,6 +323,22 @@ namespace RNAssistant.Core.Storage
             return session != null &&
                 session.FormatVersion >= 1 &&
                 session.FormatVersion <= ChatSession.CurrentFormatVersion;
+        }
+
+        private static ChatSession LoadIndexedSession(string path)
+        {
+            var session = LoadSession(path);
+            if (!IsSupported(session)) return null;
+            NormalizeSession(session, session.Host, session.DocumentKey, session.DocumentTitle);
+            return session;
+        }
+
+        private static ChatSession LoadIndexedSession(string path, string host, string documentKey, string documentTitle)
+        {
+            var session = LoadSession(path);
+            if (!IsSupported(session)) return null;
+            NormalizeSession(session, host, documentKey, documentTitle);
+            return session;
         }
 
         private static ChatSession LoadSession(string path)
@@ -338,11 +409,13 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private static IEnumerable<string> SafeGetFiles(string directory)
+        private static IEnumerable<string> SafeGetSessionFiles(string directory)
         {
             try
             {
-                return Directory.GetFiles(directory, "*.json");
+                return Directory.GetFiles(directory, "*.json")
+                    .Where(path => !ChatIndexStore.IsSidecarPath(path))
+                    .ToArray();
             }
             catch (IOException)
             {
