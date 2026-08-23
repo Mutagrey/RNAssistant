@@ -68,7 +68,8 @@ See [agent-protocol.md](agent-protocol.md).
 - `src/RNAssistant.Office/Tools/VbaToolExecutor*.cs`: VBA host orchestration and verification in the base partial, package install/run/remove lifecycle in `.Packages`, and deterministic text patching in `.Patching`.
 - `src/RNAssistant.Office/Controller`: typed bridge-facing orchestration.
 - `src/RNAssistant.OfficeHosts`: Excel/Word/PowerPoint/Outlook COM adapters.
-- `web/js`: static feature modules; no agent routing or business rules.
+- `web/js/app-html-workspace.js`: HTML workspace state and bridge orchestration; sandbox document assembly and artifact/plan presentation live in the adjacent `app-html-workspace-preview.js` and `app-html-workspace-artifacts.js` modules.
+- Other `web/js` files remain static feature modules; no agent routing or business rules.
 
 ## Harness
 
