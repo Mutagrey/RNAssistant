@@ -403,7 +403,7 @@ namespace RNAssistant.Office
                 ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId,
                 ActivePlanArtifactId = session == null ? string.Empty : session.ActivePlanArtifactId,
                 ContextUsage = ContextUsageEstimator.FromSession(session, ResolveChatSettings(session)),
-                HtmlWorkspace = session == null ? new HtmlWorkspace() : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace)
+                HtmlWorkspace = HtmlWorkspaceDto.From(session == null ? null : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace))
             };
         }
 

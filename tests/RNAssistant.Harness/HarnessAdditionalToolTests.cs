@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
@@ -287,6 +290,7 @@ namespace RNAssistant.Harness
                 var store = new ChatStore(paths);
                 var session = store.Create("Excel", "book", "Book.xlsx", "HTML chat");
                 HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "<h1>Saved</h1>", true);
+                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "<h1>Saved again</h1>", true);
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "hello" });
                 store.Save(session);
 
@@ -295,6 +299,9 @@ namespace RNAssistant.Harness
                 AssertEqual(0, loaded.Messages.Count, "messages cleared");
                 AssertEqual(1, loaded.HtmlWorkspace.Files.Count, "html workspace preserved");
                 AssertEqual("index.html", loaded.HtmlWorkspace.ActiveFileId, "active html preserved");
+                AssertEqual(1, loaded.HtmlWorkspace.History.Count, "html history preserved");
+                HtmlArtifactToolExecutor.RestoreSnapshot(loaded, loaded.HtmlWorkspace.History[0].Id);
+                AssertEqual("<h1>Saved</h1>", loaded.HtmlWorkspace.Files[0].Content, "persisted html history supports undo");
 
                 AssertTrue(store.Delete(session.Host, session.DocumentKey, session.Id), "chat deleted");
                 AssertTrue(store.Load(session.Host, session.DocumentKey, session.Id) == null, "deleted chat not loaded");
@@ -322,6 +329,50 @@ namespace RNAssistant.Harness
             AssertEqual("index.html", session.HtmlWorkspace.ActiveFileId, "html redo keeps active file");
             AssertEqual(0, session.HtmlWorkspace.RedoHistory.Count, "html redo consumes redo version");
             AssertEqual(historyCount, session.HtmlWorkspace.History.Count, "html redo restores undo history");
+        }
+
+        private static void HtmlWorkspaceHistoryIsBoundedAndTransportIsCompact()
+        {
+            var largeSession = new ChatSession { Title = "HTML bounded history" };
+            for (var revision = 0; revision < 12; revision++)
+            {
+                HtmlArtifactToolExecutor.UpsertFile(
+                    largeSession,
+                    "index.html",
+                    "html",
+                    new string((char)('a' + revision), 280000),
+                    true);
+            }
+
+            var storedCharacters = largeSession.HtmlWorkspace.History
+                .Sum(snapshot => HtmlWorkspaceHistoryPolicy.EstimateContentCharacters(snapshot));
+            AssertTrue(largeSession.HtmlWorkspace.History.Count < HtmlWorkspaceHistoryPolicy.MaxItems, "large html history is pruned before item limit");
+            AssertTrue(storedCharacters <= HtmlWorkspaceHistoryPolicy.MaxContentCharacters, "large html history stays within character budget");
+            AssertEqual('k', largeSession.HtmlWorkspace.History[0].Files[0].Content[0], "latest undo snapshot is retained");
+
+            HtmlArtifactToolExecutor.RestoreSnapshot(largeSession, largeSession.HtmlWorkspace.History[0].Id);
+            AssertEqual('k', largeSession.HtmlWorkspace.Files[0].Content[0], "bounded history still supports undo");
+            HtmlArtifactToolExecutor.RedoSnapshot(largeSession, largeSession.HtmlWorkspace.RedoHistory[0].Id);
+            AssertEqual('l', largeSession.HtmlWorkspace.Files[0].Content[0], "bounded history still supports redo");
+
+            var transportSession = new ChatSession { Title = "HTML compact transport" };
+            HtmlArtifactToolExecutor.UpsertFile(transportSession, "index.html", "html", "CURRENT_FIRST", true);
+            HtmlArtifactToolExecutor.UpsertFile(transportSession, "index.html", "html", "HISTORY_SECOND", true);
+            HtmlArtifactToolExecutor.UpsertFile(transportSession, "index.html", "html", "CURRENT_THIRD", true);
+
+            var bridgeJson = JsonConvert.SerializeObject(HtmlWorkspaceDto.From(transportSession.HtmlWorkspace));
+            AssertContains(bridgeJson, "CURRENT_THIRD", "bridge workspace includes current file content");
+            AssertTrue(bridgeJson.IndexOf("CURRENT_FIRST", StringComparison.Ordinal) < 0, "bridge workspace omits old snapshot bodies");
+            AssertTrue(bridgeJson.IndexOf("HISTORY_SECOND", StringComparison.Ordinal) < 0, "bridge workspace history contains metadata only");
+
+            var toolResult = new HtmlArtifactToolExecutor().ExecuteControllerTool(
+                new ToolCommand { ToolId = HtmlArtifactToolExecutor.ReadWorkspaceToolId },
+                transportSession,
+                false);
+            AssertTrue(toolResult.Success, "html workspace compact read succeeds");
+            AssertContains(toolResult.DataJson, "CURRENT_THIRD", "tool workspace includes current file content");
+            AssertTrue(toolResult.DataJson.IndexOf("CURRENT_FIRST", StringComparison.Ordinal) < 0, "tool workspace omits old snapshot bodies");
+            AssertTrue(toolResult.DataJson.IndexOf("HISTORY_SECOND", StringComparison.Ordinal) < 0, "tool workspace omits latest history body");
         }
 
         private static void ToolValidateChecksPayloadWithoutSaving()

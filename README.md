@@ -223,6 +223,7 @@ The HTML tab is tied to the active chat session. Agent-created HTML pages are st
 - Use `common.html_workspace_delete_file` and `common.html_workspace_delete_data` to remove workspace items. Deletions are recorded in workspace history and can be undone.
 - Use `common.html_workspace_read` to inspect the current workspace and `common.html_workspace_set_active` to choose the displayed HTML file.
 - Every workspace mutation also records an immutable chat artifact revision. Editing or forking from an older message restores/copies the exact revision at that point rather than the latest workspace.
+- Undo/redo history is bounded by item count and stored content size. UI responses carry only snapshot ids/labels/timestamps, and Agent reads return only the current workspace state.
 Edits and deletions of an existing workspace require a successful workspace read in the current agent run.
 HTML preview and its scripts are always enabled inside a sandboxed iframe.
 

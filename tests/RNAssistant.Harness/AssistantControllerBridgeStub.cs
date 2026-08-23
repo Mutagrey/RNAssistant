@@ -190,24 +190,24 @@ namespace RNAssistant.Office
         }
 
         public ToolResult RestoreVbaBackup(string backupId, string moduleName) { return ToolResult.Ok("restored"); }
-        public HtmlWorkspaceResponse GetHtmlWorkspace(string chatId = null) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace() }; }
-        public HtmlWorkspaceResponse SaveHtmlWorkspaceFile(string chatId, string path, string kind, string content, bool setActive) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace { ActiveFileId = path ?? string.Empty } }; }
-        public HtmlWorkspaceResponse SaveHtmlWorkspaceData(string chatId, string name, string json) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace() }; }
+        public HtmlWorkspaceResponse GetHtmlWorkspace(string chatId = null) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
+        public HtmlWorkspaceResponse SaveHtmlWorkspaceFile(string chatId, string path, string kind, string content, bool setActive) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(new HtmlWorkspace { ActiveFileId = path ?? string.Empty }) }; }
+        public HtmlWorkspaceResponse SaveHtmlWorkspaceData(string chatId, string name, string json) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
         public HtmlWorkspaceResponse DeleteHtmlWorkspaceFile(string chatId, string path)
         {
             LastChatId = chatId;
             LastHtmlPath = path;
-            return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace() };
+            return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) };
         }
         public HtmlWorkspaceResponse DeleteHtmlWorkspaceData(string chatId, string name)
         {
             LastChatId = chatId;
             LastHtmlDataName = name;
-            return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace() };
+            return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) };
         }
-        public HtmlWorkspaceResponse SetActiveHtmlWorkspaceFile(string chatId, string path) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace { ActiveFileId = path ?? string.Empty } }; }
-        public HtmlWorkspaceResponse RestoreHtmlWorkspaceSnapshot(string chatId, string snapshotId) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace() }; }
-        public HtmlWorkspaceResponse RedoHtmlWorkspaceSnapshot(string chatId, string snapshotId) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = new HtmlWorkspace() }; }
+        public HtmlWorkspaceResponse SetActiveHtmlWorkspaceFile(string chatId, string path) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(new HtmlWorkspace { ActiveFileId = path ?? string.Empty }) }; }
+        public HtmlWorkspaceResponse RestoreHtmlWorkspaceSnapshot(string chatId, string snapshotId) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
+        public HtmlWorkspaceResponse RedoHtmlWorkspaceSnapshot(string chatId, string snapshotId) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
         public object AllowHtmlNetworkOrigin(string origin) { return new { origin = origin, allowed = true }; }
         public Task<HtmlFetchResponse> HtmlFetchAsync(HtmlFetchRequest request, CancellationToken cancellationToken) { return Task.FromResult(new HtmlFetchResponse { Url = request == null ? "" : request.Url, Status = 200, Body = "ok", Headers = new Dictionary<string, string>() }); }
         public DocumentContext GetContext(string chatId = null) { return new DocumentContext { DocumentKey = chatId ?? string.Empty }; }

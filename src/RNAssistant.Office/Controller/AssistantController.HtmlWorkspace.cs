@@ -90,7 +90,7 @@ namespace RNAssistant.Office
             return new HtmlWorkspaceResponse
             {
                 ActiveChatId = session.Id,
-                Workspace = session == null ? new HtmlWorkspace() : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace)
+                Workspace = HtmlWorkspaceDto.From(session == null ? null : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace))
             };
         }
     }

@@ -19,7 +19,6 @@ namespace RNAssistant.Office.Tools
 
         private const int MaxHtmlChars = 300000;
         private const int MaxDataChars = 300000;
-        private const int MaxHistoryItems = 20;
 
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
@@ -385,9 +384,21 @@ namespace RNAssistant.Office.Tools
 
         private static string WorkspaceDataJson(HtmlWorkspace workspace)
         {
-            var copy = workspace == null
-                ? new HtmlWorkspace()
-                : JsonConvert.DeserializeObject<HtmlWorkspace>(JsonConvert.SerializeObject(workspace));
+            var copy = new HtmlWorkspace
+            {
+                ActiveFileId = workspace == null ? string.Empty : workspace.ActiveFileId,
+                Files = (workspace == null ? new List<HtmlWorkspaceFile>() : workspace.Files ?? new List<HtmlWorkspaceFile>())
+                    .Where(file => file != null)
+                    .Select(CloneFile)
+                    .ToList(),
+                DataSources = (workspace == null ? new List<HtmlWorkspaceDataSource>() : workspace.DataSources ?? new List<HtmlWorkspaceDataSource>())
+                    .Where(dataSource => dataSource != null)
+                    .Select(CloneDataSource)
+                    .ToList(),
+                History = new List<HtmlWorkspaceSnapshot>(),
+                RedoHistory = new List<HtmlWorkspaceSnapshot>(),
+                UpdatedUtc = workspace == null ? DateTime.UtcNow : workspace.UpdatedUtc
+            };
             return JsonConvert.SerializeObject(new
             {
                 type = "rnassistant.htmlWorkspace",
@@ -433,11 +444,11 @@ namespace RNAssistant.Office.Tools
                 }
             }
 
-            return snapshots
+            var ordered = snapshots
                 .Where(h => h != null)
                 .OrderByDescending(h => h.CreatedUtc)
-                .Take(MaxHistoryItems)
                 .ToList();
+            return HtmlWorkspaceHistoryPolicy.Trim(ordered);
         }
 
         private static void PushHistory(HtmlWorkspace workspace, string label)
@@ -486,10 +497,9 @@ namespace RNAssistant.Office.Tools
             }
 
             snapshots.Insert(0, snapshot);
-            if (snapshots.Count > MaxHistoryItems)
-            {
-                snapshots.RemoveRange(MaxHistoryItems, snapshots.Count - MaxHistoryItems);
-            }
+            var bounded = HtmlWorkspaceHistoryPolicy.Trim(snapshots);
+            snapshots.Clear();
+            snapshots.AddRange(bounded);
         }
 
         private static void ApplySnapshot(HtmlWorkspace workspace, HtmlWorkspaceSnapshot snapshot)

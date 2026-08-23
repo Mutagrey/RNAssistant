@@ -140,6 +140,7 @@ namespace RNAssistant.Harness
                 Test("tools: confirmation matrix", ConfirmationMatrixCoversDryAndManualRuns),
                 Test("tools: html workspace updates session", HtmlWorkspaceToolsUpdateChatSession),
                 Test("tools: html workspace undo", HtmlWorkspaceUndoRestoresPreviousVersion),
+                Test("tools: html workspace history is bounded", HtmlWorkspaceHistoryIsBoundedAndTransportIsCompact),
                 Test("storage: html workspace persists", HtmlWorkspacePersistsWithChatSession),
                 Test("tools: validate payload without saving", ToolValidateChecksPayloadWithoutSaving),
                 Test("plans: CRUD creates revisions and rewinds", PlanCrudCreatesRevisionsAndRewindsCleanly),

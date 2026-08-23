@@ -567,7 +567,91 @@ namespace RNAssistant.Office.Contracts
         public string ActiveChatId { get; set; }
 
         [JsonProperty("workspace")]
-        public HtmlWorkspace Workspace { get; set; }
+        public HtmlWorkspaceDto Workspace { get; set; }
+    }
+
+    public sealed class HtmlWorkspaceDto
+    {
+        [JsonProperty("activeFileId")] public string ActiveFileId { get; set; }
+        [JsonProperty("files")] public IReadOnlyList<HtmlWorkspaceFile> Files { get; set; }
+        [JsonProperty("dataSources")] public IReadOnlyList<HtmlWorkspaceDataSource> DataSources { get; set; }
+        [JsonProperty("history")] public IReadOnlyList<HtmlWorkspaceSnapshotDto> History { get; set; }
+        [JsonProperty("redoHistory")] public IReadOnlyList<HtmlWorkspaceSnapshotDto> RedoHistory { get; set; }
+        [JsonProperty("updatedUtc")] public System.DateTime UpdatedUtc { get; set; }
+
+        public static HtmlWorkspaceDto From(HtmlWorkspace workspace)
+        {
+            workspace = workspace ?? new HtmlWorkspace();
+            return new HtmlWorkspaceDto
+            {
+                ActiveFileId = workspace.ActiveFileId,
+                Files = CloneFiles(workspace.Files),
+                DataSources = CloneDataSources(workspace.DataSources),
+                History = SnapshotSummaries(workspace.History),
+                RedoHistory = SnapshotSummaries(workspace.RedoHistory),
+                UpdatedUtc = workspace.UpdatedUtc
+            };
+        }
+
+        private static IReadOnlyList<HtmlWorkspaceFile> CloneFiles(IEnumerable<HtmlWorkspaceFile> files)
+        {
+            var result = new List<HtmlWorkspaceFile>();
+            foreach (var file in files ?? new HtmlWorkspaceFile[0])
+            {
+                if (file == null) continue;
+                result.Add(new HtmlWorkspaceFile
+                {
+                    Id = file.Id,
+                    Path = file.Path,
+                    Kind = file.Kind,
+                    Content = file.Content,
+                    CreatedUtc = file.CreatedUtc,
+                    UpdatedUtc = file.UpdatedUtc
+                });
+            }
+            return result;
+        }
+
+        private static IReadOnlyList<HtmlWorkspaceDataSource> CloneDataSources(IEnumerable<HtmlWorkspaceDataSource> dataSources)
+        {
+            var result = new List<HtmlWorkspaceDataSource>();
+            foreach (var dataSource in dataSources ?? new HtmlWorkspaceDataSource[0])
+            {
+                if (dataSource == null) continue;
+                result.Add(new HtmlWorkspaceDataSource
+                {
+                    Id = dataSource.Id,
+                    Name = dataSource.Name,
+                    Json = dataSource.Json,
+                    CreatedUtc = dataSource.CreatedUtc,
+                    UpdatedUtc = dataSource.UpdatedUtc
+                });
+            }
+            return result;
+        }
+
+        private static IReadOnlyList<HtmlWorkspaceSnapshotDto> SnapshotSummaries(IEnumerable<HtmlWorkspaceSnapshot> snapshots)
+        {
+            var result = new List<HtmlWorkspaceSnapshotDto>();
+            foreach (var snapshot in snapshots ?? new HtmlWorkspaceSnapshot[0])
+            {
+                if (snapshot == null) continue;
+                result.Add(new HtmlWorkspaceSnapshotDto
+                {
+                    Id = snapshot.Id,
+                    Label = snapshot.Label,
+                    CreatedUtc = snapshot.CreatedUtc
+                });
+            }
+            return result;
+        }
+    }
+
+    public sealed class HtmlWorkspaceSnapshotDto
+    {
+        [JsonProperty("id")] public string Id { get; set; }
+        [JsonProperty("label")] public string Label { get; set; }
+        [JsonProperty("createdUtc")] public System.DateTime CreatedUtc { get; set; }
     }
 
     public sealed class QuickActionResponse
@@ -678,7 +762,7 @@ namespace RNAssistant.Office.Contracts
         public object ContextUsage { get; set; }
 
         [JsonProperty("htmlWorkspace")]
-        public HtmlWorkspace HtmlWorkspace { get; set; }
+        public HtmlWorkspaceDto HtmlWorkspace { get; set; }
     }
 
     public sealed class InitResponse
@@ -756,7 +840,7 @@ namespace RNAssistant.Office.Contracts
         public object ContextUsage { get; set; }
 
         [JsonProperty("htmlWorkspace")]
-        public HtmlWorkspace HtmlWorkspace { get; set; }
+        public HtmlWorkspaceDto HtmlWorkspace { get; set; }
 
         [JsonProperty("quickAction")]
         public string QuickAction { get; set; }
