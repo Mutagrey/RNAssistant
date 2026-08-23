@@ -335,6 +335,13 @@ namespace RNAssistant.Harness
             AssertTrue(cancellation.IsCancellationRequested, "confirm cancellation source signalled");
             lease.Dispose();
             AssertTrue(!registry.IsRunning("chat-confirm"), "confirm lease released");
+
+            var shutdownCancellation = new CancellationTokenSource();
+            var shutdownLease = registry.Start("chat-shutdown", "run-shutdown", session, shutdownCancellation);
+            registry.Clear();
+            AssertTrue(shutdownCancellation.IsCancellationRequested, "runtime shutdown cancels active run");
+            AssertTrue(!registry.IsRunning("chat-shutdown"), "runtime shutdown clears run registry");
+            shutdownLease.Dispose();
         }
 
         private static string AbsoluteAttachmentPath(AppDataPaths paths, ChatAttachment attachment)

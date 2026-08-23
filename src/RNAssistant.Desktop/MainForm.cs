@@ -154,6 +154,7 @@ namespace RNAssistant.Desktop
             }
 
             DispatchedOfficeApplicationAdapter adapter = null;
+            AssistantRuntime runtime = null;
             try
             {
                 DesktopLog.Info("Attach requested. Target=" + entry.DisplayName + ", hwnd=" + entry.Target.Hwnd + ", pid=" + entry.Target.ProcessId);
@@ -162,10 +163,12 @@ namespace RNAssistant.Desktop
                 {
                     return _adapterProvider.Create(target.Host, target);
                 });
-                var runtime = new AssistantRuntime(adapter);
+                runtime = new AssistantRuntime(adapter);
+                DisposeCurrentRuntime();
                 ClearContent();
                 DisposeCurrentAdapter();
                 _runtime = runtime;
+                runtime = null;
                 _currentAdapter = adapter;
                 adapter = null;
                 var pane = _runtime.CreatePaneControl();
@@ -183,15 +186,20 @@ namespace RNAssistant.Desktop
             }
             catch (Exception ex)
             {
+                if (runtime != null)
+                {
+                    runtime.Dispose();
+                }
                 if (adapter != null)
                 {
                     adapter.Dispose();
                 }
                 DesktopLog.Error("Attach failed.", ex);
                 RefreshTargetUi("Attach failed: " + ex.Message);
+                DisposeCurrentRuntime();
+                ClearContent();
                 ShowPlaceholder(ex.Message, true);
                 DisposeCurrentAdapter();
-                _runtime = null;
                 MessageBox.Show(this, ex.Message, "RN Assistant", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
@@ -200,6 +208,7 @@ namespace RNAssistant.Desktop
         {
             _autoFollowTimer.Stop();
             _autoFollowTimer.Dispose();
+            DisposeCurrentRuntime();
             ClearContent();
             DisposeCurrentAdapter();
             base.OnFormClosed(e);
@@ -353,6 +362,17 @@ namespace RNAssistant.Desktop
 
             _currentAdapter.Dispose();
             _currentAdapter = null;
+        }
+
+        private void DisposeCurrentRuntime()
+        {
+            if (_runtime == null)
+            {
+                return;
+            }
+
+            _runtime.Dispose();
+            _runtime = null;
         }
 
         private static OfficeTargetDescriptor CloneTarget(OfficeTargetDescriptor source)

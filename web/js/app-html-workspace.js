@@ -708,6 +708,10 @@
     return "<style data-rn-preview-reset>html,body{min-height:100%;margin:0;}*,*::before,*::after{box-sizing:border-box;}</style>";
   }
 
+  function previewContentSecurityPolicy() {
+    return "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; connect-src 'none'; img-src data: blob:; font-src data:; media-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline' blob: data:; frame-src 'none'; child-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';\">";
+  }
+
   function networkBridgeScript() {
     return "<script>(function(){" +
       "var nativeFetch=window.fetch&&window.fetch.bind(window),seq=1,pending={};" +
@@ -727,7 +731,7 @@
   function buildPreviewHtml() {
     var file = activeHtmlFile();
     var html = file ? fileContent(file) : "";
-    var headInject = previewViewportReset() + "\n" + networkBridgeScript() + "\n" + dataScript() + "\n" + cssBlock();
+    var headInject = previewContentSecurityPolicy() + "\n" + previewViewportReset() + "\n" + networkBridgeScript() + "\n" + dataScript() + "\n" + cssBlock();
     var bodyInject = scriptBlock();
     if (!html.trim()) {
       html = "<div style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">HTML workspace пуст.</div>";

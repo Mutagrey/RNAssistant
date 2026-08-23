@@ -56,6 +56,18 @@ namespace RNAssistant.Office.Contracts
         public bool? Cancelled { get; set; }
     }
 
+    public sealed class CancellationResponse
+    {
+        [JsonProperty("cancelled")]
+        public bool Cancelled { get; set; }
+    }
+
+    public sealed class DeleteResponse
+    {
+        [JsonProperty("deleted")]
+        public bool Deleted { get; set; }
+    }
+
     public sealed class ProgressMessage
     {
         [JsonProperty("type")]
@@ -258,6 +270,15 @@ namespace RNAssistant.Office.Contracts
     {
         [JsonProperty("origin")]
         public string Origin { get; set; }
+    }
+
+    public sealed class HtmlOriginPermissionResponse
+    {
+        [JsonProperty("origin")]
+        public string Origin { get; set; }
+
+        [JsonProperty("allowed")]
+        public bool Allowed { get; set; }
     }
 
     public sealed class HtmlFetchResponse

@@ -14,9 +14,13 @@ namespace RNAssistant.Office
             return _htmlNetwork.FetchAsync(request, cancellationToken);
         }
 
-        public object AllowHtmlNetworkOrigin(string origin)
+        public HtmlOriginPermissionResponse AllowHtmlNetworkOrigin(string origin)
         {
-            return new { origin = _htmlNetwork.AllowOrigin(origin), allowed = true };
+            return new HtmlOriginPermissionResponse
+            {
+                Origin = _htmlNetwork.AllowOrigin(origin),
+                Allowed = true
+            };
         }
 
         public HtmlWorkspaceResponse GetHtmlWorkspace(string chatId = null)

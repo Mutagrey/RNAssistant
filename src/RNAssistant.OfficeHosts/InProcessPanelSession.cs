@@ -73,15 +73,20 @@ namespace RNAssistant.OfficeHosts
                 ProcessId = Process.GetCurrentProcess().Id
             };
             var adapter = new OfficeComAdapterProvider().Create(host, target);
+            AssistantRuntime runtime = null;
             try
             {
-                var runtime = new AssistantRuntime(adapter, rootPath);
+                runtime = new AssistantRuntime(adapter, rootPath);
                 var control = runtime.CreatePaneControl();
                 control.Dock = DockStyle.Fill;
                 return new InProcessPanelSession(kind, officeHwnd, rootPath, adapter, runtime, control);
             }
             catch
             {
+                if (runtime != null)
+                {
+                    runtime.Dispose();
+                }
                 var disposable = adapter as IDisposable;
                 if (disposable != null)
                 {
@@ -100,6 +105,11 @@ namespace RNAssistant.OfficeHosts
 
             _disposed = true;
             RuntimeLog.Info("Disposing in-process panel session.");
+            if (Runtime != null)
+            {
+                Runtime.Dispose();
+                Runtime = null;
+            }
             if (PanelControl != null)
             {
                 PanelControl.Dispose();

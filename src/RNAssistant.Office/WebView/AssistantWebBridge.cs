@@ -7,23 +7,22 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Diagnostics;
 
 namespace RNAssistant.Office.WebView
 {
-    public sealed class AssistantWebBridge
+    public sealed class AssistantWebBridge : IDisposable
     {
         private readonly AssistantController _controller;
         private readonly Action<string> _postMessageJson;
-        private readonly object _cancellationSync;
-        private readonly Dictionary<string, CancellationTokenSource> _requestCancellations;
+        private readonly BridgeRequestCancellationRegistry _cancellations;
         private readonly string _bridgeToken;
 
         public AssistantWebBridge(AssistantController controller, Action<string> postMessageJson)
         {
             _controller = controller;
             _postMessageJson = postMessageJson;
-            _cancellationSync = new object();
-            _requestCancellations = new Dictionary<string, CancellationTokenSource>(StringComparer.OrdinalIgnoreCase);
+            _cancellations = new BridgeRequestCancellationRegistry();
             _bridgeToken = Guid.NewGuid().ToString("N");
         }
 
@@ -33,6 +32,7 @@ namespace RNAssistant.Office.WebView
             CancellationTokenSource cancellationSource = null;
             try
             {
+                _cancellations.ThrowIfDisposed();
                 var request = JsonConvert.DeserializeObject<BridgeRequest>(requestJson) ?? new BridgeRequest();
                 id = request.Id;
                 var type = (request.Type ?? string.Empty).Trim();
@@ -44,27 +44,23 @@ namespace RNAssistant.Office.WebView
                 object responsePayload;
                 if (string.Equals(type, "cancelRequest", StringComparison.OrdinalIgnoreCase))
                 {
-                    responsePayload = CancelRequest(Payload<CancelRequestPayload>(payload).RequestId);
-                    return JsonConvert.SerializeObject(new BridgeResponse
+                    responsePayload = new CancellationResponse
                     {
-                        Id = id,
-                        Ok = true,
-                        Payload = ToPayloadToken(responsePayload)
-                    });
+                        Cancelled = _cancellations.Cancel(Payload<CancelRequestPayload>(payload).RequestId)
+                    };
+                    return Success(id, responsePayload);
                 }
                 if (string.Equals(type, "cancelChatRun", StringComparison.OrdinalIgnoreCase))
                 {
                     var cancelRun = Payload<CancelChatRunPayload>(payload);
-                    responsePayload = new { cancelled = _controller.CancelChatRun(cancelRun.ChatId, cancelRun.RunId) };
-                    return JsonConvert.SerializeObject(new BridgeResponse
+                    responsePayload = new CancellationResponse
                     {
-                        Id = id,
-                        Ok = true,
-                        Payload = ToPayloadToken(responsePayload)
-                    });
+                        Cancelled = _controller.CancelChatRun(cancelRun.ChatId, cancelRun.RunId)
+                    };
+                    return Success(id, responsePayload);
                 }
 
-                cancellationSource = CreateCancellationSource(id, type);
+                cancellationSource = _cancellations.Create(id, type);
                 var cancellationToken = cancellationSource == null ? CancellationToken.None : cancellationSource.Token;
 
                 switch (type)
@@ -356,16 +352,11 @@ namespace RNAssistant.Office.WebView
                         throw new InvalidOperationException("Unknown bridge message: " + type);
                 }
 
-                return JsonConvert.SerializeObject(new BridgeResponse
-                {
-                    Id = id,
-                    Ok = true,
-                    Payload = ToPayloadToken(responsePayload)
-                });
+                return Success(id, responsePayload);
             }
             catch (OperationCanceledException ex)
             {
-                return JsonConvert.SerializeObject(new BridgeResponse
+                return Serialize(new BridgeResponse
                 {
                     Id = id,
                     Ok = false,
@@ -376,38 +367,19 @@ namespace RNAssistant.Office.WebView
             }
             catch (Exception ex)
             {
-                return JsonConvert.SerializeObject(new BridgeResponse
+                RuntimeLog.Error("WebView bridge request failed.", ex);
+                return Serialize(new BridgeResponse
                 {
                     Id = id,
                     Ok = false,
                     Error = ex.Message,
-                    ErrorDetail = ex.ToString()
+                    ErrorDetail = "Request failed. See the local runtime log for details."
                 });
             }
             finally
             {
-                ReleaseCancellationSource(id, cancellationSource);
+                _cancellations.Release(id, cancellationSource);
             }
-        }
-
-        private CancellationTokenSource CreateCancellationSource(string id, string type)
-        {
-            if (string.IsNullOrWhiteSpace(id) ||
-                (!string.Equals(type, "sendChat", StringComparison.OrdinalIgnoreCase) &&
-                 !string.Equals(type, "runTool", StringComparison.OrdinalIgnoreCase) &&
-                 !string.Equals(type, "htmlFetch", StringComparison.OrdinalIgnoreCase) &&
-                 !string.Equals(type, "testModelCompatibility", StringComparison.OrdinalIgnoreCase)))
-            {
-                return null;
-            }
-
-            var source = new CancellationTokenSource();
-            lock (_cancellationSync)
-            {
-                _requestCancellations[id] = source;
-            }
-
-            return source;
         }
 
         private static bool RequiresBridgeToken(string type)
@@ -425,40 +397,24 @@ namespace RNAssistant.Office.WebView
             return response;
         }
 
-        private object CancelRequest(string requestId)
+        public void Dispose()
         {
-            var cancelled = false;
-            lock (_cancellationSync)
-            {
-                CancellationTokenSource source;
-                _requestCancellations.TryGetValue(requestId ?? string.Empty, out source);
-                if (source != null)
-                {
-                    source.Cancel();
-                    cancelled = true;
-                }
-            }
-
-            return new { cancelled = cancelled };
+            _cancellations.Dispose();
         }
 
-        private void ReleaseCancellationSource(string id, CancellationTokenSource source)
+        private static string Success(string id, object payload)
         {
-            if (source == null)
+            return Serialize(new BridgeResponse
             {
-                return;
-            }
+                Id = id,
+                Ok = true,
+                Payload = ToPayloadToken(payload)
+            });
+        }
 
-            lock (_cancellationSync)
-            {
-                CancellationTokenSource current;
-                if (_requestCancellations.TryGetValue(id ?? string.Empty, out current) && object.ReferenceEquals(current, source))
-                {
-                    _requestCancellations.Remove(id ?? string.Empty);
-                }
-            }
-
-            source.Dispose();
+        private static string Serialize(BridgeResponse response)
+        {
+            return JsonConvert.SerializeObject(response);
         }
 
         private void ReportProgress(string id, string phase, string message)

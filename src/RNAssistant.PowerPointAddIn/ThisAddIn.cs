@@ -23,6 +23,7 @@ namespace RNAssistant.PowerPointAddIn
         private void ThisAddIn_Shutdown(object sender, EventArgs e)
         {
             RemoveContextMenus();
+            if (_runtime != null) _runtime.Dispose();
             if (_officeDispatcher != null) _officeDispatcher.Dispose();
         }
 

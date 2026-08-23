@@ -172,15 +172,32 @@ namespace RNAssistant.Office.Services
 
         public void Clear()
         {
+            List<CancellationTokenSource> cancellations;
             lock (_sync)
             {
-                foreach (var run in _runs.Values)
-                {
-                    if (run.Cancellation == null) continue;
-                    if (!run.Cancellation.IsCancellationRequested) run.Cancellation.Cancel();
-                    run.Cancellation.Dispose();
-                }
+                cancellations = _runs.Values
+                    .Where(run => run.Cancellation != null)
+                    .Select(run => run.Cancellation)
+                    .ToList();
                 _runs.Clear();
+            }
+
+            foreach (var cancellation in cancellations)
+            {
+                try
+                {
+                    if (!cancellation.IsCancellationRequested) cancellation.Cancel();
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+                catch (AggregateException)
+                {
+                }
+                finally
+                {
+                    cancellation.Dispose();
+                }
             }
         }
 

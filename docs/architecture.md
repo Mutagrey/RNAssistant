@@ -46,8 +46,10 @@ See [agent-protocol.md](agent-protocol.md).
 - Provider reasoning is stored separately from agent JSON.
 - Context belongs to the active chat. Compaction stores a model-produced checkpoint and an exact raw tail without deleting the source transcript.
 - Attachments use the selected model. There is no automatic attachment-model router or endpoint failover.
+- A chat's non-empty `Model` overrides the global default through one cloned effective-settings resolver; requests, title generation, context budgets, and compaction use the same effective model without mutating stored global settings.
 - Different chats may run concurrently; one chat has one active run and document mutations are serialized by host/document identity.
-- HTML workspace state belongs to the chat, is revisioned as artifacts, and remains sandboxed with explicit network-origin permission.
+- HTML workspace state belongs to the chat, is revisioned as artifacts, and remains sandboxed with explicit network-origin permission. WebView bridge messages are accepted only from the canonical local `web/index.html`; top-level/frame navigation, permissions, popups, and direct preview networking are restricted by host policy and CSP.
+- `AssistantRuntime.Dispose` owns pane/bridge/controller shutdown and cancels active bridge requests, chat runs, and background title generation before a host adapter or dispatcher is released.
 - Desktop COM calls enter adapters through the dedicated STA dispatcher. In-process VSTO adapters marshal every Office call back to the host UI thread through `OfficeUiDispatcher`; VSTO/COM changes still require Windows validation.
 
 ## Main code zones
@@ -55,6 +57,7 @@ See [agent-protocol.md](agent-protocol.md).
 - `src/RNAssistant.Core/Llm`: HTTP transport, message construction, response/reasoning parsing, budgets.
 - `src/RNAssistant.Core/Tools/AgentResponseParser.cs`: minimal Agent JSON parser.
 - `src/RNAssistant.Core/Storage`: settings, chats, tools, skills, attachments.
+- `src/RNAssistant.Core/Services/ChatSessionNormalizer.cs`: format-preserving chat normalization shared by storage operations.
 - `src/RNAssistant.Office/Services/AgentRunService.cs`: direct agent loop.
 - `src/RNAssistant.Office/Services/AgentPromptComposer.cs`: Agent prompt and runtime context.
 - `src/RNAssistant.Office/Services/PlainChatService.cs`: plain Chat flow.

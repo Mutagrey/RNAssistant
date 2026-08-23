@@ -68,6 +68,7 @@
     <Compile Include="Controller\AssistantController.Context.cs" />
     <Compile Include="Controller\AssistantController.Diagnostics.cs" />
     <Compile Include="Controller\AssistantController.HtmlWorkspace.cs" />
+    <Compile Include="Controller\AssistantController.Lifecycle.cs" />
     <Compile Include="Diagnostics\RuntimeLog.cs" />
     <Compile Include="Runtime\AssistantRuntime.cs" />
     <Compile Include="Runtime\DispatchedOfficeApplicationAdapter.cs" />
@@ -118,6 +119,8 @@
     <Compile Include="Tools\VbaToolExecutor.cs" />
     <Compile Include="WebView\AssistantPaneControl.cs" />
     <Compile Include="WebView\AssistantWebBridge.cs" />
+    <Compile Include="WebView\BridgeRequestCancellationRegistry.cs" />
+    <Compile Include="WebView\WebViewSecurityPolicy.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

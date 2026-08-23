@@ -104,6 +104,8 @@
     <Compile Include="Tools\AgentResponseSchemaBuilder.cs" />
     <Compile Include="Services\ContextNormalizer.cs" />
     <Compile Include="Services\ChartArtifactBuilder.cs" />
+    <Compile Include="Services\ChatSettingsResolver.cs" />
+    <Compile Include="Services\ChatSessionNormalizer.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
     <Compile Include="Storage\AttachmentStore.cs" />
     <Compile Include="Storage\ChatStore.cs" />

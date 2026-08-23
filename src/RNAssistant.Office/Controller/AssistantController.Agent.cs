@@ -82,7 +82,7 @@ namespace RNAssistant.Office
                 };
 
                 var firstRunMessageIndex = session.Messages == null ? 0 : session.Messages.Count;
-                var settings = _settingsService.Load();
+                var settings = ResolveChatSettings(session);
                 settings.ToolResultRole = PendingToolResultRole(session, pending.Command, settings.ToolResultRole);
                 var tools = _toolCatalog.GetVisibleTools().Where(tool => tool.Enabled).ToList();
                 var pendingResolved = false;

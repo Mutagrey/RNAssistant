@@ -2,7 +2,7 @@
 <html lang="ru" data-theme="light">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; frame-src 'self' blob: data:; child-src 'self' blob: data:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' blob: data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'none'; frame-src 'self' blob: data:; child-src 'self' blob: data:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' blob: data:; object-src 'none'; base-uri 'none'; form-action 'none';">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RN Assistant</title>
   <script>
@@ -455,7 +455,7 @@
               <div class="resource-editor-empty-text">Создайте план или HTML, либо выберите артефакт слева.</div>
             </div>
             <div class="html-workspace-preview html-workspace-view" id="htmlWorkspacePreview" data-html-view="preview">
-              <iframe class="html-workspace-frame" id="htmlWorkspacePreviewFrame" title="HTML preview" sandbox="allow-scripts allow-forms allow-modals allow-popups" referrerpolicy="no-referrer"></iframe>
+              <iframe class="html-workspace-frame" id="htmlWorkspacePreviewFrame" title="HTML preview" sandbox="allow-scripts allow-modals" referrerpolicy="no-referrer"></iframe>
               <div class="artifact-detail-preview hidden" id="artifactDetailPreview"></div>
             </div>
             <div class="html-workspace-edit html-workspace-view hidden" id="htmlWorkspaceEdit" data-html-view="edit">

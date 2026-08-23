@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
@@ -26,7 +27,7 @@ namespace RNAssistant.Office
             {
                 await _contextCompactionService.EnsureWithinBudgetAsync(
                     session,
-                    _settingsService.Load(),
+                    ResolveChatSettings(session),
                     string.Empty,
                     true,
                     progress,
@@ -401,9 +402,14 @@ namespace RNAssistant.Office
                 ActiveContextCheckpointId = session == null ? string.Empty : session.ActiveContextCheckpointId,
                 ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId,
                 ActivePlanArtifactId = session == null ? string.Empty : session.ActivePlanArtifactId,
-                ContextUsage = ContextUsageEstimator.FromSession(session, _settingsService.Load()),
+                ContextUsage = ContextUsageEstimator.FromSession(session, ResolveChatSettings(session)),
                 HtmlWorkspace = session == null ? new HtmlWorkspace() : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace)
             };
+        }
+
+        private AppSettings ResolveChatSettings(ChatSession session, AppSettings settings = null)
+        {
+            return ChatSettingsResolver.Resolve(settings ?? _settingsService.Load(), session);
         }
 
         private void SaveSessionChanges(ChatSession session)

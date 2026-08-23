@@ -26,6 +26,7 @@ namespace RNAssistant.OutlookAddIn
         {
             Application.ItemContextMenuDisplay -= Application_ItemContextMenuDisplay;
             RemoveContextMenus();
+            if (_runtime != null) _runtime.Dispose();
             if (_officeDispatcher != null) _officeDispatcher.Dispose();
         }
 

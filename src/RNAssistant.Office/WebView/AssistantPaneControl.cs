@@ -22,8 +22,12 @@ namespace RNAssistant.Office.WebView
         private readonly AssistantController _controller;
         private readonly string _webRoot;
         private readonly AssistantWebBridge _bridge;
+        private readonly System.Threading.CancellationTokenSource _lifetimeCancellation;
         private WebView2 _webView;
+        private CoreWebView2Controller _webViewController;
+        private string _trustedDocumentUri;
         private bool _webContentWantsKeyboard;
+        private bool _resourcesDisposed;
         private IntPtr _lastExternalFocusWindow;
 
         public AssistantPaneControl(AssistantController controller, string webRoot)
@@ -31,6 +35,7 @@ namespace RNAssistant.Office.WebView
             _controller = controller;
             _webRoot = webRoot;
             _bridge = new AssistantWebBridge(controller, PostBridgeMessage);
+            _lifetimeCancellation = new System.Threading.CancellationTokenSource();
             CreateWebViewControl();
             Load += OnLoad;
         }
@@ -84,6 +89,9 @@ namespace RNAssistant.Office.WebView
             {
                 await InitializeAsync().ConfigureAwait(true);
             }
+            catch (OperationCanceledException)
+            {
+            }
             catch (Exception ex)
             {
                 RenderStartupError(ex);
@@ -92,11 +100,14 @@ namespace RNAssistant.Office.WebView
 
         private async Task InitializeAsync()
         {
+            var cancellationToken = _lifetimeCancellation.Token;
+            cancellationToken.ThrowIfCancellationRequested();
             RuntimeLog.Info("WebView2 initialization started. WebRoot=" + _webRoot);
             var errors = new StringBuilder();
             var candidates = BuildEnvironmentCandidates();
             for (var i = 0; i < candidates.Count; i++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var candidate = candidates[i];
                 try
                 {
@@ -108,9 +119,15 @@ namespace RNAssistant.Office.WebView
                     Directory.CreateDirectory(candidate.UserDataFolder);
                     RuntimeLog.Info("WebView2 candidate=" + candidate.Name + ", userData=" + candidate.UserDataFolder);
                     var environment = await CoreWebView2Environment.CreateAsync(candidate.BrowserFolder, candidate.UserDataFolder).ConfigureAwait(true);
+                    cancellationToken.ThrowIfCancellationRequested();
                     await _webView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
+                    cancellationToken.ThrowIfCancellationRequested();
                     ConfigureInitializedWebView();
                     return;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -126,13 +143,29 @@ namespace RNAssistant.Office.WebView
 
         private void ConfigureInitializedWebView()
         {
-            _webView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
-            _webView.CoreWebView2.Settings.IsScriptEnabled = true;
-            _webView.CoreWebView2.Settings.AreDevToolsEnabled = true;
-            _webView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = false;
+            var indexPath = Path.Combine(_webRoot, "index.html");
+            _trustedDocumentUri = File.Exists(indexPath)
+                ? WebViewSecurityPolicy.TrustedDocumentUri(indexPath)
+                : string.Empty;
+
+            var core = _webView.CoreWebView2;
+            core.WebMessageReceived += OnWebMessageReceived;
+            core.NavigationStarting += OnNavigationStarting;
+            core.FrameNavigationStarting += OnFrameNavigationStarting;
+            core.NewWindowRequested += OnNewWindowRequested;
+            core.PermissionRequested += OnPermissionRequested;
+            core.Settings.IsScriptEnabled = true;
+#if DEBUG
+            core.Settings.AreDevToolsEnabled = true;
+#else
+            core.Settings.AreDevToolsEnabled = false;
+#endif
+            core.Settings.AreBrowserAcceleratorKeysEnabled = false;
+            core.Settings.AreDefaultContextMenusEnabled = false;
+            core.Settings.AreHostObjectsAllowed = false;
+            core.Settings.IsStatusBarEnabled = false;
             TryAttachAcceleratorFilter();
 
-            var indexPath = Path.Combine(_webRoot, "index.html");
             if (!File.Exists(indexPath))
             {
                 RuntimeLog.Error("WebView index was not found: " + indexPath);
@@ -142,6 +175,66 @@ namespace RNAssistant.Office.WebView
 
             RuntimeLog.Info("WebView navigating to " + indexPath);
             _webView.Source = new Uri(indexPath);
+        }
+
+        private void OnNavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
+        {
+            if (WebViewSecurityPolicy.CanNavigateTopLevel(e.Uri, _trustedDocumentUri))
+            {
+                return;
+            }
+
+            e.Cancel = true;
+            RuntimeLog.Info("Blocked WebView top-level navigation: " + (e.Uri ?? string.Empty));
+            if (e.IsUserInitiated)
+            {
+                OpenExternalUri(e.Uri);
+            }
+        }
+
+        private void OnFrameNavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
+        {
+            if (!WebViewSecurityPolicy.CanNavigateFrame(e.Uri))
+            {
+                e.Cancel = true;
+                RuntimeLog.Info("Blocked WebView frame navigation: " + (e.Uri ?? string.Empty));
+                if (e.IsUserInitiated)
+                {
+                    OpenExternalUri(e.Uri);
+                }
+            }
+        }
+
+        private void OnNewWindowRequested(object sender, CoreWebView2NewWindowRequestedEventArgs e)
+        {
+            e.Handled = true;
+            if (e.IsUserInitiated)
+            {
+                OpenExternalUri(e.Uri);
+            }
+        }
+
+        private static void OnPermissionRequested(object sender, CoreWebView2PermissionRequestedEventArgs e)
+        {
+            e.State = CoreWebView2PermissionState.Deny;
+            e.SavesInProfile = false;
+        }
+
+        private static void OpenExternalUri(string value)
+        {
+            if (!WebViewSecurityPolicy.CanOpenExternally(value))
+            {
+                return;
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(value) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                RuntimeLog.Error("Failed to open external WebView link.", ex);
+            }
         }
 
         private void CreateWebViewControl()
@@ -154,6 +247,7 @@ namespace RNAssistant.Office.WebView
         {
             if (_webView != null)
             {
+                DetachInitializedWebView();
                 Controls.Remove(_webView);
                 _webView.Dispose();
             }
@@ -186,6 +280,7 @@ namespace RNAssistant.Office.WebView
             var controller = field == null ? null : field.GetValue(_webView) as CoreWebView2Controller;
             if (controller != null)
             {
+                _webViewController = controller;
                 // This WebView2 WinForms package keeps the controller internal.
                 controller.AcceleratorKeyPressed += OnAcceleratorKeyPressed;
                 controller.LostFocus += OnControllerLostFocus;
@@ -233,6 +328,12 @@ namespace RNAssistant.Office.WebView
         {
             try
             {
+                if (!WebViewSecurityPolicy.IsTrustedDocument(e.Source, _trustedDocumentUri))
+                {
+                    RuntimeLog.Info("Blocked WebView message from untrusted source: " + (e.Source ?? string.Empty));
+                    return;
+                }
+
                 var requestJson = e.WebMessageAsJson;
                 if (TryHandleHostStateMessage(requestJson))
                 {
@@ -344,6 +445,7 @@ namespace RNAssistant.Office.WebView
             Controls.Clear();
             if (_webView != null)
             {
+                DetachInitializedWebView();
                 _webView.Dispose();
             }
 
@@ -370,6 +472,47 @@ namespace RNAssistant.Office.WebView
             };
             panel.Controls.Add(label);
             Controls.Add(panel);
+        }
+
+        private void DetachInitializedWebView()
+        {
+            try
+            {
+                var core = _webView == null || _webView.IsDisposed ? null : _webView.CoreWebView2;
+                if (core != null)
+                {
+                    core.WebMessageReceived -= OnWebMessageReceived;
+                    core.NavigationStarting -= OnNavigationStarting;
+                    core.FrameNavigationStarting -= OnFrameNavigationStarting;
+                    core.NewWindowRequested -= OnNewWindowRequested;
+                    core.PermissionRequested -= OnPermissionRequested;
+                }
+            }
+            catch
+            {
+            }
+
+            if (_webViewController != null)
+            {
+                _webViewController.AcceleratorKeyPressed -= OnAcceleratorKeyPressed;
+                _webViewController.LostFocus -= OnControllerLostFocus;
+                _webViewController = null;
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && !_resourcesDisposed)
+            {
+                _resourcesDisposed = true;
+                Load -= OnLoad;
+                try { _lifetimeCancellation.Cancel(); } catch (ObjectDisposedException) { }
+                DetachInitializedWebView();
+                _bridge.Dispose();
+                _lifetimeCancellation.Dispose();
+            }
+
+            base.Dispose(disposing);
         }
 
         private void ExecuteScript(string script)

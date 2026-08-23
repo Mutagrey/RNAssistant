@@ -71,6 +71,7 @@ namespace RNAssistant.Harness
                 Test("model compatibility: accepts exact sentinels", ModelCompatibilityAcceptsExactSentinels),
                 Test("model compatibility: rejects loose responses", ModelCompatibilityRejectsLooseResponses),
                 Test("chat: plain mode has no agent context", SimpleChatHasNoAgentContext),
+                Test("chat: session model overrides global settings", ChatSettingsUseSessionModelWithoutMutatingGlobalSettings),
                 Test("context: compaction uses one summary field", SimpleCompactionUsesOneSummaryField),
 
                 Test("desktop target: parses json descriptor", ParsesOfficeTargetJsonDescriptor),
@@ -185,6 +186,7 @@ namespace RNAssistant.Harness
                 Test("chart: requested type truncates", ChartArtifactHonorsRequestedTypeAndTruncates),
 
                 Test("bridge: init returns token", BridgeInitReturnsToken),
+                Test("webview: restricts messages and navigation", WebViewSecurityRestrictsMessagesAndNavigation),
                 Test("bridge: rejects missing token", BridgeRejectsMissingToken),
                 Test("bridge: typed runTool", BridgeUsesTypedRunToolPayload),
                 Test("bridge: typed sendChat", BridgeUsesTypedSendChatPayloadAndProgress),

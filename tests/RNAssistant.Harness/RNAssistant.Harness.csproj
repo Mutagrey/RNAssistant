@@ -60,6 +60,8 @@
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\DocumentIdentity.cs" Link="Office\Runtime\DocumentIdentity.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\OfficeStaDispatcher.cs" Link="Office\Runtime\OfficeStaDispatcher.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.cs" Link="Office\WebView\AssistantWebBridge.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\WebView\BridgeRequestCancellationRegistry.cs" Link="Office\WebView\BridgeRequestCancellationRegistry.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\WebView\WebViewSecurityPolicy.cs" Link="Office\WebView\WebViewSecurityPolicy.cs" />
     <Compile Include="..\..\src\RNAssistant.Desktop\OfficeTargetRegistry.cs" Link="Desktop\OfficeTargetRegistry.cs" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Targets\OfficeTargetDescriptor.cs" Link="OfficeHosts\Targets\OfficeTargetDescriptor.cs" />
   </ItemGroup>

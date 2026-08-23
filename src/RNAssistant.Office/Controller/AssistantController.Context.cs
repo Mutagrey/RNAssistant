@@ -23,8 +23,8 @@ namespace RNAssistant.Office
             {
                 throw new ArgumentException("Context text is empty.", "text");
             }
-            var settings = _settingsService.Load();
             var session = LoadAddressedSession(chatId);
+            var settings = ResolveChatSettings(session);
             var context = AddContextNote(session, new ContextNote
             {
                 Host = _adapter.HostName,
@@ -41,8 +41,8 @@ namespace RNAssistant.Office
 
         public DocumentContext AddSelectionContext(string mode, string chatId = null)
         {
-            var settings = _settingsService.Load();
             var session = LoadAddressedSession(chatId);
+            var settings = ResolveChatSettings(session);
             EnsureCurrentDocument(session);
             var context = LoadContext(session);
             try

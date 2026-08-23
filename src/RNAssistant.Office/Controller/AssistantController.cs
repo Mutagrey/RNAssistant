@@ -14,7 +14,7 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office
 {
-    public sealed partial class AssistantController
+    public sealed partial class AssistantController : IDisposable
     {
         private static readonly string RuntimeId = Guid.NewGuid().ToString("N");
         private readonly IOfficeApplicationAdapter _adapter;
@@ -40,6 +40,8 @@ namespace RNAssistant.Office
         private readonly Dictionary<string, PendingAgentTool> _pendingAgentTools;
         private readonly ChatRunRegistry _chatRuns;
         private readonly HtmlNetworkService _htmlNetwork;
+        private readonly CancellationTokenSource _lifetimeCancellation;
+        private int _disposed;
         private string _queuedQuickAction;
 
         public AssistantController(IOfficeApplicationAdapter adapter)
@@ -72,6 +74,7 @@ namespace RNAssistant.Office
             _skillCatalog = new SkillCatalogService(_adapter, _skillStore);
             _chatSessions = new ChatSessionService(_adapter, _chatStore);
             _chatRuns = new ChatRunRegistry();
+            _lifetimeCancellation = new CancellationTokenSource();
             _chatSessions.RunStateProvider = _chatRuns.Get;
             _chatSessions.RunSessionsProvider = _chatRuns.Sessions;
             _chatSessions.ReconcileInterruptedRuns(RuntimeId);
@@ -114,6 +117,7 @@ namespace RNAssistant.Office
             var activeId = session.Id;
             var context = LoadContext(session);
             var settings = _settingsService.Load();
+            var chatSettings = ResolveChatSettings(session, settings);
             return new InitResponse
             {
                 Host = _adapter.HostName,
@@ -139,7 +143,7 @@ namespace RNAssistant.Office
                 ActiveContextCheckpointId = session.ActiveContextCheckpointId,
                 ActiveHtmlArtifactId = session.ActiveHtmlArtifactId,
                 ActivePlanArtifactId = session.ActivePlanArtifactId,
-                ContextUsage = ContextUsageEstimator.FromSession(session, settings),
+                ContextUsage = ContextUsageEstimator.FromSession(session, chatSettings),
                 HtmlWorkspace = session == null ? new HtmlWorkspace() : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace),
                 QuickAction = DequeueQuickAction()
             };
@@ -273,10 +277,10 @@ namespace RNAssistant.Office
             return new AttachmentResponse { Attachment = attachment };
         }
 
-        public object DeleteDraftAttachment(string id)
+        public DeleteResponse DeleteDraftAttachment(string id)
         {
             _attachmentStore.DeleteDraft(id);
-            return new { deleted = true };
+            return new DeleteResponse { Deleted = true };
         }
 
         private void StartChatTitleGeneration(
@@ -296,19 +300,36 @@ namespace RNAssistant.Office
             var documentKey = session.DocumentKey;
             var documentTitle = session.DocumentTitle;
             var sessionId = session.Id;
+            CancellationToken lifetimeToken;
+            try
+            {
+                lifetimeToken = _lifetimeCancellation.Token;
+            }
+            catch (ObjectDisposedException)
+            {
+                return;
+            }
             Task.Run(async delegate
             {
                 var title = string.Empty;
                 try
                 {
-                    title = await ChatTitleBuilder.GenerateLlmTitleAsync(settings, userText, assistantText, _llmClient.CompleteAsync, CancellationToken.None).ConfigureAwait(false);
+                    title = await ChatTitleBuilder.GenerateLlmTitleAsync(settings, userText, assistantText, _llmClient.CompleteAsync, lifetimeToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
                 }
                 catch
                 {
+                    if (lifetimeToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
                     title = ChatTitleBuilder.BuildFallbackTitle(userText, assistantText);
                 }
 
-                if (string.IsNullOrWhiteSpace(title))
+                if (lifetimeToken.IsCancellationRequested || string.IsNullOrWhiteSpace(title))
                 {
                     return;
                 }
@@ -375,8 +396,8 @@ namespace RNAssistant.Office
             CancellationToken cancellationToken,
             string runId)
         {
-            settings = settings ?? _settingsService.Load();
             session = session ?? LoadAddressedSession(null);
+            settings = ResolveChatSettings(session, settings);
             var sessionId = session.Id;
             runId = string.IsNullOrWhiteSpace(runId) ? Guid.NewGuid().ToString("N") : runId;
 
@@ -575,6 +596,7 @@ namespace RNAssistant.Office
 
         private SendChatResponse CreateSendChatResponse(ChatSession session, AppSettings settings, ChatTurnResult completion)
         {
+            settings = ResolveChatSettings(session, settings);
             var activeId = session.Id;
             return new SendChatResponse
             {
@@ -604,6 +626,7 @@ namespace RNAssistant.Office
 
         private SendChatResponse EmptySendResponse(ChatSession session, AppSettings settings)
         {
+            settings = ResolveChatSettings(session, settings);
             return CreateSendChatResponse(session, settings, new ChatTurnResult
             {
                 AssistantText = string.Empty,

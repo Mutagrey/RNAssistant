@@ -37,8 +37,10 @@ namespace RNAssistant.ExcelAddIn
             foreach (var entry in new List<PaneEntry>(_panes.Values))
             {
                 try { CustomTaskPanes.Remove(entry.Pane); } catch { }
+                entry.Runtime.Dispose();
             }
             _panes.Clear();
+            if (_runtime != null) _runtime.Dispose();
             RemoveContextMenus();
             if (_officeDispatcher != null) _officeDispatcher.Dispose();
         }
@@ -162,7 +164,9 @@ namespace RNAssistant.ExcelAddIn
 
             foreach (var key in closed)
             {
-                try { CustomTaskPanes.Remove(_panes[key].Pane); } catch { }
+                var entry = _panes[key];
+                try { CustomTaskPanes.Remove(entry.Pane); } catch { }
+                entry.Runtime.Dispose();
                 _panes.Remove(key);
             }
         }

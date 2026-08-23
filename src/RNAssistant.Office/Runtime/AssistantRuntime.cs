@@ -4,10 +4,11 @@ using RNAssistant.Office.WebView;
 
 namespace RNAssistant.Office
 {
-    public sealed class AssistantRuntime
+    public sealed class AssistantRuntime : IDisposable
     {
         private readonly IOfficeApplicationAdapter _adapter;
         private AssistantPaneControl _paneControl;
+        private bool _disposed;
 
         public AssistantRuntime(IOfficeApplicationAdapter adapter)
             : this(adapter, null)
@@ -26,12 +27,19 @@ namespace RNAssistant.Office
 
         public AssistantPaneControl CreatePaneControl()
         {
+            ThrowIfDisposed();
+            if (_paneControl != null && !_paneControl.IsDisposed)
+            {
+                return _paneControl;
+            }
+
             _paneControl = new AssistantPaneControl(Controller, ResolveWebRoot(RootPath));
             return _paneControl;
         }
 
         public void RunQuickAction(string action)
         {
+            ThrowIfDisposed();
             Controller.QueueQuickAction(action);
             if (_paneControl != null)
             {
@@ -60,6 +68,7 @@ namespace RNAssistant.Office
 
         public void AddSelectionContext(string mode)
         {
+            ThrowIfDisposed();
             Controller.AddSelectionContext(mode);
             if (_paneControl != null)
             {
@@ -72,6 +81,36 @@ namespace RNAssistant.Office
             if (_paneControl != null)
             {
                 _paneControl.RefreshState();
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            try
+            {
+                if (_paneControl != null)
+                {
+                    _paneControl.Dispose();
+                    _paneControl = null;
+                }
+            }
+            finally
+            {
+                Controller.Dispose();
+            }
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException("AssistantRuntime");
             }
         }
 
