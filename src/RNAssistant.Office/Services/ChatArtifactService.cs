@@ -163,6 +163,8 @@ namespace RNAssistant.Office.Services
                         MimeType = attachment.ContentType,
                         SourceMessageId = message.Id,
                         RelativePath = attachment.RelativePath,
+                        ContentSha256 = attachment.ContentSha256,
+                        ContentByteLength = attachment.ContentByteLength,
                         ModelContextPolicy = string.IsNullOrWhiteSpace(attachment.ExtractedText) ? "reference" : "extract",
                         MetadataJson = JsonConvert.SerializeObject(new
                         {
@@ -182,6 +184,8 @@ namespace RNAssistant.Office.Services
                     artifact.MimeType = attachment.ContentType;
                     artifact.SourceMessageId = message.Id;
                     artifact.RelativePath = attachment.RelativePath;
+                    artifact.ContentSha256 = attachment.ContentSha256;
+                    artifact.ContentByteLength = attachment.ContentByteLength;
                     artifact.ModelContextPolicy = string.IsNullOrWhiteSpace(attachment.ExtractedText) ? "reference" : "extract";
                     artifact.MetadataJson = JsonConvert.SerializeObject(new
                     {

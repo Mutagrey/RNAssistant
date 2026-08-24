@@ -27,10 +27,12 @@ namespace RNAssistant.Core.Storage
             ".gitignore", ".gitattributes", ".editorconfig", ".dockerfile"
         };
         private readonly AppDataPaths _paths;
+        private readonly ChatBlobStore _blobs;
 
         public AttachmentStore(AppDataPaths paths)
         {
             _paths = paths ?? throw new ArgumentNullException("paths");
+            _blobs = new ChatBlobStore(paths);
             CleanupExpiredDrafts(DateTime.UtcNow.AddDays(-1));
         }
 
@@ -127,7 +129,10 @@ namespace RNAssistant.Core.Storage
                 return;
             }
             var json = Newtonsoft.Json.JsonConvert.SerializeObject(attachment);
-            File.WriteAllText(Path.Combine(StagingDirectory(), attachment.Id + ".meta.json"), json, Encoding.UTF8);
+            StorageFileSystem.WriteAllTextAtomic(
+                Path.Combine(StagingDirectory(), attachment.Id + ".meta.json"),
+                json,
+                new UTF8Encoding(false));
         }
 
         public void DeleteDraft(string id)
@@ -142,12 +147,12 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        public void Commit(string sessionId, ChatMessage message)
+        public void Commit(ChatMessage message)
         {
-            Commit(sessionId, message, true);
+            Commit(message, true);
         }
 
-        public void Commit(string sessionId, ChatMessage message, bool deleteDrafts)
+        public void Commit(ChatMessage message, bool deleteDrafts)
         {
             if (message == null || message.Attachments == null || message.Attachments.Count == 0)
             {
@@ -160,21 +165,21 @@ namespace RNAssistant.Core.Storage
                     throw new InvalidOperationException("Attachment file is missing: " + (attachment.FileName ?? attachment.Id));
                 }
             }
-            var directory = MessageDirectory(sessionId, message.Id);
-            Directory.CreateDirectory(directory);
             foreach (var attachment in message.Attachments.Where(item => item != null))
             {
                 var source = AbsolutePath(attachment.RelativePath);
-                var target = Path.Combine(directory, attachment.Id + Path.GetExtension(source));
-                File.Copy(source, target, true);
-                attachment.RelativePath = RelativePath(target);
+                var content = _blobs.StoreBytes(File.ReadAllBytes(source), attachment.ContentType);
+                attachment.ContentSha256 = content.Sha256;
+                attachment.ContentByteLength = content.ByteLength;
                 var extractedSource = ExtractedTextAbsolutePath(attachment);
                 if (!string.IsNullOrWhiteSpace(extractedSource) && File.Exists(extractedSource))
                 {
-                    var extractedTarget = Path.Combine(directory, attachment.Id + ".extracted.txt");
-                    File.Copy(extractedSource, extractedTarget, true);
-                    attachment.ExtractedTextPath = RelativePath(extractedTarget);
+                    var extracted = _blobs.StoreBytes(File.ReadAllBytes(extractedSource), "text/plain; charset=utf-8");
+                    attachment.ExtractedTextSha256 = extracted.Sha256;
+                    attachment.ExtractedTextByteLength = extracted.ByteLength;
                 }
+                attachment.RelativePath = null;
+                attachment.ExtractedTextPath = null;
                 if (deleteDrafts) DeleteDraft(attachment.Id);
             }
         }
@@ -200,30 +205,11 @@ namespace RNAssistant.Core.Storage
 
         public void DeleteMessage(ChatMessage message)
         {
-            var attachments = message == null || message.Attachments == null
-                ? (IEnumerable<ChatAttachment>)new ChatAttachment[0]
-                : message.Attachments;
-            foreach (var attachment in attachments.Where(item => item != null))
-            {
-                try
-                {
-                    SafeDeleteFile(AbsolutePath(attachment.RelativePath));
-                    var extractedPath = ExtractedTextAbsolutePath(attachment);
-                    if (!string.IsNullOrWhiteSpace(extractedPath)) SafeDeleteFile(extractedPath);
-                }
-                catch (InvalidOperationException)
-                {
-                    // Invalid persisted paths are ignored during best-effort cleanup.
-                }
-            }
+            // Committed content is immutable and may be shared by other messages/sessions.
+            // Orphaned blobs are removed only by runtime reset or a future reachability GC.
         }
 
-        public void DeleteSession(string sessionId)
-        {
-            SafeDeleteDirectory(SessionDirectory(sessionId));
-        }
-
-        public void CloneMessageAttachments(string targetSessionId, ChatMessage message)
+        public void CloneMessageAttachments(ChatMessage message)
         {
             if (message == null || message.Attachments == null)
             {
@@ -231,27 +217,18 @@ namespace RNAssistant.Core.Storage
             }
             foreach (var attachment in message.Attachments.Where(item => item != null))
             {
-                var source = AbsolutePath(attachment.RelativePath);
                 var cloneId = IsSafeId(attachment.Id) ? attachment.Id : Guid.NewGuid().ToString("N");
                 attachment.Id = cloneId;
-                if (!File.Exists(source))
+                if (!string.IsNullOrWhiteSpace(attachment.ContentSha256))
                 {
-                    attachment.Status = "missing";
-                    attachment.Error = "Файл вложения отсутствует.";
+                    attachment.RelativePath = null;
+                    attachment.ExtractedTextPath = null;
                     continue;
                 }
-                var directory = MessageDirectory(targetSessionId, message.Id);
-                Directory.CreateDirectory(directory);
-                var target = Path.Combine(directory, cloneId + Path.GetExtension(source));
-                File.Copy(source, target, true);
-                attachment.RelativePath = RelativePath(target);
-                var extractedSource = ExtractedTextAbsolutePath(attachment);
-                if (!string.IsNullOrWhiteSpace(extractedSource) && File.Exists(extractedSource))
-                {
-                    var extractedTarget = Path.Combine(directory, cloneId + ".extracted.txt");
-                    File.Copy(extractedSource, extractedTarget, true);
-                    attachment.ExtractedTextPath = RelativePath(extractedTarget);
-                }
+                attachment.RelativePath = null;
+                attachment.ExtractedTextPath = null;
+                attachment.Status = "missing";
+                attachment.Error = "У вложения нет content-addressed payload.";
             }
         }
 
@@ -260,6 +237,15 @@ namespace RNAssistant.Core.Storage
             if (attachment == null)
             {
                 return null;
+            }
+            if (!string.IsNullOrWhiteSpace(attachment.ContentSha256) && attachment.ContentByteLength.HasValue)
+            {
+                return _blobs.ReadBytes(new ChatBlobReference
+                {
+                    Sha256 = attachment.ContentSha256,
+                    ByteLength = attachment.ContentByteLength.Value,
+                    ContentType = attachment.ContentType
+                });
             }
             var path = AbsolutePath(attachment.RelativePath);
             return File.Exists(path) ? File.ReadAllBytes(path) : null;
@@ -275,6 +261,16 @@ namespace RNAssistant.Core.Storage
             if (attachment == null || maxChars <= 0)
             {
                 return string.Empty;
+            }
+            if (!string.IsNullOrWhiteSpace(attachment.ExtractedTextSha256) && attachment.ExtractedTextByteLength.HasValue)
+            {
+                var text = _blobs.ReadText(new ChatBlobReference
+                {
+                    Sha256 = attachment.ExtractedTextSha256,
+                    ByteLength = attachment.ExtractedTextByteLength.Value,
+                    ContentType = "text/plain; charset=utf-8"
+                }) ?? string.Empty;
+                return text.Length <= maxChars ? text : text.Substring(0, maxChars);
             }
             var path = ExtractedTextAbsolutePath(attachment);
             if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
@@ -382,8 +378,6 @@ namespace RNAssistant.Core.Storage
         }
 
         private string StagingDirectory() { return Path.Combine(_paths.AttachmentDirectory, "staging"); }
-        private string SessionDirectory(string id) { return Path.Combine(_paths.AttachmentDirectory, "sessions", AppDataPaths.SafeFileName(id ?? string.Empty)); }
-        private string MessageDirectory(string sessionId, string messageId) { return Path.Combine(SessionDirectory(sessionId), AppDataPaths.SafeFileName(messageId ?? string.Empty)); }
         private string RelativePath(string path) { return path.Substring(_paths.AttachmentDirectory.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar); }
 
         private string AbsolutePath(string relative)

@@ -63,6 +63,8 @@ namespace RNAssistant.Core.Models
         public string ParentArtifactId { get; set; }
         public string RelativePath { get; set; }
         public string InlineText { get; set; }
+        public string ContentSha256 { get; set; }
+        public long? ContentByteLength { get; set; }
         public string ModelContextPolicy { get; set; }
         public string MetadataJson { get; set; }
         public List<string> RelatedArtifactIds { get; set; }

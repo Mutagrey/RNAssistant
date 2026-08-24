@@ -74,6 +74,12 @@ namespace RNAssistant.Core.Llm
                 requestOptions.DiagnosticProgress,
                 _diagnosticProgress,
                 _debugLog);
+            var requestTraceRecorded = false;
+            var terminalTraceRecorded = false;
+            var traceEndpoint = string.Empty;
+            var traceMessageCount = 0;
+            int? traceEstimatedPromptTokens = null;
+            string failurePayload = null;
             try
             {
                 var apiKey = _apiKeyProvider == null ? null : _apiKeyProvider();
@@ -83,6 +89,7 @@ namespace RNAssistant.Core.Llm
                 {
                     throw new InvalidOperationException("Invalid LLM endpoint URL: " + url);
                 }
+                traceEndpoint = requestUri.GetLeftPart(UriPartial.Path);
 
                 var messageList = messages as IList<ChatMessage> ??
                     (messages == null ? new List<ChatMessage>() : messages.ToList());
@@ -103,6 +110,22 @@ namespace RNAssistant.Core.Llm
                     ? TokenEstimateCalibration.AddPromptIntercept(settings, scaledRequestTokens)
                     : TokenEstimateCalibration.PredictPromptTokens(settings, baseEstimatedRequestTokens);
                 var body = BuildRequestBody(settings, apiMessages, estimatedRequestTokens, requestOptions, true);
+                traceMessageCount = apiMessages.Count;
+                traceEstimatedPromptTokens = estimatedRequestTokens;
+                Trace(requestOptions, new LlmTraceRecord
+                {
+                    Type = "request",
+                    RequestId = requestDiagnostics.RequestId,
+                    Purpose = requestOptions.TracePurpose,
+                    Endpoint = traceEndpoint,
+                    Model = settings.Model,
+                    ResponseFormat = requestOptions.ResponseFormat,
+                    MessageCount = apiMessages.Count,
+                    EstimatedPromptTokens = estimatedRequestTokens,
+                    PayloadJson = body.ToString(Formatting.None),
+                    PayloadContentType = "application/json"
+                });
+                requestTraceRecorded = true;
                 var trafficId = settings.DebugModelTraffic ? requestDiagnostics.RequestId : null;
                 if (settings.DebugModelTraffic)
                 {
@@ -147,6 +170,7 @@ namespace RNAssistant.Core.Llm
                                     LlmHttpTransport.MaxErrorBodyBytes,
                                     requestCancellation.Token,
                                     requestDiagnostics.FirstChunk).ConfigureAwait(false);
+                                failurePayload = errorBody;
                                 LogModelJson(settings, trafficId, "RESPONSE HTTP " + (int)response.StatusCode, errorBody);
                                 var failureKind = LlmHttpTransport.FailureKind(response.StatusCode, errorBody, requestOptions);
                                 if ((hasImages || hasAudio) && (int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
@@ -192,6 +216,10 @@ namespace RNAssistant.Core.Llm
                                         baseEstimatedRequestTokens,
                                         estimatedRequestTokens,
                                         !hasImages && !hasAudio);
+                                    TraceCompletion(requestOptions, requestDiagnostics.RequestId, traceEndpoint,
+                                        settings, traceMessageCount, traceEstimatedPromptTokens, (int)response.StatusCode,
+                                        streamed, JsonConvert.SerializeObject(streamed, Formatting.None));
+                                    terminalTraceRecorded = true;
                                     requestDiagnostics.Completed();
                                     return streamed;
                                 }
@@ -209,6 +237,10 @@ namespace RNAssistant.Core.Llm
                                 baseEstimatedRequestTokens,
                                 estimatedRequestTokens,
                                 !hasImages && !hasAudio);
+                            TraceCompletion(requestOptions, requestDiagnostics.RequestId, traceEndpoint,
+                                settings, traceMessageCount, traceEstimatedPromptTokens, (int)response.StatusCode,
+                                parsed, responseJson);
+                            terminalTraceRecorded = true;
                             requestDiagnostics.Completed();
                             return parsed;
                         }
@@ -253,6 +285,26 @@ namespace RNAssistant.Core.Llm
             catch (Exception ex)
             {
                 requestDiagnostics.Failed(ex);
+                if (requestTraceRecorded && !terminalTraceRecorded)
+                {
+                    var requestException = ex as LlmRequestException;
+                    Trace(requestOptions, new LlmTraceRecord
+                    {
+                        Type = "failure",
+                        RequestId = requestDiagnostics.RequestId,
+                        Purpose = requestOptions.TracePurpose,
+                        Endpoint = traceEndpoint,
+                        Model = settings.Model,
+                        ResponseFormat = requestOptions.ResponseFormat,
+                        MessageCount = traceMessageCount,
+                        EstimatedPromptTokens = traceEstimatedPromptTokens,
+                        StatusCode = requestException == null ? null : requestException.StatusCode,
+                        FailureKind = requestException == null ? ex.GetType().Name : requestException.Kind.ToString(),
+                        Error = ex.Message,
+                        PayloadJson = failurePayload,
+                        PayloadContentType = "application/json"
+                    });
+                }
                 throw;
             }
         }
@@ -530,6 +582,41 @@ namespace RNAssistant.Core.Llm
             result.BaseEstimatedPromptTokens = Math.Max(0, baseEstimatedPromptTokens);
             result.EstimatedPromptTokens = Math.Max(0, estimatedPromptTokens);
             result.TokenEstimateCalibrationEligible = calibrationEligible;
+        }
+
+        private static void TraceCompletion(
+            LlmRequestOptions requestOptions,
+            string requestId,
+            string endpoint,
+            AppSettings settings,
+            int messageCount,
+            int? estimatedPromptTokens,
+            int statusCode,
+            LlmCompletionResult result,
+            string payloadJson)
+        {
+            Trace(requestOptions, new LlmTraceRecord
+            {
+                Type = "response",
+                RequestId = requestId,
+                Purpose = requestOptions == null ? null : requestOptions.TracePurpose,
+                Endpoint = endpoint,
+                Model = settings == null ? null : settings.Model,
+                ResponseFormat = requestOptions == null ? null : requestOptions.ResponseFormat,
+                MessageCount = messageCount,
+                EstimatedPromptTokens = estimatedPromptTokens,
+                StatusCode = statusCode,
+                PayloadJson = payloadJson ?? JsonConvert.SerializeObject(result, Formatting.None),
+                PayloadContentType = "application/json"
+            });
+        }
+
+        private static void Trace(LlmRequestOptions requestOptions, LlmTraceRecord record)
+        {
+            if (requestOptions != null && requestOptions.TraceSink != null)
+            {
+                requestOptions.TraceSink(record);
+            }
         }
 
         private static void AppendReasoningRequest(JObject body, AppSettings settings, LlmRequestOptions requestOptions)

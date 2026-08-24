@@ -811,18 +811,8 @@ namespace RNAssistant.Office.Services
             if (artifact == null) return 0;
             var metadataSize = MetadataSize(artifact.MetadataJson);
             if (metadataSize > 0) return metadataSize;
+            if (artifact.ContentByteLength.HasValue) return Math.Max(0, artifact.ContentByteLength.Value);
             if (!string.IsNullOrEmpty(artifact.InlineText)) return Encoding.UTF8.GetByteCount(artifact.InlineText);
-
-            if (string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase) &&
-                _paths != null && session != null)
-            {
-                var path = Path.Combine(
-                    _paths.HtmlArtifactBodyDirectory,
-                    AppDataPaths.SafeFileName(session.Id),
-                    AppDataPaths.SafeFileName(artifact.Id) + ".json");
-                var length = FileLength(path);
-                if (length > 0) return length;
-            }
             return _paths == null
                 ? 0
                 : SafeRelativeFileLength(_paths.AttachmentDirectory, artifact.RelativePath);

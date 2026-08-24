@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Llm
@@ -62,11 +63,39 @@ namespace RNAssistant.Core.Llm
         public LlmRunCache RunCache { get; set; }
         public bool? ReasoningEnabled { get; set; }
         public Action<LlmRequestDiagnosticUpdate> DiagnosticProgress { get; set; }
+        [JsonIgnore]
+        public ChatSession TraceSession { get; set; }
+        [JsonIgnore]
+        public string TracePurpose { get; set; }
+        [JsonIgnore]
+        public Action<LlmTraceRecord> TraceSink { get; set; }
+        [JsonIgnore]
+        public bool TraceSinkConfigured { get; set; }
 
         public LlmRequestOptions()
         {
             ResponseFormat = LlmResponseFormats.Text;
         }
+    }
+
+    public sealed class LlmTraceRecord
+    {
+        public string Type { get; set; }
+        public string RequestId { get; set; }
+        public string Purpose { get; set; }
+        public string Endpoint { get; set; }
+        public string Model { get; set; }
+        public string ResponseFormat { get; set; }
+        public int MessageCount { get; set; }
+        public int? Attempt { get; set; }
+        public int? EstimatedPromptTokens { get; set; }
+        public int? StatusCode { get; set; }
+        public string FailureKind { get; set; }
+        public string Error { get; set; }
+        [JsonIgnore]
+        public string PayloadJson { get; set; }
+        [JsonIgnore]
+        public string PayloadContentType { get; set; }
     }
 
     public sealed class LlmRunCache

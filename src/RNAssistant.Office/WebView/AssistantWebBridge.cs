@@ -73,6 +73,13 @@ namespace RNAssistant.Office.WebView
                     case "listChats":
                         responsePayload = _controller.ListChats();
                         break;
+                    case "getChatTrajectory":
+                        responsePayload = _controller.GetChatTrajectory(Payload<ChatPayload>(payload).ChatId);
+                        break;
+                    case "getChatEventPayload":
+                        var chatEventPayload = Payload<ChatEventPayloadRequest>(payload);
+                        responsePayload = _controller.GetChatEventPayload(chatEventPayload.ChatId, chatEventPayload.EventId);
+                        break;
                     case "createChat":
                         var createChat = Payload<CreateChatPayload>(payload);
                         responsePayload = _controller.CreateChat(createChat.Title);

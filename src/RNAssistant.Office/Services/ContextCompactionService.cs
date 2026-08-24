@@ -111,7 +111,9 @@ namespace RNAssistant.Office.Services
             var options = new LlmRequestOptions
             {
                 ResponseFormat = LlmResponseFormats.JsonObject,
-                ReasoningEnabled = false
+                ReasoningEnabled = false,
+                TraceSession = session,
+                TracePurpose = "context_compaction"
             };
             var completion = await _completeAsync(settings, request, options, null, cancellationToken).ConfigureAwait(false);
             var summary = ParseSummary(completion == null ? null : completion.Content);
@@ -132,10 +134,6 @@ namespace RNAssistant.Office.Services
                 SourceTokens = ModelContextBudget.EstimateMessagesTokens(prefix, settings),
                 SummaryTokens = ModelContextBudget.EstimateTextTokens(summaryMarkdown, settings)
             };
-            session.ContextCheckpoints = session.ContextCheckpoints ?? new List<ContextCheckpoint>();
-            session.ContextCheckpoints.Add(checkpoint);
-            session.ActiveContextCheckpointId = checkpoint.Id;
-
             session.Artifacts = session.Artifacts ?? new List<ChatArtifact>();
             var previousArtifact = activeCheckpoint == null
                 ? null
@@ -148,18 +146,21 @@ namespace RNAssistant.Office.Services
                 MimeType = "application/json",
                 ParentArtifactId = previousArtifact == null ? null : previousArtifact.Id,
                 Revision = previousArtifact == null ? 1 : Math.Max(1, previousArtifact.Revision + 1),
-                InlineText = summaryJson,
                 ModelContextPolicy = "checkpoint",
-                MetadataJson = JsonConvert.SerializeObject(new
-                {
-                    checkpointId = checkpoint.Id,
-                    throughMessageId = checkpoint.ThroughMessageId,
-                    sourceMessageCount = checkpoint.SourceMessageCount,
-                    sourceTokens = checkpoint.SourceTokens,
-                    summaryTokens = checkpoint.SummaryTokens
-                })
             };
+            checkpoint.Id = artifact.Id;
+            artifact.InlineText = JsonConvert.SerializeObject(checkpoint, Formatting.None);
+            artifact.MetadataJson = JsonConvert.SerializeObject(new
+            {
+                throughMessageId = checkpoint.ThroughMessageId,
+                sourceMessageCount = checkpoint.SourceMessageCount,
+                sourceTokens = checkpoint.SourceTokens,
+                summaryTokens = checkpoint.SummaryTokens
+            });
             session.Artifacts.Add(artifact);
+            session.ContextCheckpoints = session.ContextCheckpoints ?? new List<ContextCheckpoint>();
+            session.ContextCheckpoints.Add(checkpoint);
+            session.ActiveContextCheckpointId = artifact.Id;
             var eventMessage = new ChatMessage
             {
                 Role = "assistant",

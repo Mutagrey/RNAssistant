@@ -1,12 +1,12 @@
 using System.Collections.Generic;
 using RNAssistant.Core.Models;
 
-namespace RNAssistant.Office.Services
+namespace RNAssistant.Core.Services
 {
-    internal static class HtmlWorkspaceHistoryPolicy
+    public static class HtmlWorkspaceHistoryPolicy
     {
-        internal const int MaxItems = 20;
-        internal const long MaxContentCharacters = 2000000;
+        public const int MaxItems = 20;
+        public const long MaxContentCharacters = 2000000;
 
         public static List<HtmlWorkspaceSnapshot> Trim(IEnumerable<HtmlWorkspaceSnapshot> snapshots)
         {
@@ -14,35 +14,20 @@ namespace RNAssistant.Office.Services
             long storedCharacters = 0;
             foreach (var snapshot in snapshots ?? new HtmlWorkspaceSnapshot[0])
             {
-                if (snapshot == null)
-                {
-                    continue;
-                }
+                if (snapshot == null) continue;
                 if (result.Count >= MaxItems) break;
-
                 var snapshotCharacters = EstimateContentCharacters(snapshot);
-                if (snapshotCharacters > MaxContentCharacters)
-                {
-                    break;
-                }
-                if (storedCharacters + snapshotCharacters > MaxContentCharacters)
-                {
-                    break;
-                }
-
+                if (snapshotCharacters > MaxContentCharacters ||
+                    storedCharacters + snapshotCharacters > MaxContentCharacters) break;
                 result.Add(snapshot);
                 storedCharacters += snapshotCharacters;
             }
             return result;
         }
 
-        internal static long EstimateContentCharacters(HtmlWorkspaceSnapshot snapshot)
+        public static long EstimateContentCharacters(HtmlWorkspaceSnapshot snapshot)
         {
-            if (snapshot == null)
-            {
-                return 0;
-            }
-
+            if (snapshot == null) return 0;
             long total = TextLength(snapshot.Id) + TextLength(snapshot.Label) + TextLength(snapshot.ActiveFileId);
             foreach (var file in snapshot.Files ?? new List<HtmlWorkspaceFile>())
             {

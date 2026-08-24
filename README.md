@@ -179,13 +179,14 @@ Runtime data is stored under:
 - `secret.bin` - API key protected with DPAPI CurrentUser.
 - `tools` - central editable executable tool library.
 - `skills` - markdown guidance files used by the agent when choosing an approach.
-- `chats` - per-document chat session JSON and compact summary indexes.
-- `html-artifact-bodies` - session-scoped immutable HTML revision bodies, kept outside chat JSON and restored transparently.
+- `chats` - per-document append-only `*.events.jsonl` session streams and active-chat pointers.
+- `chat-blobs` - shared SHA-256-addressed immutable model payloads, artifact bodies and committed attachments.
+- `attachments` - temporary attachment staging before content is committed to `chat-blobs`.
 
-Settings has `Clear Chats/Data` for development resets. It clears chats, attachments, HTML revision bodies, chat context, VBA backups and WebView user data, while keeping settings, saved API key and custom tools and skills.
+Settings has `Clear Chats/Data` for development resets. It clears event streams, CAS blobs, attachment staging, chat context, VBA backups and WebView user data, while keeping settings, saved API key and custom tools and skills.
 The reset is rejected while any RNAssistant window owns an active chat operation.
 
-Diagnostics shows passive timing for real model requests (local preparation, HTTP headers, first response data and total duration) and offers one manual short model check. It does not poll the endpoint in the background.
+Diagnostics shows passive timing for real model requests (local preparation, HTTP headers, first response data and total duration), offers one manual short model check, and exposes the current chat trajectory. The trajectory lists the last 500 canonical events; large recorded payloads remain in local CAS and are loaded as bounded previews only on demand. Diagnostics does not poll the endpoint in the background.
 
 For an explicit factory reset, close all Office/RNAssistant processes and run `reset-local-data.cmd`. It validates and deletes only `%AppData%\RNAssistant`; pass `-Force` to skip the typed confirmation. This also removes settings, the DPAPI API key, custom tools/skills and runtime logs. It does not modify document-local VBA modules or RNAssistant properties already saved inside Office documents.
 
@@ -241,7 +242,7 @@ Agent mode and document-independent local tools remain usable when that chat's O
 - Use `common.html_data_refresh` to update one or all bindings locally without another LLM request. `refreshPolicy:"on_preview"` is refreshed by the Artifacts UI; `common.html_data_freeze` keeps the current JSON and removes the binding.
 - Use `common.html_workspace_delete` with `resourceType` and `name` to remove an item. Deletions are recorded in workspace history and can be undone.
 - Call `common.html_workspace_read` without arguments for the compact manifest, then pass `resourceType` and exact `name` to read a body. Use `common.html_workspace_set_active` to choose the displayed HTML file.
-- Every workspace mutation also records an immutable chat artifact revision. Full revision bodies are stored outside chat JSON; editing or forking from an older message still restores/copies the exact revision at that point.
+- Every workspace mutation also records an immutable chat artifact revision. Full revision bodies are addressed by SHA-256 in the shared CAS; editing or forking from an older message activates the exact existing revision instead of duplicating it.
 - Undo/redo history is bounded by item count and stored content size. UI responses carry only snapshot ids/labels/timestamps; Agent reads return a manifest or one targeted current item, never history bodies.
 Workspace upsert/delete resolve and validate the current item internally; a separate read is needed only when the model must inspect existing content first.
 HTML preview and its scripts are always enabled inside a sandboxed iframe. Pages can use `window.RNAssistantData`, `window.RNAssistantDataMeta`, or `window.RNAssistant.data`. The UI can export the assembled page, current JSON, CSS, and JavaScript as one offline HTML file.

@@ -28,6 +28,7 @@
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=media-routing-20260824-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=settings-sections-20260824-1">
+  <link rel="stylesheet" href="css/app-trajectory.css?v=session-events-20260824-1">
   <link rel="stylesheet" href="css/app-tools.css?v=library-editor-20260824-1">
   <link rel="stylesheet" href="css/app-vba.css?v=userform-20260824-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
@@ -762,6 +763,28 @@
                 </div>
                 <div class="model-compatibility-results" id="modelConnectionResults" aria-live="polite"></div>
               </section>
+              <section class="model-compatibility-panel trajectory-panel" aria-labelledby="trajectoryTitle">
+                <div class="model-compatibility-head">
+                  <div>
+                    <h3 id="trajectoryTitle">Траектория чата</h3>
+                    <p>Канонический append-only журнал: запросы и ответы модели, сообщения, tools и версии артефактов.</p>
+                  </div>
+                  <button class="secondary" id="refreshTrajectoryButton" type="button">Обновить</button>
+                </div>
+                <div class="trajectory-status" id="trajectoryStatus">Нажмите «Обновить», чтобы прочитать текущий event stream.</div>
+                <div class="trajectory-workspace hidden" id="trajectoryWorkspace">
+                  <div class="trajectory-events" id="trajectoryEvents" role="listbox" aria-label="События траектории"></div>
+                  <div class="trajectory-detail">
+                    <div class="trajectory-detail-head">
+                      <strong id="trajectoryEventTitle">Событие не выбрано</strong>
+                      <button class="secondary hidden" id="loadTrajectoryPayloadButton" type="button">Показать payload</button>
+                    </div>
+                    <div class="trajectory-meta" id="trajectoryEventMeta"></div>
+                    <pre class="trajectory-json" id="trajectoryEventData"></pre>
+                    <pre class="trajectory-json trajectory-payload hidden" id="trajectoryEventPayload"></pre>
+                  </div>
+                </div>
+              </section>
               <div class="logs-workspace diagnostics-logs">
                 <section class="log-section surface-panel padded">
                   <div class="log-section-head"><strong>События текущей сессии</strong><button class="secondary" id="clearLogButton" type="button">Очистить</button></div>
@@ -814,6 +837,7 @@
   <script src="js/app-settings.js?v=endpoint-defaults-20260824-1"></script>
   <script src="js/app-logs.js?v=log-filters-20260824-1"></script>
   <script src="js/app-diagnostics.js?v=log-filters-20260824-1"></script>
+  <script src="js/app-trajectory.js?v=session-events-20260824-1"></script>
   <script src="js/app-prompts.js?v=library-editor-20260824-1"></script>
   <script src="js/app-model-data.js?v=media-routing-20260824-1"></script>
   <script src="js/app-model-picker.js?v=model-modules-20260823-2"></script>

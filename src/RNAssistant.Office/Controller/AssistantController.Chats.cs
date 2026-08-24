@@ -17,6 +17,48 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
+        private const int MaxTrajectoryEvents = 500;
+        private const int MaxTrajectoryPayloadPreviewChars = 512 * 1024;
+
+        public ChatTrajectoryResponse GetChatTrajectory(string chatId = null)
+        {
+            var session = LoadSession(chatId);
+            var events = _chatStore.ReadEvents(session.Host, session.DocumentKey, session.Id);
+            var visible = events.Skip(Math.Max(0, events.Count - MaxTrajectoryEvents)).ToList();
+            return new ChatTrajectoryResponse
+            {
+                ChatId = session.Id,
+                Revision = session.Revision,
+                TotalEvents = events.Count,
+                StartSequence = visible.Count == 0 ? (long?)null : visible[0].Sequence,
+                Truncated = visible.Count < events.Count,
+                Events = visible.Select(SessionEventDto.From).Where(item => item != null).ToList()
+            };
+        }
+
+        public ChatEventPayloadResponse GetChatEventPayload(string chatId, string eventId)
+        {
+            if (string.IsNullOrWhiteSpace(eventId)) throw new InvalidOperationException("eventId is required.");
+            var session = LoadSession(chatId);
+            var sessionEvent = _chatStore.ReadEvents(session.Host, session.DocumentKey, session.Id)
+                .FirstOrDefault(item => string.Equals(item.EventId, eventId, StringComparison.OrdinalIgnoreCase));
+            if (sessionEvent == null) throw new InvalidOperationException("Session event was not found.");
+            if (sessionEvent.Payload == null) throw new InvalidOperationException("Session event has no external payload.");
+            var text = _chatStore.ReadEventPayload(sessionEvent);
+            if (text == null) throw new InvalidOperationException("Session event payload is missing or corrupted.");
+            var truncated = text.Length > MaxTrajectoryPayloadPreviewChars;
+            return new ChatEventPayloadResponse
+            {
+                ChatId = session.Id,
+                EventId = sessionEvent.EventId,
+                Sha256 = sessionEvent.Payload.Sha256,
+                ByteLength = sessionEvent.Payload.ByteLength,
+                ContentType = sessionEvent.Payload.ContentType,
+                Text = truncated ? text.Substring(0, MaxTrajectoryPayloadPreviewChars) : text,
+                TextTruncated = truncated
+            };
+        }
+
         public async Task<ChatStateResponse> CompactChatContextAsync(
             string chatId = null,
             Action<string, string, ChatActivity> progress = null,
@@ -117,6 +159,9 @@ namespace RNAssistant.Office
                 }
 
                 fork = _chatStore.CreateTransient(source.Host, source.DocumentKey, source.DocumentTitle, ChatSessionService.BuildForkTitle(source));
+                fork.ParentSessionId = source.Id;
+                fork.ParentSessionRevision = source.Revision;
+                fork.ForkedThroughMessageId = targetIndex < 0 ? null : sourceMessages[targetIndex].Id;
                 fork.Model = source.Model;
                 fork.Mode = ChatModes.Normalize(source.Mode);
                 fork.HtmlModeEnabled = source.HtmlModeEnabled;
@@ -126,7 +171,7 @@ namespace RNAssistant.Office
                     ? new List<ChatMessage>()
                     : ChatCloneService.CloneMessages(sourceMessages.Take(targetIndex + 1));
                 ChatHistoryEditService.ExcludeUnmatchedToolCalls(fork.Messages);
-                _chatStore.LoadHtmlArtifactBodies(
+                _chatStore.LoadArtifactBodies(
                     source,
                     ChatArtifactService.ReachableForMessages(source.Artifacts, fork.Messages)
                         .Where(artifact => string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
@@ -146,7 +191,7 @@ namespace RNAssistant.Office
                 }
                 foreach (var message in fork.Messages)
                 {
-                    _attachmentStore.CloneMessageAttachments(fork.Id, message);
+                    _attachmentStore.CloneMessageAttachments(message);
                 }
                 ChatArtifactService.LinkMessageArtifacts(fork, 0);
                 ChatArtifactService.RestoreActivePlanFromMessages(fork);
@@ -365,7 +410,6 @@ namespace RNAssistant.Office
                 session.LastRun = null;
                 NormalizeContext(session.Context, session);
                 SaveSessionChanges(session);
-                _attachmentStore.DeleteSession(sessionId);
             });
         }
 
@@ -376,7 +420,6 @@ namespace RNAssistant.Office
                 var sessionId = current.Id;
                 var selected = _chatSessions.DeleteAndSelectNext(sessionId);
                 RemovePendingAgentToolsForSession(sessionId);
-                _attachmentStore.DeleteSession(sessionId);
                 return selected;
             });
             return ChatState(next);
@@ -400,7 +443,6 @@ namespace RNAssistant.Office
                 _chatStore.DeleteDocument(host, documentKey);
                 foreach (var header in sessions)
                 {
-                    _attachmentStore.DeleteSession(header.Id);
                     RemovePendingAgentToolsForSession(header.Id);
                 }
             }

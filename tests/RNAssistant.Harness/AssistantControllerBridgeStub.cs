@@ -40,6 +40,14 @@ namespace RNAssistant.Office
 
         public InitResponse Initialize() { return new InitResponse { Host = "Excel", Title = "Harness.xlsx" }; }
         public ChatStateResponse ListChats() { return ChatState(); }
+        public ChatTrajectoryResponse GetChatTrajectory(string chatId = null)
+        {
+            return new ChatTrajectoryResponse { ChatId = chatId, Revision = 1, Events = new SessionEventDto[0] };
+        }
+        public ChatEventPayloadResponse GetChatEventPayload(string chatId, string eventId)
+        {
+            return new ChatEventPayloadResponse { ChatId = chatId, EventId = eventId, Text = "{}", ContentType = "application/json" };
+        }
         public ChatStateResponse CreateChat(string title) { return ChatState(title); }
         public ChatStateResponse CreateDocumentChat(string title, string host, string documentKey, string documentTitle, string documentPath)
         {

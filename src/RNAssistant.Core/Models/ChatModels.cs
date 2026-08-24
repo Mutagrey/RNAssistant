@@ -62,8 +62,12 @@ namespace RNAssistant.Core.Models
         public long Size { get; set; }
         public string Kind { get; set; }
         public string RelativePath { get; set; }
+        public string ContentSha256 { get; set; }
+        public long? ContentByteLength { get; set; }
         public string ExtractedText { get; set; }
         public string ExtractedTextPath { get; set; }
+        public string ExtractedTextSha256 { get; set; }
+        public long? ExtractedTextByteLength { get; set; }
         public int ExtractedCharCount { get; set; }
         public bool TextTruncated { get; set; }
         public int PageCount { get; set; }
@@ -114,12 +118,15 @@ namespace RNAssistant.Core.Models
 
     public sealed class ChatSession
     {
-        public const int CurrentFormatVersion = 3;
+        public const int CurrentFormatVersion = 4;
 
         [JsonProperty(Required = Required.Always)]
         public int FormatVersion { get; set; }
         public long Revision { get; set; }
         public string Id { get; set; }
+        public string ParentSessionId { get; set; }
+        public long? ParentSessionRevision { get; set; }
+        public string ForkedThroughMessageId { get; set; }
         public string Host { get; set; }
         public string DocumentKey { get; set; }
         public string DocumentTitle { get; set; }

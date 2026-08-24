@@ -89,7 +89,7 @@ namespace RNAssistant.Office
             _chatHistoryEditService = new ChatHistoryEditService(
                 RemovePendingAgentToolsForSession,
                 CancelPendingActivities,
-                _chatStore.LoadHtmlArtifactBody);
+                _chatStore.LoadArtifactBody);
             _htmlNetwork = new HtmlNetworkService(() => _settingsService.Load(), value => _settingsService.Save(value));
             _llmClient = new LlmClient(
                 () => _settingsService.LoadApiKey(),
@@ -112,6 +112,7 @@ namespace RNAssistant.Office
             }
             LlmCompletionDelegate completion = async (settings, messages, requestOptions, streamProgress, cancellationToken) =>
             {
+                ConfigureModelTrace(requestOptions);
                 var result = await rawCompletion(
                     settings,
                     messages,
@@ -141,6 +142,49 @@ namespace RNAssistant.Office
             _contextService = new ContextService(_adapter);
             _syncRoot = new object();
             _pendingAgentTools = new Dictionary<string, PendingAgentTool>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        private void ConfigureModelTrace(LlmRequestOptions options)
+        {
+            if (options == null || options.TraceSession == null || options.TraceSinkConfigured) return;
+            var session = options.TraceSession;
+            var previousSink = options.TraceSink;
+            options.TraceSink = record =>
+            {
+                if (previousSink != null) previousSink(record);
+                if (record == null) return;
+                var type = string.Equals(record.Type, "request", StringComparison.OrdinalIgnoreCase)
+                    ? SessionEventTypes.LlmRequest
+                    : string.Equals(record.Type, "response", StringComparison.OrdinalIgnoreCase)
+                        ? SessionEventTypes.LlmResponse
+                        : string.Equals(record.Type, "rejected", StringComparison.OrdinalIgnoreCase)
+                            ? SessionEventTypes.AgentResponseRejected
+                            : SessionEventTypes.LlmFailure;
+                var runId = session.LastRun == null ? null : session.LastRun.RunId;
+                _chatStore.AppendTrace(
+                    session,
+                    type,
+                    new
+                    {
+                        record.RequestId,
+                        record.Purpose,
+                        record.Endpoint,
+                        record.Model,
+                        record.ResponseFormat,
+                        record.MessageCount,
+                        record.Attempt,
+                        record.EstimatedPromptTokens,
+                        record.StatusCode,
+                        record.FailureKind,
+                        record.Error
+                    },
+                    record.PayloadJson,
+                    record.PayloadContentType,
+                    runId,
+                    runId,
+                    record.RequestId);
+            };
+            options.TraceSinkConfigured = true;
         }
 
         public string HostName { get { return _adapter.HostName; } }
@@ -390,7 +434,16 @@ namespace RNAssistant.Office
                 var title = string.Empty;
                 try
                 {
-                    title = await ChatTitleBuilder.GenerateLlmTitleAsync(settings, userText, assistantText, _llmClient.CompleteAsync, lifetimeToken).ConfigureAwait(false);
+                    var traceSession = _chatStore.Load(host, documentKey, sessionId);
+                    title = traceSession == null
+                        ? ChatTitleBuilder.BuildFallbackTitle(userText, assistantText)
+                        : await ChatTitleBuilder.GenerateLlmTitleAsync(
+                            settings,
+                            userText,
+                            assistantText,
+                            _llmCompletion,
+                            traceSession,
+                            lifetimeToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -572,8 +625,8 @@ namespace RNAssistant.Office
                 {
                     if (commitUserAttachments && appendedUserMessage != null)
                     {
-                        // Keep drafts until the chat points to the copied final files durably.
-                        _attachmentStore.Commit(sessionId, appendedUserMessage, false);
+                        // Keep drafts until the chat durably references their verified CAS blobs.
+                        _attachmentStore.Commit(appendedUserMessage, false);
                     }
                     _chatStore.Save(session);
                     preparedTurnPersisted = true;

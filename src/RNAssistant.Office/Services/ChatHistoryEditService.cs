@@ -13,16 +13,16 @@ namespace RNAssistant.Office.Services
 
         private readonly Action<string> _removePendingAgentTools;
         private readonly Action<ChatSession, string> _cancelPendingActivities;
-        private readonly Func<ChatSession, string, bool> _loadHtmlArtifactBody;
+        private readonly Func<ChatSession, string, bool> _loadArtifactBody;
 
         public ChatHistoryEditService(
             Action<string> removePendingAgentTools,
             Action<ChatSession, string> cancelPendingActivities,
-            Func<ChatSession, string, bool> loadHtmlArtifactBody = null)
+            Func<ChatSession, string, bool> loadArtifactBody = null)
         {
             _removePendingAgentTools = removePendingAgentTools ?? throw new ArgumentNullException(nameof(removePendingAgentTools));
             _cancelPendingActivities = cancelPendingActivities ?? throw new ArgumentNullException(nameof(cancelPendingActivities));
-            _loadHtmlArtifactBody = loadHtmlArtifactBody;
+            _loadArtifactBody = loadArtifactBody;
         }
 
         public ChatHistoryEditResult RewriteUserMessage(
@@ -59,9 +59,9 @@ namespace RNAssistant.Office.Services
             var workspaceCheckpoint = !string.IsNullOrWhiteSpace(target.HtmlWorkspaceCheckpointId)
                 ? target.HtmlWorkspaceCheckpointId
                 : HtmlWorkspaceArtifactService.CheckpointAtOrBefore(messages, targetIndex);
-            if (!string.IsNullOrWhiteSpace(workspaceCheckpoint) && _loadHtmlArtifactBody != null)
+            if (!string.IsNullOrWhiteSpace(workspaceCheckpoint) && _loadArtifactBody != null)
             {
-                _loadHtmlArtifactBody(session, workspaceCheckpoint);
+                _loadArtifactBody(session, workspaceCheckpoint);
             }
             if (string.IsNullOrWhiteSpace(workspaceCheckpoint) ||
                 !HtmlWorkspaceArtifactService.Restore(session, workspaceCheckpoint))

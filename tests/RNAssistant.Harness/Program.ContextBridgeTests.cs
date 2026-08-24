@@ -189,7 +189,7 @@ namespace RNAssistant.Harness
                     Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("fork data")));
                 message.Attachments.Add(attachment);
                 source.Messages.Add(message);
-                store.Commit(source.Id, message);
+                store.Commit(message);
                 ChatArtifactService.LinkMessageArtifacts(source, 0);
 
                 var fork = new ChatSession
@@ -197,21 +197,21 @@ namespace RNAssistant.Harness
                     Messages = ChatCloneService.CloneMessages(source.Messages)
                 };
                 fork.Artifacts = ChatCloneService.CloneArtifactsForMessages(source.Artifacts, fork.Messages);
-                var sourcePath = fork.Messages[0].Attachments[0].RelativePath;
-                store.CloneMessageAttachments(fork.Id, fork.Messages[0]);
+                var sourceHash = fork.Messages[0].Attachments[0].ContentSha256;
+                store.CloneMessageAttachments(fork.Messages[0]);
                 ChatArtifactService.LinkMessageArtifacts(fork, 0);
 
                 var clonedAttachment = fork.Messages[0].Attachments[0];
                 var clonedArtifact = fork.Artifacts.Single(item => item.Id == "attachment_" + clonedAttachment.Id);
                 AssertEqual(attachment.Id, clonedAttachment.Id, "fork preserves stable attachment id");
-                AssertTrue(!string.Equals(sourcePath, clonedAttachment.RelativePath, StringComparison.OrdinalIgnoreCase), "fork copies attachment to its own path");
-                AssertEqual(clonedAttachment.RelativePath, clonedArtifact.RelativePath, "fork artifact points at copied attachment");
-                AssertTrue(File.Exists(AbsoluteAttachmentPath(paths, clonedAttachment)), "forked attachment file exists");
+                AssertEqual(sourceHash, clonedAttachment.ContentSha256, "fork reuses immutable attachment blob");
+                AssertEqual(clonedAttachment.ContentSha256, clonedArtifact.ContentSha256, "fork artifact points at shared blob");
+                AssertTrue(store.ReadBytes(clonedAttachment).Length > 0, "forked attachment blob exists");
 
                 var unsafeMessage = ChatCloneService.CloneMessages(source.Messages)[0];
                 unsafeMessage.Attachments[0].Id = "../escape";
                 unsafeMessage.Attachments.Add(null);
-                store.CloneMessageAttachments(new ChatSession().Id, unsafeMessage);
+                store.CloneMessageAttachments(unsafeMessage);
                 AssertTrue(unsafeMessage.Attachments[0].Id.All(char.IsLetterOrDigit),
                     "fork replaces an unsafe persisted attachment id");
             });

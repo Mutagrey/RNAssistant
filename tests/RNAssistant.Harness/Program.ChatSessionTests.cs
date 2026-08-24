@@ -84,113 +84,6 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void SkipsBrokenChatFiles()
-        {
-            WithTempPaths(delegate(AppDataPaths paths)
-            {
-                var store = new ChatStore(paths);
-                var documentDirectory = Path.Combine(paths.ChatDirectory, AppDataPaths.SafeFileName("Excel|book"));
-                Directory.CreateDirectory(documentDirectory);
-                File.WriteAllText(Path.Combine(documentDirectory, "broken.json"), "{ broken");
-                File.WriteAllText(Path.Combine(documentDirectory, "unsupported.json"), "{\"Id\":\"unsupported\",\"Host\":\"Excel\",\"DocumentKey\":\"book\"}");
-                File.WriteAllText(Path.Combine(documentDirectory, "future.json"), "{\"FormatVersion\":" + (ChatSession.CurrentFormatVersion + 1) + ",\"Messages\":{\"invalid\":true}}");
-
-                var session = store.Create("Excel", "book", "Book", "Good");
-                var serializationExceptions = 0;
-                EventHandler<FirstChanceExceptionEventArgs> handler = delegate(object sender, FirstChanceExceptionEventArgs args)
-                {
-                    if (args.Exception is JsonSerializationException)
-                    {
-                        serializationExceptions++;
-                    }
-                };
-                AppDomain.CurrentDomain.FirstChanceException += handler;
-                IReadOnlyList<ChatSession> sessions;
-                IReadOnlyList<ChatSession> allSessions;
-                try
-                {
-                    sessions = store.List("Excel", "book", "Book");
-                    allSessions = store.List();
-                }
-                finally
-                {
-                    AppDomain.CurrentDomain.FirstChanceException -= handler;
-                }
-
-                AssertEqual(1, sessions.Count, "document session count");
-                AssertEqual(session.Id, sessions[0].Id, "session id");
-                AssertEqual(1, allSessions.Count, "global session count");
-                AssertEqual(1, store.ListHeaders().Count, "broken chats excluded from summary index");
-                AssertEqual(1, Directory.GetFiles(documentDirectory, "*.summary.json").Length, "unsupported chats are not indexed");
-                AssertEqual(0, serializationExceptions, "unsupported chat files are skipped before deserialization");
-            });
-        }
-
-        private static void ChatSummaryIndexTracksSessionLifecycle()
-        {
-            WithTempPaths(delegate(AppDataPaths paths)
-            {
-                var store = new ChatStore(paths);
-                var session = store.Create("Word", "doc-key", "Doc.docx", "Indexed chat");
-                session.DocumentPath = "C:\\Docs\\Doc.docx";
-                session.Messages.Add(new ChatMessage { Role = "user", Content = "visible" });
-                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "protocol", ProtocolMessage = true });
-                session.HtmlWorkspace.Files.Add(new HtmlWorkspaceFile { Id = "index", Path = "index.html", Kind = "html", Content = "<h1>Hi</h1>" });
-                session.HtmlWorkspace.DataSources.Add(new HtmlWorkspaceDataSource { Id = "data", Name = "data", Json = "{}" });
-                session.LastRun = new ChatRunRecord
-                {
-                    RunId = "run-1",
-                    RuntimeId = "runtime-1",
-                    Status = "running",
-                    Phase = "executing",
-                    StartedUtc = DateTime.UtcNow
-                };
-                store.Save(session);
-
-                var headers = store.ListHeaders();
-                AssertEqual(1, headers.Count, "indexed header count");
-                AssertEqual("Indexed chat", headers[0].Title, "indexed title");
-                AssertEqual(1, headers[0].MessageCount, "indexed visible message count");
-                AssertEqual(1, headers[0].HtmlFileCount, "indexed html file count");
-                AssertEqual(1, headers[0].HtmlDataSourceCount, "indexed data source count");
-                AssertEqual("runtime-1", headers[0].RunRuntimeId, "indexed run runtime");
-
-                var oldDirectory = Path.Combine(paths.ChatDirectory, AppDataPaths.SafeFileName("Word|doc-key"));
-                var sessionPath = Directory.GetFiles(oldDirectory, "*.json").Single(path => !ChatIndexStore.IsSidecarPath(path));
-                var sidecarPath = ChatIndexStore.SidecarPath(sessionPath);
-                AssertTrue(File.Exists(sidecarPath), "summary sidecar created");
-
-                File.Delete(sidecarPath);
-                AssertEqual(1, store.ListHeaders().Count, "missing sidecar rebuilt");
-                AssertTrue(File.Exists(sidecarPath), "rebuilt sidecar persisted");
-
-                File.WriteAllText(sidecarPath, "{ broken");
-                AssertEqual("Indexed chat", store.ListHeaders()[0].Title, "broken sidecar rebuilt");
-                AssertTrue(JObject.Parse(File.ReadAllText(sidecarPath)) != null, "rebuilt sidecar is valid json");
-
-                var staleSidecar = JObject.Parse(File.ReadAllText(sidecarPath));
-                staleSidecar["Header"]["Title"] = "Stale indexed title";
-                staleSidecar["Header"]["Revision"] = Math.Max(0, session.Revision - 1);
-                File.WriteAllText(sidecarPath, staleSidecar.ToString(Formatting.Indented));
-                AssertEqual("Indexed chat", store.ListHeaders()[0].Title, "sidecar revision mismatch is rebuilt");
-
-                var root = JObject.Parse(File.ReadAllText(sessionPath));
-                root["Title"] = "Externally changed";
-                File.WriteAllText(sessionPath, root.ToString(Formatting.Indented));
-                headers = store.ListHeaders();
-                AssertEqual("Externally changed", headers[0].Title, "stale sidecar refreshed");
-
-                var moved = store.Move(store.Load(session.Id), "Word", "moved-doc", "Moved.docx");
-                AssertEqual("moved-doc", moved.DocumentKey, "moved session key");
-                AssertTrue(!File.Exists(sessionPath), "old session removed after move");
-                AssertTrue(!File.Exists(sidecarPath), "old sidecar removed after move");
-                AssertEqual("moved-doc", store.Load(session.Id).DocumentKey, "indexed global lookup after move");
-
-                AssertTrue(store.Delete("Word", "moved-doc", session.Id), "indexed chat deleted");
-                AssertEqual(0, store.ListHeaders().Count, "deleted chat removed from index");
-            });
-        }
-
         private static void StaleChatRevisionIsRejected()
         {
             WithTempPaths(delegate(AppDataPaths paths)
@@ -254,8 +147,8 @@ namespace RNAssistant.Harness
                 AssertTrue(store.DeleteDocument("Excel", "book-1"), "document directory deleted");
                 AssertEqual(0, store.List("Excel", "book-1", "Book1.xlsx").Count, "document chats deleted");
                 AssertEqual(1, store.List("Excel", "book-2", "Book2.xlsx").Count, "other document preserved");
-                AssertTrue(!Directory.Exists(BodyDirectory(paths, deletedWithArtifact.Id)), "deleted document artifact bodies removed");
-                AssertTrue(Directory.Exists(BodyDirectory(paths, keptWithArtifact.Id)), "other document artifact bodies preserved");
+                AssertTrue(Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Length > 0,
+                    "shared content-addressed blobs remain valid for other sessions");
             });
         }
 
@@ -637,6 +530,8 @@ namespace RNAssistant.Harness
                     Activity = new ChatActivity
                     {
                         RunId = "old-run",
+                        ToolCallId = "call-without-result",
+                        ToolId = "excel.inspect",
                         Status = "running",
                         ExecutionStatus = "executing",
                         PendingId = "pending"

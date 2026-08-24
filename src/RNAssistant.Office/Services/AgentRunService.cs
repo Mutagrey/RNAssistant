@@ -205,6 +205,7 @@ namespace RNAssistant.Office.Services
                 var parsed = _responseParser.Parse(
                     completion == null ? null : completion.Content,
                     availableTools);
+                if (!parsed.Success) TraceRejectedResponse(options, completion, parsed.Error, 0);
                 var configuredFormatRetries = settings.MaxAgentFormatRetries > 0
                     ? settings.MaxAgentFormatRetries
                     : new AppSettings().MaxAgentFormatRetries;
@@ -234,6 +235,7 @@ namespace RNAssistant.Office.Services
                     parsed = _responseParser.Parse(
                         completion == null ? null : completion.Content,
                         availableTools);
+                    if (!parsed.Success) TraceRejectedResponse(options, completion, parsed.Error, retry);
                 }
                 if (!parsed.Success)
                 {
@@ -365,7 +367,9 @@ namespace RNAssistant.Office.Services
                 ResponseSchemaName = jsonSchema ? AgentResponseSchemaBuilder.SchemaName : null,
                 ResponseSchemaJson = jsonSchema ? AgentResponseSchemaBuilder.Build(tools) : null,
                 ReasoningEnabled = session == null ? (bool?)null : session.ReasoningEnabled,
-                RunCache = runCache
+                RunCache = runCache,
+                TraceSession = session,
+                TracePurpose = "agent"
             };
         }
 
@@ -660,6 +664,27 @@ namespace RNAssistant.Office.Services
         private static void Report(Action<string, string, ChatActivity> progress, string phase, string message, ChatActivity activity)
         {
             if (progress != null) progress(phase, message ?? string.Empty, activity);
+        }
+
+        private static void TraceRejectedResponse(
+            LlmRequestOptions options,
+            LlmCompletionResult completion,
+            string error,
+            int attempt)
+        {
+            if (options == null || options.TraceSink == null) return;
+            options.TraceSink(new LlmTraceRecord
+            {
+                Type = "rejected",
+                Purpose = options.TracePurpose,
+                Model = options.TraceSession == null ? null : options.TraceSession.Model,
+                ResponseFormat = options.ResponseFormat,
+                Attempt = attempt,
+                FailureKind = "invalid_agent_response",
+                Error = error,
+                PayloadJson = completion == null ? null : completion.Content,
+                PayloadContentType = "application/json"
+            });
         }
     }
 }

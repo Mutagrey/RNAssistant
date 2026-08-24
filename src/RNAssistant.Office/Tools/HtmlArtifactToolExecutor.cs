@@ -1055,12 +1055,10 @@ namespace RNAssistant.Office.Tools
                 throw new InvalidOperationException("HTML workspace snapshot was not found.");
             }
 
-            InsertSnapshot(session.HtmlWorkspace.RedoHistory, CreateSnapshot(session.HtmlWorkspace, "Before undo"));
-            ApplySnapshot(session.HtmlWorkspace, snapshot);
-            session.HtmlWorkspace.History.RemoveAll(h => h != null && string.Equals(h.Id, snapshot.Id, StringComparison.OrdinalIgnoreCase));
-            session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
-            NormalizeWorkspace(session.HtmlWorkspace);
-            HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML workspace restored");
+            if (!HtmlWorkspaceArtifactService.Restore(session, snapshot.Id))
+            {
+                throw new InvalidOperationException("HTML workspace artifact could not be restored.");
+            }
             return snapshot;
         }
 
@@ -1080,12 +1078,10 @@ namespace RNAssistant.Office.Tools
                 throw new InvalidOperationException("HTML workspace redo snapshot was not found.");
             }
 
-            InsertSnapshot(session.HtmlWorkspace.History, CreateSnapshot(session.HtmlWorkspace, "Before redo"));
-            ApplySnapshot(session.HtmlWorkspace, snapshot);
-            session.HtmlWorkspace.RedoHistory.RemoveAll(h => h != null && string.Equals(h.Id, snapshot.Id, StringComparison.OrdinalIgnoreCase));
-            session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
-            NormalizeWorkspace(session.HtmlWorkspace);
-            HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML workspace redone");
+            if (!HtmlWorkspaceArtifactService.Restore(session, snapshot.Id))
+            {
+                throw new InvalidOperationException("HTML workspace artifact could not be restored.");
+            }
             return snapshot;
         }
 

@@ -109,7 +109,6 @@
     <Compile Include="Services\ChatRunRegistry.cs" />
     <Compile Include="Services\HtmlNetworkService.cs" />
     <Compile Include="Services\HtmlWorkspaceArtifactService.cs" />
-    <Compile Include="Services\HtmlWorkspaceHistoryPolicy.cs" />
     <Compile Include="Services\DocumentOpenService.cs" />
     <Compile Include="Services\ContextService.cs" />
     <Compile Include="Services\BuiltInSkillProvider.cs" />

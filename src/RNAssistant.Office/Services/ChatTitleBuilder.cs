@@ -32,6 +32,7 @@ namespace RNAssistant.Office.Services
             string userText,
             string assistantText,
             LlmCompletionDelegate completeAsync,
+            ChatSession traceSession,
             CancellationToken cancellationToken)
         {
             if (settings == null || completeAsync == null)
@@ -57,7 +58,12 @@ namespace RNAssistant.Office.Services
                     new ChatMessage { Role = "user", Content = instruction + "\n\n" + request }
                 };
 
-            var completion = await completeAsync(CreateTitleSettings(settings), messages, null, null, cancellationToken).ConfigureAwait(false);
+            var completion = await completeAsync(CreateTitleSettings(settings), messages, new LlmRequestOptions
+            {
+                TraceSession = traceSession,
+                TracePurpose = "chat_title",
+                ReasoningEnabled = false
+            }, null, cancellationToken).ConfigureAwait(false);
             var title = CleanLlmTitle(completion == null ? null : completion.Content);
             return string.IsNullOrWhiteSpace(title)
                 ? BuildFallback(assistantText, userText)

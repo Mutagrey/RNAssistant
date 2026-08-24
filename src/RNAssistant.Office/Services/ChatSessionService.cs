@@ -91,7 +91,7 @@ namespace RNAssistant.Office.Services
                         continue;
                     }
 
-                    var effectMayBeUnknown = EffectMayBeUnknown(run);
+                    var effectMayBeUnknown = _chatStore.HasOpenToolExecution(session, run.RunId);
                     MarkInterruptedActivities(session, run, effectMayBeUnknown);
                     if (effectMayBeUnknown)
                     {
@@ -136,13 +136,6 @@ namespace RNAssistant.Office.Services
                     if (recoveryLease != null) recoveryLease.Dispose();
                 }
             }
-        }
-
-        private static bool EffectMayBeUnknown(ChatRunRecord run)
-        {
-            return run != null &&
-                (string.Equals(run.Phase, "tool_running", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(run.Phase, "executing", StringComparison.OrdinalIgnoreCase));
         }
 
         private static void MarkInterruptedActivities(ChatSession session, ChatRunRecord run, bool effectMayBeUnknown)

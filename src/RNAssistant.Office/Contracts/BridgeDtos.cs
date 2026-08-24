@@ -481,6 +481,79 @@ namespace RNAssistant.Office.Contracts
         public string RunId { get; set; }
     }
 
+    public sealed class ChatEventPayloadRequest : ChatPayload
+    {
+        [JsonProperty("eventId")]
+        public string EventId { get; set; }
+    }
+
+    public sealed class ChatTrajectoryResponse
+    {
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("revision")] public long Revision { get; set; }
+        [JsonProperty("totalEvents")] public int TotalEvents { get; set; }
+        [JsonProperty("startSequence")] public long? StartSequence { get; set; }
+        [JsonProperty("truncated")] public bool Truncated { get; set; }
+        [JsonProperty("events")] public IReadOnlyList<SessionEventDto> Events { get; set; }
+    }
+
+    public sealed class SessionEventDto
+    {
+        private const int MaxInlineDataChars = 65536;
+
+        [JsonProperty("schemaVersion")] public int SchemaVersion { get; set; }
+        [JsonProperty("sequence")] public long Sequence { get; set; }
+        [JsonProperty("eventId")] public string EventId { get; set; }
+        [JsonProperty("createdUtc")] public System.DateTime CreatedUtc { get; set; }
+        [JsonProperty("type")] public string Type { get; set; }
+        [JsonProperty("runId")] public string RunId { get; set; }
+        [JsonProperty("turnId")] public string TurnId { get; set; }
+        [JsonProperty("stepId")] public string StepId { get; set; }
+        [JsonProperty("previousHash")] public string PreviousHash { get; set; }
+        [JsonProperty("hash")] public string Hash { get; set; }
+        [JsonProperty("dataJson")] public string DataJson { get; set; }
+        [JsonProperty("dataTruncated")] public bool DataTruncated { get; set; }
+        [JsonProperty("payloadSha256")] public string PayloadSha256 { get; set; }
+        [JsonProperty("payloadByteLength")] public long? PayloadByteLength { get; set; }
+        [JsonProperty("payloadContentType")] public string PayloadContentType { get; set; }
+
+        public static SessionEventDto From(SessionEvent sessionEvent)
+        {
+            if (sessionEvent == null) return null;
+            var data = sessionEvent.Data == null ? string.Empty : sessionEvent.Data.ToString(Formatting.None);
+            var bounded = data.Length <= MaxInlineDataChars ? data : data.Substring(0, MaxInlineDataChars);
+            return new SessionEventDto
+            {
+                SchemaVersion = sessionEvent.SchemaVersion,
+                Sequence = sessionEvent.Sequence,
+                EventId = sessionEvent.EventId,
+                CreatedUtc = sessionEvent.CreatedUtc,
+                Type = sessionEvent.Type,
+                RunId = sessionEvent.RunId,
+                TurnId = sessionEvent.TurnId,
+                StepId = sessionEvent.StepId,
+                PreviousHash = sessionEvent.PreviousHash,
+                Hash = sessionEvent.Hash,
+                DataJson = bounded,
+                DataTruncated = bounded.Length < data.Length,
+                PayloadSha256 = sessionEvent.Payload == null ? null : sessionEvent.Payload.Sha256,
+                PayloadByteLength = sessionEvent.Payload == null ? (long?)null : sessionEvent.Payload.ByteLength,
+                PayloadContentType = sessionEvent.Payload == null ? null : sessionEvent.Payload.ContentType
+            };
+        }
+    }
+
+    public sealed class ChatEventPayloadResponse
+    {
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("eventId")] public string EventId { get; set; }
+        [JsonProperty("sha256")] public string Sha256 { get; set; }
+        [JsonProperty("byteLength")] public long ByteLength { get; set; }
+        [JsonProperty("contentType")] public string ContentType { get; set; }
+        [JsonProperty("text")] public string Text { get; set; }
+        [JsonProperty("textTruncated")] public bool TextTruncated { get; set; }
+    }
+
     public sealed class HtmlFetchRequest
     {
         [JsonProperty("url")]
@@ -933,6 +1006,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("revision")] public int Revision { get; set; }
         [JsonProperty("parentArtifactId")] public string ParentArtifactId { get; set; }
         [JsonProperty("relativePath")] public string RelativePath { get; set; }
+        [JsonProperty("contentSha256")] public string ContentSha256 { get; set; }
+        [JsonProperty("contentByteLength")] public long? ContentByteLength { get; set; }
         [JsonProperty("inlineText")] public string InlineText { get; set; }
         [JsonProperty("inlineTruncated")] public bool InlineTruncated { get; set; }
         [JsonProperty("metadataJson")] public string MetadataJson { get; set; }
@@ -959,6 +1034,8 @@ namespace RNAssistant.Office.Contracts
                     Revision = artifact.Revision,
                     ParentArtifactId = artifact.ParentArtifactId,
                     RelativePath = artifact.RelativePath,
+                    ContentSha256 = artifact.ContentSha256,
+                    ContentByteLength = artifact.ContentByteLength,
                     InlineText = bounded,
                     InlineTruncated = includeInline && bounded != null && bounded.Length < inline.Length,
                     MetadataJson = artifact.MetadataJson,

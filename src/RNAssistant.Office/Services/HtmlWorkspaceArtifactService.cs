@@ -18,16 +18,19 @@ namespace RNAssistant.Office.Services
             var snapshot = HtmlWorkspaceCopyService.CaptureSnapshot(
                 session.HtmlWorkspace,
                 string.IsNullOrWhiteSpace(title) ? "HTML workspace" : title);
-            var stateJson = JsonConvert.SerializeObject(snapshot);
+            var stateJson = SerializeState(snapshot);
             var current = session.Artifacts.FirstOrDefault(item => item != null &&
                 string.Equals(item.Id, session.ActiveHtmlArtifactId, StringComparison.OrdinalIgnoreCase));
             if (current != null && SameState(current.InlineText, snapshot))
             {
+                RebuildNavigation(session);
                 return current.Id;
             }
             if (current == null && snapshot.Files.Count == 0 && snapshot.DataSources.Count == 0)
             {
                 session.ActiveHtmlArtifactId = null;
+                session.HtmlWorkspace.History = new List<HtmlWorkspaceSnapshot>();
+                session.HtmlWorkspace.RedoHistory = new List<HtmlWorkspaceSnapshot>();
                 return string.Empty;
             }
             var artifact = new ChatArtifact
@@ -48,6 +51,7 @@ namespace RNAssistant.Office.Services
             };
             session.Artifacts.Add(artifact);
             session.ActiveHtmlArtifactId = artifact.Id;
+            RebuildNavigation(session);
             return artifact.Id;
         }
 
@@ -71,7 +75,45 @@ namespace RNAssistant.Office.Services
             session.HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(
                 HtmlWorkspaceCopyService.CreateWorkspaceFromSnapshot(snapshot));
             session.ActiveHtmlArtifactId = artifact.Id;
+            RebuildNavigation(session);
             return true;
+        }
+
+        public static void RebuildNavigation(ChatSession session)
+        {
+            if (session == null || session.HtmlWorkspace == null) return;
+            session.HtmlWorkspace.History = new List<HtmlWorkspaceSnapshot>();
+            session.HtmlWorkspace.RedoHistory = new List<HtmlWorkspaceSnapshot>();
+            var active = FindArtifact(session, session.ActiveHtmlArtifactId);
+            if (active == null) return;
+            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { active.Id };
+            var current = active;
+            while (!string.IsNullOrWhiteSpace(current.ParentArtifactId) && visited.Add(current.ParentArtifactId))
+            {
+                current = FindArtifact(session, current.ParentArtifactId);
+                var snapshot = ParseSnapshot(current);
+                if (snapshot == null) break;
+                session.HtmlWorkspace.History.Add(snapshot);
+            }
+            session.HtmlWorkspace.History = HtmlWorkspaceHistoryPolicy.Trim(session.HtmlWorkspace.History);
+
+            current = active;
+            while (current != null)
+            {
+                var child = (session.Artifacts ?? new List<ChatArtifact>())
+                    .Where(item => item != null &&
+                        string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(item.ParentArtifactId, current.Id, StringComparison.OrdinalIgnoreCase) &&
+                        !visited.Contains(item.Id))
+                    .OrderByDescending(item => item.CreatedUtc)
+                    .FirstOrDefault();
+                if (child == null || !visited.Add(child.Id)) break;
+                var snapshot = ParseSnapshot(child);
+                if (snapshot == null) break;
+                session.HtmlWorkspace.RedoHistory.Add(snapshot);
+                current = child;
+            }
+            session.HtmlWorkspace.RedoHistory = HtmlWorkspaceHistoryPolicy.Trim(session.HtmlWorkspace.RedoHistory);
         }
 
         public static string CheckpointAtOrBefore(IReadOnlyList<ChatMessage> messages, int index)
@@ -113,6 +155,43 @@ namespace RNAssistant.Office.Services
             {
                 return false;
             }
+        }
+
+        private static ChatArtifact FindArtifact(ChatSession session, string artifactId)
+        {
+            if (session == null || string.IsNullOrWhiteSpace(artifactId)) return null;
+            return (session.Artifacts ?? new List<ChatArtifact>()).FirstOrDefault(item => item != null &&
+                string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static HtmlWorkspaceSnapshot ParseSnapshot(ChatArtifact artifact)
+        {
+            if (artifact == null || string.IsNullOrWhiteSpace(artifact.InlineText)) return null;
+            try
+            {
+                var snapshot = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(artifact.InlineText);
+                if (snapshot == null) return null;
+                snapshot.Id = artifact.Id;
+                snapshot.Label = string.IsNullOrWhiteSpace(artifact.Title) ? "HTML workspace" : artifact.Title;
+                snapshot.CreatedUtc = artifact.CreatedUtc;
+                return snapshot;
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
+        private static string SerializeState(HtmlWorkspaceSnapshot snapshot)
+        {
+            snapshot = snapshot ?? new HtmlWorkspaceSnapshot();
+            return JsonConvert.SerializeObject(new
+            {
+                snapshot.ActiveFileId,
+                Files = snapshot.Files ?? new List<HtmlWorkspaceFile>(),
+                DataSources = snapshot.DataSources ?? new List<HtmlWorkspaceDataSource>()
+            }, Formatting.None);
         }
 
     }

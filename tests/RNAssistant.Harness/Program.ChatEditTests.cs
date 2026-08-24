@@ -89,7 +89,7 @@ namespace RNAssistant.Harness
                     HtmlWorkspaceCheckpointId = workspaceBeforeTarget
                 };
                 target.Attachments.Add(targetAttachment);
-                attachmentStore.Commit(sessionId, target);
+                attachmentStore.Commit(target);
                 session.Messages.Add(target);
                 session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Второй ответ" });
 
@@ -99,7 +99,7 @@ namespace RNAssistant.Harness
                     Convert.ToBase64String(Encoding.UTF8.GetBytes("TAIL_ATTACHMENT")));
                 var tail = new ChatMessage { Role = "user", Content = "Третий вопрос" };
                 tail.Attachments.Add(tailAttachment);
-                attachmentStore.Commit(sessionId, tail);
+                attachmentStore.Commit(tail);
                 session.Messages.Add(tail);
                 session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Третий ответ" });
 
@@ -119,8 +119,8 @@ namespace RNAssistant.Harness
                 var targetCreatedUtc = target.CreatedUtc;
                 var targetPath = AbsoluteAttachmentPath(paths, targetAttachment);
                 var tailPath = AbsoluteAttachmentPath(paths, tailAttachment);
-                AssertTrue(File.Exists(targetPath), "target attachment committed");
-                AssertTrue(File.Exists(tailPath), "tail attachment committed");
+                AssertTrue(File.Exists(targetPath), "target attachment blob committed");
+                AssertTrue(File.Exists(tailPath), "tail attachment blob committed");
 
                 var result = service.RewriteUserMessage(
                     session,
@@ -135,11 +135,11 @@ namespace RNAssistant.Harness
                 AssertEqual(targetCreatedUtc, target.CreatedUtc, "edited message time preserved");
                 AssertEqual("Второй вопрос после правки", target.Content, "edited message text stored");
                 AssertEqual(1, target.Attachments.Count, "edited message attachments preserved");
-                AssertTrue(File.Exists(targetPath), "edited attachment file still exists");
-                AssertTrue(File.Exists(tailPath), "tail attachment retained until rewritten history is durable");
+                AssertTrue(File.Exists(targetPath), "edited attachment blob still exists");
+                AssertTrue(File.Exists(tailPath), "tail blob remains immutable while history is rewritten");
                 AssertTrue(result.RemovedMessages.Contains(tail), "removed tail is returned for post-save cleanup");
                 foreach (var removed in result.RemovedMessages) attachmentStore.DeleteMessage(removed);
-                AssertTrue(!File.Exists(tailPath), "tail attachment file removed after durable-save cleanup");
+                AssertTrue(File.Exists(tailPath), "logical deletion does not remove a potentially shared CAS blob");
                 AssertTrue(session.Messages.All(message => message == null || message.Content != "Третий вопрос"), "tail user turn removed");
                 AssertTrue(target.PromptTokens == null && target.CompletionTokens == null && target.TotalTokens == null, "edited usage cleared");
                 AssertTrue(target.UsageJson == null && target.ReasoningContent == null && target.ReasoningTokens == null, "edited reasoning cleared");
@@ -499,9 +499,11 @@ namespace RNAssistant.Harness
 
         private static string AbsoluteAttachmentPath(AppDataPaths paths, ChatAttachment attachment)
         {
+            var hash = attachment == null ? string.Empty : attachment.ContentSha256 ?? string.Empty;
             return Path.GetFullPath(Path.Combine(
-                paths.AttachmentDirectory,
-                attachment == null ? string.Empty : attachment.RelativePath ?? string.Empty));
+                paths.ChatBlobDirectory,
+                hash.Length >= 2 ? hash.Substring(0, 2) : "00",
+                hash + ".blob"));
         }
 
         private static void ExpectEditFailure(

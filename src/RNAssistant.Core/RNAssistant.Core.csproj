@@ -83,6 +83,7 @@
     <Compile Include="Models\ArtifactModels.cs" />
     <Compile Include="Models\AgentResponseModels.cs" />
     <Compile Include="Models\ChatModels.cs" />
+    <Compile Include="Models\SessionEventModels.cs" />
     <Compile Include="Models\ChartArtifactModels.cs" />
     <Compile Include="Models\ContextModels.cs" />
     <Compile Include="Models\SkillModels.cs" />
@@ -110,12 +111,12 @@
     <Compile Include="Services\ChatSessionNormalizer.cs" />
     <Compile Include="Services\ChatSessionHeaderFactory.cs" />
     <Compile Include="Services\HtmlWorkspaceCopyService.cs" />
+    <Compile Include="Services\HtmlWorkspaceHistoryPolicy.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
     <Compile Include="Storage\AttachmentStore.cs" />
     <Compile Include="Storage\PdfAttachmentTextExtractor.cs" />
     <Compile Include="Storage\ChatStore.cs" />
-    <Compile Include="Storage\ChatIndexStore.cs" />
-    <Compile Include="Storage\HtmlArtifactBodyStore.cs" />
+    <Compile Include="Storage\ChatBlobStore.cs" />
     <Compile Include="Storage\JsonFileStore.cs" />
     <Compile Include="Storage\ProtectedSecretStore.cs" />
     <Compile Include="Storage\SettingsService.cs" />

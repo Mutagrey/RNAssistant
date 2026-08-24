@@ -130,7 +130,9 @@ namespace RNAssistant.Office.Services
             };
             var completion = await _completeAsync(settings, messages, new LlmRequestOptions
             {
-                ReasoningEnabled = session == null ? (bool?)null : session.ReasoningEnabled
+                ReasoningEnabled = session == null ? (bool?)null : session.ReasoningEnabled,
+                TraceSession = session,
+                TracePurpose = "chat"
             }, update =>
             {
                 if (update == null)
