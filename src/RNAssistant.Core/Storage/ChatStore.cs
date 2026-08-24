@@ -270,9 +270,24 @@ namespace RNAssistant.Core.Storage
 
         public void MoveDocument(string oldHost, string oldDocumentKey, string newHost, string newDocumentKey, string documentTitle)
         {
+            MoveDocument(oldHost, oldDocumentKey, newHost, newDocumentKey, documentTitle, null);
+        }
+
+        public void MoveDocument(
+            string oldHost,
+            string oldDocumentKey,
+            string newHost,
+            string newDocumentKey,
+            string documentTitle,
+            string documentPath)
+        {
             var activeId = LoadActiveSessionId(oldHost, oldDocumentKey);
             foreach (var session in List(oldHost, oldDocumentKey, documentTitle))
             {
+                if (!string.IsNullOrWhiteSpace(documentPath))
+                {
+                    session.DocumentPath = documentPath.Trim();
+                }
                 Move(session, newHost, newDocumentKey, documentTitle);
             }
 

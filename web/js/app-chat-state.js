@@ -77,6 +77,7 @@ function activeChatUsesCurrentDocument() {
 }
 
 function applyChatState(response) {
+  state.chatStateApplyVersion = (state.chatStateApplyVersion || 0) + 1;
   response = response || {};
   if (typeof resetMessageEditState === "function") {
     resetMessageEditState();
@@ -146,6 +147,7 @@ function applyChatState(response) {
 }
 
 function applyChatCatalogState(response) {
+  state.chatStateApplyVersion = (state.chatStateApplyVersion || 0) + 1;
   response = response || {};
   if (response.chats !== undefined || response.Chats !== undefined) {
     state.chats = response.chats || response.Chats || [];

@@ -169,7 +169,7 @@ function renderContext(skipUsageEstimate) {
 }
 
 async function syncActiveChatState() {
-  applyChatState(await send("listChats", {}));
+  await synchronizeChatState(true);
 }
 
 async function refreshContext() {

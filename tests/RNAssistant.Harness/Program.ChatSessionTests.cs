@@ -270,10 +270,13 @@ namespace RNAssistant.Harness
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "before save" });
                 store.Save(session);
                 var otherSession = store.Create("Excel", "doc", "Harness.xlsx", "Other running chat");
+                otherSession.DocumentPath = "C:\\Demo\\MockWorkbook.xlsx";
+                store.Save(otherSession);
 
                 var runOwned = true;
                 service.RunOwnershipProvider = id => runOwned && string.Equals(id, otherSession.Id, StringComparison.OrdinalIgnoreCase);
                 adapter.DocumentKeyValue = "saved-doc";
+                adapter.DocumentPathValue = "C:\\Demo\\SavedWorkbook.xlsx";
                 var stillRunning = service.LoadSession(null);
                 AssertEqual("doc", stillRunning.DocumentKey, "active run postpones document migration");
                 AssertEqual(2, store.List("Excel", "doc", "Harness.xlsx").Count, "all source chats remain while another chat owns a run");
@@ -286,7 +289,10 @@ namespace RNAssistant.Harness
                 AssertEqual("saved-doc", migrated.Context.DocumentKey, "migrated chat context identity");
                 AssertEqual(1, migrated.Messages.Count, "migrated message count");
                 AssertEqual(0, store.List("Excel", "doc", "Harness.xlsx").Count, "old document sessions");
-                AssertEqual(2, store.List("Excel", "saved-doc", "Harness.xlsx").Count, "new document sessions");
+                var migratedSessions = store.List("Excel", "saved-doc", "Harness.xlsx");
+                AssertEqual(2, migratedSessions.Count, "new document sessions");
+                AssertTrue(migratedSessions.All(item => item.DocumentPath == "C:\\Demo\\SavedWorkbook.xlsx"),
+                    "all migrated chats use the current full path");
             });
         }
 
@@ -304,6 +310,7 @@ namespace RNAssistant.Harness
 
                 adapter.DocumentKeyValue = "other-doc";
                 adapter.RuntimeDocumentKeyValue = "other-runtime-doc";
+                adapter.DocumentPathValue = "C:\\Demo\\Other.xlsx";
 
                 var current = service.LoadSession(oldId, true);
 
@@ -343,6 +350,7 @@ namespace RNAssistant.Harness
 
                 adapter.DocumentKeyValue = "other-doc";
                 adapter.RuntimeDocumentKeyValue = "other-runtime-doc";
+                adapter.DocumentPathValue = "C:\\Demo\\Other.xlsx";
                 var loaded = service.LoadAddressedSession(draft.Id);
 
                 AssertEqual(draft.Id, loaded.Id, "addressed transient id");
@@ -451,6 +459,115 @@ namespace RNAssistant.Harness
 
                 AssertEqual("Changed in another window", service.LoadSession(session.Id).Title,
                     "addressed active chat reloads its current persisted revision");
+            });
+        }
+
+        private static void ChatSessionServiceFollowsOfficeDocumentSwitches()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var current = store.Create("Excel", "doc", "MockWorkbook.xlsx", "Current chat");
+                current.DocumentPath = "C:\\Demo\\MockWorkbook.xlsx";
+                store.Save(current);
+                var forecast = store.Create("Excel", "forecast-doc", "Forecast.xlsx", "Forecast chat");
+                forecast.DocumentPath = "C:\\Demo\\Forecast.xlsx";
+                store.Save(forecast);
+
+                var service = new ChatSessionService(adapter, store);
+                AssertEqual(current.Id, service.LoadSession(null).Id, "current document active chat");
+
+                AssertEqual(forecast.Id, service.LoadSession(forecast.Id).Id, "archived chat selected");
+                AssertEqual(forecast.Id, service.GetActiveSessionForOfficeState().Id,
+                    "poll preserves intentional archive selection");
+
+                adapter.ActivateDocument("forecast-doc");
+                AssertEqual(forecast.Id, service.GetActiveSessionForOfficeState().Id,
+                    "external Office switch restores target chat");
+
+                adapter.ActivateDocument("doc");
+                var restored = service.GetActiveSessionForOfficeState();
+                AssertEqual(current.Id, restored.Id, "returning to document restores its active chat");
+                AssertTrue(service.IsCurrentDocument(restored), "restored chat belongs to current document");
+            });
+        }
+
+        private static void LegacyChatRebindsByFullPath()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var current = store.Create("Excel", "doc", "MockWorkbook.xlsx", "Current chat");
+                current.DocumentPath = "C:\\Demo\\MockWorkbook.xlsx";
+                store.Save(current);
+                var legacy = store.Create("Excel", "Excel:DocumentId:lost-id", "Forecast.xlsx", "Legacy forecast chat");
+                legacy.DocumentPath = "C:\\Demo\\Forecast.xlsx";
+                store.Save(legacy);
+                var unrelated = store.Create("Excel", "Excel:DocumentId:lost-id", "Other.xlsx", "Unrelated chat in a legacy group");
+                unrelated.DocumentPath = "C:\\Demo\\Other.xlsx";
+                store.Save(unrelated);
+                var duplicate = store.Create("Excel", "Excel:DocumentId:another-lost-id", "Forecast.xlsx", "Another legacy chat");
+                duplicate.DocumentPath = "C:\\Demo\\Forecast.xlsx";
+                store.Save(duplicate);
+                var pathOnly = store.Create("Excel", "Excel:Path:C:\\Demo\\Forecast.xlsx", "Forecast.xlsx", "Path-only legacy chat");
+
+                var service = new ChatSessionService(adapter, store);
+                service.LoadSession(null);
+                service.LoadSession(legacy.Id);
+                var catalog = (IOfficeDocumentCatalog)adapter;
+                var target = catalog.ListOpenDocuments().First(document =>
+                    DocumentOpenService.SamePath(document.Path, legacy.DocumentPath));
+                AssertTrue(catalog.ActivateDocument(target.DocumentKey), "matching open document activated by path");
+
+                service.RunOwnershipProvider = id => string.Equals(id, legacy.Id, StringComparison.OrdinalIgnoreCase);
+                var deferred = service.LoadSession(legacy.Id);
+                AssertEqual("Excel:DocumentId:lost-id", deferred.DocumentKey,
+                    "running legacy chat postpones identity reconciliation");
+                service.RunOwnershipProvider = null;
+                var rebound = service.GetActiveSessionForOfficeState();
+                AssertEqual("forecast-doc", adapter.DocumentKey, "matching document is active");
+                AssertEqual(legacy.Id, rebound.Id, "requested legacy chat remains active");
+                var legacyRemainder = store.List("Excel", "Excel:DocumentId:lost-id", "Other.xlsx");
+                AssertEqual(1, legacyRemainder.Count, "different-path chat remains in mixed legacy group");
+                AssertEqual(unrelated.Id, legacyRemainder[0].Id, "unrelated chat identity is preserved");
+                AssertEqual(0, store.List("Excel", "Excel:DocumentId:another-lost-id", "Forecast.xlsx").Count,
+                    "duplicate legacy document identity removed after migration");
+                AssertEqual(legacy.Id, store.Load("Excel", "forecast-doc", legacy.Id).Id,
+                    "legacy chat moved to live document identity");
+                AssertEqual(duplicate.Id, store.Load("Excel", "forecast-doc", duplicate.Id).Id,
+                    "all same-path chats merged into live document identity");
+                AssertEqual(pathOnly.Id, store.Load("Excel", "forecast-doc", pathOnly.Id).Id,
+                    "document-key path fallback is migrated without stored metadata");
+            });
+        }
+
+        private static void UnsavedDocumentChatsStayIsolated()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                adapter.DocumentKeyValue = "Excel:Runtime:unsaved-a";
+                adapter.RuntimeDocumentKeyValue = "Excel:Runtime:unsaved-a";
+                adapter.DocumentPathValue = string.Empty;
+                var store = new ChatStore(paths);
+                var service = new ChatSessionService(adapter, store);
+                var first = service.LoadSession(null);
+                first.Messages.Add(new ChatMessage { Role = "user", Content = "first unsaved workbook" });
+                store.Save(first);
+                service.NotifySaved(first);
+
+                adapter.DocumentKeyValue = "Excel:Runtime:unsaved-b";
+                adapter.RuntimeDocumentKeyValue = "Excel:Runtime:unsaved-b";
+                var second = service.GetActiveSessionForOfficeState();
+                AssertTrue(first.Id != second.Id, "new unsaved workbook gets its own transient chat");
+                AssertEqual("Excel:Runtime:unsaved-b", second.DocumentKey, "second unsaved workbook identity");
+
+                adapter.DocumentKeyValue = "Excel:Runtime:unsaved-a";
+                adapter.RuntimeDocumentKeyValue = "Excel:Runtime:unsaved-a";
+                AssertEqual(first.Id, service.GetActiveSessionForOfficeState().Id,
+                    "returning to the first unsaved workbook restores its chat");
             });
         }
 

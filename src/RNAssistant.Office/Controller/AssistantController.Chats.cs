@@ -229,7 +229,7 @@ namespace RNAssistant.Office
 
         public ChatStateResponse ListChats()
         {
-            var session = _chatSessions.GetActiveSession() ?? LoadSession(null);
+            var session = _chatSessions.GetActiveSessionForOfficeState();
             return ChatState(session);
         }
 
@@ -263,22 +263,38 @@ namespace RNAssistant.Office
             var session = LoadSession(chatId);
             var catalog = _adapter as IOfficeDocumentCatalog;
             var sameHost = string.Equals(session.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase);
-            if (sameHost && catalog != null && catalog.ActivateDocument(session.DocumentKey))
+            var path = _chatSessions.GetDocumentPath(session);
+            if (sameHost && catalog != null && TryActivateDocument(catalog, session.DocumentKey, path))
             {
-                return new OpenDocumentResponse { Path = _chatSessions.GetDocumentPath(session), Launched = false };
+                session = LoadSession(session.Id);
+                return new OpenDocumentResponse { Path = path, Launched = false, State = ChatState(session) };
             }
             if (_chatSessions.IsCurrentDocument(session))
             {
-                return new OpenDocumentResponse { Path = _chatSessions.GetDocumentPath(session), Launched = false };
+                return new OpenDocumentResponse { Path = path, Launched = false, State = ChatState(session) };
             }
 
-            var path = _chatSessions.GetDocumentPath(session);
             if (sameHost && catalog != null && catalog.OpenDocument(path))
             {
-                return new OpenDocumentResponse { Path = path, Launched = true };
+                session = LoadSession(session.Id);
+                return new OpenDocumentResponse { Path = path, Launched = true, State = ChatState(session) };
             }
             DocumentOpenService.Open(path);
             return new OpenDocumentResponse { Path = path, Launched = true };
+        }
+
+        private bool TryActivateDocument(IOfficeDocumentCatalog catalog, string documentKey, string path)
+        {
+            if (catalog.ActivateDocument(documentKey))
+            {
+                return true;
+            }
+
+            var match = ListOpenDocuments().FirstOrDefault(document =>
+                document != null &&
+                string.Equals(document.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) &&
+                DocumentOpenService.SamePath(document.Path, path));
+            return match != null && catalog.ActivateDocument(match.DocumentKey);
         }
 
         public ChatStateResponse RenameChat(string chatId, string title)

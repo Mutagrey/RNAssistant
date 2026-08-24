@@ -42,7 +42,7 @@ namespace RNAssistant.OfficeHosts
 
                 return DocumentIdentity.ForOfficeDocument(
                     HostName,
-                    doc.Path,
+                    PersistentPath(doc),
                     RuntimeDocumentKey,
                     () => doc.CustomDocumentProperties);
             }
@@ -82,7 +82,7 @@ namespace RNAssistant.OfficeHosts
             var doc = ActiveDocument();
             if (doc != null)
             {
-                context.DocumentPath = SafeString(delegate { return doc.FullName; });
+                context.DocumentPath = PersistentPath(doc);
                 context.DocumentTitle = SafeString(delegate { return doc.Name; });
             }
 
@@ -107,13 +107,12 @@ namespace RNAssistant.OfficeHosts
             var result = new List<OpenOfficeDocumentDto>();
             foreach (Word.Document document in _application.Documents)
             {
-                var path = SafeString(delegate { return document.Path; });
                 result.Add(new OpenOfficeDocumentDto
                 {
                     Host = HostName,
                     DocumentKey = KeyForDocument(document),
                     Title = SafeString(delegate { return document.Name; }),
-                    Path = string.IsNullOrWhiteSpace(path) ? string.Empty : SafeString(delegate { return document.FullName; }),
+                    Path = PersistentPath(document),
                     IsActive = active != null && string.Equals(KeyForDocument(active), KeyForDocument(document), StringComparison.OrdinalIgnoreCase)
                 });
             }
@@ -175,9 +174,19 @@ namespace RNAssistant.OfficeHosts
             var runtimeKey = DocumentIdentity.RuntimeKey(HostName, document);
             return DocumentIdentity.ForOfficeDocument(
                 HostName,
-                SafeString(delegate { return document.Path; }),
+                PersistentPath(document),
                 runtimeKey,
                 () => document.CustomDocumentProperties);
+        }
+
+        private static string PersistentPath(Word.Document document)
+        {
+            if (document == null || string.IsNullOrWhiteSpace(SafeString(delegate { return document.Path; })))
+            {
+                return string.Empty;
+            }
+
+            return SafeString(delegate { return document.FullName; });
         }
 
         public IEnumerable<ToolDefinition> GetBuiltInTools()

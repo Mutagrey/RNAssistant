@@ -911,6 +911,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("launched")]
         public bool Launched { get; set; }
+
+        [JsonProperty("state")]
+        public ChatStateResponse State { get; set; }
     }
 
     public sealed class ChatArtifactDto

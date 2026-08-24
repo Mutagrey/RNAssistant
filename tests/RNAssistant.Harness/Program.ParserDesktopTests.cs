@@ -159,22 +159,58 @@ namespace RNAssistant.Harness
             AssertTrue(DocumentOpenService.IsAvailable("https://example.sharepoint.com/Documents/Book.xlsx"), "https document path");
             AssertTrue(DocumentOpenService.IsAvailable("http://example.test/Book.xlsx"), "http document path");
             AssertTrue(!DocumentOpenService.IsAvailable(string.Empty), "empty document path");
+            AssertTrue(DocumentOpenService.SamePath("C:\\Docs\\Book.xlsx", "c:/docs/book.xlsx"),
+                "Windows paths compare case-insensitively");
+            AssertTrue(DocumentOpenService.SamePath(
+                "https://example.sharepoint.com/Documents/Book%20One.xlsx",
+                "https://EXAMPLE.sharepoint.com/Documents/Book One.xlsx"),
+                "SharePoint URLs compare canonically");
+            AssertTrue(!DocumentOpenService.SamePath("C:\\Docs\\One.xlsx", "C:\\Docs\\Two.xlsx"),
+                "different full paths stay distinct");
         }
 
-        private static void UnsavedDocumentIdentityUsesStoredId()
+        private static void UnsavedDocumentIdentityUsesRuntimeKey()
         {
             var properties = new FakeDocumentProperties();
-            var first = DocumentIdentity.ForOfficeDocument("Excel", string.Empty, "Excel:Runtime:first", delegate { return properties; });
-            var second = DocumentIdentity.ForOfficeDocument("Excel", string.Empty, "Excel:Runtime:second", delegate { return properties; });
+            var key = DocumentIdentity.ForOfficeDocument("Excel", string.Empty, "Excel:Runtime:first", delegate { return properties; });
 
-            AssertTrue(first.StartsWith("Excel:DocumentId:", StringComparison.Ordinal), "unsaved document id prefix");
-            AssertEqual(first, second, "unsaved document id stable");
+            AssertEqual("Excel:Runtime:first", key, "unsaved document runtime identity");
+            AssertEqual(0, properties.Count, "identity lookup does not dirty unsaved document");
+        }
+
+        private static void SavedDocumentIdentityUsesFullPathOrLegacyId()
+        {
+            var properties = new FakeDocumentProperties();
+            var first = DocumentIdentity.ForOfficeDocument(
+                "Excel",
+                "C:\\Docs\\One.xlsx",
+                "Excel:Runtime:first",
+                delegate { return properties; });
+            var second = DocumentIdentity.ForOfficeDocument(
+                "Excel",
+                "C:\\Docs\\Two.xlsx",
+                "Excel:Runtime:second",
+                delegate { return properties; });
+
+            AssertEqual("Excel:Path:C:\\Docs\\One.xlsx", first, "saved document full path identity");
+            AssertEqual("Excel:Path:C:\\Docs\\Two.xlsx", second, "same-folder documents stay distinct");
+            AssertEqual(0, properties.Count, "identity lookup does not add a hidden property");
+
+            properties.Add(DocumentIdentity.PropertyName, false, 4, "legacy-id");
+            var legacy = DocumentIdentity.ForOfficeDocument(
+                "Excel",
+                "C:\\Docs\\One.xlsx",
+                "Excel:Runtime:first",
+                delegate { return properties; });
+            AssertEqual("Excel:DocumentId:legacy-id", legacy, "existing persisted identity remains supported");
         }
 
         public sealed class FakeDocumentProperties
         {
             private readonly Dictionary<string, FakeDocumentProperty> _values =
                 new Dictionary<string, FakeDocumentProperty>(StringComparer.OrdinalIgnoreCase);
+
+            public int Count { get { return _values.Count; } }
 
             public FakeDocumentProperty this[string name]
             {

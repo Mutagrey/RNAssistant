@@ -96,7 +96,8 @@ namespace RNAssistant.Harness
                 Test("desktop com: adapter dispatches calls", DispatchedAdapterDelegatesCalls),
                 Test("documents: catalog activates selected document", DocumentCatalogActivatesSelectedDocument),
                 Test("documents: recognizes web paths", DocumentOpenServiceRecognizesWebPaths),
-                Test("documents: unsaved identity is stable", UnsavedDocumentIdentityUsesStoredId),
+                Test("documents: unsaved identity uses runtime key", UnsavedDocumentIdentityUsesRuntimeKey),
+                Test("documents: saved identity uses full path or legacy id", SavedDocumentIdentityUsesFullPathOrLegacyId),
 
                 Test("storage: chat roundtrip", CreatesAndListsChatsInTempRoot),
                 Test("storage: json save remains atomic", JsonFileStoreWritesAtomicUtf8),
@@ -118,6 +119,9 @@ namespace RNAssistant.Harness
                 Test("chat sessions: empty drafts are transient", EmptyChatDraftsAreNotPersisted),
                 Test("chat sessions: background save keeps active chat", BackgroundSaveKeepsActiveChat),
                 Test("chat sessions: active persisted state refreshes", LoadingActiveChatRefreshesPersistedState),
+                Test("chat sessions: follows Office document switches", ChatSessionServiceFollowsOfficeDocumentSwitches),
+                Test("chat sessions: unsaved documents stay isolated", UnsavedDocumentChatsStayIsolated),
+                Test("chat sessions: legacy chat rebinds by full path", LegacyChatRebindsByFullPath),
                 Test("chat sessions: interrupted run is marked unknown", InterruptedRunIsRecoveredAsUnknown),
                 Test("chat sessions: saved run boundary preserves protocol", InterruptedRunAtSavedBoundaryPreservesProtocol),
 

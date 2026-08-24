@@ -21,6 +21,7 @@ namespace RNAssistant.Harness
         public int VbaReportedLineCountOffset { get; set; }
         public string DocumentKeyValue { get; set; }
         public string RuntimeDocumentKeyValue { get; set; }
+        public string DocumentPathValue { get; set; }
 
         private readonly string _hostName;
         private string _documentTitle;
@@ -62,6 +63,7 @@ namespace RNAssistant.Harness
             _outlookDraft = string.Empty;
             DocumentKeyValue = "doc";
             RuntimeDocumentKeyValue = "runtime-doc";
+            DocumentPathValue = "C:\\Demo\\MockWorkbook.xlsx";
             SeedDemoState();
         }
 
@@ -100,6 +102,7 @@ namespace RNAssistant.Harness
             return new OfficeContext
             {
                 Host = _hostName,
+                DocumentPath = DocumentPathValue,
                 DocumentTitle = _documentTitle,
                 ContainerName = string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase) ? "Data" : string.Empty,
                 SelectionAddress = string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase) ? "A1:B4" : "selection",
@@ -134,6 +137,7 @@ namespace RNAssistant.Harness
             }
             DocumentKeyValue = document.DocumentKey;
             RuntimeDocumentKeyValue = "runtime-" + document.DocumentKey;
+            DocumentPathValue = document.Path;
             _documentTitle = document.Title;
             return true;
         }

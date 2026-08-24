@@ -7,13 +7,17 @@ namespace RNAssistant.Office
     public static class DocumentIdentity
     {
         public const string PropertyName = "RNAssistantDocumentId";
-        private const int MsoPropertyTypeString = 4;
 
         public static string ForOfficeDocument(string host, string persistentPath, string runtimeKey, Func<object> customPropertiesFactory)
         {
             var fallback = string.IsNullOrWhiteSpace(persistentPath)
                 ? runtimeKey
-                : (host ?? string.Empty) + ":Path:" + persistentPath;
+                : (host ?? string.Empty) + ":Path:" + persistentPath.Trim();
+            if (string.IsNullOrWhiteSpace(persistentPath))
+            {
+                return fallback;
+            }
+
             try
             {
                 var properties = customPropertiesFactory == null ? null : customPropertiesFactory();
@@ -27,9 +31,7 @@ namespace RNAssistant.Office
                 {
                     return Key(host, existing);
                 }
-
-                var id = Guid.NewGuid().ToString("N");
-                return TryAddProperty(properties, PropertyName, id) ? Key(host, id) : fallback;
+                return fallback;
             }
             catch
             {
@@ -102,41 +104,5 @@ namespace RNAssistant.Office
             }
         }
 
-        private static bool TryAddProperty(object properties, string name, string value)
-        {
-            try
-            {
-                dynamic target = properties;
-                target.Add(name, false, MsoPropertyTypeString, value);
-                return true;
-            }
-            catch
-            {
-                try
-                {
-                    var add = properties.GetType().GetMethod("Add");
-                    if (add != null)
-                    {
-                        add.Invoke(properties, new object[] { name, false, MsoPropertyTypeString, value });
-                        return true;
-                    }
-                }
-                catch
-                {
-                }
-
-                try
-                {
-                    dynamic target = properties;
-                    var property = target[name];
-                    property.Value = value;
-                    return true;
-                }
-                catch
-                {
-                    return false;
-                }
-            }
-        }
     }
 }

@@ -54,7 +54,7 @@ namespace RNAssistant.OfficeHosts
 
                 return DocumentIdentity.ForOfficeDocument(
                     HostName,
-                    workbook.Path,
+                    PersistentPath(workbook),
                     RuntimeDocumentKey,
                     () => workbook.CustomDocumentProperties);
             }
@@ -94,7 +94,7 @@ namespace RNAssistant.OfficeHosts
             var workbook = ActiveWorkbook();
             if (workbook != null)
             {
-                context.DocumentPath = SafeString(delegate { return workbook.FullName; });
+                context.DocumentPath = PersistentPath(workbook);
                 context.DocumentTitle = SafeString(delegate { return workbook.Name; });
             }
 
@@ -126,7 +126,7 @@ namespace RNAssistant.OfficeHosts
                     Host = HostName,
                     DocumentKey = KeyForWorkbook(workbook),
                     Title = SafeString(delegate { return workbook.Name; }),
-                    Path = SafeString(delegate { return workbook.FullName; }),
+                    Path = PersistentPath(workbook),
                     IsActive = active != null && SameWorkbook(active, workbook)
                 });
             }
@@ -195,9 +195,19 @@ namespace RNAssistant.OfficeHosts
             var runtimeKey = DocumentIdentity.RuntimeKey(HostName, workbook);
             return DocumentIdentity.ForOfficeDocument(
                 HostName,
-                SafeString(delegate { return workbook.Path; }),
+                PersistentPath(workbook),
                 runtimeKey,
                 () => workbook.CustomDocumentProperties);
+        }
+
+        private static string PersistentPath(Excel.Workbook workbook)
+        {
+            if (workbook == null || string.IsNullOrWhiteSpace(SafeString(delegate { return workbook.Path; })))
+            {
+                return string.Empty;
+            }
+
+            return SafeString(delegate { return workbook.FullName; });
         }
 
         public IEnumerable<ToolDefinition> GetBuiltInTools()

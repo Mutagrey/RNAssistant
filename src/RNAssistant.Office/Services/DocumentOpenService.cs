@@ -40,5 +40,37 @@ namespace RNAssistant.Office.Services
 
             return File.Exists(path);
         }
+
+        public static bool SamePath(string left, string right)
+        {
+            if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+            {
+                return false;
+            }
+
+            Uri leftUri;
+            Uri rightUri;
+            if (Uri.TryCreate(left.Trim(), UriKind.Absolute, out leftUri) &&
+                Uri.TryCreate(right.Trim(), UriKind.Absolute, out rightUri) &&
+                (string.Equals(leftUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(leftUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) &&
+                (string.Equals(rightUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(rightUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+            {
+                return Uri.Compare(
+                    leftUri,
+                    rightUri,
+                    UriComponents.HttpRequestUrl,
+                    UriFormat.SafeUnescaped,
+                    StringComparison.OrdinalIgnoreCase) == 0;
+            }
+
+            return string.Equals(NormalizeFilePath(left), NormalizeFilePath(right), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeFilePath(string path)
+        {
+            return (path ?? string.Empty).Trim().TrimEnd('\\', '/').Replace('/', '\\');
+        }
     }
 }

@@ -18,6 +18,14 @@ namespace RNAssistant.Office.Services
         private string _activeRuntimeDocumentKey;
         private ChatSession _activeSession;
         private bool _activeSessionPersisted;
+        private string _observedHost;
+        private string _observedDocumentKey;
+        private string _observedRuntimeDocumentKey;
+        private string _aliasReconciledHost;
+        private string _aliasReconciledDocumentKey;
+        private string _aliasReconciledRuntimeDocumentKey;
+        private string _aliasReconciledDocumentPath;
+        private bool _aliasReconciliationPending;
         internal Func<string, ChatRunSnapshot> RunStateProvider { get; set; }
         internal Func<string, ChatRunSnapshot> RunStatusProvider { get; set; }
         internal Func<IReadOnlyList<ChatSession>> RunSessionsProvider { get; set; }
@@ -206,6 +214,14 @@ namespace RNAssistant.Office.Services
             _activeRuntimeDocumentKey = null;
             _activeSession = null;
             _activeSessionPersisted = false;
+            _observedHost = null;
+            _observedDocumentKey = null;
+            _observedRuntimeDocumentKey = null;
+            _aliasReconciledHost = null;
+            _aliasReconciledDocumentKey = null;
+            _aliasReconciledRuntimeDocumentKey = null;
+            _aliasReconciledDocumentPath = null;
+            _aliasReconciliationPending = false;
         }
 
         public ChatSession LoadSession(string requestedSessionId)
@@ -226,6 +242,7 @@ namespace RNAssistant.Office.Services
             var documentKey = _adapter.DocumentKey;
             var runtimeKey = _adapter.RuntimeDocumentKey;
             var title = _adapter.DocumentTitle;
+            var documentPath = CurrentDocumentPath();
 
             var activeDocumentKeyChanged = !string.IsNullOrWhiteSpace(_activeSessionId) &&
                 string.Equals(_activeHost, host, StringComparison.OrdinalIgnoreCase) &&
@@ -246,7 +263,7 @@ namespace RNAssistant.Office.Services
                     if (_chatStore.IsPersisted(_activeSession))
                     {
                         var activeSessionId = _activeSessionId;
-                        _chatStore.MoveDocument(_activeHost, oldDocumentKey, host, documentKey, title);
+                        _chatStore.MoveDocument(_activeHost, oldDocumentKey, host, documentKey, title, documentPath);
                         _activeSession = _chatStore.Load(host, documentKey, activeSessionId) ?? _activeSession;
                     }
                     else if (_activeSession != null)
@@ -269,6 +286,19 @@ namespace RNAssistant.Office.Services
             {
                 if (migrationLease != null) migrationLease.Dispose();
             }
+
+            if (!AliasesReconciled(host, documentKey, runtimeKey, documentPath))
+            {
+                _aliasReconciliationPending = !ReconcileDocumentAliases(host, documentKey, title, documentPath);
+                if (!_aliasReconciliationPending)
+                {
+                    _aliasReconciledHost = host;
+                    _aliasReconciledDocumentKey = documentKey;
+                    _aliasReconciledRuntimeDocumentKey = runtimeKey;
+                    _aliasReconciledDocumentPath = documentPath;
+                }
+            }
+            ObserveCurrentDocument(host, documentKey, runtimeKey);
 
             ChatSession session = null;
             if (!string.IsNullOrWhiteSpace(requestedSessionId))
@@ -328,7 +358,7 @@ namespace RNAssistant.Office.Services
             {
                 SetActiveSession(session);
             }
-            UpdateCurrentDocumentMetadata(session);
+            UpdateCurrentDocumentMetadata(session, documentPath);
             return session;
         }
 
@@ -486,6 +516,19 @@ namespace RNAssistant.Office.Services
             return _activeSession;
         }
 
+        public ChatSession GetActiveSessionForOfficeState()
+        {
+            var host = _adapter.HostName;
+            var documentKey = _adapter.DocumentKey;
+            var runtimeKey = _adapter.RuntimeDocumentKey;
+            if (CurrentDocumentChanged(host, documentKey, runtimeKey) || _aliasReconciliationPending)
+            {
+                return LoadSession(null);
+            }
+
+            return GetActiveSession() ?? LoadSession(null);
+        }
+
         public IReadOnlyList<ChatSessionSummary> GetChatSummaries(string activeId)
         {
             var summaries = _chatStore.ListHeaders().Select(ToSummary).ToList();
@@ -570,14 +613,16 @@ namespace RNAssistant.Office.Services
 
         private void UpdateCurrentDocumentMetadata(ChatSession session)
         {
+            UpdateCurrentDocumentMetadata(session, CurrentDocumentPath());
+        }
+
+        private void UpdateCurrentDocumentMetadata(ChatSession session, string path)
+        {
             if (!IsCurrentDocument(session))
             {
                 return;
             }
 
-            var provider = _adapter as IOfficeContextProvider;
-            var officeContext = provider == null ? null : provider.GetOfficeContext();
-            var path = officeContext == null ? string.Empty : officeContext.DocumentPath;
             if (!string.IsNullOrWhiteSpace(path) && !string.Equals(session.DocumentPath, path, StringComparison.OrdinalIgnoreCase))
             {
                 var persisted = _chatStore.IsPersisted(session);
@@ -598,6 +643,177 @@ namespace RNAssistant.Office.Services
                         session.DocumentPath = previousPath;
                     }
                 }
+            }
+        }
+
+        private string CurrentDocumentPath()
+        {
+            var provider = _adapter as IOfficeContextProvider;
+            var officeContext = provider == null ? null : provider.GetOfficeContext();
+            return officeContext == null ? string.Empty : officeContext.DocumentPath;
+        }
+
+        private bool CurrentDocumentChanged(string host, string documentKey, string runtimeKey)
+        {
+            if (string.IsNullOrWhiteSpace(_observedHost))
+            {
+                return true;
+            }
+            if (!string.Equals(_observedHost, host, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(_observedDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return !string.IsNullOrWhiteSpace(_observedRuntimeDocumentKey) &&
+                !string.IsNullOrWhiteSpace(runtimeKey) &&
+                !string.Equals(_observedRuntimeDocumentKey, runtimeKey, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void ObserveCurrentDocument(string host, string documentKey, string runtimeKey)
+        {
+            _observedHost = host;
+            _observedDocumentKey = documentKey;
+            _observedRuntimeDocumentKey = runtimeKey;
+        }
+
+        private bool AliasesReconciled(string host, string documentKey, string runtimeKey, string documentPath)
+        {
+            return string.Equals(_aliasReconciledHost, host, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(_aliasReconciledDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(_aliasReconciledRuntimeDocumentKey, runtimeKey, StringComparison.OrdinalIgnoreCase) &&
+                (string.IsNullOrWhiteSpace(_aliasReconciledDocumentPath) && string.IsNullOrWhiteSpace(documentPath) ||
+                 DocumentOpenService.SamePath(_aliasReconciledDocumentPath, documentPath));
+        }
+
+        private bool ReconcileDocumentAliases(string host, string documentKey, string documentTitle, string documentPath)
+        {
+            if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(documentKey) ||
+                string.IsNullOrWhiteSpace(documentPath))
+            {
+                return true;
+            }
+
+            var aliases = _chatStore.ListHeaders()
+                .Where(header => header != null &&
+                    string.Equals(header.Host, host, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(header.DocumentKey, documentKey, StringComparison.OrdinalIgnoreCase) &&
+                    DocumentOpenService.SamePath(
+                        ResolveDocumentPath(header.DocumentPath, header.DocumentKey),
+                        documentPath))
+                .GroupBy(header => header.DocumentKey, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(group => group.Max(header => header.UpdatedUtc))
+                .ToList();
+            if (aliases.Count == 0)
+            {
+                return true;
+            }
+            if (IsDocumentRunOwned(host, documentKey))
+            {
+                return false;
+            }
+
+            IDisposable lease = null;
+            var complete = true;
+            try
+            {
+                if (MaintenanceLeaseProvider != null)
+                {
+                    try
+                    {
+                        lease = MaintenanceLeaseProvider();
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        return false;
+                    }
+                    if (lease == null) return false;
+                }
+                if (IsDocumentRunOwned(host, documentKey))
+                {
+                    return false;
+                }
+
+                var preferredActiveId = aliases.SelectMany(alias => alias)
+                    .Any(header => string.Equals(header.Id, _activeSessionId, StringComparison.OrdinalIgnoreCase))
+                    ? _activeSessionId
+                    : _chatStore.LoadActiveSessionId(host, documentKey);
+                if (string.IsNullOrWhiteSpace(preferredActiveId))
+                {
+                    var newest = aliases[aliases.Count - 1];
+                    preferredActiveId = _chatStore.LoadActiveSessionId(host, newest.Key);
+                    if (string.IsNullOrWhiteSpace(preferredActiveId) ||
+                        newest.All(header => !string.Equals(header.Id, preferredActiveId, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        preferredActiveId = newest.OrderByDescending(header => header.UpdatedUtc).Select(header => header.Id).FirstOrDefault();
+                    }
+                }
+
+                foreach (var alias in aliases)
+                {
+                    if (IsDocumentRunOwned(host, alias.Key))
+                    {
+                        complete = false;
+                        continue;
+                    }
+
+                    var sourceActiveId = _chatStore.LoadActiveSessionId(host, alias.Key);
+                    foreach (var header in alias.OrderBy(header => header.UpdatedUtc))
+                    {
+                        if (IsRunOwned(header.Id))
+                        {
+                            complete = false;
+                            continue;
+                        }
+
+                        try
+                        {
+                            var session = _chatStore.Load(host, alias.Key, header.Id);
+                            if (session == null || !DocumentOpenService.SamePath(
+                                ResolveDocumentPath(session),
+                                documentPath))
+                            {
+                                complete = false;
+                                continue;
+                            }
+                            session.DocumentPath = documentPath.Trim();
+                            _chatStore.Move(session, host, documentKey, documentTitle);
+                        }
+                        catch (ChatConcurrencyException)
+                        {
+                            // Another window changed this history; retry reconciliation on a later refresh.
+                            complete = false;
+                        }
+                    }
+
+                    var remainingHeaders = _chatStore.ListHeaders(host, alias.Key, string.Empty);
+                    if (remainingHeaders.Any(header => DocumentOpenService.SamePath(
+                        ResolveDocumentPath(header.DocumentPath, header.DocumentKey),
+                        documentPath)))
+                    {
+                        complete = false;
+                    }
+                    if (!string.IsNullOrWhiteSpace(sourceActiveId) &&
+                        remainingHeaders.All(header => !string.Equals(
+                            header.Id,
+                            sourceActiveId,
+                            StringComparison.OrdinalIgnoreCase)))
+                    {
+                        var remaining = remainingHeaders.FirstOrDefault();
+                        _chatStore.SaveActiveSessionId(host, alias.Key, remaining == null ? string.Empty : remaining.Id);
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(preferredActiveId) &&
+                    _chatStore.Load(host, documentKey, preferredActiveId) != null)
+                {
+                    _chatStore.SaveActiveSessionId(host, documentKey, preferredActiveId);
+                }
+                return complete;
+            }
+            finally
+            {
+                if (lease != null) lease.Dispose();
             }
         }
 

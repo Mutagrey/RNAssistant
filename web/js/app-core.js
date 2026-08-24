@@ -86,7 +86,9 @@ var state = {
   highlightLoadLogged: false,
   syncTimer: null,
   chatSyncPromise: null,
-  initializePromise: null
+  initializePromise: null,
+  chatNavigationVersion: 0,
+  chatStateApplyVersion: 0
 };
 
 function $(id) {

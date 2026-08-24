@@ -43,7 +43,7 @@ namespace RNAssistant.OfficeHosts
 
                 return DocumentIdentity.ForOfficeDocument(
                     HostName,
-                    presentation.Path,
+                    PersistentPath(presentation),
                     RuntimeDocumentKey,
                     () => presentation.CustomDocumentProperties);
             }
@@ -83,7 +83,7 @@ namespace RNAssistant.OfficeHosts
             var presentation = ActivePresentation();
             if (presentation != null)
             {
-                context.DocumentPath = SafeString(delegate { return presentation.FullName; });
+                context.DocumentPath = PersistentPath(presentation);
                 context.DocumentTitle = SafeString(delegate { return presentation.Name; });
             }
 
@@ -117,13 +117,12 @@ namespace RNAssistant.OfficeHosts
             var result = new List<OpenOfficeDocumentDto>();
             foreach (PowerPoint.Presentation presentation in _application.Presentations)
             {
-                var path = SafeString(delegate { return presentation.Path; });
                 result.Add(new OpenOfficeDocumentDto
                 {
                     Host = HostName,
                     DocumentKey = KeyForPresentation(presentation),
                     Title = SafeString(delegate { return presentation.Name; }),
-                    Path = string.IsNullOrWhiteSpace(path) ? string.Empty : SafeString(delegate { return presentation.FullName; }),
+                    Path = PersistentPath(presentation),
                     IsActive = active != null && string.Equals(KeyForPresentation(active), KeyForPresentation(presentation), StringComparison.OrdinalIgnoreCase)
                 });
             }
@@ -191,9 +190,19 @@ namespace RNAssistant.OfficeHosts
             var runtimeKey = DocumentIdentity.RuntimeKey(HostName, presentation);
             return DocumentIdentity.ForOfficeDocument(
                 HostName,
-                SafeString(delegate { return presentation.Path; }),
+                PersistentPath(presentation),
                 runtimeKey,
                 () => presentation.CustomDocumentProperties);
+        }
+
+        private static string PersistentPath(PowerPoint.Presentation presentation)
+        {
+            if (presentation == null || string.IsNullOrWhiteSpace(SafeString(delegate { return presentation.Path; })))
+            {
+                return string.Empty;
+            }
+
+            return SafeString(delegate { return presentation.FullName; });
         }
 
         public IEnumerable<ToolDefinition> GetBuiltInTools()

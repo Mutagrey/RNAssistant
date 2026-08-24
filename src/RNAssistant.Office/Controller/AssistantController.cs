@@ -228,7 +228,7 @@ namespace RNAssistant.Office
                 throw new InvalidOperationException("Не удалось активировать документ.");
             }
 
-            return ListChats();
+            return ChatState(LoadSession(null));
         }
 
         public async Task<SendChatResponse> SendChatAsync(
