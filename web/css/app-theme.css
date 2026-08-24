@@ -298,6 +298,27 @@ html[data-theme="dark"] .rn-code-editor .CodeMirror-gutters {
   background: #191e25;
 }
 
+html[data-theme="dark"] .log-filter-button:hover,
+html[data-theme="dark"] .log-filter-button.active {
+  border-color: #3a4656;
+  background: #242c37;
+}
+
+html[data-theme="dark"] .log-entry-error {
+  background: rgba(241, 106, 101, .10);
+  color: #ffaaa6;
+}
+
+html[data-theme="dark"] .log-entry-warning {
+  background: rgba(244, 177, 72, .10);
+  color: #f4b148;
+}
+
+html[data-theme="dark"] .log-entry-success {
+  background: rgba(70, 191, 144, .10);
+  color: #70d2ac;
+}
+
 html[data-theme="dark"] .rn-code-editor .CodeMirror-linenumber {
   color: #727f91;
 }

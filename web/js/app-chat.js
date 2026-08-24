@@ -27,7 +27,7 @@ async function toggleChatHtmlMode() {
     }));
     log(state.activeChatHtmlMode ? "HTML mode включен." : "HTML mode выключен.");
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
   }
 }
 
@@ -43,7 +43,7 @@ async function saveChatMode(mode) {
     log("Режим чата: " + state.activeChatMode + ".");
   } catch (error) {
     $("chatModeSelect").value = state.activeChatMode || "agent";
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
   }
 }
 

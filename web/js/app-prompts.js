@@ -367,7 +367,7 @@
     });
     $("addPromptToChatButton").addEventListener("click", function () {
       addSelectedPromptToChat().catch(function (error) {
-        log(error.detail || error.message);
+        log(error.detail || error.message, "error");
       });
     });
     $("resetCurrentPromptButton").addEventListener("click", function () {
@@ -382,7 +382,7 @@
     $("savePromptButton").addEventListener("click", async function () {
       setControlBusy("savePromptButton", true);
       try { await persistSettingsFromForm(); log("Промпт сохранён."); }
-      catch (error) { log(error.message); }
+      catch (error) { log(error.message, "error"); }
       finally { setControlBusy("savePromptButton", false); renderInstructions(); }
     });
   }

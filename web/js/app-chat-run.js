@@ -40,7 +40,7 @@ async function sendChat(text, attachments) {
         clearSendError();
       }
       renderChatSessions();
-      log("Chat request cancelled.");
+      log("Chat request cancelled.", "warning");
     } else {
       if (state.activeChatId === sentChatId) {
         markLocalMessage(text, { Pending: false, Failed: true });
@@ -48,9 +48,9 @@ async function sendChat(text, attachments) {
         showSendError(error.detail || error.message, text);
         state.failedSend.attachments = attachments;
       }
-      log(error.message);
+      log(error.message, "error");
       if (error.detail && error.detail !== error.message) {
-        log(error.detail);
+        log(error.detail, "error");
       }
     }
   } finally {
@@ -124,7 +124,7 @@ function stopActiveSend() {
     ? cancelChatRun(state.activeChatId, run.runId)
     : cancelBridgeRequest(activeSend.requestId);
   cancellation.catch(function (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
   });
 }
 
@@ -204,7 +204,7 @@ async function confirmAgentTool(pendingId) {
     else applyChatCatalogState(response);
     log("Agent tool confirmed.");
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
   } finally {
     delete state.activeSends[chatId];
     endChatRunTracking(chatId);
@@ -225,9 +225,9 @@ async function cancelAgentTool(pendingId) {
   }
   try {
     applyChatState(await send("cancelAgentTool", { chatId: state.activeChatId, pendingId: pendingId }));
-    log("Agent tool cancelled.");
+    log("Agent tool cancelled.", "warning");
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
     if (typeof renderAgentApprovalDock === "function") renderAgentApprovalDock();
   }
 }

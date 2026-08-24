@@ -27,7 +27,7 @@
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-capabilities-20260820-1">
-  <link rel="stylesheet" href="css/app-workspace.css?v=app-version-20260824-1">
+  <link rel="stylesheet" href="css/app-workspace.css?v=log-filters-20260824-1">
   <link rel="stylesheet" href="css/app-tools.css?v=unified-ui-20260821-1">
   <link rel="stylesheet" href="css/app-prompts.css?v=library-ui-20260821-1">
   <link rel="stylesheet" href="css/app-vba.css?v=library-ui-20260821-1">
@@ -39,7 +39,7 @@
   <link rel="stylesheet" href="css/app-responsive.css?v=unified-ui-20260821-1">
   <link rel="stylesheet" href="css/app-agent.css?v=ui-simplify-20260821-4">
   <link rel="stylesheet" href="css/app-agent-data.css?v=agent-ui-20260821-2">
-  <link rel="stylesheet" href="css/app-theme.css?v=unified-ui-20260821-1">
+  <link rel="stylesheet" href="css/app-theme.css?v=log-filters-20260824-1">
 </head>
 <body>
   <div class="shell">
@@ -660,7 +660,17 @@
                 <button class="danger" id="clearRuntimeDataButton" type="button">Очистить данные</button>
               </div>
               <div class="logs-workspace diagnostics-logs">
-                <section class="log-section surface-panel padded"><div class="log-section-head"><strong>События текущей сессии</strong><button class="secondary" id="clearLogButton" type="button">Очистить</button></div><pre class="log-box" id="logBox"></pre></section>
+                <section class="log-section surface-panel padded">
+                  <div class="log-section-head"><strong>События текущей сессии</strong><button class="secondary" id="clearLogButton" type="button">Очистить</button></div>
+                  <div class="log-filter-bar" role="toolbar" aria-label="Фильтр событий">
+                    <button class="log-filter-button active" type="button" data-log-filter="all" aria-pressed="true">Все <span class="log-filter-count">0</span></button>
+                    <button class="log-filter-button" type="button" data-log-filter="error" aria-pressed="false">Ошибки <span class="log-filter-count">0</span></button>
+                    <button class="log-filter-button" type="button" data-log-filter="warning" aria-pressed="false">Предупреждения <span class="log-filter-count">0</span></button>
+                    <button class="log-filter-button" type="button" data-log-filter="success" aria-pressed="false">Успешно <span class="log-filter-count">0</span></button>
+                    <button class="log-filter-button" type="button" data-log-filter="info" aria-pressed="false">Инфо <span class="log-filter-count">0</span></button>
+                  </div>
+                  <pre class="log-box" id="logBox" aria-live="polite" aria-label="Журнал событий"></pre>
+                </section>
               </div>
             </section>
             <div class="settings-actions-row action-bar" hidden>
@@ -686,42 +696,42 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=app-version-20260824-1"></script>
+  <script src="js/app-core.js?v=log-filters-20260824-1"></script>
   <script src="js/app-utils.js?v=runtime-20260807-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js?v=agent-protocol-20260821-2"></script>
-  <script src="js/app-markdown.js"></script>
-  <script src="js/app-settings.js?v=app-version-20260824-1"></script>
-  <script src="js/app-logs.js?v=unified-ui-20260821-1"></script>
-  <script src="js/app-diagnostics.js?v=model-diagnostics-20260823-1"></script>
-  <script src="js/app-prompts.js?v=unified-ui-20260821-1"></script>
+  <script src="js/app-markdown.js?v=log-filters-20260824-1"></script>
+  <script src="js/app-settings.js?v=log-filters-20260824-1"></script>
+  <script src="js/app-logs.js?v=log-filters-20260824-1"></script>
+  <script src="js/app-diagnostics.js?v=log-filters-20260824-1"></script>
+  <script src="js/app-prompts.js?v=log-filters-20260824-1"></script>
   <script src="js/app-model-data.js?v=model-capabilities-20260820-1"></script>
   <script src="js/app-model-picker.js?v=model-modules-20260823-2"></script>
   <script src="js/app-model-capabilities.js?v=model-modules-20260823-1"></script>
   <script src="js/app-model-render.js?v=model-modules-20260823-2"></script>
-  <script src="js/app-models.js?v=agent-reliability-20260819-1"></script>
+  <script src="js/app-models.js?v=log-filters-20260824-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=plan-tools-20260821-1"></script>
+  <script src="js/app-chat-state.js?v=log-filters-20260824-1"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
   <script src="js/app-tools-structured.js?v=tools-modules-20260823-1"></script>
-  <script src="js/app-tools-actions.js?v=tools-modules-20260823-2"></script>
-  <script src="js/app-tools.js?v=tools-modules-20260823-2"></script>
-  <script src="js/app-skills.js?v=unified-ui-20260821-1"></script>
+  <script src="js/app-tools-actions.js?v=log-filters-20260824-1"></script>
+  <script src="js/app-tools.js?v=log-filters-20260824-1"></script>
+  <script src="js/app-skills.js?v=log-filters-20260824-1"></script>
   <script src="js/app-vba-diff.js?v=vba-modules-20260823-1"></script>
-  <script src="js/app-vba-actions.js?v=vba-modules-20260823-2"></script>
-  <script src="js/app-vba-project.js?v=vba-modules-20260823-3"></script>
+  <script src="js/app-vba-actions.js?v=log-filters-20260824-1"></script>
+  <script src="js/app-vba-project.js?v=log-filters-20260824-1"></script>
   <script src="js/app-vba.js?v=vba-modules-20260823-3"></script>
   <script src="js/app-html-workspace-preview.js?v=workspace-modules-20260823-1"></script>
   <script src="js/app-html-workspace-artifacts.js?v=workspace-modules-20260823-1"></script>
   <script src="js/app-html-workspace-model.js?v=workspace-modules-20260823-4"></script>
   <script src="js/app-html-workspace-editor.js?v=workspace-modules-20260823-5"></script>
   <script src="js/app-html-workspace-tree.js?v=workspace-modules-20260823-2"></script>
-  <script src="js/app-html-workspace-actions.js?v=workspace-modules-20260823-3"></script>
+  <script src="js/app-html-workspace-actions.js?v=log-filters-20260824-1"></script>
   <script src="js/app-html-workspace.js?v=workspace-modules-20260823-5"></script>
-  <script src="js/app-context.js?v=ui-simplify-20260821-3"></script>
+  <script src="js/app-context.js?v=log-filters-20260824-1"></script>
   <script src="js/app-agent-data.js?v=agent-ui-20260821-2"></script>
   <script src="js/app-agent-model.js?v=agent-ui-20260821-3"></script>
-  <script src="js/app-chart-artifacts.js?v=chatui-20260622-2"></script>
+  <script src="js/app-chart-artifacts.js?v=log-filters-20260824-1"></script>
   <script src="js/app-html-artifacts.js?v=chatui-20260702-2"></script>
   <script src="js/app-artifacts.js?v=unified-ui-20260821-1"></script>
   <script src="js/app-plan.js?v=ui-simplify-20260821-3"></script>
@@ -730,12 +740,12 @@
   <script src="js/app-agent.js?v=agent-modules-20260823-2"></script>
   <script src="js/app-messages.js?v=agent-ui-20260821-2"></script>
   <script src="js/app-reasoning.js?v=reasoning-ui-20260819-1"></script>
-  <script src="js/app-attachments.js?v=agent-ui-20260821-2"></script>
-  <script src="js/app-chat-session.js?v=app-version-20260824-1"></script>
+  <script src="js/app-attachments.js?v=log-filters-20260824-1"></script>
+  <script src="js/app-chat-session.js?v=log-filters-20260824-1"></script>
   <script src="js/app-chat-composer.js?v=chat-modules-20260823-3"></script>
-  <script src="js/app-chat-run.js?v=chat-modules-20260823-2"></script>
-  <script src="js/app-chat.js?v=chat-modules-20260823-3"></script>
-  <script src="js/app-chat-edit.js?v=agent-ui-20260821-2"></script>
+  <script src="js/app-chat-run.js?v=log-filters-20260824-1"></script>
+  <script src="js/app-chat.js?v=log-filters-20260824-1"></script>
+  <script src="js/app-chat-edit.js?v=log-filters-20260824-1"></script>
   <script src="js/app.js?v=unified-ui-20260821-1"></script>
 </body>
 </html>

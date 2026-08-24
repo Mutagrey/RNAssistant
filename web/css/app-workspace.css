@@ -566,6 +566,104 @@
   font-size: 12px;
 }
 
+.log-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.log-filter-button {
+  gap: 4px !important;
+  min-height: 24px;
+  padding: 0 7px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.log-filter-button::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  content: "";
+}
+
+.log-filter-button[data-log-filter="error"]::before { background: var(--danger); }
+.log-filter-button[data-log-filter="warning"]::before { background: #c77700; }
+.log-filter-button[data-log-filter="success"]::before { background: var(--success); }
+.log-filter-button[data-log-filter="info"]::before { background: var(--accent); }
+
+.log-filter-button:hover,
+.log-filter-button.active {
+  border-color: var(--line);
+  background: var(--secondary-bg);
+  color: var(--text);
+}
+
+.log-filter-count {
+  min-width: 15px;
+  border-radius: 8px;
+  background: rgba(107, 116, 130, .12);
+  padding: 0 4px;
+  color: inherit;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.log-entry {
+  display: block;
+  padding: 3px 7px;
+  border-left: 2px solid var(--line-strong);
+  border-radius: 2px;
+  color: var(--code-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.log-entry + .log-entry {
+  margin-top: 2px;
+}
+
+.log-entry[hidden] {
+  display: none;
+}
+
+.log-entry-time {
+  color: var(--muted);
+}
+
+.log-entry-error {
+  border-left-color: var(--danger);
+  background: rgba(180, 35, 24, .07);
+  color: #991b1b;
+}
+
+.log-entry-warning {
+  border-left-color: #c77700;
+  background: rgba(199, 119, 0, .08);
+  color: #8a4b0f;
+}
+
+.log-entry-success {
+  border-left-color: var(--success);
+  background: rgba(22, 131, 93, .07);
+  color: #126b4d;
+}
+
+.log-entry-info {
+  border-left-color: var(--accent);
+}
+
+.log-box.is-filter-empty::after {
+  display: block;
+  padding: 8px;
+  color: var(--muted);
+  content: "Нет событий выбранного типа";
+}
+
 .danger-zone {
   display: flex;
   align-items: center;

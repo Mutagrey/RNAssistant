@@ -20,7 +20,7 @@
         throwOnError: false
       });
     } catch (error) {
-      logOnce("LaTeX render failed: " + (error.message || error));
+      logOnce("LaTeX render failed: " + (error.message || error), "warning");
     }
   }
 
@@ -151,7 +151,7 @@
         result = window.hljs.highlight(text, { language: language, ignoreIllegals: true });
       } else if (window.hljs.highlightAuto) {
         if (language) {
-          logOnce("Highlight language is not bundled: " + requestedLanguage + "; using auto-detect.");
+          logOnce("Highlight language is not bundled: " + requestedLanguage + "; using auto-detect.", "warning");
         }
         result = window.hljs.highlightAuto(text);
         language = result.language || "plaintext";
@@ -167,7 +167,7 @@
       code.textContent = text;
       code.dataset.language = "plaintext";
       code.classList.add("language-plaintext");
-      logOnce("Highlight failed: " + (error.message || error));
+      logOnce("Highlight failed: " + (error.message || error), "warning");
     }
   }
 
@@ -197,7 +197,7 @@
       }
 
       state.highlightLoadLogged = true;
-      logOnce("Highlight.js was not loaded from js/vendor/highlight.min.js; code is shown without syntax colors.");
+      logOnce("Highlight.js was not loaded from js/vendor/highlight.min.js; code is shown without syntax colors.", "warning");
     }, 150);
   }
 

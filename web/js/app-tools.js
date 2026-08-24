@@ -536,7 +536,7 @@ function bindToolActions() {
       switchTab("chat");
       setChatInputText("Отредактируй RNAssistant-инструмент из добавленного контекста. Верни обновленные tool.json, pipeline или VBA .bas/.cls components; не выполняй действия без подтверждения.", true);
     }).catch(function (error) {
-      log(error.detail || error.message);
+      log(error.detail || error.message, "error");
     });
   });
 }

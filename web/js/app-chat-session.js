@@ -9,7 +9,7 @@ async function createChat() {
     clearSendError();
     log("Чат создан.");
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
   } finally {
     setControlBusy("newChatButton", false);
   }
@@ -34,7 +34,7 @@ async function createDocumentChat(documentItem) {
     clearSendError();
     log("Чат для документа создан.");
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
   }
 }
 
@@ -54,7 +54,7 @@ async function selectChat(id) {
     clearSendError();
     log("Чат открыт.");
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
     renderChatSessions();
   }
 }
@@ -69,7 +69,7 @@ async function openActiveDocument(chatIdValue) {
     var result = await send("openDocument", { chatId: targetChatId });
     log(result && result.launched ? "Документ открыт." : "Документ уже активен.");
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
     window.alert(error.message || "Не удалось открыть документ.");
   } finally {
     setControlBusy("openDocumentButton", false);
@@ -86,7 +86,7 @@ async function activateDocument(documentKey) {
     applyChatState(await send("activateDocument", { documentKey: documentKey }));
     log("Документ активирован.");
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
     window.alert(error.detail || error.message);
   }
 }
@@ -104,7 +104,7 @@ async function deleteDocument(host, documentKey, title) {
     clearSendError();
     log("История документа удалена.");
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
     window.alert(error.detail || error.message);
   }
 }
@@ -131,7 +131,7 @@ async function renameChat(chatIdValue) {
     applyChatState(await send("renameChat", { chatId: targetChatId, title: title.trim() }));
     log("Чат переименован.");
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
   }
 }
 
@@ -149,7 +149,7 @@ async function clearChat() {
     clearSendError();
     log("Чат очищен.");
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
   } finally {
     setControlBusy("clearChatButton", false);
   }
@@ -165,7 +165,7 @@ async function compactChatContext() {
       ? "Ранний контекст сжат; полная история сохранена."
       : "Контекст пока не требует сжатия.");
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
   } finally {
     setControlBusy("compactContextButton", false);
   }
@@ -186,7 +186,7 @@ async function deleteChat(chatIdValue) {
     clearSendError();
     log("Чат удален.");
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
   }
 }
 
@@ -209,7 +209,7 @@ async function deleteMessage(message, index) {
     log("Сообщение удалено.");
   } catch (error) {
     showSendError(error.detail || error.message, state.failedSend ? state.failedSend.text : "");
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
   }
 }
 
@@ -223,7 +223,7 @@ async function forkChatAtMessage(message, index) {
     clearSendError();
     log("Ветка чата создана.");
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
   }
 }
 
@@ -328,7 +328,7 @@ function applyBridgeUnavailableState(error) {
   if (typeof updateVbaMacroRunState === "function") {
     updateVbaMacroRunState();
   }
-  log((error && (error.detail || error.message)) || "WebView bridge is not available.");
+  log((error && (error.detail || error.message)) || "WebView bridge is not available.", "error");
 }
 
 function chatNavigationSignature(payload) {
@@ -354,7 +354,7 @@ async function synchronizeChatState() {
       applyChatState(response);
     }
   } catch (error) {
-    logOnce("Не удалось синхронизировать список чатов: " + (error.detail || error.message));
+    logOnce("Не удалось синхронизировать список чатов: " + (error.detail || error.message), "warning");
   }
 }
 
@@ -382,7 +382,7 @@ async function clearRuntimeData() {
     applyInitState(init);
     log("Локальные данные очищены.");
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
   } finally {
     setControlBusy("clearRuntimeDataButton", false);
   }

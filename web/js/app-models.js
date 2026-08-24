@@ -15,7 +15,7 @@ async function loadModelCatalog(useFormSettings) {
     state.modelCatalog.error = error.message || "Unknown error";
     renderModelControls();
     var message = error.message || "Неизвестная ошибка";
-    log(/^Каталог моделей не загружен:/i.test(message) ? message : ("Каталог моделей не загружен: " + message));
+    log(/^Каталог моделей не загружен:/i.test(message) ? message : ("Каталог моделей не загружен: " + message), "warning");
     return false;
   }
 }
@@ -42,7 +42,7 @@ async function saveChatModelSelection(value) {
     return activeChatModel() === value;
   } catch (error) {
     renderModelControls();
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
     return false;
   } finally {
     state.modelSaving = false;
@@ -66,7 +66,7 @@ async function saveChatReasoningSelection(enabled) {
     log(enabled ? "Reasoning enabled." : "Reasoning disabled.");
     return state.activeChatReasoning === !!enabled;
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
     return false;
   } finally {
     state.reasoningSaving = false;

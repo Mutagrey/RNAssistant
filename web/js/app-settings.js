@@ -319,7 +319,7 @@ function bindSettingsActions() {
     } catch (error) {
       settingsDirty = true;
       updateSettingsSaveButton();
-      log(error.message);
+      log(error.message, "error");
     }
   });
   $("testModelCompatibilityButton").addEventListener("click", async function () {
@@ -335,7 +335,7 @@ function bindSettingsActions() {
       log("Проверка совместимости модели завершена.");
     } catch (error) {
       root.textContent = "Тест не выполнен: " + error.message;
-      log(error.message);
+      log(error.message, "error");
     } finally {
       button.disabled = false;
       button.textContent = "Запустить тест";

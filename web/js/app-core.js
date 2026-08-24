@@ -79,6 +79,7 @@ var state = {
   seq: 1,
   focusReportTimer: null,
   lastReportedWantsKeyboard: null,
+  logFilter: "all",
   highlightLog: {},
   highlightRetryScheduled: false,
   highlightRetryAttempts: 0,
@@ -112,22 +113,60 @@ window.RNAssistantHost = {
   }
 };
 
-function log(message) {
+function resolveLogType(message, type) {
+  var normalizedType = String(type || "").toLowerCase();
+  if (normalizedType === "error" || normalizedType === "warning" || normalizedType === "success" || normalizedType === "info") {
+    return normalizedType;
+  }
+
+  var text = String(message || "").toLowerCase();
+  if (/\b(error|failed|failure|fail|exception|fatal|denied|invalid|unavailable|timeout|refused)\b|ошиб|не удалось|недоступ|сбой|отказ|неверн|запрещ/.test(text)) {
+    return "error";
+  }
+  if (/\b(warn|warning|cancelled|canceled|missing|not loaded|not bundled|limit)\b|предупреж|отмен|лимит|не загруж|не найден|исправьте|не более/.test(text)) {
+    return "warning";
+  }
+  if (/\b(ok|success|saved|loaded|completed|finished|created|updated|deleted|cleared|copied|opened|selected|enabled|disabled|confirmed|restored|initialized|added|activated|recorded)\b|сохран|загруж|заверш|создан|обнов|удал|очищ|скопирован|открыт|выбран|включ|выключ|подтверж|восстанов|инициализ|добавлен|актив|переименован|выполнен/.test(text)) {
+    return "success";
+  }
+  return "info";
+}
+
+function log(message, type) {
   var box = $("logBox");
   if (!box) {
     return;
   }
-  var line = new Date().toISOString() + " " + message;
-  box.textContent += line + "\n";
+  var resolvedType = resolveLogType(message, type);
+  var entry = document.createElement("span");
+  entry.className = "log-entry log-entry-" + resolvedType;
+  entry.dataset.logType = resolvedType;
+  entry.hidden = state.logFilter !== "all" && state.logFilter !== resolvedType;
+
+  var time = document.createElement("span");
+  time.className = "log-entry-time";
+  time.textContent = new Date().toISOString();
+
+  var text = document.createElement("span");
+  text.className = "log-entry-message";
+  text.textContent = String(message === null || message === undefined ? "" : message);
+
+  entry.appendChild(time);
+  entry.appendChild(document.createTextNode(" "));
+  entry.appendChild(text);
+  box.appendChild(entry);
+  if (typeof updateLogFilterCounts === "function") {
+    updateLogFilterCounts();
+  }
   box.scrollTop = box.scrollHeight;
 }
 
-function logOnce(message) {
+function logOnce(message, type) {
   if (state.highlightLog[message]) {
     return;
   }
   state.highlightLog[message] = true;
-  log(message);
+  log(message, type);
 }
 
 function setControlBusy(target, busy) {

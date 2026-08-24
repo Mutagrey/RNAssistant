@@ -66,7 +66,7 @@
         }
         options.log("Артефакт сохранён.");
       } catch (error) {
-        options.log(error.detail || error.message);
+        options.log(error.detail || error.message, "error");
         window.alert(error.message || "Артефакт не сохранён.");
       }
     }
@@ -99,7 +99,7 @@
         options.applyWorkspaceResponse(response);
         options.log("Удалено из HTML: " + selected.label);
       } catch (error) {
-        options.log(error.detail || error.message);
+        options.log(error.detail || error.message, "error");
         window.alert(error.message || "Элемент HTML workspace не удален.");
       }
     }
@@ -121,7 +121,7 @@
         }));
         options.log(direction === "redo" ? "HTML workspace redo выполнен." : "HTML workspace восстановлен.");
       } catch (error) {
-        options.log(error.detail || error.message);
+        options.log(error.detail || error.message, "error");
         window.alert(error.message || (direction === "redo" ? "HTML workspace redo не выполнен." : "HTML workspace не восстановлен."));
       }
     }
@@ -146,7 +146,7 @@
         options.render();
         options.log("План создан.");
       } catch (error) {
-        options.log(error.detail || error.message);
+        options.log(error.detail || error.message, "error");
         window.alert(error.message || "План не создан.");
       }
     }
@@ -164,7 +164,7 @@
         options.hideCreate();
         options.render();
       } catch (error) {
-        options.log(error.detail || error.message);
+        options.log(error.detail || error.message, "error");
         window.alert(error.message || "Файл не создан.");
       }
     }
@@ -180,7 +180,7 @@
         options.hideCreate();
         options.render();
       } catch (error) {
-        options.log(error.detail || error.message);
+        options.log(error.detail || error.message, "error");
         window.alert(error.message || "Data source не создан.");
       }
     }

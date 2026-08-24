@@ -35,7 +35,7 @@
         options.log(result.Message || result.message || "VBA package state updated.");
       } catch (error) {
         options.setOutput(error.detail || error.message);
-        options.log(error.message);
+        options.log(error.message, "error");
       } finally {
         options.setBusy(actionButtonId, false);
         options.renderEditor();
@@ -44,7 +44,7 @@
 
     async function runSelected(dryRun) {
       if (!options.validateSelected()) {
-        options.log("Исправьте JSON инструмента перед запуском.");
+        options.log("Исправьте JSON инструмента перед запуском.", "warning");
         return;
       }
       options.syncSelected();
@@ -64,7 +64,7 @@
         options.logToolResult(dryRun ? "Проверка инструмента" : "Запуск инструмента", tool.Id, response);
       } catch (error) {
         options.setOutput(error.detail || error.message);
-        options.log(error.message);
+        options.log(error.message, "error");
       } finally {
         options.setBusy(runButtonId, false);
       }
@@ -84,7 +84,7 @@
         options.renderTools();
         options.log("Инструменты сохранены.");
       } catch (error) {
-        options.log(error.message);
+        options.log(error.message, "error");
       } finally {
         options.setBusy("saveToolsButton", false);
       }

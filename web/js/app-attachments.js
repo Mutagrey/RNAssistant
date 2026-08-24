@@ -37,12 +37,12 @@ async function addAttachmentFiles(files) {
 
   var existingBytes = state.draftAttachments.reduce(function (sum, item) { return sum + attachmentSize(item); }, 0);
   if (state.draftAttachments.length + files.length > ATTACHMENT_MAX_FILES) {
-    log("Можно добавить не более 10 файлов.");
+    log("Можно добавить не более 10 файлов.", "warning");
     return;
   }
   if (files.some(function (file) { return file.size <= 0 || file.size > ATTACHMENT_MAX_FILE_BYTES; }) ||
       existingBytes + files.reduce(function (sum, file) { return sum + file.size; }, 0) > ATTACHMENT_MAX_TOTAL_BYTES) {
-    log("Лимит: 20 МБ на файл и 50 МБ на сообщение.");
+    log("Лимит: 20 МБ на файл и 50 МБ на сообщение.", "warning");
     return;
   }
   try {
@@ -59,7 +59,7 @@ async function addAttachmentFiles(files) {
       renderAttachmentDrafts();
     }
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
     return;
   }
 }
@@ -68,7 +68,7 @@ async function removeDraftAttachment(item) {
   try {
     await send("deleteDraftAttachment", { id: attachmentId(item) });
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
     return;
   }
   if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);

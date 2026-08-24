@@ -178,7 +178,7 @@ async function refreshChatAfterEditFailure(chatId) {
       applyChatCatalogState(response);
     }
   } catch (syncError) {
-    log(syncError.detail || syncError.message);
+    log(syncError.detail || syncError.message, "error");
   }
 }
 
@@ -220,7 +220,7 @@ async function saveMessageEdit() {
     }
     log("Сообщение обновлено. Нижняя история перестроена заново.");
   } catch (error) {
-    log(error.cancelled ? "Редактирование сообщения отменено." : error.detail || error.message);
+    log(error.cancelled ? "Редактирование сообщения отменено." : error.detail || error.message, error.cancelled ? "warning" : "error");
     await refreshChatAfterEditFailure(sentChatId);
   } finally {
     delete state.activeSends[sentChatId];

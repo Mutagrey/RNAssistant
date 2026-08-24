@@ -176,7 +176,7 @@ async function refreshContext() {
   try {
     await syncActiveChatState();
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
   }
 }
 
@@ -191,7 +191,7 @@ async function addSelectionContext(mode) {
     await syncActiveChatState();
     log("Выделение добавлено в контекст.");
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
   } finally {
     setControlBusy("addSelectionContextButton", false);
   }
@@ -240,7 +240,7 @@ async function removeContextItem(id) {
     await syncActiveChatState();
     log("Элемент контекста удален.");
   } catch (error) {
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
   }
 }
 
@@ -273,7 +273,7 @@ function bindContextActions() {
       await syncActiveChatState();
       log("Контекст очищен.");
     } catch (error) {
-      log(error.message);
+      log(error.message, "error");
     } finally {
       setControlBusy("clearContextButton", false);
     }

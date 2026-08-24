@@ -425,7 +425,7 @@ function chatHtmlDataSourceCount(chat) {
 function logToolResult(prefix, toolId, result) {
   var ok = result && (result.Success === true || result.success === true);
   var message = result ? (result.Message || result.message || "") : "";
-  log(prefix + " " + (ok ? "OK" : "FAIL") + ": " + toolId + (message ? " - " + message : ""));
+  log(prefix + " " + (ok ? "OK" : "FAIL") + ": " + toolId + (message ? " - " + message : ""), ok ? "success" : "error");
 }
 
 function logToolResults(results) {

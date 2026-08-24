@@ -473,7 +473,7 @@
         messageId: context.messageId,
         dataJson: dataJson
       }).catch(function (error) {
-        log("Chart artifact save failed: " + (error.detail || error.message));
+        log("Chart artifact save failed: " + (error.detail || error.message), "error");
       });
     }, 350);
   }
@@ -521,7 +521,7 @@
       await send("updateMessageActivityData", { chatId: state.activeChatId, messageId: context.messageId, dataJson: dataJson });
       renderMessages();
     } catch (error) {
-      log("Chart refresh failed: " + (error.detail || error.message));
+      log("Chart refresh failed: " + (error.detail || error.message), "error");
     } finally {
       button.disabled = false;
       button.textContent = "Обновить";

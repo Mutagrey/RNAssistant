@@ -304,7 +304,7 @@ async function loadSelectedVbaModule() {
     $("vbaStatus").textContent = response.Message || response.message || "VBA-модуль загружен.";
   } catch (error) {
     $("vbaStatus").textContent = error.message;
-    log(error.detail || error.message);
+    log(error.detail || error.message, "error");
   } finally {
     if (state.vba.loadingModule === moduleName) {
       state.vba.loadingModule = "";
@@ -334,4 +334,3 @@ function vbaModuleMetaText(module) {
   }
   return parts.join(" - ");
 }
-

@@ -180,7 +180,7 @@ function bindDiagnosticsActions() {
       log("Проверка связи с моделью завершена.");
     } catch (error) {
       if (root) root.textContent = "Тест не выполнен: " + error.message;
-      log(error.message);
+      log(error.message, "error");
     } finally {
       button.disabled = false;
       button.textContent = "Проверить модель";

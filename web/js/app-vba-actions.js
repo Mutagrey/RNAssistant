@@ -10,7 +10,7 @@
         return true;
       } catch (error) {
         options.setStatus(error.message);
-        options.log(error.detail || error.message);
+        options.log(error.detail || error.message, "error");
         return false;
       }
     }
@@ -78,7 +78,7 @@
         options.logToolResult("Запуск макроса", toolId, response);
       } catch (error) {
         options.setMacroStatus(error.detail || error.message, "error");
-        options.log(error.detail || error.message);
+        options.log(error.detail || error.message, "error");
       } finally {
         options.updateMacroRunState();
       }

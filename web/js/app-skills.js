@@ -240,7 +240,7 @@ function bindSkillActions() {
       renderSkills();
       log("Навыки сохранены.");
     } catch (error) {
-      log(error.message);
+      log(error.message, "error");
     } finally {
       setControlBusy("saveSkillsButton", false);
     }
@@ -273,7 +273,7 @@ function bindSkillActions() {
       switchTab("chat");
       setChatInputText("Отредактируй RNAssistant-навык из добавленного контекста. Сначала прочитай текущий skill, затем при необходимости вызови common.skills_update только с изменёнными полями после подтверждения.", true);
     }).catch(function (error) {
-      log(error.detail || error.message);
+      log(error.detail || error.message, "error");
     });
   });
 }
