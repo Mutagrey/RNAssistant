@@ -488,7 +488,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"uiTheme\":\"dark\",\"debugModelTraffic\":true,\"reasoningRequestMode\":\"custom_json\",\"reasoningCustomJson\":\"{\\\"thinking\\\":{\\\"budget\\\":4096}}\",\"systemPromptRole\":\"system\",\"agentResponseMode\":\"json_schema\",\"toolResultRole\":\"tool\",\"fallbackToJsonObject\":false,\"maxAgentFormatRetries\":4,\"modelImageSupportOverrides\":{\"gpt-test\":true},\"modelAudioSupportOverrides\":{\"gpt-audio\":true}},\"apiKey\":\"secret\"}}")
+                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"uiTheme\":\"dark\",\"debugModelTraffic\":true,\"reasoningRequestMode\":\"custom_json\",\"reasoningCustomJson\":\"{\\\"thinking\\\":{\\\"budget\\\":4096}}\",\"systemPromptRole\":\"system\",\"agentResponseMode\":\"json_schema\",\"toolResultRole\":\"tool\",\"fallbackToJsonObject\":false,\"maxAgentFormatRetries\":4,\"historyIntegrityMode\":\"hmac_sha256\",\"historyEncryptionMode\":\"aes256_cbc_hmac_sha256\",\"historyKeySource\":\"custom_secret\",\"modelImageSupportOverrides\":{\"gpt-test\":true},\"modelAudioSupportOverrides\":{\"gpt-audio\":true}},\"apiKey\":\"secret\",\"historySecret\":\"portable secret\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -507,6 +507,10 @@ namespace RNAssistant.Harness
             AssertEqual(true, controller.LastSettings.ModelImageSupportOverrides["gpt-test"].Value, "model image override");
             AssertEqual(true, controller.LastSettings.ModelAudioSupportOverrides["gpt-audio"].Value, "model audio override");
             AssertEqual("secret", controller.LastApiKey, "api key");
+            AssertEqual(HistoryIntegrityModes.HmacSha256, controller.LastSettings.HistoryIntegrityMode, "history integrity mode");
+            AssertEqual(HistoryEncryptionModes.Aes256CbcHmacSha256, controller.LastSettings.HistoryEncryptionMode, "history encryption mode");
+            AssertEqual(HistoryKeySources.CustomSecret, controller.LastSettings.HistoryKeySource, "history key source");
+            AssertEqual("portable secret", controller.LastHistorySecret, "history secret");
 
             var runtimeLog = JObject.Parse(bridge.HandleMessageAsync(
                 "{\"id\":\"log1\",\"type\":\"getRuntimeLog\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")

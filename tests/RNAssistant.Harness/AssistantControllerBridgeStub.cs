@@ -24,6 +24,7 @@ namespace RNAssistant.Office
         public string LastRunId { get; private set; }
         public AppSettings LastSettings { get; private set; }
         public string LastApiKey { get; private set; }
+        public string LastHistorySecret { get; private set; }
         public string LastModuleName { get; private set; }
         public string LastModuleCode { get; private set; }
         public string LastModuleHash { get; private set; }
@@ -117,15 +118,16 @@ namespace RNAssistant.Office
             return Task.FromResult(ChatState(id, chatId));
         }
         public ChatStateResponse UpdateMessageActivityData(string messageId, string dataJson, string chatId = null) { return ChatState(messageId, chatId); }
-        public SettingsResponse GetSettings() { return new SettingsResponse { Settings = new AppSettings(), HasApiKey = false }; }
+        public SettingsResponse GetSettings() { return new SettingsResponse { Settings = new AppSettings(), HasApiKey = false, HasHistorySecret = false }; }
         public RuntimeLogResponse GetRuntimeLog() { return new RuntimeLogResponse { Content = "runtime log", Path = "runtime.log" }; }
         public RuntimeLogResponse ClearRuntimeLog() { return new RuntimeLogResponse { Content = string.Empty, Path = "runtime.log" }; }
         public Task<ModelCatalogResponse> GetModelCatalogAsync(AppSettings settings, string apiKey) { return Task.FromResult(new ModelCatalogResponse { Catalog = new JObject() }); }
 
-        public SettingsResponse SaveSettings(AppSettings settings, string apiKey)
+        public SettingsResponse SaveSettings(AppSettings settings, string apiKey, string historySecret)
         {
             LastSettings = settings;
             LastApiKey = apiKey;
+            LastHistorySecret = historySecret;
             return GetSettings();
         }
 

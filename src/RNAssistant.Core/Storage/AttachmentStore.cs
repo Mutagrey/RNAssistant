@@ -30,9 +30,14 @@ namespace RNAssistant.Core.Storage
         private readonly ChatBlobStore _blobs;
 
         public AttachmentStore(AppDataPaths paths)
+            : this(paths, null)
+        {
+        }
+
+        public AttachmentStore(AppDataPaths paths, Func<StorageProtector> protectionProvider)
         {
             _paths = paths ?? throw new ArgumentNullException("paths");
-            _blobs = new ChatBlobStore(paths);
+            _blobs = new ChatBlobStore(paths, protectionProvider);
             CleanupExpiredDrafts(DateTime.UtcNow.AddDays(-1));
         }
 

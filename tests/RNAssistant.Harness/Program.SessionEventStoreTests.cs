@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
@@ -58,6 +61,167 @@ namespace RNAssistant.Harness
                 AssertEqual(0, store.List(session.Host, session.DocumentKey, session.DocumentTitle).Count,
                     "corrupt stream is excluded from listing");
             });
+        }
+
+        private static void SessionEventHmacRequiresMatchingKey()
+        {
+            WithTempPaths(paths =>
+            {
+                var salt = Enumerable.Range(1, 32).Select(value => (byte)value).ToArray();
+                var protector = new StorageProtector(
+                    HistoryIntegrityModes.HmacSha256,
+                    HistoryEncryptionModes.None,
+                    "correct portable secret",
+                    salt);
+                var store = new ChatStore(paths, () => protector);
+                var session = store.Create("Word", "hmac-doc", "Hmac.docx", "Signed history");
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "readable but signed" });
+                store.Save(session);
+
+                var events = store.ReadEvents(session.Host, session.DocumentKey, session.Id);
+                AssertTrue(events.All(item => item.HashAlgorithm == HistoryIntegrityModes.HmacSha256),
+                    "all events use HMAC");
+                AssertTrue(events.All(item => item.ProtectionKeyId == protector.KeyId),
+                    "all events identify the HMAC key");
+                AssertContains(File.ReadAllText(SessionEventFile(paths, session)), "readable but signed",
+                    "HMAC does not encrypt history");
+
+                var wrong = new StorageProtector(
+                    HistoryIntegrityModes.HmacSha256,
+                    HistoryEncryptionModes.None,
+                    "different portable secret",
+                    salt);
+                var wrongStore = new ChatStore(paths, () => wrong);
+                AssertTrue(wrongStore.Load(session.Host, session.DocumentKey, session.Id) == null,
+                    "another HMAC key cannot validate history");
+            });
+        }
+
+        private static void EncryptedHistoryProtectsEventsAndCas()
+        {
+            WithTempPaths(paths =>
+            {
+                const string titleMarker = "PRIVATE_TITLE_7f29";
+                const string messageMarker = "PRIVATE_MESSAGE_58c1";
+                const string artifactMarker = "PRIVATE_ARTIFACT_f04a";
+                const string payloadMarker = "PRIVATE_MODEL_PAYLOAD_91de";
+                var salt = Enumerable.Range(33, 32).Select(value => (byte)value).ToArray();
+                var protector = new StorageProtector(
+                    HistoryIntegrityModes.Sha256,
+                    HistoryEncryptionModes.Aes256CbcHmacSha256,
+                    "portable encrypted secret",
+                    salt);
+                var store = new ChatStore(paths, () => protector);
+                var session = store.Create("Excel", "encrypted-doc", "Encrypted.xlsx", titleMarker);
+                session.Messages.Add(new ChatMessage { Role = "user", Content = messageMarker });
+                session.Artifacts.Add(new ChatArtifact
+                {
+                    Kind = ChatArtifactKinds.Markdown,
+                    MimeType = "text/markdown",
+                    InlineText = artifactMarker
+                });
+                store.Save(session);
+                store.AppendTrace(
+                    session,
+                    SessionEventTypes.LlmRequest,
+                    new { requestId = "encrypted-request", purpose = "agent" },
+                    payloadMarker,
+                    "application/json",
+                    "encrypted-run",
+                    "encrypted-turn",
+                    "encrypted-request");
+
+                var eventText = File.ReadAllText(SessionEventFile(paths, session));
+                AssertContains(eventText, "EncryptedData", "encrypted event envelope");
+                AssertTrue(eventText.IndexOf(titleMarker, StringComparison.Ordinal) < 0, "title is not plaintext");
+                AssertTrue(eventText.IndexOf(messageMarker, StringComparison.Ordinal) < 0, "message is not plaintext");
+                AssertTrue(eventText.IndexOf(artifactMarker, StringComparison.Ordinal) < 0, "artifact is not in event plaintext");
+                AssertTrue(eventText.IndexOf(payloadMarker, StringComparison.Ordinal) < 0, "model payload is not in event plaintext");
+                foreach (var path in Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories))
+                {
+                    var raw = File.ReadAllBytes(path);
+                    AssertTrue(StorageProtector.IsProtectedPayload(raw), "CAS blob uses protected envelope");
+                    AssertTrue(!ContainsBytes(raw, Encoding.UTF8.GetBytes(artifactMarker)), "artifact CAS body is encrypted");
+                    AssertTrue(!ContainsBytes(raw, Encoding.UTF8.GetBytes(payloadMarker)), "model CAS payload is encrypted");
+                }
+
+                var loaded = store.Load(session.Host, session.DocumentKey, session.Id);
+                AssertEqual(titleMarker, loaded.Title, "encrypted title replays");
+                AssertEqual(messageMarker, loaded.Messages.Single().Content, "encrypted message replays");
+                AssertEqual(artifactMarker, loaded.Artifacts.Single().InlineText, "encrypted artifact hydrates");
+                var trace = store.ReadEvents(session.Host, session.DocumentKey, session.Id)
+                    .Single(item => item.Type == SessionEventTypes.LlmRequest);
+                AssertEqual(payloadMarker, store.ReadEventPayload(trace), "encrypted model payload roundtrip");
+
+                File.AppendAllText(SessionEventFile(paths, session), "{\"SchemaVersion\":");
+                session.Title = titleMarker + "_UPDATED";
+                store.Save(session);
+                AssertTrue(File.ReadAllText(SessionEventFile(paths, session)).IndexOf(titleMarker, StringComparison.Ordinal) < 0,
+                    "encrypted tail recovery does not leak hydrated data");
+                AssertEqual(titleMarker + "_UPDATED", store.Load(session.Host, session.DocumentKey, session.Id).Title,
+                    "encrypted tail recovery replays");
+
+                var wrong = new StorageProtector(
+                    HistoryIntegrityModes.Sha256,
+                    HistoryEncryptionModes.Aes256CbcHmacSha256,
+                    "wrong encrypted secret",
+                    salt);
+                AssertTrue(new ChatStore(paths, () => wrong).Load(session.Host, session.DocumentKey, session.Id) == null,
+                    "wrong encryption key cannot project history");
+
+                var lines = File.ReadAllLines(SessionEventFile(paths, session));
+                var rewritten = JObject.Parse(lines[0]);
+                rewritten["Type"] = SessionEventTypes.SessionForked;
+                rewritten["Hash"] = ComputeUnkeyedEventHash(rewritten);
+                lines[0] = rewritten.ToString(Newtonsoft.Json.Formatting.None);
+                File.WriteAllLines(SessionEventFile(paths, session), lines);
+                AssertTrue(store.Load(session.Host, session.DocumentKey, session.Id) == null,
+                    "encryption authenticates event metadata even after SHA is recomputed");
+            });
+        }
+
+        private static string ComputeUnkeyedEventHash(JObject record)
+        {
+            var canonical = new JObject
+            {
+                ["SchemaVersion"] = record["SchemaVersion"],
+                ["SessionId"] = record["SessionId"],
+                ["Sequence"] = record["Sequence"],
+                ["EventId"] = record["EventId"],
+                ["CreatedUtc"] = record["CreatedUtc"].Value<DateTime>().ToUniversalTime().ToString("o", CultureInfo.InvariantCulture),
+                ["Type"] = record["Type"],
+                ["RunId"] = record["RunId"] == null ? JValue.CreateNull() : record["RunId"].DeepClone(),
+                ["TurnId"] = record["TurnId"] == null ? JValue.CreateNull() : record["TurnId"].DeepClone(),
+                ["StepId"] = record["StepId"] == null ? JValue.CreateNull() : record["StepId"].DeepClone(),
+                ["PreviousHash"] = record["PreviousHash"] == null ? JValue.CreateNull() : record["PreviousHash"].DeepClone(),
+                ["HashAlgorithm"] = record["HashAlgorithm"],
+                ["ProtectionKeyId"] = record["ProtectionKeyId"] == null ? JValue.CreateNull() : record["ProtectionKeyId"].DeepClone(),
+                ["Data"] = record["Data"] == null ? JValue.CreateNull() : record["Data"].DeepClone(),
+                ["EncryptedData"] = record["EncryptedData"] == null ? JValue.CreateNull() : record["EncryptedData"].DeepClone(),
+                ["Payload"] = record["Payload"] == null ? JValue.CreateNull() : record["Payload"].DeepClone()
+            };
+            using (var sha = SHA256.Create())
+            {
+                var bytes = Encoding.UTF8.GetBytes(canonical.ToString(Newtonsoft.Json.Formatting.None));
+                return BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", string.Empty).ToLowerInvariant();
+            }
+        }
+
+        private static bool ContainsBytes(byte[] source, byte[] value)
+        {
+            if (source == null || value == null || value.Length == 0 || source.Length < value.Length) return false;
+            for (var offset = 0; offset <= source.Length - value.Length; offset++)
+            {
+                var matches = true;
+                for (var index = 0; index < value.Length; index++)
+                {
+                    if (source[offset + index] == value[index]) continue;
+                    matches = false;
+                    break;
+                }
+                if (matches) return true;
+            }
+            return false;
         }
 
         private static void SessionForkLineageIsCanonical()

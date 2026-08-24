@@ -10,6 +10,8 @@ namespace RNAssistant.Core.Storage
         public string Root { get; private set; }
         public string SettingsFile { get; private set; }
         public string SecretFile { get; private set; }
+        public string HistorySecretFile { get; private set; }
+        public string HistoryProtectionSaltFile { get; private set; }
         public string ToolsDirectory { get; private set; }
         public string SkillsDirectory { get; private set; }
         public string VbaBackupDirectory { get; private set; }
@@ -36,6 +38,8 @@ namespace RNAssistant.Core.Storage
                 Root = root,
                 SettingsFile = Path.Combine(root, "settings.json"),
                 SecretFile = Path.Combine(root, "secret.bin"),
+                HistorySecretFile = Path.Combine(root, "history-secret.bin"),
+                HistoryProtectionSaltFile = Path.Combine(root, "history-protection.salt"),
                 ToolsDirectory = Path.Combine(root, "tools"),
                 SkillsDirectory = Path.Combine(root, "skills"),
                 VbaBackupDirectory = Path.Combine(root, "vba-backups"),

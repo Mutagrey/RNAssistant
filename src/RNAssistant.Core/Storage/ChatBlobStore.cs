@@ -9,11 +9,18 @@ namespace RNAssistant.Core.Storage
     internal sealed class ChatBlobStore
     {
         private readonly string _rootDirectory;
+        private readonly Func<StorageProtector> _protectionProvider;
 
         public ChatBlobStore(AppDataPaths paths)
+            : this(paths, null)
+        {
+        }
+
+        public ChatBlobStore(AppDataPaths paths, Func<StorageProtector> protectionProvider)
         {
             if (paths == null) throw new ArgumentNullException("paths");
             _rootDirectory = paths.ChatBlobDirectory;
+            _protectionProvider = protectionProvider ?? (() => StorageProtector.None);
         }
 
         public ChatBlobReference StoreText(string value, string contentType)
@@ -25,20 +32,22 @@ namespace RNAssistant.Core.Storage
         {
             bytes = bytes ?? new byte[0];
             var hash = Sha256(bytes);
+            var protector = Protection();
             var path = PathFor(hash);
-            if (!Matches(path, hash, bytes.LongLength))
+            if (!Matches(path, hash, bytes.LongLength, protector))
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(path));
+                var stored = protector.Protect(bytes, BlobPurpose(hash, bytes.LongLength));
                 try
                 {
-                    StorageFileSystem.WriteAtomic(path, tempPath => File.WriteAllBytes(tempPath, bytes));
+                    StorageFileSystem.WriteAtomic(path, tempPath => File.WriteAllBytes(tempPath, stored));
                 }
                 catch (IOException)
                 {
-                    if (!Matches(path, hash, bytes.LongLength)) throw;
+                    if (!Matches(path, hash, bytes.LongLength, protector)) throw;
                 }
             }
-            if (!Matches(path, hash, bytes.LongLength))
+            if (!Matches(path, hash, bytes.LongLength, protector))
             {
                 throw new IOException("Content-addressed blob could not be verified after writing.");
             }
@@ -47,7 +56,9 @@ namespace RNAssistant.Core.Storage
             {
                 Sha256 = hash,
                 ByteLength = bytes.LongLength,
-                ContentType = string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType
+                ContentType = string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType,
+                Encryption = protector.EncryptionMode,
+                ProtectionKeyId = protector.Encrypts ? protector.KeyId : null
             };
         }
 
@@ -62,11 +73,32 @@ namespace RNAssistant.Core.Storage
             if (!ValidReference(reference)) return null;
             var path = PathFor(reference.Sha256);
             if (!File.Exists(path)) return null;
-            var bytes = File.ReadAllBytes(path);
-            return bytes.LongLength == reference.ByteLength &&
-                string.Equals(Sha256(bytes), reference.Sha256, StringComparison.OrdinalIgnoreCase)
-                    ? bytes
-                    : null;
+            var protector = Protection();
+            if (!string.IsNullOrWhiteSpace(reference.Encryption) &&
+                !string.Equals(HistoryEncryptionModes.Normalize(reference.Encryption), protector.EncryptionMode, StringComparison.Ordinal)) return null;
+            if (!string.IsNullOrWhiteSpace(reference.ProtectionKeyId) &&
+                !string.Equals(reference.ProtectionKeyId, protector.KeyId, StringComparison.OrdinalIgnoreCase)) return null;
+            try
+            {
+                var stored = File.ReadAllBytes(path);
+                var bytes = protector.Unprotect(stored, BlobPurpose(reference.Sha256, reference.ByteLength));
+                return bytes.LongLength == reference.ByteLength &&
+                    string.Equals(Sha256(bytes), reference.Sha256, StringComparison.OrdinalIgnoreCase)
+                        ? bytes
+                        : null;
+            }
+            catch (IOException)
+            {
+                return null;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return null;
+            }
+            catch (CryptographicException)
+            {
+                return null;
+            }
         }
 
         private string PathFor(string sha256)
@@ -105,17 +137,15 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private static bool Matches(string path, string expectedHash, long expectedLength)
+        private bool Matches(string path, string expectedHash, long expectedLength, StorageProtector protector)
         {
             try
             {
-                if (!File.Exists(path) || new FileInfo(path).Length != expectedLength) return false;
-                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
-                using (var sha = SHA256.Create())
-                {
-                    var actual = BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
-                    return string.Equals(actual, expectedHash, StringComparison.OrdinalIgnoreCase);
-                }
+                if (!File.Exists(path)) return false;
+                var stored = File.ReadAllBytes(path);
+                var bytes = protector.Unprotect(stored, BlobPurpose(expectedHash, expectedLength));
+                return bytes.LongLength == expectedLength &&
+                    string.Equals(Sha256(bytes), expectedHash, StringComparison.OrdinalIgnoreCase);
             }
             catch (IOException)
             {
@@ -125,6 +155,20 @@ namespace RNAssistant.Core.Storage
             {
                 return false;
             }
+            catch (CryptographicException)
+            {
+                return false;
+            }
+        }
+
+        private StorageProtector Protection()
+        {
+            return _protectionProvider() ?? StorageProtector.None;
+        }
+
+        private static string BlobPurpose(string hash, long length)
+        {
+            return "blob|" + (hash ?? string.Empty).ToLowerInvariant() + "|" + length;
         }
     }
 }

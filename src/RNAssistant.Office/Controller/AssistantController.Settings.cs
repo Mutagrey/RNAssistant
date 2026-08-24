@@ -14,7 +14,8 @@ namespace RNAssistant.Office
             {
                 AppVersion = ApplicationVersionService.Current,
                 Settings = _settingsService.Load(),
-                HasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey())
+                HasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey()),
+                HasHistorySecret = !string.IsNullOrWhiteSpace(_settingsService.LoadHistorySecret())
             };
         }
 
@@ -39,13 +40,9 @@ namespace RNAssistant.Office
             };
         }
 
-        public SettingsResponse SaveSettings(AppSettings settings, string apiKey)
+        public SettingsResponse SaveSettings(AppSettings settings, string apiKey, string historySecret)
         {
-            _settingsService.Save(settings);
-            if (apiKey != null)
-            {
-                _settingsService.SaveApiKey(apiKey);
-            }
+            _settingsService.Save(settings, apiKey, historySecret);
 
             return GetSettings();
         }

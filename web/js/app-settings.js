@@ -81,6 +81,19 @@ function updateAgentProtocolControls() {
   field.setAttribute("aria-hidden", visible ? "false" : "true");
 }
 
+function updateHistoryProtectionControls() {
+  var hmac = $("historyHmacInput").checked;
+  var encrypted = $("historyEncryptionInput").checked;
+  var enabled = hmac || encrypted;
+  var source = $("historyKeySourceInput");
+  source.disabled = !enabled;
+  var custom = enabled && source.value === "custom_secret";
+  var field = $("historySecretField");
+  field.classList.toggle("hidden", !custom);
+  field.setAttribute("aria-hidden", custom ? "false" : "true");
+  $("historySecretInput").disabled = !custom;
+}
+
 function tokenEstimateCalibrationFor(settings, model) {
   var calibrations = compatibilityValue(settings, "TokenEstimateCalibrations", "tokenEstimateCalibrations", {}) || {};
   var target = String(model || "").toLowerCase();
@@ -196,6 +209,21 @@ function renderSettings() {
   $("autoConfirmToolsInput").checked = compatibilityValue(s, "AutoConfirmToolActions", "autoConfirmToolActions", agentSettingsDefaults.autoConfirmToolActions) === true;
   $("autoCompressContextInput").checked = compatibilityValue(s, "AutoCompressContext", "autoCompressContext", agentSettingsDefaults.autoCompressContext) !== false;
   $("debugModelTrafficInput").checked = !!(s.DebugModelTraffic || s.debugModelTraffic);
+  $("historyHmacInput").checked = String(compatibilityValue(s, "HistoryIntegrityMode", "historyIntegrityMode", "sha256")).toLowerCase() === "hmac_sha256";
+  $("historyEncryptionInput").checked = String(compatibilityValue(s, "HistoryEncryptionMode", "historyEncryptionMode", "none")).toLowerCase() === "aes256_cbc_hmac_sha256";
+  $("historyKeySourceInput").value = String(compatibilityValue(s, "HistoryKeySource", "historyKeySource", "api_key")).toLowerCase() === "custom_secret"
+    ? "custom_secret"
+    : "api_key";
+  var historySecretStatus = $("historySecretStatus");
+  $("historySecretInput").placeholder = state.hasHistorySecret
+    ? "Секрет сохранён; оставьте пустым, чтобы не менять"
+    : "Минимум 12 символов";
+  if (historySecretStatus) {
+    historySecretStatus.textContent = state.hasHistorySecret
+      ? "Секрет сохранён через DPAPI и повторно не отображается."
+      : "Отдельный секрет пока не сохранён.";
+  }
+  updateHistoryProtectionControls();
   $("smartChatTitlesInput").checked = (s.SmartChatTitles !== false && s.smartChatTitles !== false);
   $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || agentSettingsDefaults.maxAgentIterations;
   $("maxAgentFormatRetriesInput").value = s.MaxAgentFormatRetries || s.maxAgentFormatRetries || agentSettingsDefaults.maxAgentFormatRetries;
@@ -248,6 +276,9 @@ function readSettings() {
     AutoConfirmToolActions: $("autoConfirmToolsInput").checked,
     AutoCompressContext: $("autoCompressContextInput").checked,
     DebugModelTraffic: $("debugModelTrafficInput").checked,
+    HistoryIntegrityMode: $("historyHmacInput").checked ? "hmac_sha256" : "sha256",
+    HistoryEncryptionMode: $("historyEncryptionInput").checked ? "aes256_cbc_hmac_sha256" : "none",
+    HistoryKeySource: $("historyKeySourceInput").value,
     SmartChatTitles: $("smartChatTitlesInput").checked,
     MaxAgentIterations: Number($("maxAgentIterationsInput").value || agentSettingsDefaults.maxAgentIterations),
     MaxAgentFormatRetries: Math.max(1, Math.min(20, Number($("maxAgentFormatRetriesInput").value || agentSettingsDefaults.maxAgentFormatRetries))),
@@ -271,12 +302,19 @@ function readSettings() {
 
 async function persistSettingsFromForm() {
   var apiKey = $("apiKeyInput").value;
+  var historySecret = $("historySecretInput").value;
   var nextSettings = readSettings();
-  var response = await send("saveSettings", { settings: nextSettings, apiKey: apiKey || null });
+  var response = await send("saveSettings", {
+    settings: nextSettings,
+    apiKey: apiKey || null,
+    historySecret: historySecret || null
+  });
   state.appVersion = response.appVersion || response.AppVersion || state.appVersion;
   state.settings = response.settings || response.Settings || nextSettings;
   state.hasApiKey = !!(response.hasApiKey || response.HasApiKey);
+  state.hasHistorySecret = !!(response.hasHistorySecret || response.HasHistorySecret);
   $("apiKeyInput").value = "";
+  $("historySecretInput").value = "";
   renderSettings();
   updateEstimatedContextUsage();
   renderContextMeter();
@@ -400,6 +438,9 @@ function bindSettingsActions() {
 
   $("reasoningRequestModeInput").addEventListener("change", updateReasoningCustomJsonVisibility);
   $("agentResponseModeInput").addEventListener("change", updateAgentProtocolControls);
+  $("historyHmacInput").addEventListener("change", updateHistoryProtectionControls);
+  $("historyEncryptionInput").addEventListener("change", updateHistoryProtectionControls);
+  $("historyKeySourceInput").addEventListener("change", updateHistoryProtectionControls);
   $("tokenEstimateMultiplierInput").addEventListener("input", function () {
     renderTokenEstimateCalibrationStatus(state.settings);
   });

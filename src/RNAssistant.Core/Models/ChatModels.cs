@@ -118,7 +118,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class ChatSession
     {
-        public const int CurrentFormatVersion = 4;
+        public const int CurrentFormatVersion = 5;
 
         [JsonProperty(Required = Required.Always)]
         public int FormatVersion { get; set; }

@@ -15,6 +15,11 @@ namespace RNAssistant.Core.Storage
 
         public string LoadApiKey()
         {
+            return LoadSecret();
+        }
+
+        public string LoadSecret()
+        {
             try
             {
                 if (!File.Exists(_path))
@@ -38,15 +43,20 @@ namespace RNAssistant.Core.Storage
 
         public void SaveApiKey(string apiKey)
         {
+            SaveSecret(apiKey);
+        }
+
+        public void SaveSecret(string value)
+        {
             var directory = Path.GetDirectoryName(_path);
             if (!string.IsNullOrWhiteSpace(directory))
             {
                 Directory.CreateDirectory(directory);
             }
 
-            var bytes = Encoding.UTF8.GetBytes(apiKey ?? string.Empty);
+            var bytes = Encoding.UTF8.GetBytes(value ?? string.Empty);
             var protectedBytes = ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
-            File.WriteAllBytes(_path, protectedBytes);
+            StorageFileSystem.WriteAtomic(_path, tempPath => File.WriteAllBytes(tempPath, protectedBytes));
         }
     }
 }

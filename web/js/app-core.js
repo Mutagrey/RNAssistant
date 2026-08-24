@@ -5,6 +5,7 @@ var state = {
   officeContext: null,
   settings: {},
   hasApiKey: false,
+  hasHistorySecret: false,
   tools: [],
   skills: [],
   context: {},

@@ -275,6 +275,7 @@ function applyInitState(init) {
   state.bridgeToken = init.bridgeToken || init.BridgeToken || state.bridgeToken || "";
   state.settings = init.settings || {};
   state.hasApiKey = !!(init.hasApiKey || init.HasApiKey);
+  state.hasHistorySecret = !!(init.hasHistorySecret || init.HasHistorySecret);
   state.tools = init.tools || [];
   state.skills = init.skills || [];
   state.toolsPath = init.toolsPath || "";
@@ -330,6 +331,7 @@ function applyBridgeUnavailableState(error) {
   document.body.classList.add("bridge-unavailable");
   resetMessageEditState();
   state.appVersion = "";
+  state.hasHistorySecret = false;
   state.host = "";
   state.title = "";
   state.officeContext = null;

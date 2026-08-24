@@ -120,6 +120,7 @@
     <Compile Include="Storage\JsonFileStore.cs" />
     <Compile Include="Storage\ProtectedSecretStore.cs" />
     <Compile Include="Storage\SettingsService.cs" />
+    <Compile Include="Storage\StorageProtection.cs" />
     <Compile Include="Storage\SkillStore.cs" />
     <Compile Include="Storage\StorageFileSystem.cs" />
     <Compile Include="Storage\ToolStore.cs" />

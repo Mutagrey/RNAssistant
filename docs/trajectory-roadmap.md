@@ -4,6 +4,7 @@
 
 - A chat's append-only `*.events.jsonl` stream is its only durable source of truth. `ChatSession`, model history, diagnostics, and UI state are replayed projections.
 - Immutable payloads and artifact bodies are stored once in the shared SHA-256 `chat-blobs` CAS. Events keep verified references rather than competing body copies.
+- History protection is explicit and disabled by default. HMAC-SHA256 can authenticate the event chain, while authenticated AES-256-CBC + HMAC-SHA256 encryption protects event data and committed CAS using either the API key or a separate DPAPI-protected custom secret.
 - Every real HTML workspace change creates an immutable workspace artifact with a parent id. Undo and redo only move `ActiveHtmlArtifactId` to an existing revision, so navigation survives replay without creating duplicate revisions.
 - VBA is deliberately not a chat artifact. The Office document is the authority for current live VBA state; RNAssistant adds a runtime-bound stale-state guard, confirmation, a pre-mutation rollback backup, and post-write read-back verification.
 - Chat replay, fork, prune, HTML undo, and HTML redo must never replay or mutate VBA or any other external Office state.
@@ -30,18 +31,19 @@
 
 ### P1 — trajectory queries and operator UX
 
-- [ ] Introduce a read-only paged trajectory query boundary with filters for sequence range, event type, run, turn, step, tool call, artifact, status, and accepted versus log-only records. The event stream remains authoritative; any index must be disposable and rebuildable.
-- [ ] Add derived views for model replay, tool execution, artifact lineage, confirmation pauses, failure/retry history, and per-turn timing/token usage. Every row must retain its source event sequence/id.
+- [ ] Introduce `ITrajectoryQuery`: cursor pagination, FTS, and filters for sequence range, event type, run, turn, step, tool call, artifact, status, and `current` / `shadowed` / `log-only`. The event stream remains authoritative; any index must be disposable and rebuildable.
+- [ ] Add derived views for model replay, tool execution, artifact lineage, confirmation pauses, failure/retry history, and per-turn timing/token/cost usage. Every projection row must retain `sourceEventSeqs` and source event ids.
 - [ ] Upgrade Diagnostics from the fixed recent tail to pagination, correlation navigation, artifact lineage, and VBA before/after diff with an explicit restore action.
 - [ ] Add an export bundle containing selected event records, a manifest of referenced CAS payloads, and integrity hashes for offline trajectory analysis and regression fixtures.
-- [ ] Define persistence seams (`ISessionEventStore`, `IBlobStore`, `ITrajectoryQuery`) before considering SQLite. A SQLite backend is useful only for query scale; it must preserve append-only/CAS semantics and must not become a second durable truth beside JSONL.
+- [ ] Define persistence seams (`ISessionPersistence`, `IBlobStore`, `ITrajectoryQuery`) before considering an optional SQLite backend. SQLite is useful only for query scale; it must preserve append-only/CAS semantics and must not become a second durable truth beside JSONL.
 
 ### P2 — lifecycle, evaluation, and tamper resistance
 
-- [ ] Add reference-aware retention policies for chats, model payloads, attachments, artifacts, VBA snapshots, and diagnostic exports.
-- [ ] Add reproducible trajectory evaluations for malformed Agent output, confirmation continuation, tool failures, HTML branch navigation, VBA stale guards, and crash recovery.
-- [ ] Surface aggregate latency, tokens, model failures, format repairs, tool outcomes, uncertain effects, and restore outcomes without mixing telemetry into model replay.
-- [ ] Add optional authenticated integrity (for example, keyed hashes) and encryption-at-rest for sensitive local payloads. The current SHA-256 chain detects accidental corruption, not malicious rewriting.
+- [ ] Add reference-aware CAS garbage collection and retention policies for chats, model payloads, attachments, artifacts, VBA snapshots, and diagnostic exports; add configurable redaction before share/export.
+- [ ] Add reproducible replay fixtures and trajectory evaluations for malformed Agent output, confirmation continuation, tool failures, HTML branch navigation, VBA stale guards, and crash recovery.
+- [ ] Surface aggregate latency, tokens, cost, model failures, format repairs, tool outcomes, uncertain effects, and restore outcomes from the same canonical journal without mixing telemetry into model replay.
+- [x] Add optional HMAC-SHA256 event authentication and optional authenticated encryption-at-rest for event data and committed CAS; keep both disabled by default and expose API/custom-secret key selection in Settings.
+- [ ] Add explicit re-key/decrypt-for-export operations so protected history can change keys or become a shareable redacted bundle without clearing canonical data.
 - [ ] Journal multi-module VBA package operations as one transaction manifest with per-component before/after state and best-effort rollback outcomes.
 
 ## Non-negotiable invariants

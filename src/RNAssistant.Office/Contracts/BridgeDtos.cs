@@ -510,12 +510,16 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("turnId")] public string TurnId { get; set; }
         [JsonProperty("stepId")] public string StepId { get; set; }
         [JsonProperty("previousHash")] public string PreviousHash { get; set; }
+        [JsonProperty("hashAlgorithm")] public string HashAlgorithm { get; set; }
+        [JsonProperty("protectionKeyId")] public string ProtectionKeyId { get; set; }
         [JsonProperty("hash")] public string Hash { get; set; }
+        [JsonProperty("dataEncrypted")] public bool DataEncrypted { get; set; }
         [JsonProperty("dataJson")] public string DataJson { get; set; }
         [JsonProperty("dataTruncated")] public bool DataTruncated { get; set; }
         [JsonProperty("payloadSha256")] public string PayloadSha256 { get; set; }
         [JsonProperty("payloadByteLength")] public long? PayloadByteLength { get; set; }
         [JsonProperty("payloadContentType")] public string PayloadContentType { get; set; }
+        [JsonProperty("payloadEncryption")] public string PayloadEncryption { get; set; }
 
         public static SessionEventDto From(SessionEvent sessionEvent)
         {
@@ -533,12 +537,16 @@ namespace RNAssistant.Office.Contracts
                 TurnId = sessionEvent.TurnId,
                 StepId = sessionEvent.StepId,
                 PreviousHash = sessionEvent.PreviousHash,
+                HashAlgorithm = sessionEvent.HashAlgorithm,
+                ProtectionKeyId = sessionEvent.ProtectionKeyId,
                 Hash = sessionEvent.Hash,
+                DataEncrypted = !string.IsNullOrWhiteSpace(sessionEvent.EncryptedData),
                 DataJson = bounded,
                 DataTruncated = bounded.Length < data.Length,
                 PayloadSha256 = sessionEvent.Payload == null ? null : sessionEvent.Payload.Sha256,
                 PayloadByteLength = sessionEvent.Payload == null ? (long?)null : sessionEvent.Payload.ByteLength,
-                PayloadContentType = sessionEvent.Payload == null ? null : sessionEvent.Payload.ContentType
+                PayloadContentType = sessionEvent.Payload == null ? null : sessionEvent.Payload.ContentType,
+                PayloadEncryption = sessionEvent.Payload == null ? null : sessionEvent.Payload.Encryption
             };
         }
     }
@@ -655,6 +663,8 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class SaveSettingsPayload : ModelCatalogPayload
     {
+        [JsonProperty("historySecret")]
+        public string HistorySecret { get; set; }
     }
 
     public sealed class SaveToolsPayload
@@ -817,6 +827,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("hasApiKey")]
         public bool HasApiKey { get; set; }
+
+        [JsonProperty("hasHistorySecret")]
+        public bool HasHistorySecret { get; set; }
     }
 
     public sealed class ModelCatalogResponse
@@ -1138,6 +1151,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("hasApiKey")]
         public bool HasApiKey { get; set; }
+
+        [JsonProperty("hasHistorySecret")]
+        public bool HasHistorySecret { get; set; }
 
         [JsonProperty("tools")]
         public IReadOnlyList<ToolDefinition> Tools { get; set; }

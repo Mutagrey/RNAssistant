@@ -9,13 +9,15 @@ RNAssistant uses one append-only event stream per chat as its durable source of 
   chats/<document-hash>/<session-hash>.events.jsonl
   chat-blobs/<sha-prefix>/<sha256>.blob
   attachments/staging/...
+  history-protection.salt
+  history-secret.bin
 ```
 
 `ChatSession` is an in-memory projection rebuilt by replay. Its `Revision` is the last durable event sequence, not an independently stored counter.
 
 ## Event contract
 
-Every `SessionEvent` contains `SchemaVersion`, `SessionId`, contiguous `Sequence`, `EventId`, UTC time, type, optional run/turn/step correlation, `PreviousHash`, `Hash`, JSON data, and an optional content-addressed payload reference.
+Every `SessionEvent` contains `SchemaVersion`, `SessionId`, contiguous `Sequence`, `EventId`, UTC time, type, optional run/turn/step correlation, `PreviousHash`, hash algorithm/key metadata, `Hash`, JSON data or encrypted data, and an optional content-addressed payload reference.
 
 - `session.created` seeds the initial projection.
 - `session.forked` seeds an independent projection and records parent session id, source revision, and boundary message id.
@@ -28,7 +30,7 @@ Every `SessionEvent` contains `SchemaVersion`, `SessionId`, contiguous `Sequence
 - `llm.failure` records endpoint/status/failure metadata and any bounded provider error body.
 - `agent.response.rejected` keeps malformed Agent output for diagnosis without adding it to model replay or visible chat history.
 
-The hash-chain detects accidental edits, truncation in the middle of the log, and reordered records. It is an integrity check, not authentication: it is not keyed.
+The default SHA-256 hash-chain detects accidental edits, truncation in the middle of the log, and reordered records. Optional HMAC-SHA256 prevents recomputing valid edited records without the selected secret. Neither mode prevents deletion of an unanchored final suffix.
 
 ## Blobs and artifacts
 
@@ -39,7 +41,22 @@ Large immutable content is stored once by SHA-256 in `chat-blobs`; the event str
 - exact model request/response payloads use the same CAS;
 - equal bytes across chats or revisions deduplicate automatically.
 
+When history encryption is enabled, committed CAS files contain authenticated ciphertext while their references retain the plaintext SHA-256 and byte length for deterministic identity and post-decryption verification.
+
 Artifact metadata and lineage remain in the session stream. HTML undo/redo is derived from the active artifact and its parent/child chain. Chart UI data is derived from a chart artifact. Context checkpoints are derived from compaction artifacts. These values are not persisted again as competing state.
+
+## Optional history protection
+
+Settings → Diagnostics → History protection controls two independent features. Both are off by default: events use the ordinary SHA-256 chain and history remains plaintext.
+
+- HMAC-SHA256 authenticates the complete canonical event envelope, including data/ciphertext and CAS references. HMAC does not encrypt content.
+- Authenticated encryption uses AES-256-CBC with HMAC-SHA256. It encrypts every event `Data` value and every committed `chat-blobs` payload; event type, sequence, time, correlation ids, hashes, key id, CAS plaintext hash/length, and content equality remain visible.
+- The selected key source is the API key by default or a separate custom secret. Both secrets are stored with DPAPI CurrentUser and never enter settings, events, diagnostics, or exports.
+- Keys are derived with PBKDF2-SHA256 and a portable installation salt, then domain-separated for encryption, ciphertext authentication, and event-chain HMAC.
+- Changing the enabled modes, key source, or effective key is rejected while event streams or CAS blobs exist. Clear Chats/Data first. In particular, rotating an API key used for protection requires clearing or a future explicit re-key operation.
+- For sharing protected history, use a custom secret and transfer the event/CAS data plus `history-protection.salt`; communicate the secret separately. Never share an API key for this purpose.
+
+Current history encryption does not cover transient attachment staging, settings, runtime logs, WebView data, or the separate VBA backup store. Committed attachments are protected after they enter CAS. VBA protection moves to its planned document-scoped journal rather than being mixed into chat ownership.
 
 ## Durability and recovery
 
@@ -59,4 +76,4 @@ The prioritized follow-up work for trajectory queries, HTML branches, CAS lifecy
 
 ## Format policy
 
-`ChatSession.CurrentFormatVersion` is 4 and `SessionEvent.CurrentSchemaVersion` is 1. Unsupported event schemas and old snapshot files are refused rather than guessed or migrated. During development, use **Clear Chats/Data** once after upgrading.
+`ChatSession.CurrentFormatVersion` is 5 and `SessionEvent.CurrentSchemaVersion` is 2. Unsupported event schemas and old snapshot files are refused rather than guessed or migrated. During development, use **Clear Chats/Data** once after upgrading.

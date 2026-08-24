@@ -58,8 +58,8 @@ namespace RNAssistant.Office
             _paths = paths ?? AppDataPaths.CreateDefault();
             RuntimeLog.Configure(_paths.Root);
             _settingsService = new SettingsService(_paths);
-            _chatStore = new ChatStore(_paths);
-            _attachmentStore = new AttachmentStore(_paths);
+            _chatStore = new ChatStore(_paths, () => _settingsService.LoadStorageProtector());
+            _attachmentStore = new AttachmentStore(_paths, () => _settingsService.LoadStorageProtector());
             _toolStore = new ToolStore(_paths);
             _skillStore = new SkillStore(_paths);
             _vbaBackupStore = new VbaBackupStore(_paths);
@@ -221,6 +221,7 @@ namespace RNAssistant.Office
                 Documents = ListOpenDocuments(),
                 Settings = settings,
                 HasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey()),
+                HasHistorySecret = !string.IsNullOrWhiteSpace(_settingsService.LoadHistorySecret()),
                 Tools = _toolCatalog.GetVisibleTools(),
                 ToolsPath = _paths.ToolsDirectory,
                 Skills = _skillCatalog.GetVisibleSkills(),

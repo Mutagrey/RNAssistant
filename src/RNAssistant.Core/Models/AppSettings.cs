@@ -69,6 +69,45 @@ namespace RNAssistant.Core.Models
         }
     }
 
+    public static class HistoryIntegrityModes
+    {
+        public const string Sha256 = "sha256";
+        public const string HmacSha256 = "hmac_sha256";
+
+        public static string Normalize(string value)
+        {
+            return string.Equals(value, HmacSha256, StringComparison.OrdinalIgnoreCase)
+                ? HmacSha256
+                : Sha256;
+        }
+    }
+
+    public static class HistoryEncryptionModes
+    {
+        public const string None = "none";
+        public const string Aes256CbcHmacSha256 = "aes256_cbc_hmac_sha256";
+
+        public static string Normalize(string value)
+        {
+            return string.Equals(value, Aes256CbcHmacSha256, StringComparison.OrdinalIgnoreCase)
+                ? Aes256CbcHmacSha256
+                : None;
+        }
+    }
+
+    public static class HistoryKeySources
+    {
+        public const string ApiKey = "api_key";
+        public const string CustomSecret = "custom_secret";
+
+        public static string Normalize(string value)
+        {
+            return string.Equals(value, CustomSecret, StringComparison.OrdinalIgnoreCase)
+                ? CustomSecret
+                : ApiKey;
+        }
+    }
+
     public sealed class ModelCapabilitySettings
     {
         public int? MaxContextTokens { get; set; }
@@ -148,6 +187,9 @@ namespace RNAssistant.Core.Models
         public int MaxAgentToolSteps { get; set; }
         public bool AutoCompressContext { get; set; }
         public bool DebugModelTraffic { get; set; }
+        public string HistoryIntegrityMode { get; set; }
+        public string HistoryEncryptionMode { get; set; }
+        public string HistoryKeySource { get; set; }
         public double UiFontScale { get; set; }
         public string UiTheme { get; set; }
         public Dictionary<string, string> CustomHeaders { get; set; }
@@ -238,6 +280,9 @@ namespace RNAssistant.Core.Models
             MaxAgentToolSteps = DefaultMaxAgentToolSteps;
             AutoCompressContext = true;
             DebugModelTraffic = false;
+            HistoryIntegrityMode = HistoryIntegrityModes.Sha256;
+            HistoryEncryptionMode = HistoryEncryptionModes.None;
+            HistoryKeySource = HistoryKeySources.ApiKey;
             UiFontScale = 1.0;
             UiTheme = UiThemes.Light;
             CustomHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

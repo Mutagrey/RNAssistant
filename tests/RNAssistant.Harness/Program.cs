@@ -106,6 +106,8 @@ namespace RNAssistant.Harness
                 Test("storage: fork lineage is canonical", SessionForkLineageIsCanonical),
                 Test("storage: stale chat save is rejected", StaleChatRevisionIsRejected),
                 Test("storage: event integrity rejects tampering", SessionEventIntegrityRejectsTampering),
+                Test("storage: event HMAC requires matching key", SessionEventHmacRequiresMatchingKey),
+                Test("storage: encrypted history protects events and CAS", EncryptedHistoryProtectsEventsAndCas),
                 Test("storage: deletes document event logs", DeletesDocumentEventLogs),
                 Test("storage: delete preserves shared CAS", DeletesDocumentChats),
                 Test("storage: artifact bodies use CAS", ArtifactBodiesUseContentAddressing),

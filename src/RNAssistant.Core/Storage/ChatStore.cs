@@ -48,11 +48,18 @@ namespace RNAssistant.Core.Storage
 
         private readonly AppDataPaths _paths;
         private readonly ChatBlobStore _blobs;
+        private readonly Func<StorageProtector> _protectionProvider;
 
         public ChatStore(AppDataPaths paths)
+            : this(paths, null)
+        {
+        }
+
+        public ChatStore(AppDataPaths paths, Func<StorageProtector> protectionProvider)
         {
             _paths = paths ?? throw new ArgumentNullException("paths");
-            _blobs = new ChatBlobStore(paths);
+            _protectionProvider = protectionProvider ?? (() => StorageProtector.None);
+            _blobs = new ChatBlobStore(paths, _protectionProvider);
         }
 
         public ChatSession LoadOrCreateActive(string host, string documentKey, string documentTitle)
@@ -492,7 +499,7 @@ namespace RNAssistant.Core.Storage
             catch (ChatConcurrencyException) { }
         }
 
-        internal static long ReadRevision(string path)
+        private long ReadRevision(string path)
         {
             var log = ReadEventLog(path);
             return log == null || log.Events.Count == 0 ? 0 : log.Events[log.Events.Count - 1].Sequence;
@@ -618,7 +625,11 @@ namespace RNAssistant.Core.Storage
                 Data = data == null ? null : data.DeepClone(),
                 Payload = payload
             };
-            sessionEvent.Hash = ComputeHash(sessionEvent);
+            var protector = Protection();
+            sessionEvent.HashAlgorithm = protector.CurrentHashAlgorithm;
+            sessionEvent.ProtectionKeyId = protector.UsesHmac || protector.Encrypts ? protector.KeyId : null;
+            ProtectEventData(sessionEvent, protector);
+            sessionEvent.Hash = ComputeHash(sessionEvent, protector);
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             using (var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read))
             using (var writer = new StreamWriter(stream, Utf8))
@@ -1252,11 +1263,12 @@ namespace RNAssistant.Core.Storage
             return JObject.FromObject(session, JsonSerializer.Create(ProjectionJsonSettings));
         }
 
-        private static EventLogReadResult ReadEventLog(string path)
+        private EventLogReadResult ReadEventLog(string path)
         {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
             var lines = File.ReadAllLines(path, Utf8);
             var result = new EventLogReadResult();
+            var protector = Protection();
             for (var index = 0; index < lines.Length; index++)
             {
                 if (string.IsNullOrWhiteSpace(lines[index])) continue;
@@ -1274,16 +1286,23 @@ namespace RNAssistant.Core.Storage
                     }
                     throw new ChatConcurrencyException("The chat event log contains an invalid record.");
                 }
-                ValidateEvent(result.Events, sessionEvent);
+                ValidateEvent(result.Events, sessionEvent, protector);
+                HydrateEventData(sessionEvent, protector);
                 result.Events.Add(sessionEvent);
             }
             return result;
         }
 
-        private static void ValidateEvent(IReadOnlyList<SessionEvent> previousEvents, SessionEvent sessionEvent)
+        private static void ValidateEvent(
+            IReadOnlyList<SessionEvent> previousEvents,
+            SessionEvent sessionEvent,
+            StorageProtector protector)
         {
             if (sessionEvent == null || sessionEvent.SchemaVersion != SessionEvent.CurrentSchemaVersion ||
-                string.IsNullOrWhiteSpace(sessionEvent.SessionId) || string.IsNullOrWhiteSpace(sessionEvent.Type))
+                string.IsNullOrWhiteSpace(sessionEvent.SessionId) || string.IsNullOrWhiteSpace(sessionEvent.Type) ||
+                !ValidHashAlgorithm(sessionEvent.HashAlgorithm) ||
+                !string.IsNullOrWhiteSpace(sessionEvent.EncryptedData) && sessionEvent.Data != null ||
+                !ProtectionMatches(sessionEvent, protector))
             {
                 throw new ChatConcurrencyException("The chat event log contains an unsupported record.");
             }
@@ -1293,13 +1312,13 @@ namespace RNAssistant.Core.Storage
             if (sessionEvent.Sequence != expectedSequence ||
                 previous != null && !string.Equals(sessionEvent.SessionId, previous.SessionId, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(sessionEvent.PreviousHash ?? string.Empty, expectedPreviousHash ?? string.Empty, StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(sessionEvent.Hash, ComputeHash(sessionEvent), StringComparison.OrdinalIgnoreCase))
+                !string.Equals(sessionEvent.Hash, ComputeHash(sessionEvent, protector), StringComparison.OrdinalIgnoreCase))
             {
                 throw new ChatConcurrencyException("The chat event log integrity check failed.");
             }
         }
 
-        private static string ComputeHash(SessionEvent sessionEvent)
+        private static string ComputeHash(SessionEvent sessionEvent, StorageProtector protector)
         {
             var canonical = new JObject
             {
@@ -1313,14 +1332,109 @@ namespace RNAssistant.Core.Storage
                 ["TurnId"] = sessionEvent.TurnId == null ? JValue.CreateNull() : new JValue(sessionEvent.TurnId),
                 ["StepId"] = sessionEvent.StepId == null ? JValue.CreateNull() : new JValue(sessionEvent.StepId),
                 ["PreviousHash"] = sessionEvent.PreviousHash == null ? JValue.CreateNull() : new JValue(sessionEvent.PreviousHash),
-                ["Data"] = sessionEvent.Data == null ? JValue.CreateNull() : sessionEvent.Data.DeepClone(),
+                ["HashAlgorithm"] = sessionEvent.HashAlgorithm,
+                ["ProtectionKeyId"] = sessionEvent.ProtectionKeyId == null ? JValue.CreateNull() : new JValue(sessionEvent.ProtectionKeyId),
+                ["Data"] = string.IsNullOrWhiteSpace(sessionEvent.EncryptedData) && sessionEvent.Data != null
+                    ? sessionEvent.Data.DeepClone()
+                    : JValue.CreateNull(),
+                ["EncryptedData"] = string.IsNullOrWhiteSpace(sessionEvent.EncryptedData)
+                    ? JValue.CreateNull()
+                    : new JValue(sessionEvent.EncryptedData),
                 ["Payload"] = sessionEvent.Payload == null ? JValue.CreateNull() : JToken.FromObject(sessionEvent.Payload)
             };
-            using (var sha = SHA256.Create())
+            try
             {
                 var bytes = Utf8.GetBytes(canonical.ToString(Formatting.None));
-                return BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", string.Empty).ToLowerInvariant();
+                return (protector ?? StorageProtector.None).ComputeEventHash(
+                    bytes,
+                    sessionEvent.HashAlgorithm,
+                    sessionEvent.ProtectionKeyId);
             }
+            catch (CryptographicException ex)
+            {
+                throw new ChatConcurrencyException("The chat event log protection key is unavailable or invalid: " + ex.Message);
+            }
+        }
+
+        private static void ProtectEventData(SessionEvent sessionEvent, StorageProtector protector)
+        {
+            if (sessionEvent == null || protector == null || !protector.Encrypts) return;
+            var plaintext = Utf8.GetBytes(sessionEvent.Data == null
+                ? "null"
+                : sessionEvent.Data.ToString(Formatting.None));
+            sessionEvent.EncryptedData = Convert.ToBase64String(
+                protector.Protect(plaintext, EventProtectionPurpose(sessionEvent)));
+            sessionEvent.Data = null;
+        }
+
+        private static void HydrateEventData(SessionEvent sessionEvent, StorageProtector protector)
+        {
+            if (sessionEvent == null || string.IsNullOrWhiteSpace(sessionEvent.EncryptedData)) return;
+            try
+            {
+                var stored = Convert.FromBase64String(sessionEvent.EncryptedData);
+                var plaintext = (protector ?? StorageProtector.None).Unprotect(
+                    stored,
+                    EventProtectionPurpose(sessionEvent));
+                var parsed = JToken.Parse(Utf8.GetString(plaintext));
+                sessionEvent.Data = parsed.Type == JTokenType.Null ? null : parsed;
+            }
+            catch (FormatException ex)
+            {
+                throw new ChatConcurrencyException("The encrypted chat event is invalid: " + ex.Message);
+            }
+            catch (CryptographicException ex)
+            {
+                throw new ChatConcurrencyException("The encrypted chat event could not be authenticated: " + ex.Message);
+            }
+            catch (JsonException ex)
+            {
+                throw new ChatConcurrencyException("The decrypted chat event is invalid: " + ex.Message);
+            }
+        }
+
+        private static string EventProtectionPurpose(SessionEvent sessionEvent)
+        {
+            return new JObject
+            {
+                ["SchemaVersion"] = sessionEvent.SchemaVersion,
+                ["SessionId"] = sessionEvent.SessionId,
+                ["Sequence"] = sessionEvent.Sequence,
+                ["EventId"] = sessionEvent.EventId,
+                ["CreatedUtc"] = sessionEvent.CreatedUtc.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture),
+                ["Type"] = sessionEvent.Type,
+                ["RunId"] = sessionEvent.RunId == null ? JValue.CreateNull() : new JValue(sessionEvent.RunId),
+                ["TurnId"] = sessionEvent.TurnId == null ? JValue.CreateNull() : new JValue(sessionEvent.TurnId),
+                ["StepId"] = sessionEvent.StepId == null ? JValue.CreateNull() : new JValue(sessionEvent.StepId),
+                ["PreviousHash"] = sessionEvent.PreviousHash == null ? JValue.CreateNull() : new JValue(sessionEvent.PreviousHash),
+                ["HashAlgorithm"] = sessionEvent.HashAlgorithm,
+                ["ProtectionKeyId"] = sessionEvent.ProtectionKeyId,
+                ["Payload"] = sessionEvent.Payload == null ? JValue.CreateNull() : JToken.FromObject(sessionEvent.Payload)
+            }.ToString(Formatting.None);
+        }
+
+        private static bool ValidHashAlgorithm(string value)
+        {
+            return string.Equals(value, HistoryIntegrityModes.Sha256, StringComparison.Ordinal) ||
+                string.Equals(value, HistoryIntegrityModes.HmacSha256, StringComparison.Ordinal);
+        }
+
+        private static bool ProtectionMatches(SessionEvent sessionEvent, StorageProtector protector)
+        {
+            protector = protector ?? StorageProtector.None;
+            if (!string.Equals(sessionEvent.HashAlgorithm, protector.CurrentHashAlgorithm, StringComparison.Ordinal)) return false;
+            if (protector.Encrypts != !string.IsNullOrWhiteSpace(sessionEvent.EncryptedData)) return false;
+            if (protector.UsesHmac || protector.Encrypts)
+            {
+                return !string.IsNullOrWhiteSpace(sessionEvent.ProtectionKeyId) &&
+                    string.Equals(sessionEvent.ProtectionKeyId, protector.KeyId, StringComparison.OrdinalIgnoreCase);
+            }
+            return string.IsNullOrWhiteSpace(sessionEvent.ProtectionKeyId);
+        }
+
+        private StorageProtector Protection()
+        {
+            return _protectionProvider() ?? StorageProtector.None;
         }
 
         private static void RewriteValidEvents(string path, IEnumerable<SessionEvent> events)

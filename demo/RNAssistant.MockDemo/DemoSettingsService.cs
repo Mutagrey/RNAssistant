@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Storage
@@ -10,6 +11,8 @@ namespace RNAssistant.Core.Storage
         private readonly JsonFileStore _json;
         private static string _baseUrl = "http://127.0.0.1:5179";
         private static string _defaultModel = "mock-strict";
+        private static string _apiKey = string.Empty;
+        private static string _historySecret = string.Empty;
 
         public SettingsService(AppDataPaths paths)
         {
@@ -40,13 +43,49 @@ namespace RNAssistant.Core.Storage
             _json.Save(_paths.SettingsFile, Normalize(settings ?? new AppSettings()));
         }
 
+        public void Save(AppSettings settings, string apiKey, string historySecret)
+        {
+            if (apiKey != null) _apiKey = apiKey;
+            if (historySecret != null) _historySecret = historySecret;
+            Save(settings);
+        }
+
         public string LoadApiKey()
         {
-            return string.Empty;
+            return _apiKey;
         }
 
         public void SaveApiKey(string apiKey)
         {
+            _apiKey = apiKey ?? string.Empty;
+        }
+
+        public string LoadHistorySecret()
+        {
+            return _historySecret;
+        }
+
+        public StorageProtector LoadStorageProtector()
+        {
+            var settings = Load();
+            if (!StorageProtector.RequiresSecret(settings.HistoryIntegrityMode, settings.HistoryEncryptionMode))
+            {
+                return StorageProtector.None;
+            }
+            var secret = string.Equals(settings.HistoryKeySource, HistoryKeySources.CustomSecret, StringComparison.Ordinal)
+                ? _historySecret
+                : _apiKey;
+            byte[] salt;
+            if (File.Exists(_paths.HistoryProtectionSaltFile))
+            {
+                salt = File.ReadAllBytes(_paths.HistoryProtectionSaltFile);
+            }
+            else
+            {
+                salt = StorageProtector.NewSalt();
+                File.WriteAllBytes(_paths.HistoryProtectionSaltFile, salt);
+            }
+            return new StorageProtector(settings.HistoryIntegrityMode, settings.HistoryEncryptionMode, secret, salt);
         }
 
         private static AppSettings Normalize(AppSettings settings)
@@ -97,6 +136,9 @@ namespace RNAssistant.Core.Storage
             settings.ReasoningRequestMode = ReasoningRequestModes.Normalize(settings.ReasoningRequestMode);
             settings.ReasoningCustomJson = DefaultIfBlank(settings.ReasoningCustomJson, defaults.ReasoningCustomJson).Trim();
             settings.UiTheme = UiThemes.Normalize(settings.UiTheme);
+            settings.HistoryIntegrityMode = HistoryIntegrityModes.Normalize(settings.HistoryIntegrityMode);
+            settings.HistoryEncryptionMode = HistoryEncryptionModes.Normalize(settings.HistoryEncryptionMode);
+            settings.HistoryKeySource = HistoryKeySources.Normalize(settings.HistoryKeySource);
             foreach (var capability in settings.ModelCapabilities.Values)
             {
                 if (capability != null)

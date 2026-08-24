@@ -44,7 +44,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class SessionEvent
     {
-        public const int CurrentSchemaVersion = 1;
+        public const int CurrentSchemaVersion = 2;
 
         public int SchemaVersion { get; set; }
         public string SessionId { get; set; }
@@ -56,8 +56,11 @@ namespace RNAssistant.Core.Models
         public string TurnId { get; set; }
         public string StepId { get; set; }
         public string PreviousHash { get; set; }
+        public string HashAlgorithm { get; set; }
+        public string ProtectionKeyId { get; set; }
         public string Hash { get; set; }
         public JToken Data { get; set; }
+        public string EncryptedData { get; set; }
         public ChatBlobReference Payload { get; set; }
 
         public SessionEvent()
@@ -65,6 +68,17 @@ namespace RNAssistant.Core.Models
             SchemaVersion = CurrentSchemaVersion;
             EventId = Guid.NewGuid().ToString("N");
             CreatedUtc = DateTime.UtcNow;
+            HashAlgorithm = HistoryIntegrityModes.Sha256;
+        }
+
+        public bool ShouldSerializeData()
+        {
+            return string.IsNullOrWhiteSpace(EncryptedData);
+        }
+
+        public bool ShouldSerializeEncryptedData()
+        {
+            return !string.IsNullOrWhiteSpace(EncryptedData);
         }
     }
 
@@ -79,5 +93,7 @@ namespace RNAssistant.Core.Models
         public string Sha256 { get; set; }
         public long ByteLength { get; set; }
         public string ContentType { get; set; }
+        public string Encryption { get; set; }
+        public string ProtectionKeyId { get; set; }
     }
 }
