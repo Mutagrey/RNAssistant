@@ -521,7 +521,7 @@ function updateEstimatedContextUsage() {
     ? effectiveModelCapabilityValue(modelName, "MaxContextTokens", "maxContextTokens", model && model.maxContextTokens)
     : (model && model.maxContextTokens);
   var windowTokens = override || Number(configuredWindow || 32768);
-  var requestedOutput = Number(settings.MaxTokens || settings.maxTokens || 2048);
+  var requestedOutput = Number(settings.MaxTokens || settings.maxTokens || 3072);
   var configuredOutput = typeof effectiveModelCapabilityValue === "function"
     ? effectiveModelCapabilityValue(modelName, "MaxOutputTokens", "maxOutputTokens", model && model.maxOutputTokens)
     : (model && model.maxOutputTokens);

@@ -186,7 +186,9 @@ namespace RNAssistant.Office.Services
                 var configuredFormatRetries = settings.MaxAgentFormatRetries > 0
                     ? settings.MaxAgentFormatRetries
                     : new AppSettings().MaxAgentFormatRetries;
-                var maxFormatRetries = Math.Max(1, Math.Min(5, configuredFormatRetries));
+                var maxFormatRetries = Math.Max(
+                    1,
+                    Math.Min(AppSettings.MaximumAgentFormatRetries, configuredFormatRetries));
                 for (var retry = 1; !parsed.Success && retry <= maxFormatRetries; retry++)
                 {
                     Report(progress, "thinking", "Модель исправляет формат ответа... (" + retry + "/" + maxFormatRetries + ")", null);

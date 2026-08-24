@@ -71,7 +71,15 @@ namespace RNAssistant.Office.Tools
 
         public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, ChatSession session, CancellationToken cancellationToken = default(CancellationToken))
         {
-            return Execute(command, tools, settings, dryRun, manualRun, session, settings == null ? 40 : settings.MaxAgentToolSteps, cancellationToken);
+            return Execute(
+                command,
+                tools,
+                settings,
+                dryRun,
+                manualRun,
+                session,
+                settings == null ? AppSettings.DefaultMaxAgentToolSteps : settings.MaxAgentToolSteps,
+                cancellationToken);
         }
 
         public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, ChatSession session, int maxExecutionSteps, CancellationToken cancellationToken = default(CancellationToken))

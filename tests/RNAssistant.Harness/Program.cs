@@ -61,7 +61,7 @@ namespace RNAssistant.Harness
                 Test("agent: prompt is request-local", SimpleAgentPromptIsRequestLocal),
                 Test("agent: invalid response gets bounded format repair", SimpleAgentRepairsInvalidResponse),
                 Test("agent: failed format repair stays out of context", SimpleAgentFailedRepairDoesNotPolluteContext),
-                Test("agent: format repair limit is clamped to five", SimpleAgentClampsFormatRepairLimit),
+                Test("agent: format repair limit is clamped to twenty", SimpleAgentClampsFormatRepairLimit),
                 Test("agent: exposes safe VBA editing tools", SimpleAgentExposesSafeVbaEditingTools),
                 Test("agent: rejects hidden VBA backend calls", SimpleAgentRejectsHiddenVbaBackendCalls),
                 Test("agent: confirmation replays one final result", SimpleAgentConfirmationReplaysOnlyFinalResult),

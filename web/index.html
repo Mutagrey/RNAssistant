@@ -576,7 +576,7 @@
                 <label class="checkline"><input id="autoConfirmToolsInput" type="checkbox"><span>Автоподтверждение действий</span></label>
                 <label class="checkline"><input id="autoCompressContextInput" type="checkbox"><span>Создавать summary при заполнении контекста</span></label>
                 <label><span>Макс. итераций агента</span><input id="maxAgentIterationsInput" type="number" min="1"></label>
-                <label><span>Повторов при ошибке формата</span><input id="maxAgentFormatRetriesInput" type="number" min="1" max="5"></label>
+                <label><span>Повторов при ошибке формата</span><input id="maxAgentFormatRetriesInput" type="number" min="1" max="20"></label>
                 <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1"></label>
               </div>
               <div class="setting-note">Agent получает tools и каталог skills в RUNTIME_CONTEXT. Независимые вызовы выполняются последовательно за один model turn; зависимые и требующие подтверждения выбираются по одному.</div>

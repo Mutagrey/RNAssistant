@@ -129,7 +129,11 @@ namespace RNAssistant.Office.Services
             settings.MaxTokens = 32;
             settings.RequestTimeoutSeconds = Math.Max(
                 30,
-                Math.Min(source.RequestTimeoutSeconds <= 0 ? 300 : source.RequestTimeoutSeconds, 60));
+                Math.Min(
+                    source.RequestTimeoutSeconds <= 0
+                        ? AppSettings.DefaultRequestTimeoutSeconds
+                        : source.RequestTimeoutSeconds,
+                    60));
             settings.Temperature = Math.Min(Math.Max(source.Temperature, 0), 0.2);
             settings.TopP = source.TopP <= 0 ? 1.0 : Math.Min(source.TopP, 1.0);
             settings.StreamResponses = false;

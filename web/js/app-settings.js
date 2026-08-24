@@ -120,8 +120,8 @@ function renderSettings() {
   $("reasoningRequestModeInput").value = reasoningModes.indexOf(reasoningRequestMode) >= 0 ? reasoningRequestMode : "auto";
   $("reasoningCustomJsonInput").value = s.ReasoningCustomJson || s.reasoningCustomJson || "{}";
   updateReasoningCustomJsonVisibility();
-  $("maxTokensInput").value = compatibilityValue(s, "MaxTokens", "maxTokens", 2048);
-  $("requestTimeoutInput").value = compatibilityValue(s, "RequestTimeoutSeconds", "requestTimeoutSeconds", 300);
+  $("maxTokensInput").value = compatibilityValue(s, "MaxTokens", "maxTokens", 3072);
+  $("requestTimeoutInput").value = compatibilityValue(s, "RequestTimeoutSeconds", "requestTimeoutSeconds", 1800);
   $("temperatureInput").value = compatibilityValue(s, "Temperature", "temperature", 0.2);
   $("topPInput").value = compatibilityValue(s, "TopP", "topP", 1);
   $("uiFontScaleInput").value = Math.round(clampUiFontScale(s.UiFontScale || s.uiFontScale || 1) * 100);
@@ -134,9 +134,9 @@ function renderSettings() {
   $("autoCompressContextInput").checked = (s.AutoCompressContext !== false && s.autoCompressContext !== false);
   $("debugModelTrafficInput").checked = !!(s.DebugModelTraffic || s.debugModelTraffic);
   $("smartChatTitlesInput").checked = (s.SmartChatTitles !== false && s.smartChatTitles !== false);
-  $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || 8;
-  $("maxAgentFormatRetriesInput").value = s.MaxAgentFormatRetries || s.maxAgentFormatRetries || 2;
-  $("maxAgentToolStepsInput").value = s.MaxAgentToolSteps || s.maxAgentToolSteps || 40;
+  $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || 256;
+  $("maxAgentFormatRetriesInput").value = s.MaxAgentFormatRetries || s.maxAgentFormatRetries || 10;
+  $("maxAgentToolStepsInput").value = s.MaxAgentToolSteps || s.maxAgentToolSteps || 4096;
   if (typeof renderPromptSettings === "function") {
     renderPromptSettings(s);
   }
@@ -171,8 +171,8 @@ function readSettings() {
     Model: $("modelInput").value.trim(),
     ReasoningRequestMode: reasoningRequestMode,
     ReasoningCustomJson: reasoningCustomJson,
-    MaxTokens: Number($("maxTokensInput").value || 2048),
-    RequestTimeoutSeconds: Number($("requestTimeoutInput").value || 300),
+    MaxTokens: Number($("maxTokensInput").value || 3072),
+    RequestTimeoutSeconds: Number($("requestTimeoutInput").value || 1800),
     Temperature: Number($("temperatureInput").value || 0.2),
     TopP: Number($("topPInput").value || 1),
     UiFontScale: clampUiFontScale(Number($("uiFontScaleInput").value || 100) / 100),
@@ -183,9 +183,9 @@ function readSettings() {
     AutoCompressContext: $("autoCompressContextInput").checked,
     DebugModelTraffic: $("debugModelTrafficInput").checked,
     SmartChatTitles: $("smartChatTitlesInput").checked,
-    MaxAgentIterations: Number($("maxAgentIterationsInput").value || 8),
-    MaxAgentFormatRetries: Math.max(1, Math.min(5, Number($("maxAgentFormatRetriesInput").value || 2))),
-    MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || 40),
+    MaxAgentIterations: Number($("maxAgentIterationsInput").value || 256),
+    MaxAgentFormatRetries: Math.max(1, Math.min(20, Number($("maxAgentFormatRetriesInput").value || 10))),
+    MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || 4096),
     AgentResponseMode: $("agentResponseModeInput").value,
     ToolResultRole: $("toolResultRoleInput").value,
     FallbackToJsonObject: $("fallbackJsonObjectInput").checked,

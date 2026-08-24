@@ -31,7 +31,7 @@ There are exactly two persisted modes.
 
 Editable Agent, Chat, title, and compaction prompts are stored as Markdown. Their instruction role (`developer`/`system`/`user`) is independent from Agent response format (`json_object`/strict `json_schema`) and tool-result role (`user`/`developer`/matched `tool`).
 
-`AgentResponseParser` accepts either a final `message` or one or more `tool_calls` entries with unique ids. `json_schema` derives a strict response contract from the current runnable tools; `json_object` uses the same envelope with local validation. Invalid output gets bounded 1–5 ephemeral format-correction attempts; each starts from clean accepted history and invalid content never enters replay. `OfficeToolExecutor` remains the authority for formal argument schemas, effective pipeline safety, confirmation, and dispatch. `AgentJsonProtocol` serializes each result to `{ok, tool_call_id, name, status, message, data, error}` and emits the selected replay role.
+`AgentResponseParser` accepts either a final `message` or one or more `tool_calls` entries with unique ids. `json_schema` derives a strict response contract from the current runnable tools; `json_object` uses the same envelope with local validation. Invalid output gets bounded 1–20 ephemeral format-correction attempts; each starts from clean accepted history and invalid content never enters replay. `OfficeToolExecutor` remains the authority for formal argument schemas, effective pipeline safety, confirmation, and dispatch. `AgentJsonProtocol` serializes each result to `{ok, tool_call_id, name, status, message, data, error}` and emits the selected replay role.
 
 See [agent-protocol.md](agent-protocol.md).
 

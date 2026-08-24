@@ -87,6 +87,13 @@ namespace RNAssistant.Core.Models
 
     public sealed class AppSettings
     {
+        public const int DefaultMaxTokens = 3072;
+        public const int DefaultRequestTimeoutSeconds = 1800;
+        public const int DefaultMaxAgentIterations = 256;
+        public const int DefaultMaxAgentFormatRetries = 10;
+        public const int MaximumAgentFormatRetries = 20;
+        public const int DefaultMaxAgentToolSteps = 4096;
+
         public string BaseUrl { get; set; }
         public string ModelsConfigUrl { get; set; }
         public string Model { get; set; }
@@ -185,17 +192,17 @@ namespace RNAssistant.Core.Models
             FallbackToJsonObject = true;
             ReasoningRequestMode = ReasoningRequestModes.Auto;
             ReasoningCustomJson = "{}";
-            MaxTokens = 2048;
-            RequestTimeoutSeconds = 300;
+            MaxTokens = DefaultMaxTokens;
+            RequestTimeoutSeconds = DefaultRequestTimeoutSeconds;
             Temperature = 0.2;
             TopP = 1.0;
             ContextWindowOverrideTokens = 0;
             StreamResponses = true;
             AutoConfirmToolActions = false;
             SmartChatTitles = true;
-            MaxAgentIterations = 8;
-            MaxAgentFormatRetries = 2;
-            MaxAgentToolSteps = 40;
+            MaxAgentIterations = DefaultMaxAgentIterations;
+            MaxAgentFormatRetries = DefaultMaxAgentFormatRetries;
+            MaxAgentToolSteps = DefaultMaxAgentToolSteps;
             AutoCompressContext = true;
             DebugModelTraffic = false;
             UiFontScale = 1.0;

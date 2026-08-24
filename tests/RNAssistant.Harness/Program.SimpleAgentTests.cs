@@ -399,8 +399,8 @@ namespace RNAssistant.Harness
                     "Do something.", NewSession(adapter), NewContext(adapter), new AppSettings { MaxAgentFormatRetries = 99 },
                     adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
 
-                AssertEqual(6, calls, "initial request plus at most five repairs");
-                AssertContains(result.AssistantText, "после 5 попыток", "clamped repair diagnostic");
+                AssertEqual(21, calls, "initial request plus at most twenty repairs");
+                AssertContains(result.AssistantText, "после 20 попыток", "clamped repair diagnostic");
             });
         }
 

@@ -103,7 +103,11 @@ namespace RNAssistant.Core.Llm
                 }
                 var content = LlmHttpTransport.CreateJsonContent(body);
                 var diagnostics = CreateDiagnostics(requestUri, settings, apiMessages.Count, !string.IsNullOrWhiteSpace(apiKey));
-                var timeout = TimeSpan.FromSeconds(Math.Max(30, settings.RequestTimeoutSeconds <= 0 ? 300 : settings.RequestTimeoutSeconds));
+                var timeout = TimeSpan.FromSeconds(Math.Max(
+                    30,
+                    settings.RequestTimeoutSeconds <= 0
+                        ? AppSettings.DefaultRequestTimeoutSeconds
+                        : settings.RequestTimeoutSeconds));
                 apiBuild = null;
                 apiMessages = null;
                 body = null;

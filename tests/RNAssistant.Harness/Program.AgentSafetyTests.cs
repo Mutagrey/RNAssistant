@@ -25,6 +25,11 @@ namespace RNAssistant.Harness
             AssertTrue(settings.ChatSystemPrompt.StartsWith("# RNAssistant Chat", StringComparison.Ordinal), "chat prompt Markdown heading");
             AssertTrue(settings.ContextCompactionPrompt.StartsWith("# Context compaction", StringComparison.Ordinal), "compaction prompt Markdown heading");
             AssertTrue(settings.ChatTitlePrompt.StartsWith("# Chat title", StringComparison.Ordinal), "title prompt Markdown heading");
+            AssertEqual(AppSettings.DefaultMaxTokens, settings.MaxTokens, "long-run output token default");
+            AssertEqual(AppSettings.DefaultRequestTimeoutSeconds, settings.RequestTimeoutSeconds, "long-run request timeout default");
+            AssertEqual(AppSettings.DefaultMaxAgentIterations, settings.MaxAgentIterations, "long-run iteration default");
+            AssertEqual(AppSettings.DefaultMaxAgentFormatRetries, settings.MaxAgentFormatRetries, "long-run format retry default");
+            AssertEqual(AppSettings.DefaultMaxAgentToolSteps, settings.MaxAgentToolSteps, "long-run tool step default");
         }
 
         private static void AgentSupportsSelectableResponseFormats()

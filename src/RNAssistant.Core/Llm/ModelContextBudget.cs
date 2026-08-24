@@ -71,7 +71,7 @@ namespace RNAssistant.Core.Llm
 
         public static int RequestedOutputTokens(AppSettings settings, string model = null)
         {
-            var requested = Math.Max(1, settings == null ? 2048 : settings.MaxTokens);
+            var requested = Math.Max(1, settings == null ? AppSettings.DefaultMaxTokens : settings.MaxTokens);
             var capability = Capability(settings, model);
             var modelLimit = capability == null ? 0 : capability.MaxOutputTokens.GetValueOrDefault();
             return modelLimit > 0 ? Math.Min(requested, modelLimit) : requested;
