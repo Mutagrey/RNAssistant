@@ -31,6 +31,7 @@ namespace RNAssistant.Harness
             AssertEqual(AppSettings.DefaultMaxAgentIterations, settings.MaxAgentIterations, "long-run iteration default");
             AssertEqual(AppSettings.DefaultMaxAgentFormatRetries, settings.MaxAgentFormatRetries, "long-run format retry default");
             AssertEqual(AppSettings.DefaultMaxAgentToolSteps, settings.MaxAgentToolSteps, "long-run tool step default");
+            AssertEqual(ReasoningRequestModes.ChatTemplateKwargs, settings.ReasoningRequestMode, "reasoning request mode default");
         }
 
         private static void AgentSupportsSelectableResponseFormats()

@@ -190,7 +190,7 @@ namespace RNAssistant.Core.Models
             AgentResponseMode = AgentResponseModes.JsonObject;
             ToolResultRole = ToolResultRoles.User;
             FallbackToJsonObject = true;
-            ReasoningRequestMode = ReasoningRequestModes.Auto;
+            ReasoningRequestMode = ReasoningRequestModes.ChatTemplateKwargs;
             ReasoningCustomJson = "{}";
             MaxTokens = DefaultMaxTokens;
             RequestTimeoutSeconds = DefaultRequestTimeoutSeconds;

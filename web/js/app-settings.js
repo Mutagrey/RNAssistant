@@ -1,5 +1,29 @@
 var settingsDirty = false;
 
+var modelSettingsDefaults = {
+  model: "gpt-4o-mini",
+  reasoningRequestMode: "chat_template_kwargs",
+  reasoningCustomJson: "{}",
+  maxTokens: 3072,
+  requestTimeoutSeconds: 1800,
+  temperature: 0.2,
+  topP: 1,
+  contextWindowOverrideTokens: 0,
+  streamResponses: true
+};
+
+var agentSettingsDefaults = {
+  systemPromptRole: "developer",
+  agentResponseMode: "json_object",
+  toolResultRole: "user",
+  fallbackToJsonObject: true,
+  autoConfirmToolActions: false,
+  autoCompressContext: true,
+  maxAgentIterations: 256,
+  maxAgentFormatRetries: 10,
+  maxAgentToolSteps: 4096
+};
+
 function clampUiFontScale(value) {
   value = Number(value || 1);
   if (!isFinite(value) || value <= 0) {
@@ -107,36 +131,36 @@ function renderSettings() {
   $("baseUrlInput").value = s.BaseUrl || s.baseUrl || "";
   $("modelsConfigUrlInput").value = s.ModelsConfigUrl || s.modelsConfigUrl || "";
   $("modelInput").value = s.Model || s.model || "";
-  var instructionRole = String(s.SystemPromptRole || s.systemPromptRole || "developer").toLowerCase();
-  $("systemPromptRoleInput").value = instructionRole === "system" || instructionRole === "user" ? instructionRole : "developer";
-  var responseMode = String(s.AgentResponseMode || s.agentResponseMode || "json_object").toLowerCase();
+  var instructionRole = String(s.SystemPromptRole || s.systemPromptRole || agentSettingsDefaults.systemPromptRole).toLowerCase();
+  $("systemPromptRoleInput").value = instructionRole === "system" || instructionRole === "user" ? instructionRole : agentSettingsDefaults.systemPromptRole;
+  var responseMode = String(s.AgentResponseMode || s.agentResponseMode || agentSettingsDefaults.agentResponseMode).toLowerCase();
   $("agentResponseModeInput").value = responseMode === "json_schema" ? "json_schema" : "json_object";
-  var toolResultRole = String(s.ToolResultRole || s.toolResultRole || "user").toLowerCase();
-  $("toolResultRoleInput").value = toolResultRole === "developer" || toolResultRole === "tool" ? toolResultRole : "user";
-  $("fallbackJsonObjectInput").checked = compatibilityValue(s, "FallbackToJsonObject", "fallbackToJsonObject", true) !== false;
+  var toolResultRole = String(s.ToolResultRole || s.toolResultRole || agentSettingsDefaults.toolResultRole).toLowerCase();
+  $("toolResultRoleInput").value = toolResultRole === "developer" || toolResultRole === "tool" ? toolResultRole : agentSettingsDefaults.toolResultRole;
+  $("fallbackJsonObjectInput").checked = compatibilityValue(s, "FallbackToJsonObject", "fallbackToJsonObject", agentSettingsDefaults.fallbackToJsonObject) !== false;
   updateAgentProtocolControls();
-  var reasoningRequestMode = String(s.ReasoningRequestMode || s.reasoningRequestMode || "auto").toLowerCase();
+  var reasoningRequestMode = String(s.ReasoningRequestMode || s.reasoningRequestMode || modelSettingsDefaults.reasoningRequestMode).toLowerCase();
   var reasoningModes = ["auto", "reasoning_effort", "enable_thinking", "chat_template_kwargs", "reasoning_enabled", "custom_json"];
-  $("reasoningRequestModeInput").value = reasoningModes.indexOf(reasoningRequestMode) >= 0 ? reasoningRequestMode : "auto";
-  $("reasoningCustomJsonInput").value = s.ReasoningCustomJson || s.reasoningCustomJson || "{}";
+  $("reasoningRequestModeInput").value = reasoningModes.indexOf(reasoningRequestMode) >= 0 ? reasoningRequestMode : modelSettingsDefaults.reasoningRequestMode;
+  $("reasoningCustomJsonInput").value = s.ReasoningCustomJson || s.reasoningCustomJson || modelSettingsDefaults.reasoningCustomJson;
   updateReasoningCustomJsonVisibility();
-  $("maxTokensInput").value = compatibilityValue(s, "MaxTokens", "maxTokens", 3072);
-  $("requestTimeoutInput").value = compatibilityValue(s, "RequestTimeoutSeconds", "requestTimeoutSeconds", 1800);
-  $("temperatureInput").value = compatibilityValue(s, "Temperature", "temperature", 0.2);
-  $("topPInput").value = compatibilityValue(s, "TopP", "topP", 1);
+  $("maxTokensInput").value = compatibilityValue(s, "MaxTokens", "maxTokens", modelSettingsDefaults.maxTokens);
+  $("requestTimeoutInput").value = compatibilityValue(s, "RequestTimeoutSeconds", "requestTimeoutSeconds", modelSettingsDefaults.requestTimeoutSeconds);
+  $("temperatureInput").value = compatibilityValue(s, "Temperature", "temperature", modelSettingsDefaults.temperature);
+  $("topPInput").value = compatibilityValue(s, "TopP", "topP", modelSettingsDefaults.topP);
   $("uiFontScaleInput").value = Math.round(clampUiFontScale(s.UiFontScale || s.uiFontScale || 1) * 100);
   Array.prototype.slice.call(document.querySelectorAll('input[name="uiTheme"]')).forEach(function (input) {
     input.checked = input.value === uiTheme;
   });
-  $("contextLimitInput").value = s.ContextWindowOverrideTokens || s.contextWindowOverrideTokens || 0;
-  $("streamInput").checked = !!(s.StreamResponses || s.streamResponses);
-  $("autoConfirmToolsInput").checked = !!(s.AutoConfirmToolActions || s.autoConfirmToolActions);
-  $("autoCompressContextInput").checked = (s.AutoCompressContext !== false && s.autoCompressContext !== false);
+  $("contextLimitInput").value = compatibilityValue(s, "ContextWindowOverrideTokens", "contextWindowOverrideTokens", modelSettingsDefaults.contextWindowOverrideTokens);
+  $("streamInput").checked = compatibilityValue(s, "StreamResponses", "streamResponses", modelSettingsDefaults.streamResponses) !== false;
+  $("autoConfirmToolsInput").checked = compatibilityValue(s, "AutoConfirmToolActions", "autoConfirmToolActions", agentSettingsDefaults.autoConfirmToolActions) === true;
+  $("autoCompressContextInput").checked = compatibilityValue(s, "AutoCompressContext", "autoCompressContext", agentSettingsDefaults.autoCompressContext) !== false;
   $("debugModelTrafficInput").checked = !!(s.DebugModelTraffic || s.debugModelTraffic);
   $("smartChatTitlesInput").checked = (s.SmartChatTitles !== false && s.smartChatTitles !== false);
-  $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || 256;
-  $("maxAgentFormatRetriesInput").value = s.MaxAgentFormatRetries || s.maxAgentFormatRetries || 10;
-  $("maxAgentToolStepsInput").value = s.MaxAgentToolSteps || s.maxAgentToolSteps || 4096;
+  $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || agentSettingsDefaults.maxAgentIterations;
+  $("maxAgentFormatRetriesInput").value = s.MaxAgentFormatRetries || s.maxAgentFormatRetries || agentSettingsDefaults.maxAgentFormatRetries;
+  $("maxAgentToolStepsInput").value = s.MaxAgentToolSteps || s.maxAgentToolSteps || agentSettingsDefaults.maxAgentToolSteps;
   if (typeof renderPromptSettings === "function") {
     renderPromptSettings(s);
   }
@@ -171,10 +195,10 @@ function readSettings() {
     Model: $("modelInput").value.trim(),
     ReasoningRequestMode: reasoningRequestMode,
     ReasoningCustomJson: reasoningCustomJson,
-    MaxTokens: Number($("maxTokensInput").value || 3072),
-    RequestTimeoutSeconds: Number($("requestTimeoutInput").value || 1800),
-    Temperature: Number($("temperatureInput").value || 0.2),
-    TopP: Number($("topPInput").value || 1),
+    MaxTokens: Number($("maxTokensInput").value || modelSettingsDefaults.maxTokens),
+    RequestTimeoutSeconds: Number($("requestTimeoutInput").value || modelSettingsDefaults.requestTimeoutSeconds),
+    Temperature: Number($("temperatureInput").value || modelSettingsDefaults.temperature),
+    TopP: Number($("topPInput").value || modelSettingsDefaults.topP),
     UiFontScale: clampUiFontScale(Number($("uiFontScaleInput").value || 100) / 100),
     UiTheme: normalizeUiTheme((document.querySelector('input[name="uiTheme"]:checked') || {}).value),
     ContextWindowOverrideTokens: Number($("contextLimitInput").value || 0),
@@ -183,9 +207,9 @@ function readSettings() {
     AutoCompressContext: $("autoCompressContextInput").checked,
     DebugModelTraffic: $("debugModelTrafficInput").checked,
     SmartChatTitles: $("smartChatTitlesInput").checked,
-    MaxAgentIterations: Number($("maxAgentIterationsInput").value || 256),
-    MaxAgentFormatRetries: Math.max(1, Math.min(20, Number($("maxAgentFormatRetriesInput").value || 10))),
-    MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || 4096),
+    MaxAgentIterations: Number($("maxAgentIterationsInput").value || agentSettingsDefaults.maxAgentIterations),
+    MaxAgentFormatRetries: Math.max(1, Math.min(20, Number($("maxAgentFormatRetriesInput").value || agentSettingsDefaults.maxAgentFormatRetries))),
+    MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || agentSettingsDefaults.maxAgentToolSteps),
     AgentResponseMode: $("agentResponseModeInput").value,
     ToolResultRole: $("toolResultRoleInput").value,
     FallbackToJsonObject: $("fallbackJsonObjectInput").checked,
@@ -219,6 +243,44 @@ async function persistSettingsFromForm() {
 function compatibilityValue(source, pascal, camel, fallback) {
   source = source || {};
   return source[pascal] !== undefined ? source[pascal] : (source[camel] !== undefined ? source[camel] : fallback);
+}
+
+function markSettingsDirty() {
+  settingsDirty = true;
+  updateSettingsSaveButton();
+}
+
+function resetModelSettingsToDefaults() {
+  var settings = state.settings || (state.settings = {});
+  settings.ModelCapabilities = {};
+  settings.ModelImageSupportOverrides = {};
+  settings.ModelAudioSupportOverrides = {};
+  $("modelInput").value = modelSettingsDefaults.model;
+  $("reasoningRequestModeInput").value = modelSettingsDefaults.reasoningRequestMode;
+  $("reasoningCustomJsonInput").value = modelSettingsDefaults.reasoningCustomJson;
+  $("maxTokensInput").value = modelSettingsDefaults.maxTokens;
+  $("requestTimeoutInput").value = modelSettingsDefaults.requestTimeoutSeconds;
+  $("temperatureInput").value = modelSettingsDefaults.temperature;
+  $("topPInput").value = modelSettingsDefaults.topP;
+  $("contextLimitInput").value = modelSettingsDefaults.contextWindowOverrideTokens;
+  $("streamInput").checked = modelSettingsDefaults.streamResponses;
+  updateReasoningCustomJsonVisibility();
+  renderModelControls();
+  markSettingsDirty();
+}
+
+function resetAgentSettingsToDefaults() {
+  $("systemPromptRoleInput").value = agentSettingsDefaults.systemPromptRole;
+  $("agentResponseModeInput").value = agentSettingsDefaults.agentResponseMode;
+  $("toolResultRoleInput").value = agentSettingsDefaults.toolResultRole;
+  $("fallbackJsonObjectInput").checked = agentSettingsDefaults.fallbackToJsonObject;
+  $("autoConfirmToolsInput").checked = agentSettingsDefaults.autoConfirmToolActions;
+  $("autoCompressContextInput").checked = agentSettingsDefaults.autoCompressContext;
+  $("maxAgentIterationsInput").value = agentSettingsDefaults.maxAgentIterations;
+  $("maxAgentFormatRetriesInput").value = agentSettingsDefaults.maxAgentFormatRetries;
+  $("maxAgentToolStepsInput").value = agentSettingsDefaults.maxAgentToolSteps;
+  updateAgentProtocolControls();
+  markSettingsDirty();
 }
 
 function renderModelCompatibilityResult(result) {
@@ -290,6 +352,8 @@ function bindSettingsActions() {
 
   $("reasoningRequestModeInput").addEventListener("change", updateReasoningCustomJsonVisibility);
   $("agentResponseModeInput").addEventListener("change", updateAgentProtocolControls);
+  $("resetModelSettingsButton").addEventListener("click", resetModelSettingsToDefaults);
+  $("resetAgentSettingsButton").addEventListener("click", resetAgentSettingsToDefaults);
 
   Array.prototype.slice.call(document.querySelectorAll('input[name="uiTheme"]')).forEach(function (input) {
     input.addEventListener("change", function () {

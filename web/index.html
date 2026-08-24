@@ -27,7 +27,7 @@
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-capabilities-20260820-1">
-  <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-layout-20260824-1">
+  <link rel="stylesheet" href="css/app-workspace.css?v=settings-sections-20260824-1">
   <link rel="stylesheet" href="css/app-tools.css?v=unified-ui-20260821-1">
   <link rel="stylesheet" href="css/app-prompts.css?v=library-ui-20260821-1">
   <link rel="stylesheet" href="css/app-vba.css?v=userform-20260824-1">
@@ -559,14 +559,17 @@
             </section>
 
             <section class="settings-page" data-settings-page="model">
-              <div class="settings-heading">
-                <h2>Модель</h2>
-                <p>Основная модель, лимиты ответа и параметры генерации.</p>
+              <div class="settings-heading settings-heading-with-action">
+                <div>
+                  <h2>Модель</h2>
+                  <p>Основная модель, лимиты ответа и параметры генерации.</p>
+                </div>
+                <button class="secondary" id="resetModelSettingsButton" type="button" title="Вернуть модель, параметры запроса и возможности к исходным значениям">Сбросить параметры</button>
               </div>
               <div class="form-grid two-columns">
                 <label><span>Модель по умолчанию</span><select id="modelSelect"></select></label>
                 <label><span>ID модели вручную</span><input id="modelInput" autocomplete="off" placeholder="Если модели нет в каталоге"></label>
-                <label class="wide"><span>Параметр reasoning API</span><select id="reasoningRequestModeInput"><option value="auto">Авто — стандарт OpenAI reasoning_effort</option><option value="reasoning_effort">reasoning_effort: medium / none</option><option value="enable_thinking">enable_thinking: true / false</option><option value="chat_template_kwargs">chat_template_kwargs.enable_thinking</option><option value="reasoning_enabled">reasoning.enabled: true / false</option><option value="custom_json">Кастомный JSON в теле запроса</option></select><small>Для QwenCloud выберите enable_thinking, для vLLM — chat_template_kwargs, для OpenRouter — reasoning.enabled. Каталог модели может переопределить режим.</small></label>
+                <label class="wide"><span>Параметр reasoning API</span><select id="reasoningRequestModeInput"><option value="auto">Авто — стандарт OpenAI reasoning_effort</option><option value="reasoning_effort">reasoning_effort: medium / none</option><option value="enable_thinking">enable_thinking: true / false</option><option value="chat_template_kwargs" selected>chat_template_kwargs.enable_thinking</option><option value="reasoning_enabled">reasoning.enabled: true / false</option><option value="custom_json">Кастомный JSON в теле запроса</option></select><small>Для QwenCloud выберите enable_thinking, для vLLM — chat_template_kwargs, для OpenRouter — reasoning.enabled. Каталог модели может переопределить режим.</small></label>
                 <label class="wide hidden" id="reasoningCustomJsonField"><span>Кастомный reasoning JSON</span><textarea class="reasoning-json-input" id="reasoningCustomJsonInput" rows="5" spellcheck="false" placeholder='{"reasoning":{"effort":"high"}}'></textarea><small>JSON-объект добавляется на верхний уровень тела запроса только при включённой лампочке reasoning. Системные поля model, messages, tools и response_format переопределять нельзя.</small></label>
                 <div class="model-info wide" id="modelInfo"></div>
                 <section class="model-capability-section wide" aria-labelledby="modelCapabilityTitle">
@@ -592,14 +595,23 @@
             </section>
 
             <section class="settings-page" data-settings-page="agent">
-              <div class="settings-heading">
-                <h2>Агент</h2>
-                <p>Протокол, выполнение инструментов и поведение при ошибках.</p>
+              <div class="settings-heading settings-heading-with-action">
+                <div>
+                  <h2>Агент</h2>
+                  <p>Протокол, выполнение инструментов и поведение при ошибках.</p>
+                </div>
+                <button class="secondary" id="resetAgentSettingsButton" type="button" title="Вернуть параметры агента к встроенным значениям">Сбросить параметры</button>
               </div>
-              <div class="form-grid two-columns agent-instruction-settings">
-                <label><span>Роль Markdown-инструкций</span><select id="systemPromptRoleInput"><option value="developer">developer — по умолчанию</option><option value="system">system</option><option value="user">user</option></select><small>Применяется к Agent, Chat и служебным запросам.</small></label>
-              </div>
-              <section class="agent-protocol-panel" aria-labelledby="agentProtocolTitle">
+              <section class="agent-parameter-section" aria-labelledby="agentInstructionsTitle">
+                <div class="settings-subheading">
+                  <h3 id="agentInstructionsTitle">Инструкции</h3>
+                  <p>Приоритет системных Markdown-инструкций во всех запросах.</p>
+                </div>
+                <div class="form-grid two-columns agent-instruction-settings">
+                  <label><span>Роль Markdown-инструкций</span><select id="systemPromptRoleInput"><option value="developer">developer — по умолчанию</option><option value="system">system</option><option value="user">user</option></select><small>Применяется к Agent, Chat и служебным запросам.</small></label>
+                </div>
+              </section>
+              <section class="agent-protocol-panel agent-parameter-section" aria-labelledby="agentProtocolTitle">
                 <div class="agent-protocol-head">
                   <div>
                     <h3 id="agentProtocolTitle">Протокол</h3>
@@ -637,14 +649,20 @@
                   </div>
                 </div>
               </section>
-              <div class="form-grid two-columns agent-settings-grid">
-                <label class="checkline"><input id="autoConfirmToolsInput" type="checkbox"><span>Автоподтверждение действий</span></label>
-                <label class="checkline"><input id="autoCompressContextInput" type="checkbox"><span>Создавать summary при заполнении контекста</span></label>
-                <label><span>Макс. итераций агента</span><input id="maxAgentIterationsInput" type="number" min="1"></label>
-                <label><span>Повторов при ошибке формата</span><input id="maxAgentFormatRetriesInput" type="number" min="1" max="20"></label>
-                <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1"></label>
-              </div>
-              <div class="setting-note">Agent получает tools и каталог skills в RUNTIME_CONTEXT. Независимые вызовы выполняются последовательно за один model turn; зависимые и требующие подтверждения выбираются по одному.</div>
+              <section class="agent-parameter-section" aria-labelledby="agentExecutionTitle">
+                <div class="settings-subheading">
+                  <h3 id="agentExecutionTitle">Выполнение</h3>
+                  <p>Подтверждения, сжатие контекста и предельные значения одного запуска.</p>
+                </div>
+                <div class="form-grid two-columns agent-settings-grid">
+                  <label class="checkline"><input id="autoConfirmToolsInput" type="checkbox"><span>Автоподтверждение действий</span></label>
+                  <label class="checkline"><input id="autoCompressContextInput" type="checkbox"><span>Создавать summary при заполнении контекста</span></label>
+                  <label><span>Макс. итераций агента</span><input id="maxAgentIterationsInput" type="number" min="1"></label>
+                  <label><span>Повторов при ошибке формата</span><input id="maxAgentFormatRetriesInput" type="number" min="1" max="20"></label>
+                  <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1"></label>
+                </div>
+                <div class="setting-note">Agent получает tools и каталог skills в RUNTIME_CONTEXT. Независимые вызовы выполняются последовательно за один model turn; зависимые и требующие подтверждения выбираются по одному.</div>
+              </section>
               <section class="model-compatibility-panel" aria-labelledby="modelCompatibilityTitle">
                 <div class="model-compatibility-head">
                   <div>
@@ -762,7 +780,7 @@
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js?v=agent-protocol-20260821-2"></script>
   <script src="js/app-markdown.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-settings.js?v=log-filters-20260824-1"></script>
+  <script src="js/app-settings.js?v=settings-reset-20260824-1"></script>
   <script src="js/app-logs.js?v=log-filters-20260824-1"></script>
   <script src="js/app-diagnostics.js?v=log-filters-20260824-1"></script>
   <script src="js/app-prompts.js?v=log-filters-20260824-1"></script>
