@@ -27,6 +27,7 @@ RNAssistant - локальный VSTO/WebView2 ассистент для Office,
 - Не раздувай `web/js/app.js`; новую UI-логику клади в существующий feature-файл или выделяй новый static script в `index.html`.
 - Не храни секреты в репозитории. API key остается в DPAPI CurrentUser через `ProtectedSecretStore`.
 - Перед каждым коммитом сравни `RNAssistantVersionPrefix` в `Directory.Build.props` с версией в `HEAD`: версия нового коммита должна быть выше. Выбирай SemVer bump по самому значимому изменению: patch для исправлений, документации и совместимого рефакторинга, minor для обратно совместимой функциональности, major для breaking changes. Если версия уже корректно повышена в текущих изменениях, повторно её не повышай. Перед коммитом запускай `dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateRNAssistantVersion -nologo -v:minimal`.
+- После коммита создай на нём аннотированный Git tag `v<Version>` (например, `v4.0.1`) и отправь в `origin` коммит и tag. Перед созданием проверь локальные и remote tags; опубликованные tags не перемещай и не переиспользуй.
 
 ## Tool/Agent Protocol
 

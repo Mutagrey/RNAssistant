@@ -126,6 +126,8 @@ C# assembly, file, informational, and VSTO application versions are derived auto
 dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateRNAssistantVersion -nologo -v:minimal
 ```
 
+After committing, create an annotated `v<Version>` Git tag on that commit and push both the branch and tag to `origin`. Check local and remote tags first; never move or reuse a published version tag.
+
 ## Visual Studio Debug
 
 1. Run `install-local.cmd Excel` once, replacing `Excel` with the host you want to debug.
