@@ -89,7 +89,7 @@ function renderSendControls() {
 
   if (sendButton) {
     sendButton.classList.toggle("hidden", isSending);
-    sendButton.title = isEditing ? "Сохранить изменения" : "Отправить";
+    sendButton.title = isEditing ? "Отправить заново" : "Отправить";
     sendButton.setAttribute("aria-label", sendButton.title);
   }
   if (stopButton) {
@@ -101,7 +101,7 @@ function renderSendControls() {
   if (input) {
     input.readOnly = isSending || approvalPending || state.reasoningSaving || state.bridgeUnavailable;
     input.placeholder = isEditing
-      ? "Измените сообщение..."
+      ? "Измените сообщение или отправьте его заново..."
       : (state.bridgeUnavailable
         ? "Откройте RNAssistant внутри Office, чтобы начать чат..."
         : (approvalPending

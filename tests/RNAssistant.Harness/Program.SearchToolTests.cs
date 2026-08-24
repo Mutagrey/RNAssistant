@@ -64,17 +64,15 @@ namespace RNAssistant.Harness
                 AssertEqual(true, (bool)limitedData["truncated"], "VBA search result list is truncated");
 
                 var patch = "[{\"op\":\"regexReplace\",\"pattern\":\"old(Value)\",\"text\":\"new$1\",\"replaceAll\":true}]";
-                var stale = executor.Execute(Command("excel.vba_apply_patch", "moduleName", "Module1", "expectedCodeSha256", "stale", "patch", patch), tools, settings, false, false);
-                AssertEqual("stale_vba_module", stale.ErrorCode, "stale VBA patch rejected");
-                var patched = executor.Execute(Command("excel.vba_apply_patch", "moduleName", "Module1", "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(adapter.GetVbaModuleCode("Module1")), "patch", patch), tools, settings, false, false);
+                var patched = executor.Execute(Command("excel.vba_apply_patch", "moduleName", "Module1", "expectedCodeSha256", "model-value-is-ignored", "patch", patch), tools, settings, false, false);
                 AssertTrue(patched.Success, "VBA regex patch succeeds");
+                AssertTrue(!patched.DataJson.Contains("model-value-is-ignored"), "legacy model hash is removed and runtime snapshots state itself");
                 AssertContains(adapter.GetVbaModuleCode("Module1"), "newValue", "VBA regex patch applies captures");
 
                 var blockedDelete = executor.Execute(Command("excel.vba_delete_module", "moduleName", "ThisWorkbook", "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(adapter.GetVbaModuleCode("ThisWorkbook"))), tools, settings, false, false);
                 AssertEqual("vba_component_type_read_only", blockedDelete.ErrorCode, "document module delete blocked");
 
-                var currentHash = VbaToolManifestParser.LiveCodeSha256(adapter.GetVbaModuleCode("Module1"));
-                var deleted = executor.Execute(Command("excel.vba_delete_module", "moduleName", "Module1", "expectedCodeSha256", currentHash), tools, settings, false, false);
+                var deleted = executor.Execute(Command("excel.vba_delete_module", "moduleName", "Module1"), tools, settings, false, false);
                 AssertTrue(deleted.Success, "standard module delete succeeds");
             });
         }

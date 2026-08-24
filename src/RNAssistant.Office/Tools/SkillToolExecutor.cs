@@ -99,8 +99,7 @@ namespace RNAssistant.Office.Tools
                 version = string.IsNullOrWhiteSpace(skill.Version) ? "1.0.0" : skill.Version,
                 enabled = skill.Enabled,
                 format = "markdown",
-                bodyMarkdown = skill.BodyMarkdown ?? string.Empty,
-                instructions = skill.BodyMarkdown ?? string.Empty
+                bodyMarkdown = skill.BodyMarkdown ?? string.Empty
             }));
         }
 

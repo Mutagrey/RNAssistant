@@ -266,14 +266,7 @@ async function deleteVbaModule(moduleName) {
   if (!window.confirm(warning)) return false;
 
   try {
-    var read = await send("getVbaModule", { moduleName: moduleName });
-    if (read.Success === false || read.success === false) {
-      throw new Error(read.Message || read.message || "VBA-модуль не прочитан.");
-    }
-    var data = JSON.parse(read.DataJson || read.dataJson || "{}");
-    var hash = data.codeSha256 || data.CodeSha256 || "";
-    if (!hash) throw new Error("Не получен актуальный hash VBA-модуля.");
-    var deleted = await vbaActions.deleteModule(moduleName, hash);
+    var deleted = await vbaActions.deleteModule(moduleName);
     if (!deleted) return false;
     state.vbaEditorDirty = false;
     return true;

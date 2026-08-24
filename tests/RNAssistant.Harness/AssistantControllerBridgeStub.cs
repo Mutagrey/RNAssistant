@@ -251,11 +251,10 @@ namespace RNAssistant.Office
             return ToolResult.Ok("created");
         }
 
-        public ToolResult DeleteVbaModule(string moduleName, string expectedCodeSha256)
+        public ToolResult DeleteVbaModule(string moduleName)
         {
             LastModuleName = moduleName;
-            LastModuleHash = expectedCodeSha256;
-            return ToolResult.Ok("deleted", expectedCodeSha256);
+            return ToolResult.Ok("deleted");
         }
 
         public ToolResult RestoreVbaBackup(string backupId, string moduleName) { return ToolResult.Ok("restored"); }

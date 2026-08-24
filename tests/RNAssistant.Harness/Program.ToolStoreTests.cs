@@ -120,9 +120,14 @@ namespace RNAssistant.Harness
                     var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths));
                     var tools = executor.GetControllerTools().ToList();
                     AssertTrue(HasTool(tools, "common.vba_read_module"), host + " exposes common VBA read");
+                    AssertTrue(HasTool(tools, "common.vba_write_module"), host + " exposes common VBA upsert");
                     AssertTrue(HasTool(tools, "common.vba_apply_patch"), host + " exposes common VBA patch");
-                    AssertTrue(tools.Where(tool => (tool.Id ?? string.Empty).StartsWith("common.vba_", StringComparison.OrdinalIgnoreCase))
-                        .All(tool => string.Equals(tool.Host, "Common", StringComparison.OrdinalIgnoreCase)), host + " VBA facade is host-neutral");
+                    AssertTrue(!HasTool(tools, "common.vba_read_lines") &&
+                        !HasTool(tools, "common.vba_replace_text") &&
+                        !HasTool(tools, "common.vba_create_module"), host + " omits redundant public aliases");
+                    var vbaTools = tools.Where(tool => (tool.Id ?? string.Empty).StartsWith("common.vba_", StringComparison.OrdinalIgnoreCase)).ToList();
+                    AssertEqual(8, vbaTools.Count, host + " exposes the compact eight-tool VBA facade");
+                    AssertTrue(vbaTools.All(tool => string.Equals(tool.Host, "Common", StringComparison.OrdinalIgnoreCase)), host + " VBA facade is host-neutral");
                     AssertTrue(!HasTool(tools, host.ToLowerInvariant() + ".vba_apply_patch"), host + " does not publish a host-specific patch facade");
                 }
 
@@ -133,12 +138,18 @@ namespace RNAssistant.Harness
                 var excel = FakeOfficeAdapter.ForHost("Excel");
                 var store = new ToolStore(paths);
                 var legacyPipeline = CustomTool("Excel", "excel.legacy_vba_pipeline");
-                legacyPipeline.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.vba_read_module\",\"arguments\":{\"moduleName\":\"Module1\"}},{\"toolId\":\"excel.vba_apply_patch\",\"arguments\":{\"moduleName\":\"Module1\",\"patch\":[{\"op\":\"replace\",\"find\":\"old\",\"text\":\"new\"}]}}]}";
+                legacyPipeline.PipelineJson = "{\"steps\":[" +
+                    "{\"toolId\":\"excel.vba_read_lines\",\"arguments\":{\"moduleName\":\"Module1\"}}," +
+                    "{\"toolId\":\"excel.vba_replace_text\",\"arguments\":{\"moduleName\":\"Module1\",\"find\":\"old\",\"replace\":\"new\"}}," +
+                    "{\"toolId\":\"excel.vba_create_module\",\"arguments\":{\"moduleName\":\"NewModule\",\"code\":\"Option Explicit\"}}]}";
                 store.SaveOne(legacyPipeline);
                 var excelExecutor = new OfficeToolExecutor(excel, new VbaBackupStore(paths), new SkillStore(paths), store);
                 var loaded = FindTool(new ToolCatalogService(excel, excelExecutor, store).GetVisibleTools(), legacyPipeline.Id);
                 AssertContains(loaded.PipelineJson, "common.vba_read_module", "legacy pipeline read id is normalized in memory");
                 AssertContains(loaded.PipelineJson, "common.vba_apply_patch", "legacy pipeline patch id is normalized in memory");
+                AssertContains(loaded.PipelineJson, "common.vba_write_module", "legacy pipeline create id is normalized in memory");
+                AssertContains(loaded.PipelineJson, "\"mode\":\"createOnly\"", "legacy create keeps strict create semantics");
+                AssertContains(loaded.PipelineJson, "\"lineCount\":200", "legacy range read keeps range defaults");
             });
         }
 

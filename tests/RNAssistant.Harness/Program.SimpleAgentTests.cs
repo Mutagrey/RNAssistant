@@ -183,6 +183,8 @@ namespace RNAssistant.Harness
                 AssertContains(replay, "TEST_SKILL_END", "skill body is not cut by the generic tool-result limit");
                 AssertContains(replay, "\"format\":\"markdown\"", "loaded skill format");
                 AssertContains(replay, "\"version\":\"2.0.0\"", "loaded skill version");
+                AssertTrue(replay.IndexOf("\"truncated\":true", StringComparison.Ordinal) < 0,
+                    "loaded skill is not duplicated into a truncated result");
             });
         }
 
@@ -228,6 +230,10 @@ namespace RNAssistant.Harness
             var arguments = new Newtonsoft.Json.Linq.JObject();
             AssertTrue(ToolSchemaSupport.ValidateArguments(arguments, schema, true, out error), "default is applied");
             AssertEqual(2L, Convert.ToInt64(arguments["count"]), "declared default value");
+            arguments["count"] = Newtonsoft.Json.Linq.JValue.CreateNull();
+            ToolSchemaSupport.RemoveOptionalNulls(arguments, schema);
+            AssertTrue(ToolSchemaSupport.ValidateArguments(arguments, schema, true, out error), "strict-output null is treated as omitted");
+            AssertEqual(2L, Convert.ToInt64(arguments["count"]), "runtime reapplies the code-owned default after null removal");
             arguments["count"] = 4;
             AssertTrue(!ToolSchemaSupport.ValidateArguments(arguments, schema, false, out error), "maximum is enforced");
 
@@ -429,8 +435,14 @@ namespace RNAssistant.Harness
                 AssertContains(prompt, "\"name\":\"common.vba_read_module\"", "common VBA read exposed");
                 AssertContains(prompt, "\"name\":\"common.vba_search_code\"", "common VBA search exposed");
                 AssertContains(prompt, "\"name\":\"common.vba_apply_patch\"", "common safe VBA patch exposed");
-                AssertContains(prompt, "\"name\":\"common.vba_create_module\"", "common VBA create exposed");
+                AssertContains(prompt, "\"name\":\"common.vba_write_module\"", "common VBA upsert exposed");
                 AssertContains(prompt, "\"name\":\"common.vba_delete_module\"", "common VBA delete exposed");
+                AssertTrue(prompt.IndexOf("\"name\":\"common.vba_create_module\"", StringComparison.Ordinal) < 0,
+                    "redundant create alias is hidden from the model");
+                AssertTrue(prompt.IndexOf("\"name\":\"common.vba_replace_text\"", StringComparison.Ordinal) < 0,
+                    "redundant replace alias is hidden from the model");
+                AssertTrue(prompt.IndexOf("\"name\":\"common.vba_read_lines\"", StringComparison.Ordinal) < 0,
+                    "range reads use the single read_module contract");
                 AssertTrue(prompt.IndexOf("\"expectedCodeSha256\"", StringComparison.Ordinal) < 0,
                     "model-facing VBA schemas do not require a hash argument");
                 AssertTrue(prompt.IndexOf("\"name\":\"excel.vba_read_module\"", StringComparison.Ordinal) < 0,

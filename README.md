@@ -203,7 +203,7 @@ Each chat stores an explicit execution mode:
 
 Editable Agent instructions use `developer` by default and may use `system` or `user`. The Prompts page edits the Agent prompt, Chat prompt, context-compaction prompt, and title prompt. Agent-side prompt changes use `common.prompts_read_defaults` and confirmed `common.prompts_save`.
 
-In Agent mode the prompt contains all runnable tools in native-like function JSON and a compact catalog (`id`, `name`, `description`) of enabled skills. When a catalog description is relevant, the model loads that skill's complete versioned Markdown through `common.skills_read`. The model returns one raw JSON object. A tool turn contains one or more calls:
+In Agent mode the prompt contains all runnable tools in native-like function JSON and a compact catalog (`id`, `name`, `description`) of enabled skills. When a catalog description is relevant, the model loads that skill's complete versioned Markdown through `common.skills_read`. In strict response-schema mode, optional tool arguments are nullable; runtime treats `null` as omitted and applies code-owned schema defaults instead of forcing the model to invent values. The model returns one raw JSON object. A tool turn contains one or more calls:
 
 ```json
 {
@@ -310,7 +310,7 @@ enabled: true
 - Preserve the requested column order.
 ```
 
-At runtime the catalog entry is `{"id","name","description"}`. `common.skills_read` returns metadata plus `format: "markdown"` and the complete body in both `bodyMarkdown` and `instructions` inside a normal `TOOL_RESULT.data` object. That result remains in conversation history; there is no separate activation state.
+At runtime the catalog entry is `{"id","name","description"}`. `common.skills_read` returns metadata plus `format: "markdown"` and the complete body once in `bodyMarkdown` inside a normal `TOOL_RESULT.data` object. That result remains in conversation history; there is no separate activation state.
 
 ## VBA Workflow
 
@@ -322,10 +322,10 @@ Office VBA support requires Office setting `Trust access to the VBA project obje
 - `Save Module` replaces the selected module and stores the previous version under `%AppData%\RNAssistant\vba-backups`.
 - `Restore Backup` restores the selected backup; restoring also backs up the current module first.
 - Existing-module writes fail closed when a rollback backup cannot be created. A failed code write restores the original module when Office still permits access.
-- VBA writes retain local backup, strict live-code snapshot, ownership, stale-state, and post-write read-back checks inside the VBA tools. Runtime binds the exact code read from VBIDE to the current chat/document/module and rechecks it after confirmation; the model does not supply a hash argument. Post-write verification accepts only VBE-equivalent case/spacing/terminal-line normalization and returns the actual read-back hash.
+- VBA writes retain local backup, strict live-code snapshot, ownership, stale-state, and post-write read-back checks inside the VBA tools. A mutation reads and binds the current VBIDE state itself, then rechecks it after confirmation; the model neither performs a preparatory read nor supplies a hash argument. If the model already inspected the module, runtime uses that snapshot automatically for one stale warning and then allows an intentional retry. Post-write verification accepts only VBE-equivalent case/spacing/terminal-line normalization and returns the actual read-back hash.
 - `Review in Chat` sends loaded VBA modules to chat for review and improvement suggestions.
 
-The Agent uses the same public `common.vba_*` facade in Excel, Word, and PowerPoint: list/read/search, exact-range reads, text/structured patching, create/delete, and backup restore. Mutations require confirmation and create rollback backups. Edit/delete require a prior public read/search; runtime binds its snapshot automatically and rejects stale code. Host-prefixed whole-module replacement, insert, and arbitrary macro backends remain hidden from Agent selection.
+The Agent uses the same compact public `common.vba_*` facade in Excel, Word, and PowerPoint: list, read (whole source or an optional exact line range), search, whole-source write/upsert, structured patch, delete, and backup list/restore. `common.vba_write_module` updates an existing component or creates a missing one and safely normalizes invalid new names. Mutations read and bind current state internally, require confirmation unless auto-confirm is enabled, create rollback backups where prior state exists, and reject races or mismatched read-back. Legacy create/replace-text/read-lines ids remain runtime aliases but are not shown to the Agent; host-prefixed whole-module, insert, and macro backends also remain hidden.
 
 Patch operations support:
 

@@ -63,12 +63,25 @@ namespace RNAssistant.Harness
             {
                 Id = "excel.read_range",
                 Description = "Read cells.",
-                ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"range\":{\"type\":\"string\",\"description\":\"A1 range.\"}},\"required\":[\"range\"],\"additionalProperties\":false}"
+                ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{" +
+                    "\"range\":{\"type\":\"string\",\"description\":\"A1 range.\"}," +
+                    "\"sheet\":{\"type\":\"string\",\"description\":\"Optional sheet name.\"}," +
+                    "\"mode\":{\"type\":\"string\",\"description\":\"Read mode.\",\"default\":\"values\",\"enum\":[\"values\",\"formulas\"]}" +
+                    "},\"required\":[\"range\"],\"additionalProperties\":false}"
             };
             var schema = JObject.Parse(AgentResponseSchemaBuilder.Build(new[] { tool }));
             var call = schema.SelectToken("properties.tool_calls.items.anyOf[0]");
             AssertEqual("excel.read_range", (string)call.SelectToken("properties.name.const"), "exact tool name in schema");
             AssertEqual("string", (string)call.SelectToken("properties.arguments.properties.range.type"), "tool argument schema copied");
+            var optionalSheetType = call.SelectToken("properties.arguments.properties.sheet.type") as JArray;
+            AssertTrue(optionalSheetType != null && optionalSheetType.Values<string>().Contains("null"),
+                "strict response schema makes optional arguments nullable");
+            var optionalModeEnum = call.SelectToken("properties.arguments.properties.mode.enum") as JArray;
+            AssertTrue(optionalModeEnum != null && optionalModeEnum.Any(item => item.Type == JTokenType.Null),
+                "nullable optional enum accepts null");
+            var strictRequired = call.SelectToken("properties.arguments.required") as JArray;
+            AssertTrue(strictRequired != null && strictRequired.Values<string>().Contains("sheet"),
+                "strict response schema still lists every property as required");
             AssertTrue(call.SelectToken("properties.arguments.additionalProperties").Value<bool>() == false, "tool arguments remain strict");
             AssertTrue(schema["additionalProperties"].Value<bool>() == false, "agent response root is strict");
         }
@@ -82,6 +95,57 @@ namespace RNAssistant.Harness
                 AssertEqual("string",
                     (string)schema.SelectToken("properties.tool_calls.items.anyOf[0].properties.arguments.properties.parameters.properties.type.type"),
                     "schema property named type");
+
+                var patchTool = executor.GetControllerTools().Single(candidate => candidate.Id == "common.vba_apply_patch");
+                var patchSchema = JObject.Parse(AgentResponseSchemaBuilder.Build(new[] { patchTool }));
+                var patchVariants = patchSchema.SelectToken(
+                    "properties.tool_calls.items.anyOf[0].properties.arguments.properties.patch.items.anyOf") as JArray;
+                AssertEqual(7, patchVariants == null ? 0 : patchVariants.Count, "patch schema has one compact variant per operation");
+                var literalReplace = patchVariants.OfType<JObject>().Single(item =>
+                    string.Equals((string)item.SelectToken("properties.op.enum[0]"), "replace", StringComparison.Ordinal));
+                AssertEqual(3, ((JObject)literalReplace["properties"]).Properties().Count(),
+                    "literal replace exposes only op, find, and text");
+                AssertTrue(literalReplace.SelectToken("properties.replace") == null,
+                    "legacy replacement alias is hidden from the strict model schema");
+                var regexReplace = patchVariants.OfType<JObject>().Single(item =>
+                    string.Equals((string)item.SelectToken("properties.op.enum[0]"), "regexReplace", StringComparison.Ordinal));
+                var optionalMatchCaseType = regexReplace.SelectToken("properties.matchCase.type") as JArray;
+                AssertTrue(optionalMatchCaseType != null && optionalMatchCaseType.Values<string>().Contains("null"),
+                    "nested optional regex arguments are nullable in strict output");
+
+                var restoreTool = executor.GetControllerTools().Single(candidate => candidate.Id == "common.vba_restore_backup");
+                var restoreSchema = JObject.Parse(AgentResponseSchemaBuilder.Build(new[] { restoreTool }));
+                var restoreVariants = restoreSchema.SelectToken(
+                    "properties.tool_calls.items.anyOf[0].properties.arguments.anyOf") as JArray;
+                AssertEqual(2, restoreVariants == null ? 0 : restoreVariants.Count,
+                    "restore schema requires either backup id or module name");
+                var backupVariant = restoreVariants.OfType<JObject>().Single(item =>
+                    item.SelectToken("properties.backupId.type").Type == JTokenType.String);
+                var optionalRestoreModuleType = backupVariant.SelectToken("properties.moduleName.type") as JArray;
+                AssertTrue(optionalRestoreModuleType != null && optionalRestoreModuleType.Values<string>().Contains("null"),
+                    "irrelevant restore selector is nullable in strict output");
+
+                var strictPatchArguments = new JObject
+                {
+                    ["moduleName"] = "Module1",
+                    ["patch"] = new JArray(new JObject
+                    {
+                        ["op"] = "regexReplace",
+                        ["pattern"] = "Old",
+                        ["text"] = "New",
+                        ["matchCase"] = JValue.CreateNull(),
+                        ["wholeWord"] = JValue.CreateNull(),
+                        ["replaceAll"] = JValue.CreateNull(),
+                        ["maxReplacements"] = JValue.CreateNull()
+                    })
+                };
+                JObject runtimePatchSchema;
+                string parseError;
+                AssertTrue(ToolSchemaSupport.TryParse(patchTool, out runtimePatchSchema, out parseError),
+                    "runtime patch schema parses: " + parseError);
+                ToolSchemaSupport.RemoveOptionalNulls(strictPatchArguments, runtimePatchSchema);
+                AssertEqual(3, ((JObject)((JArray)strictPatchArguments["patch"])[0]).Properties().Count(),
+                    "optional nulls are removed inside an anyOf variant");
             });
         }
 

@@ -79,10 +79,11 @@ namespace RNAssistant.Office
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_create_module") };
+            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_write_module") };
             command.Arguments["moduleName"] = moduleName;
             command.Arguments["componentType"] = componentType;
             command.Arguments["code"] = code;
+            command.Arguments["mode"] = "createOnly";
             return WithReservedSession(LoadSession(null), session =>
             {
                 var result = _toolExecutor.Execute(command, tools, settings, false, true, session);
@@ -91,7 +92,7 @@ namespace RNAssistant.Office
             });
         }
 
-        public ToolResult DeleteVbaModule(string moduleName, string expectedCodeSha256)
+        public ToolResult DeleteVbaModule(string moduleName)
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
@@ -99,7 +100,6 @@ namespace RNAssistant.Office
             command.Arguments["moduleName"] = moduleName;
             return WithReservedSession(LoadSession(null), session =>
             {
-                _toolExecutor.ObserveVbaHash(session, moduleName, expectedCodeSha256);
                 var result = _toolExecutor.Execute(command, tools, settings, false, true, session);
                 _toolCatalog.InvalidateDocumentVbaTools();
                 return result;
@@ -110,17 +110,12 @@ namespace RNAssistant.Office
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
+            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_restore_backup") };
+            if (!string.IsNullOrWhiteSpace(backupId)) command.Arguments["backupId"] = backupId;
+            if (!string.IsNullOrWhiteSpace(moduleName)) command.Arguments["moduleName"] = moduleName;
             return WithReservedSession(LoadSession(null), session =>
             {
-                var result = _toolExecutor.Execute(new ToolCommand
-                {
-                    ToolId = _toolExecutor.VbaToolId("vba_restore_backup"),
-                    Arguments =
-                    {
-                        ["backupId"] = backupId ?? string.Empty,
-                        ["moduleName"] = moduleName ?? string.Empty
-                    }
-                }, tools, settings, false, true, session);
+                var result = _toolExecutor.Execute(command, tools, settings, false, true, session);
                 _toolCatalog.InvalidateDocumentVbaTools();
                 return result;
             });

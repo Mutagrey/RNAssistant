@@ -43,11 +43,10 @@
       return created;
     }
 
-    async function deleteModule(moduleName, expectedCodeSha256) {
+    async function deleteModule(moduleName) {
       var deleted = await runWork(async function () {
         var response = await options.send("deleteVbaModule", {
-          moduleName: moduleName,
-          expectedCodeSha256: expectedCodeSha256
+          moduleName: moduleName
         });
         if (response.Success === false || response.success === false) {
           throw new Error(response.Message || response.message || "VBA-модуль не удалён.");

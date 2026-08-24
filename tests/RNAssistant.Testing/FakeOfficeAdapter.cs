@@ -364,8 +364,11 @@ namespace RNAssistant.Harness
 
             if ((command.ToolId ?? string.Empty).EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase))
             {
+                var moduleName = Argument(command, "moduleName", "Module1");
                 var code = Argument(command, "code", string.Empty);
-                SetVbaModule(Argument(command, "moduleName", "Module1"), VbaWriteTransform == null ? code : VbaWriteTransform(code), VbaModuleType);
+                FakeVbaModule existing;
+                var componentType = _vbaModules.TryGetValue(moduleName, out existing) ? existing.Type : VbaModuleType;
+                SetVbaModule(moduleName, VbaWriteTransform == null ? code : VbaWriteTransform(code), componentType);
                 return ToolResult.Ok("replaced " + command.ToolId);
             }
 

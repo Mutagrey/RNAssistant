@@ -18,7 +18,7 @@ Visible planning is optional data, not a protocol phase. `common.plan_create/rea
 
 A confirmed tool result always returns to the Agent loop, including `ok:false`, so the model can explain the failure, correct arguments, or choose another tool. An explicit user cancellation is terminal for that run and does not invoke the model again.
 
-When a catalog description matches the task, the model calls `common.skills_read` with the exact id. Its `TOOL_RESULT.data` contains `id`, `host`, `name`, `description`, `version`, `enabled`, `format: "markdown"`, and the complete body in both authoring-compatible `bodyMarkdown` and model-facing `instructions`, subject only to the remaining request budget. Several clearly relevant skills may be read as independent calls. The result is normal conversation history; there is no router or activation state.
+When a catalog description matches the task, the model calls `common.skills_read` with the exact id. Its `TOOL_RESULT.data` contains `id`, `host`, `name`, `description`, `version`, `enabled`, `format: "markdown"`, and the complete body once in authoring-compatible `bodyMarkdown`, subject only to the remaining request budget. Several clearly relevant skills may be read as independent calls. The result is normal conversation history; there is no router or activation state.
 
 Tools use a native-like description:
 
@@ -56,6 +56,8 @@ Agent mode always returns the same raw JSON envelope with no Markdown or surroun
 - `json_object` (default) asks the endpoint for a generic JSON object and relies on the local parser and tool argument validators;
 - `json_schema` sends a strict response schema generated from the exact currently runnable tool catalog. The schema fixes the root fields, exact tool names, and each tool's argument contract.
 
+Strict response schemas require every object property to appear. Properties that are optional in the executable tool contract are therefore represented as nullable in the response schema. A model may return `null` for an irrelevant optional argument; immediately before normal validation, runtime removes those optional nulls and applies the declared defaults. Required arguments remain non-null unless their original tool schema explicitly allows null.
+
 When `FallbackToJsonObject` is enabled and the endpoint explicitly rejects `json_schema`, that run is retried once with `json_object`; the saved selection is unchanged. This is not model routing or general error retry.
 
 Tool call:
@@ -86,7 +88,7 @@ The parser accepts one or more calls, requires a non-empty user-facing `message`
 
 If a call needs confirmation, execution pauses at that call and later calls from the same response are not retained or executed. The pending id, cumulative iteration/tool-step counters, and execution fingerprint of that tool and its pipeline dependencies are persisted with the chat, so confirmation survives a WebView or Office restart but cannot execute a replaced definition. Cosmetic changes to unrelated tools do not invalidate it. A new request in that chat is blocked until the action is confirmed or cancelled. After confirmation, the model receives that result and chooses the remaining work normally using the remaining original budget. There is no separate batch state. The local parser tolerates additional root fields in `json_object`; strict `json_schema` rejects them at the endpoint.
 
-If parsing fails, the runtime makes up to `MaxAgentFormatRetries` correction requests (default 10, clamped to 1–20). Every attempt starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored. A refusal remains valid user-facing content when returned in `message` with an empty `tool_calls` array. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy normalization.
+If parsing fails, the runtime makes up to `MaxAgentFormatRetries` correction requests (default 10, clamped to 1–20). Every attempt starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored. A refusal remains valid user-facing content when returned in `message` with an empty `tool_calls` array. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy response-envelope normalization.
 
 ## Tool result
 
@@ -115,7 +117,7 @@ Chat-local plan/HTML mutations are serialized by the per-chat lease. Document an
 - Every Agent run pins the runtime COM identity, with the stable document key as fallback when no runtime identity is available. The UI/STA adapter rechecks it immediately before execution; a genuinely different document returns non-retryable `active_document_changed` without starting the tool.
 - Maximum iterations and maximum tool steps bound execution.
 - Pipelines call existing tool ids through `OfficeToolExecutor`; nested safety is resolved recursively.
-- VBA mutations keep backup/strict-live-hash/stale-state checks inside the VBA tool implementation. Edit/delete bind the last public read/search snapshot by chat/document/module instead of accepting a model-supplied hash, persist the guard through confirmation, revalidate it before mutation, verify final state by read-back, and expose bounded exact-range reads through `common.vba_read_lines`. Export-aware package hashes are separate from live module hashes.
+- VBA mutations keep backup/strict-live-hash/stale-state checks inside the implementation. Runtime reads current state and binds a chat/document/module guard while preparing the mutation, persists it through confirmation, revalidates immediately before mutation, and verifies final state by read-back. No preparatory public read or model-supplied hash is required; when a read/search snapshot already exists, runtime consumes it automatically to surface one actionable stale warning before rebinding on an intentional retry. `common.vba_read_module` handles whole-source and bounded line-range reads; `common.vba_write_module` is an idempotent whole-source upsert. Legacy create/replace-text/read-lines ids canonicalize to the compact facade. Export-aware package hashes remain separate from live module hashes.
 - Provider reasoning is transport metadata, not part of the agent JSON or replay history.
 - Context compaction may replace a fully included replay prefix with a stored checkpoint, but it does not split a tool exchange, delete the source transcript, partially mark an oversized message as summarized, change the agent protocol, or repeat Office tools.
 - A persisted `running` or `cancelling` run without a live cross-process owner is marked interrupted and is never resumed automatically. If it stopped while a tool may have been in flight, it is marked `interrupted_unknown` and that run's protocol remains visible but is excluded from replay. Protocol through a saved tool-result boundary remains replayable.

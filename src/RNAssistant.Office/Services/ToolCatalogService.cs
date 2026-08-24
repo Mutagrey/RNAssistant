@@ -75,6 +75,18 @@ namespace RNAssistant.Office.Services
                 {
                     var id = (string)step["toolId"];
                     var canonical = _toolExecutor.CanonicalizeVbaToolId(id);
+                    var arguments = step["arguments"] as JObject;
+                    if (VbaPublicToolIds.IsLegacyCreate(id) && arguments != null && arguments["mode"] == null)
+                    {
+                        arguments["mode"] = "createOnly";
+                        changed = true;
+                    }
+                    if (VbaPublicToolIds.IsLegacyReadLines(id) && arguments != null)
+                    {
+                        if (arguments["startLine"] == null) arguments["startLine"] = 1;
+                        if (arguments["lineCount"] == null) arguments["lineCount"] = 200;
+                        changed = true;
+                    }
                     if (string.Equals(id, canonical, StringComparison.Ordinal)) continue;
                     step["toolId"] = canonical;
                     changed = true;

@@ -110,8 +110,63 @@ namespace RNAssistant.Core.Tools
         public static JObject ForStructuredOutput(JObject schema)
         {
             var clone = schema == null ? EmptyObjectSchema() : (JObject)schema.DeepClone();
+            MakeOptionalPropertiesNullable(clone);
             MakeObjectSchemasStrict(clone);
             return clone;
+        }
+
+        public static void RemoveOptionalNulls(JToken value, JObject schema)
+        {
+            if (value == null || schema == null) return;
+
+            var alternatives = schema["anyOf"] as JArray;
+            if (alternatives != null)
+            {
+                JObject discriminatorMatch = null;
+                foreach (var candidate in alternatives.OfType<JObject>())
+                {
+                    if (discriminatorMatch == null && MatchesDiscriminator(value, candidate)) discriminatorMatch = candidate;
+                    var clone = value.DeepClone();
+                    RemoveOptionalNulls(clone, candidate);
+                    string ignored;
+                    if (!ValidateValue(clone, candidate, "$", false, out ignored)) continue;
+                    CopyValidatedValue(value, clone);
+                    return;
+                }
+                if (discriminatorMatch != null)
+                {
+                    RemoveOptionalNulls(value, discriminatorMatch);
+                    return;
+                }
+            }
+
+            var array = value as JArray;
+            if (array != null)
+            {
+                var itemSchema = schema["items"] as JObject;
+                if (itemSchema == null) return;
+                foreach (var item in array) RemoveOptionalNulls(item, itemSchema);
+                return;
+            }
+
+            var obj = value as JObject;
+            if (obj == null) return;
+            var properties = schema["properties"] as JObject ?? new JObject();
+            var required = new HashSet<string>(
+                (schema["required"] as JArray ?? new JArray()).Values<string>(),
+                StringComparer.Ordinal);
+            foreach (var property in obj.Properties().ToList())
+            {
+                var childSchema = properties[property.Name] as JObject;
+                if (childSchema == null) continue;
+                if ((property.Value.Type == JTokenType.Null || property.Value.Type == JTokenType.Undefined) &&
+                    !required.Contains(property.Name))
+                {
+                    property.Remove();
+                    continue;
+                }
+                RemoveOptionalNulls(property.Value, childSchema);
+            }
         }
 
         public static bool ValidateArguments(JObject arguments, JObject schema, bool applyDefaults, out string error)
@@ -138,13 +193,21 @@ namespace RNAssistant.Core.Tools
             var anyOf = schema["anyOf"] as JArray;
             if (anyOf != null)
             {
+                string firstError = null;
+                string discriminatorError = null;
                 foreach (var candidate in anyOf.OfType<JObject>())
                 {
-                    string ignored;
+                    string candidateError;
                     var clone = value == null ? null : value.DeepClone();
-                    if (ValidateValue(clone, candidate, path, false, out ignored)) return true;
+                    if (ValidateValue(clone, candidate, path, applyDefaults, out candidateError))
+                    {
+                        CopyValidatedValue(value, clone);
+                        return true;
+                    }
+                    if (firstError == null) firstError = candidateError;
+                    if (MatchesDiscriminator(value, candidate)) discriminatorError = candidateError;
                 }
-                error = path + " does not match any allowed schema.";
+                error = discriminatorError ?? (anyOf.Count == 1 ? firstError : null) ?? path + " does not match any allowed schema.";
                 return false;
             }
 
@@ -256,6 +319,44 @@ namespace RNAssistant.Core.Tools
             return true;
         }
 
+        private static bool MatchesDiscriminator(JToken value, JObject schema)
+        {
+            var obj = value as JObject;
+            var properties = schema == null ? null : schema["properties"] as JObject;
+            if (obj == null || properties == null) return false;
+            foreach (var property in properties.Properties())
+            {
+                var actual = obj[property.Name];
+                var propertySchema = property.Value as JObject;
+                if (actual == null || propertySchema == null) continue;
+                var constant = propertySchema["const"];
+                if (constant != null && JToken.DeepEquals(actual, constant)) return true;
+                var allowed = propertySchema["enum"] as JArray;
+                if (allowed != null && allowed.Count == 1 && JToken.DeepEquals(actual, allowed[0])) return true;
+            }
+            return false;
+        }
+
+        private static void CopyValidatedValue(JToken target, JToken source)
+        {
+            var targetObject = target as JObject;
+            var sourceObject = source as JObject;
+            if (targetObject != null && sourceObject != null)
+            {
+                targetObject.RemoveAll();
+                foreach (var property in sourceObject.Properties()) targetObject.Add(property.Name, property.Value.DeepClone());
+                return;
+            }
+
+            var targetArray = target as JArray;
+            var sourceArray = source as JArray;
+            if (targetArray != null && sourceArray != null)
+            {
+                targetArray.RemoveAll();
+                foreach (var item in sourceArray) targetArray.Add(item.DeepClone());
+            }
+        }
+
         private static bool MatchesType(JToken value, JToken typeToken)
         {
             if (typeToken == null) return true;
@@ -327,6 +428,59 @@ namespace RNAssistant.Core.Tools
             if (array != null)
             {
                 foreach (var item in array) MakeObjectSchemasStrict(item);
+            }
+        }
+
+        private static void MakeOptionalPropertiesNullable(JToken token)
+        {
+            var obj = token as JObject;
+            if (obj != null)
+            {
+                if (ContainsType(obj["type"], "object"))
+                {
+                    var properties = obj["properties"] as JObject ?? new JObject();
+                    var required = new HashSet<string>(
+                        (obj["required"] as JArray ?? new JArray()).Values<string>(),
+                        StringComparer.Ordinal);
+                    foreach (var property in properties.Properties())
+                    {
+                        MakeOptionalPropertiesNullable(property.Value);
+                        var propertySchema = property.Value as JObject;
+                        if (propertySchema != null && !required.Contains(property.Name)) MakeNullable(propertySchema);
+                    }
+                    foreach (var keyword in obj.Properties().Where(property =>
+                        !string.Equals(property.Name, "properties", StringComparison.Ordinal)).ToList())
+                    {
+                        MakeOptionalPropertiesNullable(keyword.Value);
+                    }
+                    return;
+                }
+                foreach (var property in obj.Properties().ToList()) MakeOptionalPropertiesNullable(property.Value);
+                return;
+            }
+
+            var array = token as JArray;
+            if (array != null)
+            {
+                foreach (var item in array) MakeOptionalPropertiesNullable(item);
+            }
+        }
+
+        private static void MakeNullable(JObject schema)
+        {
+            if (schema == null) return;
+            var type = schema["type"];
+            if (type != null && !ContainsType(type, "null"))
+            {
+                schema["type"] = type.Type == JTokenType.Array
+                    ? new JArray(((JArray)type).Select(item => item.DeepClone()).Concat(new[] { new JValue("null") }))
+                    : new JArray(type.DeepClone(), "null");
+            }
+
+            var enumValues = schema["enum"] as JArray;
+            if (enumValues != null && !enumValues.Any(item => item.Type == JTokenType.Null))
+            {
+                enumValues.Add(JValue.CreateNull());
             }
         }
 

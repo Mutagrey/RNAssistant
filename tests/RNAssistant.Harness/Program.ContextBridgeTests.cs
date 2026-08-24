@@ -643,12 +643,11 @@ namespace RNAssistant.Harness
 
             var deleteResponseJson = bridge.HandleMessageAsync(
                 "{\"id\":\"b5-delete\",\"type\":\"deleteVbaModule\",\"bridgeToken\":\"" + token +
-                "\",\"payload\":{\"moduleName\":\"Module3\",\"expectedCodeSha256\":\"abc123\"}}")
+                "\",\"payload\":{\"moduleName\":\"Module3\"}}")
                 .GetAwaiter()
                 .GetResult();
             AssertTrue(JObject.Parse(deleteResponseJson)["ok"].Value<bool>(), "VBA delete bridge response ok");
             AssertEqual("Module3", controller.LastModuleName, "delete module name");
-            AssertEqual("abc123", controller.LastModuleHash, "delete module hash");
         }
 
         private static void BridgeReportsModelConnectionDiagnostics()

@@ -162,6 +162,28 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ReplayingUnchangedUserMessageRewindsHistory()
+        {
+            var session = new ChatSession();
+            var target = new ChatMessage { Role = "user", Content = "Повтори запрос" };
+            var oldAnswer = new ChatMessage { Role = "assistant", Content = "Старый ответ" };
+            session.Messages.Add(target);
+            session.Messages.Add(oldAnswer);
+
+            var service = new ChatHistoryEditService(delegate { }, delegate { });
+            var result = service.RewriteUserMessage(
+                session,
+                session.Id,
+                target.Id,
+                -1,
+                "  Повтори запрос  ");
+
+            AssertEqual(1, session.Messages.Count, "unchanged replay rewinds the old answer");
+            AssertEqual(target, result.Message, "unchanged replay preserves the user message");
+            AssertEqual("Повтори запрос", target.Content, "unchanged replay keeps normalized text");
+            AssertTrue(result.RemovedMessages.Contains(oldAnswer), "unchanged replay returns the removed answer");
+        }
+
         private static void EditingLatestUserMessageDoesNotDuplicateUserTurn()
         {
             var session = new ChatSession();

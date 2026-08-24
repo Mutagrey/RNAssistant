@@ -615,9 +615,6 @@ namespace RNAssistant.Office.Contracts
     {
         [JsonProperty("moduleName")]
         public string ModuleName { get; set; }
-
-        [JsonProperty("expectedCodeSha256")]
-        public string ExpectedCodeSha256 { get; set; }
     }
 
     public sealed class RestoreVbaBackupPayload

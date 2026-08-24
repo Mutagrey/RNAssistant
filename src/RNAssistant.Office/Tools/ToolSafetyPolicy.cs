@@ -200,6 +200,14 @@ namespace RNAssistant.Office.Tools
                     catalog.Add(tool.Id, tool);
                 }
             }
+            foreach (var alias in VbaPublicToolIds.LegacyAliases())
+            {
+                ToolDefinition canonical;
+                if (!catalog.ContainsKey(alias.Key) && catalog.TryGetValue(alias.Value, out canonical))
+                {
+                    catalog.Add(alias.Key, canonical);
+                }
+            }
             foreach (var tool in toolList.Where(item => item.Id.StartsWith("common.vba_", StringComparison.OrdinalIgnoreCase)))
             {
                 var suffix = tool.Id.Substring("common.".Length);
@@ -210,6 +218,20 @@ namespace RNAssistant.Office.Tools
                         !catalog.ContainsKey(legacyId))
                     {
                         catalog.Add(legacyId, tool);
+                    }
+                }
+            }
+            foreach (var alias in VbaPublicToolIds.LegacyAliases())
+            {
+                var aliasSuffix = alias.Key.Substring("common.".Length);
+                var canonicalSuffix = alias.Value.Substring("common.".Length);
+                foreach (var host in new[] { "excel", "word", "powerpoint" })
+                {
+                    ToolDefinition canonical;
+                    var legacyId = host + "." + aliasSuffix;
+                    if (!catalog.ContainsKey(legacyId) && catalog.TryGetValue(host + "." + canonicalSuffix, out canonical))
+                    {
+                        catalog.Add(legacyId, canonical);
                     }
                 }
             }

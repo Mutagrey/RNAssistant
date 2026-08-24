@@ -168,7 +168,8 @@ namespace RNAssistant.Harness
                 Test("vba: replace text backs up module", VbaReplaceTextBacksUpModule),
                 Test("vba: confirmed mutation rejects stale snapshot", VbaConfirmedMutationRejectsStaleSnapshot),
                 Test("vba: create rejects confirmation race", VbaCreateRejectsConfirmationRace),
-                Test("vba: snapshots are chat scoped", VbaSnapshotsAreChatScoped),
+                Test("vba: write upserts and normalizes name", VbaWriteUpsertsAndNormalizesName),
+                Test("vba: delete reads internally", VbaDeleteNeedsNoPublicRead),
                 Test("vba: guard rejects runtime document switch", VbaGuardRejectsRuntimeDocumentSwitch),
                 Test("vba: apply patch targets module", VbaApplyPatchTargetsNamedModule),
                 Test("vba: backup failure blocks replacement", VbaBackupFailureBlocksReplacement),
@@ -199,6 +200,7 @@ namespace RNAssistant.Harness
                 Test("vba: code hash normalizes export", VbaCodeHashIgnoresExportHeadersAndRuntimeMarkers),
 
                 Test("chat: editing middle rewinds artifacts", EditingMiddleUserMessageRewindsHistoryAndClearsHtmlWorkspace),
+                Test("chat: unchanged edit replays turn", ReplayingUnchangedUserMessageRewindsHistory),
                 Test("chat: editing latest avoids duplicate", EditingLatestUserMessageDoesNotDuplicateUserTurn),
                 Test("chat: editing legacy clears html", EditingLegacyTurnClearsUnversionedHtmlWorkspace),
                 Test("chat: editing errors reported", EditingMessageValidationErrorsAreReported),

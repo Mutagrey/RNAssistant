@@ -98,7 +98,7 @@ function canSaveMessageEdit(message, index) {
   }
 
   var text = normalizeEditedMessageText(state.editingText);
-  return !!text && text !== normalizeEditedMessageText(messageContent(message));
+  return !!text;
 }
 
 function focusMessageEditComposer() {
@@ -191,6 +191,7 @@ async function saveMessageEdit() {
   var sentChatId = state.activeChatId;
   var sentMessageId = messageId(target.message);
   var text = normalizeEditedMessageText(state.editingText);
+  var textChanged = text !== normalizeEditedMessageText(messageContent(target.message));
   state.editingBusy = true;
   clearSendError();
   applyEditedMessagePreview(target, text);
@@ -218,7 +219,9 @@ async function saveMessageEdit() {
     } else {
       applyChatCatalogState(response);
     }
-    log("Сообщение обновлено. Нижняя история перестроена заново.");
+    log(textChanged
+      ? "Сообщение изменено и отправлено заново. Последующая история перестроена."
+      : "Сообщение отправлено заново. Последующая история перестроена.");
   } catch (error) {
     log(error.cancelled ? "Редактирование сообщения отменено." : error.detail || error.message, error.cancelled ? "warning" : "error");
     await refreshChatAfterEditFailure(sentChatId);

@@ -234,7 +234,7 @@ namespace RNAssistant.OfficeHosts
                 Tool("excel.sort_range", "Mutates document: Sort rows in a range by one key column.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address.\"},\"keyColumn\":{\"type\":\"integer\",\"description\":\"One-based sort-key column index within the range.\",\"default\":1},\"descending\":{\"type\":\"boolean\",\"description\":\"Whether to sort in descending order.\",\"default\":false},\"hasHeaders\":{\"type\":\"boolean\",\"description\":\"Whether the first row contains headers.\",\"default\":true}},\"required\":[\"address\"],\"additionalProperties\":false}", true, true, 2, true),
                 Tool("excel.filter_range", "Mutates document: Apply AutoFilter criteria to a range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address.\"},\"field\":{\"type\":\"integer\",\"description\":\"One-based column index within the filter range.\",\"default\":1},\"criteria\":{\"type\":\"string\",\"description\":\"AutoFilter criterion understood by Excel.\"}},\"required\":[\"address\"],\"additionalProperties\":false}", true, true, 2, true),
                 Tool("excel.vba_read_module", "Internal VBA backend read; use common.vba_read_module.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum number of text characters returned.\",\"default\":30000,\"minimum\":1,\"maximum\":1000000}},\"required\":[\"moduleName\"],\"additionalProperties\":false}", false, false),
-                Tool("excel.vba_read_lines", "Internal VBA backend range read; use common.vba_read_lines.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"startLine\":{\"type\":\"integer\",\"description\":\"One-based first line.\",\"default\":1,\"minimum\":1},\"lineCount\":{\"type\":\"integer\",\"description\":\"Maximum consecutive lines returned.\",\"default\":200,\"minimum\":1,\"maximum\":500}},\"required\":[\"moduleName\"],\"additionalProperties\":false}", false, false),
+                Tool("excel.vba_read_lines", "Internal VBA backend range read; the public facade is common.vba_read_module.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"startLine\":{\"type\":\"integer\",\"description\":\"One-based first line.\",\"default\":1,\"minimum\":1},\"lineCount\":{\"type\":\"integer\",\"description\":\"Maximum consecutive lines returned.\",\"default\":200,\"minimum\":1,\"maximum\":500}},\"required\":[\"moduleName\"],\"additionalProperties\":false}", false, false),
                 Tool("excel.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code.\"},\"createIfMissing\":{\"type\":\"boolean\",\"description\":\"Whether a missing VBA standard module may be created.\",\"default\":true}},\"required\":[\"moduleName\",\"code\"],\"additionalProperties\":false}", true, false, 3),
                 Tool("excel.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\",\"default\":\"RNAssistantModule\"},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code.\"}},\"required\":[\"code\"],\"additionalProperties\":false}", true, false, 3),
                 Tool("excel.run_macro", "Mutates document: Run an Excel VBA macro by name.", "{\"type\":\"object\",\"properties\":{\"macroName\":{\"type\":\"string\",\"description\":\"Exact public VBA macro name.\"}},\"required\":[\"macroName\"],\"additionalProperties\":false}", true, false, 3)
@@ -784,7 +784,8 @@ namespace RNAssistant.OfficeHosts
                 }
 
                 var chartObjects = (Excel.ChartObjects)sheet.ChartObjects(Type.Missing);
-                for (var i = 1; i <= chartObjects.Count; i++)
+                var chartCount = chartObjects.Count;
+                for (var i = 1; i <= chartCount; i++)
                 {
                     var chartObject = (Excel.ChartObject)chartObjects.Item(i);
                     charts.Add(ChartDetails(sheet, chartObject));
@@ -1038,7 +1039,7 @@ namespace RNAssistant.OfficeHosts
             chart.SetSourceData(source);
             chart.ChartType = ResolveChartType(chartType);
             chart.HasTitle = true;
-            chart.ChartTitle.Text = title;
+            chart.ChartTitle.Caption = title;
             var chartName = ToolArgumentReader.String(command.Arguments, "chartName", string.Empty);
             if (!string.IsNullOrWhiteSpace(chartName))
             {
@@ -1076,10 +1077,11 @@ namespace RNAssistant.OfficeHosts
             if (command.Arguments.ContainsKey("title"))
             {
                 var title = ToolArgumentReader.String(command.Arguments, "title", string.Empty);
-                chart.HasTitle = !string.IsNullOrWhiteSpace(title);
-                if (chart.HasTitle)
+                var hasTitle = !string.IsNullOrWhiteSpace(title);
+                chart.HasTitle = hasTitle;
+                if (hasTitle)
                 {
-                    chart.ChartTitle.Text = title;
+                    chart.ChartTitle.Caption = title;
                 }
             }
             if (command.Arguments.ContainsKey("left"))
@@ -1788,7 +1790,8 @@ namespace RNAssistant.OfficeHosts
                 }
 
                 var chartObjects = (Excel.ChartObjects)sheet.ChartObjects(Type.Missing);
-                for (var i = 1; i <= chartObjects.Count; i++)
+                var chartCount = chartObjects.Count;
+                for (var i = 1; i <= chartCount; i++)
                 {
                     var chartObject = (Excel.ChartObject)chartObjects.Item(i);
                     if (string.Equals(chartObject.Name, chartName, StringComparison.OrdinalIgnoreCase))
@@ -1827,10 +1830,17 @@ namespace RNAssistant.OfficeHosts
             try
             {
                 var collection = (Excel.SeriesCollection)chart.SeriesCollection(Type.Missing);
-                for (var i = 1; i <= collection.Count; i++)
+                var seriesCount = collection.Count;
+                for (var i = 1; i <= seriesCount; i++)
                 {
-                    var series = (Excel.Series)collection.Item(i);
-                    result.Add(new { name = Convert.ToString(series.Name), formula = Convert.ToString(series.Formula) });
+                    try
+                    {
+                        var series = (Excel.Series)collection.Item(i);
+                        result.Add(new { name = Convert.ToString(series.Name), formula = Convert.ToString(series.Formula) });
+                    }
+                    catch
+                    {
+                    }
                 }
             }
             catch
@@ -1841,14 +1851,48 @@ namespace RNAssistant.OfficeHosts
 
         private static string AxisTitle(Excel.Chart chart, Excel.XlAxisType axisType)
         {
+            var axis = PrimaryAxis(chart, axisType);
+            if (axis == null)
+            {
+                return string.Empty;
+            }
+
             try
             {
-                var axis = chart.Axes(axisType, Excel.XlAxisGroup.xlPrimary) as Excel.Axis;
-                return axis != null && axis.HasTitle ? axis.AxisTitle.Text : string.Empty;
+                if (!axis.HasTitle)
+                {
+                    return string.Empty;
+                }
+
+                var title = axis.AxisTitle;
+                return title == null ? string.Empty : Convert.ToString(title.Caption);
             }
             catch
             {
                 return string.Empty;
+            }
+        }
+
+        private static Excel.Axis PrimaryAxis(Excel.Chart chart, Excel.XlAxisType axisType)
+        {
+            if (chart == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                // Avoid asking Excel for an Axis COM proxy when this chart type has no such axis.
+                if (!Convert.ToBoolean(chart.HasAxis[axisType, Excel.XlAxisGroup.xlPrimary]))
+                {
+                    return null;
+                }
+
+                return chart.Axes(axisType, Excel.XlAxisGroup.xlPrimary) as Excel.Axis;
+            }
+            catch
+            {
+                return null;
             }
         }
 
@@ -1861,7 +1905,8 @@ namespace RNAssistant.OfficeHosts
                 {
                     var labels = sheet.Range[labelsRange];
                     var collection = (Excel.SeriesCollection)chart.SeriesCollection(Type.Missing);
-                    for (var i = 1; i <= collection.Count; i++)
+                    var seriesCount = collection.Count;
+                    for (var i = 1; i <= seriesCount; i++)
                     {
                         ((Excel.Series)collection.Item(i)).XValues = labels;
                     }
@@ -1880,19 +1925,7 @@ namespace RNAssistant.OfficeHosts
             }
 
             var title = ToolArgumentReader.String(command.Arguments, argumentName, string.Empty);
-            Excel.Axis axis;
-            try
-            {
-                axis = chart.Axes(axisType, Excel.XlAxisGroup.xlPrimary) as Excel.Axis;
-            }
-            catch (Exception ex)
-            {
-                if (string.IsNullOrWhiteSpace(title))
-                {
-                    return;
-                }
-                throw new InvalidOperationException("Chart does not support the requested axis title: " + argumentName, ex);
-            }
+            var axis = PrimaryAxis(chart, axisType);
             if (axis == null)
             {
                 if (string.IsNullOrWhiteSpace(title))
@@ -1901,10 +1934,17 @@ namespace RNAssistant.OfficeHosts
                 }
                 throw new InvalidOperationException("Chart does not support the requested axis title: " + argumentName);
             }
-            axis.HasTitle = !string.IsNullOrWhiteSpace(title);
-            if (axis.HasTitle)
+
+            var hasTitle = !string.IsNullOrWhiteSpace(title);
+            axis.HasTitle = hasTitle;
+            if (hasTitle)
             {
-                axis.AxisTitle.Text = title;
+                var axisTitle = axis.AxisTitle;
+                if (axisTitle == null)
+                {
+                    throw new InvalidOperationException("Excel did not create the requested axis title: " + argumentName);
+                }
+                axisTitle.Caption = title;
             }
         }
 
@@ -1912,7 +1952,13 @@ namespace RNAssistant.OfficeHosts
         {
             try
             {
-                return chart != null && chart.HasTitle ? chart.ChartTitle.Text : string.Empty;
+                if (chart == null || !chart.HasTitle)
+                {
+                    return string.Empty;
+                }
+
+                var title = chart.ChartTitle;
+                return title == null ? string.Empty : Convert.ToString(title.Caption);
             }
             catch
             {

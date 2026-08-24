@@ -285,9 +285,7 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "deleteVbaModule":
                         var deleteVbaModule = Payload<VbaDeleteModulePayload>(payload);
-                        responsePayload = _controller.DeleteVbaModule(
-                            deleteVbaModule.ModuleName,
-                            deleteVbaModule.ExpectedCodeSha256);
+                        responsePayload = _controller.DeleteVbaModule(deleteVbaModule.ModuleName);
                         break;
                     case "restoreVbaBackup":
                         var restoreVba = Payload<RestoreVbaBackupPayload>(payload);

@@ -241,7 +241,9 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Fail("Tool command is empty.");
             }
 
+            var requestedToolId = command.ToolId;
             command.ToolId = CanonicalizeVbaToolId(command.ToolId);
+            _vbaExecutor.NormalizeLegacyArguments(command, requestedToolId);
 
             if (depth > 8)
             {
@@ -268,7 +270,6 @@ namespace RNAssistant.Office.Tools
                     false);
             }
 
-            _vbaExecutor.CaptureLegacyExpectedHash(command, context.Session);
             var argumentValidation = ValidateCommandArguments(command, tool);
             if (argumentValidation != null)
             {
@@ -299,12 +300,18 @@ namespace RNAssistant.Office.Tools
 
             if (ToolSafetyPolicy.RequiresConfirmation(tool, safety, context.Settings, dryRun, manualRun))
             {
+                ToolResult preview = null;
                 if (isVbaController)
                 {
-                    var validation = _vbaExecutor.ValidatePreparedControllerTool(command, context.Session, cancellationToken);
-                    if (validation != null) return validation;
+                    preview = _vbaExecutor.PreviewPreparedControllerTool(command, context.Session, cancellationToken);
+                    if (preview != null && !preview.Success) return preview;
                 }
-                return ToolResult.WaitingConfirmation("Tool requires confirmation before execution: " + command.ToolId);
+                var waiting = ToolResult.WaitingConfirmation(
+                    preview == null
+                        ? "Tool requires confirmation before execution: " + command.ToolId
+                        : "Confirmation required. " + preview.Message);
+                if (preview != null) waiting.DataJson = preview.DataJson;
+                return waiting;
             }
 
             if (!context.TryConsumeStep())
@@ -339,6 +346,7 @@ namespace RNAssistant.Office.Tools
             {
                 arguments = JObject.FromObject(command.Arguments ?? new Dictionary<string, object>());
                 CoerceStructuredStrings(arguments, schema);
+                ToolSchemaSupport.RemoveOptionalNulls(arguments, schema);
             }
             catch (JsonException ex)
             {
@@ -665,8 +673,10 @@ namespace RNAssistant.Office.Tools
         {
             if (string.IsNullOrWhiteSpace(id)) return id;
             var hostPrefix = (_adapter.HostName ?? string.Empty).ToLowerInvariant() + ".";
-            if (!id.StartsWith(hostPrefix, StringComparison.OrdinalIgnoreCase)) return id;
-            var candidate = "common." + id.Substring(hostPrefix.Length);
+            var candidate = id.StartsWith(hostPrefix, StringComparison.OrdinalIgnoreCase)
+                ? "common." + id.Substring(hostPrefix.Length)
+                : id;
+            candidate = VbaPublicToolIds.Canonicalize(candidate);
             ControllerExecutorKind executor;
             return _controllerExecutors.TryGetValue(candidate, out executor) && executor == ControllerExecutorKind.Vba
                 ? candidate
