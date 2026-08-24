@@ -142,6 +142,7 @@ namespace RNAssistant.Harness
                 Test("search: regex and capture replacement", TextPatternEngineSupportsRegexpAndGroups),
 
                 Test("tools: catalog merges visible tools", ToolCatalogMergesVisibleTools),
+                Test("tools: VBA facade is common across hosts", VbaFacadeIsCommonAcrossHosts),
                 Test("tools: built-in ids cannot be shadowed", BuiltInToolIdsCannotBeShadowed),
                 Test("tools: nested safety is effective", RefreshedCustomToolGetsEffectiveSafety),
                 Test("tools: store saves and updates", ToolStoreSavesAndUpdatesCustomTools),
@@ -165,6 +166,10 @@ namespace RNAssistant.Harness
                 Test("plans: duplicate step ids rejected", PlanCrudRejectsAmbiguousSteps),
 
                 Test("vba: replace text backs up module", VbaReplaceTextBacksUpModule),
+                Test("vba: confirmed mutation rejects stale snapshot", VbaConfirmedMutationRejectsStaleSnapshot),
+                Test("vba: create rejects confirmation race", VbaCreateRejectsConfirmationRace),
+                Test("vba: snapshots are chat scoped", VbaSnapshotsAreChatScoped),
+                Test("vba: guard rejects runtime document switch", VbaGuardRejectsRuntimeDocumentSwitch),
                 Test("vba: apply patch targets module", VbaApplyPatchTargetsNamedModule),
                 Test("vba: backup failure blocks replacement", VbaBackupFailureBlocksReplacement),
                 Test("vba: patch rejects line overrun", VbaPatchRejectsLineOverrun),
@@ -182,6 +187,7 @@ namespace RNAssistant.Harness
                 Test("vba: read-back rejects write drift", VbaReadBackRejectsWriteDrift),
                 Test("vba: read-back rejects delete drift", VbaReadBackRejectsDeleteDrift),
                 Test("vba: restore applies backup", VbaRestoreAppliesBackup),
+                Test("vba: restore pins backup before confirmation", VbaRestorePinsBackupBeforeConfirmation),
                 Test("vba: backup store skips broken files", VbaBackupStoreSkipsBrokenFiles),
                 Test("vba: manifest validates entry point", VbaToolManifestValidatesTypedEntryPoint),
                 Test("vba: package rejects duplicate sources", VbaToolPackageRejectsDuplicateSources),

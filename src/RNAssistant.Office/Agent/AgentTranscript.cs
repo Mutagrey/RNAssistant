@@ -128,6 +128,7 @@ namespace RNAssistant.Office
                         MaxTranscriptArgumentsChars,
                         result != null && IsWaitingResult(result),
                         false),
+                RuntimeGuardJson = command == null ? null : command.RuntimeGuardJson,
                 ResultMessage = message,
                 DataJson = BoundJson(rawDataJson, MaxTranscriptDataChars, false, true)
             };

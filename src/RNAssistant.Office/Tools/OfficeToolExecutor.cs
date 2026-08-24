@@ -150,6 +150,16 @@ namespace RNAssistant.Office.Tools
             return _vbaExecutor.ToolId(suffix);
         }
 
+        public string VbaBackendToolId(string suffix)
+        {
+            return _vbaExecutor.BackendToolId(suffix);
+        }
+
+        public void ObserveVbaHash(ChatSession session, string moduleName, string codeSha256)
+        {
+            _vbaExecutor.ObserveExpectedHash(session, moduleName, codeSha256);
+        }
+
         public ToolResult ValidateToolDefinition(ToolDefinition tool)
         {
             var validation = ToolAuthoringExecutor.ValidateToolDefinition(tool);
@@ -231,6 +241,8 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Fail("Tool command is empty.");
             }
 
+            command.ToolId = CanonicalizeVbaToolId(command.ToolId);
+
             if (depth > 8)
             {
                 return ToolResult.Fail("Pipeline nesting limit exceeded.");
@@ -256,6 +268,7 @@ namespace RNAssistant.Office.Tools
                     false);
             }
 
+            _vbaExecutor.CaptureLegacyExpectedHash(command, context.Session);
             var argumentValidation = ValidateCommandArguments(command, tool);
             if (argumentValidation != null)
             {
@@ -275,8 +288,22 @@ namespace RNAssistant.Office.Tools
                 return reservedIdResult;
             }
 
+            ControllerExecutorKind controllerKind;
+            var isVbaController = _controllerExecutors.TryGetValue(command.ToolId, out controllerKind) &&
+                controllerKind == ControllerExecutorKind.Vba;
+            if (isVbaController)
+            {
+                var preparation = _vbaExecutor.PrepareControllerTool(command, context.Session);
+                if (preparation != null) return preparation;
+            }
+
             if (ToolSafetyPolicy.RequiresConfirmation(tool, safety, context.Settings, dryRun, manualRun))
             {
+                if (isVbaController)
+                {
+                    var validation = _vbaExecutor.ValidatePreparedControllerTool(command, context.Session, cancellationToken);
+                    if (validation != null) return validation;
+                }
                 return ToolResult.WaitingConfirmation("Tool requires confirmation before execution: " + command.ToolId);
             }
 
@@ -403,9 +430,9 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Ok("Dry run: would execute " + command.ToolId, JsonConvert.SerializeObject(command.Arguments));
             }
 
-            if (string.Equals(command.ToolId, VbaToolId("vba_replace_module"), StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, VbaBackendToolId("vba_replace_module"), StringComparison.OrdinalIgnoreCase))
             {
-                var backupError = _vbaExecutor.PrepareBackupBeforeReplace(command);
+                var backupError = _vbaExecutor.PrepareBackupBeforeReplace(command, context.Session);
                 if (backupError != null)
                 {
                     return backupError;
@@ -599,7 +626,7 @@ namespace RNAssistant.Office.Tools
             switch (executor)
             {
                 case ControllerExecutorKind.Vba:
-                    return _vbaExecutor.ExecuteControllerTool(command, dryRun, cancellationToken);
+                    return _vbaExecutor.ExecuteControllerTool(command, dryRun, context.Session, cancellationToken);
                 case ControllerExecutorKind.Skill:
                     return _skillExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun, context.SkillCatalog);
                 case ControllerExecutorKind.ToolAuthoring:
@@ -634,6 +661,18 @@ namespace RNAssistant.Office.Tools
             }
         }
 
+        internal string CanonicalizeVbaToolId(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return id;
+            var hostPrefix = (_adapter.HostName ?? string.Empty).ToLowerInvariant() + ".";
+            if (!id.StartsWith(hostPrefix, StringComparison.OrdinalIgnoreCase)) return id;
+            var candidate = "common." + id.Substring(hostPrefix.Length);
+            ControllerExecutorKind executor;
+            return _controllerExecutors.TryGetValue(candidate, out executor) && executor == ControllerExecutorKind.Vba
+                ? candidate
+                : id;
+        }
+
         private IReadOnlyList<ToolDefinition> KnownTools(IEnumerable<ToolDefinition> providedTools)
         {
             var result = new List<ToolDefinition>();
@@ -646,9 +685,11 @@ namespace RNAssistant.Office.Tools
 
         private bool IsProtectedToolId(string id)
         {
+            var canonicalId = CanonicalizeVbaToolId(id);
             return !string.IsNullOrWhiteSpace(id) &&
                 (_adapterTools.Any(tool => tool != null && string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase)) ||
                  _controllerExecutors.ContainsKey(id) ||
+                 _controllerExecutors.ContainsKey(canonicalId ?? string.Empty) ||
                  _vbaExecutor.IsInternalToolId(id));
         }
 

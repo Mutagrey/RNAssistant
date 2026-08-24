@@ -103,9 +103,8 @@ function reviewVbaInChat() {
   if (!module) {
     return;
   }
-  var host = (state.host || "excel").toLowerCase();
-  var readTool = host + ".vba_read_module";
-  var patchTool = (state.host || "excel").toLowerCase() + ".vba_apply_patch";
+  var readTool = "common.vba_read_module";
+  var patchTool = "common.vba_apply_patch";
   switchTab("chat");
   setChatInputText("Проверь VBA-модуль " + vbaModuleName(module) + ": сначала прочитай его через " + readTool + ", затем найди ошибки, риски и места для улучшения. Для небольших правок используй " + patchTool + ".", true);
 }
@@ -178,6 +177,10 @@ var vbaActions = window.RNAssistantVbaActions.create({
   logToolResult: logToolResult,
   getModuleName: function () { return $("vbaModuleSelect").value; },
   getEditorCode: vbaEditorCode,
+  getModuleHash: function () {
+    var module = selectedVbaModule();
+    return module ? (module.codeSha256 || module.CodeSha256 || "") : "";
+  },
   getBackupId: function () { return $("vbaBackupSelect").value; },
   previewDiff: previewVbaDiff,
   applyProjectResponse: readVbaResult,

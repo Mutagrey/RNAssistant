@@ -103,10 +103,42 @@ namespace RNAssistant.Harness
                 var catalog = new ToolCatalogService(adapter, executor, toolStore).GetVisibleTools();
 
                 AssertTrue(HasTool(catalog, "excel.add_sheet"), "built-in tool visible");
-                AssertTrue(HasTool(catalog, "excel.vba_apply_patch"), "controller VBA tool visible");
+                AssertTrue(HasTool(catalog, "common.vba_apply_patch"), "common controller VBA tool visible");
                 AssertTrue(HasTool(catalog, "common.inspect"), "common custom tool visible");
                 AssertTrue(HasTool(catalog, "excel.custom"), "host custom tool visible");
                 AssertTrue(!HasTool(catalog, "word.hidden"), "other host custom tool hidden");
+            });
+        }
+
+        private static void VbaFacadeIsCommonAcrossHosts()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                foreach (var host in new[] { "Excel", "Word", "PowerPoint" })
+                {
+                    var adapter = FakeOfficeAdapter.ForHost(host);
+                    var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths));
+                    var tools = executor.GetControllerTools().ToList();
+                    AssertTrue(HasTool(tools, "common.vba_read_module"), host + " exposes common VBA read");
+                    AssertTrue(HasTool(tools, "common.vba_apply_patch"), host + " exposes common VBA patch");
+                    AssertTrue(tools.Where(tool => (tool.Id ?? string.Empty).StartsWith("common.vba_", StringComparison.OrdinalIgnoreCase))
+                        .All(tool => string.Equals(tool.Host, "Common", StringComparison.OrdinalIgnoreCase)), host + " VBA facade is host-neutral");
+                    AssertTrue(!HasTool(tools, host.ToLowerInvariant() + ".vba_apply_patch"), host + " does not publish a host-specific patch facade");
+                }
+
+                var outlook = FakeOfficeAdapter.ForHost("Outlook");
+                var outlookExecutor = new OfficeToolExecutor(outlook, new VbaBackupStore(paths), new SkillStore(paths));
+                AssertTrue(!HasTool(outlookExecutor.GetControllerTools(), "common.vba_apply_patch"), "Outlook does not expose VBA facade");
+
+                var excel = FakeOfficeAdapter.ForHost("Excel");
+                var store = new ToolStore(paths);
+                var legacyPipeline = CustomTool("Excel", "excel.legacy_vba_pipeline");
+                legacyPipeline.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.vba_read_module\",\"arguments\":{\"moduleName\":\"Module1\"}},{\"toolId\":\"excel.vba_apply_patch\",\"arguments\":{\"moduleName\":\"Module1\",\"patch\":[{\"op\":\"replace\",\"find\":\"old\",\"text\":\"new\"}]}}]}";
+                store.SaveOne(legacyPipeline);
+                var excelExecutor = new OfficeToolExecutor(excel, new VbaBackupStore(paths), new SkillStore(paths), store);
+                var loaded = FindTool(new ToolCatalogService(excel, excelExecutor, store).GetVisibleTools(), legacyPipeline.Id);
+                AssertContains(loaded.PipelineJson, "common.vba_read_module", "legacy pipeline read id is normalized in memory");
+                AssertContains(loaded.PipelineJson, "common.vba_apply_patch", "legacy pipeline patch id is normalized in memory");
             });
         }
 

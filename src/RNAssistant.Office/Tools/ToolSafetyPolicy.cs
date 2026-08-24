@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Tools
@@ -189,11 +190,27 @@ namespace RNAssistant.Office.Tools
         private static Dictionary<string, ToolDefinition> BuildCatalog(IEnumerable<ToolDefinition> tools)
         {
             var catalog = new Dictionary<string, ToolDefinition>(StringComparer.OrdinalIgnoreCase);
-            foreach (var tool in tools ?? new ToolDefinition[0])
+            var toolList = (tools ?? new ToolDefinition[0])
+                .Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))
+                .ToList();
+            foreach (var tool in toolList)
             {
-                if (tool != null && !string.IsNullOrWhiteSpace(tool.Id) && !catalog.ContainsKey(tool.Id))
+                if (!catalog.ContainsKey(tool.Id))
                 {
                     catalog.Add(tool.Id, tool);
+                }
+            }
+            foreach (var tool in toolList.Where(item => item.Id.StartsWith("common.vba_", StringComparison.OrdinalIgnoreCase)))
+            {
+                var suffix = tool.Id.Substring("common.".Length);
+                foreach (var host in new[] { "excel", "word", "powerpoint" })
+                {
+                    var legacyId = host + "." + suffix;
+                    if (toolList.Any(item => item.Id.StartsWith(host + ".", StringComparison.OrdinalIgnoreCase)) &&
+                        !catalog.ContainsKey(legacyId))
+                    {
+                        catalog.Add(legacyId, tool);
+                    }
                 }
             }
             return catalog;

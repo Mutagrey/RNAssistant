@@ -30,17 +30,35 @@ namespace RNAssistant.Harness
                 adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"old\"\nEnd Sub";
                 var backupStore = new VbaBackupStore(paths);
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
+                var session = NewSession(adapter);
                 var command = new ToolCommand { ToolId = executor.VbaToolId("vba_replace_text") };
                 command.Arguments["moduleName"] = "Module1";
-                command.Arguments["expectedCodeSha256"] = VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode);
                 command.Arguments["find"] = "\"old\"";
                 command.Arguments["replace"] = "\"new\"";
 
-                var blocked = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = false }, false, false);
-                AssertTrue(!blocked.Success, "vba replace blocked");
-                AssertEqual(0, adapter.Executed.Count, "blocked vba adapter execution count");
+                var missingSnapshot = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+                AssertEqual("vba_snapshot_required", missingSnapshot.ErrorCode, "edit requires an observed module");
+                AssertEqual(0, adapter.Executed.Count, "missing snapshot does not trigger an implicit read");
 
-                var result = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
+                var read = executor.Execute(
+                    Command(executor.VbaToolId("vba_read_module"), "moduleName", "Module1"),
+                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    new AppSettings(),
+                    false,
+                    false,
+                    session);
+                AssertTrue(read.Success, "module snapshot read");
+                adapter.Executed.Clear();
+
+                var blocked = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = false }, false, false, session);
+                AssertTrue(!blocked.Success, "vba replace blocked");
+                AssertEqual("waiting_confirmation", blocked.Status, "vba replace waits for confirmation");
+                AssertTrue(!string.IsNullOrWhiteSpace(command.RuntimeGuardJson), "runtime snapshot guard bound before confirmation");
+                AssertEqual(2, adapter.Executed.Count, "confirmation preflight validates snapshot and patch without writing");
+                AssertEqual(0, adapter.Executed.Count(item => item.ToolId.EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase)), "confirmation preflight does not write VBA");
+                AssertContains(adapter.VbaModuleCode, "\"old\"", "blocked mutation leaves code unchanged");
+
+                var result = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false, session);
 
                 AssertTrue(result.Success, "replace result");
                 AssertContains(adapter.VbaModuleCode, "\"new\"", "updated module");
@@ -49,6 +67,103 @@ namespace RNAssistant.Harness
                 AssertEqual(1, backups.Count, "backup count");
                 AssertEqual("Module1", backups[0].ModuleName, "backup module");
                 AssertContains(backups[0].Code, "\"old\"", "backup code");
+            });
+        }
+
+        private static void VbaConfirmedMutationRejectsStaleSnapshot()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"old\"\nEnd Sub";
+                var backupStore = new VbaBackupStore(paths);
+                var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
+                var session = NewSession(adapter);
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+
+                var read = executor.Execute(Command("common.vba_read_module", "moduleName", "Module1"), tools, new AppSettings(), false, false, session);
+                AssertTrue(read.Success, "snapshot read succeeds");
+                var command = Command("common.vba_replace_text", "moduleName", "Module1", "find", "\"old\"", "replace", "\"new\"");
+                var waiting = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = false }, false, false, session);
+                AssertEqual("waiting_confirmation", waiting.Status, "mutation waits for confirmation");
+
+                var persistedCommand = JsonConvert.DeserializeObject<ToolCommand>(JsonConvert.SerializeObject(command));
+                AssertTrue(!string.IsNullOrWhiteSpace(persistedCommand.RuntimeGuardJson), "runtime guard survives persistence");
+                adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"changed elsewhere\"\nEnd Sub";
+                var stale = executor.Execute(persistedCommand, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+
+                AssertEqual("stale_vba_module", stale.ErrorCode, "confirmed stale mutation rejected");
+                AssertContains(adapter.VbaModuleCode, "changed elsewhere", "stale mutation does not overwrite external change");
+                AssertEqual(0, backupStore.List("Excel", "doc").Count, "stale mutation does not create a needless backup");
+            });
+        }
+
+        private static void VbaCreateRejectsConfirmationRace()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var session = NewSession(adapter);
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var command = Command(
+                    "common.vba_create_module",
+                    "moduleName", "CreatedDuringConfirmation",
+                    "componentType", "StdModule",
+                    "code", "Sub Requested()\nEnd Sub");
+                var waiting = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = false }, false, false, session);
+                AssertEqual("waiting_confirmation", waiting.Status, "create waits for confirmation");
+
+                adapter.SetVbaModule("CreatedDuringConfirmation", "Sub External()\nEnd Sub", "StdModule");
+                var stale = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+
+                AssertEqual("stale_vba_module", stale.ErrorCode, "create detects a module added during confirmation");
+                AssertContains(adapter.GetVbaModuleCode("CreatedDuringConfirmation"), "External", "create race does not overwrite module");
+            });
+        }
+
+        private static void VbaSnapshotsAreChatScoped()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.VbaModuleCode = "Sub Main()\nEnd Sub";
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var firstChat = NewSession(adapter);
+                var secondChat = NewSession(adapter);
+                var read = executor.Execute(Command("common.vba_read_module", "moduleName", "Module1"), tools, new AppSettings(), false, false, firstChat);
+                AssertTrue(read.Success, "first chat reads module");
+
+                adapter.Executed.Clear();
+                var blocked = executor.Execute(
+                    Command("common.vba_delete_module", "moduleName", "Module1"),
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false,
+                    secondChat);
+
+                AssertEqual("vba_snapshot_required", blocked.ErrorCode, "another chat cannot reuse the snapshot");
+                AssertEqual(0, adapter.Executed.Count, "cross-chat snapshot rejection does not touch VBA");
+                AssertContains(adapter.VbaModuleCode, "Sub Main", "module remains present");
+            });
+        }
+
+        private static void VbaGuardRejectsRuntimeDocumentSwitch()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.VbaModuleCode = "Sub Main()\nEnd Sub";
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var session = NewSession(adapter);
+                AssertTrue(executor.Execute(Command("common.vba_read_module", "moduleName", "Module1"), tools, new AppSettings(), false, false, session).Success,
+                    "module read before document switch");
+                var command = Command("common.vba_delete_module", "moduleName", "Module1");
+                AssertEqual("waiting_confirmation", executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = false }, false, false, session).Status,
+                    "delete waits with a bound guard");
+
+                adapter.RuntimeDocumentKeyValue = "runtime-other-document";
+                var blocked = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+
+                AssertEqual("vba_snapshot_context_changed", blocked.ErrorCode, "runtime document switch invalidates the guard");
+                AssertContains(adapter.VbaModuleCode, "Sub Main", "document switch does not delete module");
             });
         }
 
@@ -327,11 +442,12 @@ namespace RNAssistant.Harness
                         "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode),
                         "patch", "[{\"op\":\"insertBefore\",\"find\":\"End Sub\",\"text\":\"Debug.Print 1\\n\"}]"),
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
-                    new AppSettings { AutoConfirmToolActions = true },
+                    new AppSettings { AutoConfirmToolActions = false },
                     false,
                     false);
                 AssertTrue(!result.Success, "ambiguous anchor rejected");
                 AssertEqual("vba_patch_ambiguous", result.ErrorCode, "ambiguous anchor error");
+                AssertTrue(!string.Equals("waiting_confirmation", result.Status, StringComparison.OrdinalIgnoreCase), "ambiguous patch fails before confirmation");
                 AssertContains(result.Message, "replaceLines", "ambiguous anchor recovery guidance");
                 AssertContains(result.Message, "do not bypass", "ambiguous anchor bypass guidance");
                 AssertTrue(adapter.VbaModuleCode.IndexOf("Debug.Print", StringComparison.Ordinal) < 0, "module unchanged");
@@ -549,6 +665,31 @@ namespace RNAssistant.Harness
                     .OfType<JObject>()
                     .First(item => string.Equals((string)item["name"], "RestoredClass", StringComparison.OrdinalIgnoreCase));
                 AssertEqual("ClassModule", (string)restoredClass["type"], "restore preserves class module type");
+            });
+        }
+
+        private static void VbaRestorePinsBackupBeforeConfirmation()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                adapter.VbaModuleCode = "Sub Current()\nEnd Sub";
+                var backupStore = new VbaBackupStore(paths);
+                var selected = backupStore.Save("Excel", "doc", "Harness.xlsx", "Module1", "StdModule", "Sub Selected()\nEnd Sub");
+                var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
+                var session = NewSession(adapter);
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var command = Command("common.vba_restore_backup", "moduleName", "Module1");
+                var waiting = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = false }, false, false, session);
+                AssertEqual("waiting_confirmation", waiting.Status, "restore waits for confirmation");
+                AssertEqual(selected.BackupId, Convert.ToString(command.Arguments["backupId"]), "latest backup is resolved to an exact id before confirmation");
+
+                backupStore.Save("Excel", "doc", "Harness.xlsx", "Module1", "StdModule", "Sub Newer()\nEnd Sub");
+                var restored = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+
+                AssertTrue(restored.Success, "pinned restore succeeds");
+                AssertContains(adapter.VbaModuleCode, "Selected", "confirmation restores the originally selected backup");
+                AssertTrue(adapter.VbaModuleCode.IndexOf("Newer", StringComparison.Ordinal) < 0, "newer backup does not replace confirmed target");
             });
         }
 

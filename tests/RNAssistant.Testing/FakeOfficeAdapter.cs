@@ -1147,8 +1147,8 @@ namespace RNAssistant.Harness
                 BuiltIn("Excel", "excel.clear_range", false, true, false, 3),
                 BuiltIn("Excel", "excel.sort_range", false, true, false),
                 BuiltIn("Excel", "excel.filter_range", false, true, false),
-                BuiltIn("Excel", "excel.vba_read_module", false, false, true),
-                BuiltIn("Excel", "excel.vba_read_lines", false, false, true),
+                BuiltIn("Excel", "excel.vba_read_module", false, false, false),
+                BuiltIn("Excel", "excel.vba_read_lines", false, false, false),
                 BuiltIn("Excel", "excel.vba_replace_module", false, true, false, 3),
                 BuiltIn("Excel", "excel.insert_vba_module", false, true, false, 3),
                 BuiltIn("Excel", "excel.run_macro", false, true, false, 3)
@@ -1178,8 +1178,8 @@ namespace RNAssistant.Harness
                 BuiltIn("Word", "word.add_table", false, true, true),
                 BuiltIn("Word", "word.insert_page_break", false, true, true, 1),
                 BuiltIn("Word", "word.add_comment", false, true, true, 1),
-                BuiltIn("Word", "word.vba_read_module", false, false, true),
-                BuiltIn("Word", "word.vba_read_lines", false, false, true),
+                BuiltIn("Word", "word.vba_read_module", false, false, false),
+                BuiltIn("Word", "word.vba_read_lines", false, false, false),
                 BuiltIn("Word", "word.vba_replace_module", false, true, false, 3),
                 BuiltIn("Word", "word.insert_vba_module", false, true, false, 3),
                 BuiltIn("Word", "word.run_macro", false, true, false, 3)
@@ -1206,8 +1206,8 @@ namespace RNAssistant.Harness
                 BuiltIn("PowerPoint", "powerpoint.add_table", false, true, true, 1),
                 BuiltIn("PowerPoint", "powerpoint.duplicate_slide", false, true, true, 1),
                 BuiltIn("PowerPoint", "powerpoint.move_slide", false, true, false),
-                BuiltIn("PowerPoint", "powerpoint.vba_read_module", false, false, true),
-                BuiltIn("PowerPoint", "powerpoint.vba_read_lines", false, false, true),
+                BuiltIn("PowerPoint", "powerpoint.vba_read_module", false, false, false),
+                BuiltIn("PowerPoint", "powerpoint.vba_read_lines", false, false, false),
                 BuiltIn("PowerPoint", "powerpoint.vba_replace_module", false, true, false, 3),
                 BuiltIn("PowerPoint", "powerpoint.insert_vba_module", false, true, false, 3),
                 BuiltIn("PowerPoint", "powerpoint.run_macro", false, true, false, 3)

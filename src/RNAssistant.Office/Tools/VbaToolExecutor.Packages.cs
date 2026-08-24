@@ -57,7 +57,7 @@ namespace RNAssistant.Office.Tools
             }
 
             var entryModule = EntryComponent(package);
-            var run = new ToolCommand { ToolId = ToolId("run_macro") };
+            var run = new ToolCommand { ToolId = BackendToolId("run_macro") };
             run.Arguments["macroName"] = entryModule.Name + "." + package.EntryPoint;
             run.Arguments["argumentsJson"] = positional.ToString(Formatting.None);
             ToolResult runResult;
@@ -128,7 +128,7 @@ namespace RNAssistant.Office.Tools
                 }
             }
 
-            var install = new ToolCommand { ToolId = ToolId("vba_install_package_internal") };
+            var install = new ToolCommand { ToolId = BackendToolId("vba_install_package_internal") };
             install.Arguments["componentsJson"] = JsonConvert.SerializeObject(package.Components.Select(component => new { name = component.Name, type = component.Type, code = component.Code }).ToArray());
             install.Arguments["marker"] = (sessionOnly ? "RNAssistantSession: " : "RNAssistantPackage: ") +
                 "id=" + package.Id + "; version=" + package.PackageVersion + "; hash=" + PackageHash(package);
@@ -173,7 +173,7 @@ namespace RNAssistant.Office.Tools
             if (!TryPreparePackage(tool, out package, out validationError)) return validationError;
             var expected = new JObject();
             foreach (var component in package.Components) expected[component.Name] = VbaToolManifestParser.CodeSha256(component.Code);
-            var remove = new ToolCommand { ToolId = ToolId("vba_remove_package_internal") };
+            var remove = new ToolCommand { ToolId = BackendToolId("vba_remove_package_internal") };
             remove.Arguments["expectedComponentsJson"] = expected.ToString(Formatting.None);
             remove.Arguments["expectedMarker"] = (sessionOnly ? "RNAssistantSession: " : "RNAssistantPackage: ") + "id=" + package.Id + ";";
             var removed = _adapter.ExecuteTool(remove);

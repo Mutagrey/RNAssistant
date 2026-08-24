@@ -426,11 +426,15 @@ namespace RNAssistant.Harness
                     .GetAwaiter().GetResult();
 
                 var prompt = FlattenSimple(request);
-                AssertContains(prompt, "\"name\":\"excel.vba_search_code\"", "VBA search exposed");
-                AssertContains(prompt, "\"name\":\"excel.vba_apply_patch\"", "safe VBA patch exposed");
-                AssertContains(prompt, "\"name\":\"excel.vba_create_module\"", "VBA create exposed");
-                AssertContains(prompt, "\"name\":\"excel.vba_delete_module\"", "VBA delete exposed");
-                AssertContains(prompt, "expectedCodeSha256", "VBA edit schema requires current hash");
+                AssertContains(prompt, "\"name\":\"common.vba_read_module\"", "common VBA read exposed");
+                AssertContains(prompt, "\"name\":\"common.vba_search_code\"", "common VBA search exposed");
+                AssertContains(prompt, "\"name\":\"common.vba_apply_patch\"", "common safe VBA patch exposed");
+                AssertContains(prompt, "\"name\":\"common.vba_create_module\"", "common VBA create exposed");
+                AssertContains(prompt, "\"name\":\"common.vba_delete_module\"", "common VBA delete exposed");
+                AssertTrue(prompt.IndexOf("\"expectedCodeSha256\"", StringComparison.Ordinal) < 0,
+                    "model-facing VBA schemas do not require a hash argument");
+                AssertTrue(prompt.IndexOf("\"name\":\"excel.vba_read_module\"", StringComparison.Ordinal) < 0,
+                    "raw host VBA read backend remains hidden");
                 AssertTrue(prompt.IndexOf("\"name\":\"excel.vba_replace_module\"", StringComparison.Ordinal) < 0,
                     "raw whole-module backend remains hidden");
                 AssertTrue(prompt.IndexOf("\"name\":\"excel.run_macro\"", StringComparison.Ordinal) < 0,

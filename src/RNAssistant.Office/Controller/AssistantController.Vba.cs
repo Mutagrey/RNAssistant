@@ -58,16 +58,17 @@ namespace RNAssistant.Office
             return _toolExecutor.Execute(command, new ToolDefinition[0], settings, false, true, session);
         }
 
-        public ToolResult SaveVbaModule(string moduleName, string code)
+        public ToolResult SaveVbaModule(string moduleName, string code, string expectedCodeSha256 = null)
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_replace_module") };
+            var command = new ToolCommand { ToolId = _toolExecutor.VbaBackendToolId("vba_replace_module") };
             command.Arguments["moduleName"] = moduleName;
             command.Arguments["code"] = code;
             command.Arguments["createIfMissing"] = "false";
             return WithReservedSession(LoadSession(null), session =>
             {
+                _toolExecutor.ObserveVbaHash(session, moduleName, expectedCodeSha256);
                 var result = _toolExecutor.Execute(command, tools, settings, false, true, session);
                 _toolCatalog.InvalidateDocumentVbaTools();
                 return result;
@@ -96,9 +97,9 @@ namespace RNAssistant.Office
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
             var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_delete_module") };
             command.Arguments["moduleName"] = moduleName;
-            command.Arguments["expectedCodeSha256"] = expectedCodeSha256;
             return WithReservedSession(LoadSession(null), session =>
             {
+                _toolExecutor.ObserveVbaHash(session, moduleName, expectedCodeSha256);
                 var result = _toolExecutor.Execute(command, tools, settings, false, true, session);
                 _toolCatalog.InvalidateDocumentVbaTools();
                 return result;

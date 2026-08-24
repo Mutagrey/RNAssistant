@@ -69,7 +69,8 @@
       var saved = await runWork(async function () {
         var response = await options.send("saveVbaModule", {
           moduleName: moduleName,
-          code: options.getEditorCode()
+          code: options.getEditorCode(),
+          expectedCodeSha256: typeof options.getModuleHash === "function" ? options.getModuleHash() : ""
         });
         options.setStatus(response.Message || response.message || "VBA-модуль сохранен.");
       });

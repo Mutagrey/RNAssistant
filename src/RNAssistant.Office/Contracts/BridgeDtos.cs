@@ -594,6 +594,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("code")]
         public string Code { get; set; }
+
+        [JsonProperty("expectedCodeSha256")]
+        public string ExpectedCodeSha256 { get; set; }
     }
 
     public sealed class VbaCreateModulePayload

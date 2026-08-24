@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
 
 namespace RNAssistant.Core.Models
 {
@@ -79,6 +80,9 @@ namespace RNAssistant.Core.Models
         public string Description { get; set; }
         public string ToolCallId { get; set; }
         public Dictionary<string, object> Arguments { get; set; }
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public string RuntimeGuardJson { get; set; }
 
         public ToolCommand()
         {

@@ -48,6 +48,7 @@ namespace RNAssistant.Office.Services
             {
                 if (!string.IsNullOrWhiteSpace(tool.Id) && !result.ContainsKey(tool.Id))
                 {
+                    CanonicalizeLegacyVbaPipeline(tool);
                     if (string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
                     {
                         tool.Scope = "global";
@@ -60,6 +61,30 @@ namespace RNAssistant.Office.Services
             DiscoverDocumentVbaTools(result);
 
             return result.Values.OrderBy(s => s.Host).ThenBy(s => s.Id).ToList();
+        }
+
+        private void CanonicalizeLegacyVbaPipeline(ToolDefinition tool)
+        {
+            if (tool == null || !string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(tool.PipelineJson)) return;
+            try
+            {
+                var pipeline = JObject.Parse(tool.PipelineJson);
+                var changed = false;
+                foreach (var step in (pipeline["steps"] as JArray ?? new JArray()).OfType<JObject>())
+                {
+                    var id = (string)step["toolId"];
+                    var canonical = _toolExecutor.CanonicalizeVbaToolId(id);
+                    if (string.Equals(id, canonical, StringComparison.Ordinal)) continue;
+                    step["toolId"] = canonical;
+                    changed = true;
+                }
+                if (changed) tool.PipelineJson = pipeline.ToString(Formatting.None);
+            }
+            catch (JsonException)
+            {
+                // Normal validation reports malformed pipelines; compatibility rewriting stays best-effort.
+            }
         }
 
         private void DiscoverDocumentVbaTools(IDictionary<string, ToolDefinition> result)
@@ -177,7 +202,7 @@ namespace RNAssistant.Office.Services
             ToolResult read;
             try
             {
-                var command = new ToolCommand { ToolId = (_adapter.HostName ?? string.Empty).ToLowerInvariant() + ".vba_list_project_components_internal" };
+                var command = new ToolCommand { ToolId = _toolExecutor.VbaBackendToolId("vba_list_project_components_internal") };
                 read = _adapter.ExecuteTool(command);
             }
             catch { return result; }
@@ -248,7 +273,7 @@ namespace RNAssistant.Office.Services
             ToolResult read;
             try
             {
-                var command = new ToolCommand { ToolId = (_adapter.HostName ?? string.Empty).ToLowerInvariant() + ".vba_read_module" };
+                var command = new ToolCommand { ToolId = _toolExecutor.VbaBackendToolId("vba_read_module") };
                 command.Arguments["moduleName"] = moduleName;
                 command.Arguments["maxChars"] = 2000000;
                 read = _adapter.ExecuteTool(command);

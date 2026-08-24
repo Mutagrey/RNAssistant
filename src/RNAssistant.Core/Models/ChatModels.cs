@@ -100,6 +100,8 @@ namespace RNAssistant.Core.Models
         public string ToolId { get; set; }
         public string ToolCallId { get; set; }
         public string ArgumentsJson { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public string RuntimeGuardJson { get; set; }
         public string ResultMessage { get; set; }
         public string DataJson { get; set; }
         public List<ChatActivity> Children { get; set; }

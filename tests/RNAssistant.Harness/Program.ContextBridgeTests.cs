@@ -114,6 +114,7 @@ namespace RNAssistant.Harness
                     ErrorCode = "pipeline_partial_failure",
                     Retryable = false,
                     ToolId = "excel.write_table",
+                    RuntimeGuardJson = "{\"version\":1}",
                     Children = new List<ChatActivity>
                     {
                         new ChatActivity { Kind = "tool", Title = "Nested", Status = "completed", ToolId = "excel.add_sheet" }
@@ -141,6 +142,7 @@ namespace RNAssistant.Harness
             AssertEqual("Write table", clonedMessages[0].Activity.Title, "activity title");
             AssertEqual("pipeline_partial_failure", clonedMessages[0].Activity.ErrorCode, "activity error code");
             AssertEqual(false, clonedMessages[0].Activity.Retryable, "activity retryable");
+            AssertEqual("{\"version\":1}", clonedMessages[0].Activity.RuntimeGuardJson, "activity runtime guard cloned");
             AssertEqual("run-1", clonedMessages[0].Activity.RunId, "activity run id");
             AssertEqual(5, clonedMessages[0].Activity.Sequence, "activity sequence");
             sourceMessage.Content = "Changed";
@@ -619,7 +621,7 @@ namespace RNAssistant.Harness
             AssertEqual("Module2", controller.LastModuleName, "read module name");
 
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b5\",\"type\":\"saveVbaModule\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"moduleName\":\"Module1\",\"code\":\"Sub Main()\\nEnd Sub\"}}")
+                "{\"id\":\"b5\",\"type\":\"saveVbaModule\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"moduleName\":\"Module1\",\"code\":\"Sub Main()\\nEnd Sub\",\"expectedCodeSha256\":\"save123\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -627,6 +629,7 @@ namespace RNAssistant.Harness
             AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
             AssertEqual("Module1", controller.LastModuleName, "module name");
             AssertContains(controller.LastModuleCode, "Sub Main", "module code");
+            AssertEqual("save123", controller.LastModuleHash, "save module hash");
 
             var createResponseJson = bridge.HandleMessageAsync(
                 "{\"id\":\"b5-create\",\"type\":\"createVbaModule\",\"bridgeToken\":\"" + token +

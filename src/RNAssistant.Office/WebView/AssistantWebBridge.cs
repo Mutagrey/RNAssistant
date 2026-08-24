@@ -271,7 +271,10 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "saveVbaModule":
                         var saveVbaModule = Payload<VbaModulePayload>(payload);
-                        responsePayload = _controller.SaveVbaModule(saveVbaModule.ModuleName, saveVbaModule.Code);
+                        responsePayload = _controller.SaveVbaModule(
+                            saveVbaModule.ModuleName,
+                            saveVbaModule.Code,
+                            saveVbaModule.ExpectedCodeSha256);
                         break;
                     case "createVbaModule":
                         var createVbaModule = Payload<VbaCreateModulePayload>(payload);

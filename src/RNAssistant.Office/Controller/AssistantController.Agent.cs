@@ -368,7 +368,8 @@ namespace RNAssistant.Office
             {
                 ToolId = command == null ? string.Empty : command.ToolId,
                 Description = command == null ? string.Empty : command.Description,
-                ToolCallId = command == null ? string.Empty : command.ToolCallId
+                ToolCallId = command == null ? string.Empty : command.ToolCallId,
+                RuntimeGuardJson = command == null ? null : command.RuntimeGuardJson
             };
 
             if (command != null && command.Arguments != null)
@@ -547,7 +548,8 @@ namespace RNAssistant.Office
             {
                 ToolId = activity.ToolId,
                 ToolCallId = activity.ToolCallId,
-                Description = activity.Title
+                Description = activity.Title,
+                RuntimeGuardJson = activity.RuntimeGuardJson
             };
 
             if (string.IsNullOrWhiteSpace(activity.ArgumentsJson))
@@ -659,6 +661,7 @@ namespace RNAssistant.Office
             target.ToolId = source.ToolId;
             target.ToolCallId = source.ToolCallId;
             target.ArgumentsJson = source.ArgumentsJson;
+            target.RuntimeGuardJson = source.RuntimeGuardJson;
             target.ResultMessage = source.ResultMessage;
             target.DataJson = source.DataJson;
             target.Children = source.Children ?? new List<ChatActivity>();

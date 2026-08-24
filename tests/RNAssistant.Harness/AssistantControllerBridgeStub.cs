@@ -235,10 +235,11 @@ namespace RNAssistant.Office
         public VbaProjectResponse GetVbaProject() { return new VbaProjectResponse { Result = ToolResult.Ok("ok") }; }
         public ToolResult GetVbaModule(string moduleName) { LastModuleName = moduleName; return ToolResult.Ok("read"); }
 
-        public ToolResult SaveVbaModule(string moduleName, string code)
+        public ToolResult SaveVbaModule(string moduleName, string code, string expectedCodeSha256 = null)
         {
             LastModuleName = moduleName;
             LastModuleCode = code;
+            LastModuleHash = expectedCodeSha256;
             return ToolResult.Ok("saved");
         }
 

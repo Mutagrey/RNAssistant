@@ -266,6 +266,7 @@ namespace RNAssistant.Office.Services
                 ToolId = activity.ToolId,
                 ToolCallId = activity.ToolCallId,
                 ArgumentsJson = activity.ArgumentsJson,
+                RuntimeGuardJson = activity.RuntimeGuardJson,
                 ResultMessage = activity.ResultMessage,
                 DataJson = activity.DataJson,
                 Children = activity.Children == null ? null : activity.Children.Select(CloneActivity).ToList()

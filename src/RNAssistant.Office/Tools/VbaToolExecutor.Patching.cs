@@ -126,7 +126,7 @@ namespace RNAssistant.Office.Tools
                     JsonConvert.SerializeObject(new
                     {
                         matchCount = count,
-                        recovery = "Use vba_read_lines, then retry vba_apply_patch with a unique anchor or replaceLines."
+                        recovery = "Use common.vba_read_lines, then retry common.vba_apply_patch with a unique anchor or replaceLines."
                     }),
                     "vba_patch_ambiguous",
                     true);
