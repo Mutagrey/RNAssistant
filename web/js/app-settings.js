@@ -263,6 +263,7 @@ function readSettings() {
     ModelImageSupportOverrides: modelImageSupportOverrides(),
     ModelAudioSupportOverrides: modelAudioSupportOverrides(),
     ModelCapabilities: modelCapabilitiesForSettings(),
+    AttachmentModelPriority: attachmentModelPriorityForSettings(),
     HtmlNetworkAllowedOrigins: $("htmlNetworkOriginsInput").value.split(/\r?\n/).map(function (value) { return value.trim(); }).filter(Boolean),
     CustomHeaders: textToHeaders($("headersInput").value)
   };
@@ -297,6 +298,7 @@ function resetModelSettingsToDefaults() {
   settings.ModelCapabilities = {};
   settings.ModelImageSupportOverrides = {};
   settings.ModelAudioSupportOverrides = {};
+  settings.AttachmentModelPriority = [];
   $("modelInput").value = modelSettingsDefaults.model;
   $("reasoningRequestModeInput").value = modelSettingsDefaults.reasoningRequestMode;
   $("reasoningCustomJsonInput").value = modelSettingsDefaults.reasoningCustomJson;

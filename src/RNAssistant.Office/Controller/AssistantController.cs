@@ -514,6 +514,8 @@ namespace RNAssistant.Office
                 input = input ?? new ChatTurnInput();
                 var text = input.Text ?? string.Empty;
                 var attachments = input.Attachments ?? new ChatAttachment[0];
+                var attachmentRouting = AttachmentModelRoutingService.Select(settings, session, attachments);
+                settings = attachmentRouting.Settings;
                 var executionMode = ChatModes.Normalize(session.Mode);
                 var documentRuntimeKey = string.Empty;
                 if (executionMode == ChatModes.Agent)
@@ -647,6 +649,10 @@ namespace RNAssistant.Office
                 ChatTurnResult completion;
                 try
                 {
+                    if (attachmentRouting.HasMedia)
+                    {
+                        ReportProgress(runProgress, "routing", attachmentRouting.ProgressMessage);
+                    }
                     try
                     {
                         await _contextCompactionService.EnsureWithinBudgetAsync(

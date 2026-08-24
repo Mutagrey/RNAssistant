@@ -173,6 +173,11 @@ function modelAudioSupportOverrides() {
   return settings.ModelAudioSupportOverrides || settings.modelAudioSupportOverrides || {};
 }
 
+function storedAttachmentModelPriority() {
+  var settings = state.settings || {};
+  return settings.AttachmentModelPriority || settings.attachmentModelPriority || [];
+}
+
 function catalogModelSupportsImages(model) {
   if (!model) return null;
   if (model.supportsImages !== null && model.supportsImages !== undefined) {
@@ -275,10 +280,27 @@ function allKnownModelValues() {
   }
   (state.modelCatalog.models || []).forEach(function (model) { add(model.value); });
   add(formModel());
+  storedAttachmentModelPriority().forEach(add);
   Object.keys(modelImageSupportOverrides()).forEach(add);
   Object.keys(modelAudioSupportOverrides()).forEach(add);
   var settings = state.settings || {};
   var capabilities = settings.ModelCapabilities || settings.modelCapabilities || {};
   Object.keys(capabilities).forEach(add);
   return values;
+}
+
+function attachmentModelPriorityForSettings() {
+  var result = [];
+  var seen = {};
+  function append(value) {
+    value = String(value || "").trim();
+    var key = value.toLowerCase();
+    if (!value || seen[key]) return;
+    if (effectiveModelSupportsImages(value) !== true && effectiveModelSupportsAudio(value) !== true) return;
+    seen[key] = true;
+    result.push(value);
+  }
+  storedAttachmentModelPriority().forEach(append);
+  allKnownModelValues().forEach(append);
+  return result;
 }

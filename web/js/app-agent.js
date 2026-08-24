@@ -322,8 +322,9 @@ function renderAgentRunArticle(run) {
     body.appendChild(finalSection);
   }
   if (!run.live) {
-    items.forEach(function (item) { appendMessageArtifactCards(body, item.message); });
-    if (finalMessage) appendMessageArtifactCards(body, finalMessage.message);
+    var renderedArtifactIds = {};
+    items.forEach(function (item) { appendMessageArtifactCards(body, item.message, renderedArtifactIds); });
+    if (finalMessage) appendMessageArtifactCards(body, finalMessage.message, renderedArtifactIds);
   }
   node.appendChild(body);
 

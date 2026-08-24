@@ -113,17 +113,23 @@
     return card;
   }
 
-  function appendMessageArtifactCards(parent, message) {
+  function appendMessageArtifactCards(parent, message, seenArtifactIds) {
     if (!parent || !message) return;
     var artifacts = messageArtifactIds(message).map(artifactById).filter(Boolean).filter(function (artifact) {
       var kind = artifactKind(artifact);
       if (kind === "html_workspace") return artifactId(artifact) === htmlWorkspaceRevisionId(message);
       return kind !== "attachment" && kind !== "image" && (kind !== "plan" || latestPlanRevision(artifact));
+    }).filter(function (artifact) {
+      var key = "$" + String(artifactId(artifact) || "").toLowerCase();
+      return !seenArtifactIds || !seenArtifactIds[key];
     });
     if (!artifacts.length) return;
     var wrap = document.createElement("div");
     wrap.className = "chat-artifact-list";
-    artifacts.forEach(function (artifact) { wrap.appendChild(artifactCard(artifact)); });
+    artifacts.forEach(function (artifact) {
+      if (seenArtifactIds) seenArtifactIds["$" + String(artifactId(artifact) || "").toLowerCase()] = true;
+      wrap.appendChild(artifactCard(artifact));
+    });
     parent.appendChild(wrap);
   }
 

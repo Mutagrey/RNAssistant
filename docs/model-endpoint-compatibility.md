@@ -22,11 +22,11 @@ Settings → Agent → «Запустить тест» checks three exact sentin
 - SSE streaming.
 - Reasoning metadata in supported response fields or one leading `<think>` block. It is stored separately from visible content.
 - Model catalog metadata for context/output limits and Vision/Audio support.
-- Image, rendered scanned-PDF, and audio content parts when the selected model is explicitly marked compatible.
+- Image, rendered scanned-PDF, and audio content parts when a model is explicitly marked compatible.
 - Custom request headers except unsafe transport headers.
 - Debug traffic logging without authorization/header values. Message bodies may contain document data, so logging is disabled by default.
 
-Attachments never trigger automatic model routing or failover. RNAssistant uses the selected model and fails clearly when its declared capabilities do not support the current media.
+Image, scanned-PDF, and audio attachments use request-scoped model routing. RNAssistant selects the first compatible model from Settings → Model → «Маршрутизация вложений» without changing the chat's stored model; a later text-only turn returns to that chat model. If no configured model declares all required media capabilities, the request fails before the endpoint call. Endpoint/network failover is not performed.
 
 ## Failure behavior
 

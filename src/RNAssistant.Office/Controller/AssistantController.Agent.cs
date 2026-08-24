@@ -98,6 +98,7 @@ namespace RNAssistant.Office
 
                 var settings = ResolveChatSettings(session);
                 settings.ToolResultRole = PendingToolResultRole(session, pending.Command, settings.ToolResultRole);
+                var continuationAttachments = pending.Attachments ?? LatestUserAttachments(session);
                 var tools = _toolCatalog.GetVisibleTools().Where(tool => tool.Enabled).ToList();
                 var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
                 var pendingResolved = false;
@@ -139,6 +140,15 @@ namespace RNAssistant.Office
                     var context = LoadContext(session);
                     skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
                     SetToolCallReplay(session, pending.Command.ToolCallId, true);
+                    var attachmentRouting = AttachmentModelRoutingService.Select(
+                        settings,
+                        session,
+                        continuationAttachments);
+                    settings = attachmentRouting.Settings;
+                    if (attachmentRouting.HasMedia)
+                    {
+                        ReportProgress(runProgress, "routing", attachmentRouting.ProgressMessage);
+                    }
                     var completion = await _agentRunService.ContinueAfterToolAsync(
                         CloneCommand(pending.Command),
                         result,
@@ -146,7 +156,7 @@ namespace RNAssistant.Office
                         context,
                         settings,
                         tools,
-                        pending.Attachments ?? LatestUserAttachments(session),
+                        continuationAttachments,
                         runProgress,
                         RegisterPendingAgentTool,
                         skills,

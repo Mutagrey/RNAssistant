@@ -26,7 +26,7 @@
   <link rel="stylesheet" href="css/app-composer.css?v=message-edit-20260806-1">
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
-  <link rel="stylesheet" href="css/app-models.css?v=model-capabilities-20260820-1">
+  <link rel="stylesheet" href="css/app-models.css?v=media-routing-20260824-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=settings-sections-20260824-1">
   <link rel="stylesheet" href="css/app-tools.css?v=library-editor-20260824-1">
   <link rel="stylesheet" href="css/app-vba.css?v=userform-20260824-1">
@@ -39,7 +39,7 @@
   <link rel="stylesheet" href="css/app-responsive.css?v=library-editor-20260824-2">
   <link rel="stylesheet" href="css/app-agent.css?v=ui-simplify-20260821-4">
   <link rel="stylesheet" href="css/app-agent-data.css?v=agent-ui-20260821-2">
-  <link rel="stylesheet" href="css/app-theme.css?v=userform-20260824-1">
+  <link rel="stylesheet" href="css/app-theme.css?v=media-routing-20260824-1">
 </head>
 <body>
   <div class="shell">
@@ -601,6 +601,15 @@
                   </div>
                   <div class="model-capability-list" id="modelCapabilityList"></div>
                 </section>
+                <section class="model-capability-section wide" aria-labelledby="attachmentModelPriorityTitle">
+                  <div class="model-capability-heading">
+                    <div>
+                      <h3 id="attachmentModelPriorityTitle">Маршрутизация вложений</h3>
+                      <p>Для изображений, сканов и аудио выбирается первая совместимая модель сверху вниз. Модель чата при этом не меняется.</p>
+                    </div>
+                  </div>
+                  <div class="attachment-model-priority" id="attachmentModelPriorityList"></div>
+                </section>
                 <label><span>Макс. токены ответа</span><input id="maxTokensInput" type="number" min="1"></label>
                 <label><span>Таймаут запроса, сек</span><input id="requestTimeoutInput" type="number" min="30"></label>
                 <label><span>Temperature</span><input id="temperatureInput" type="number" min="0" max="2" step="0.1"></label>
@@ -806,10 +815,10 @@
   <script src="js/app-logs.js?v=log-filters-20260824-1"></script>
   <script src="js/app-diagnostics.js?v=log-filters-20260824-1"></script>
   <script src="js/app-prompts.js?v=library-editor-20260824-1"></script>
-  <script src="js/app-model-data.js?v=model-capabilities-20260820-1"></script>
+  <script src="js/app-model-data.js?v=media-routing-20260824-1"></script>
   <script src="js/app-model-picker.js?v=model-modules-20260823-2"></script>
-  <script src="js/app-model-capabilities.js?v=model-modules-20260823-1"></script>
-  <script src="js/app-model-render.js?v=token-estimate-20260824-2"></script>
+  <script src="js/app-model-capabilities.js?v=media-routing-20260824-1"></script>
+  <script src="js/app-model-render.js?v=media-routing-20260824-1"></script>
   <script src="js/app-models.js?v=log-filters-20260824-1"></script>
   <script src="js/app-context-data.js"></script>
   <script src="js/app-chat-state.js?v=html-preference-20260824-1"></script>
@@ -835,11 +844,11 @@
   <script src="js/app-agent-model.js?v=agent-ui-20260821-3"></script>
   <script src="js/app-chart-artifacts.js?v=log-filters-20260824-1"></script>
   <script src="js/app-html-artifacts.js?v=chatui-20260702-2"></script>
-  <script src="js/app-artifacts.js?v=unified-ui-20260821-1"></script>
+  <script src="js/app-artifacts.js?v=artifact-dedup-20260824-1"></script>
   <script src="js/app-plan.js?v=ui-simplify-20260821-3"></script>
   <script src="js/app-agent-activity.js?v=agent-modules-20260823-1"></script>
   <script src="js/app-agent-approval.js?v=agent-modules-20260823-2"></script>
-  <script src="js/app-agent.js?v=agent-modules-20260823-2"></script>
+  <script src="js/app-agent.js?v=artifact-dedup-20260824-1"></script>
   <script src="js/app-messages.js?v=agent-ui-20260821-2"></script>
   <script src="js/app-reasoning.js?v=reasoning-ui-20260819-1"></script>
   <script src="js/app-attachments.js?v=log-filters-20260824-1"></script>

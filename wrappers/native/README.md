@@ -35,6 +35,11 @@ C:\Temp\RNAssistant\
   Microsoft.Web.WebView2.Core.dll
   Microsoft.Web.WebView2.WinForms.dll
   Newtonsoft.Json.dll
+  UglyToad.PdfPig*.dll
+  PDFtoImage.dll
+  SkiaSharp.dll
+  pdfium.dll                 # x64 package
+  libSkiaSharp.dll           # x64 package
   WebView2Loader.dll
   panel-owner-mode.txt
   web\

@@ -123,6 +123,7 @@ function renderModelControls() {
   renderModelInfo(formModel());
   renderModelStatus();
   renderModelCapabilityList();
+  renderAttachmentModelPriority();
   renderActiveModelCapability();
   renderReasoningToggle();
   renderChatModelPicker();

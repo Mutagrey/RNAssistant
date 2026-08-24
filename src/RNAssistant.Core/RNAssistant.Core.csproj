@@ -112,6 +112,7 @@
     <Compile Include="Services\HtmlWorkspaceCopyService.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
     <Compile Include="Storage\AttachmentStore.cs" />
+    <Compile Include="Storage\PdfAttachmentTextExtractor.cs" />
     <Compile Include="Storage\ChatStore.cs" />
     <Compile Include="Storage\ChatIndexStore.cs" />
     <Compile Include="Storage\HtmlArtifactBodyStore.cs" />

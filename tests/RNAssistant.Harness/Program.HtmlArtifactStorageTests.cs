@@ -54,12 +54,24 @@ namespace RNAssistant.Harness
                     DataJson = readResult.DataJson
                 }
             };
+            var duplicateMutationMessage = new ChatMessage
+            {
+                Role = "assistant",
+                HtmlWorkspaceCheckpointId = revisionId,
+                Activity = new ChatActivity
+                {
+                    ToolId = HtmlArtifactToolExecutor.SetActiveToolId,
+                    DataJson = writeResult.DataJson
+                }
+            };
             session.Messages.Add(writeMessage);
+            session.Messages.Add(duplicateMutationMessage);
             session.Messages.Add(readMessage);
 
             ChatArtifactService.LinkMessageArtifacts(session, 0);
 
             AssertTrue(writeMessage.ArtifactIds.Contains(revisionId), "html mutation links its revision artifact");
+            AssertTrue(!duplicateMutationMessage.ArtifactIds.Contains(revisionId), "same html revision is linked only once");
             AssertTrue(!readMessage.ArtifactIds.Contains(revisionId), "html read does not expose the checkpoint artifact");
         }
 

@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
+using RNAssistant.Office.Services;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Fonts.Standard14Fonts;
 using UglyToad.PdfPig.Writer;
@@ -54,6 +55,98 @@ namespace RNAssistant.Harness
             AssertTrue(json.IndexOf("\"type\":\"image_url\"", StringComparison.Ordinal) >= 0, "image content part");
             AssertTrue(json.IndexOf("data:image/jpeg;base64,", StringComparison.Ordinal) >= 0, "image data uri");
             AssertTrue(json.IndexOf("RelativePath", StringComparison.Ordinal) < 0, "metadata not leaked");
+        }
+
+        private static void AttachmentImageImportBypassesPdfExtraction()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var png = new byte[] { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00 };
+                var attachment = new AttachmentStore(paths).Import(
+                    "image.png",
+                    "image/png",
+                    Convert.ToBase64String(png));
+                AssertEqual("image", attachment.Kind, "image kind");
+                AssertEqual("ready", attachment.Status, "image import status");
+                AssertTrue(string.IsNullOrWhiteSpace(attachment.Error), "image import has no pdf extraction error");
+            });
+        }
+
+        private static void AttachmentRoutingIsRequestScoped()
+        {
+            var settings = new AppSettings { Model = "global-text" };
+            settings.ModelCapabilities["text-only"] = new ModelCapabilitySettings { SupportsImages = false, SupportsAudio = false };
+            settings.ModelCapabilities["vision-first"] = new ModelCapabilitySettings { SupportsImages = true, SupportsAudio = false };
+            settings.AttachmentModelPriority.Add("vision-first");
+            var session = new ChatSession { Model = "text-only" };
+
+            var routed = AttachmentModelRoutingService.Select(
+                settings,
+                session,
+                new[] { new ChatAttachment { Kind = "image", FileName = "clipboard.png" } });
+            AssertEqual("vision-first", routed.SelectedModel, "priority vision model");
+            AssertEqual("vision-first", routed.Settings.Model, "request copy model");
+            AssertEqual("text-only", session.Model, "session model unchanged");
+            AssertEqual("global-text", settings.Model, "stored settings unchanged");
+            routed.Settings.ModelCapabilities["text-only"].SupportsImages = true;
+            routed.Settings.AttachmentModelPriority.Clear();
+            AssertEqual(false, settings.ModelCapabilities["text-only"].SupportsImages.Value, "capability settings cloned deeply");
+            AssertEqual(1, settings.AttachmentModelPriority.Count, "model priority cloned deeply");
+
+            var text = AttachmentModelRoutingService.Select(settings, session, null);
+            AssertEqual("text-only", text.SelectedModel, "next text request uses chat model");
+        }
+
+        private static void AttachmentRoutingCoversPdfAndMixedMedia()
+        {
+            var settings = new AppSettings { Model = "text-only" };
+            settings.ModelCapabilities["text-only"] = new ModelCapabilitySettings { SupportsImages = false, SupportsAudio = false };
+            settings.ModelCapabilities["vision"] = new ModelCapabilitySettings { SupportsImages = true, SupportsAudio = false };
+            settings.ModelCapabilities["audio"] = new ModelCapabilitySettings { SupportsImages = false, SupportsAudio = true };
+            settings.ModelCapabilities["both"] = new ModelCapabilitySettings { SupportsImages = true, SupportsAudio = true };
+            settings.AttachmentModelPriority.AddRange(new[] { "vision", "audio", "both" });
+            var session = new ChatSession { Model = "text-only" };
+
+            var textPdf = AttachmentModelRoutingService.Select(settings, session, new[]
+            {
+                new ChatAttachment { Kind = "pdf", PageCount = 1, PageTextLengths = new List<int> { 100 } }
+            });
+            AssertEqual("text-only", textPdf.SelectedModel, "text pdf stays on base model");
+
+            var scanPdf = AttachmentModelRoutingService.Select(settings, session, new[]
+            {
+                new ChatAttachment { Kind = "pdf", PageCount = 1, PageTextLengths = new List<int> { 0 } }
+            });
+            AssertEqual("vision", scanPdf.SelectedModel, "scanned pdf uses vision priority");
+
+            var audio = AttachmentModelRoutingService.Select(settings, session, new[]
+            {
+                new ChatAttachment { Kind = "audio" }
+            });
+            AssertEqual("audio", audio.SelectedModel, "audio uses audio priority");
+
+            var mixed = AttachmentModelRoutingService.Select(settings, session, new[]
+            {
+                new ChatAttachment { Kind = "image" },
+                new ChatAttachment { Kind = "audio" }
+            });
+            AssertEqual("both", mixed.SelectedModel, "mixed request requires both capabilities");
+
+            settings.AttachmentModelPriority.Remove("both");
+            var rejected = false;
+            try
+            {
+                AttachmentModelRoutingService.Select(settings, session, new[]
+                {
+                    new ChatAttachment { Kind = "image" },
+                    new ChatAttachment { Kind = "audio" }
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                rejected = ex.Message.IndexOf("Vision и Audio", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            AssertTrue(rejected, "mixed request rejected without combined model");
         }
 
         private static void AttachmentAudioImportAndApiPayload()

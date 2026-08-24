@@ -38,6 +38,31 @@ Copy-RequiredFile (Join-Path $officeOutput "Microsoft.Web.WebView2.Core.dll") $D
 Copy-RequiredFile (Join-Path $officeOutput "Microsoft.Web.WebView2.WinForms.dll") $Destination
 Copy-RequiredFile (Join-Path $webViewPackage "build\native\$Architecture\WebView2Loader.dll") $Destination
 
+$managedRuntimeFiles = @(
+    "Microsoft.Bcl.HashCode.dll",
+    "System.Buffers.dll",
+    "System.Memory.dll",
+    "System.Numerics.Vectors.dll",
+    "System.Runtime.CompilerServices.Unsafe.dll",
+    "UglyToad.PdfPig.dll",
+    "UglyToad.PdfPig.Core.dll",
+    "UglyToad.PdfPig.DocumentLayoutAnalysis.dll",
+    "UglyToad.PdfPig.Fonts.dll",
+    "UglyToad.PdfPig.Tokenization.dll",
+    "UglyToad.PdfPig.Tokens.dll",
+    "PDFtoImage.dll",
+    "SkiaSharp.dll"
+)
+foreach ($fileName in $managedRuntimeFiles) {
+    Copy-RequiredFile (Join-Path $officeOutput $fileName) $Destination
+}
+
+if ($Architecture -eq "x64") {
+    $pdfNativeRoot = Join-Path $repo "vendor\pdf-rendering\runtimes\win-x64\native"
+    Copy-RequiredFile (Join-Path $pdfNativeRoot "pdfium.dll") $Destination
+    Copy-RequiredFile (Join-Path $pdfNativeRoot "libSkiaSharp.dll") $Destination
+}
+
 Get-ChildItem -Path $hostsOutput -Filter "Microsoft.Office.Interop.*.dll" -ErrorAction SilentlyContinue |
     Copy-Item -Force -Destination $Destination
 Get-ChildItem -Path $hostsOutput -Filter "Office.dll" -ErrorAction SilentlyContinue |

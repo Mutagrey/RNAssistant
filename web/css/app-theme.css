@@ -577,13 +577,18 @@ html[data-theme="dark"] .agent-data-table tbody tr:nth-child(even) {
 }
 
 html[data-theme="dark"] .model-info-metrics span,
-html[data-theme="dark"] .model-capability-header {
+html[data-theme="dark"] .model-capability-header,
+html[data-theme="dark"] .attachment-model-priority-rank {
   background: #202a38;
   color: #b9c7dc;
 }
 
 html[data-theme="dark"] .model-default-badge {
   background: #203452;
+}
+
+html[data-theme="dark"] .attachment-model-priority-badges span {
+  background: #183229;
 }
 
 html[data-theme="dark"] .tool-list-item,

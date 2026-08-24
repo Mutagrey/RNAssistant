@@ -153,6 +153,7 @@ namespace RNAssistant.Core.Models
         public Dictionary<string, bool?> ModelImageSupportOverrides { get; set; }
         public Dictionary<string, bool?> ModelAudioSupportOverrides { get; set; }
         public Dictionary<string, ModelCapabilitySettings> ModelCapabilities { get; set; }
+        public List<string> AttachmentModelPriority { get; set; }
         public Dictionary<string, TokenEstimateCalibrationSettings> TokenEstimateCalibrations { get; set; }
         public List<string> HtmlNetworkAllowedOrigins { get; set; }
 
@@ -242,6 +243,7 @@ namespace RNAssistant.Core.Models
             ModelImageSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
             ModelAudioSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
             ModelCapabilities = new Dictionary<string, ModelCapabilitySettings>(StringComparer.OrdinalIgnoreCase);
+            AttachmentModelPriority = new List<string>();
             TokenEstimateCalibrations = new Dictionary<string, TokenEstimateCalibrationSettings>(StringComparer.OrdinalIgnoreCase);
             HtmlNetworkAllowedOrigins = new List<string>();
         }
@@ -263,6 +265,7 @@ namespace RNAssistant.Core.Models
             {
                 clone.ModelCapabilities[pair.Key] = pair.Value == null ? null : pair.Value.Clone();
             }
+            clone.AttachmentModelPriority = new List<string>(AttachmentModelPriority ?? new List<string>());
             clone.TokenEstimateCalibrations = new Dictionary<string, TokenEstimateCalibrationSettings>(StringComparer.OrdinalIgnoreCase);
             foreach (var pair in TokenEstimateCalibrations ?? new Dictionary<string, TokenEstimateCalibrationSettings>())
             {

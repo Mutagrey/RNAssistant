@@ -230,6 +230,10 @@ namespace RNAssistant.Office.Services
             if (artifact != null)
             {
                 artifact.SourceMessageId = string.IsNullOrWhiteSpace(artifact.SourceMessageId) ? message.Id : artifact.SourceMessageId;
+                if (!string.Equals(artifact.SourceMessageId, message.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
                 artifact.RunId = string.IsNullOrWhiteSpace(artifact.RunId) ? message.RunId : artifact.RunId;
                 AddUnique(message.ArtifactIds, artifact.Id);
             }

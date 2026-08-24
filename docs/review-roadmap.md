@@ -30,6 +30,6 @@ Known trade-offs of this simpler design:
 - strict tool schemas improve selection and validation, but their descriptions, defaults, enums, and required fields must stay synchronized with executor behavior;
 - the selected endpoint should support the configured `json_object` or `json_schema` format and result role; repeated malformed responses stop after the configured 1–20 correction attempts;
 - without a separate verifier stage, correctness depends on explicit tool results and tool-internal checks; VBA mutations perform deterministic backup/strict-live-hash/stale-state and post-write read-back verification, while package equivalence uses a separate export-aware hash;
-- attachments use the selected model and fail explicitly when its declared media capabilities are insufficient.
+- media attachments use request-scoped priority routing and fail explicitly when no configured model declares all required capabilities.
 
 The fast validation path is `dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj`. COM/VSTO behavior still requires Windows x64 + Office + VS 2022 smoke testing.

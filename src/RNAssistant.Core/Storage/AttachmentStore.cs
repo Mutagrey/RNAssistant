@@ -4,8 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using RNAssistant.Core.Models;
-using UglyToad.PdfPig;
-using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
 
 namespace RNAssistant.Core.Storage
 {
@@ -320,23 +318,10 @@ namespace RNAssistant.Core.Storage
                 return;
             }
 
-            var builder = new StringBuilder();
-            using (var document = PdfDocument.Open(path))
-            {
-                attachment.PageCount = document.NumberOfPages;
-                foreach (var page in document.GetPages())
-                {
-                    if (builder.Length >= MaxExtractedChars)
-                    {
-                        break;
-                    }
-                    var pageText = ContentOrderTextExtractor.GetText(page) ?? string.Empty;
-                    attachment.PageTextLengths.Add(pageText.Trim().Length);
-                    builder.AppendLine("[PDF page " + page.Number + "]");
-                    builder.AppendLine(pageText);
-                }
-            }
-            SetExtractedText(attachment, path, builder.ToString());
+            var extracted = PdfAttachmentTextExtractor.Extract(path, MaxExtractedChars);
+            attachment.PageCount = extracted.PageCount;
+            attachment.PageTextLengths = extracted.PageTextLengths;
+            SetExtractedText(attachment, path, extracted.Text);
             if (attachment.PageTextLengths.Count == 0 || attachment.PageTextLengths.All(length => length < 20))
             {
                 attachment.ExtractionWarning = "PDF contains little or no extractable text; a vision model is required for scanned pages.";

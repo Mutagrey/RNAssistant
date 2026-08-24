@@ -57,6 +57,7 @@ namespace RNAssistant.Core.Storage
             {
                 settings.ModelCapabilities = new Dictionary<string, ModelCapabilitySettings>(StringComparer.OrdinalIgnoreCase);
             }
+            settings.AttachmentModelPriority = NormalizeAttachmentModelPriority(settings);
             if (settings.TokenEstimateCalibrations == null)
             {
                 settings.TokenEstimateCalibrations = new Dictionary<string, TokenEstimateCalibrationSettings>(StringComparer.OrdinalIgnoreCase);
@@ -185,6 +186,37 @@ namespace RNAssistant.Core.Storage
                 settings.MaxAgentToolSteps = defaults.MaxAgentToolSteps;
             }
             return settings;
+        }
+
+        private static List<string> NormalizeAttachmentModelPriority(AppSettings settings)
+        {
+            var result = (settings.AttachmentModelPriority ?? new List<string>())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            foreach (var pair in settings.ModelCapabilities ?? new Dictionary<string, ModelCapabilitySettings>())
+            {
+                if (pair.Value != null && (pair.Value.SupportsImages == true || pair.Value.SupportsAudio == true))
+                {
+                    AddUnique(result, pair.Key);
+                }
+            }
+            foreach (var pair in settings.ModelImageSupportOverrides ?? new Dictionary<string, bool?>())
+            {
+                if (pair.Value == true) AddUnique(result, pair.Key);
+            }
+            foreach (var pair in settings.ModelAudioSupportOverrides ?? new Dictionary<string, bool?>())
+            {
+                if (pair.Value == true) AddUnique(result, pair.Key);
+            }
+            return result;
+        }
+
+        private static void AddUnique(ICollection<string> values, string value)
+        {
+            value = (value ?? string.Empty).Trim();
+            if (value.Length > 0 && !values.Contains(value, StringComparer.OrdinalIgnoreCase)) values.Add(value);
         }
 
         private static string NormalizePromptRole(string value, string fallback)
