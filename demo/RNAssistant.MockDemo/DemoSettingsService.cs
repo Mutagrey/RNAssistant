@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
 {
@@ -57,8 +56,25 @@ namespace RNAssistant.Core.Storage
             {
                 settings.CustomHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             }
+            if (settings.ModelImageSupportOverrides == null)
+            {
+                settings.ModelImageSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
+            }
+            if (settings.ModelAudioSupportOverrides == null)
+            {
+                settings.ModelAudioSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
+            }
+            if (settings.ModelCapabilities == null)
+            {
+                settings.ModelCapabilities = new Dictionary<string, ModelCapabilitySettings>(StringComparer.OrdinalIgnoreCase);
+            }
+            if (settings.HtmlNetworkAllowedOrigins == null)
+            {
+                settings.HtmlNetworkAllowedOrigins = new List<string>();
+            }
 
             settings.BaseUrl = _baseUrl;
+            settings.ModelsConfigUrl = (settings.ModelsConfigUrl ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(settings.Model) ||
                 string.Equals(settings.Model, defaults.Model, StringComparison.OrdinalIgnoreCase))
             {
@@ -69,16 +85,25 @@ namespace RNAssistant.Core.Storage
             {
                 settings.SystemPrompt = defaults.SystemPrompt;
             }
-
-            settings.SystemPromptRole = string.Equals(settings.SystemPromptRole, "system", StringComparison.OrdinalIgnoreCase)
-                ? "system"
-                : "user";
-
-            if (settings.AgentPrompts == null)
+            if (string.IsNullOrWhiteSpace(settings.ChatSystemPrompt))
             {
-                settings.AgentPrompts = new AgentPromptSettings();
+                settings.ChatSystemPrompt = defaults.ChatSystemPrompt;
             }
-            AgentPromptMigration.Apply(settings, defaults);
+            settings.ChatTitlePrompt = DefaultIfBlank(settings.ChatTitlePrompt, defaults.ChatTitlePrompt);
+            settings.ContextCompactionPrompt = DefaultIfBlank(settings.ContextCompactionPrompt, defaults.ContextCompactionPrompt);
+            settings.SystemPromptRole = NormalizePromptRole(settings.SystemPromptRole, defaults.SystemPromptRole);
+            settings.AgentResponseMode = AgentResponseModes.Normalize(settings.AgentResponseMode);
+            settings.ToolResultRole = ToolResultRoles.Normalize(settings.ToolResultRole);
+            settings.ReasoningRequestMode = ReasoningRequestModes.Normalize(settings.ReasoningRequestMode);
+            settings.ReasoningCustomJson = DefaultIfBlank(settings.ReasoningCustomJson, defaults.ReasoningCustomJson).Trim();
+            settings.UiTheme = UiThemes.Normalize(settings.UiTheme);
+            foreach (var capability in settings.ModelCapabilities.Values)
+            {
+                if (capability != null)
+                {
+                    capability.ReasoningRequestMode = ReasoningRequestModes.NormalizeOverride(capability.ReasoningRequestMode);
+                }
+            }
 
             if (settings.MaxTokens <= 0)
             {
@@ -95,29 +120,44 @@ namespace RNAssistant.Core.Storage
                 settings.RequestTimeoutSeconds = 30;
             }
 
+            if (settings.ContextWindowOverrideTokens < 0)
+            {
+                settings.ContextWindowOverrideTokens = 0;
+            }
+
             settings.AutoConfirmToolActions = true;
             settings.SmartChatTitles = false;
-
-            if (settings.VbaContextCharLimit <= 0)
-            {
-                settings.VbaContextCharLimit = defaults.VbaContextCharLimit;
-            }
 
             if (settings.MaxAgentIterations <= 0)
             {
                 settings.MaxAgentIterations = defaults.MaxAgentIterations;
             }
-
+            if (settings.MaxAgentFormatRetries <= 0)
+            {
+                settings.MaxAgentFormatRetries = defaults.MaxAgentFormatRetries;
+            }
+            settings.MaxAgentFormatRetries = Math.Max(
+                1,
+                Math.Min(AppSettings.MaximumAgentFormatRetries, settings.MaxAgentFormatRetries));
             if (settings.MaxAgentToolSteps <= 0)
             {
                 settings.MaxAgentToolSteps = defaults.MaxAgentToolSteps;
             }
-            if (settings.MaxAgentToolsPerRequest <= 0)
-            {
-                settings.MaxAgentToolsPerRequest = defaults.MaxAgentToolsPerRequest;
-            }
 
             return settings;
+        }
+
+        private static string NormalizePromptRole(string value, string fallback)
+        {
+            if (string.Equals(value, "system", StringComparison.OrdinalIgnoreCase)) return "system";
+            if (string.Equals(value, "developer", StringComparison.OrdinalIgnoreCase)) return "developer";
+            if (string.Equals(value, "user", StringComparison.OrdinalIgnoreCase)) return "user";
+            return fallback;
+        }
+
+        private static string DefaultIfBlank(string value, string fallback)
+        {
+            return string.IsNullOrWhiteSpace(value) ? fallback : value;
         }
     }
 }

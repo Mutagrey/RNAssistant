@@ -57,12 +57,15 @@
     <Compile Include="..\..\src\RNAssistant.Office\Contracts\*.cs" Link="Office\Contracts\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Agent\*.cs" Link="Office\Agent\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Controller\*.cs" Link="Office\Controller\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\RNAssistant.Office\Diagnostics\*.cs" Link="Office\Diagnostics\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\RNAssistant.Office\Runtime\OfficeDocumentExecutionGuard.cs" Link="Office\Runtime\OfficeDocumentExecutionGuard.cs" />
     <Compile
       Include="..\..\src\RNAssistant.Office\Services\*.cs"
       Exclude="..\..\src\RNAssistant.Office\Services\AttachmentImageService.cs"
       Link="Office\Services\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\*.cs" Link="Office\Tools\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.cs" Link="Office\WebView\AssistantWebBridge.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\WebView\BridgeRequestCancellationRegistry.cs" Link="Office\WebView\BridgeRequestCancellationRegistry.cs" />
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.cs" Link="Testing\FakeOfficeAdapter.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 
@@ -24,27 +25,29 @@ namespace RNAssistant.MockDemo
         {
             cancellationToken.ThrowIfCancellationRequested();
             var model = NormalizeModel(settings == null ? null : settings.Model);
-            var plannerContext = PlannerContext(messages);
+            var messageList = (messages ?? new ChatMessage[0]).Where(message => message != null).ToList();
+            var requestIndex = CurrentUserRequestIndex(messageList);
             var lastUser = LastUserMessage(messages);
-            var plannerRequest = ExtractPlannerRequest(plannerContext);
-            var htmlModeEnabled = Contains(plannerContext, "HTML MODE IS ENABLED");
-            var isHtmlTask = htmlModeEnabled || LooksLikeHtmlTask(plannerRequest);
-            var isHtmlEdit = LooksLikeHtmlEdit(plannerRequest);
-            var observations = ExtractObservations(plannerContext);
+            var userRequest = requestIndex < 0
+                ? string.Empty
+                : ExtractUserRequest(messageList[requestIndex].Content);
+            var toolResults = ReadToolResults(messageList, requestIndex + 1);
+            var isHtmlTask = LooksLikeHtmlTask(userRequest);
+            var isHtmlEdit = LooksLikeHtmlEdit(userRequest);
             var repair = IsRepairRequest(lastUser);
             string content;
 
-            if (!isHtmlTask && !LooksLikeOfficeAction(plannerRequest))
+            if (!isHtmlTask && !LooksLikeOfficeAction(userRequest))
             {
-                content = FinalBlock(ProseAnswer(plannerRequest));
+                content = FinalBlock(ProseAnswer(userRequest));
             }
             else
             {
                 var commands = (isHtmlTask
                     ? HtmlCommands(isHtmlEdit, false)
                     : InitialCommands(_host, false)).ToList();
-                var next = NextPendingCommand(commands, observations);
-                var firstTurn = string.Equals(observations, "none", StringComparison.OrdinalIgnoreCase);
+                var next = NextPendingCommand(commands, toolResults);
+                var firstTurn = toolResults.Count == 0;
 
                 if (!repair && firstTurn && string.Equals(model, "mock-glm5", StringComparison.OrdinalIgnoreCase))
                 {
@@ -242,17 +245,16 @@ namespace RNAssistant.MockDemo
             command = command ?? new DemoCommand { ToolId = "missing.tool" };
             return JsonConvert.SerializeObject(new
             {
-                protocolVersion = 1,
-                kind = "tool",
-                decisionSummary = "Выполняю следующий шаг: " + command.ToolId + ".",
-                goal = (string)null,
-                plan = (object)null,
-                tool = new
+                message = "Выполняю следующий шаг: " + command.ToolId + ".",
+                tool_calls = new[]
                 {
-                    toolId = command.ToolId,
-                    arguments = command.Arguments
-                },
-                message = (string)null
+                    new
+                    {
+                        id = CallId(command),
+                        name = command.ToolId,
+                        arguments = command.Arguments
+                    }
+                }
             });
         }
 
@@ -260,37 +262,35 @@ namespace RNAssistant.MockDemo
         {
             return JsonConvert.SerializeObject(new
             {
-                protocolVersion = 1,
-                kind = "final",
-                decisionSummary = "Задача завершена.",
-                goal = (string)null,
-                plan = (object)null,
-                tool = (object)null,
-                message = message ?? string.Empty
+                message = message ?? string.Empty,
+                tool_calls = new object[0]
             });
         }
 
-        private static DemoCommand NextPendingCommand(IEnumerable<DemoCommand> commands, string observations)
+        private static DemoCommand NextPendingCommand(IEnumerable<DemoCommand> commands, IEnumerable<JObject> toolResults)
         {
-            return (commands ?? new DemoCommand[0]).FirstOrDefault(command => !CommandWasObserved(command, observations));
+            return (commands ?? new DemoCommand[0]).FirstOrDefault(command => !CommandWasObserved(command, toolResults));
         }
 
-        private static bool CommandWasObserved(DemoCommand command, string observations)
+        private static bool CommandWasObserved(DemoCommand command, IEnumerable<JObject> toolResults)
         {
             if (command == null || string.IsNullOrWhiteSpace(command.ToolId))
             {
                 return false;
             }
 
-            if (!string.Equals(command.ToolId, "common.html_workspace_upsert_file", StringComparison.OrdinalIgnoreCase))
+            var callId = CallId(command);
+            foreach (var result in toolResults ?? new JObject[0])
             {
-                return Contains(observations, command.ToolId + " succeeded");
+                if (result != null &&
+                    (bool?)result["ok"] == true &&
+                    string.Equals((string)result["name"], command.ToolId, StringComparison.Ordinal) &&
+                    string.Equals((string)result["tool_call_id"], callId, StringComparison.Ordinal))
+                {
+                    return true;
+                }
             }
-
-            object pathValue;
-            command.Arguments.TryGetValue("path", out pathValue);
-            var path = Convert.ToString(pathValue) ?? string.Empty;
-            return Contains(observations, "HTML workspace file saved: " + path);
+            return false;
         }
 
         private static DemoCommand Cmd(string toolId, params object[] keyValues)
@@ -304,14 +304,18 @@ namespace RNAssistant.MockDemo
             return command;
         }
 
-        private static string PlannerContext(IEnumerable<ChatMessage> messages)
+        private static int CurrentUserRequestIndex(IReadOnlyList<ChatMessage> messages)
         {
-            return (messages ?? new ChatMessage[0])
-                .Where(message => message != null &&
-                    Contains(message.Content, "USER_REQUEST:") &&
-                    Contains(message.Content, "OBSERVATIONS:"))
-                .Select(message => message.Content ?? string.Empty)
-                .LastOrDefault() ?? string.Empty;
+            for (var index = (messages == null ? 0 : messages.Count) - 1; index >= 0; index--)
+            {
+                var message = messages[index];
+                if (message != null && !message.ProtocolMessage &&
+                    string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase))
+                {
+                    return index;
+                }
+            }
+            return -1;
         }
 
         private static string LastUserMessage(IEnumerable<ChatMessage> messages)
@@ -322,7 +326,7 @@ namespace RNAssistant.MockDemo
             return last == null ? string.Empty : last.Content ?? string.Empty;
         }
 
-        private static string ExtractPlannerRequest(string text)
+        private static string ExtractUserRequest(string text)
         {
             var value = text ?? string.Empty;
             var marker = "USER_REQUEST:";
@@ -333,40 +337,57 @@ namespace RNAssistant.MockDemo
             }
 
             start += marker.Length;
-            var end = value.IndexOf("\n\nROUTE:", start, StringComparison.OrdinalIgnoreCase);
-            if (end < 0)
-            {
-                end = value.Length;
-            }
-            return value.Substring(start, end - start).Trim();
+            return value.Substring(start).Trim();
         }
 
-        private static string ExtractObservations(string text)
+        private static List<JObject> ReadToolResults(IReadOnlyList<ChatMessage> messages, int startIndex)
         {
-            var value = text ?? string.Empty;
-            var marker = "OBSERVATIONS:";
-            var start = value.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
-            if (start < 0)
+            var results = new List<JObject>();
+            for (var index = Math.Max(0, startIndex); messages != null && index < messages.Count; index++)
             {
-                return "none";
-            }
+                var message = messages[index];
+                var content = message == null ? string.Empty : message.Content ?? string.Empty;
+                const string marker = "TOOL_RESULT:";
+                if (content.StartsWith(marker, StringComparison.Ordinal))
+                {
+                    content = content.Substring(marker.Length).Trim();
+                }
+                else if (message == null || !string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
 
-            start += marker.Length;
-            var end = value.IndexOf("\n\nRELEVANT_SKILLS:", start, StringComparison.OrdinalIgnoreCase);
-            if (end < 0)
-            {
-                end = value.Length;
+                try
+                {
+                    results.Add(JObject.Parse(content));
+                }
+                catch (JsonException)
+                {
+                }
             }
-            var observations = value.Substring(start, end - start).Trim();
-            return string.IsNullOrWhiteSpace(observations) ? "none" : observations;
+            return results;
         }
 
         private static bool IsRepairRequest(string text)
         {
-            return Contains(text, "Validation error:") ||
-                Contains(text, "previous response was not a valid AgentDecision") ||
-                Contains(text, "previous RNAssistant planner output was invalid") ||
-                Contains(text, "Use only these exact available tool ids");
+            return Contains(text, "FORMAT_REPAIR:");
+        }
+
+        private static string CallId(DemoCommand command)
+        {
+            var seed = (command == null ? string.Empty : command.ToolId ?? string.Empty) + "|" +
+                JsonConvert.SerializeObject(command == null ? null : command.Arguments, Formatting.None);
+            unchecked
+            {
+                uint hash = 2166136261;
+                foreach (var character in seed)
+                {
+                    hash ^= character;
+                    hash *= 16777619;
+                }
+                return "call_" + Regex.Replace(command == null ? "tool" : command.ToolId ?? "tool", "[^A-Za-z0-9_-]", "_") +
+                    "_" + hash.ToString("x8");
+            }
         }
 
         private static string LastNonEmptyLine(string value)

@@ -193,9 +193,11 @@ namespace RNAssistant.MockDemo
             {
                 throw new InvalidOperationException("chat messages were not returned");
             }
-            if (messages.ToString(Formatting.None).IndexOf("selectedTools", StringComparison.OrdinalIgnoreCase) < 0)
+            var transcriptJson = messages.ToString(Formatting.None);
+            if (transcriptJson.IndexOf("excel.add_sheet", StringComparison.OrdinalIgnoreCase) < 0 ||
+                transcriptJson.IndexOf("excel.add_chart", StringComparison.OrdinalIgnoreCase) < 0)
             {
-                throw new InvalidOperationException("agent transcript did not retain routing diagnostics");
+                throw new InvalidOperationException("agent transcript did not retain executed tool activities");
             }
 
             var plain = await SendAsync(
@@ -243,12 +245,16 @@ namespace RNAssistant.MockDemo
                 token).ConfigureAwait(false);
             var htmlModeChatId = Payload(htmlModeChat)["activeChatId"].ToString();
             await SendAsync(bridge, "8", "setChatModel", new { chatId = htmlModeChatId, model = model }, token).ConfigureAwait(false);
-            await SendAsync(bridge, "9", "setChatHtmlMode", new { chatId = htmlModeChatId, enabled = true }, token).ConfigureAwait(false);
+            var htmlMode = await SendAsync(bridge, "9", "setChatHtmlMode", new { chatId = htmlModeChatId, enabled = true }, token).ConfigureAwait(false);
+            if (!(bool)Payload(htmlMode)["activeChatHtmlMode"])
+            {
+                throw new InvalidOperationException("HTML mode was not persisted by the bridge");
+            }
             var htmlModeCreate = await SendAsync(
                 bridge,
                 "10",
                 "sendChat",
-                new { chatId = htmlModeChatId, text = "Сделай отчет продаж." },
+                new { chatId = htmlModeChatId, text = "Сделай HTML отчет продаж." },
                 token).ConfigureAwait(false);
             AssertHtmlWorkspace(Payload(htmlModeCreate), false);
         }
