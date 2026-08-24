@@ -259,7 +259,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void VbaGuardRejectsRuntimeDocumentSwitch()
+        private static void VbaGuardHandlesStableAndChangedDocumentIdentities()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -271,9 +271,19 @@ namespace RNAssistant.Harness
                     "delete waits with a bound guard");
 
                 adapter.RuntimeDocumentKeyValue = "runtime-other-document";
-                var blocked = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+                var sameDocument = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+                AssertTrue(sameDocument.Success, "stable document key tolerates a changed runtime identity");
 
-                AssertEqual("vba_snapshot_context_changed", blocked.ErrorCode, "runtime document switch invalidates the guard");
+                adapter.VbaModuleCode = "Sub Main()\nEnd Sub";
+                var changedCommand = Command("common.vba_delete_module", "moduleName", "Module1");
+                AssertEqual("waiting_confirmation", executor.Execute(changedCommand, tools, new AppSettings { AutoConfirmToolActions = false }, false, false, session).Status,
+                    "second delete waits with a bound guard");
+                adapter.DocumentKeyValue = "other-document";
+                adapter.RuntimeDocumentKeyValue = "runtime-different-document";
+                session.DocumentKey = adapter.DocumentKeyValue;
+                var blocked = executor.Execute(changedCommand, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+
+                AssertEqual("vba_snapshot_context_changed", blocked.ErrorCode, "different document invalidates the guard");
                 AssertContains(adapter.VbaModuleCode, "Sub Main", "document switch does not delete module");
             });
         }

@@ -41,18 +41,21 @@ namespace RNAssistant.Office
                     expectation.Host,
                     adapter.HostName,
                     StringComparison.OrdinalIgnoreCase);
-                var identityMatches = !string.IsNullOrWhiteSpace(expectation.RuntimeDocumentKey)
-                    ? string.Equals(
-                        expectation.RuntimeDocumentKey,
-                        adapter.RuntimeDocumentKey,
-                        StringComparison.OrdinalIgnoreCase)
-                    : string.Equals(
-                        expectation.DocumentKey,
-                        adapter.DocumentKey,
-                        StringComparison.OrdinalIgnoreCase);
+                var documentMatches = hostMatches && IdentityMatches(
+                    expectation.DocumentKey,
+                    string.Empty,
+                    adapter.DocumentKey,
+                    string.Empty);
+                var identityMatches = documentMatches || hostMatches && IdentityMatches(
+                    string.Empty,
+                    expectation.RuntimeDocumentKey,
+                    string.Empty,
+                    adapter.RuntimeDocumentKey);
                 if (hostMatches && identityMatches) return null;
                 return ToolResult.Fail(
-                    "The active Office document changed before tool execution. No action was started; return to the original document and make a new request.",
+                    "The Office document bound to this chat is closed or no longer matches the tool target. " +
+                    "No Office action was started. Open that document before retrying Office tools; " +
+                    "non-Office tools can continue in this chat.",
                     null,
                     "active_document_changed",
                     false);
@@ -64,6 +67,36 @@ namespace RNAssistant.Office
                     null,
                     "document_identity_unavailable",
                     false);
+            }
+        }
+
+        internal static bool IdentityMatches(
+            string expectedDocumentKey,
+            string expectedRuntimeDocumentKey,
+            string actualDocumentKey,
+            string actualRuntimeDocumentKey)
+        {
+            var documentMatches = !string.IsNullOrWhiteSpace(expectedDocumentKey) &&
+                !string.IsNullOrWhiteSpace(actualDocumentKey) &&
+                string.Equals(expectedDocumentKey, actualDocumentKey, StringComparison.OrdinalIgnoreCase);
+            var runtimeMatches = !string.IsNullOrWhiteSpace(expectedRuntimeDocumentKey) &&
+                !string.IsNullOrWhiteSpace(actualRuntimeDocumentKey) &&
+                string.Equals(expectedRuntimeDocumentKey, actualRuntimeDocumentKey, StringComparison.OrdinalIgnoreCase);
+            return documentMatches || runtimeMatches;
+        }
+
+        internal static bool SessionMatchesAdapter(IOfficeApplicationAdapter adapter, ChatSession session)
+        {
+            if (adapter == null || session == null) return false;
+            try
+            {
+                return string.Equals(session.Host, adapter.HostName, StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(session.DocumentKey) &&
+                    string.Equals(session.DocumentKey, adapter.DocumentKey, StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
             }
         }
 

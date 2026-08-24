@@ -59,6 +59,12 @@ namespace RNAssistant.Office.Tools
             yield return ControllerToolDefinition.Create(FreezeDataToolId, "Common", "Workspace: Keep the current JSON of one bound data source but remove its Office binding so future refreshes cannot overwrite it.", "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Exact bound data-source name.\",\"maxLength\":128}},\"required\":[\"name\"],\"additionalProperties\":false}", mutatesLocalState: true, name: "html_data_freeze", scope: "session");
         }
 
+        internal bool RequiresOfficeDocument(string toolId)
+        {
+            return string.Equals(toolId, BindDataToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, RefreshDataToolId, StringComparison.OrdinalIgnoreCase);
+        }
+
         public ToolResult ExecuteControllerTool(ToolCommand command, ChatSession session, bool dryRun, CancellationToken cancellationToken = default(CancellationToken))
         {
             if (command == null)

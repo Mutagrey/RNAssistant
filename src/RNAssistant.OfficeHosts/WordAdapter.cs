@@ -34,17 +34,7 @@ namespace RNAssistant.OfficeHosts
         {
             get
             {
-                var doc = ActiveDocument();
-                if (doc == null)
-                {
-                    return "Word:NoDocument";
-                }
-
-                return DocumentIdentity.ForOfficeDocument(
-                    HostName,
-                    PersistentPath(doc),
-                    RuntimeDocumentKey,
-                    () => doc.CustomDocumentProperties);
+                return KeyForDocument(ActiveDocument());
             }
         }
 

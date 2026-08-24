@@ -114,7 +114,8 @@ Chat-local plan/HTML mutations are serialized by the per-chat lease. HTML bindin
 
 - Disabled, unavailable, or `AgentCanRun=false` tools are not exposed to Agent mode.
 - Confirmation and mutation safety remain local executor rules.
-- Every Agent run pins the runtime COM identity, with the stable document key as fallback when no runtime identity is available. The UI/STA adapter rechecks it immediately before execution; a genuinely different document returns non-retryable `active_document_changed` without starting the tool.
+- Agent mode remains available for an archived or closed document. Its request catalog keeps document-independent local tools, including HTML workspace tools, while Office/VBA tools and Office-backed HTML bindings are omitted until that document is open again.
+- Every Agent run pins both the stable document key and runtime COM identity. The UI/STA adapter accepts either matching identity so COM proxy changes and document-key migration do not create false switches; when neither matches, it returns non-retryable `active_document_changed` before starting the Office tool.
 - Maximum iterations and maximum tool steps bound execution.
 - Pipelines call existing tool ids through `OfficeToolExecutor`; nested safety is resolved recursively.
 - Excel/Word/PowerPoint replacement tools inspect the current target scope inside the locked mutation. Search remains optional for discovery/preview; model-facing match-count and scope-hash preconditions are not required.

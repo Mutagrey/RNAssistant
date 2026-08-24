@@ -69,6 +69,28 @@ namespace RNAssistant.Office.Tools
             return _controllerTools;
         }
 
+        internal List<ToolDefinition> AvailableAgentToolsForSession(
+            IEnumerable<ToolDefinition> tools,
+            ChatSession session)
+        {
+            var source = (tools ?? new ToolDefinition[0])
+                .Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))
+                .ToList();
+            if (OfficeDocumentExecutionGuardState.SessionMatchesAdapter(_adapter, session))
+            {
+                return source;
+            }
+
+            var catalog = source
+                .GroupBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+            return source.Where(tool => CanRunWithoutOfficeDocument(
+                tool,
+                catalog,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                0)).ToList();
+        }
+
         public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, CancellationToken cancellationToken = default(CancellationToken))
         {
             return Execute(command, tools, settings, dryRun, manualRun, null, cancellationToken);
@@ -107,13 +129,18 @@ namespace RNAssistant.Office.Tools
             var initialSteps = context.RemainingSteps;
             var result = ExecuteForExpectedDocument(
                 session,
+                RequiresOfficeDocument(command, context.Tools),
                 () => ExecuteCommandSafely(command, context, 0, dryRun, manualRun, cancellationToken));
             if (result != null) result.ToolStepsConsumed = initialSteps - context.RemainingSteps;
             return result;
         }
 
-        private ToolResult ExecuteForExpectedDocument(ChatSession session, Func<ToolResult> action)
+        private ToolResult ExecuteForExpectedDocument(
+            ChatSession session,
+            bool requiresOfficeDocument,
+            Func<ToolResult> action)
         {
+            if (!requiresOfficeDocument) return action();
             var runtimeDocumentKey = session == null || session.LastRun == null
                 ? string.Empty
                 : session.LastRun.DocumentRuntimeKey;
@@ -176,7 +203,7 @@ namespace RNAssistant.Office.Tools
         {
             if (dryRun)
             {
-                return ExecuteForExpectedDocument(session, () => _vbaExecutor.InstallCustomTool(tool, false, true));
+                return ExecuteForExpectedDocument(session, true, () => _vbaExecutor.InstallCustomTool(tool, false, true));
             }
             return ExecuteDirectMutation(
                 session,
@@ -536,6 +563,7 @@ namespace RNAssistant.Office.Tools
             {
                 return ExecuteForExpectedDocument(
                     session,
+                    true,
                     () => ExecuteMutation(session, mutatesSharedLocalState, mutatesDocument, cancellationToken, action));
             }
             catch (MutationLockException ex)
@@ -696,6 +724,68 @@ namespace RNAssistant.Office.Tools
         internal string CanonicalizeToolId(string id)
         {
             return BuiltInToolAliases.Canonicalize(CanonicalizeVbaToolId(id));
+        }
+
+        private bool RequiresOfficeDocument(ToolCommand command, IReadOnlyList<ToolDefinition> tools)
+        {
+            var id = CanonicalizeToolId(command == null ? null : command.ToolId);
+            var catalog = (tools ?? new ToolDefinition[0])
+                .Where(candidate => candidate != null && !string.IsNullOrWhiteSpace(candidate.Id))
+                .GroupBy(candidate => candidate.Id, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+            ToolDefinition tool;
+            if (string.IsNullOrWhiteSpace(id) || !catalog.TryGetValue(id, out tool)) return false;
+            return !CanRunWithoutOfficeDocument(
+                tool,
+                catalog,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                0);
+        }
+
+        private bool CanRunWithoutOfficeDocument(
+            ToolDefinition tool,
+            IDictionary<string, ToolDefinition> catalog,
+            ISet<string> path,
+            int depth)
+        {
+            if (tool == null || depth > 8) return true;
+            var id = CanonicalizeToolId(tool.Id);
+            if (string.IsNullOrWhiteSpace(id) || !path.Add(id)) return true;
+            try
+            {
+                if (_adapterTools.Any(candidate => candidate != null &&
+                    string.Equals(candidate.Id, id, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return false;
+                }
+
+                ControllerExecutorKind controller;
+                if (_controllerExecutors.TryGetValue(id, out controller))
+                {
+                    return controller != ControllerExecutorKind.Vba &&
+                        (controller != ControllerExecutorKind.HtmlArtifact ||
+                         !_htmlArtifactExecutor.RequiresOfficeDocument(id));
+                }
+
+                if (string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase)) return false;
+                if (!string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase)) return false;
+
+                PipelineDefinition pipeline;
+                string error;
+                if (!PipelineDefinitionParser.TryParse(tool.Id, tool.PipelineJson, out pipeline, out error)) return true;
+                foreach (var step in pipeline.Steps)
+                {
+                    var stepId = CanonicalizeToolId(step.ToolId);
+                    ToolDefinition nested;
+                    if (string.IsNullOrWhiteSpace(stepId) || !catalog.TryGetValue(stepId, out nested)) return true;
+                    if (!CanRunWithoutOfficeDocument(nested, catalog, path, depth + 1)) return false;
+                }
+                return true;
+            }
+            finally
+            {
+                path.Remove(id);
+            }
         }
 
         internal void CanonicalizePipeline(ToolDefinition tool)

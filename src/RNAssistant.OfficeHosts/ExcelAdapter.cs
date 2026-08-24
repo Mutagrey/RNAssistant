@@ -46,17 +46,7 @@ namespace RNAssistant.OfficeHosts
         {
             get
             {
-                var workbook = ActiveWorkbook();
-                if (workbook == null)
-                {
-                    return "Excel:NoWorkbook";
-                }
-
-                return DocumentIdentity.ForOfficeDocument(
-                    HostName,
-                    PersistentPath(workbook),
-                    RuntimeDocumentKey,
-                    () => workbook.CustomDocumentProperties);
+                return KeyForWorkbook(ActiveWorkbook());
             }
         }
 

@@ -35,17 +35,7 @@ namespace RNAssistant.OfficeHosts
         {
             get
             {
-                var presentation = ActivePresentation();
-                if (presentation == null)
-                {
-                    return "PowerPoint:NoPresentation";
-                }
-
-                return DocumentIdentity.ForOfficeDocument(
-                    HostName,
-                    PersistentPath(presentation),
-                    RuntimeDocumentKey,
-                    () => presentation.CustomDocumentProperties);
+                return KeyForPresentation(ActivePresentation());
             }
         }
 

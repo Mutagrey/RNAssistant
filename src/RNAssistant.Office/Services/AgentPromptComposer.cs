@@ -91,13 +91,32 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             AppSettings settings = null)
         {
+            var adapterHost = SafeAdapterValue(adapter, item => item.HostName);
+            var adapterDocumentKey = SafeAdapterValue(adapter, item => item.DocumentKey);
+            var adapterDocumentTitle = SafeAdapterValue(adapter, item => item.DocumentTitle);
+            var host = session != null && !string.IsNullOrWhiteSpace(session.Host)
+                ? session.Host
+                : adapterHost;
+            var documentKey = session != null && !string.IsNullOrWhiteSpace(session.DocumentKey)
+                ? session.DocumentKey
+                : adapterDocumentKey;
+            var documentTitle = session != null && !string.IsNullOrWhiteSpace(session.DocumentTitle)
+                ? session.DocumentTitle
+                : adapterDocumentTitle;
+            var officeToolsAvailable = session == null
+                ? adapter != null
+                : OfficeDocumentExecutionGuardState.SessionMatchesAdapter(adapter, session);
             var root = new JObject
             {
-                ["host"] = adapter == null ? string.Empty : adapter.HostName ?? string.Empty,
+                ["host"] = host ?? string.Empty,
                 ["document"] = new JObject
                 {
-                    ["key"] = adapter == null ? string.Empty : adapter.DocumentKey ?? string.Empty,
-                    ["title"] = adapter == null ? string.Empty : adapter.DocumentTitle ?? string.Empty
+                    ["key"] = documentKey ?? string.Empty,
+                    ["title"] = documentTitle ?? string.Empty,
+                    ["office_tools_available"] = officeToolsAvailable,
+                    ["office_tool_policy"] = officeToolsAvailable
+                        ? "Office object-model tools may target this open document."
+                        : "The chat document is closed or inactive. Do not call Office object-model tools until it is opened; continue with non-Office tools such as the HTML workspace when useful."
                 },
                 ["chat"] = new JObject
                 {
@@ -110,6 +129,21 @@ namespace RNAssistant.Office.Services
             var artifacts = ChatArtifactService.BuildPromptIndex(session, 2000, settings);
             if (!string.IsNullOrWhiteSpace(artifacts)) root["artifacts"] = artifacts;
             return root.ToString(Formatting.None);
+        }
+
+        private static string SafeAdapterValue(
+            IOfficeApplicationAdapter adapter,
+            Func<IOfficeApplicationAdapter, string> read)
+        {
+            if (adapter == null || read == null) return string.Empty;
+            try
+            {
+                return read(adapter) ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
         }
 
         internal static JArray BuildTools(IEnumerable<ToolDefinition> tools)

@@ -127,16 +127,45 @@ namespace RNAssistant.Harness
             AssertTrue(createdOnThread != 0, "created thread");
             AssertEqual(createdOnThread, executeOnThread, "execute thread");
 
-            adapter = new FakeOfficeAdapter();
-            using (var dispatched = new DispatchedOfficeApplicationAdapter(delegate { return adapter; }))
-            using (((IOfficeDocumentExecutionGuard)dispatched).BeginExpectedDocument(
-                "Excel", adapter.DocumentKey, adapter.RuntimeDocumentKey))
+            foreach (var host in new[] { "Excel", "Word", "PowerPoint", "Outlook" })
             {
-                adapter.ActivateDocument("forecast-doc");
-                var blocked = dispatched.ExecuteTool(new ToolCommand { ToolId = "excel.read_range" });
-                AssertEqual("active_document_changed", blocked.ErrorCode,
-                    "document guard blocks a tool after active document changes");
-                AssertEqual(0, adapter.Executed.Count, "blocked tool never reaches Office adapter");
+                var guardedAdapter = FakeOfficeAdapter.ForHost(host);
+                var toolId = guardedAdapter.GetBuiltInTools().First().Id;
+                using (var dispatched = new DispatchedOfficeApplicationAdapter(delegate { return guardedAdapter; }))
+                {
+                    var originalDocumentKey = dispatched.DocumentKey;
+                    var originalRuntimeKey = dispatched.RuntimeDocumentKey;
+                    using (((IOfficeDocumentExecutionGuard)dispatched).BeginExpectedDocument(
+                        host, originalDocumentKey, originalRuntimeKey))
+                    {
+                        guardedAdapter.RuntimeDocumentKeyValue = originalRuntimeKey + "-new-proxy";
+                        var sameDocument = dispatched.ExecuteTool(new ToolCommand { ToolId = toolId });
+                        AssertTrue(sameDocument.Success,
+                            host + " guard accepts a stable document key when COM runtime identity changes");
+                    }
+
+                    guardedAdapter.RuntimeDocumentKeyValue = originalRuntimeKey;
+                    using (((IOfficeDocumentExecutionGuard)dispatched).BeginExpectedDocument(
+                        host, originalDocumentKey, originalRuntimeKey))
+                    {
+                        guardedAdapter.DocumentKeyValue = originalDocumentKey + "-saved";
+                        var migratedDocument = dispatched.ExecuteTool(new ToolCommand { ToolId = toolId });
+                        AssertTrue(migratedDocument.Success,
+                            host + " guard accepts the same runtime document after identity migration");
+                    }
+
+                    using (((IOfficeDocumentExecutionGuard)dispatched).BeginExpectedDocument(
+                        host, guardedAdapter.DocumentKey, guardedAdapter.RuntimeDocumentKey))
+                    {
+                        guardedAdapter.DocumentKeyValue += "-other";
+                        guardedAdapter.RuntimeDocumentKeyValue += "-other";
+                        var blocked = dispatched.ExecuteTool(new ToolCommand { ToolId = toolId });
+                        AssertEqual("active_document_changed", blocked.ErrorCode,
+                            host + " guard blocks a different Office document");
+                        AssertEqual(2, guardedAdapter.Executed.Count,
+                            host + " blocked tool never reaches Office adapter");
+                    }
+                }
             }
         }
 

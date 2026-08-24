@@ -233,6 +233,7 @@ Context compaction preserves the full stored transcript and replays a checkpoint
 ## HTML Workspace
 
 The HTML tab is tied to the active chat session. Agent-created HTML pages are stored with the chat, not inside the Office document.
+Agent mode and document-independent local tools remain usable when that chat's Office document is closed. Office reads, writes, VBA actions, and Office-backed HTML bindings become available again only after the bound document is opened.
 
 - Use `common.html_workspace_upsert` with `resourceType:"file"` for `index.html`, CSS, and scripts; runtime infers file kind from the extension.
 - Use the same tool with `resourceType:"data"` for JSON data sources exposed as `window.RNAssistantData`.

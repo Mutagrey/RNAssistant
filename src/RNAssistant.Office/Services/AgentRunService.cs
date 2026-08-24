@@ -139,6 +139,7 @@ namespace RNAssistant.Office.Services
         {
             settings = settings ?? new AppSettings();
             var availableTools = PrepareToolsForRun(tools);
+            availableTools = _toolExecutor.AvailableAgentToolsForSession(availableTools, session);
             var enabledSkills = (skills ?? new SkillDefinition[0]).Where(skill => skill != null && skill.Enabled).ToList();
             var messages = await BuildMessagesAsync(text, session, documentContext, settings, availableTools,
                 enabledSkills, attachments, initialCommand != null && initialResult != null, progress, cancellationToken).ConfigureAwait(false);

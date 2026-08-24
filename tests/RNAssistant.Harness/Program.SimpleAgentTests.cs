@@ -146,6 +146,70 @@ namespace RNAssistant.Harness
             AssertTrue(prompt.IndexOf("NEXT_ACTION_POLICY", StringComparison.OrdinalIgnoreCase) < 0, "no action heuristic");
         }
 
+        private static void AgentContinuesWithLocalToolsForClosedDocument()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var session = NewSession(adapter);
+                session.DocumentKey = "closed-doc";
+                session.DocumentTitle = "Closed.xlsx";
+                var context = new DocumentContext
+                {
+                    Host = session.Host,
+                    DocumentKey = session.DocumentKey,
+                    Title = session.DocumentTitle
+                };
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var responses = new Queue<string>(new[]
+                {
+                    "{\"message\":\"Создаю локальный HTML.\",\"tool_calls\":[{\"id\":\"call_html\",\"name\":\"common.html_workspace_upsert\",\"arguments\":{\"resourceType\":\"file\",\"name\":\"index.html\",\"content\":\"<main>Offline</main>\"}}]}",
+                    "{\"message\":\"Локальный HTML готов.\",\"tool_calls\":[]}"
+                });
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
+                {
+                    calls.Add(messages.ToList());
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+
+                var result = new AgentRunService(adapter, executor, completion).ExecuteAsync(
+                    "Создай HTML без обращения к Excel.",
+                    session,
+                    context,
+                    new AppSettings(),
+                    tools,
+                    null,
+                    null,
+                    null,
+                    CancellationToken.None).GetAwaiter().GetResult();
+
+                AssertEqual("Локальный HTML готов.", result.AssistantText, "closed-document local result");
+                AssertTrue(session.HtmlWorkspace != null && session.HtmlWorkspace.Files.Any(file =>
+                    file != null && string.Equals(file.Path, "index.html", StringComparison.OrdinalIgnoreCase)),
+                    "closed-document HTML file saved");
+                var prompt = FlattenSimple(calls[0]);
+                AssertContains(prompt, "\"key\":\"closed-doc\"", "archived document identity in prompt");
+                AssertContains(prompt, "\"office_tools_available\":false", "Office availability in prompt");
+                AssertContains(prompt, "common.html_workspace_upsert", "local HTML tool remains available");
+                AssertTrue(prompt.IndexOf("excel.read_range", StringComparison.OrdinalIgnoreCase) < 0,
+                    "Office tools omitted for a closed document");
+                AssertTrue(prompt.IndexOf("common.html_data_bind", StringComparison.OrdinalIgnoreCase) < 0,
+                    "Office-backed HTML binding omitted for a closed document");
+                AssertEqual(0, adapter.Executed.Count, "local tool does not enter Office adapter");
+
+                var blocked = executor.Execute(
+                    Command("excel.read_range", "sheet", "Data", "range", "A1:B2"),
+                    tools,
+                    new AppSettings(),
+                    false,
+                    false,
+                    session);
+                AssertEqual("active_document_changed", blocked.ErrorCode,
+                    "closed-document Office call remains guarded");
+                AssertEqual(0, adapter.Executed.Count, "guarded Office tool never reaches adapter");
+            });
+        }
+
         private static void SimpleAgentLoadsFullSkillThroughTool()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

@@ -1092,15 +1092,18 @@ namespace RNAssistant.Office.Tools
                 !string.Equals(guard.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase)) return false;
             var sessionId = session == null ? string.Empty : session.Id ?? string.Empty;
             if (!string.Equals(guard.SessionId ?? string.Empty, sessionId, StringComparison.OrdinalIgnoreCase)) return false;
-            var runtimeKey = _adapter.RuntimeDocumentKey ?? string.Empty;
             var documentKey = _adapter.DocumentKey ?? string.Empty;
-            if (!string.IsNullOrWhiteSpace(guard.RuntimeDocumentKey) && !string.IsNullOrWhiteSpace(runtimeKey))
-            {
-                return string.Equals(guard.RuntimeDocumentKey, runtimeKey, StringComparison.OrdinalIgnoreCase);
-            }
-            return !string.IsNullOrWhiteSpace(guard.DocumentKey) &&
-                !string.IsNullOrWhiteSpace(documentKey) &&
-                string.Equals(guard.DocumentKey, documentKey, StringComparison.OrdinalIgnoreCase);
+            if (OfficeDocumentExecutionGuardState.IdentityMatches(
+                guard.DocumentKey,
+                string.Empty,
+                documentKey,
+                string.Empty)) return true;
+            var runtimeKey = _adapter.RuntimeDocumentKey ?? string.Empty;
+            return OfficeDocumentExecutionGuardState.IdentityMatches(
+                string.Empty,
+                guard.RuntimeDocumentKey,
+                string.Empty,
+                runtimeKey);
         }
 
         private static VbaMutationGuard ReadGuard(ToolCommand command)

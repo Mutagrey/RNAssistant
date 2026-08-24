@@ -158,10 +158,18 @@ namespace RNAssistant.Office
 
         private string CaptureExpectedRuntimeDocumentKey(ChatSession session)
         {
-            EnsureCurrentDocument(session);
-            var runtimeDocumentKey = CaptureRuntimeDocumentKey();
-            EnsureCurrentDocument(session);
-            return runtimeDocumentKey;
+            try
+            {
+                if (!_chatSessions.IsCurrentDocument(session)) return string.Empty;
+                var runtimeDocumentKey = CaptureRuntimeDocumentKey();
+                return _chatSessions.IsCurrentDocument(session) ? runtimeDocumentKey : string.Empty;
+            }
+            catch
+            {
+                // Agent and local tools remain usable for an archived document. Office tools
+                // perform their own guarded identity check immediately before COM execution.
+                return string.Empty;
+            }
         }
     }
 }
