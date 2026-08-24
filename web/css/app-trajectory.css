@@ -10,6 +10,26 @@
   line-height: 1.35;
 }
 
+.trajectory-querybar {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(120px, .65fr) minmax(110px, auto) auto;
+  gap: 6px;
+  margin: 7px 0 5px;
+}
+
+.trajectory-querybar input,
+.trajectory-querybar select {
+  min-width: 0;
+}
+
+.trajectory-status-row {
+  display: flex;
+  min-height: 28px;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .trajectory-workspace {
   display: grid;
   grid-template-columns: minmax(180px, 30%) minmax(0, 1fr);
@@ -132,6 +152,10 @@
 }
 
 @media (max-width: 700px) {
+  .trajectory-querybar {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .trajectory-workspace {
     grid-template-columns: minmax(140px, 38%) minmax(0, 1fr);
   }

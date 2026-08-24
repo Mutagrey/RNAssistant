@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Diagnostics;
@@ -26,6 +27,7 @@ namespace RNAssistant.Office
         private readonly SkillStore _skillStore;
         private readonly VbaJournalStore _vbaJournalStore;
         private readonly CasMaintenanceService _casMaintenanceService;
+        private readonly ITrajectoryQuery _trajectoryQuery;
         private readonly OfficeToolExecutor _toolExecutor;
         private readonly ToolCatalogService _toolCatalog;
         private readonly SkillCatalogService _skillCatalog;
@@ -82,6 +84,7 @@ namespace RNAssistant.Office
                 () => _settingsService.LoadStorageProtector(),
                 _chatRuns.ReserveMaintenance,
                 EnsureNoActiveRuns);
+            _trajectoryQuery = new EventStreamTrajectoryQuery();
             _chatSessions = new ChatSessionService(_adapter, _chatStore);
             _lifetimeCancellation = new CancellationTokenSource();
             _chatSessions.RunStateProvider = _chatRuns.Get;

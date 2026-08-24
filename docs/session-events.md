@@ -72,7 +72,7 @@ Current history encryption does not cover transient attachment staging, settings
 
 ## Inspection
 
-Settings → Diagnostics → Trajectory reads the last 500 events from the same stream. It shows run, turn, and step correlation. Event metadata and state operations are inline; model payloads and streaming-frame batches are fetched lazily by event id and shown as a bounded preview. CAS storage audits all retained chat/VBA references and exposes an explicitly confirmed orphan cleanup. The bridge never includes API keys, history secrets, or authorization headers.
+Settings → Diagnostics → Trajectory queries the same stream through disposable `ITrajectoryQuery`. Results use exclusive sequence cursors, newest-first pages, tokenized text search and filters for sequence, event type, run/turn/step, tool call, artifact, status and reconstructed `current`/`shadowed`/`log-only` visibility. Event metadata and state operations are inline; model payloads and streaming-frame batches are fetched lazily by event id and shown as a bounded preview. CAS storage audits all retained chat/VBA references and exposes an explicitly confirmed orphan cleanup. The bridge never includes API keys, history secrets or authorization headers. See [trajectory-query.md](trajectory-query.md).
 
 The prioritized follow-up work for trajectory queries, HTML branches, CAS lifecycle, and document-scoped VBA recovery is tracked in [trajectory-roadmap.md](trajectory-roadmap.md).
 

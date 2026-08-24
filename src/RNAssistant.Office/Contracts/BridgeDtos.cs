@@ -603,13 +603,52 @@ namespace RNAssistant.Office.Contracts
         public string EventId { get; set; }
     }
 
+    public sealed class ChatTrajectoryRequest : ChatPayload
+    {
+        [JsonProperty("cursor")] public string Cursor { get; set; }
+        [JsonProperty("pageSize")] public int? PageSize { get; set; }
+        [JsonProperty("search")] public string Search { get; set; }
+        [JsonProperty("minSequence")] public long? MinSequence { get; set; }
+        [JsonProperty("maxSequence")] public long? MaxSequence { get; set; }
+        [JsonProperty("eventTypes")] public List<string> EventTypes { get; set; }
+        [JsonProperty("runId")] public string RunId { get; set; }
+        [JsonProperty("turnId")] public string TurnId { get; set; }
+        [JsonProperty("stepId")] public string StepId { get; set; }
+        [JsonProperty("toolCallId")] public string ToolCallId { get; set; }
+        [JsonProperty("artifactId")] public string ArtifactId { get; set; }
+        [JsonProperty("status")] public string Status { get; set; }
+        [JsonProperty("visibility")] public string Visibility { get; set; }
+
+        public TrajectoryQueryRequest ToQueryRequest()
+        {
+            return new TrajectoryQueryRequest
+            {
+                Cursor = Cursor,
+                PageSize = PageSize.GetValueOrDefault(100),
+                Search = Search,
+                MinSequence = MinSequence,
+                MaxSequence = MaxSequence,
+                EventTypes = EventTypes ?? new List<string>(),
+                RunId = RunId,
+                TurnId = TurnId,
+                StepId = StepId,
+                ToolCallId = ToolCallId,
+                ArtifactId = ArtifactId,
+                Status = Status,
+                Visibility = Visibility
+            };
+        }
+    }
+
     public sealed class ChatTrajectoryResponse
     {
         [JsonProperty("chatId")] public string ChatId { get; set; }
         [JsonProperty("revision")] public long Revision { get; set; }
         [JsonProperty("totalEvents")] public int TotalEvents { get; set; }
-        [JsonProperty("startSequence")] public long? StartSequence { get; set; }
-        [JsonProperty("truncated")] public bool Truncated { get; set; }
+        [JsonProperty("totalMatches")] public int TotalMatches { get; set; }
+        [JsonProperty("cursor")] public string Cursor { get; set; }
+        [JsonProperty("nextCursor")] public string NextCursor { get; set; }
+        [JsonProperty("hasMore")] public bool HasMore { get; set; }
         [JsonProperty("events")] public IReadOnlyList<SessionEventDto> Events { get; set; }
     }
 
@@ -636,6 +675,12 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("payloadByteLength")] public long? PayloadByteLength { get; set; }
         [JsonProperty("payloadContentType")] public string PayloadContentType { get; set; }
         [JsonProperty("payloadEncryption")] public string PayloadEncryption { get; set; }
+        [JsonProperty("visibility")] public string Visibility { get; set; }
+        [JsonProperty("sourceEventSeqs")] public IReadOnlyList<long> SourceEventSeqs { get; set; }
+        [JsonProperty("sourceEventIds")] public IReadOnlyList<string> SourceEventIds { get; set; }
+        [JsonProperty("toolCallIds")] public IReadOnlyList<string> ToolCallIds { get; set; }
+        [JsonProperty("artifactIds")] public IReadOnlyList<string> ArtifactIds { get; set; }
+        [JsonProperty("statuses")] public IReadOnlyList<string> Statuses { get; set; }
 
         public static SessionEventDto From(SessionEvent sessionEvent)
         {
@@ -664,6 +709,19 @@ namespace RNAssistant.Office.Contracts
                 PayloadContentType = sessionEvent.Payload == null ? null : sessionEvent.Payload.ContentType,
                 PayloadEncryption = sessionEvent.Payload == null ? null : sessionEvent.Payload.Encryption
             };
+        }
+
+        public static SessionEventDto From(TrajectoryEventRecord record)
+        {
+            var dto = record == null ? null : From(record.Event);
+            if (dto == null) return null;
+            dto.Visibility = record.Visibility;
+            dto.SourceEventSeqs = record.SourceEventSeqs ?? new List<long>();
+            dto.SourceEventIds = record.SourceEventIds ?? new List<string>();
+            dto.ToolCallIds = record.ToolCallIds ?? new List<string>();
+            dto.ArtifactIds = record.ArtifactIds ?? new List<string>();
+            dto.Statuses = record.Statuses ?? new List<string>();
+            return dto;
         }
     }
 

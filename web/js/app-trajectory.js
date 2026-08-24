@@ -1,6 +1,7 @@
 (function () {
   var events = [];
   var selected = null;
+  var nextCursor = null;
 
   function value(source, pascal, camel, fallback) {
     source = source || {};
@@ -36,11 +37,19 @@
     var turnId = value(item, "TurnId", "turnId", "");
     var stepId = value(item, "StepId", "stepId", "");
     var payloadSize = value(item, "PayloadByteLength", "payloadByteLength", null);
+    var visibility = value(item, "Visibility", "visibility", "");
+    var toolCallIds = value(item, "ToolCallIds", "toolCallIds", []) || [];
+    var artifactIds = value(item, "ArtifactIds", "artifactIds", []) || [];
+    var statuses = value(item, "Statuses", "statuses", []) || [];
     $("trajectoryEventTitle").textContent = "#" + sequence + "  " + type;
     $("trajectoryEventMeta").textContent = [
       runId ? "run=" + runId : "",
       turnId ? "turn=" + turnId : "",
       stepId ? "step=" + stepId : "",
+      visibility || "",
+      toolCallIds.length ? "tool=" + toolCallIds.join(",") : "",
+      artifactIds.length ? "artifact=" + artifactIds.join(",") : "",
+      statuses.length ? "status=" + statuses.join(",") : "",
       previousHash ? "prev=" + previousHash : "root",
       hash ? "hash=" + hash : "",
       payloadSize === null ? "" : "payload=" + bytesLabel(payloadSize)
@@ -56,8 +65,9 @@
     payloadButton.textContent = "Показать payload";
   }
 
-  function renderEvents(response) {
-    events = value(response, "Events", "events", []) || [];
+  function renderEvents(response, append) {
+    var page = value(response, "Events", "events", []) || [];
+    events = append ? events.concat(page) : page;
     var root = $("trajectoryEvents");
     root.replaceChildren();
     events.forEach(function (item) {
@@ -93,20 +103,41 @@
     });
 
     var total = value(response, "TotalEvents", "totalEvents", events.length);
-    var start = value(response, "StartSequence", "startSequence", null);
-    var truncated = !!value(response, "Truncated", "truncated", false);
-    $("trajectoryStatus").textContent = "Событий: " + total +
-      (truncated ? " · показаны #" + start + "–#" + value(response, "Revision", "revision", total) : "") +
-      " · payload загружается только по запросу";
+    var matches = value(response, "TotalMatches", "totalMatches", events.length);
+    nextCursor = value(response, "NextCursor", "nextCursor", null);
+    var hasMore = !!value(response, "HasMore", "hasMore", false);
+    $("trajectoryStatus").textContent = "Совпадений: " + matches + " из " + total + " · загружено " + events.length +
+      " · payload только по запросу";
+    $("loadMoreTrajectoryButton").classList.toggle("hidden", !hasMore);
     $("trajectoryWorkspace").classList.toggle("hidden", events.length === 0);
-    if (events.length) {
-      var lastButton = root.lastElementChild;
-      selectEvent(events[events.length - 1], lastButton);
-      root.scrollTop = root.scrollHeight;
+    if (!append && events.length) {
+      selectEvent(events[0], root.firstElementChild);
+      root.scrollTop = 0;
+    } else if (append && selected) {
+      var selectedIndex = events.map(eventId).indexOf(eventId(selected));
+      if (selectedIndex >= 0) selectEvent(events[selectedIndex], root.children[selectedIndex]);
+    } else if (!events.length) {
+      selected = null;
+      $("trajectoryEventTitle").textContent = "Событие не выбрано";
+      $("trajectoryEventMeta").textContent = "";
+      $("trajectoryEventData").textContent = "";
+      $("trajectoryEventPayload").textContent = "";
+      $("loadTrajectoryPayloadButton").classList.add("hidden");
     }
   }
 
-  async function refreshTrajectory() {
+  function queryPayload(chatId, cursor) {
+    return {
+      chatId: chatId,
+      cursor: cursor || null,
+      pageSize: 100,
+      search: $("trajectorySearchInput").value.trim(),
+      eventTypes: $("trajectoryTypeInput").value.split(",").map(function (item) { return item.trim(); }).filter(Boolean),
+      visibility: $("trajectoryVisibilityInput").value || null
+    };
+  }
+
+  async function refreshTrajectory(append) {
     var button = $("refreshTrajectoryButton");
     if (!state.activeChatId) {
       $("trajectoryStatus").textContent = "Нет активного чата.";
@@ -115,15 +146,17 @@
     var chatId = state.activeChatId;
     try {
       button.disabled = true;
+      $("loadMoreTrajectoryButton").disabled = true;
       $("trajectoryStatus").textContent = "Читаю event stream…";
-      var response = await send("getChatTrajectory", { chatId: chatId });
+      var response = await send("getChatTrajectory", queryPayload(chatId, append ? nextCursor : null));
       if (state.activeChatId !== chatId) return;
-      renderEvents(response);
+      renderEvents(response, !!append);
     } catch (error) {
       $("trajectoryStatus").textContent = "Не удалось прочитать траекторию: " + error.message;
       $("trajectoryWorkspace").classList.add("hidden");
     } finally {
       button.disabled = false;
+      $("loadMoreTrajectoryButton").disabled = false;
     }
   }
 
@@ -153,8 +186,18 @@
 
   window.bindTrajectoryActions = function () {
     var refresh = $("refreshTrajectoryButton");
+    var more = $("loadMoreTrajectoryButton");
     var payload = $("loadTrajectoryPayloadButton");
-    if (refresh) refresh.addEventListener("click", refreshTrajectory);
+    if (refresh) refresh.addEventListener("click", function () { refreshTrajectory(false); });
+    if (more) more.addEventListener("click", function () { refreshTrajectory(true); });
+    ["trajectorySearchInput", "trajectoryTypeInput"].forEach(function (id) {
+      $(id).addEventListener("input", function () {
+        nextCursor = null;
+        $("loadMoreTrajectoryButton").classList.add("hidden");
+      });
+      $(id).addEventListener("keydown", function (event) { if (event.key === "Enter") refreshTrajectory(false); });
+    });
+    $("trajectoryVisibilityInput").addEventListener("change", function () { refreshTrajectory(false); });
     if (payload) payload.addEventListener("click", loadPayload);
   };
 }());

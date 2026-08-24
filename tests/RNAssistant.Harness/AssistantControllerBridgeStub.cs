@@ -38,12 +38,23 @@ namespace RNAssistant.Office
         public string LastDocumentHost { get; private set; }
         public string LastHtmlPath { get; private set; }
         public string LastHtmlDataName { get; private set; }
+        public string LastTrajectoryCursor { get; private set; }
+        public string LastTrajectorySearch { get; private set; }
+        public string LastTrajectoryVisibility { get; private set; }
+        public IReadOnlyList<string> LastTrajectoryEventTypes { get; private set; }
 
         public InitResponse Initialize() { return new InitResponse { Host = "Excel", Title = "Harness.xlsx" }; }
         public ChatStateResponse ListChats() { return ChatState(); }
-        public ChatTrajectoryResponse GetChatTrajectory(string chatId = null)
+        public ChatTrajectoryResponse GetChatTrajectory(ChatTrajectoryRequest request)
         {
-            return new ChatTrajectoryResponse { ChatId = chatId, Revision = 1, Events = new SessionEventDto[0] };
+            LastChatId = request == null ? null : request.ChatId;
+            LastTrajectoryCursor = request == null ? null : request.Cursor;
+            LastTrajectorySearch = request == null ? null : request.Search;
+            LastTrajectoryVisibility = request == null ? null : request.Visibility;
+            LastTrajectoryEventTypes = request == null
+                ? (IReadOnlyList<string>)new string[0]
+                : request.EventTypes ?? new List<string>();
+            return new ChatTrajectoryResponse { ChatId = LastChatId, Revision = 1, Events = new SessionEventDto[0] };
         }
         public ChatEventPayloadResponse GetChatEventPayload(string chatId, string eventId)
         {

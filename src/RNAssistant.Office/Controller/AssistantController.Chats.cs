@@ -17,22 +17,24 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
-        private const int MaxTrajectoryEvents = 500;
         private const int MaxTrajectoryPayloadPreviewChars = 512 * 1024;
 
-        public ChatTrajectoryResponse GetChatTrajectory(string chatId = null)
+        public ChatTrajectoryResponse GetChatTrajectory(ChatTrajectoryRequest request)
         {
-            var session = LoadSession(chatId);
+            request = request ?? new ChatTrajectoryRequest();
+            var session = LoadSession(request.ChatId);
             var events = _chatStore.ReadEvents(session.Host, session.DocumentKey, session.Id);
-            var visible = events.Skip(Math.Max(0, events.Count - MaxTrajectoryEvents)).ToList();
+            var page = _trajectoryQuery.Query(events, request.ToQueryRequest());
             return new ChatTrajectoryResponse
             {
                 ChatId = session.Id,
                 Revision = session.Revision,
-                TotalEvents = events.Count,
-                StartSequence = visible.Count == 0 ? (long?)null : visible[0].Sequence,
-                Truncated = visible.Count < events.Count,
-                Events = visible.Select(SessionEventDto.From).Where(item => item != null).ToList()
+                TotalEvents = page.TotalEvents,
+                TotalMatches = page.TotalMatches,
+                Cursor = page.Cursor,
+                NextCursor = page.NextCursor,
+                HasMore = page.HasMore,
+                Events = page.Records.Select(SessionEventDto.From).Where(item => item != null).ToList()
             };
         }
 

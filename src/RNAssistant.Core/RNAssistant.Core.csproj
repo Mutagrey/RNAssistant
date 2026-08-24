@@ -85,6 +85,7 @@
     <Compile Include="Models\ChatModels.cs" />
     <Compile Include="Models\CasMaintenanceModels.cs" />
     <Compile Include="Models\SessionEventModels.cs" />
+    <Compile Include="Models\TrajectoryModels.cs" />
     <Compile Include="Models\ChartArtifactModels.cs" />
     <Compile Include="Models\ContextModels.cs" />
     <Compile Include="Models\SkillModels.cs" />
@@ -114,6 +115,7 @@
     <Compile Include="Services\HtmlWorkspaceCopyService.cs" />
     <Compile Include="Services\HtmlWorkspaceHistoryPolicy.cs" />
     <Compile Include="Services\HtmlWorkspaceNavigationService.cs" />
+    <Compile Include="Services\EventStreamTrajectoryQuery.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
     <Compile Include="Storage\AttachmentStore.cs" />
     <Compile Include="Storage\PdfAttachmentTextExtractor.cs" />

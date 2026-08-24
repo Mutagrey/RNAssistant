@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Tools;
@@ -42,6 +43,106 @@ namespace RNAssistant.Harness
                 AssertEqual(1, Directory.GetFiles(SessionDirectory(paths, session), "*.events.jsonl").Length,
                     "one canonical event stream");
             });
+        }
+
+        private static void TrajectoryQueryPaginatesAndFilters()
+        {
+            var events = new List<SessionEvent>
+            {
+                new SessionEvent { Sequence = 1, EventId = "event-1", Type = SessionEventTypes.SessionCreated, Data = new JObject { ["Title"] = "Root" } },
+                new SessionEvent
+                {
+                    Sequence = 2,
+                    EventId = "event-2",
+                    Type = SessionEventTypes.SessionCommit,
+                    Data = new JObject
+                    {
+                        ["Operations"] = new JArray(new JObject
+                        {
+                            ["Type"] = SessionOperationTypes.MessageUpsert,
+                            ["Data"] = new JObject
+                            {
+                                ["Value"] = new JObject
+                                {
+                                    ["Id"] = "message-1",
+                                    ["Activity"] = new JObject { ["ToolCallId"] = "tool-call-old", ["Status"] = "running" }
+                                }
+                            }
+                        })
+                    }
+                },
+                new SessionEvent
+                {
+                    Sequence = 3,
+                    EventId = "event-3",
+                    Type = SessionEventTypes.SessionCommit,
+                    Data = new JObject
+                    {
+                        ["Operations"] = new JArray(new JObject
+                        {
+                            ["Type"] = SessionOperationTypes.MessageRemove,
+                            ["Data"] = new JObject { ["Id"] = "message-1" }
+                        })
+                    }
+                },
+                new SessionEvent
+                {
+                    Sequence = 4,
+                    EventId = "event-4",
+                    Type = SessionEventTypes.SessionCommit,
+                    Data = new JObject
+                    {
+                        ["Operations"] = new JArray(new JObject
+                        {
+                            ["Type"] = SessionOperationTypes.ArtifactRevisionCreated,
+                            ["Data"] = new JObject { ["Value"] = new JObject { ["Id"] = "artifact-1", ["Title"] = "Plan" } }
+                        })
+                    }
+                },
+                new SessionEvent
+                {
+                    Sequence = 5,
+                    EventId = "event-5",
+                    Type = SessionEventTypes.AgentResponseRejected,
+                    RunId = "run-failed",
+                    TurnId = "turn-failed",
+                    StepId = "step-failed",
+                    Data = new JObject { ["Status"] = "failed", ["Reason"] = "unique repair marker" }
+                }
+            };
+            var query = new EventStreamTrajectoryQuery();
+            var first = query.Query(events, new TrajectoryQueryRequest { PageSize = 2 });
+            AssertEqual(5, first.TotalEvents, "query reports canonical event count");
+            AssertEqual(5, first.TotalMatches, "unfiltered query matches all events");
+            AssertEqual(5L, first.Records[0].Event.Sequence, "query is newest first");
+            AssertEqual(4L, first.Records[1].Event.Sequence, "first page is bounded");
+            AssertEqual("seq:4", first.NextCursor, "cursor is sequence based");
+            AssertTrue(first.HasMore, "older events remain");
+
+            var second = query.Query(events, new TrajectoryQueryRequest { PageSize = 2, Cursor = first.NextCursor });
+            AssertEqual(3L, second.Records[0].Event.Sequence, "cursor continues without overlap");
+            AssertEqual(2L, second.Records[1].Event.Sequence, "second page remains newest first");
+            AssertEqual(2L, second.Records[1].SourceEventSeqs.Single(), "projection keeps source sequence");
+            AssertEqual("event-2", second.Records[1].SourceEventIds.Single(), "projection keeps source event id");
+
+            AssertEqual(2L, query.Query(events, new TrajectoryQueryRequest { Visibility = TrajectoryVisibility.Shadowed })
+                .Records.Single().Event.Sequence, "superseded projection mutation is shadowed");
+            AssertEqual(5L, query.Query(events, new TrajectoryQueryRequest { Visibility = TrajectoryVisibility.LogOnly })
+                .Records.Single().Event.Sequence, "trace event is log-only");
+            AssertEqual(3, query.Query(events, new TrajectoryQueryRequest { Visibility = TrajectoryVisibility.Current }).TotalMatches,
+                "seed and live projection mutations are current");
+            AssertEqual(2L, query.Query(events, new TrajectoryQueryRequest { ToolCallId = "tool-call-old" }).Records.Single().Event.Sequence,
+                "tool-call correlation filter searches event data");
+            AssertEqual(4L, query.Query(events, new TrajectoryQueryRequest { ArtifactId = "artifact-1" }).Records.Single().Event.Sequence,
+                "artifact filter resolves operation values");
+            AssertEqual(5L, query.Query(events, new TrajectoryQueryRequest { Search = "unique marker", Status = "failed", RunId = "run-failed" })
+                .Records.Single().Event.Sequence, "full-text/status/run filters compose");
+            AssertEqual(2, query.Query(events, new TrajectoryQueryRequest
+            {
+                EventTypes = new List<string> { SessionEventTypes.SessionCommit },
+                MinSequence = 3,
+                MaxSequence = 4
+            }).TotalMatches, "event type and sequence filters compose");
         }
 
         private static void SessionEventIntegrityRejectsTampering()

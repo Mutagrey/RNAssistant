@@ -14,7 +14,7 @@
 - Diagnostics now provides a repository-wide CAS health report and fail-closed orphan collector. Retention/pruning, re-keying, and redacted export lifecycles are still missing.
 - VBA package install/remove now has one CAS-backed multi-component transaction manifest; Diagnostics does not yet expose its component outcomes and diffs.
 - VBA recovery state is canonical, but Diagnostics does not yet expose paged mutation history or before/after diffs.
-- Diagnostics expose a bounded recent tail; there is no reusable paged query API for complete turn, step, tool, artifact, and failure trajectories.
+- Diagnostics now uses the reusable paged raw-event query API; correlated derived views across complete turns, tools, artifacts and failures remain to be added.
 
 ## Next implementation order
 
@@ -41,11 +41,11 @@
 
 ### P2 — trajectory queries and operator UX
 
-- [ ] Introduce `ITrajectoryQuery`: cursor pagination, FTS, and filters for sequence range, event type, run, turn, step, tool call, artifact, status, and `current` / `shadowed` / `log-only`. The event stream remains authoritative; any index must be disposable and rebuildable.
+- [x] Introduce `ITrajectoryQuery`: cursor pagination, tokenized full-text search, and filters for sequence range, event type, run, turn, step, tool call, artifact, status, and `current` / `shadowed` / `log-only`. The event stream remains authoritative; the current projection is disposable and rebuilt in memory.
 - [ ] Add derived views for model replay, tool execution, artifact lineage, confirmation pauses, failure/retry history, and per-turn timing/token/cost usage. Every projection row must retain `sourceEventSeqs` and source event ids.
-- [ ] Upgrade Diagnostics from the fixed recent tail to pagination, correlation navigation, artifact lineage, and VBA before/after diff with an explicit restore action.
+- [ ] Extend the paged Diagnostics view with correlation navigation, artifact lineage, and VBA before/after diff with an explicit restore action.
 - [ ] Add an export bundle containing selected event records, a manifest of referenced CAS payloads, and integrity hashes for offline trajectory analysis and regression fixtures.
-- [ ] Define persistence seams (`ISessionPersistence`, `IBlobStore`, `ITrajectoryQuery`) before considering an optional SQLite backend. SQLite is useful only for query scale; it must preserve append-only/CAS semantics and must not become a second durable truth beside JSONL.
+- [ ] Add the remaining persistence seams (`ISessionPersistence`, `IBlobStore`); `ITrajectoryQuery` is now explicit. Consider an optional SQLite query backend only for scale; it must preserve append-only/CAS semantics and must not become a second durable truth beside JSONL.
 
 ### P3 — lifecycle, evaluation, and tamper resistance
 
