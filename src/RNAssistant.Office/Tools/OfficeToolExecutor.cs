@@ -31,7 +31,7 @@ namespace RNAssistant.Office.Tools
 
         public OfficeToolExecutor(
             IOfficeApplicationAdapter adapter,
-            VbaBackupStore vbaBackupStore,
+            VbaJournalStore vbaJournalStore,
             SkillStore skillStore,
             ToolStore toolStore = null,
             Func<AppSettings> loadSettings = null,
@@ -41,7 +41,7 @@ namespace RNAssistant.Office.Tools
             _adapter = adapter;
             _adapterTools = (_adapter.GetBuiltInTools() ?? new ToolDefinition[0]).ToArray();
             _pipelineExecutor = new PipelineToolExecutor();
-            _vbaExecutor = new VbaToolExecutor(adapter, vbaBackupStore);
+            _vbaExecutor = new VbaToolExecutor(adapter, vbaJournalStore);
             _skillExecutor = new SkillToolExecutor(adapter, skillStore);
             _toolAuthoringExecutor = new ToolAuthoringExecutor(adapter, toolStore);
             _promptToolExecutor = new PromptToolExecutor(loadSettings, saveSettings);
@@ -828,7 +828,8 @@ namespace RNAssistant.Office.Tools
                 ToolId = command == null ? string.Empty : command.ToolId,
                 Description = command == null ? string.Empty : command.Description,
                 ToolCallId = command == null ? string.Empty : command.ToolCallId,
-                RuntimeGuardJson = command == null ? null : command.RuntimeGuardJson
+                RuntimeGuardJson = command == null ? null : command.RuntimeGuardJson,
+                RuntimeStepId = command == null ? null : command.RuntimeStepId
             };
             if (command != null && command.Arguments != null)
             {

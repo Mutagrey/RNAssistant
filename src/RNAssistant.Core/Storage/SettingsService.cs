@@ -300,6 +300,8 @@ namespace RNAssistant.Core.Storage
             {
                 return Directory.Exists(_paths.ChatDirectory) &&
                         Directory.EnumerateFiles(_paths.ChatDirectory, "*.events.jsonl", SearchOption.AllDirectories).Any() ||
+                    Directory.Exists(_paths.VbaJournalDirectory) &&
+                        Directory.EnumerateFiles(_paths.VbaJournalDirectory, "*.events.jsonl", SearchOption.AllDirectories).Any() ||
                     Directory.Exists(_paths.ChatBlobDirectory) &&
                         Directory.EnumerateFiles(_paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Any();
             }

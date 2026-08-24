@@ -147,7 +147,7 @@ namespace RNAssistant.Harness
                 adapter.SetVbaModule("RNA_Echo", tool.Components[0].Code, "StdModule");
                 adapter.SetVbaModule("RNA_EchoService", tool.Components[1].Code, "ClassModule");
                 var store = new ToolStore(paths);
-                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths), store);
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), store);
                 var catalogService = new ToolCatalogService(adapter, executor, store);
                 var catalog = catalogService.GetVisibleTools();
                 var discovered = catalog.FirstOrDefault(item => string.Equals(item.Id, tool.Id, StringComparison.OrdinalIgnoreCase));

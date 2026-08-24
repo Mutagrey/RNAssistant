@@ -772,8 +772,8 @@
                   </div>
                 </div>
                 <div class="form-grid two-columns">
-                  <label class="checkline"><input id="historyHmacInput" type="checkbox"><span>Защищать event stream через HMAC-SHA256</span></label>
-                  <label class="checkline"><input id="historyEncryptionInput" type="checkbox"><span>Шифровать event data и committed CAS</span></label>
+                  <label class="checkline"><input id="historyHmacInput" type="checkbox"><span>Защищать chat/VBA event streams через HMAC-SHA256</span></label>
+                  <label class="checkline"><input id="historyEncryptionInput" type="checkbox"><span>Шифровать chat/VBA event data и committed CAS</span></label>
                   <label><span>Источник ключа</span><select id="historyKeySourceInput"><option value="api_key">API-ключ — по умолчанию</option><option value="custom_secret">Отдельный секрет — для переноса</option></select><small>Смена API-ключа сделает защищённую им историю недоступной.</small></label>
                   <label id="historySecretField"><span>Отдельный секрет</span><input id="historySecretInput" type="password" autocomplete="off" placeholder="Оставьте пустым, чтобы не менять"><small id="historySecretStatus"></small></label>
                 </div>

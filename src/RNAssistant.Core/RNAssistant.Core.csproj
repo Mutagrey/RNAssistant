@@ -125,7 +125,7 @@
     <Compile Include="Storage\SkillStore.cs" />
     <Compile Include="Storage\StorageFileSystem.cs" />
     <Compile Include="Storage\ToolStore.cs" />
-    <Compile Include="Storage\VbaBackupStore.cs" />
+    <Compile Include="Storage\VbaJournalStore.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

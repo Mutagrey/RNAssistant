@@ -50,13 +50,13 @@ Artifact metadata and lineage remain in the session stream. HTML undo follows th
 Settings → Diagnostics → History protection controls two independent features. Both are off by default: events use the ordinary SHA-256 chain and history remains plaintext.
 
 - HMAC-SHA256 authenticates the complete canonical event envelope, including data/ciphertext and CAS references. HMAC does not encrypt content.
-- Authenticated encryption uses AES-256-CBC with HMAC-SHA256. It encrypts every event `Data` value and every committed `chat-blobs` payload; event type, sequence, time, correlation ids, hashes, key id, CAS plaintext hash/length, and content equality remain visible.
+- Authenticated encryption uses AES-256-CBC with HMAC-SHA256. It encrypts every chat and VBA journal event `Data` value and every committed `chat-blobs` payload; event type, sequence, time, correlation ids, hashes, key id, CAS plaintext hash/length, and content equality remain visible.
 - The selected key source is the API key by default or a separate custom secret. Both secrets are stored with DPAPI CurrentUser and never enter settings, events, diagnostics, or exports.
 - Keys are derived with PBKDF2-SHA256 and a portable installation salt, then domain-separated for encryption, ciphertext authentication, and event-chain HMAC.
 - Changing the enabled modes, key source, or effective key is rejected while event streams or CAS blobs exist. Clear Chats/Data first. In particular, rotating an API key used for protection requires clearing or a future explicit re-key operation.
 - For sharing protected history, use a custom secret and transfer the event/CAS data plus `history-protection.salt`; communicate the secret separately. Never share an API key for this purpose.
 
-Current history encryption does not cover transient attachment staging, settings, runtime logs, WebView data, or the separate VBA backup store. Committed attachments are protected after they enter CAS. VBA protection moves to its planned document-scoped journal rather than being mixed into chat ownership.
+Current history encryption does not cover transient attachment staging, settings, runtime logs, or WebView data. Committed attachments and VBA snapshots are protected after they enter the shared CAS; document-scoped VBA journal data is protected without making it chat-owned.
 
 ## Durability and recovery
 
@@ -67,6 +67,7 @@ Current history encryption does not cover transient attachment staging, settings
 - Startup recovery marks tool effect as unknown only when the stream contains `tool.execution.started` without the matching `tool.execution.finished` for that run.
 - Recovery closes open model steps with `step.ended { Status: "interrupted", Synthetic: true }`, then closes the logical turn through the normal persisted run transition.
 - Missing or corrupt CAS content leaves its metadata visible but is never hydrated as trusted content.
+- VBA preparations left without a terminal record are compared with live module state on the next safe VBA access and closed as `committed`, `not_applied`, or `unknown`; recovery never replays an Office mutation.
 
 ## Inspection
 

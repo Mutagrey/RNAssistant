@@ -383,7 +383,8 @@ namespace RNAssistant.Office
                 ToolId = command == null ? string.Empty : command.ToolId,
                 Description = command == null ? string.Empty : command.Description,
                 ToolCallId = command == null ? string.Empty : command.ToolCallId,
-                RuntimeGuardJson = command == null ? null : command.RuntimeGuardJson
+                RuntimeGuardJson = command == null ? null : command.RuntimeGuardJson,
+                RuntimeStepId = command == null ? null : command.RuntimeStepId
             };
 
             if (command != null && command.Arguments != null)
@@ -563,7 +564,8 @@ namespace RNAssistant.Office
                 ToolId = activity.ToolId,
                 ToolCallId = activity.ToolCallId,
                 Description = activity.Title,
-                RuntimeGuardJson = activity.RuntimeGuardJson
+                RuntimeGuardJson = activity.RuntimeGuardJson,
+                RuntimeStepId = activity.StepId
             };
 
             if (string.IsNullOrWhiteSpace(activity.ArgumentsJson))

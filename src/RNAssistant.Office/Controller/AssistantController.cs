@@ -24,7 +24,7 @@ namespace RNAssistant.Office
         private readonly AttachmentStore _attachmentStore;
         private readonly ToolStore _toolStore;
         private readonly SkillStore _skillStore;
-        private readonly VbaBackupStore _vbaBackupStore;
+        private readonly VbaJournalStore _vbaJournalStore;
         private readonly OfficeToolExecutor _toolExecutor;
         private readonly ToolCatalogService _toolCatalog;
         private readonly SkillCatalogService _skillCatalog;
@@ -62,10 +62,10 @@ namespace RNAssistant.Office
             _attachmentStore = new AttachmentStore(_paths, () => _settingsService.LoadStorageProtector());
             _toolStore = new ToolStore(_paths);
             _skillStore = new SkillStore(_paths);
-            _vbaBackupStore = new VbaBackupStore(_paths);
+            _vbaJournalStore = new VbaJournalStore(_paths, () => _settingsService.LoadStorageProtector());
             _toolExecutor = new OfficeToolExecutor(
                 _adapter,
-                _vbaBackupStore,
+                _vbaJournalStore,
                 _skillStore,
                 _toolStore,
                 () => _settingsService.Load(),

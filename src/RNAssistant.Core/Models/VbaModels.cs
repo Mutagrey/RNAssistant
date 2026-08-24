@@ -1,15 +1,135 @@
 using System;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace RNAssistant.Core.Models
 {
+    public static class VbaJournalEventTypes
+    {
+        public const string BackupCreated = "backup.created";
+        public const string MutationPrepared = "mutation.prepared";
+        public const string MutationTerminal = "mutation.terminal";
+    }
+
+    public static class VbaMutationStatuses
+    {
+        public const string Committed = "committed";
+        public const string NotApplied = "not_applied";
+        public const string RolledBack = "rolled_back";
+        public const string Failed = "failed";
+        public const string Unknown = "unknown";
+
+        public static bool IsTerminal(string value)
+        {
+            return string.Equals(value, Committed, StringComparison.Ordinal) ||
+                string.Equals(value, NotApplied, StringComparison.Ordinal) ||
+                string.Equals(value, RolledBack, StringComparison.Ordinal) ||
+                string.Equals(value, Failed, StringComparison.Ordinal) ||
+                string.Equals(value, Unknown, StringComparison.Ordinal);
+        }
+    }
+
+    public sealed class VbaJournalEvent
+    {
+        public const int CurrentSchemaVersion = 1;
+
+        public int SchemaVersion { get; set; }
+        public string Host { get; set; }
+        public string DocumentKey { get; set; }
+        public long Sequence { get; set; }
+        public string EventId { get; set; }
+        public DateTime CreatedUtc { get; set; }
+        public string Type { get; set; }
+        public string MutationId { get; set; }
+        public string RunId { get; set; }
+        public string TurnId { get; set; }
+        public string StepId { get; set; }
+        public string ToolCallId { get; set; }
+        public string PreviousHash { get; set; }
+        public string HashAlgorithm { get; set; }
+        public string ProtectionKeyId { get; set; }
+        public string Hash { get; set; }
+        public JToken Data { get; set; }
+        public string EncryptedData { get; set; }
+
+        public VbaJournalEvent()
+        {
+            SchemaVersion = CurrentSchemaVersion;
+            EventId = Guid.NewGuid().ToString("N");
+            CreatedUtc = DateTime.UtcNow;
+            HashAlgorithm = HistoryIntegrityModes.Sha256;
+        }
+
+        public bool ShouldSerializeData()
+        {
+            return string.IsNullOrWhiteSpace(EncryptedData);
+        }
+
+        public bool ShouldSerializeEncryptedData()
+        {
+            return !string.IsNullOrWhiteSpace(EncryptedData);
+        }
+    }
+
+    public sealed class VbaMutationPreparation
+    {
+        public string MutationId { get; set; }
+        public string Operation { get; set; }
+        public string Host { get; set; }
+        public string DocumentKey { get; set; }
+        public string RuntimeDocumentKey { get; set; }
+        public string DocumentTitle { get; set; }
+        public string ModuleName { get; set; }
+        public string ComponentType { get; set; }
+        public bool BeforeExists { get; set; }
+        public string BeforeCodeSha256 { get; set; }
+        public string BeforeComparableCodeSha256 { get; set; }
+        public ChatBlobReference BeforeCodeReference { get; set; }
+        public bool IntendedAfterExists { get; set; }
+        public string IntendedAfterCodeSha256 { get; set; }
+        public string IntendedAfterComparableCodeSha256 { get; set; }
+        public ChatBlobReference IntendedAfterCodeReference { get; set; }
+        public string BackupId { get; set; }
+        public string SessionId { get; set; }
+        public string RunId { get; set; }
+        public string TurnId { get; set; }
+        public string StepId { get; set; }
+        public string ToolCallId { get; set; }
+        public DateTime CreatedUtc { get; set; }
+    }
+
+    public sealed class VbaMutationTerminal
+    {
+        public string MutationId { get; set; }
+        public string Status { get; set; }
+        public bool? ActualExists { get; set; }
+        public string ActualCodeSha256 { get; set; }
+        public string ActualComparableCodeSha256 { get; set; }
+        public string ErrorCode { get; set; }
+        public string Message { get; set; }
+        public DateTime CreatedUtc { get; set; }
+    }
+
+    public sealed class VbaMutationRecord
+    {
+        public VbaMutationPreparation Prepared { get; set; }
+        public VbaMutationTerminal Terminal { get; set; }
+    }
+
     public sealed class VbaModuleBackup
     {
         public string BackupId { get; set; }
+        public string MutationId { get; set; }
         public string Host { get; set; }
         public string DocumentKey { get; set; }
         public string DocumentTitle { get; set; }
         public string ModuleName { get; set; }
         public string ComponentType { get; set; }
+        public string CodeSha256 { get; set; }
+        public long CodeByteLength { get; set; }
+        public ChatBlobReference CodeReference { get; set; }
+
+        [JsonIgnore]
         public string Code { get; set; }
         public DateTime CreatedUtc { get; set; }
     }

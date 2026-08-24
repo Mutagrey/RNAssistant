@@ -85,6 +85,9 @@ namespace RNAssistant.Core.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public string RuntimeGuardJson { get; set; }
 
+        [JsonIgnore]
+        public string RuntimeStepId { get; set; }
+
         public ToolCommand()
         {
             Arguments = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);

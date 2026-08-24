@@ -6,27 +6,28 @@
 - Immutable payloads and artifact bodies are stored once in the shared SHA-256 `chat-blobs` CAS. Events keep verified references rather than competing body copies.
 - History protection is explicit and disabled by default. HMAC-SHA256 can authenticate the event chain, while authenticated AES-256-CBC + HMAC-SHA256 encryption protects event data and committed CAS using either the API key or a separate DPAPI-protected custom secret.
 - Every real HTML workspace change creates an immutable workspace artifact with a parent id. Undo and redo only move `ActiveHtmlArtifactId` to an existing revision, so navigation survives replay without creating duplicate revisions.
-- VBA is deliberately not a chat artifact. The Office document is the authority for current live VBA state; RNAssistant adds a runtime-bound stale-state guard, confirmation, a pre-mutation rollback backup, and post-write read-back verification.
+- VBA is deliberately not a chat artifact. The Office document is the authority for current live VBA state; a document-scoped append-only journal records prepared/terminal mutations, CAS-backed before/intended source, rollback backups, correlation, and deterministic recovery evidence.
 - Chat replay, fork, prune, HTML undo, and HTML redo must never replay or mutate VBA or any other external Office state.
 
 ## Known gaps
 
 - Missing or corrupt CAS content fails closed, but there is no repository-wide health report or reachability garbage collector. A crash after storing a blob but before appending its reference can leave a harmless orphan.
-- VBA backups are separate document-scoped JSON files with inline source. They are not linked to a durable VBA mutation record or deduplicated in CAS.
-- A process/COM crash between `tool.execution.started` and `tool.execution.finished` is correctly classified as an unknown effect, but runtime cannot yet compare live VBA with the intended before/after states to distinguish applied, not applied, and divergent outcomes.
+- VBA package install/remove still emits per-component rollback backups rather than one multi-module transaction manifest.
+- VBA recovery state is canonical, but Diagnostics does not yet expose paged mutation history or before/after diffs.
 - Diagnostics expose a bounded recent tail; there is no reusable paged query API for complete turn, step, tool, artifact, and failure trajectories.
 
 ## Next implementation order
 
 ### P0 — deterministic recovery and storage health
 
-- [ ] Add a document-scoped append-only VBA mutation journal. A prepared record must contain host/document identity, module name/type, existence, before hash and CAS reference, intended after hash and CAS reference, backup id, and chat/run/turn/step/tool-call correlation. Terminal records must classify `committed`, `not_applied`, `rolled_back`, `failed`, or `unknown`.
-- [ ] Replace inline VBA backup source with CAS references and derive the backup list from the VBA journal. Keep this journal document-scoped rather than chat-owned so chat fork/prune semantics cannot change the live Office project.
-- [ ] Reconcile interrupted VBA writes on the next safe document attach: compare the live module with the recorded before/after hashes. Report `committed` or `not_applied` when exact, otherwise `unknown`; never auto-retry or auto-restore an external mutation.
-- [ ] Make VBA restore a journaled transaction: validate the live guard, snapshot current source, persist the prepared record, write, read back, then append the terminal outcome. Preserve explicit confirmation.
+- [x] Add a document-scoped append-only VBA mutation journal. A prepared record contains host/document identity, module name/type, existence, before hash and CAS reference, intended after hash and CAS reference, backup id, and chat/run/turn/step/tool-call correlation. Terminal records classify `committed`, `not_applied`, `rolled_back`, `failed`, or `unknown`.
+- [x] Replace inline VBA backup source with CAS references and derive the backup list from the VBA journal. The journal is document-scoped rather than chat-owned, so chat fork/prune semantics cannot change the live Office project.
+- [x] Reconcile interrupted VBA writes on the next safe VBA access: compare the live module with recorded before/after hashes, append `committed`, `not_applied`, or `unknown`, and never auto-retry or auto-restore an external mutation.
+- [x] Make VBA restore a journaled transaction: validate the live guard, snapshot current source, persist the prepared record, write, read back, then append the terminal outcome. Preserve explicit confirmation.
 - [x] Make HTML redo branch-aware. Redo without an id is valid only with exactly one child; multiple children return an explicit branch-choice result. Expose child revision metadata in the bridge while keeping bodies lazy and CAS-backed.
 - [ ] Add a CAS health/GC service that scans all validated event streams and document-scoped VBA journals, reports missing/corrupt/orphaned blobs, and removes only proven unreachable blobs under the maintenance gate. Corrupt or unreadable journals must make deletion fail closed.
-- [ ] Add harness crash-injection coverage for blob-before-event, HTML branching, interrupted VBA prepare/write/verify, and deterministic reconciliation. VBA/COM behavior also requires Windows x64 + Office x64 + VS 2022 smoke tests.
+- [x] Add harness coverage for interrupted VBA prepare/write reconciliation, journal tail recovery/corruption, CAS-backed projections, correlation, and history protection.
+- [ ] Add explicit blob-before-event crash injection and complete HTML branch recovery fixtures. VBA/COM behavior also requires Windows x64 + Office x64 + VS 2022 smoke tests.
 
 ### P1 — trajectory queries and operator UX
 

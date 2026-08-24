@@ -191,10 +191,11 @@ Runtime data is stored under:
 - `tools` - central editable executable tool library.
 - `skills` - markdown guidance files used by the agent when choosing an approach.
 - `chats` - per-document append-only `*.events.jsonl` session streams and active-chat pointers.
-- `chat-blobs` - shared SHA-256-addressed immutable model payloads, artifact bodies and committed attachments.
+- `chat-blobs` - shared SHA-256-addressed immutable model payloads, artifact bodies, committed attachments and VBA source snapshots.
+- `vba-journals` - per-document append-only VBA mutation streams; backup lists are replayed from these records.
 - `attachments` - temporary attachment staging before content is committed to `chat-blobs`.
 
-Settings has `Clear Chats/Data` for development resets. It clears event streams, CAS blobs, attachment staging, chat context, VBA backups and WebView user data, while keeping settings, saved API key and custom tools and skills.
+Settings has `Clear Chats/Data` for development resets. It clears chat/VBA event streams, CAS blobs, attachment staging, chat context and WebView user data, while keeping settings, saved API key and custom tools and skills.
 The reset is rejected while any RNAssistant window owns an active chat operation.
 
 Diagnostics shows passive timing for real model requests (local preparation, HTTP headers, first response data and total duration), offers one manual short model check, and exposes the current chat trajectory. The trajectory lists the last 500 canonical events with run/turn/step correlation. Large request, response, and bounded streaming-frame payloads remain in local CAS and are loaded as previews only on demand. Diagnostics does not poll the endpoint in the background.
@@ -336,13 +337,13 @@ Office VBA support requires Office setting `Trust access to the VBA project obje
 - Settings has request timeout seconds; increase it for slow local or proxy LLM endpoints.
 - Excel, Word, and PowerPoint can read whole VBA modules or exact line ranges, show source code, and list RNAssistant rollback backups.
 - `Preview Diff` shows the current editor changes before saving.
-- `Save Module` replaces the selected module and stores the previous version under `%AppData%\RNAssistant\vba-backups`.
-- `Restore Backup` restores the selected backup; restoring also backs up the current module first.
+- `Save Module` replaces the selected module only after a document-scoped prepared mutation and CAS-backed rollback snapshot are durable under `%AppData%\RNAssistant\vba-journals` and `chat-blobs`.
+- `Restore Backup` is itself a confirmed journaled mutation; restoring snapshots the current module first and verifies read-back.
 - Existing-module writes fail closed when a rollback backup cannot be created. A failed code write restores the original module when Office still permits access.
-- VBA writes retain local backup, strict live-code snapshot, ownership, stale-state, and post-write read-back checks inside the VBA tools. A mutation reads and binds the current VBIDE state itself, then rechecks it after confirmation; the model neither performs a preparatory read nor supplies a hash argument. If the model already inspected the module, runtime uses that snapshot automatically for one stale warning and then allows an intentional retry. Post-write verification accepts only VBE-equivalent case/spacing/terminal-line normalization and returns the actual read-back hash.
+- VBA writes retain a CAS-backed rollback snapshot, strict live-code snapshot, ownership, stale-state, and post-write read-back checks inside the VBA tools. A mutation reads and binds the current VBIDE state itself, then rechecks it after confirmation; the model neither performs a preparatory read nor supplies a hash argument. If the model already inspected the module, runtime uses that snapshot automatically for one stale warning and then allows an intentional retry. Post-write verification accepts only VBE-equivalent case/spacing/terminal-line normalization and returns the actual read-back hash. If runtime stops after `mutation.prepared`, the next safe VBA access compares live state with both recorded sides and closes it without replaying the effect.
 - `Review in Chat` sends loaded VBA modules to chat for review and improvement suggestions.
 
-The Agent uses the same compact public `common.vba_*` facade in Excel, Word, and PowerPoint: list, read (whole source or an optional exact line range), search, whole-source write/upsert, structured patch, delete, and backup list/restore. `common.vba_write_module` updates an existing component or creates a missing one and safely normalizes invalid new names. Mutations read and bind current state internally, require confirmation unless auto-confirm is enabled, create rollback backups where prior state exists, and reject races or mismatched read-back. Legacy create/replace-text/read-lines ids remain runtime aliases but are not shown to the Agent; host-prefixed whole-module, insert, and macro backends also remain hidden.
+The Agent uses the same compact public `common.vba_*` facade in Excel, Word, and PowerPoint: list, read (whole source or an optional exact line range), search, whole-source write/upsert, structured patch, delete, and backup list/restore. `common.vba_write_module` updates an existing component or creates a missing one and safely normalizes invalid new names. Mutations read and bind current state internally, require confirmation unless auto-confirm is enabled, create rollback backups where prior state exists, and reject races or mismatched read-back. Removed create/replace-text/read-lines ids are unsupported; host-prefixed whole-module, insert, and macro backends remain hidden.
 
 Patch operations support:
 

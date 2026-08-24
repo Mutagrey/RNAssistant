@@ -34,7 +34,7 @@ namespace RNAssistant.Harness
                 var settings = new AppSettings();
                 var executor = new OfficeToolExecutor(
                     adapter,
-                    new VbaBackupStore(paths),
+                    new VbaJournalStore(paths),
                     new SkillStore(paths),
                     new ToolStore(paths),
                     () => settings,

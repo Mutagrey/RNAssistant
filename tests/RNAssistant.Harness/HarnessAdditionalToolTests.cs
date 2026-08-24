@@ -515,7 +515,7 @@ namespace RNAssistant.Harness
             {
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
                 var toolStore = new ToolStore(paths);
-                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths), toolStore);
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), toolStore);
                 var command = new ToolCommand { ToolId = "common.tools_validate" };
                 command.Arguments["id"] = "excel.validated";
                 command.Arguments["host"] = "Excel";

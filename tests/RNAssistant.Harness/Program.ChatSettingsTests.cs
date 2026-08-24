@@ -34,7 +34,7 @@ namespace RNAssistant.Harness
                 var global = new AppSettings { Model = "global-model", SystemPrompt = "Old prompt" };
                 var executor = new OfficeToolExecutor(
                     adapter,
-                    new VbaBackupStore(paths),
+                    new VbaJournalStore(paths),
                     new SkillStore(paths),
                     new ToolStore(paths),
                     () => global,

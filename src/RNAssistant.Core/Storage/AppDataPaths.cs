@@ -14,7 +14,7 @@ namespace RNAssistant.Core.Storage
         public string HistoryProtectionSaltFile { get; private set; }
         public string ToolsDirectory { get; private set; }
         public string SkillsDirectory { get; private set; }
-        public string VbaBackupDirectory { get; private set; }
+        public string VbaJournalDirectory { get; private set; }
         public string ChatDirectory { get; private set; }
         public string ChatBlobDirectory { get; private set; }
         public string WebViewUserDataDirectory { get; private set; }
@@ -42,7 +42,7 @@ namespace RNAssistant.Core.Storage
                 HistoryProtectionSaltFile = Path.Combine(root, "history-protection.salt"),
                 ToolsDirectory = Path.Combine(root, "tools"),
                 SkillsDirectory = Path.Combine(root, "skills"),
-                VbaBackupDirectory = Path.Combine(root, "vba-backups"),
+                VbaJournalDirectory = Path.Combine(root, "vba-journals"),
                 ChatDirectory = Path.Combine(root, "chats"),
                 ChatBlobDirectory = Path.Combine(root, "chat-blobs"),
                 AttachmentDirectory = Path.Combine(root, "attachments"),
@@ -57,7 +57,7 @@ namespace RNAssistant.Core.Storage
             Directory.CreateDirectory(Root);
             Directory.CreateDirectory(ToolsDirectory);
             Directory.CreateDirectory(SkillsDirectory);
-            Directory.CreateDirectory(VbaBackupDirectory);
+            Directory.CreateDirectory(VbaJournalDirectory);
             Directory.CreateDirectory(ChatDirectory);
             Directory.CreateDirectory(ChatBlobDirectory);
             Directory.CreateDirectory(AttachmentDirectory);
@@ -68,7 +68,7 @@ namespace RNAssistant.Core.Storage
         {
             ClearDirectory(ChatDirectory);
             ClearDirectory(ChatBlobDirectory);
-            ClearDirectory(VbaBackupDirectory);
+            ClearDirectory(VbaJournalDirectory);
             ClearDirectory(AttachmentDirectory);
             ClearDirectory(WebViewUserDataDirectory);
             Ensure();

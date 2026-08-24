@@ -30,7 +30,7 @@ namespace RNAssistant.Harness
                 var store = new ToolStore(paths);
                 var executor = new OfficeToolExecutor(
                     adapter,
-                    new VbaBackupStore(paths),
+                    new VbaJournalStore(paths),
                     new SkillStore(paths),
                     store);
                 var invalid = new ToolDefinition
@@ -99,7 +99,7 @@ namespace RNAssistant.Harness
                     CustomTool("Excel", "excel.custom"),
                     CustomTool("Word", "word.hidden")
                 });
-                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths));
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths));
                 var catalog = new ToolCatalogService(adapter, executor, toolStore).GetVisibleTools();
 
                 AssertTrue(HasTool(catalog, "excel.add_sheet"), "built-in tool visible");
@@ -117,7 +117,7 @@ namespace RNAssistant.Harness
                 foreach (var host in new[] { "Excel", "Word", "PowerPoint" })
                 {
                     var adapter = FakeOfficeAdapter.ForHost(host);
-                    var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths));
+                    var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths));
                     var tools = executor.GetControllerTools().ToList();
                     AssertTrue(HasTool(tools, "common.vba_read_module"), host + " exposes common VBA read");
                     AssertTrue(HasTool(tools, "common.vba_write_module"), host + " exposes common VBA upsert");
@@ -139,7 +139,7 @@ namespace RNAssistant.Harness
                 }
 
                 var outlook = FakeOfficeAdapter.ForHost("Outlook");
-                var outlookExecutor = new OfficeToolExecutor(outlook, new VbaBackupStore(paths), new SkillStore(paths));
+                var outlookExecutor = new OfficeToolExecutor(outlook, new VbaJournalStore(paths), new SkillStore(paths));
                 AssertTrue(!HasTool(outlookExecutor.GetControllerTools(), "common.vba_apply_patch"), "Outlook does not expose VBA facade");
 
                 var excel = FakeOfficeAdapter.ForHost("Excel");
@@ -150,7 +150,7 @@ namespace RNAssistant.Harness
                     "{\"toolId\":\"excel.vba_replace_text\",\"arguments\":{\"moduleName\":\"Module1\",\"find\":\"old\",\"replace\":\"new\"}}," +
                     "{\"toolId\":\"excel.vba_create_module\",\"arguments\":{\"moduleName\":\"NewModule\",\"code\":\"Option Explicit\"}}]}";
                 store.SaveOne(legacyPipeline);
-                var excelExecutor = new OfficeToolExecutor(excel, new VbaBackupStore(paths), new SkillStore(paths), store);
+                var excelExecutor = new OfficeToolExecutor(excel, new VbaJournalStore(paths), new SkillStore(paths), store);
                 var loaded = FindTool(new ToolCatalogService(excel, excelExecutor, store).GetVisibleTools(), legacyPipeline.Id);
                 AssertContains(loaded.PipelineJson, "excel.vba_read_lines", "removed pipeline ids are not silently rewritten");
                 var safety = ToolSafetyPolicy.Resolve(
@@ -198,7 +198,7 @@ namespace RNAssistant.Harness
                 shadow.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}";
                 var store = new ToolStore(paths);
                 store.SaveOne(shadow);
-                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths), store);
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), store);
 
                 var catalogTool = FindTool(new ToolCatalogService(adapter, executor, store).GetVisibleTools(), shadow.Id);
                 AssertTrue(catalogTool != null && catalogTool.BuiltIn, "catalog keeps built-in definition");
@@ -562,7 +562,7 @@ namespace RNAssistant.Harness
                 }
                 AssertTrue(whitespaceIdRejected, "skill ids with surrounding whitespace are rejected");
 
-                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), store, new ToolStore(paths));
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), store, new ToolStore(paths));
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var enabledRead = executor.Execute(
                     Command("common.skills_read", "id", "common.a.b"), tools, new AppSettings(), false, false,

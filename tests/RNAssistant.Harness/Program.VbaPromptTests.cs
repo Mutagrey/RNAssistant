@@ -28,7 +28,7 @@ namespace RNAssistant.Harness
             {
                 var adapter = new FakeOfficeAdapter();
                 adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"old\"\nEnd Sub";
-                var backupStore = new VbaBackupStore(paths);
+                var backupStore = new VbaJournalStore(paths);
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var session = NewSession(adapter);
                 var command = Command(
@@ -58,7 +58,8 @@ namespace RNAssistant.Harness
                 var backups = backupStore.List("Excel", "doc");
                 AssertEqual(1, backups.Count, "backup count");
                 AssertEqual("Module1", backups[0].ModuleName, "backup module");
-                AssertContains(backups[0].Code, "\"old\"", "backup code");
+                AssertTrue(backups[0].Code == null, "backup list is metadata-only");
+                AssertContains(backupStore.Find("Excel", "doc", backups[0].BackupId, null).Code, "\"old\"", "backup code");
             });
         }
 
@@ -68,7 +69,7 @@ namespace RNAssistant.Harness
             {
                 var adapter = new FakeOfficeAdapter();
                 adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"old\"\nEnd Sub";
-                var backupStore = new VbaBackupStore(paths);
+                var backupStore = new VbaJournalStore(paths);
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var session = NewSession(adapter);
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
@@ -125,7 +126,7 @@ namespace RNAssistant.Harness
             {
                 var adapter = new FakeOfficeAdapter();
                 adapter.VbaModuleCode = "Sub OldCode()\nEnd Sub";
-                var backupStore = new VbaBackupStore(paths);
+                var backupStore = new VbaJournalStore(paths);
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var settings = new AppSettings { AutoConfirmToolActions = true };
@@ -215,7 +216,7 @@ namespace RNAssistant.Harness
             {
                 var adapter = new FakeOfficeAdapter();
                 adapter.VbaModuleCode = "Sub Main()\nEnd Sub";
-                var backupStore = new VbaBackupStore(paths);
+                var backupStore = new VbaJournalStore(paths);
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var settings = new AppSettings { AutoConfirmToolActions = true };
@@ -309,7 +310,7 @@ namespace RNAssistant.Harness
                 var adapter = new FakeOfficeAdapter();
                 adapter.SetVbaModule("Module1", "Sub Main()\nDebug.Print \"untouched\"\nEnd Sub", "StdModule");
                 adapter.SetVbaModule("Module2", "Sub Run()\nDebug.Print \"old\"\nEnd Sub", "StdModule");
-                var backupStore = new VbaBackupStore(paths);
+                var backupStore = new VbaJournalStore(paths);
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var command = new ToolCommand { ToolId = executor.VbaToolId("vba_apply_patch") };
                 command.Arguments["moduleName"] = "Module2";
@@ -339,7 +340,8 @@ namespace RNAssistant.Harness
                 var backups = backupStore.List("Excel", "doc");
                 AssertEqual(1, backups.Count, "backup count");
                 AssertEqual("Module2", backups[0].ModuleName, "backup module");
-                AssertContains(backups[0].Code, "\"old\"", "backup code");
+                AssertTrue(backups[0].Code == null, "backup list is metadata-only");
+                AssertContains(backupStore.Find("Excel", "doc", backups[0].BackupId, null).Code, "\"old\"", "backup code");
 
                 var malformed = new ToolCommand { ToolId = executor.VbaToolId("vba_apply_patch") };
                 malformed.Arguments["moduleName"] = "Module2";
@@ -365,7 +367,7 @@ namespace RNAssistant.Harness
                 var adapter = new FakeOfficeAdapter();
                 adapter.VbaModuleCode = "Sub Original()\nEnd Sub";
                 adapter.QueueResult("excel.vba_read_module", ToolResult.Ok("malformed read", "{}"));
-                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths));
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths));
                 var command = Command("common.vba_write_module", "moduleName", "Module1", "code", "Sub Changed()\nEnd Sub", "mode", "updateOnly");
 
                 var result = executor.Execute(command, adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
@@ -449,7 +451,7 @@ namespace RNAssistant.Harness
                 adapter.VbaReportedLineCountOffset = 1;
                 adapter.VbaWriteTransform = code =>
                     code.Replace("Sub Main()", "sub Main ( )") + "\r\n\r\n";
-                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths));
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths));
                 var patch = new JArray
                 {
                     new JObject
@@ -768,7 +770,7 @@ namespace RNAssistant.Harness
                 var adapter = new FakeOfficeAdapter();
                 adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"old\"\nEnd Sub";
                 adapter.QueueResult("excel.vba_replace_module", ToolResult.Ok("scripted success without write"));
-                var backupStore = new VbaBackupStore(paths);
+                var backupStore = new VbaJournalStore(paths);
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var command = Command(
                     executor.VbaToolId("vba_apply_patch"),
@@ -799,7 +801,7 @@ namespace RNAssistant.Harness
                 var adapter = new FakeOfficeAdapter();
                 adapter.VbaModuleCode = "Sub Main()\nEnd Sub";
                 adapter.QueueResult("excel.vba_delete_module_internal", ToolResult.Ok("scripted success without delete"));
-                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths));
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths));
                 var command = Command(
                     executor.VbaToolId("vba_delete_module"),
                     "moduleName", "Module1");
@@ -819,7 +821,7 @@ namespace RNAssistant.Harness
             {
                 var adapter = new FakeOfficeAdapter();
                 adapter.VbaModuleCode = "Sub Current()\nEnd Sub";
-                var backupStore = new VbaBackupStore(paths);
+                var backupStore = new VbaJournalStore(paths);
                 var backup = backupStore.Save("Excel", "doc", "Harness.xlsx", "Module1", "StdModule", "Sub Restored()\nEnd Sub");
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var command = Command(executor.VbaToolId("vba_restore_backup"), "backupId", backup.BackupId, "moduleName", "Module1");
@@ -872,7 +874,7 @@ namespace RNAssistant.Harness
             {
                 var adapter = new FakeOfficeAdapter();
                 adapter.VbaModuleCode = "Sub Current()\nEnd Sub";
-                var backupStore = new VbaBackupStore(paths);
+                var backupStore = new VbaJournalStore(paths);
                 var selected = backupStore.Save("Excel", "doc", "Harness.xlsx", "Module1", "StdModule", "Sub Selected()\nEnd Sub");
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var session = NewSession(adapter);
@@ -894,19 +896,192 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void VbaBackupStoreSkipsBrokenFiles()
+        private static void VbaJournalRecoversTailAndRejectsCorruption()
         {
             WithTempPaths(delegate(AppDataPaths paths)
             {
-                var store = new VbaBackupStore(paths);
+                var store = new VbaJournalStore(paths);
                 var backup = store.Save("Excel", "doc", "Harness.xlsx", "Module1", "StdModule", "Sub Main()\nEnd Sub");
-                var directory = Path.Combine(paths.VbaBackupDirectory, AppDataPaths.SafeFileName("Excel|doc"));
-                File.WriteAllText(Path.Combine(directory, "broken.json"), "{ broken");
+                var directory = Path.Combine(paths.VbaJournalDirectory, AppDataPaths.SafeFileName("Excel|doc"));
+                var journal = Path.Combine(directory, "mutations.events.jsonl");
+                File.AppendAllText(journal, "{\"SchemaVersion\":");
+                var second = store.Save("Excel", "doc", "Harness.xlsx", "Module2", "StdModule", "Sub Two()\nEnd Sub");
 
                 var backups = store.List("Excel", "doc");
 
-                AssertEqual(1, backups.Count, "backup count");
-                AssertEqual(backup.BackupId, backups[0].BackupId, "backup id");
+                AssertEqual(2, backups.Count, "incomplete final record is removed before append");
+                AssertTrue(backups.Any(item => item.BackupId == backup.BackupId), "first backup survives tail recovery");
+                AssertTrue(backups.Any(item => item.BackupId == second.BackupId), "second backup is appended after recovery");
+                AssertEqual(2, store.ReadEvents("Excel", "doc").Count, "journal sequence remains contiguous");
+
+                var lines = File.ReadAllLines(journal);
+                var tampered = JObject.Parse(lines[0]);
+                tampered["Data"]["ModuleName"] = "Tampered";
+                lines[0] = tampered.ToString(Formatting.None);
+                File.WriteAllLines(journal, lines);
+                try
+                {
+                    store.List("Excel", "doc");
+                    throw new InvalidOperationException("tampered VBA journal was accepted");
+                }
+                catch (VbaJournalException)
+                {
+                }
+            });
+        }
+
+        private static void VbaJournalRecordsMutationAndCorrelation()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                const string before = "Sub Main()\nDebug.Print \"journal-before-marker\"\nEnd Sub";
+                const string after = "Sub Main()\nDebug.Print \"journal-after-marker\"\nEnd Sub";
+                var adapter = new FakeOfficeAdapter { VbaModuleCode = before };
+                var store = new VbaJournalStore(paths);
+                var executor = new OfficeToolExecutor(adapter, store, new SkillStore(paths));
+                var session = NewSession(adapter);
+                session.LastRun = new ChatRunRecord { RunId = "run-vba", TurnId = "turn-vba" };
+                var command = Command("common.vba_write_module", "moduleName", "Module1", "code", after);
+                command.ToolCallId = "call-vba";
+                command.RuntimeStepId = "step-vba";
+
+                var result = executor.Execute(
+                    command,
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false,
+                    session);
+
+                AssertTrue(result.Success, "journaled mutation succeeds");
+                AssertContains(result.DataJson, "mutationId", "tool result exposes mutation correlation");
+                var record = store.ListMutations("Excel", "doc").Single();
+                AssertEqual("write", record.Prepared.Operation, "prepared operation");
+                AssertEqual(session.Id, record.Prepared.SessionId, "prepared chat id");
+                AssertEqual("run-vba", record.Prepared.RunId, "prepared run id");
+                AssertEqual("turn-vba", record.Prepared.TurnId, "prepared turn id");
+                AssertEqual("step-vba", record.Prepared.StepId, "prepared step id");
+                AssertEqual("call-vba", record.Prepared.ToolCallId, "prepared tool call id");
+                AssertTrue(record.Prepared.BeforeCodeReference != null, "prepared before CAS reference");
+                AssertTrue(record.Prepared.IntendedAfterCodeReference != null, "prepared after CAS reference");
+                AssertEqual(VbaMutationStatuses.Committed, record.Terminal.Status, "terminal mutation status");
+
+                var metadata = store.List("Excel", "doc").Single();
+                AssertTrue(metadata.Code == null, "backup projection does not hydrate source");
+                AssertEqual(record.Prepared.BackupId, metadata.BackupId, "backup is derived from prepared record");
+                AssertEqual(before, store.Find("Excel", "doc", metadata.BackupId, null).Code, "backup hydrates from CAS on demand");
+                var journal = Path.Combine(paths.VbaJournalDirectory, AppDataPaths.SafeFileName("Excel|doc"), "mutations.events.jsonl");
+                var journalText = File.ReadAllText(journal);
+                AssertTrue(journalText.IndexOf("journal-before-marker", StringComparison.Ordinal) < 0, "before source is absent from journal");
+                AssertTrue(journalText.IndexOf("journal-after-marker", StringComparison.Ordinal) < 0, "after source is absent from journal");
+            });
+        }
+
+        private static void VbaJournalReconcilesInterruptedMutations()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                const string before = "Sub BeforeState()\nEnd Sub";
+                const string after = "Sub AfterState()\nEnd Sub";
+                var adapter = new FakeOfficeAdapter { VbaModuleCode = after };
+                var store = new VbaJournalStore(paths);
+                var applied = store.PrepareMutation(new VbaMutationPreparation
+                {
+                    Operation = "write",
+                    Host = "Excel",
+                    DocumentKey = "doc",
+                    DocumentTitle = "Harness.xlsx",
+                    ModuleName = "Module1",
+                    ComponentType = "StdModule",
+                    BeforeExists = true,
+                    IntendedAfterExists = true
+                }, before, after);
+                var executor = new OfficeToolExecutor(adapter, store, new SkillStore(paths));
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+
+                var list = executor.Execute(Command("common.vba_list_backups"), tools, new AppSettings(), false, false);
+
+                AssertTrue(list.Success, "safe VBA access continues after reconciliation");
+                AssertEqual(VbaMutationStatuses.Committed,
+                    store.ListMutations("Excel", "doc").Single(item => item.Prepared.MutationId == applied.MutationId).Terminal.Status,
+                    "live intended state reconciles as committed");
+                AssertEqual(0, adapter.Executed.Count(item => item.ToolId.EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase)),
+                    "reconciliation never replays a write");
+
+                var notApplied = store.PrepareMutation(new VbaMutationPreparation
+                {
+                    Operation = "write",
+                    Host = "Excel",
+                    DocumentKey = "doc",
+                    DocumentTitle = "Harness.xlsx",
+                    ModuleName = "Module1",
+                    ComponentType = "StdModule",
+                    BeforeExists = true,
+                    IntendedAfterExists = true
+                }, after, "Sub LaterState()\nEnd Sub");
+                executor.Execute(Command("common.vba_list_backups"), tools, new AppSettings(), false, false);
+                AssertEqual(VbaMutationStatuses.NotApplied,
+                    store.ListMutations("Excel", "doc").Single(item => item.Prepared.MutationId == notApplied.MutationId).Terminal.Status,
+                    "live before state reconciles as not applied");
+
+                var unknown = store.PrepareMutation(new VbaMutationPreparation
+                {
+                    Operation = "write",
+                    Host = "Excel",
+                    DocumentKey = "doc",
+                    DocumentTitle = "Harness.xlsx",
+                    ModuleName = "Module1",
+                    ComponentType = "StdModule",
+                    BeforeExists = true,
+                    IntendedAfterExists = true
+                }, after, "Sub UnknownTarget()\nEnd Sub");
+                adapter.QueueResult("excel.vba_read_module", ToolResult.Fail("VBA access denied.", null, "vba_access_error", false));
+                executor.Execute(Command("common.vba_list_backups"), tools, new AppSettings(), false, false);
+                AssertEqual(VbaMutationStatuses.Unknown,
+                    store.ListMutations("Excel", "doc").Single(item => item.Prepared.MutationId == unknown.MutationId).Terminal.Status,
+                    "unreadable live state reconciles as unknown");
+            });
+        }
+
+        private static void VbaJournalUsesHistoryProtection()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                const string marker = "PRIVATE_VBA_SOURCE_6c91";
+                var salt = Enumerable.Range(71, 32).Select(value => (byte)value).ToArray();
+                var protector = new StorageProtector(
+                    HistoryIntegrityModes.HmacSha256,
+                    HistoryEncryptionModes.Aes256CbcHmacSha256,
+                    "portable VBA history secret",
+                    salt);
+                var store = new VbaJournalStore(paths, () => protector);
+                var backup = store.Save("Excel", "doc", "Harness.xlsx", "Module1", "StdModule", "Sub " + marker + "()\nEnd Sub");
+                var journal = Path.Combine(paths.VbaJournalDirectory, AppDataPaths.SafeFileName("Excel|doc"), "mutations.events.jsonl");
+                var rawJournal = File.ReadAllText(journal);
+
+                AssertContains(rawJournal, "EncryptedData", "VBA journal event data is encrypted");
+                AssertTrue(rawJournal.IndexOf(marker, StringComparison.Ordinal) < 0, "VBA source is absent from journal plaintext");
+                AssertTrue(store.ReadEvents("Excel", "doc").All(item => item.HashAlgorithm == HistoryIntegrityModes.HmacSha256),
+                    "VBA journal uses selected HMAC mode");
+                AssertContains(store.Find("Excel", "doc", backup.BackupId, null).Code, marker, "protected VBA CAS hydrates");
+                foreach (var blob in Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories))
+                {
+                    AssertTrue(StorageProtector.IsProtectedPayload(File.ReadAllBytes(blob)), "VBA CAS blob is encrypted");
+                }
+
+                var wrong = new StorageProtector(
+                    HistoryIntegrityModes.HmacSha256,
+                    HistoryEncryptionModes.Aes256CbcHmacSha256,
+                    "wrong VBA history secret",
+                    salt);
+                try
+                {
+                    new VbaJournalStore(paths, () => wrong).ReadEvents("Excel", "doc");
+                    throw new InvalidOperationException("wrong VBA history key was accepted");
+                }
+                catch (VbaJournalException)
+                {
+                }
             });
         }
 

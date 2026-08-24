@@ -45,7 +45,7 @@ namespace RNAssistant.Office
             return new VbaProjectResponse
             {
                 Result = result,
-                Backups = _vbaBackupStore.List(session.Host, session.DocumentKey)
+                Backups = _vbaJournalStore.List(session.Host, session.DocumentKey)
             };
         }
 

@@ -269,6 +269,7 @@ namespace RNAssistant.Office.Services
                     cancellationToken.ThrowIfCancellationRequested();
                     var call = response.ToolCalls[callIndex];
                     var command = AgentJsonProtocol.ToCommand(call);
+                    command.RuntimeStepId = stepId;
                     var callMessage = AgentJsonProtocol.CreateToolCallMessage(
                         call,
                         callIndex == 0 ? response.Message : string.Empty,
