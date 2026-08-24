@@ -492,6 +492,13 @@ namespace RNAssistant.Harness
                 AssertContains(read.DataJson, "Review workbook formatting consistently", "skill description updated");
                 AssertContains(read.DataJson, "Preserve workbook conventions", "omitted skill body preserved");
                 AssertContains(read.DataJson, "\"version\":\"1.0.0\"", "omitted version preserved");
+                AssertEqual("# Review style\n\nPreserve workbook conventions.",
+                    (string)JObject.Parse(read.DataJson)["bodyMarkdown"],
+                    "skill persistence does not accumulate separator blank lines");
+                AssertContains(read.DataJson, "\"revision\":\"" + SkillRevision.Compute(new SkillDefinition
+                {
+                    BodyMarkdown = "# Review style\n\nPreserve workbook conventions."
+                }) + "\"", "skill read returns body revision");
 
                 var emptyUpdate = executor.Execute(Command("common.skills_upsert", "id", "excel.review_style"), tools, new AppSettings(), false, false);
                 AssertTrue(!emptyUpdate.Success, "empty skill update fails before confirmation");
@@ -504,6 +511,39 @@ namespace RNAssistant.Harness
                 var deleted = executor.Execute(Command("common.skills_delete", "id", "excel.review_style"), tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(deleted.Success, "skill delete succeeds");
             });
+        }
+
+        private static void SkillRevisionAndValidationAreDeterministic()
+        {
+            var unix = new SkillDefinition
+            {
+                Id = "common.revision",
+                Description = "Revision test.",
+                BodyMarkdown = "# Revision\n\nFirst line.\nSecond line."
+            };
+            var windows = new SkillDefinition
+            {
+                Id = unix.Id,
+                Description = unix.Description,
+                BodyMarkdown = "# Revision\r\n\r\nFirst line.\r\nSecond line."
+            };
+            AssertEqual(SkillRevision.Compute(unix), SkillRevision.Compute(windows),
+                "skill revision normalizes line endings");
+
+            windows.BodyMarkdown += "\r\nChanged.";
+            AssertTrue(!string.Equals(SkillRevision.Compute(unix), SkillRevision.Compute(windows), StringComparison.Ordinal),
+                "skill revision changes with Markdown body");
+
+            AssertEqual("Skill description is required.", SkillStore.ValidateDefinition(new SkillDefinition
+            {
+                Id = "common.no_description",
+                BodyMarkdown = "# Body"
+            }), "skill description is required by shared validation");
+            AssertEqual("Skill bodyMarkdown is required.", SkillStore.ValidateDefinition(new SkillDefinition
+            {
+                Id = "common.no_body",
+                Description = "Missing body."
+            }), "skill body is required by shared validation");
         }
 
         private static void SkillIdsDoNotCollideAndDisabledReadsFail()

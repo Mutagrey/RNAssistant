@@ -138,8 +138,10 @@ namespace RNAssistant.Harness
             AssertContains(prompt, "excel.read_range", "second tool present");
             AssertContains(prompt, "common.test", "skill id present");
             AssertContains(prompt, "Test workflow", "skill description present");
+            AssertContains(prompt, "\"revision\":\"" + SkillRevision.Compute(skills[0]) + "\"", "skill revision present");
             AssertTrue(prompt.IndexOf("TEST_SKILL_SENTINEL", StringComparison.Ordinal) < 0, "full skill is not in catalog");
             AssertContains(prompt, "common.skills_read", "skill loading guidance present");
+            AssertContains(prompt, "successful, non-truncated result with the same id and revision", "skill loading state is explicit");
             AssertContains(prompt, "several tool_calls", "multi-tool guidance present");
             AssertContains(prompt, "data.truncated=true", "bounded tool-result guidance present");
             AssertTrue(prompt.IndexOf("ROUTE:", StringComparison.OrdinalIgnoreCase) < 0, "no route wrapper");
@@ -240,13 +242,16 @@ namespace RNAssistant.Harness
                     tools, null, null, null, new[] { skill }, CancellationToken.None, true).GetAwaiter().GetResult();
 
                 AssertEqual("Инструкции учтены.", result.AssistantText, "skill-assisted response");
+                var revision = SkillRevision.Compute(skill);
                 AssertTrue(FlattenSimple(calls[0]).IndexOf("TEST_SKILL_SENTINEL", StringComparison.Ordinal) < 0,
                     "first request contains only catalog");
+                AssertContains(FlattenSimple(calls[0]), "\"revision\":\"" + revision + "\"", "catalog carries skill revision");
                 var replay = FlattenSimple(calls[1]);
                 AssertContains(replay, "TEST_SKILL_SENTINEL", "full instructions returned by tool");
                 AssertContains(replay, "TEST_SKILL_END", "skill body is not cut by the generic tool-result limit");
                 AssertContains(replay, "\"format\":\"markdown\"", "loaded skill format");
                 AssertContains(replay, "\"version\":\"2.0.0\"", "loaded skill version");
+                AssertContains(replay, "\"revision\":\"" + revision + "\"", "loaded skill revision matches catalog");
                 AssertTrue(replay.IndexOf("\"truncated\":true", StringComparison.Ordinal) < 0,
                     "loaded skill is not duplicated into a truncated result");
             });
@@ -909,6 +914,10 @@ namespace RNAssistant.Harness
             AssertContains(request, "COMPACTION_TOOL_ARGUMENT", "native tool arguments preserved for compaction");
             AssertContains(request, "COMPACTION_TOOL_ARGUMENT_2", "all native tool calls preserved for compaction");
             AssertTrue(request.IndexOf("\"goals\"", StringComparison.Ordinal) < 0, "no fixed summary sections");
+            AssertContains(
+                ContextCompactionService.BuildActiveWindow(session)[0].Content,
+                "Full skill bodies present only in compacted earlier context are not loaded",
+                "compacted context invalidates skill body loading");
         }
 
         private static void CompactionPreservesToolProtocolPairs()

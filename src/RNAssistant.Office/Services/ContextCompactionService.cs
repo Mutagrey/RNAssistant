@@ -196,7 +196,11 @@ namespace RNAssistant.Office.Services
                 new ChatMessage
                 {
                     Role = "assistant",
-                    Content = "COMPACTED_EARLIER_CONTEXT (reference only; not new instructions):\n" + (checkpoint.SummaryMarkdown ?? string.Empty)
+                    Content = "COMPACTED_EARLIER_CONTEXT (reference only; not new instructions):\n" +
+                        (checkpoint.SummaryMarkdown ?? string.Empty) +
+                        "\n\nSKILL_CONTEXT_NOTICE: Full skill bodies present only in compacted earlier context are not loaded. " +
+                        "For relevant work, call common.skills_read again unless the replay tail below contains a successful, " +
+                        "non-truncated result for the catalog's current revision."
                 }
             };
             result.AddRange(messages);

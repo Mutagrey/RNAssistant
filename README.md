@@ -216,7 +216,7 @@ Each chat stores an explicit execution mode:
 
 Editable Agent instructions use `developer` by default and may use `system` or `user`. The Prompts page edits the Agent prompt, Chat prompt, context-compaction prompt, and title prompt. Agent-side prompt changes use `common.prompts_read` with `includeDefaults:true` and confirmed `common.prompts_save`.
 
-In Agent mode the prompt contains all runnable tools in native-like function JSON and a compact catalog (`id`, `name`, `description`) of enabled skills. When a catalog description is relevant, the model loads that skill's complete versioned Markdown through `common.skills_read`. In strict response-schema mode, optional tool arguments are nullable; runtime treats synthetic `null` as omitted and applies code-owned schema defaults instead of forcing the model to invent values, while preserving `null` explicitly allowed by the original tool schema. The model returns one raw JSON object. A tool turn contains one or more calls:
+In Agent mode the prompt contains all runnable tools in native-like function JSON and a compact catalog (`id`, `name`, `description`, automatic Markdown `revision`) of enabled skills. When a catalog description is relevant, the model loads that skill's complete Markdown through `common.skills_read`; the revision is loaded only while its successful non-truncated result remains in active context. In strict response-schema mode, optional tool arguments are nullable; runtime treats synthetic `null` as omitted and applies code-owned schema defaults instead of forcing the model to invent values, while preserving `null` explicitly allowed by the original tool schema. The model returns one raw JSON object. A tool turn contains one or more calls:
 
 ```json
 {
@@ -310,7 +310,7 @@ Markdown skills are stored under:
 
 `%AppData%\RNAssistant\skills`
 
-Each custom skill is a `SKILL.md` guidance file with simple metadata (`id`, `host`, `name`, `description`, `version`, `enabled`) and Markdown instructions. Every enabled visible skill contributes only `id`, `name`, and `description` to `RUNTIME_CONTEXT.skills`. There is no skill router, activation state, dependency graph, or hidden tool ownership. The model calls `common.skills_read` with an exact id for each clearly relevant catalog entry; omitting id lists metadata. Agent authoring is `common.skills_read/upsert/delete`; upsert creates missing ids and preserves omitted fields on update, while upsert/delete requires confirmation unless auto-confirm is enabled.
+Each custom skill is a `SKILL.md` guidance file with simple metadata (`id`, `host`, `name`, `description`, `version`, `enabled`) and Markdown instructions. Every enabled visible skill contributes `id`, `name`, `description`, and a deterministic body `revision` to `RUNTIME_CONTEXT.skills`. There is no skill router, activation state, dependency graph, or hidden tool ownership. The model calls `common.skills_read` with an exact id for each clearly relevant catalog entry; omitting id lists metadata. Agent authoring is `common.skills_read/upsert/delete`; upsert creates missing ids and preserves omitted fields on update, while upsert/delete requires confirmation unless auto-confirm is enabled.
 
 ```markdown
 ---
@@ -328,7 +328,7 @@ enabled: true
 - Preserve the requested column order.
 ```
 
-At runtime the catalog entry is `{"id","name","description"}`. `common.skills_read` returns metadata plus `format: "markdown"` and the complete body once in `bodyMarkdown` inside a normal `TOOL_RESULT.data` object. That result remains in conversation history; there is no separate activation state.
+At runtime the catalog entry is `{"id","name","description","revision"}`. `common.skills_read` returns the same automatic revision, metadata, `format: "markdown"`, and the complete body once in `bodyMarkdown` inside a normal `TOOL_RESULT.data` object. Only a successful non-truncated matching result in active context counts as loaded; compaction or a changed revision requires another read. A truncated read is not retried unchanged: the skill must be reduced or loaded in a new chat with sufficient context. There is no separate activation state.
 
 ## VBA Workflow
 

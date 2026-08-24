@@ -176,6 +176,10 @@ namespace RNAssistant.Core.Storage
                     if (string.Equals(lines[i].Trim(), "---", StringComparison.Ordinal))
                     {
                         bodyStart = i + 1;
+                        while (bodyStart < lines.Length && string.IsNullOrWhiteSpace(lines[bodyStart]))
+                        {
+                            bodyStart += 1;
+                        }
                         break;
                     }
 
@@ -237,6 +241,8 @@ namespace RNAssistant.Core.Storage
             {
                 return "Skill id must be 1-128 characters without line breaks.";
             }
+            if (string.IsNullOrWhiteSpace(skill.Description)) return "Skill description is required.";
+            if (string.IsNullOrWhiteSpace(skill.BodyMarkdown)) return "Skill bodyMarkdown is required.";
             if ((skill.Name ?? string.Empty).Length > 200) return "Skill name is too long.";
             if ((skill.Description ?? string.Empty).Length > 4000) return "Skill description is too long.";
             if ((skill.Version ?? string.Empty).Length > 64) return "Skill version is too long.";

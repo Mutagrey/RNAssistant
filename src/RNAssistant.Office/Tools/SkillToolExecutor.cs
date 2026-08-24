@@ -22,7 +22,7 @@ namespace RNAssistant.Office.Tools
 
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
-            yield return ControllerToolDefinition.Create("common.skills_read", "Common", "Read-only: Load complete Markdown instructions for one exact skill id; omit id only to list available skill metadata.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact skill id from RUNTIME_CONTEXT.skills; omit to list metadata only.\"}},\"required\":[],\"additionalProperties\":false}");
+            yield return ControllerToolDefinition.Create("common.skills_read", "Common", "Read-only: Load complete Markdown instructions and their automatic revision for one exact skill id. A truncated result is not loaded and must not be retried unchanged; omit id only to list available metadata.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact skill id from RUNTIME_CONTEXT.skills; omit to list metadata only.\"}},\"required\":[],\"additionalProperties\":false}");
             yield return ControllerToolDefinition.Create("common.skills_upsert", "Common", "Mutates settings: Create a missing Markdown skill or update an existing custom skill. Omitted fields are preserved on update; use strict mode only when existence itself matters.", SkillUpsertSchema(), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
             yield return ControllerToolDefinition.Create("common.skills_delete", "Common", "Mutates settings: Delete a custom markdown skill by id.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable identifier.\"}},\"required\":[\"id\"],\"additionalProperties\":false}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
         }
@@ -64,6 +64,7 @@ namespace RNAssistant.Office.Tools
                 name = s.Name,
                 description = s.Description,
                 version = s.Version,
+                revision = SkillRevision.Compute(s),
                 builtIn = s.BuiltIn,
                 enabled = s.Enabled
             }).ToArray();
@@ -87,6 +88,7 @@ namespace RNAssistant.Office.Tools
                 name = skill.Name,
                 description = skill.Description,
                 version = string.IsNullOrWhiteSpace(skill.Version) ? "1.0.0" : skill.Version,
+                revision = SkillRevision.Compute(skill),
                 enabled = skill.Enabled,
                 format = "markdown",
                 bodyMarkdown = skill.BodyMarkdown ?? string.Empty
@@ -150,11 +152,6 @@ namespace RNAssistant.Office.Tools
             if (!string.IsNullOrWhiteSpace(validationError))
             {
                 return ToolResult.Fail(validationError, null, "invalid_skill_definition", false);
-            }
-            if (string.IsNullOrWhiteSpace(skill.BodyMarkdown)) return ToolResult.Fail("Skill bodyMarkdown is required.");
-            if (string.IsNullOrWhiteSpace(skill.Description))
-            {
-                return ToolResult.Fail("Skill description is required.", null, "invalid_skill_definition", false);
             }
             if (!dryRun && !manualRun && !(settings ?? new AppSettings()).AutoConfirmToolActions)
             {

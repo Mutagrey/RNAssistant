@@ -23,8 +23,12 @@ namespace RNAssistant.Harness
             var settings = new AppSettings();
             AssertTrue(settings.SystemPrompt.StartsWith("# RNAssistant Agent", StringComparison.Ordinal), "agent prompt Markdown heading");
             AssertContains(settings.SystemPrompt, "## Response contract", "agent prompt structured section");
+            AssertContains(settings.SystemPrompt, "deterministic Markdown `revision`", "agent prompt describes skill revisions");
+            AssertContains(settings.SystemPrompt, "successful, non-truncated result", "agent prompt defines loaded skill state");
+            AssertContains(settings.SystemPrompt, "do not retry the same read unchanged", "agent prompt prevents truncated skill loops");
             AssertTrue(settings.ChatSystemPrompt.StartsWith("# RNAssistant Chat", StringComparison.Ordinal), "chat prompt Markdown heading");
             AssertTrue(settings.ContextCompactionPrompt.StartsWith("# Context compaction", StringComparison.Ordinal), "compaction prompt Markdown heading");
+            AssertContains(settings.ContextCompactionPrompt, "Skill ids and revisions", "compaction preserves pending skill references");
             AssertTrue(settings.ChatTitlePrompt.StartsWith("# Chat title", StringComparison.Ordinal), "title prompt Markdown heading");
             AssertEqual(AppSettings.DefaultMaxTokens, settings.MaxTokens, "long-run output token default");
             AssertEqual(AppSettings.DefaultRequestTimeoutSeconds, settings.RequestTimeoutSeconds, "long-run request timeout default");

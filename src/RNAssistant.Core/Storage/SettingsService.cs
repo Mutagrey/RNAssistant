@@ -149,6 +149,7 @@ namespace RNAssistant.Core.Storage
             {
                 settings.SystemPrompt = defaults.SystemPrompt;
             }
+            settings.SystemPrompt = AgentSkillPromptPolicy.Upgrade(settings.SystemPrompt);
             if (string.IsNullOrWhiteSpace(settings.ChatSystemPrompt))
             {
                 settings.ChatSystemPrompt = defaults.ChatSystemPrompt;

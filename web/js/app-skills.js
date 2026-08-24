@@ -97,6 +97,7 @@ function readSkills() {
       Host: skill.Host || "Common",
       Name: skill.Name || skill.Id || "",
       Description: skill.Description || "",
+      Version: skill.Version || "1.0.0",
       BodyMarkdown: skill.BodyMarkdown || "",
       Enabled: skill.Enabled !== false,
       BuiltIn: !!skill.BuiltIn
@@ -160,6 +161,7 @@ function bindSkillActions() {
       Host: "Common",
       Name: "new_skill",
       Description: "",
+      Version: "1.0.0",
       BodyMarkdown: "# Новый навык\n\nИспользуйте этот навык, когда...\n",
       Enabled: true,
       BuiltIn: false
@@ -182,6 +184,7 @@ function bindSkillActions() {
       Host: source.Host || "Common",
       Name: id,
       Description: source.Description || "",
+      Version: source.Version || "1.0.0",
       BodyMarkdown: source.BodyMarkdown || "",
       Enabled: true,
       BuiltIn: false

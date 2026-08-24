@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
@@ -64,6 +65,26 @@ namespace RNAssistant.Harness
                 AssertEqual("New prompt", global.SystemPrompt, "global prompt updated");
                 AssertEqual("global-model", global.Model, "per-chat model is not copied into global settings");
             });
+        }
+
+        private static void SettingsMigrateLegacySkillLoadingPolicy()
+        {
+            var settings = new AppSettings();
+            var legacy = settings.SystemPrompt.Replace(
+                AgentSkillPromptPolicy.CurrentInstructions,
+                AgentSkillPromptPolicy.LegacyInstructions);
+            AssertContains(legacy, AgentSkillPromptPolicy.LegacyInstructions,
+                "legacy policy fixture is present");
+
+            var upgraded = AgentSkillPromptPolicy.Upgrade(legacy);
+            AssertContains(upgraded, AgentSkillPromptPolicy.CurrentInstructions,
+                "legacy default policy is upgraded");
+            AssertTrue(upgraded.IndexOf(AgentSkillPromptPolicy.LegacyInstructions, StringComparison.Ordinal) < 0,
+                "legacy policy is removed after upgrade");
+
+            const string custom = "Custom prompt without the default skill policy.";
+            AssertEqual(custom, AgentSkillPromptPolicy.Upgrade(custom),
+                "custom prompt without legacy policy is preserved");
         }
     }
 }

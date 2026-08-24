@@ -11,14 +11,14 @@ Every Agent request contains the editable Markdown `SystemPrompt` and one `RUNTI
 
 - current host and document identity;
 - every enabled, schema-valid tool that the agent may run in this request;
-- the enabled skill catalog with `id`, `name`, and `description` only;
+- the enabled skill catalog with `id`, `name`, `description`, and a deterministic Markdown `revision`;
 - chat-owned user context and artifact references.
 
 Visible planning is optional data, not a protocol phase. `common.plan_create/read/update/delete` stores a versioned plan artifact for the active chat. The model explicitly supplies every step status; runtime does not infer progress from tool calls. The active plan artifact id appears in the artifact index.
 
 A confirmed tool result always returns to the Agent loop, including `ok:false`, so the model can explain the failure, correct arguments, or choose another tool. An explicit user cancellation is terminal for that run and does not invoke the model again.
 
-When a catalog description matches the task, the model calls `common.skills_read` with the exact id. Its `TOOL_RESULT.data` contains `id`, `host`, `name`, `description`, `version`, `enabled`, `format: "markdown"`, and the complete body once in authoring-compatible `bodyMarkdown`, subject only to the remaining request budget. Several clearly relevant skills may be read as independent calls. The result is normal conversation history; there is no router or activation state.
+When a catalog description matches the task, the model calls `common.skills_read` with the exact id. Its `TOOL_RESULT.data` contains `id`, `host`, `name`, `description`, the human-authored `version`, the automatic `revision`, `enabled`, `format: "markdown"`, and the complete body once in authoring-compatible `bodyMarkdown`, subject only to the remaining request budget. A revision is loaded only while the active model context contains its successful non-truncated read result with the complete body. Compaction or a revision mismatch requires another read. A truncated read is not loaded and is not retried unchanged; the skill must be reduced or read in a new chat with sufficient context. Several clearly relevant skills may be read as independent calls. The result is normal conversation history; there is no router or activation state.
 
 Tools use a native-like description:
 

@@ -1,5 +1,24 @@
+using System;
+using System.Security.Cryptography;
+using System.Text;
+
 namespace RNAssistant.Core.Models
 {
+    public static class SkillRevision
+    {
+        public static string Compute(SkillDefinition skill)
+        {
+            var body = skill == null ? string.Empty : skill.BodyMarkdown ?? string.Empty;
+            body = body.Replace("\r\n", "\n").Replace('\r', '\n');
+            using (var sha = SHA256.Create())
+            {
+                return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(body)))
+                    .Replace("-", string.Empty)
+                    .ToLowerInvariant();
+            }
+        }
+    }
+
     public sealed class SkillDefinition
     {
         public string Id { get; set; }
