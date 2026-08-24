@@ -57,7 +57,7 @@ See [agent-protocol.md](agent-protocol.md).
 - Model request diagnostics are passive request-scoped milestones from the normal LLM pipeline (`preparing`, `sending`, headers, first data, terminal state). The bridge forwards typed `modelDiagnostics` events, and the manual connection probe uses the same completion path with bounded output and timeout; there is no background polling.
 - `AssistantRuntime.Dispose` owns pane/bridge/controller shutdown and cancels active bridge requests, chat runs, and background title generation before a host adapter or dispatcher is released.
 - Each Excel window pane is bound directly to its workbook COM object and only the active pane is refreshed on window changes; inactive WebViews do not rescan tools or take focus.
-- Desktop COM calls enter adapters through the dedicated STA dispatcher. In-process VSTO adapters marshal every Office call back to the host UI thread through `OfficeUiDispatcher`; VSTO/COM changes still require Windows validation.
+- Desktop COM calls enter adapters through the dedicated STA dispatcher. In-process VSTO and NativeHostCli adapters marshal every Office call back to the host UI thread through `OfficeUiDispatcher`; VSTO/COM changes still require Windows validation.
 
 ## Main code zones
 

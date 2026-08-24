@@ -19,6 +19,7 @@ namespace RNAssistant.OfficeHosts
     public sealed class InProcessPanelSession : IDisposable
     {
         private readonly IOfficeApplicationAdapter _adapter;
+        private readonly OfficeUiDispatcher _officeDispatcher;
         private bool _disposed;
 
         private InProcessPanelSession(
@@ -26,6 +27,7 @@ namespace RNAssistant.OfficeHosts
             long officeHwnd,
             string rootPath,
             IOfficeApplicationAdapter adapter,
+            OfficeUiDispatcher officeDispatcher,
             AssistantRuntime runtime,
             Control panelControl)
         {
@@ -33,6 +35,7 @@ namespace RNAssistant.OfficeHosts
             OfficeHwnd = officeHwnd;
             RootPath = rootPath;
             _adapter = adapter;
+            _officeDispatcher = officeDispatcher;
             Runtime = runtime;
             PanelControl = panelControl;
         }
@@ -72,25 +75,54 @@ namespace RNAssistant.OfficeHosts
                 Hwnd = officeHwnd,
                 ProcessId = Process.GetCurrentProcess().Id
             };
-            var adapter = new OfficeComAdapterProvider().Create(host, target);
+            IOfficeApplicationAdapter innerAdapter = null;
+            OfficeUiDispatcher officeDispatcher = null;
             AssistantRuntime runtime = null;
             try
             {
+                // Agent continuations run on worker threads; all in-process Office COM calls
+                // must return to the UI STA to preserve COM and document identity.
+                officeDispatcher = new OfficeUiDispatcher();
+                innerAdapter = new OfficeComAdapterProvider().Create(host, target);
+                var adapter = new UiThreadOfficeApplicationAdapter(innerAdapter, officeDispatcher);
                 runtime = new AssistantRuntime(adapter, rootPath);
                 var control = runtime.CreatePaneControl();
                 control.Dock = DockStyle.Fill;
-                return new InProcessPanelSession(kind, officeHwnd, rootPath, adapter, runtime, control);
+                return new InProcessPanelSession(
+                    kind,
+                    officeHwnd,
+                    rootPath,
+                    innerAdapter,
+                    officeDispatcher,
+                    runtime,
+                    control);
             }
             catch
             {
-                if (runtime != null)
+                try
                 {
-                    runtime.Dispose();
+                    if (runtime != null)
+                    {
+                        runtime.Dispose();
+                    }
                 }
-                var disposable = adapter as IDisposable;
-                if (disposable != null)
+                finally
                 {
-                    disposable.Dispose();
+                    try
+                    {
+                        var disposable = innerAdapter as IDisposable;
+                        if (disposable != null)
+                        {
+                            disposable.Dispose();
+                        }
+                    }
+                    finally
+                    {
+                        if (officeDispatcher != null)
+                        {
+                            officeDispatcher.Dispose();
+                        }
+                    }
                 }
                 throw;
             }
@@ -105,21 +137,36 @@ namespace RNAssistant.OfficeHosts
 
             _disposed = true;
             RuntimeLog.Info("Disposing in-process panel session.");
-            if (Runtime != null)
+            try
             {
-                Runtime.Dispose();
-                Runtime = null;
+                if (Runtime != null)
+                {
+                    Runtime.Dispose();
+                    Runtime = null;
+                }
+                if (PanelControl != null)
+                {
+                    PanelControl.Dispose();
+                    PanelControl = null;
+                }
             }
-            if (PanelControl != null)
+            finally
             {
-                PanelControl.Dispose();
-                PanelControl = null;
-            }
-
-            var disposable = _adapter as IDisposable;
-            if (disposable != null)
-            {
-                disposable.Dispose();
+                try
+                {
+                    var disposable = _adapter as IDisposable;
+                    if (disposable != null)
+                    {
+                        disposable.Dispose();
+                    }
+                }
+                finally
+                {
+                    if (_officeDispatcher != null)
+                    {
+                        _officeDispatcher.Dispose();
+                    }
+                }
             }
         }
 
