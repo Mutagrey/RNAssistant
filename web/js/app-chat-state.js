@@ -123,6 +123,7 @@ function applyChatState(response) {
   }
   if (response.contextUsage || response.ContextUsage) {
     state.contextUsage = response.contextUsage || response.ContextUsage || {};
+    syncTokenEstimateCalibrationFromUsage();
   }
   if (response.htmlWorkspace || response.HtmlWorkspace) {
     state.htmlWorkspace = response.htmlWorkspace || response.HtmlWorkspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [] };
@@ -469,11 +470,12 @@ function renderContextMeter() {
   }
 
   percent = Math.max(0, Math.min(100, percent));
-  var compactDetail = formatCompactTokenCount(used) + " / " + formatCompactTokenCount(limit);
-  var detailText = formatNumber(used) + " / " + formatNumber(limit) + " вход";
+  var actual = !!(usage.actual || usage.Actual);
+  var compactDetail = (actual ? "" : "≈") + formatCompactTokenCount(used) + " / " + formatCompactTokenCount(limit);
+  var detailText = (actual ? "" : "≈") + formatNumber(used) + " / " + formatNumber(limit) + " вход";
   if (windowTokens) detailText += " · окно " + formatNumber(windowTokens);
   if (reservedOutput) detailText += " · ответ до " + formatNumber(reservedOutput);
-  detailText += (usage.actual || usage.Actual ? " · API usage" : " · оценка") + lastTokenUsageText();
+  detailText += (actual ? " · API usage" : "") + lastTokenUsageText();
   var level = percent >= 90 ? "danger" : (percent >= 70 ? "warn" : "ok");
   meter.dataset.level = level;
   meter.style.setProperty("--context-meter-percent", percent + "%");
@@ -489,17 +491,33 @@ function updateEstimatedContextUsage() {
   state.messages.forEach(function (message) {
     if (messageActivity(message) || message.ExcludeFromModelContext || message.excludeFromModelContext) return;
     var role = messageRole(message).toLowerCase();
-    if (role !== "user" && role !== "assistant") return;
+    var protocol = !!(message.ProtocolMessage || message.protocolMessage);
+    if (role !== "user" && role !== "assistant" &&
+        !(protocol && (role === "tool" || role === "developer"))) return;
     var content = messageContent(message);
     var pending = message.Local || message.local || message.Pending || message.pending;
-    if (!content.trim() && !pending) return;
+    var toolCalls = message.ToolCalls || message.toolCalls || [];
+    if (!content.trim() && !pending && !toolCalls.length && role !== "tool") return;
     used += 4 + estimateTextTokens(role) + estimateTextTokens(content);
+    if (toolCalls.length) {
+      used += 8;
+      toolCalls.forEach(function (call) {
+        call = call || {};
+        used += 4 + estimateTextTokens(call.Id || call.id || "") +
+          estimateTextTokens(call.Name || call.name || "") +
+          estimateTextTokens(call.ArgumentsJson || call.argumentsJson || "");
+      });
+    }
+    if (role === "tool") {
+      used += 2 + estimateTextTokens(message.ToolCallId || message.toolCallId || "") +
+        estimateTextTokens(message.ToolName || message.toolName || "");
+    }
     messageAttachments(message).forEach(function (attachment) {
       var extracted = String(attachment.ExtractedText || attachment.extractedText || "");
       var chars = Math.max(Number(attachment.ExtractedCharCount || attachment.extractedCharCount || 0), extracted.length);
-      used += Math.ceil(chars / 2);
-      if (pending && attachmentKind(attachment) === "image") used += 4096;
-      if (pending && attachmentKind(attachment) === "audio") {
+      used += estimateCharacterCountTokens(chars);
+      if (attachmentKind(attachment) === "image") used += 4096;
+      if (attachmentKind(attachment) === "audio") {
         used += Math.ceil(Number(attachment.Size || attachment.size || 0) / 512);
       }
     });
@@ -515,6 +533,7 @@ function updateEstimatedContextUsage() {
     includedContext[identity] = true;
     used += estimateTextTokens(text);
   });
+  if (used > 0) used += effectiveTokenEstimateIntercept();
 
   var settings = state.settings || {};
   var override = Number(settings.ContextWindowOverrideTokens || settings.contextWindowOverrideTokens || 0);
@@ -542,7 +561,12 @@ function updateEstimatedContextUsage() {
     reservedOutputTokens: reservedOutput,
     maxOutputTokens: maxOutput,
     safetyTokens: safety,
-    availableOutputTokens: Math.max(0, windowTokens - safety - used)
+    availableOutputTokens: Math.max(0, windowTokens - safety - used),
+    estimateMultiplier: effectiveTokenEstimateMultiplier(),
+    estimateInterceptTokens: effectiveTokenEstimateIntercept(),
+    estimateModel: modelName,
+    manualEstimateMultiplier: Number(settings.TokenEstimateMultiplier || settings.tokenEstimateMultiplier || 1),
+    autoCalibrateEstimate: settings.AutoCalibrateTokenEstimate !== false && settings.autoCalibrateTokenEstimate !== false
   };
 }
 
@@ -555,7 +579,89 @@ function estimateTextTokens(text) {
   } else {
     bytes = unescape(encodeURIComponent(text)).length;
   }
-  return Math.max(1, Math.ceil(bytes / 3));
+  return Math.max(1, Math.ceil(Math.ceil(bytes / 4) * effectiveTokenEstimateMultiplier()));
+}
+
+function estimateCharacterCountTokens(characters) {
+  characters = Number(characters || 0);
+  if (characters <= 0) return 0;
+  return Math.max(1, Math.ceil(Math.ceil(characters / 2) * effectiveTokenEstimateMultiplier()));
+}
+
+function effectiveTokenEstimateMultiplier() {
+  var settings = state.settings || {};
+  var manual = Number(settings.TokenEstimateMultiplier || settings.tokenEstimateMultiplier || 1);
+  if (!isFinite(manual) || manual <= 0) manual = 1;
+  manual = Math.max(0.25, Math.min(4, manual));
+  var automatic = settings.AutoCalibrateTokenEstimate !== false && settings.autoCalibrateTokenEstimate !== false;
+  var usage = state.contextUsage || {};
+  var modelName = String(activeChatModel() || settingsModel() || "");
+  var usageModel = String(usage.estimateModel || usage.EstimateModel || "");
+  var usageMultiplier = Number(usage.estimateMultiplier || usage.EstimateMultiplier || 0);
+  var usageManual = Number(usage.manualEstimateMultiplier || usage.ManualEstimateMultiplier || 0);
+  var usageAutomatic = usage.autoCalibrateEstimate !== false && usage.AutoCalibrateEstimate !== false;
+  if (usageMultiplier > 0 && usageModel.toLowerCase() === modelName.toLowerCase() &&
+      Math.abs(usageManual - manual) < 0.0001 && usageAutomatic === automatic) {
+    return Math.max(0.25, Math.min(4, usageMultiplier));
+  }
+  if (!automatic) return manual;
+  var model = modelName.toLowerCase();
+  var calibrations = settings.TokenEstimateCalibrations || settings.tokenEstimateCalibrations || {};
+  var key = Object.keys(calibrations).filter(function (item) {
+    return String(item || "").toLowerCase() === model;
+  })[0];
+  var calibration = key ? calibrations[key] : null;
+  var samples = Number((calibration && (calibration.SampleCount || calibration.sampleCount)) || 0);
+  var relative = Number((calibration && (calibration.Multiplier || calibration.multiplier)) || 1);
+  if (!samples || !isFinite(relative) || relative <= 0) return manual;
+  return Math.max(0.25, Math.min(4, relative));
+}
+
+function effectiveTokenEstimateIntercept() {
+  var settings = state.settings || {};
+  var automatic = settings.AutoCalibrateTokenEstimate !== false && settings.autoCalibrateTokenEstimate !== false;
+  if (!automatic) return 0;
+  var usage = state.contextUsage || {};
+  var modelName = String(activeChatModel() || settingsModel() || "");
+  var usageModel = String(usage.estimateModel || usage.EstimateModel || "");
+  var usageIntercept = Number(usage.estimateInterceptTokens || usage.EstimateInterceptTokens || 0);
+  if (usageModel.toLowerCase() === modelName.toLowerCase() && isFinite(usageIntercept) && usageIntercept >= 0) {
+    return Math.min(65536, Math.ceil(usageIntercept));
+  }
+  var calibrations = settings.TokenEstimateCalibrations || settings.tokenEstimateCalibrations || {};
+  var model = modelName.toLowerCase();
+  var key = Object.keys(calibrations).filter(function (item) {
+    return String(item || "").toLowerCase() === model;
+  })[0];
+  var calibration = key ? calibrations[key] : null;
+  var samples = Number((calibration && (calibration.SampleCount || calibration.sampleCount)) || 0);
+  var intercept = Number((calibration && (calibration.InterceptTokens || calibration.interceptTokens)) || 0);
+  return samples > 0 && isFinite(intercept) && intercept > 0 ? Math.min(65536, Math.ceil(intercept)) : 0;
+}
+
+function syncTokenEstimateCalibrationFromUsage() {
+  var usage = state.contextUsage || {};
+  var settings = state.settings || {};
+  var model = String(usage.estimateModel || usage.EstimateModel || "").trim();
+  var samples = Number(usage.calibrationSamples || usage.CalibrationSamples || 0);
+  var relative = Number(usage.calibrationMultiplier || usage.CalibrationMultiplier || 0);
+  if (!model || samples <= 0 || !isFinite(relative) || relative <= 0) return;
+
+  var calibrations = settings.TokenEstimateCalibrations || settings.tokenEstimateCalibrations || {};
+  var lowerModel = model.toLowerCase();
+  var key = Object.keys(calibrations).filter(function (item) {
+    return String(item || "").toLowerCase() === lowerModel;
+  })[0] || model;
+  var profile = usage.calibrationProfile || usage.CalibrationProfile;
+  calibrations[key] = profile || {
+    Multiplier: relative,
+    InterceptTokens: Number(usage.calibrationInterceptTokens || usage.CalibrationInterceptTokens || 0),
+    SampleCount: samples,
+    LastEstimatedPromptTokens: Number(usage.calibrationLastEstimatedPromptTokens || usage.CalibrationLastEstimatedPromptTokens || 0),
+    LastActualPromptTokens: Number(usage.calibrationLastActualPromptTokens || usage.CalibrationLastActualPromptTokens || 0),
+    UpdatedUtc: usage.calibrationUpdatedUtc || usage.CalibrationUpdatedUtc || null
+  };
+  settings.TokenEstimateCalibrations = calibrations;
 }
 
 function showSendError(error, text) {

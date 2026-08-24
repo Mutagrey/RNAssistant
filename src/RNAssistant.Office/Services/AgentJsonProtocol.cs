@@ -48,14 +48,19 @@ namespace RNAssistant.Office.Services
 
         public static string BuildToolResult(ToolCommand command, ToolResult result)
         {
-            return BuildToolResult(command, result, DefaultMaxToolResultDataTokens);
+            return BuildToolResult(command, result, DefaultMaxToolResultDataTokens, null);
         }
 
-        internal static string BuildToolResult(ToolCommand command, ToolResult result, int maxDataTokens)
+        internal static string BuildToolResult(
+            ToolCommand command,
+            ToolResult result,
+            int maxDataTokens,
+            AppSettings settings = null)
         {
             var message = BoundText(
                 result == null ? "Tool returned no result." : result.Message ?? string.Empty,
-                MaxToolResultMessageTokens);
+                MaxToolResultMessageTokens,
+                settings);
             var root = new JObject
             {
                 ["ok"] = result != null && result.Success,
@@ -63,7 +68,7 @@ namespace RNAssistant.Office.Services
                 ["name"] = command == null ? string.Empty : command.ToolId ?? string.Empty,
                 ["status"] = result == null ? "failed" : result.Status ?? (result.Success ? "completed" : "failed"),
                 ["message"] = message,
-                ["data"] = ParseData(result == null ? null : result.DataJson, maxDataTokens),
+                ["data"] = ParseData(result == null ? null : result.DataJson, maxDataTokens, settings),
                 ["error"] = result != null && result.Success
                     ? null
                     : new JObject
@@ -92,10 +97,11 @@ namespace RNAssistant.Office.Services
             ToolCommand command,
             ToolResult result,
             int maxDataTokens,
-            string role)
+            string role,
+            AppSettings settings = null)
         {
             var normalizedRole = ToolResultRoles.Normalize(role);
-            var resultJson = BuildToolResult(command, result, maxDataTokens);
+            var resultJson = BuildToolResult(command, result, maxDataTokens, settings);
             if (string.Equals(normalizedRole, ToolResultRoles.Tool, StringComparison.Ordinal))
             {
                 return new ChatMessage
@@ -185,7 +191,7 @@ namespace RNAssistant.Office.Services
             return value.Length <= 64 ? value : value.Substring(0, 64);
         }
 
-        private static JToken ParseData(string dataJson, int maxDataTokens)
+        private static JToken ParseData(string dataJson, int maxDataTokens, AppSettings settings)
         {
             if (string.IsNullOrWhiteSpace(dataJson)) return JValue.CreateNull();
             JToken parsed;
@@ -199,7 +205,7 @@ namespace RNAssistant.Office.Services
             }
 
             var compact = parsed.ToString(Formatting.None);
-            var estimatedTokens = ModelContextBudget.EstimateTextTokens(compact);
+            var estimatedTokens = ModelContextBudget.EstimateTextTokens(compact, settings);
             var boundedTokens = Math.Max(0, maxDataTokens);
             if (estimatedTokens <= boundedTokens)
             {
@@ -212,16 +218,16 @@ namespace RNAssistant.Office.Services
                 ["truncated"] = true,
                 ["original_chars"] = compact.Length,
                 ["original_estimated_tokens"] = estimatedTokens,
-                ["preview"] = ModelContextBudget.TruncateText(compact, previewBudget),
+                ["preview"] = ModelContextBudget.TruncateText(compact, previewBudget, settings),
                 ["hint"] = "The tool result was too large for the model context. Request a smaller scope."
             };
         }
 
-        private static string BoundText(string value, int maxTokens)
+        private static string BoundText(string value, int maxTokens, AppSettings settings)
         {
             var text = value ?? string.Empty;
-            if (ModelContextBudget.EstimateTextTokens(text) <= maxTokens) return text;
-            return ModelContextBudget.TruncateText(text, Math.Max(1, maxTokens - 8)) + "...[truncated]";
+            if (ModelContextBudget.EstimateTextTokens(text, settings) <= maxTokens) return text;
+            return ModelContextBudget.TruncateText(text, Math.Max(1, maxTokens - 8), settings) + "...[truncated]";
         }
     }
 }

@@ -52,7 +52,7 @@ namespace RNAssistant.Core.Llm
 
         public static int EffectiveOutputTokens(AppSettings settings, IEnumerable<ChatMessage> messages, string model = null)
         {
-            return EffectiveOutputTokens(settings, EstimateMessagesTokens(messages), model);
+            return EffectiveOutputTokens(settings, EstimateMessagesTokens(messages, settings, model), model);
         }
 
         public static int EffectiveOutputTokens(AppSettings settings, int estimatedPromptTokens, string model = null)
@@ -137,18 +137,41 @@ namespace RNAssistant.Core.Llm
 
         public static int EstimateTextTokens(string text)
         {
-            return string.IsNullOrEmpty(text)
-                ? 0
-                : Math.Max(1, (int)Math.Ceiling(Encoding.UTF8.GetByteCount(text) / 3.0));
+            return EstimateTextTokens(text, null, null);
+        }
+
+        public static int EstimateTextTokens(string text, AppSettings settings, string model = null)
+        {
+            if (string.IsNullOrEmpty(text)) return 0;
+            var raw = Math.Max(1, (int)Math.Ceiling(Encoding.UTF8.GetByteCount(text) / 4.0));
+            return ApplyTextMultiplier(raw, settings, model);
+        }
+
+        public static int EstimateCharacterCountTokens(int characters, AppSettings settings, string model = null)
+        {
+            if (characters <= 0) return 0;
+            return ApplyTextMultiplier(Math.Max(1, (int)Math.Ceiling(characters / 2.0)), settings, model);
+        }
+
+        public static int ApproximateTextCharacterCapacity(int tokens, AppSettings settings, string model = null)
+        {
+            if (tokens <= 0) return 0;
+            var multiplier = TokenEstimateCalibration.EffectiveMultiplier(settings, model);
+            return Math.Max(1, (int)Math.Floor(tokens * 4.0 / Math.Max(0.01, multiplier)));
         }
 
         public static string TruncateText(string text, int maxTokens)
+        {
+            return TruncateText(text, maxTokens, null, null);
+        }
+
+        public static string TruncateText(string text, int maxTokens, AppSettings settings, string model = null)
         {
             if (string.IsNullOrEmpty(text) || maxTokens <= 0)
             {
                 return string.Empty;
             }
-            if (EstimateTextTokens(text) <= maxTokens)
+            if (EstimateTextTokens(text, settings, model) <= maxTokens)
             {
                 return text;
             }
@@ -159,7 +182,8 @@ namespace RNAssistant.Core.Llm
             while (low < high)
             {
                 var middle = low + (high - low + 1) / 2;
-                var tokens = Math.Max(1, (int)Math.Ceiling(Encoding.UTF8.GetByteCount(characters, 0, middle) / 3.0));
+                var raw = Math.Max(1, (int)Math.Ceiling(Encoding.UTF8.GetByteCount(characters, 0, middle) / 4.0));
+                var tokens = ApplyTextMultiplier(raw, settings, model);
                 if (tokens <= maxTokens) low = middle;
                 else high = middle - 1;
             }
@@ -168,33 +192,81 @@ namespace RNAssistant.Core.Llm
 
         public static int EstimateMessagesTokens(IEnumerable<ChatMessage> messages)
         {
-            return EstimateMessagesTokens(messages, true);
+            return EstimateMessagesTokens(messages, true, null, null);
         }
 
         public static int EstimateMessagesTokens(IEnumerable<ChatMessage> messages, bool includeExtractedAttachments)
         {
-            var total = 0;
-            foreach (var message in messages ?? new ChatMessage[0])
+            return EstimateMessagesTokens(messages, includeExtractedAttachments, null, null);
+        }
+
+        public static int EstimateMessagesTokens(
+            IEnumerable<ChatMessage> messages,
+            AppSettings settings,
+            string model = null)
+        {
+            return EstimateMessagesTokens(messages, true, settings, model);
+        }
+
+        public static int EstimateMessagesTokens(
+            IEnumerable<ChatMessage> messages,
+            bool includeExtractedAttachments,
+            AppSettings settings,
+            string model = null)
+        {
+            var source = (messages ?? new ChatMessage[0]).ToList();
+            var hasMedia = source.Any(message => message != null &&
+                (message.Attachments ?? new List<ChatAttachment>()).Any(attachment => attachment != null &&
+                    (string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase))));
+            if (!hasMedia)
             {
-                total += EstimateMessageTokens(message, includeExtractedAttachments);
+                var baseTotal = source.Sum(message =>
+                    EstimateMessageTokens(message, includeExtractedAttachments, null, model));
+                return TokenEstimateCalibration.PredictPromptTokens(settings, baseTotal, model);
             }
-            return total;
+
+            var total = 0;
+            foreach (var message in source)
+            {
+                total += EstimateMessageTokens(message, includeExtractedAttachments, settings, model);
+            }
+            return TokenEstimateCalibration.AddPromptIntercept(settings, total, model);
         }
 
         public static int EstimateMessageTokens(ChatMessage message, bool includeExtractedAttachments = true)
         {
+            return EstimateMessageTokens(message, includeExtractedAttachments, null, null);
+        }
+
+        public static int EstimateMessageTokens(
+            ChatMessage message,
+            AppSettings settings,
+            string model = null,
+            bool includeExtractedAttachments = true)
+        {
+            return EstimateMessageTokens(message, includeExtractedAttachments, settings, model);
+        }
+
+        private static int EstimateMessageTokens(
+            ChatMessage message,
+            bool includeExtractedAttachments,
+            AppSettings settings,
+            string model)
+        {
             if (message == null || message.ExcludeFromModelContext) return 0;
-            var total = 4 + EstimateTextTokens(message.Role) + EstimateTextTokens(message.Content);
+            var total = 4 + EstimateTextTokens(message.Role, settings, model) + EstimateTextTokens(message.Content, settings, model);
             if (message.ToolCalls != null && message.ToolCalls.Count > 0)
             {
                 total += 8;
                 total += message.ToolCalls.Sum(call => call == null
                     ? 0
-                    : 4 + EstimateTextTokens(call.Id) + EstimateTextTokens(call.Name) + EstimateTextTokens(call.ArgumentsJson));
+                    : 4 + EstimateTextTokens(call.Id, settings, model) + EstimateTextTokens(call.Name, settings, model) +
+                        EstimateTextTokens(call.ArgumentsJson, settings, model));
             }
             if (string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase))
             {
-                total += 2 + EstimateTextTokens(message.ToolCallId) + EstimateTextTokens(message.ToolName);
+                total += 2 + EstimateTextTokens(message.ToolCallId, settings, model) + EstimateTextTokens(message.ToolName, settings, model);
             }
             foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
             {
@@ -203,7 +275,10 @@ namespace RNAssistant.Core.Llm
                 if (string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase)) total += EstimateAudioTokens(attachment.Size);
                 if (includeExtractedAttachments)
                 {
-                    total += Math.Max(attachment.ExtractedCharCount, (attachment.ExtractedText ?? string.Empty).Length) / 2;
+                    total += EstimateCharacterCountTokens(
+                        Math.Max(attachment.ExtractedCharCount, (attachment.ExtractedText ?? string.Empty).Length),
+                        settings,
+                        model);
                 }
             }
             return total;
@@ -211,13 +286,28 @@ namespace RNAssistant.Core.Llm
 
         public static int EstimateRequestOptionsTokens(LlmRequestOptions options)
         {
+            return EstimateRequestOptionsTokens(options, null, null);
+        }
+
+        public static int EstimateRequestOptionsTokens(
+            LlmRequestOptions options,
+            AppSettings settings,
+            string model = null)
+        {
             if (options == null) return 0;
-            var total = 8 + EstimateTextTokens(options.ResponseFormat);
+            var total = 8 + EstimateTextTokens(options.ResponseFormat, settings, model);
             if (string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.OrdinalIgnoreCase))
             {
-                total += EstimateTextTokens(options.ResponseSchemaName) + EstimateTextTokens(options.ResponseSchemaJson);
+                total += EstimateTextTokens(options.ResponseSchemaName, settings, model) +
+                    EstimateTextTokens(options.ResponseSchemaJson, settings, model);
             }
             return total;
+        }
+
+        private static int ApplyTextMultiplier(int rawTokens, AppSettings settings, string model)
+        {
+            if (rawTokens <= 0) return 0;
+            return Math.Max(1, (int)Math.Ceiling(rawTokens * TokenEstimateCalibration.EffectiveMultiplier(settings, model)));
         }
 
         public static int EstimateAudioTokens(long bytes)

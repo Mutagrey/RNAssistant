@@ -617,14 +617,14 @@ namespace RNAssistant.Office.Services
             AppSettings settings)
         {
             var inputBudget = ModelContextBudget.InputBudgetTokens(settings);
-            var used = ModelContextBudget.EstimateMessagesTokens(messages);
+            var used = ModelContextBudget.EstimateMessagesTokens(messages, settings);
             var availableForData = Math.Max(0, inputBudget - used - ToolResultEnvelopeReserveTokens);
             var toolId = command == null ? null : command.ToolId;
             var maxDataTokens = string.Equals(toolId, "common.skills_read", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlArtifactToolExecutor.ReadWorkspaceToolId, StringComparison.OrdinalIgnoreCase)
                     ? availableForData
                     : Math.Min(AgentJsonProtocol.DefaultMaxToolResultDataTokens, availableForData);
-            return AgentJsonProtocol.CreateToolResultMessage(command, result, maxDataTokens, settings.ToolResultRole);
+            return AgentJsonProtocol.CreateToolResultMessage(command, result, maxDataTokens, settings.ToolResultRole, settings);
         }
 
         private static bool TryValidatePromptBudget(
@@ -634,15 +634,15 @@ namespace RNAssistant.Office.Services
             out string error)
         {
             var inputBudget = ModelContextBudget.InputBudgetTokens(settings);
-            var estimated = ModelContextBudget.EstimateMessagesTokens(messages) +
-                ModelContextBudget.EstimateRequestOptionsTokens(options);
+            var estimated = ModelContextBudget.EstimateMessagesTokens(messages, settings) +
+                ModelContextBudget.EstimateRequestOptionsTokens(options, settings);
             if (estimated <= inputBudget)
             {
                 error = null;
                 return true;
             }
 
-            error = "Агент остановлен до следующего запроса модели: контекст занимает примерно " + estimated +
+            error = "Агент остановлен до следующего запроса модели: контекст занимает ≈" + estimated +
                 " токенов при доступном лимите " + inputBudget +
                 ". Сузьте диапазон/объём результата или начните новый чат.";
             return false;

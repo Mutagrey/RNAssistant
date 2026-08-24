@@ -34,7 +34,7 @@ namespace RNAssistant.Office.Services
             }
 
             var budget = inputBudgetTokens > 0 ? inputBudgetTokens : ModelContextBudget.InputBudgetTokens(settings);
-            var used = EstimateMessages(messages);
+            var used = EstimateMessages(messages, settings);
             if (used > budget)
             {
                 throw new PromptBudgetExceededException(
@@ -55,7 +55,7 @@ namespace RNAssistant.Office.Services
             }
 
             var candidates = history.Select(CloneConversationMessage).ToList();
-            var required = EstimateMessages(candidates);
+            var required = EstimateMessages(candidates, settings);
             if (required > available)
             {
                 throw new PromptBudgetExceededException(
@@ -69,9 +69,9 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        public int EstimateMessages(IEnumerable<ChatMessage> messages)
+        public int EstimateMessages(IEnumerable<ChatMessage> messages, AppSettings settings = null)
         {
-            return ModelContextBudget.EstimateMessagesTokens(messages);
+            return ModelContextBudget.EstimateMessagesTokens(messages, settings);
         }
 
         internal static List<ChatMessage> ConversationHistory(

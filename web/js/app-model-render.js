@@ -126,6 +126,9 @@ function renderModelControls() {
   renderActiveModelCapability();
   renderReasoningToggle();
   renderChatModelPicker();
+  if (typeof renderTokenEstimateCalibrationStatus === "function") {
+    renderTokenEstimateCalibrationStatus(state.settings);
+  }
 }
 
 function renderReasoningToggle() {

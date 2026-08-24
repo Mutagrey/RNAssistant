@@ -91,13 +91,17 @@ function renderPromptContextInspector(snapshot) {
   var mode = promptContextInspectorValue(snapshot, "mode", "Mode", "agent");
   var model = promptContextInspectorValue(snapshot, "model", "Model", "");
   var overBudget = !!promptContextInspectorValue(snapshot, "overBudget", "OverBudget", false);
+  var estimated = promptContextInspectorValue(snapshot, "estimated", "Estimated", true) !== false;
+  var multiplier = Number(promptContextInspectorValue(snapshot, "estimateMultiplier", "EstimateMultiplier", 1) || 1);
+  var intercept = Number(promptContextInspectorValue(snapshot, "estimateInterceptTokens", "EstimateInterceptTokens", 0) || 0);
+  var calibrationSamples = Number(promptContextInspectorValue(snapshot, "calibrationSamples", "CalibrationSamples", 0) || 0);
   var generatedUtc = promptContextInspectorValue(snapshot, "generatedUtc", "GeneratedUtc", "");
   var subtitle = ["Следующий запрос", mode === "chat" ? "Chat" : "Agent", model,
     generatedUtc ? "снимок " + formatPromptContextTime(generatedUtc) : ""].filter(Boolean).join(" · ");
 
   percent = Math.max(0, Math.min(100, percent));
   $("promptContextInspectorSubtitle").textContent = subtitle;
-  $("promptContextInspectorUsage").textContent = formatNumber(used) + " / " + formatNumber(limit) + " токенов";
+  $("promptContextInspectorUsage").textContent = (estimated ? "≈ " : "") + formatNumber(used) + " / " + formatNumber(limit) + " токенов";
   $("promptContextInspectorPercent").textContent = percent + "%";
   $("promptContextInspectorWindow").textContent = formatNumber(windowTokens);
   $("promptContextInspectorOutput").textContent = formatNumber(outputTokens);
@@ -111,7 +115,11 @@ function renderPromptContextInspector(snapshot) {
   track.setAttribute("aria-valuenow", String(percent));
 
   var notice = $("promptContextInspectorNotice");
-  notice.textContent = promptContextInspectorValue(snapshot, "notice", "Notice", "Оценочный снимок контекста.");
+  notice.textContent = promptContextInspectorValue(snapshot, "notice", "Notice", "≈ снимок контекста.") +
+    (calibrationSamples
+      ? " ×" + multiplier.toFixed(2).replace(".", ",") +
+        (intercept > 0 ? " + " + formatNumber(Math.ceil(intercept)) : "")
+      : "");
   notice.classList.toggle("is-over-budget", overBudget);
 
   var lastPrompt = promptContextInspectorValue(snapshot, "lastPromptTokens", "LastPromptTokens", null);
@@ -153,7 +161,7 @@ function renderPromptContextSections(sections, usedTokens) {
     var meta = document.createElement("span");
     meta.className = "prompt-context-section-meta";
     meta.textContent = included
-      ? formatNumber(tokens) + " ток. · " + formatNumber(count)
+      ? "≈" + formatNumber(tokens) + " ток. · " + formatNumber(count)
       : formatNumber(count) + " элементов";
     summary.appendChild(meta);
     var detailText = promptContextInspectorValue(section, "detail", "Detail", "");
@@ -207,9 +215,9 @@ function renderPromptContextItem(item, included) {
   var value = document.createElement("span");
   value.className = "prompt-context-item-value";
   var values = [];
-  if (included && tokens) values.push(formatNumber(tokens) + " ток.");
+  if (included && tokens) values.push("≈" + formatNumber(tokens) + " ток.");
   if (size) values.push(formatPromptContextSize(size));
-  value.textContent = values.join(" · ") || (included ? "0 ток." : "");
+  value.textContent = values.join(" · ") || (included ? "≈0 ток." : "");
   row.appendChild(value);
   if (subtitle) {
     var subtitleNode = document.createElement("span");

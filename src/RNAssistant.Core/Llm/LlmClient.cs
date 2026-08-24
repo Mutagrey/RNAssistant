@@ -95,7 +95,14 @@ namespace RNAssistant.Core.Llm
                     throw new InvalidOperationException("LLM request has no messages.");
                 }
 
-                var body = BuildRequestBody(settings, apiMessages, apiBuild.EstimatedPromptTokens, requestOptions);
+                var baseEstimatedRequestTokens = apiBuild.BaseEstimatedPromptTokens +
+                    ModelContextBudget.EstimateRequestOptionsTokens(requestOptions);
+                var scaledRequestTokens = apiBuild.EstimatedPromptTokens +
+                    ModelContextBudget.EstimateRequestOptionsTokens(requestOptions, settings);
+                var estimatedRequestTokens = hasImages || hasAudio
+                    ? TokenEstimateCalibration.AddPromptIntercept(settings, scaledRequestTokens)
+                    : TokenEstimateCalibration.PredictPromptTokens(settings, baseEstimatedRequestTokens);
+                var body = BuildRequestBody(settings, apiMessages, estimatedRequestTokens, requestOptions, true);
                 var trafficId = settings.DebugModelTraffic ? requestDiagnostics.RequestId : null;
                 if (settings.DebugModelTraffic)
                 {
@@ -180,6 +187,11 @@ namespace RNAssistant.Core.Llm
                                         requestCancellation.Token,
                                         rawResponseLog,
                                         requestDiagnostics.FirstChunk).ConfigureAwait(false);
+                                    AttachPromptEstimate(
+                                        streamed,
+                                        baseEstimatedRequestTokens,
+                                        estimatedRequestTokens,
+                                        !hasImages && !hasAudio);
                                     requestDiagnostics.Completed();
                                     return streamed;
                                 }
@@ -192,6 +204,11 @@ namespace RNAssistant.Core.Llm
                                 requestDiagnostics.FirstChunk).ConfigureAwait(false);
                             LogModelJson(settings, trafficId, "RESPONSE HTTP " + (int)response.StatusCode, responseJson);
                             var parsed = LlmResponseParser.ParseCompletionResponse(responseJson);
+                            AttachPromptEstimate(
+                                parsed,
+                                baseEstimatedRequestTokens,
+                                estimatedRequestTokens,
+                                !hasImages && !hasAudio);
                             requestDiagnostics.Completed();
                             return parsed;
                         }
@@ -439,11 +456,18 @@ namespace RNAssistant.Core.Llm
                 ". Headers: [" + string.Join(", ", headerNames.ToArray()) + "]";
         }
 
-        internal static JObject BuildRequestBody(AppSettings settings, IList<object> apiMessages, int estimatedPromptTokens, LlmRequestOptions requestOptions)
+        internal static JObject BuildRequestBody(
+            AppSettings settings,
+            IList<object> apiMessages,
+            int estimatedPromptTokens,
+            LlmRequestOptions requestOptions,
+            bool estimateIncludesRequestOptions = false)
         {
             settings = settings ?? new AppSettings();
             requestOptions = requestOptions ?? new LlmRequestOptions();
-            var estimatedRequestTokens = estimatedPromptTokens + ModelContextBudget.EstimateRequestOptionsTokens(requestOptions);
+            var estimatedRequestTokens = estimateIncludesRequestOptions
+                ? estimatedPromptTokens
+                : estimatedPromptTokens + ModelContextBudget.EstimateRequestOptionsTokens(requestOptions, settings);
             var body = new JObject
             {
                 ["model"] = settings.Model,
@@ -486,6 +510,18 @@ namespace RNAssistant.Core.Llm
                 };
             }
             return body;
+        }
+
+        private static void AttachPromptEstimate(
+            LlmCompletionResult result,
+            int baseEstimatedPromptTokens,
+            int estimatedPromptTokens,
+            bool calibrationEligible)
+        {
+            if (result == null) return;
+            result.BaseEstimatedPromptTokens = Math.Max(0, baseEstimatedPromptTokens);
+            result.EstimatedPromptTokens = Math.Max(0, estimatedPromptTokens);
+            result.TokenEstimateCalibrationEligible = calibrationEligible;
         }
 
         private static void AppendReasoningRequest(JObject body, AppSettings settings, LlmRequestOptions requestOptions)

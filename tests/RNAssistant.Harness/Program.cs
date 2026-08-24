@@ -81,6 +81,11 @@ namespace RNAssistant.Harness
                 Test("context: compaction preserves tool protocol pairs", CompactionPreservesToolProtocolPairs),
                 Test("context inspector: builds agent snapshot", PromptContextInspectorBuildsAgentSnapshot),
                 Test("context inspector: raw JSON is opt-in", PromptContextInspectorRawJsonIsOptIn),
+                Test("token estimate: manual multiplier", TokenEstimateMultiplierAppliesToPromptParts),
+                Test("token estimate: learns from API usage", TokenEstimateCalibrationLearnsFromApiUsage),
+                Test("token estimate: learns linear overhead", TokenEstimateCalibrationLearnsLinearOverhead),
+                Test("token estimate: calibration can be disabled", TokenEstimateCalibrationCanBeDisabled),
+                Test("token estimate: actual usage is authoritative", TokenEstimateUsesActualApiUsage),
 
                 Test("desktop target: parses json descriptor", ParsesOfficeTargetJsonDescriptor),
                 Test("desktop target: parses base64 descriptor", ParsesOfficeTargetBase64Descriptor),

@@ -54,11 +54,11 @@ namespace RNAssistant.Office.Services
             var inputBudget = Math.Max(1024, ModelContextBudget.InputBudgetTokens(settings));
             var activeCheckpoint = ActiveCheckpoint(session);
             var instructionTokens = Math.Max(
-                ModelContextBudget.EstimateTextTokens(settings.SystemPrompt),
-                ModelContextBudget.EstimateTextTokens(settings.ChatSystemPrompt));
-            var projected = ModelContextBudget.EstimateMessagesTokens(window) +
-                ModelContextBudget.EstimateTextTokens(activeCheckpoint == null ? null : activeCheckpoint.SummaryMarkdown) +
-                ModelContextBudget.EstimateTextTokens(incomingText) +
+                ModelContextBudget.EstimateTextTokens(settings.SystemPrompt, settings),
+                ModelContextBudget.EstimateTextTokens(settings.ChatSystemPrompt, settings));
+            var projected = ModelContextBudget.EstimateMessagesTokens(window, settings) +
+                ModelContextBudget.EstimateTextTokens(activeCheckpoint == null ? null : activeCheckpoint.SummaryMarkdown, settings) +
+                ModelContextBudget.EstimateTextTokens(incomingText, settings) +
                 instructionTokens +
                 Math.Max(512, inputBudget / 10);
             if (!force && projected * 100 < inputBudget * TriggerPercent)
@@ -66,7 +66,7 @@ namespace RNAssistant.Office.Services
                 return null;
             }
 
-            var compactCount = SelectPrefixCount(window, inputBudget, force);
+            var compactCount = SelectPrefixCount(window, inputBudget, force, settings);
             if (compactCount <= 0)
             {
                 return null;
@@ -75,7 +75,8 @@ namespace RNAssistant.Office.Services
             compactCount = ToolProtocolMessages.PreserveCompletePrefix(window, compactCount);
             var prefix = TakeFullyIncludedPrefix(
                 window.Take(compactCount),
-                Math.Max(384, sourceTokenBudget / 2));
+                Math.Max(384, sourceTokenBudget / 2),
+                settings);
             var through = prefix.LastOrDefault(message => message != null && !string.IsNullOrWhiteSpace(message.Id));
             if (through == null)
             {
@@ -94,7 +95,8 @@ namespace RNAssistant.Office.Services
                 session,
                 prefix,
                 Math.Max(192, sourceTokenBudget / 4),
-                sourceTokenBudget);
+                sourceTokenBudget,
+                settings);
             var prompt = CompactionPrompt(settings);
             var request = new List<ChatMessage>
             {
@@ -115,7 +117,8 @@ namespace RNAssistant.Office.Services
             var summary = ParseSummary(completion == null ? null : completion.Content);
             summary["summary"] = ModelContextBudget.TruncateText(
                 (string)summary["summary"] ?? string.Empty,
-                Math.Max(256, Math.Min(4096, inputBudget / 4)));
+                Math.Max(256, Math.Min(4096, inputBudget / 4)),
+                settings);
             var summaryJson = summary.ToString(Formatting.None);
             var summaryMarkdown = RenderSummary(summary);
             var checkpoint = new ContextCheckpoint
@@ -126,8 +129,8 @@ namespace RNAssistant.Office.Services
                 Model = settings.Model,
                 PromptVersion = ContextCheckpoint.CurrentPromptVersion,
                 SourceMessageCount = prefix.Count,
-                SourceTokens = ModelContextBudget.EstimateMessagesTokens(prefix),
-                SummaryTokens = ModelContextBudget.EstimateTextTokens(summaryMarkdown)
+                SourceTokens = ModelContextBudget.EstimateMessagesTokens(prefix, settings),
+                SummaryTokens = ModelContextBudget.EstimateTextTokens(summaryMarkdown, settings)
             };
             session.ContextCheckpoints = session.ContextCheckpoints ?? new List<ContextCheckpoint>();
             session.ContextCheckpoints.Add(checkpoint);
@@ -243,7 +246,11 @@ namespace RNAssistant.Office.Services
                  string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase));
         }
 
-        private static int SelectPrefixCount(IReadOnlyList<ChatMessage> window, int inputBudget, bool force)
+        private static int SelectPrefixCount(
+            IReadOnlyList<ChatMessage> window,
+            int inputBudget,
+            bool force,
+            AppSettings settings)
         {
             if (window == null || window.Count < (force ? 2 : 3))
             {
@@ -254,7 +261,7 @@ namespace RNAssistant.Office.Services
             var firstRecent = window.Count;
             for (var index = window.Count - 1; index >= 0; index--)
             {
-                var cost = ModelContextBudget.EstimateMessageTokens(window[index]);
+                var cost = ModelContextBudget.EstimateMessageTokens(window[index], settings);
                 if (recentTokens + cost > target && firstRecent < window.Count)
                 {
                     break;
@@ -277,7 +284,8 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             IEnumerable<ChatMessage> prefix,
             int attachmentTokenBudget,
-            int sourceTokenBudget)
+            int sourceTokenBudget,
+            AppSettings settings)
         {
             var builder = new StringBuilder();
             var prefixMessages = (prefix ?? new ChatMessage[0]).Where(message => message != null).ToList();
@@ -291,7 +299,8 @@ namespace RNAssistant.Office.Services
                 builder.AppendLine("PRIOR_CHECKPOINT:");
                 builder.AppendLine(ModelContextBudget.TruncateText(
                     active.SummaryJson,
-                    Math.Max(128, sourceTokenBudget / 8)));
+                    Math.Max(128, sourceTokenBudget / 8),
+                    settings));
             }
             var referencedArtifactIds = new HashSet<string>(
                 prefixMessages.SelectMany(message => message.ArtifactIds ?? new List<string>())
@@ -334,10 +343,14 @@ namespace RNAssistant.Office.Services
                     var share = textAttachmentCount <= 0 ? 0 : remainingAttachmentTokens / textAttachmentCount;
                     textAttachmentCount = Math.Max(0, textAttachmentCount - 1);
                     if (share <= 0) continue;
-                    var extracted = ReadAttachmentText(attachment, Math.Max(1, share * 3));
-                    var selected = ModelContextBudget.TruncateText(extracted, share);
+                    var extracted = ReadAttachmentText(
+                        attachment,
+                        Math.Max(1, ModelContextBudget.ApproximateTextCharacterCapacity(share, settings)));
+                    var selected = ModelContextBudget.TruncateText(extracted, share, settings);
                     if (string.IsNullOrWhiteSpace(selected)) continue;
-                    remainingAttachmentTokens = Math.Max(0, remainingAttachmentTokens - ModelContextBudget.EstimateTextTokens(selected));
+                    remainingAttachmentTokens = Math.Max(
+                        0,
+                        remainingAttachmentTokens - ModelContextBudget.EstimateTextTokens(selected, settings));
                     builder.AppendLine("[attachment_text " + (attachment.Id ?? string.Empty) + ":" + (attachment.FileName ?? "unnamed") + "]");
                     builder.AppendLine(selected);
                     if (selected.Length < extracted.Length || attachment.TextTruncated) builder.AppendLine("[attachment_text_truncated]");
@@ -355,33 +368,35 @@ namespace RNAssistant.Office.Services
                 foreach (var artifact in artifacts.Take(100))
                 {
                     artifactIndex.AppendLine(
-                        ModelContextBudget.TruncateText(artifact.Id, 64) + " | " +
-                        ModelContextBudget.TruncateText(artifact.Kind, 32) + " | " +
-                        ModelContextBudget.TruncateText(artifact.Title, 128) +
+                        ModelContextBudget.TruncateText(artifact.Id, 64, settings) + " | " +
+                        ModelContextBudget.TruncateText(artifact.Kind, 32, settings) + " | " +
+                        ModelContextBudget.TruncateText(artifact.Title, 128, settings) +
                         " | revision=" + artifact.Revision + " | parent=" +
-                        ModelContextBudget.TruncateText(artifact.ParentArtifactId, 64) +
-                        " | policy=" + ModelContextBudget.TruncateText(artifact.ModelContextPolicy, 32));
+                        ModelContextBudget.TruncateText(artifact.ParentArtifactId, 64, settings) +
+                        " | policy=" + ModelContextBudget.TruncateText(artifact.ModelContextPolicy, 32, settings));
                 }
                 if (artifacts.Count > 100) artifactIndex.AppendLine("[additional artifacts omitted]");
             }
             builder.AppendLine(ModelContextBudget.TruncateText(
                 artifactIndex.ToString(),
-                Math.Max(128, sourceTokenBudget / 8)));
+                Math.Max(128, sourceTokenBudget / 8),
+                settings));
             var source = builder.ToString();
-            if (ModelContextBudget.EstimateTextTokens(source) <= sourceTokenBudget) return source;
-            return ModelContextBudget.TruncateText(source, sourceTokenBudget) + "\n[compaction_source_truncated]";
+            if (ModelContextBudget.EstimateTextTokens(source, settings) <= sourceTokenBudget) return source;
+            return ModelContextBudget.TruncateText(source, sourceTokenBudget, settings) + "\n[compaction_source_truncated]";
         }
 
         private static List<ChatMessage> TakeFullyIncludedPrefix(
             IEnumerable<ChatMessage> messages,
-            int tokenBudget)
+            int tokenBudget,
+            AppSettings settings)
         {
             var source = (messages ?? new ChatMessage[0]).Where(message => message != null).ToList();
             var count = 0;
             var used = 0;
             while (count < source.Count)
             {
-                var cost = Math.Max(1, ModelContextBudget.EstimateMessageTokens(source[count], false));
+                var cost = Math.Max(1, ModelContextBudget.EstimateMessageTokens(source[count], settings, null, false));
                 if (used + cost > tokenBudget) break;
                 used += cost;
                 count += 1;

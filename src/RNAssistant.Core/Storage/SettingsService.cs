@@ -57,6 +57,10 @@ namespace RNAssistant.Core.Storage
             {
                 settings.ModelCapabilities = new Dictionary<string, ModelCapabilitySettings>(StringComparer.OrdinalIgnoreCase);
             }
+            if (settings.TokenEstimateCalibrations == null)
+            {
+                settings.TokenEstimateCalibrations = new Dictionary<string, TokenEstimateCalibrationSettings>(StringComparer.OrdinalIgnoreCase);
+            }
             if (settings.HtmlNetworkAllowedOrigins == null)
             {
                 settings.HtmlNetworkAllowedOrigins = new List<string>();
@@ -120,6 +124,51 @@ namespace RNAssistant.Core.Storage
             {
                 settings.ContextWindowOverrideTokens = 0;
             }
+            if (settings.TokenEstimateMultiplier <= 0 ||
+                double.IsNaN(settings.TokenEstimateMultiplier) ||
+                double.IsInfinity(settings.TokenEstimateMultiplier))
+            {
+                settings.TokenEstimateMultiplier = defaults.TokenEstimateMultiplier;
+            }
+            settings.TokenEstimateMultiplier = Math.Max(
+                AppSettings.MinimumTokenEstimateMultiplier,
+                Math.Min(AppSettings.MaximumTokenEstimateMultiplier, settings.TokenEstimateMultiplier));
+            foreach (var key in settings.TokenEstimateCalibrations.Keys.ToList())
+            {
+                var calibration = settings.TokenEstimateCalibrations[key];
+                if (string.IsNullOrWhiteSpace(key) || calibration == null)
+                {
+                    settings.TokenEstimateCalibrations.Remove(key);
+                    continue;
+                }
+                if (calibration.Multiplier <= 0 ||
+                    double.IsNaN(calibration.Multiplier) ||
+                    double.IsInfinity(calibration.Multiplier))
+                {
+                    calibration.Multiplier = 1.0;
+                }
+                calibration.Multiplier = Math.Max(
+                    AppSettings.MinimumTokenEstimateMultiplier,
+                    Math.Min(AppSettings.MaximumTokenEstimateMultiplier, calibration.Multiplier));
+                if (calibration.InterceptTokens < 0 ||
+                    double.IsNaN(calibration.InterceptTokens) ||
+                    double.IsInfinity(calibration.InterceptTokens))
+                {
+                    calibration.InterceptTokens = 0;
+                }
+                calibration.InterceptTokens = Math.Min(
+                    AppSettings.MaximumTokenEstimateInterceptTokens,
+                    calibration.InterceptTokens);
+                calibration.SampleCount = Math.Max(0, calibration.SampleCount);
+                calibration.FitSampleCount = Math.Max(0, Math.Min(calibration.SampleCount, calibration.FitSampleCount));
+                calibration.MeanBasePromptTokens = NormalizeCalibrationStatistic(calibration.MeanBasePromptTokens);
+                calibration.MeanActualPromptTokens = NormalizeCalibrationStatistic(calibration.MeanActualPromptTokens);
+                calibration.BasePromptTokenM2 = NormalizeCalibrationStatistic(calibration.BasePromptTokenM2);
+                calibration.BaseActualPromptC2 = NormalizeCalibrationStatistic(calibration.BaseActualPromptC2, true);
+                calibration.LastBaseEstimatedPromptTokens = Math.Max(0, calibration.LastBaseEstimatedPromptTokens);
+                calibration.LastEstimatedPromptTokens = Math.Max(0, calibration.LastEstimatedPromptTokens);
+                calibration.LastActualPromptTokens = Math.Max(0, calibration.LastActualPromptTokens);
+            }
             if (settings.MaxAgentIterations <= 0)
             {
                 settings.MaxAgentIterations = defaults.MaxAgentIterations;
@@ -154,6 +203,15 @@ namespace RNAssistant.Core.Storage
         private static string DefaultIfBlank(string value, string fallback)
         {
             return string.IsNullOrWhiteSpace(value) ? fallback : value;
+        }
+
+        private static double NormalizeCalibrationStatistic(double value, bool allowNegative = false)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || !allowNegative && value < 0)
+            {
+                return 0;
+            }
+            return value;
         }
 
         private static string NormalizeBaseUrl(string baseUrl)

@@ -11,7 +11,7 @@ namespace RNAssistant.Office.Services
 {
     internal static class ChatArtifactService
     {
-        public static string BuildPromptIndex(ChatSession session, int maxTokens)
+        public static string BuildPromptIndex(ChatSession session, int maxTokens, AppSettings settings = null)
         {
             var artifacts = session == null || session.Artifacts == null
                 ? new List<ChatArtifact>()
@@ -23,7 +23,7 @@ namespace RNAssistant.Office.Services
             if (!string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId)) builder.AppendLine("activeHtml: " + session.ActiveHtmlArtifactId);
             if (!string.IsNullOrWhiteSpace(session.ActivePlanArtifactId)) builder.AppendLine("activePlan: " + session.ActivePlanArtifactId);
             if (!string.IsNullOrWhiteSpace(session.ActiveContextCheckpointId)) builder.AppendLine("activeContextCheckpoint: " + session.ActiveContextCheckpointId);
-            var used = ModelContextBudget.EstimateTextTokens(builder.ToString());
+            var used = ModelContextBudget.EstimateTextTokens(builder.ToString(), settings);
             foreach (var artifact in artifacts
                 .OrderByDescending(item => string.Equals(item.Id, session.ActiveHtmlArtifactId, StringComparison.OrdinalIgnoreCase))
                 .ThenByDescending(item => string.Equals(item.Id, session.ActivePlanArtifactId, StringComparison.OrdinalIgnoreCase))
@@ -37,10 +37,10 @@ namespace RNAssistant.Office.Services
                     " | policy=" + (artifact.ModelContextPolicy ?? "reference");
                 var remaining = maxTokens - used;
                 if (remaining <= 0) break;
-                var selected = ModelContextBudget.TruncateText(line, remaining);
+                var selected = ModelContextBudget.TruncateText(line, remaining, settings);
                 if (string.IsNullOrWhiteSpace(selected)) break;
                 builder.AppendLine(selected);
-                used += ModelContextBudget.EstimateTextTokens(selected);
+                used += ModelContextBudget.EstimateTextTokens(selected, settings);
                 if (selected.Length < line.Length)
                 {
                     builder.AppendLine("[artifact index truncated]");

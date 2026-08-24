@@ -261,6 +261,24 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("estimated")]
         public bool Estimated { get; set; }
 
+        [JsonProperty("estimateMultiplier")]
+        public double EstimateMultiplier { get; set; }
+
+        [JsonProperty("estimateInterceptTokens")]
+        public int EstimateInterceptTokens { get; set; }
+
+        [JsonProperty("manualEstimateMultiplier")]
+        public double ManualEstimateMultiplier { get; set; }
+
+        [JsonProperty("autoCalibrateEstimate")]
+        public bool AutoCalibrateEstimate { get; set; }
+
+        [JsonProperty("calibrationSamples")]
+        public int CalibrationSamples { get; set; }
+
+        [JsonProperty("estimateMethod")]
+        public string EstimateMethod { get; set; }
+
         [JsonProperty("lastPromptTokens")]
         public int? LastPromptTokens { get; set; }
 

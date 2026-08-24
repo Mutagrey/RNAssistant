@@ -26,13 +26,21 @@ namespace RNAssistant.Office
             using (ReserveChatOperation(session))
             {
                 session = ReloadReservedSession(session);
-                await _contextCompactionService.EnsureWithinBudgetAsync(
-                    session,
-                    ResolveChatSettings(session),
-                    string.Empty,
-                    true,
-                    progress,
-                    cancellationToken).ConfigureAwait(false);
+                var settings = ResolveChatSettings(session);
+                try
+                {
+                    await _contextCompactionService.EnsureWithinBudgetAsync(
+                        session,
+                        settings,
+                        string.Empty,
+                        true,
+                        progress,
+                        cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    PersistTokenEstimateCalibration(settings);
+                }
                 SaveSessionChanges(session);
             }
             return ChatState(session);

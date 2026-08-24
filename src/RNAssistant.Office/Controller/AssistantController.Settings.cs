@@ -49,5 +49,28 @@ namespace RNAssistant.Office
 
             return GetSettings();
         }
+
+        private void PersistTokenEstimateCalibration(AppSettings source)
+        {
+            if (source == null || !source.AutoCalibrateTokenEstimate)
+            {
+                return;
+            }
+            try
+            {
+                lock (_syncRoot)
+                {
+                    var stored = _settingsService.Load();
+                    if (TokenEstimateCalibration.MergeModel(stored, source, source.Model))
+                    {
+                        _settingsService.Save(stored);
+                    }
+                }
+            }
+            catch
+            {
+                // Calibration is best-effort and must never fail a chat turn.
+            }
+        }
     }
 }

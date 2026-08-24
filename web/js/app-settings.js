@@ -9,6 +9,8 @@ var modelSettingsDefaults = {
   temperature: 0.2,
   topP: 1,
   contextWindowOverrideTokens: 0,
+  tokenEstimateMultiplier: 1,
+  autoCalibrateTokenEstimate: true,
   streamResponses: true
 };
 
@@ -77,6 +79,40 @@ function updateAgentProtocolControls() {
   var visible = $("agentResponseModeInput").value === "json_schema";
   field.classList.toggle("hidden", !visible);
   field.setAttribute("aria-hidden", visible ? "false" : "true");
+}
+
+function tokenEstimateCalibrationFor(settings, model) {
+  var calibrations = compatibilityValue(settings, "TokenEstimateCalibrations", "tokenEstimateCalibrations", {}) || {};
+  var target = String(model || "").toLowerCase();
+  var key = Object.keys(calibrations).filter(function (item) {
+    return String(item || "").toLowerCase() === target;
+  })[0];
+  return key ? calibrations[key] : null;
+}
+
+function renderTokenEstimateCalibrationStatus(settings) {
+  var status = $("tokenEstimateCalibrationStatus");
+  if (!status) return;
+  settings = settings || state.settings || {};
+  var manual = Number($("tokenEstimateMultiplierInput").value || modelSettingsDefaults.tokenEstimateMultiplier);
+  var automatic = $("autoCalibrateTokenEstimateInput").checked;
+  var model = $("modelInput").value.trim() || settings.Model || settings.model || "";
+  var calibration = tokenEstimateCalibrationFor(settings, model);
+  var relative = Number(compatibilityValue(calibration, "Multiplier", "multiplier", 1) || 1);
+  var intercept = Number(compatibilityValue(calibration, "InterceptTokens", "interceptTokens", 0) || 0);
+  var samples = Number(compatibilityValue(calibration, "SampleCount", "sampleCount", 0) || 0);
+  var effective = Math.max(0.25, Math.min(4, automatic && samples > 0 ? relative : manual));
+  if (automatic && samples > 0) {
+    var estimated = Number(compatibilityValue(calibration, "LastEstimatedPromptTokens", "lastEstimatedPromptTokens", 0) || 0);
+    var actual = Number(compatibilityValue(calibration, "LastActualPromptTokens", "lastActualPromptTokens", 0) || 0);
+    status.textContent = "Авто: ×" + effective.toFixed(2).replace(".", ",") +
+      (intercept > 0 ? " + " + formatNumber(Math.ceil(intercept)) : "") + " · " + samples +
+      " API usage" +
+      (estimated && actual ? " · последнее: ≈" + formatNumber(estimated) + " → " + formatNumber(actual) : "");
+    return;
+  }
+  status.textContent = "×" + effective.toFixed(2).replace(".", ",") + " · UTF-8/4" +
+    (automatic ? " · авто после первого API usage" : "");
 }
 
 function readReasoningCustomJson(mode) {
@@ -153,6 +189,9 @@ function renderSettings() {
     input.checked = input.value === uiTheme;
   });
   $("contextLimitInput").value = compatibilityValue(s, "ContextWindowOverrideTokens", "contextWindowOverrideTokens", modelSettingsDefaults.contextWindowOverrideTokens);
+  $("tokenEstimateMultiplierInput").value = compatibilityValue(s, "TokenEstimateMultiplier", "tokenEstimateMultiplier", modelSettingsDefaults.tokenEstimateMultiplier);
+  $("autoCalibrateTokenEstimateInput").checked = compatibilityValue(s, "AutoCalibrateTokenEstimate", "autoCalibrateTokenEstimate", modelSettingsDefaults.autoCalibrateTokenEstimate) !== false;
+  renderTokenEstimateCalibrationStatus(s);
   $("streamInput").checked = compatibilityValue(s, "StreamResponses", "streamResponses", modelSettingsDefaults.streamResponses) !== false;
   $("autoConfirmToolsInput").checked = compatibilityValue(s, "AutoConfirmToolActions", "autoConfirmToolActions", agentSettingsDefaults.autoConfirmToolActions) === true;
   $("autoCompressContextInput").checked = compatibilityValue(s, "AutoCompressContext", "autoCompressContext", agentSettingsDefaults.autoCompressContext) !== false;
@@ -202,6 +241,9 @@ function readSettings() {
     UiFontScale: clampUiFontScale(Number($("uiFontScaleInput").value || 100) / 100),
     UiTheme: normalizeUiTheme((document.querySelector('input[name="uiTheme"]:checked') || {}).value),
     ContextWindowOverrideTokens: Number($("contextLimitInput").value || 0),
+    TokenEstimateMultiplier: Number($("tokenEstimateMultiplierInput").value || modelSettingsDefaults.tokenEstimateMultiplier),
+    AutoCalibrateTokenEstimate: $("autoCalibrateTokenEstimateInput").checked,
+    TokenEstimateCalibrations: compatibilityValue(state.settings, "TokenEstimateCalibrations", "tokenEstimateCalibrations", {}) || {},
     StreamResponses: $("streamInput").checked,
     AutoConfirmToolActions: $("autoConfirmToolsInput").checked,
     AutoCompressContext: $("autoCompressContextInput").checked,
@@ -263,9 +305,13 @@ function resetModelSettingsToDefaults() {
   $("temperatureInput").value = modelSettingsDefaults.temperature;
   $("topPInput").value = modelSettingsDefaults.topP;
   $("contextLimitInput").value = modelSettingsDefaults.contextWindowOverrideTokens;
+  $("tokenEstimateMultiplierInput").value = modelSettingsDefaults.tokenEstimateMultiplier;
+  $("autoCalibrateTokenEstimateInput").checked = modelSettingsDefaults.autoCalibrateTokenEstimate;
+  settings.TokenEstimateCalibrations = {};
   $("streamInput").checked = modelSettingsDefaults.streamResponses;
   updateReasoningCustomJsonVisibility();
   renderModelControls();
+  renderTokenEstimateCalibrationStatus(settings);
   markSettingsDirty();
 }
 
@@ -352,6 +398,15 @@ function bindSettingsActions() {
 
   $("reasoningRequestModeInput").addEventListener("change", updateReasoningCustomJsonVisibility);
   $("agentResponseModeInput").addEventListener("change", updateAgentProtocolControls);
+  $("tokenEstimateMultiplierInput").addEventListener("input", function () {
+    renderTokenEstimateCalibrationStatus(state.settings);
+  });
+  $("autoCalibrateTokenEstimateInput").addEventListener("change", function () {
+    renderTokenEstimateCalibrationStatus(state.settings);
+  });
+  $("modelInput").addEventListener("input", function () {
+    renderTokenEstimateCalibrationStatus(state.settings);
+  });
   $("resetModelSettingsButton").addEventListener("click", resetModelSettingsToDefaults);
   $("resetAgentSettingsButton").addEventListener("click", resetAgentSettingsToDefaults);
 

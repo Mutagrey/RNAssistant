@@ -34,7 +34,11 @@ namespace RNAssistant.Office
                     Title = string.IsNullOrWhiteSpace(title) ? "Context" : title.Trim(),
                     Reference = string.IsNullOrWhiteSpace(reference) ? title : reference.Trim(),
                     Source = string.IsNullOrWhiteSpace(reference) ? title : reference.Trim(),
-                    Text = ContextNormalizer.TrimForContext(text ?? string.Empty, ModelContextBudget.InputBudgetTokens(settings) * 3),
+                    Text = ContextNormalizer.TrimForContext(
+                        text ?? string.Empty,
+                        ModelContextBudget.ApproximateTextCharacterCapacity(
+                            ModelContextBudget.InputBudgetTokens(settings),
+                            settings)),
                     Preview = ContextNormalizer.TrimForContext(text ?? string.Empty, 360),
                     DetailsJson = detailsJson
                 }, kind);
@@ -56,7 +60,11 @@ namespace RNAssistant.Office
                 catch
                 {
                 }
-                var note = _adapter.CaptureSelectionContext(mode, ModelContextBudget.InputBudgetTokens(settings) * 3);
+                var note = _adapter.CaptureSelectionContext(
+                    mode,
+                    ModelContextBudget.ApproximateTextCharacterCapacity(
+                        ModelContextBudget.InputBudgetTokens(settings),
+                        settings));
                 if (note == null)
                 {
                     throw new InvalidOperationException("No selectable Office context was found.");

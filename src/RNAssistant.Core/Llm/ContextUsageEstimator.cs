@@ -22,6 +22,8 @@ namespace RNAssistant.Core.Llm
             var limit = ModelContextBudget.InputBudgetTokens(settings);
             var usedChars = 0;
             var estimatedTokens = 0;
+            var baseEstimatedTokens = 0;
+            var hasMedia = false;
             var count = 0;
             if (promptMessages != null)
             {
@@ -33,20 +35,33 @@ namespace RNAssistant.Core.Llm
                     }
 
                     usedChars += (message.Content ?? string.Empty).Length;
-                    estimatedTokens += ModelContextBudget.EstimateMessageTokens(message, false);
+                    estimatedTokens += ModelContextBudget.EstimateMessageTokens(message, settings, null, false);
+                    baseEstimatedTokens += ModelContextBudget.EstimateMessageTokens(message, null, null, false);
                     foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
                     {
                         if (attachment == null) continue;
+                        hasMedia = hasMedia ||
+                            string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase);
                         usedChars += attachment.ExtractedCharCount > 0
                             ? attachment.ExtractedCharCount
                             : (attachment.ExtractedText ?? string.Empty).Length;
-                        estimatedTokens += Math.Max(attachment.ExtractedCharCount, (attachment.ExtractedText ?? string.Empty).Length) / 2;
+                        estimatedTokens += ModelContextBudget.EstimateCharacterCountTokens(
+                            Math.Max(attachment.ExtractedCharCount, (attachment.ExtractedText ?? string.Empty).Length),
+                            settings);
+                        baseEstimatedTokens += ModelContextBudget.EstimateCharacterCountTokens(
+                            Math.Max(attachment.ExtractedCharCount, (attachment.ExtractedText ?? string.Empty).Length),
+                            null);
                     }
                     count += 1;
                 }
             }
 
-            estimatedTokens += ModelContextBudget.EstimateRequestOptionsTokens(requestOptions);
+            var baseOptionsTokens = ModelContextBudget.EstimateRequestOptionsTokens(requestOptions);
+            estimatedTokens = hasMedia
+                ? TokenEstimateCalibration.AddPromptIntercept(settings, estimatedTokens) +
+                    ModelContextBudget.EstimateRequestOptionsTokens(requestOptions, settings)
+                : TokenEstimateCalibration.PredictPromptTokens(settings, baseEstimatedTokens + baseOptionsTokens);
             return Usage(usedChars, actualPromptTokens ?? estimatedTokens, limit, count, actualPromptTokens.HasValue, settings);
         }
 
@@ -55,6 +70,8 @@ namespace RNAssistant.Core.Llm
             var limit = ModelContextBudget.InputBudgetTokens(settings);
             var usedChars = 0;
             var usedTokens = 0;
+            var baseTokens = 0;
+            var hasMedia = false;
             var count = 0;
             if (session != null && session.Messages != null)
             {
@@ -66,7 +83,8 @@ namespace RNAssistant.Core.Llm
                 if (checkpoint != null)
                 {
                     usedChars += (checkpoint.SummaryMarkdown ?? string.Empty).Length;
-                    usedTokens += ModelContextBudget.EstimateTextTokens(checkpoint.SummaryMarkdown);
+                    usedTokens += ModelContextBudget.EstimateTextTokens(checkpoint.SummaryMarkdown, settings);
+                    baseTokens += ModelContextBudget.EstimateTextTokens(checkpoint.SummaryMarkdown);
                     count += 1;
                     var throughIndex = session.Messages.FindIndex(message => message != null &&
                         string.Equals(message.Id, checkpoint.ThroughMessageId, StringComparison.OrdinalIgnoreCase));
@@ -76,7 +94,9 @@ namespace RNAssistant.Core.Llm
                 {
                     var protocolTool = message != null && message.ProtocolMessage &&
                         (string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase));
+                         string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(message.Role, "developer", StringComparison.OrdinalIgnoreCase));
                     if (message == null || message.ExcludeFromModelContext || message.Activity != null ||
                         !protocolTool && (string.IsNullOrWhiteSpace(message.Content) ||
                         (!string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) &&
@@ -86,20 +106,23 @@ namespace RNAssistant.Core.Llm
                     }
 
                     usedChars += (message.Content ?? string.Empty).Length;
-                    usedTokens += 4 +
-                        ModelContextBudget.EstimateTextTokens(message.Role) +
-                        ModelContextBudget.EstimateTextTokens(message.Content);
+                    usedTokens += ModelContextBudget.EstimateMessageTokens(message, settings, null, false);
+                    baseTokens += ModelContextBudget.EstimateMessageTokens(message, null, null, false);
                     foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
                     {
                         if (attachment == null)
                         {
                             continue;
                         }
+                        hasMedia = hasMedia ||
+                            string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase);
                         var extractedChars = Math.Max(
                             attachment.ExtractedCharCount,
                             (attachment.ExtractedText ?? string.Empty).Length);
                         usedChars += extractedChars;
-                        usedTokens += extractedChars / 2;
+                        usedTokens += ModelContextBudget.EstimateCharacterCountTokens(extractedChars, settings);
+                        baseTokens += ModelContextBudget.EstimateCharacterCountTokens(extractedChars, null);
                     }
                     count += 1;
                 }
@@ -123,10 +146,14 @@ namespace RNAssistant.Core.Llm
                         continue;
                     }
                     usedChars += text.Length;
-                    usedTokens += ModelContextBudget.EstimateTextTokens(text);
+                    usedTokens += ModelContextBudget.EstimateTextTokens(text, settings);
+                    baseTokens += ModelContextBudget.EstimateTextTokens(text);
                 }
             }
 
+            usedTokens = hasMedia
+                ? TokenEstimateCalibration.AddPromptIntercept(settings, usedTokens)
+                : TokenEstimateCalibration.PredictPromptTokens(settings, baseTokens);
             return Usage(usedChars, usedTokens, limit, count, false, settings);
         }
 
@@ -136,6 +163,7 @@ namespace RNAssistant.Core.Llm
             var safetyTokens = ModelContextBudget.SafetyReserveTokens(contextWindowTokens);
             var reservedOutputTokens = Math.Max(1, contextWindowTokens - safetyTokens - limitTokens);
             var availableOutputTokens = Math.Max(0, contextWindowTokens - safetyTokens - usedTokens);
+            var calibration = TokenEstimateCalibration.Get(settings);
             return new
             {
                 usedChars = usedChars,
@@ -149,7 +177,22 @@ namespace RNAssistant.Core.Llm
                 reservedOutputTokens = reservedOutputTokens,
                 maxOutputTokens = ModelContextBudget.RequestedOutputTokens(settings),
                 safetyTokens = safetyTokens,
-                availableOutputTokens = availableOutputTokens
+                availableOutputTokens = availableOutputTokens,
+                estimateMultiplier = TokenEstimateCalibration.EffectiveMultiplier(settings),
+                estimateInterceptTokens = TokenEstimateCalibration.EffectiveInterceptTokens(settings),
+                calibrationSamples = TokenEstimateCalibration.SampleCount(settings),
+                calibrationMultiplier = calibration == null ? 1.0 : calibration.Multiplier,
+                calibrationInterceptTokens = calibration == null ? 0 : calibration.InterceptTokens,
+                calibrationLastEstimatedPromptTokens = calibration == null ? 0 : calibration.LastEstimatedPromptTokens,
+                calibrationLastActualPromptTokens = calibration == null ? 0 : calibration.LastActualPromptTokens,
+                calibrationUpdatedUtc = calibration == null ? null : (DateTime?)calibration.UpdatedUtc,
+                calibrationProfile = calibration == null ? null : calibration.Clone(),
+                estimateMethod = "utf8_bytes_div_4_linear_calibrated",
+                estimateModel = settings == null ? string.Empty : settings.Model ?? string.Empty,
+                manualEstimateMultiplier = settings == null || settings.TokenEstimateMultiplier <= 0
+                    ? AppSettings.DefaultTokenEstimateMultiplier
+                    : settings.TokenEstimateMultiplier,
+                autoCalibrateEstimate = settings != null && settings.AutoCalibrateTokenEstimate
             };
         }
     }

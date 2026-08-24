@@ -29,8 +29,11 @@ namespace RNAssistant.Office.Services
             }
 
             var budget = ModelContextBudget.InputBudgetTokens(settings);
-            var currentText = BuildCurrentText(userText, context, Math.Max(256, budget / 3));
-            var artifactIndex = ChatArtifactService.BuildPromptIndex(session, Math.Max(256, Math.Min(2000, budget / 10)));
+            var currentText = BuildCurrentText(userText, context, Math.Max(256, budget / 3), settings);
+            var artifactIndex = ChatArtifactService.BuildPromptIndex(
+                session,
+                Math.Max(256, Math.Min(2000, budget / 10)),
+                settings);
             if (!string.IsNullOrWhiteSpace(artifactIndex)) currentText += "\n\n" + artifactIndex;
             if (string.Equals(instructionRole, "user", StringComparison.Ordinal))
             {
@@ -63,7 +66,11 @@ namespace RNAssistant.Office.Services
             return "user";
         }
 
-        private static string BuildCurrentText(string userText, DocumentContext context, int contextBudgetTokens)
+        private static string BuildCurrentText(
+            string userText,
+            DocumentContext context,
+            int contextBudgetTokens,
+            AppSettings settings)
         {
             var builder = new StringBuilder();
             builder.Append(userText ?? string.Empty);
@@ -97,10 +104,9 @@ namespace RNAssistant.Office.Services
                     builder.AppendLine("[additional context omitted by token budget]");
                     break;
                 }
-                if (ModelContextBudget.EstimateTextTokens(line) > remaining)
+                if (ModelContextBudget.EstimateTextTokens(line, settings) > remaining)
                 {
-                    var maxChars = Math.Max(0, remaining * 2);
-                    line = line.Substring(0, Math.Min(line.Length, maxChars)) + "\n[context truncated]";
+                    line = ModelContextBudget.TruncateText(line, remaining, settings) + "\n[context truncated]";
                 }
                 if (!wroteHeader)
                 {
@@ -110,7 +116,7 @@ namespace RNAssistant.Office.Services
                     wroteHeader = true;
                 }
                 builder.AppendLine(line);
-                usedTokens += ModelContextBudget.EstimateTextTokens(line);
+                usedTokens += ModelContextBudget.EstimateTextTokens(line, settings);
             }
             return builder.ToString();
         }

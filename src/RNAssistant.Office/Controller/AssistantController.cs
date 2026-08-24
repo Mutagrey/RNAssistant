@@ -99,17 +99,39 @@ namespace RNAssistant.Office
                     ModelAttachmentService.ReadForModel(_attachmentStore, settings, attachment, maxImages, cancellationToken),
                 RuntimeLog.Debug,
                 ReportModelRequestDiagnostics);
-            LlmCompletionDelegate completion;
+            LlmCompletionDelegate rawCompletion;
             if (completeAsync == null)
             {
-                completion = (settings, messages, requestOptions, streamProgress, cancellationToken) =>
+                rawCompletion = (settings, messages, requestOptions, streamProgress, cancellationToken) =>
                     _llmClient.CompleteAsync(settings, messages, requestOptions, streamProgress, cancellationToken);
             }
             else
             {
-                completion = (settings, messages, requestOptions, streamProgress, cancellationToken) =>
+                rawCompletion = (settings, messages, requestOptions, streamProgress, cancellationToken) =>
                     completeAsync(settings, messages, cancellationToken);
             }
+            LlmCompletionDelegate completion = async (settings, messages, requestOptions, streamProgress, cancellationToken) =>
+            {
+                var result = await rawCompletion(
+                    settings,
+                    messages,
+                    requestOptions,
+                    streamProgress,
+                    cancellationToken).ConfigureAwait(false);
+                if (result != null && result.TokenEstimateCalibrationEligible &&
+                    result.BaseEstimatedPromptTokens.GetValueOrDefault() > 0 &&
+                    result.EstimatedPromptTokens.GetValueOrDefault() > 0 &&
+                    result.PromptTokens.GetValueOrDefault() > 0)
+                {
+                    TokenEstimateCalibration.Observe(
+                        settings,
+                        settings == null ? null : settings.Model,
+                        result.BaseEstimatedPromptTokens.Value,
+                        result.EstimatedPromptTokens.Value,
+                        result.PromptTokens.Value);
+                }
+                return result;
+            };
             _llmCompletion = completion;
             _contextCompactionService = new ContextCompactionService(
                 completion,
@@ -694,6 +716,7 @@ namespace RNAssistant.Office
                 }
                 catch (Exception ex)
                 {
+                    PersistTokenEstimateCalibration(settings);
                     CloseRunningActivities(session, firstRunMessageIndex, ex is OperationCanceledException);
                     RecordFailedTurn(session, ex);
                     if (session.LastRun != null)
@@ -710,6 +733,7 @@ namespace RNAssistant.Office
                     throw;
                 }
 
+                PersistTokenEstimateCalibration(settings);
                 if (settings.SmartChatTitles == false)
                 {
                     ChatTitleBuilder.ApplyFallback(session, text, completion.AssistantText);

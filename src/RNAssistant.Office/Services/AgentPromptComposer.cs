@@ -26,7 +26,7 @@ namespace RNAssistant.Office.Services
             var instruction = string.IsNullOrWhiteSpace(settings.SystemPrompt)
                 ? new AppSettings().SystemPrompt
                 : settings.SystemPrompt.Trim();
-            var runtimeContext = BuildRuntimeContext(adapter, tools, skills, context, session);
+            var runtimeContext = BuildRuntimeContext(adapter, tools, skills, context, session, settings);
             var role = NormalizeInstructionRole(settings.SystemPromptRole);
             var messages = new List<ChatMessage>();
             if (!string.Equals(role, "user", StringComparison.Ordinal))
@@ -88,7 +88,8 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<ToolDefinition> tools,
             IReadOnlyList<SkillDefinition> skills,
             DocumentContext context,
-            ChatSession session)
+            ChatSession session,
+            AppSettings settings = null)
         {
             var root = new JObject
             {
@@ -102,7 +103,7 @@ namespace RNAssistant.Office.Services
                 ["skills"] = BuildSkills(skills),
                 ["user_context"] = BuildUserContext(context)
             };
-            var artifacts = ChatArtifactService.BuildPromptIndex(session, 2000);
+            var artifacts = ChatArtifactService.BuildPromptIndex(session, 2000, settings);
             if (!string.IsNullOrWhiteSpace(artifacts)) root["artifacts"] = artifacts;
             return root.ToString(Formatting.None);
         }

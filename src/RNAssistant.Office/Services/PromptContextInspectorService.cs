@@ -21,6 +21,7 @@ namespace RNAssistant.Office.Services
 
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly AppDataPaths _paths;
+        private AppSettings _estimationSettings;
 
         public PromptContextInspectorService(IOfficeApplicationAdapter adapter, AppDataPaths paths)
         {
@@ -39,6 +40,7 @@ namespace RNAssistant.Office.Services
             bool includeRaw)
         {
             settings = settings ?? new AppSettings();
+            _estimationSettings = settings;
             session = session ?? new ChatSession();
             attachments = attachments ?? new ChatAttachment[0];
             draftText = draftText ?? string.Empty;
@@ -82,8 +84,8 @@ namespace RNAssistant.Office.Services
                     previewSession,
                     null)
                 : null;
-            var usedTokens = ModelContextBudget.EstimateMessagesTokens(messages) +
-                ModelContextBudget.EstimateRequestOptionsTokens(options);
+            var usedTokens = EstimateMessagesTokens(messages) +
+                EstimateRequestOptionsTokens(options);
             var inputLimit = ModelContextBudget.InputBudgetTokens(settings);
             var contextWindow = Math.Max(4096, ModelContextBudget.ContextWindowTokens(settings));
             var safety = ModelContextBudget.SafetyReserveTokens(contextWindow);
@@ -106,6 +108,18 @@ namespace RNAssistant.Office.Services
                 .Where(item => item != null && item.PromptTokens.HasValue)
                 .OrderByDescending(item => item.CreatedUtc)
                 .FirstOrDefault();
+            var estimateMultiplier = TokenEstimateCalibration.EffectiveMultiplier(settings);
+            var estimateIntercept = TokenEstimateCalibration.EffectiveInterceptTokens(settings);
+            var calibrationSamples = settings.AutoCalibrateTokenEstimate
+                ? TokenEstimateCalibration.SampleCount(settings)
+                : 0;
+            var estimateNotice = calibrationSamples > 0
+                ? "≈ уточнено по " + calibrationSamples + " API usage для этой модели."
+                : "≈ рассчитано по UTF-8 объёму.";
+            if (mode == ChatModes.Agent)
+            {
+                estimateNotice += " Даже пустой чат включает system prompt, схемы tools и каталог skills.";
+            }
 
             var response = new PromptContextInspectorResponse
             {
@@ -123,12 +137,20 @@ namespace RNAssistant.Office.Services
                 MessageCount = messages.Count,
                 OverBudget = relaxed || usedTokens > inputLimit,
                 Estimated = true,
+                EstimateMultiplier = estimateMultiplier,
+                EstimateInterceptTokens = estimateIntercept,
+                ManualEstimateMultiplier = settings.TokenEstimateMultiplier <= 0
+                    ? AppSettings.DefaultTokenEstimateMultiplier
+                    : settings.TokenEstimateMultiplier,
+                AutoCalibrateEstimate = settings.AutoCalibrateTokenEstimate,
+                CalibrationSamples = calibrationSamples,
+                EstimateMethod = "utf8_bytes_div_4_linear_calibrated",
                 LastPromptTokens = lastUsage == null ? null : lastUsage.PromptTokens,
                 LastPromptUtc = lastUsage == null ? null : (DateTime?)lastUsage.CreatedUtc,
                 LastRunId = lastUsage == null ? string.Empty : lastUsage.RunId ?? string.Empty,
                 Notice = relaxed || usedTokens > inputLimit
-                    ? "Текущий состав превышает лимит. Перед реальным запросом потребуется сжатие контекста."
-                    : "Снимок рассчитан по текущему состоянию и обновляется только вручную.",
+                    ? "Оценочный состав превышает лимит. Перед реальным запросом потребуется сжатие контекста. " + estimateNotice
+                    : estimateNotice + " Снимок обновляется только вручную.",
                 Sections = sections,
                 GeneratedUtc = DateTime.UtcNow
             };
@@ -196,10 +218,10 @@ namespace RNAssistant.Office.Services
         {
             var sections = new List<PromptContextSectionDto>();
             var current = messages == null || messages.Count == 0 ? null : messages[messages.Count - 1];
-            var currentTokens = ModelContextBudget.EstimateMessageTokens(current);
+            var currentTokens = EstimateMessageTokens(current);
             var hasStandaloneInstruction = messages != null && messages.Count > 1 && IsInstructionRole(messages[0].Role);
             var instructionMessageTokens = hasStandaloneInstruction
-                ? ModelContextBudget.EstimateMessageTokens(messages[0])
+                ? EstimateMessageTokens(messages[0])
                 : 0;
 
             string instruction;
@@ -210,7 +232,13 @@ namespace RNAssistant.Office.Services
                 instruction = string.IsNullOrWhiteSpace(settings.SystemPrompt)
                     ? new AppSettings().SystemPrompt
                     : settings.SystemPrompt.Trim();
-                runtimeJson = AgentPromptComposer.BuildRuntimeContext(_adapter, tools, skills, context, previewSession);
+                runtimeJson = AgentPromptComposer.BuildRuntimeContext(
+                    _adapter,
+                    tools,
+                    skills,
+                    context,
+                    previewSession,
+                    settings);
                 instructionEnvelope = instruction + "\n\nRUNTIME_CONTEXT:\n" + runtimeJson;
             }
             else
@@ -223,7 +251,7 @@ namespace RNAssistant.Office.Services
 
             var embeddedInstructionTokens = hasStandaloneInstruction || current == null
                 ? 0
-                : Math.Min(currentTokens, ModelContextBudget.EstimateTextTokens(instructionEnvelope));
+                : Math.Min(currentTokens, EstimateTextTokens(instructionEnvelope));
             var runtimeBudget = hasStandaloneInstruction ? instructionMessageTokens : embeddedInstructionTokens;
             if (mode == ChatModes.Agent)
             {
@@ -241,12 +269,12 @@ namespace RNAssistant.Office.Services
                         Id = "instructions",
                         Title = "Инструкции",
                         Detail = "Chat system prompt",
-                        RawTokens = Math.Max(1, ModelContextBudget.EstimateTextTokens(instruction)),
+                        RawTokens = Math.Max(1, EstimateTextTokens(instruction)),
                         Count = 1,
                         Items = new List<PromptContextItemDto>
                         {
                             Item("chat-system-prompt", "instruction", "Chat system prompt", string.Empty,
-                                ModelContextBudget.EstimateTextTokens(instruction), instruction)
+                                EstimateTextTokens(instruction), instruction)
                         }
                     }
                 }, runtimeBudget);
@@ -284,7 +312,7 @@ namespace RNAssistant.Office.Services
                     draftText), currentBudget);
             }
 
-            var optionsTokens = ModelContextBudget.EstimateRequestOptionsTokens(options);
+            var optionsTokens = EstimateRequestOptionsTokens(options);
             if (optionsTokens > 0)
             {
                 var schema = options == null ? string.Empty : options.ResponseSchemaJson ?? string.Empty;
@@ -299,17 +327,36 @@ namespace RNAssistant.Office.Services
                     Items = BoundItems(new List<PromptContextItemDto>
                     {
                         Item("response-format", "format", options == null ? "response format" : options.ResponseFormat,
-                            string.Empty, ModelContextBudget.EstimateTextTokens(options == null ? string.Empty : options.ResponseFormat),
+                            string.Empty, EstimateTextTokens(options == null ? string.Empty : options.ResponseFormat),
                             options == null ? string.Empty : options.ResponseFormat),
                         string.IsNullOrWhiteSpace(schema) ? null : Item(
                             "response-schema", "schema", options.ResponseSchemaName ?? "response schema", string.Empty,
-                            ModelContextBudget.EstimateTextTokens(schema), schema)
+                            EstimateTextTokens(schema), schema)
                     }.Where(item => item != null).ToList(), optionsTokens)
                 });
             }
 
             var excluded = BuildExcludedSection(sourceSession, previewSession, mode == ChatModes.Agent);
             if (excluded != null) sections.Add(excluded);
+
+            var estimateIntercept = TokenEstimateCalibration.EffectiveInterceptTokens(settings);
+            if (estimateIntercept > 0)
+            {
+                sections.Add(new PromptContextSectionDto
+                {
+                    Id = "estimate_overhead",
+                    Title = "Overhead модели",
+                    Tokens = estimateIntercept,
+                    Count = 1,
+                    Detail = "Линейная калибровка по API usage",
+                    Included = true,
+                    Items = new List<PromptContextItemDto>
+                    {
+                        Item("estimate-intercept", "estimate", "Постоянная поправка", string.Empty,
+                            estimateIntercept, "Не отдельный текст запроса; поправка модели по прошлым usage.")
+                    }
+                });
+            }
 
             var included = sections.Where(section => section.Included).OrderByDescending(section => section.Tokens).ToList();
             var difference = usedTokens - included.Sum(section => section.Tokens);
@@ -336,9 +383,9 @@ namespace RNAssistant.Office.Services
             var baseItems = new List<PromptContextItemDto>
             {
                 Item("agent-system-prompt", "instruction", "Agent system prompt", string.Empty,
-                    ModelContextBudget.EstimateTextTokens(instruction), instruction),
+                    EstimateTextTokens(instruction), instruction),
                 Item("runtime-document", "runtime", "Документ и host", string.Empty,
-                    ModelContextBudget.EstimateTextTokens(baseJson), baseJson)
+                    EstimateTextTokens(baseJson), baseJson)
             };
             var seeds = new List<SectionSeed>
             {
@@ -361,14 +408,14 @@ namespace RNAssistant.Office.Services
                     Id = "tools",
                     Title = "Tools и схемы",
                     Detail = tools.Count + " runnable tools",
-                    RawTokens = Math.Max(1, ModelContextBudget.EstimateTextTokens(tools.ToString(Formatting.None))),
+                    RawTokens = Math.Max(1, EstimateTextTokens(tools.ToString(Formatting.None))),
                     Count = tools.Count,
                     Items = items
                 });
             }
             else
             {
-                seeds[0].RawTokens += ModelContextBudget.EstimateTextTokens("\"tools\":[]");
+                seeds[0].RawTokens += EstimateTextTokens("\"tools\":[]");
             }
 
             if (skills.Count > 0)
@@ -378,21 +425,21 @@ namespace RNAssistant.Office.Services
                     "skill",
                     (string)item["name"] ?? (string)item["id"] ?? "Skill",
                     (string)item["id"] ?? string.Empty,
-                    ModelContextBudget.EstimateTextTokens(item.ToString(Formatting.None)),
+                    EstimateTextTokens(item.ToString(Formatting.None)),
                     (string)item["description"] ?? string.Empty)).ToList();
                 seeds.Add(new SectionSeed
                 {
                     Id = "skills",
                     Title = "Skills",
                     Detail = skills.Count + " enabled skills",
-                    RawTokens = Math.Max(1, ModelContextBudget.EstimateTextTokens(skills.ToString(Formatting.None))),
+                    RawTokens = Math.Max(1, EstimateTextTokens(skills.ToString(Formatting.None))),
                     Count = skills.Count,
                     Items = items
                 });
             }
             else
             {
-                seeds[0].RawTokens += ModelContextBudget.EstimateTextTokens("\"skills\":[]");
+                seeds[0].RawTokens += EstimateTextTokens("\"skills\":[]");
             }
 
             if (userContext.Count > 0)
@@ -402,21 +449,21 @@ namespace RNAssistant.Office.Services
                     "context",
                     (string)item["title"] ?? "Контекст",
                     string.Join(" · ", new[] { (string)item["kind"], (string)item["reference"] }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray()),
-                    ModelContextBudget.EstimateTextTokens(item.ToString(Formatting.None)),
+                    EstimateTextTokens(item.ToString(Formatting.None)),
                     (string)item["content"] ?? string.Empty)).ToList();
                 seeds.Add(new SectionSeed
                 {
                     Id = "document_context",
                     Title = "Контекст документа",
                     Detail = userContext.Count + " элементов",
-                    RawTokens = Math.Max(1, ModelContextBudget.EstimateTextTokens(userContext.ToString(Formatting.None))),
+                    RawTokens = Math.Max(1, EstimateTextTokens(userContext.ToString(Formatting.None))),
                     Count = userContext.Count,
                     Items = items
                 });
             }
             else
             {
-                seeds[0].RawTokens += ModelContextBudget.EstimateTextTokens("\"user_context\":[]");
+                seeds[0].RawTokens += EstimateTextTokens("\"user_context\":[]");
             }
 
             if (!string.IsNullOrWhiteSpace(artifactIndex))
@@ -427,7 +474,7 @@ namespace RNAssistant.Office.Services
                     Id = "artifacts",
                     Title = "Индекс артефактов",
                     Detail = artifactItems.Count + " ссылок; содержимое не вставляется целиком",
-                    RawTokens = Math.Max(1, ModelContextBudget.EstimateTextTokens(artifactIndex)),
+                    RawTokens = Math.Max(1, EstimateTextTokens(artifactIndex)),
                     Count = artifactItems.Count,
                     Items = artifactItems
                 });
@@ -435,7 +482,7 @@ namespace RNAssistant.Office.Services
             return seeds;
         }
 
-        private static PromptContextItemDto BuildToolItem(JObject item)
+        private PromptContextItemDto BuildToolItem(JObject item)
         {
             var function = item["function"] as JObject ?? new JObject();
             var safety = item["safety"] as JObject;
@@ -452,7 +499,7 @@ namespace RNAssistant.Office.Services
                 "tool",
                 (string)function["name"] ?? "Tool",
                 safetyText,
-                ModelContextBudget.EstimateTextTokens(item.ToString(Formatting.None)),
+                EstimateTextTokens(item.ToString(Formatting.None)),
                 item.ToString(Formatting.Indented));
         }
 
@@ -473,7 +520,7 @@ namespace RNAssistant.Office.Services
             var requestItems = new List<PromptContextItemDto>
             {
                 Item("current-user", "message", "Текущий запрос", "user",
-                    ModelContextBudget.EstimateTextTokens(requestText), requestText)
+                    EstimateTextTokens(requestText), requestText)
             };
             var seeds = new List<SectionSeed>
             {
@@ -482,7 +529,7 @@ namespace RNAssistant.Office.Services
                     Id = "current_request",
                     Title = "Текущий запрос",
                     Detail = "Текст в поле и transport overhead",
-                    RawTokens = Math.Max(1, ModelContextBudget.EstimateTextTokens(requestText) + 5),
+                    RawTokens = Math.Max(1, EstimateTextTokens(requestText) + 5),
                     Count = 1,
                     Items = requestItems
                 }
@@ -519,12 +566,12 @@ namespace RNAssistant.Office.Services
                     Id = "current_request",
                     Title = "Текущий запрос",
                     Detail = "Текст в поле и transport overhead",
-                    RawTokens = Math.Max(1, ModelContextBudget.EstimateTextTokens(requestText) + 5),
+                    RawTokens = Math.Max(1, EstimateTextTokens(requestText) + 5),
                     Count = 1,
                     Items = new List<PromptContextItemDto>
                     {
                         Item("current-user", "message", "Текущий запрос", "user",
-                            ModelContextBudget.EstimateTextTokens(requestText), requestText)
+                            EstimateTextTokens(requestText), requestText)
                     }
                 }
             };
@@ -537,19 +584,19 @@ namespace RNAssistant.Office.Services
                     "context",
                     note.Title ?? note.Kind ?? "Контекст",
                     string.Join(" · ", new[] { note.Kind, note.Reference }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray()),
-                    ModelContextBudget.EstimateTextTokens(note.Text ?? note.Preview),
+                    EstimateTextTokens(note.Text ?? note.Preview),
                     note.Text ?? note.Preview ?? string.Empty)).ToList();
                 if (items.Count == 0)
                 {
                     items.Add(Item("chat-context", "context", "Переданный контекст", string.Empty,
-                        ModelContextBudget.EstimateTextTokens(contextText), contextText));
+                        EstimateTextTokens(contextText), contextText));
                 }
                 seeds.Add(new SectionSeed
                 {
                     Id = "document_context",
                     Title = "Контекст документа",
                     Detail = items.Count + " элементов",
-                    RawTokens = Math.Max(1, ModelContextBudget.EstimateTextTokens(contextText)),
+                    RawTokens = Math.Max(1, EstimateTextTokens(contextText)),
                     Count = items.Count,
                     Items = items
                 });
@@ -563,7 +610,7 @@ namespace RNAssistant.Office.Services
                     Id = "artifacts",
                     Title = "Индекс артефактов",
                     Detail = items.Count + " ссылок; содержимое не вставляется целиком",
-                    RawTokens = Math.Max(1, ModelContextBudget.EstimateTextTokens(artifactText)),
+                    RawTokens = Math.Max(1, EstimateTextTokens(artifactText)),
                     Count = items.Count,
                     Items = items
                 });
@@ -572,7 +619,7 @@ namespace RNAssistant.Office.Services
             return seeds;
         }
 
-        private static void AddAttachmentSeed(List<SectionSeed> seeds, IReadOnlyList<ChatAttachment> attachments)
+        private void AddAttachmentSeed(List<SectionSeed> seeds, IReadOnlyList<ChatAttachment> attachments)
         {
             var list = (attachments ?? new ChatAttachment[0]).Where(item => item != null).ToList();
             if (list.Count == 0) return;
@@ -608,10 +655,12 @@ namespace RNAssistant.Office.Services
             });
         }
 
-        private static int AttachmentTokens(ChatAttachment attachment)
+        private int AttachmentTokens(ChatAttachment attachment)
         {
             if (attachment == null) return 0;
-            var tokens = Math.Max(attachment.ExtractedCharCount, (attachment.ExtractedText ?? string.Empty).Length) / 2;
+            var tokens = ModelContextBudget.EstimateCharacterCountTokens(
+                Math.Max(attachment.ExtractedCharCount, (attachment.ExtractedText ?? string.Empty).Length),
+                _estimationSettings);
             if (string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase))
             {
                 tokens += ModelContextBudget.EstimatedImageTokens;
@@ -636,7 +685,7 @@ namespace RNAssistant.Office.Services
             {
                 Id = id,
                 Title = title,
-                Tokens = messages.Sum(message => ModelContextBudget.EstimateMessageTokens(message)),
+                Tokens = messages.Sum(message => EstimateMessageTokens(message)),
                 Count = messages.Count,
                 Detail = detail,
                 Included = true,
@@ -644,7 +693,7 @@ namespace RNAssistant.Office.Services
             });
         }
 
-        private static PromptContextItemDto BuildMessageItem(ChatMessage message)
+        private PromptContextItemDto BuildMessageItem(ChatMessage message)
         {
             var role = message == null ? string.Empty : message.Role ?? string.Empty;
             var toolName = message == null ? string.Empty : message.ToolName ?? string.Empty;
@@ -669,7 +718,7 @@ namespace RNAssistant.Office.Services
                 Kind = IsProtocolMessage(message) ? "protocol" : "message",
                 Title = title,
                 Subtitle = string.Join(" · ", new[] { role, attachmentNames }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray()),
-                Tokens = ModelContextBudget.EstimateMessageTokens(message),
+                Tokens = EstimateMessageTokens(message),
                 Characters = preview.Length,
                 Preview = BoundText(preview, MaxPreviewChars),
                 Reference = message == null ? string.Empty : message.RunId ?? string.Empty
@@ -742,7 +791,7 @@ namespace RNAssistant.Office.Services
                         "rev. " + Math.Max(1, artifact.Revision),
                         artifact.ModelContextPolicy ?? "reference"
                     }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray()),
-                    Tokens = ModelContextBudget.EstimateTextTokens(line),
+                    Tokens = EstimateTextTokens(line),
                     Characters = (artifact.InlineText ?? string.Empty).Length,
                     SizeBytes = ArtifactStoredBytes(session, artifact),
                     Preview = BoundText(line, MaxPreviewChars),
@@ -752,7 +801,7 @@ namespace RNAssistant.Office.Services
             if (items.Count == 0 && !string.IsNullOrWhiteSpace(artifactIndex))
             {
                 items.Add(Item("artifact-index", "artifact", "Индекс артефактов", "reference only",
-                    ModelContextBudget.EstimateTextTokens(artifactIndex), artifactIndex));
+                    EstimateTextTokens(artifactIndex), artifactIndex));
             }
             return items;
         }
@@ -996,6 +1045,26 @@ namespace RNAssistant.Office.Services
             value = value ?? string.Empty;
             if (value.Length <= maxChars) return value;
             return value.Substring(0, maxChars).TrimEnd() + "…";
+        }
+
+        private int EstimateTextTokens(string text)
+        {
+            return ModelContextBudget.EstimateTextTokens(text, _estimationSettings);
+        }
+
+        private int EstimateMessageTokens(ChatMessage message)
+        {
+            return ModelContextBudget.EstimateMessageTokens(message, _estimationSettings);
+        }
+
+        private int EstimateMessagesTokens(IEnumerable<ChatMessage> messages)
+        {
+            return ModelContextBudget.EstimateMessagesTokens(messages, _estimationSettings);
+        }
+
+        private int EstimateRequestOptionsTokens(LlmRequestOptions options)
+        {
+            return ModelContextBudget.EstimateRequestOptionsTokens(options, _estimationSettings);
         }
 
         private sealed class SectionSeed

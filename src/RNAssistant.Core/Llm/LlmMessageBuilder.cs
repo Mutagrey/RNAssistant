@@ -41,7 +41,7 @@ namespace RNAssistant.Core.Llm
             var remainingAttachmentTokens = Math.Max(
                 0,
                 ModelContextBudget.InputBudgetTokens(settings) -
-                ModelContextBudget.EstimateMessagesTokens(messageList, false) -
+                ModelContextBudget.EstimateMessagesTokens(messageList, false, settings) -
                 EstimatePdfImageTokens(messageList, settings));
             var remainingImages = ModelContextBudget.MaxImagesPerPrompt(settings);
 
@@ -73,7 +73,8 @@ namespace RNAssistant.Core.Llm
                             }
                         }))
                     });
-                    build.EstimatedPromptTokens += ModelContextBudget.EstimateMessageTokens(message, false);
+                    build.EstimatedPromptTokens += ModelContextBudget.EstimateMessageTokens(message, settings, null, false);
+                    build.BaseEstimatedPromptTokens += ModelContextBudget.EstimateMessageTokens(message, null, null, false);
                     continue;
                 }
 
@@ -91,12 +92,19 @@ namespace RNAssistant.Core.Llm
                     };
                     if (!string.IsNullOrWhiteSpace(message.ToolName)) toolMessage["name"] = message.ToolName;
                     build.Messages.Add(toolMessage);
-                    build.EstimatedPromptTokens += ModelContextBudget.EstimateMessageTokens(message, false);
+                    build.EstimatedPromptTokens += ModelContextBudget.EstimateMessageTokens(message, settings, null, false);
+                    build.BaseEstimatedPromptTokens += ModelContextBudget.EstimateMessageTokens(message, null, null, false);
                     continue;
                 }
 
                 var attachments = message.Attachments ?? new List<ChatAttachment>();
-                var text = AppendExtractedText(message.Content ?? string.Empty, attachments, ref remainingAttachmentTokens, runCache, cancellationToken);
+                var text = AppendExtractedText(
+                    message.Content ?? string.Empty,
+                    attachments,
+                    settings,
+                    ref remainingAttachmentTokens,
+                    runCache,
+                    cancellationToken);
                 var imageParts = new List<ModelImagePart>();
                 var audioAttachments = attachments
                     .Where(attachment => attachment != null && string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase))
@@ -133,6 +141,9 @@ namespace RNAssistant.Core.Llm
                     }
                     build.Messages.Add(new { role = message.Role, content = text });
                     build.EstimatedPromptTokens += 4 +
+                        ModelContextBudget.EstimateTextTokens(message.Role, settings) +
+                        ModelContextBudget.EstimateTextTokens(text, settings);
+                    build.BaseEstimatedPromptTokens += 4 +
                         ModelContextBudget.EstimateTextTokens(message.Role) +
                         ModelContextBudget.EstimateTextTokens(text);
                     continue;
@@ -172,9 +183,14 @@ namespace RNAssistant.Core.Llm
                     });
                     build.HasAudio = true;
                     build.EstimatedPromptTokens += ModelContextBudget.EstimateAudioTokens(bytes.LongLength);
+                    build.BaseEstimatedPromptTokens += ModelContextBudget.EstimateAudioTokens(bytes.LongLength);
                 }
                 build.Messages.Add(new { role = message.Role, content = parts });
-                build.EstimatedPromptTokens += 4 + ModelContextBudget.EstimateTextTokens(message.Role) + ModelContextBudget.EstimateTextTokens(text) +
+                build.EstimatedPromptTokens += 4 + ModelContextBudget.EstimateTextTokens(message.Role, settings) +
+                    ModelContextBudget.EstimateTextTokens(text, settings) +
+                    imageParts.Count * ModelContextBudget.EstimatedImageTokens;
+                build.BaseEstimatedPromptTokens += 4 + ModelContextBudget.EstimateTextTokens(message.Role) +
+                    ModelContextBudget.EstimateTextTokens(text) +
                     imageParts.Count * ModelContextBudget.EstimatedImageTokens;
             }
 
@@ -274,6 +290,7 @@ namespace RNAssistant.Core.Llm
         private string AppendExtractedText(
             string content,
             IEnumerable<ChatAttachment> attachments,
+            AppSettings settings,
             ref int remainingTokens,
             LlmRunCache runCache,
             CancellationToken cancellationToken)
@@ -283,7 +300,9 @@ namespace RNAssistant.Core.Llm
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (remainingTokens <= 0) break;
-                var maxChars = (int)Math.Min(1000000L, Math.Max(64L, (long)remainingTokens * 3L + 16L));
+                var maxChars = (int)Math.Min(
+                    1000000L,
+                    Math.Max(64L, (long)ModelContextBudget.ApproximateTextCharacterCapacity(remainingTokens, settings) + 16L));
                 var cacheKey = AttachmentKey(attachment) + "|text";
                 string extracted = null;
                 var cached = runCache != null && runCache.TryGetAttachmentText(cacheKey, out extracted);
@@ -299,8 +318,8 @@ namespace RNAssistant.Core.Llm
                 {
                     continue;
                 }
-                var selected = ModelContextBudget.TruncateText(extracted, remainingTokens);
-                var selectedTokens = ModelContextBudget.EstimateTextTokens(selected);
+                var selected = ModelContextBudget.TruncateText(extracted, remainingTokens, settings);
+                var selectedTokens = ModelContextBudget.EstimateTextTokens(selected, settings);
                 remainingTokens = Math.Max(0, remainingTokens - selectedTokens);
                 builder.AppendLine();
                 builder.AppendLine();
@@ -345,5 +364,6 @@ namespace RNAssistant.Core.Llm
         public bool HasImages { get; set; }
         public bool HasAudio { get; set; }
         public int EstimatedPromptTokens { get; set; }
+        public int BaseEstimatedPromptTokens { get; set; }
     }
 }

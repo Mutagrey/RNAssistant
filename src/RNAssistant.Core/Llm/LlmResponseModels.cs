@@ -19,6 +19,9 @@ namespace RNAssistant.Core.Llm
         public int? CompletionTokens { get; set; }
         public int? TotalTokens { get; set; }
         public string UsageJson { get; set; }
+        public int? BaseEstimatedPromptTokens { get; set; }
+        public int? EstimatedPromptTokens { get; set; }
+        public bool TokenEstimateCalibrationEligible { get; set; }
     }
 
     public sealed class LlmStreamUpdate

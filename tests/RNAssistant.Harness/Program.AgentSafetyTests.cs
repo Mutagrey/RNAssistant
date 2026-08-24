@@ -245,7 +245,7 @@ namespace RNAssistant.Harness
             {
                 adapter.QueueResult("excel.list_sheets", ToolResult.Ok(
                     "large read",
-                    JsonConvert.SerializeObject(new { value = new string('x', 100000) })));
+                    JsonConvert.SerializeObject(new { value = new string('x', 150000) })));
                 var responses = new Queue<string>(new[]
                 {
                     "{\"message\":\"Читаю.\",\"tool_calls\":[{\"id\":\"call_large\",\"name\":\"excel.list_sheets\",\"arguments\":{}}]}",

@@ -85,6 +85,27 @@ namespace RNAssistant.Core.Models
         }
     }
 
+    public sealed class TokenEstimateCalibrationSettings
+    {
+        public double Multiplier { get; set; }
+        public double InterceptTokens { get; set; }
+        public int SampleCount { get; set; }
+        public int FitSampleCount { get; set; }
+        public double MeanBasePromptTokens { get; set; }
+        public double MeanActualPromptTokens { get; set; }
+        public double BasePromptTokenM2 { get; set; }
+        public double BaseActualPromptC2 { get; set; }
+        public int LastBaseEstimatedPromptTokens { get; set; }
+        public int LastEstimatedPromptTokens { get; set; }
+        public int LastActualPromptTokens { get; set; }
+        public DateTime UpdatedUtc { get; set; }
+
+        public TokenEstimateCalibrationSettings Clone()
+        {
+            return (TokenEstimateCalibrationSettings)MemberwiseClone();
+        }
+    }
+
     public sealed class AppSettings
     {
         public const int DefaultMaxTokens = 3072;
@@ -93,6 +114,10 @@ namespace RNAssistant.Core.Models
         public const int DefaultMaxAgentFormatRetries = 10;
         public const int MaximumAgentFormatRetries = 20;
         public const int DefaultMaxAgentToolSteps = 4096;
+        public const double DefaultTokenEstimateMultiplier = 1.0;
+        public const double MinimumTokenEstimateMultiplier = 0.25;
+        public const double MaximumTokenEstimateMultiplier = 4.0;
+        public const double MaximumTokenEstimateInterceptTokens = 65536.0;
 
         public string BaseUrl { get; set; }
         public string ModelsConfigUrl { get; set; }
@@ -112,6 +137,8 @@ namespace RNAssistant.Core.Models
         public double Temperature { get; set; }
         public double TopP { get; set; }
         public int ContextWindowOverrideTokens { get; set; }
+        public double TokenEstimateMultiplier { get; set; }
+        public bool AutoCalibrateTokenEstimate { get; set; }
         public bool StreamResponses { get; set; }
         public bool AutoConfirmToolActions { get; set; }
         public bool SmartChatTitles { get; set; }
@@ -126,6 +153,7 @@ namespace RNAssistant.Core.Models
         public Dictionary<string, bool?> ModelImageSupportOverrides { get; set; }
         public Dictionary<string, bool?> ModelAudioSupportOverrides { get; set; }
         public Dictionary<string, ModelCapabilitySettings> ModelCapabilities { get; set; }
+        public Dictionary<string, TokenEstimateCalibrationSettings> TokenEstimateCalibrations { get; set; }
         public List<string> HtmlNetworkAllowedOrigins { get; set; }
 
         public AppSettings()
@@ -197,6 +225,8 @@ namespace RNAssistant.Core.Models
             Temperature = 0.2;
             TopP = 1.0;
             ContextWindowOverrideTokens = 0;
+            TokenEstimateMultiplier = DefaultTokenEstimateMultiplier;
+            AutoCalibrateTokenEstimate = true;
             StreamResponses = true;
             AutoConfirmToolActions = false;
             SmartChatTitles = true;
@@ -211,6 +241,7 @@ namespace RNAssistant.Core.Models
             ModelImageSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
             ModelAudioSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
             ModelCapabilities = new Dictionary<string, ModelCapabilitySettings>(StringComparer.OrdinalIgnoreCase);
+            TokenEstimateCalibrations = new Dictionary<string, TokenEstimateCalibrationSettings>(StringComparer.OrdinalIgnoreCase);
             HtmlNetworkAllowedOrigins = new List<string>();
         }
 
@@ -230,6 +261,11 @@ namespace RNAssistant.Core.Models
             foreach (var pair in ModelCapabilities ?? new Dictionary<string, ModelCapabilitySettings>())
             {
                 clone.ModelCapabilities[pair.Key] = pair.Value == null ? null : pair.Value.Clone();
+            }
+            clone.TokenEstimateCalibrations = new Dictionary<string, TokenEstimateCalibrationSettings>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in TokenEstimateCalibrations ?? new Dictionary<string, TokenEstimateCalibrationSettings>())
+            {
+                clone.TokenEstimateCalibrations[pair.Key] = pair.Value == null ? null : pair.Value.Clone();
             }
             clone.HtmlNetworkAllowedOrigins = new List<string>(HtmlNetworkAllowedOrigins ?? new List<string>());
             return clone;

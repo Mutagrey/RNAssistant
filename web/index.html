@@ -159,7 +159,7 @@
               <button class="context-meter" id="contextMeter" type="button" title="Открыть состав контекста" aria-label="Открыть состав контекста" aria-expanded="false" aria-controls="promptContextInspector">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4-8 4-8-4 8-4Z"/><path d="m20 12-8 4-8-4"/><path d="m20 17-8 4-8-4"/></svg>
                 <strong id="contextMeterValue">0%</strong>
-                <em id="contextMeterDetail">0 / 0</em>
+                <em id="contextMeterDetail">≈0 / 0</em>
               </button>
             </div>
             <div class="composer-actions">
@@ -222,7 +222,7 @@
               <div class="prompt-context-inspector-notice" id="promptContextInspectorNotice"></div>
               <section class="prompt-context-budget" aria-label="Лимит контекста">
                 <div class="prompt-context-budget-head">
-                  <strong id="promptContextInspectorUsage">0 / 0 токенов</strong>
+                  <strong id="promptContextInspectorUsage">≈ 0 / 0 токенов</strong>
                   <span id="promptContextInspectorPercent">0%</span>
                 </div>
                 <div class="prompt-context-budget-track" id="promptContextInspectorTrack" role="progressbar" aria-label="Использование входного контекста" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
@@ -238,7 +238,7 @@
               </section>
               <div class="prompt-context-section-heading">
                 <strong>Состав</strong>
-                <span>по вкладу в токены</span>
+                <span>по вкладу</span>
               </div>
               <div class="prompt-context-sections" id="promptContextInspectorSections"></div>
               <details class="prompt-context-raw hidden" id="promptContextInspectorRaw">
@@ -604,6 +604,8 @@
                 <label><span>Temperature</span><input id="temperatureInput" type="number" min="0" max="2" step="0.1"></label>
                 <label><span>Top P</span><input id="topPInput" type="number" min="0" max="1" step="0.01"></label>
                 <label><span>Окно контекста, токены (0 = по модели)</span><input id="contextLimitInput" type="number" min="0"></label>
+                <label><span>Коэффициент без API usage</span><input id="tokenEstimateMultiplierInput" type="number" min="0.25" max="4" step="0.05"><small id="tokenEstimateCalibrationStatus">×1,00 · UTF-8/4</small></label>
+                <label class="checkline"><input id="autoCalibrateTokenEstimateInput" type="checkbox"><span>Автокалибровка по API usage для каждой модели</span></label>
                 <label class="checkline"><input id="streamInput" type="checkbox"><span>Потоковый API (SSE)</span></label>
               </div>
               <div class="toolbar">
@@ -798,17 +800,17 @@
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js?v=library-editor-20260824-1"></script>
   <script src="js/app-markdown.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-settings.js?v=settings-reset-20260824-1"></script>
+  <script src="js/app-settings.js?v=token-estimate-20260824-2"></script>
   <script src="js/app-logs.js?v=log-filters-20260824-1"></script>
   <script src="js/app-diagnostics.js?v=log-filters-20260824-1"></script>
   <script src="js/app-prompts.js?v=library-editor-20260824-1"></script>
   <script src="js/app-model-data.js?v=model-capabilities-20260820-1"></script>
   <script src="js/app-model-picker.js?v=model-modules-20260823-2"></script>
   <script src="js/app-model-capabilities.js?v=model-modules-20260823-1"></script>
-  <script src="js/app-model-render.js?v=model-modules-20260823-2"></script>
+  <script src="js/app-model-render.js?v=token-estimate-20260824-2"></script>
   <script src="js/app-models.js?v=log-filters-20260824-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=log-filters-20260824-1"></script>
+  <script src="js/app-chat-state.js?v=token-estimate-20260824-2"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
   <script src="js/app-tools-structured.js?v=tools-modules-20260823-1"></script>
   <script src="js/app-tools-actions.js?v=log-filters-20260824-1"></script>
@@ -826,7 +828,7 @@
   <script src="js/app-html-workspace-actions.js?v=vba-tab-20260824-1"></script>
   <script src="js/app-html-workspace.js?v=vba-tab-20260824-1"></script>
   <script src="js/app-context.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-context-inspector.js?v=context-inspector-20260824-1"></script>
+  <script src="js/app-context-inspector.js?v=token-estimate-20260824-2"></script>
   <script src="js/app-agent-data.js?v=agent-ui-20260821-2"></script>
   <script src="js/app-agent-model.js?v=agent-ui-20260821-3"></script>
   <script src="js/app-chart-artifacts.js?v=log-filters-20260824-1"></script>
