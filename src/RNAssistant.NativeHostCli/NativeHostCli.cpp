@@ -281,7 +281,9 @@ private:
             _form->MinimumSize = System::Drawing::Size(420, 300);
             _form->StartPosition = FormStartPosition::Manual;
             _form->ShowInTaskbar = false;
-            _form->FormBorderStyle = FormBorderStyle::SizableToolWindow;
+            _form->FormBorderStyle = FormBorderStyle::Sizable;
+            _form->MaximizeBox = true;
+            _form->MinimizeBox = false;
             _form->Controls->Add(panel);
             _form->HandleCreated += gcnew EventHandler(&ManagedPanelHost::OnFormHandleCreated);
             _form->FormClosed += gcnew FormClosedEventHandler(&ManagedPanelHost::OnFormClosed);
