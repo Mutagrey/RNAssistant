@@ -190,6 +190,7 @@ namespace RNAssistant.Core.Models
         public string HistoryIntegrityMode { get; set; }
         public string HistoryEncryptionMode { get; set; }
         public string HistoryKeySource { get; set; }
+        public bool ScreenCaptureProtectionEnabled { get; set; }
         public double UiFontScale { get; set; }
         public string UiTheme { get; set; }
         public Dictionary<string, string> CustomHeaders { get; set; }
@@ -283,6 +284,7 @@ namespace RNAssistant.Core.Models
             HistoryIntegrityMode = HistoryIntegrityModes.Sha256;
             HistoryEncryptionMode = HistoryEncryptionModes.None;
             HistoryKeySource = HistoryKeySources.ApiKey;
+            ScreenCaptureProtectionEnabled = true;
             UiFontScale = 1.0;
             UiTheme = UiThemes.Light;
             CustomHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

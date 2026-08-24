@@ -1,13 +1,17 @@
+using System;
 using System.Threading.Tasks;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Diagnostics;
 using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
+        public event Action<AppSettings> SettingsChanged;
+
         public SettingsResponse GetSettings()
         {
             return new SettingsResponse
@@ -43,8 +47,20 @@ namespace RNAssistant.Office
         public SettingsResponse SaveSettings(AppSettings settings, string apiKey, string historySecret)
         {
             _settingsService.Save(settings, apiKey, historySecret);
-
-            return GetSettings();
+            var response = GetSettings();
+            var settingsChanged = SettingsChanged;
+            if (settingsChanged != null)
+            {
+                try
+                {
+                    settingsChanged(response.Settings.Clone());
+                }
+                catch (Exception ex)
+                {
+                    RuntimeLog.Error("Settings change notification failed.", ex);
+                }
+            }
+            return response;
         }
 
         private void PersistTokenEstimateCalibration(AppSettings source)

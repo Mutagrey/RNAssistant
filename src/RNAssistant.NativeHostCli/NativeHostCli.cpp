@@ -4,6 +4,10 @@
 #include <string>
 #include <msclr/marshal_cppstd.h>
 
+#ifndef WDA_EXCLUDEFROMCAPTURE
+#define WDA_EXCLUDEFROMCAPTURE 0x00000011
+#endif
+
 using namespace System;
 using namespace System::Drawing;
 using namespace System::IO;
@@ -49,6 +53,9 @@ private:
     static PanelOwnerMode _ownerMode = PanelOwnerMode::OwnerWindow;
     static String^ _lastError = String::Empty;
     static bool _resolverInstalled = false;
+    static bool _screenCaptureProtectionEnabled = true;
+    static EventInfo^ _screenCaptureProtectionChangedEvent = nullptr;
+    static Action<bool>^ _screenCaptureProtectionChangedHandler = nullptr;
 
 public:
     static int ShowPanel(IntPtr officeHwnd, String^ rootPath, int hostKind)
@@ -237,6 +244,27 @@ private:
             arguments[2] = rootPath;
             _session = createMethod->Invoke(nullptr, arguments);
 
+            PropertyInfo^ captureProtectionProperty = sessionType->GetProperty("ScreenCaptureProtectionEnabled");
+            if (captureProtectionProperty == nullptr)
+            {
+                throw gcnew MissingMemberException(
+                    sessionType->FullName + ".ScreenCaptureProtectionEnabled was not found.");
+            }
+            _screenCaptureProtectionEnabled = safe_cast<bool>(
+                captureProtectionProperty->GetValue(_session, nullptr));
+
+            _screenCaptureProtectionChangedEvent = sessionType->GetEvent("ScreenCaptureProtectionChanged");
+            if (_screenCaptureProtectionChangedEvent == nullptr)
+            {
+                throw gcnew MissingMemberException(
+                    sessionType->FullName + ".ScreenCaptureProtectionChanged was not found.");
+            }
+            _screenCaptureProtectionChangedHandler =
+                gcnew Action<bool>(&ManagedPanelHost::OnScreenCaptureProtectionChanged);
+            _screenCaptureProtectionChangedEvent->AddEventHandler(
+                _session,
+                _screenCaptureProtectionChangedHandler);
+
             PropertyInfo^ panelProperty = sessionType->GetProperty("PanelControl");
             Control^ panel = panelProperty == nullptr
                 ? nullptr
@@ -255,6 +283,7 @@ private:
             _form->ShowInTaskbar = false;
             _form->FormBorderStyle = FormBorderStyle::SizableToolWindow;
             _form->Controls->Add(panel);
+            _form->HandleCreated += gcnew EventHandler(&ManagedPanelHost::OnFormHandleCreated);
             _form->FormClosed += gcnew FormClosedEventHandler(&ManagedPanelHost::OnFormClosed);
 
             _officeHwnd = officeHwnd;
@@ -302,6 +331,64 @@ private:
 
         _form->BringToFront();
         _form->Activate();
+    }
+
+    static void OnFormHandleCreated(Object^ sender, EventArgs^)
+    {
+        Form^ form = dynamic_cast<Form^>(sender);
+        if (form == nullptr || form->IsDisposed)
+        {
+            return;
+        }
+
+        ApplyScreenCaptureProtection(form);
+    }
+
+    static void OnScreenCaptureProtectionChanged(bool enabled)
+    {
+        _screenCaptureProtectionEnabled = enabled;
+        Form^ form = _form;
+        if (form == nullptr || form->IsDisposed || !form->IsHandleCreated)
+        {
+            return;
+        }
+
+        if (form->InvokeRequired)
+        {
+            array<Object^>^ arguments = gcnew array<Object^>(1);
+            arguments[0] = enabled;
+            form->BeginInvoke(_screenCaptureProtectionChangedHandler, arguments);
+            return;
+        }
+
+        ApplyScreenCaptureProtection(form);
+    }
+
+    static void ApplyScreenCaptureProtection(Form^ form)
+    {
+        HWND hwnd = static_cast<HWND>(form->Handle.ToPointer());
+        DWORD affinity = _screenCaptureProtectionEnabled
+            ? WDA_EXCLUDEFROMCAPTURE
+            : WDA_NONE;
+        String^ affinityName = _screenCaptureProtectionEnabled
+            ? "WDA_EXCLUDEFROMCAPTURE"
+            : "WDA_NONE";
+        SetLastError(ERROR_SUCCESS);
+        if (SetWindowDisplayAffinity(hwnd, affinity))
+        {
+            Log(String::Format(
+                "Screen capture protection updated. hwnd={0}, affinity={1}.",
+                form->Handle.ToInt64(),
+                affinityName));
+            return;
+        }
+
+        DWORD error = GetLastError();
+        Log(String::Format(
+            "WARNING: Screen capture protection could not be updated. hwnd={0}, affinity={1}, win32Error={2}.",
+            form->Handle.ToInt64(),
+            affinityName,
+            error));
     }
 
     static PanelOwnerMode ReadOwnerMode(String^ rootPath)
@@ -364,12 +451,29 @@ private:
 
     static void DisposeSession()
     {
+        if (_session != nullptr &&
+            _screenCaptureProtectionChangedEvent != nullptr &&
+            _screenCaptureProtectionChangedHandler != nullptr)
+        {
+            try
+            {
+                _screenCaptureProtectionChangedEvent->RemoveEventHandler(
+                    _session,
+                    _screenCaptureProtectionChangedHandler);
+            }
+            catch (Exception^)
+            {
+            }
+        }
         IDisposable^ disposable = dynamic_cast<IDisposable^>(_session);
         if (disposable != nullptr)
         {
             delete disposable;
         }
         _session = nullptr;
+        _screenCaptureProtectionChangedEvent = nullptr;
+        _screenCaptureProtectionChangedHandler = nullptr;
+        _screenCaptureProtectionEnabled = true;
     }
 
     static int Fail(int result, String^ message, Exception^ exception, IntPtr owner)

@@ -561,6 +561,7 @@
             <button class="settings-nav-button" type="button" data-settings-page="model">Модель</button>
             <button class="settings-nav-button" type="button" data-settings-page="agent">Агент</button>
             <button class="settings-nav-button" type="button" data-settings-page="interface">Интерфейс</button>
+            <button class="settings-nav-button" type="button" data-settings-page="protection">Защита</button>
             <button class="settings-nav-button" type="button" data-settings-page="service">Диагностика</button>
             <span class="settings-nav-version" id="appVersion" aria-label="Версия RNAssistant">—</span>
           </nav>
@@ -748,12 +749,21 @@
               <div class="setting-note">HTML preview и его скрипты всегда доступны в sandboxed iframe.</div>
             </section>
 
-            <section class="settings-page" data-settings-page="service">
+            <section class="settings-page" data-settings-page="protection">
               <div class="settings-heading">
-                <h2>Диагностика</h2>
-                <p>События текущей сессии и очистка локальных данных.</p>
+                <h2>Защита</h2>
+                <p>Экранное содержимое и локальная история чатов.</p>
               </div>
-              <input id="debugModelTrafficInput" type="checkbox" hidden>
+              <section class="model-compatibility-panel" aria-labelledby="screenCaptureProtectionTitle">
+                <div class="model-compatibility-head">
+                  <div>
+                    <h3 id="screenCaptureProtectionTitle">Защита экрана</h3>
+                    <p>Для отдельного окна RN Assistant, запущенного через NativeHostCli.</p>
+                  </div>
+                </div>
+                <label class="checkline"><input id="screenCaptureProtectionInput" type="checkbox"><span>Исключать окно ассистента из захвата экрана</span></label>
+                <div class="setting-note">Настройка применяется сразу: совместимые средства захвата увидят окно Office под ассистентом. VSTO-панель является частью окна Office и этой настройкой не защищается. Это не защита от камеры или привилегированного ПО.</div>
+              </section>
               <section class="model-compatibility-panel" aria-labelledby="historyProtectionTitle">
                 <div class="model-compatibility-head">
                   <div>
@@ -769,6 +779,14 @@
                 </div>
                 <div class="setting-note">HMAC подтверждает целостность, но не скрывает содержимое. Шифрование использует AES-256-CBC + HMAC-SHA256; envelope событий остаётся видимым. Режим или ключ меняются только после «Очистить данные».</div>
               </section>
+            </section>
+
+            <section class="settings-page" data-settings-page="service">
+              <div class="settings-heading">
+                <h2>Диагностика</h2>
+                <p>События текущей сессии и очистка локальных данных.</p>
+              </div>
+              <input id="debugModelTrafficInput" type="checkbox" hidden>
               <section class="model-compatibility-panel diagnostics-model-panel" aria-labelledby="modelConnectionTitle">
                 <div class="model-compatibility-head">
                   <div>
@@ -850,7 +868,7 @@
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js?v=library-editor-20260824-1"></script>
   <script src="js/app-markdown.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-settings.js?v=history-protection-20260824-1"></script>
+  <script src="js/app-settings.js?v=screen-protection-20260824-1"></script>
   <script src="js/app-logs.js?v=log-filters-20260824-1"></script>
   <script src="js/app-diagnostics.js?v=log-filters-20260824-1"></script>
   <script src="js/app-trajectory.js?v=session-events-20260824-1"></script>

@@ -209,6 +209,7 @@ function renderSettings() {
   $("autoConfirmToolsInput").checked = compatibilityValue(s, "AutoConfirmToolActions", "autoConfirmToolActions", agentSettingsDefaults.autoConfirmToolActions) === true;
   $("autoCompressContextInput").checked = compatibilityValue(s, "AutoCompressContext", "autoCompressContext", agentSettingsDefaults.autoCompressContext) !== false;
   $("debugModelTrafficInput").checked = !!(s.DebugModelTraffic || s.debugModelTraffic);
+  $("screenCaptureProtectionInput").checked = compatibilityValue(s, "ScreenCaptureProtectionEnabled", "screenCaptureProtectionEnabled", true) !== false;
   $("historyHmacInput").checked = String(compatibilityValue(s, "HistoryIntegrityMode", "historyIntegrityMode", "sha256")).toLowerCase() === "hmac_sha256";
   $("historyEncryptionInput").checked = String(compatibilityValue(s, "HistoryEncryptionMode", "historyEncryptionMode", "none")).toLowerCase() === "aes256_cbc_hmac_sha256";
   $("historyKeySourceInput").value = String(compatibilityValue(s, "HistoryKeySource", "historyKeySource", "api_key")).toLowerCase() === "custom_secret"
@@ -276,6 +277,7 @@ function readSettings() {
     AutoConfirmToolActions: $("autoConfirmToolsInput").checked,
     AutoCompressContext: $("autoCompressContextInput").checked,
     DebugModelTraffic: $("debugModelTrafficInput").checked,
+    ScreenCaptureProtectionEnabled: $("screenCaptureProtectionInput").checked,
     HistoryIntegrityMode: $("historyHmacInput").checked ? "hmac_sha256" : "sha256",
     HistoryEncryptionMode: $("historyEncryptionInput").checked ? "aes256_cbc_hmac_sha256" : "none",
     HistoryKeySource: $("historyKeySourceInput").value,

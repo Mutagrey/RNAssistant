@@ -31,6 +31,7 @@ namespace RNAssistant.Harness
             AssertEqual(AppSettings.DefaultMaxAgentIterations, settings.MaxAgentIterations, "long-run iteration default");
             AssertEqual(AppSettings.DefaultMaxAgentFormatRetries, settings.MaxAgentFormatRetries, "long-run format retry default");
             AssertEqual(AppSettings.DefaultMaxAgentToolSteps, settings.MaxAgentToolSteps, "long-run tool step default");
+            AssertTrue(settings.ScreenCaptureProtectionEnabled, "screen capture protection default");
             AssertEqual(ReasoningRequestModes.ChatTemplateKwargs, settings.ReasoningRequestMode, "reasoning request mode default");
             AssertEqual(string.Empty, settings.BaseUrl, "base URL default");
             AssertEqual("/v1/models", settings.ModelsConfigUrl, "models endpoint default");

@@ -32,6 +32,15 @@ Development rules are in `AGENTS.md`. Architecture boundaries and refactoring ta
 This mode runs the existing WebView2 panel inside Office without an RNAssistant
 EXE, VSTO startup, COM registration or RegAsm.
 
+The native-host panel is an owned top-level window. Its enabled-by-default
+screen capture protection can be changed under Settings → Protection and is
+applied immediately through `WDA_EXCLUDEFROMCAPTURE` or `WDA_NONE`. Capture
+tools that honor the Windows display-affinity contract omit the assistant
+window while leaving the Office window beneath it visible. Applying the
+affinity is fail-open and any Win32 error is written to `logs\native-host.log`;
+this is defense in depth, not DRM or protection from privileged capture
+software.
+
 1. Build `RNAssistant.NativeHostCli`, `RNAssistant.Core`, `RNAssistant.Office`
    and `RNAssistant.OfficeHosts` in Visual Studio 2022 using the same bitness as
    Office.

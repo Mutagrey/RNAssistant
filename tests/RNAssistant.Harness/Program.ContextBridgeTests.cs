@@ -488,7 +488,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"uiTheme\":\"dark\",\"debugModelTraffic\":true,\"reasoningRequestMode\":\"custom_json\",\"reasoningCustomJson\":\"{\\\"thinking\\\":{\\\"budget\\\":4096}}\",\"systemPromptRole\":\"system\",\"agentResponseMode\":\"json_schema\",\"toolResultRole\":\"tool\",\"fallbackToJsonObject\":false,\"maxAgentFormatRetries\":4,\"historyIntegrityMode\":\"hmac_sha256\",\"historyEncryptionMode\":\"aes256_cbc_hmac_sha256\",\"historyKeySource\":\"custom_secret\",\"modelImageSupportOverrides\":{\"gpt-test\":true},\"modelAudioSupportOverrides\":{\"gpt-audio\":true}},\"apiKey\":\"secret\",\"historySecret\":\"portable secret\"}}")
+                "{\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"uiTheme\":\"dark\",\"debugModelTraffic\":true,\"screenCaptureProtectionEnabled\":false,\"reasoningRequestMode\":\"custom_json\",\"reasoningCustomJson\":\"{\\\"thinking\\\":{\\\"budget\\\":4096}}\",\"systemPromptRole\":\"system\",\"agentResponseMode\":\"json_schema\",\"toolResultRole\":\"tool\",\"fallbackToJsonObject\":false,\"maxAgentFormatRetries\":4,\"historyIntegrityMode\":\"hmac_sha256\",\"historyEncryptionMode\":\"aes256_cbc_hmac_sha256\",\"historyKeySource\":\"custom_secret\",\"modelImageSupportOverrides\":{\"gpt-test\":true},\"modelAudioSupportOverrides\":{\"gpt-audio\":true}},\"apiKey\":\"secret\",\"historySecret\":\"portable secret\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -497,6 +497,7 @@ namespace RNAssistant.Harness
             AssertEqual("gpt-test", controller.LastSettings.Model, "settings model");
             AssertEqual(UiThemes.Dark, controller.LastSettings.UiTheme, "settings theme");
             AssertTrue(controller.LastSettings.DebugModelTraffic, "settings model traffic debug flag");
+            AssertTrue(!controller.LastSettings.ScreenCaptureProtectionEnabled, "screen capture protection setting");
             AssertEqual(ReasoningRequestModes.CustomJson, controller.LastSettings.ReasoningRequestMode, "settings custom reasoning mode");
             AssertContains(controller.LastSettings.ReasoningCustomJson, "budget", "settings custom reasoning json");
             AssertEqual("system", controller.LastSettings.SystemPromptRole, "system prompt role");
