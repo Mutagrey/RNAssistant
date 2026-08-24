@@ -65,7 +65,38 @@ namespace RNAssistant.Office
             var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_replace_module") };
             command.Arguments["moduleName"] = moduleName;
             command.Arguments["code"] = code;
-            command.Arguments["createIfMissing"] = "true";
+            command.Arguments["createIfMissing"] = "false";
+            return WithReservedSession(LoadSession(null), session =>
+            {
+                var result = _toolExecutor.Execute(command, tools, settings, false, true, session);
+                _toolCatalog.InvalidateDocumentVbaTools();
+                return result;
+            });
+        }
+
+        public ToolResult CreateVbaModule(string moduleName, string componentType, string code)
+        {
+            var settings = _settingsService.Load();
+            var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
+            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_create_module") };
+            command.Arguments["moduleName"] = moduleName;
+            command.Arguments["componentType"] = componentType;
+            command.Arguments["code"] = code;
+            return WithReservedSession(LoadSession(null), session =>
+            {
+                var result = _toolExecutor.Execute(command, tools, settings, false, true, session);
+                _toolCatalog.InvalidateDocumentVbaTools();
+                return result;
+            });
+        }
+
+        public ToolResult DeleteVbaModule(string moduleName, string expectedCodeSha256)
+        {
+            var settings = _settingsService.Load();
+            var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
+            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_delete_module") };
+            command.Arguments["moduleName"] = moduleName;
+            command.Arguments["expectedCodeSha256"] = expectedCodeSha256;
             return WithReservedSession(LoadSession(null), session =>
             {
                 var result = _toolExecutor.Execute(command, tools, settings, false, true, session);

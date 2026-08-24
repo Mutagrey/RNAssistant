@@ -5,17 +5,12 @@ function renderVbaProject() {
   var query = (($("vbaModuleSearchInput") && $("vbaModuleSearchInput").value) || "").trim().toLowerCase();
   moduleSelect.innerHTML = "";
   backupSelect.innerHTML = "";
-  if (moduleList) {
-    moduleList.innerHTML = "";
-  }
+  if (moduleList) moduleList.innerHTML = "";
   var renderedModules = 0;
   var filteredModules = [];
 
   state.vba.modules.forEach(function (module) {
-    if (query && !vbaModuleMatchesSearch(module, query)) {
-      return;
-    }
-
+    if (query && !vbaModuleMatchesSearch(module, query)) return;
     filteredModules.push(module);
     var option = document.createElement("option");
     option.value = module.name || module.Name || "";
@@ -48,8 +43,11 @@ function renderVbaProject() {
   moduleSelect.disabled = state.bridgeUnavailable || !renderedModules;
   backupSelect.disabled = state.bridgeUnavailable || !state.vba.backups.length;
   $("vbaModuleSearchInput").disabled = state.bridgeUnavailable;
+  $("addVbaUserFormButton").disabled = state.bridgeUnavailable;
   $("refreshVbaButton").disabled = state.bridgeUnavailable;
   $("refreshVbaEmptyButton").disabled = state.bridgeUnavailable;
+  $("vbaCreateNameInput").disabled = state.bridgeUnavailable;
+  $("confirmVbaCreateButton").disabled = state.bridgeUnavailable;
   var editorPanel = document.querySelector(".vba-editor");
   var emptyState = $("vbaEmptyState");
   var isEmpty = state.bridgeUnavailable || !renderedModules;
@@ -66,6 +64,8 @@ function renderVbaProject() {
     $("vbaStatus").textContent = "Office bridge недоступен. VBA загрузится внутри add-in.";
   } else if (!state.vba.modules.length) {
     $("vbaStatus").textContent = "VBA-проект не загружен.";
+  } else {
+    $("vbaStatus").textContent = "VBA project · модулей: " + state.vba.modules.length + ".";
   }
 
   if (state.vba.selectedModule && selectHasOption(moduleSelect, state.vba.selectedModule)) {
@@ -79,9 +79,7 @@ function renderVbaProject() {
 
 function renderVbaModuleList(modules, query) {
   var list = $("vbaModuleList");
-  if (!list) {
-    return;
-  }
+  if (!list) return;
 
   list.innerHTML = "";
   if (!modules.length) {
@@ -104,6 +102,9 @@ function renderVbaModuleList(modules, query) {
       var name = vbaModuleName(module);
       var type = vbaModuleType(module);
       var lineCount = module.lineCount || module.LineCount || 0;
+      var row = document.createElement("div");
+      var deletable = isDeletableVbaModule(module);
+      row.className = "resource-tree-item-row" + (deletable ? " has-action" : "");
       var item = createResourceListItem({
         title: name,
         enabled: null,
@@ -123,9 +124,26 @@ function renderVbaModuleList(modules, query) {
           loadSelectedVbaModule();
         }
       });
+      item.classList.add("resource-tree-item-main");
       item.setAttribute("role", "treeitem");
       item.setAttribute("aria-selected", name === selectedName ? "true" : "false");
-      body.appendChild(item);
+      row.appendChild(item);
+
+      if (deletable) {
+        var deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "resource-tree-item-action is-danger";
+        deleteButton.title = "Удалить VBA-модуль " + name;
+        deleteButton.setAttribute("aria-label", deleteButton.title);
+        deleteButton.innerHTML = iconSvg("trash");
+        deleteButton.addEventListener("click", function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          deleteVbaModule(name);
+        });
+        row.appendChild(deleteButton);
+      }
+      body.appendChild(row);
     });
 
     list.appendChild(section);
@@ -160,9 +178,7 @@ function groupVbaModules(modules) {
   });
 
   groups.sort(function (left, right) {
-    if (left.order !== right.order) {
-      return left.order - right.order;
-    }
+    if (left.order !== right.order) return left.order - right.order;
     return left.label.localeCompare(right.label);
   });
   return groups;
@@ -172,37 +188,26 @@ function vbaModuleType(module) {
   return module ? (module.type || module.Type || "module") : "module";
 }
 
+function isDeletableVbaModule(module) {
+  var type = String(vbaModuleType(module)).toLowerCase();
+  return type === "stdmodule" || type === "classmodule";
+}
+
 function vbaModuleGroupLabel(type) {
   var value = String(type || "module").toLowerCase();
-  if (value.indexOf("document") >= 0 || value.indexOf("worksheet") >= 0 || value.indexOf("workbook") >= 0) {
-    return "Объекты документа";
-  }
-  if (value.indexOf("class") >= 0) {
-    return "Классы";
-  }
-  if (value.indexOf("form") >= 0) {
-    return "Формы";
-  }
-  if (value.indexOf("module") >= 0 || value === "standard") {
-    return "Модули";
-  }
+  if (value.indexOf("document") >= 0 || value.indexOf("worksheet") >= 0 || value.indexOf("workbook") >= 0) return "Объекты документа";
+  if (value.indexOf("class") >= 0) return "Классы";
+  if (value.indexOf("form") >= 0) return "Формы";
+  if (value.indexOf("module") >= 0 || value === "standard") return "Модули";
   return type || "Other";
 }
 
 function vbaModuleGroupOrder(type) {
   var label = vbaModuleGroupLabel(type);
-  if (label === "Модули") {
-    return 1;
-  }
-  if (label === "Объекты документа") {
-    return 2;
-  }
-  if (label === "Классы") {
-    return 3;
-  }
-  if (label === "Формы") {
-    return 4;
-  }
+  if (label === "Модули") return 1;
+  if (label === "Объекты документа") return 2;
+  if (label === "Классы") return 3;
+  if (label === "Формы") return 4;
   return 9;
 }
 

@@ -71,8 +71,8 @@
       }
     }
 
-    async function deleteSelection() {
-      var selected = options.getSelection();
+    async function deleteSelection(target) {
+      var selected = target && typeof target.type === "string" ? target : options.getSelection();
       if (!selected || selected.type === "artifact" || state.bridgeUnavailable) return;
       var warning = selected.type === "plan"
         ? "Удалить план «" + selected.label + "» и все его версии?"

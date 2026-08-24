@@ -598,7 +598,8 @@ html[data-theme="dark"] .tool-list.is-horizontal .tool-list-item,
 html[data-theme="dark"] .tool-list-icon,
 html[data-theme="dark"] .tool-list-empty,
 html[data-theme="dark"] .resource-editor-empty,
-html[data-theme="dark"] .html-workspace-create {
+html[data-theme="dark"] .html-workspace-create,
+html[data-theme="dark"] .vba-create {
   border-color: var(--line);
   background: var(--panel);
 }

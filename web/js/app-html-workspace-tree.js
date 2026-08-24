@@ -30,6 +30,31 @@
     if (typeof options.onSelect === "function") options.onSelect(type, id);
   }
 
+  function appendTreeItem(parent, itemOptions, action) {
+    var row = document.createElement("div");
+    row.className = "resource-tree-item-row" + (action ? " has-action" : "");
+    var item = createResourceListItem(itemOptions);
+    item.classList.add("resource-tree-item-main");
+    item.setAttribute("role", "treeitem");
+    row.appendChild(item);
+    if (action) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "resource-tree-item-action" + (action.danger ? " is-danger" : "");
+      button.title = action.title || "Действие";
+      button.setAttribute("aria-label", button.title);
+      button.innerHTML = iconSvg(action.icon || "trash");
+      button.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        action.onClick();
+      });
+      row.appendChild(button);
+    }
+    parent.appendChild(row);
+    return row;
+  }
+
   function renderFileGroup(parent, label, key, items, query, options) {
     var count = 0;
     var group = createResourceGroup({ key: key, title: label, count: items.length });
@@ -39,7 +64,7 @@
       return matchesText([file.path, file.kind, file.content].join(" "), query);
     });
     renderFileTreeNode(body, key, buildFileTree(matched), function (container, file) {
-      container.appendChild(createResourceListItem({
+      appendTreeItem(container, {
         title: fileDisplayName(file),
         active: isSelected(options, "file", file.id),
         meta: file.kind || "file",
@@ -49,7 +74,12 @@
         compact: true,
         depth: 1,
         onClick: function () { select(options, "file", file.id); }
-      }));
+      }, {
+        title: "Удалить " + file.path,
+        icon: "trash",
+        danger: true,
+        onClick: function () { options.onDelete("file", file.id); }
+      });
       count += 1;
     });
     if (count) parent.appendChild(group);
@@ -63,7 +93,7 @@
     var body = group.treeChildren || group;
     items.forEach(function (data) {
       if (!matchesText([data.name, data.json].join(" "), query)) return;
-      body.appendChild(createResourceListItem({
+      appendTreeItem(body, {
         title: data.name,
         active: isSelected(options, "data", data.id),
         meta: "data/*.json",
@@ -72,7 +102,12 @@
         compact: true,
         depth: 1,
         onClick: function () { select(options, "data", data.id); }
-      }));
+      }, {
+        title: "Удалить " + data.name,
+        icon: "trash",
+        danger: true,
+        onClick: function () { options.onDelete("data", data.id); }
+      });
       count += 1;
     });
     if (count) parent.appendChild(group);
@@ -88,7 +123,7 @@
     group.className += " artifact-root-group";
     var body = group.treeChildren || group;
     matched.sort(function (left, right) { return left.title.localeCompare(right.title); }).forEach(function (artifact) {
-      body.appendChild(createResourceListItem({
+      appendTreeItem(body, {
         title: artifact.title,
         active: isSelected(options, selectionType, artifact.id),
         meta: artifact.meta,
@@ -96,7 +131,12 @@
         compact: true,
         depth: 1,
         onClick: function () { select(options, selectionType, artifact.id); }
-      }));
+      }, selectionType === "plan" ? {
+        title: "Удалить план " + artifact.title,
+        icon: "trash",
+        danger: true,
+        onClick: function () { options.onDelete(selectionType, artifact.id); }
+      } : null);
     });
     parent.appendChild(group);
     return matched.length;

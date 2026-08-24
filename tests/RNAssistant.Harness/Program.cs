@@ -171,6 +171,7 @@ namespace RNAssistant.Harness
                 Test("vba: live hash preserves line structure", VbaLiveHashPreservesLineStructure),
                 Test("vba: VBE normalization is accepted", VbaReadBackAcceptsVbeNormalization),
                 Test("vba: COM write accepts VBE line metadata", VbaProjectWriteAcceptsVbeNormalization),
+                Test("vba: UserForm create and code edit", VbaUserFormCreateAndCodeEdit),
                 Test("vba: read lines returns exact range", VbaReadLinesReturnsExactRange),
                 Test("vba: patch rejects ambiguous anchors", VbaPatchRejectsAmbiguousAnchors),
                 Test("vba: line patch ignores one terminator", VbaLinePatchDoesNotInsertTrailingBlankLine),

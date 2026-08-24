@@ -26,6 +26,8 @@ namespace RNAssistant.Office
         public string LastApiKey { get; private set; }
         public string LastModuleName { get; private set; }
         public string LastModuleCode { get; private set; }
+        public string LastModuleHash { get; private set; }
+        public string LastModuleType { get; private set; }
         public string LastContextKind { get; private set; }
         public string LastContextTitle { get; private set; }
         public string LastContextReference { get; private set; }
@@ -238,6 +240,21 @@ namespace RNAssistant.Office
             LastModuleName = moduleName;
             LastModuleCode = code;
             return ToolResult.Ok("saved");
+        }
+
+        public ToolResult CreateVbaModule(string moduleName, string componentType, string code)
+        {
+            LastModuleName = moduleName;
+            LastModuleType = componentType;
+            LastModuleCode = code;
+            return ToolResult.Ok("created");
+        }
+
+        public ToolResult DeleteVbaModule(string moduleName, string expectedCodeSha256)
+        {
+            LastModuleName = moduleName;
+            LastModuleHash = expectedCodeSha256;
+            return ToolResult.Ok("deleted", expectedCodeSha256);
         }
 
         public ToolResult RestoreVbaBackup(string backupId, string moduleName) { return ToolResult.Ok("restored"); }

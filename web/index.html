@@ -30,25 +30,25 @@
   <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-layout-20260824-1">
   <link rel="stylesheet" href="css/app-tools.css?v=unified-ui-20260821-1">
   <link rel="stylesheet" href="css/app-prompts.css?v=library-ui-20260821-1">
-  <link rel="stylesheet" href="css/app-vba.css?v=library-ui-20260821-1">
+  <link rel="stylesheet" href="css/app-vba.css?v=userform-20260824-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
   <link rel="stylesheet" href="css/app-context-inspector.css?v=context-inspector-20260824-1">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260702-2">
   <link rel="stylesheet" href="css/app-artifacts.css?v=ui-simplify-20260821-3">
-  <link rel="stylesheet" href="css/app-html-workspace.css?v=unified-ui-20260821-1">
-  <link rel="stylesheet" href="css/app-responsive.css?v=unified-ui-20260821-1">
+  <link rel="stylesheet" href="css/app-html-workspace.css?v=vba-tab-20260824-1">
+  <link rel="stylesheet" href="css/app-responsive.css?v=vba-tab-20260824-1">
   <link rel="stylesheet" href="css/app-agent.css?v=ui-simplify-20260821-4">
   <link rel="stylesheet" href="css/app-agent-data.css?v=agent-ui-20260821-2">
-  <link rel="stylesheet" href="css/app-theme.css?v=log-filters-20260824-1">
+  <link rel="stylesheet" href="css/app-theme.css?v=userform-20260824-1">
 </head>
 <body>
   <div class="shell">
     <nav class="tabs" aria-label="Разделы ассистента">
       <button class="tab active" data-section="chat" data-tab="chat">Чат</button>
-      <button class="tab" id="libraryRootTab" data-section="library" data-default-tab="instructions">Библиотека</button>
-      <button class="tab" data-section="vba" data-tab="vba">VBA</button>
       <button class="tab" data-section="artifacts" data-tab="artifacts">Артефакты</button>
+      <button class="tab" data-section="vba" data-tab="vba">VBA</button>
+      <button class="tab" id="libraryRootTab" data-section="library" data-default-tab="instructions">Библиотека</button>
       <button class="tab" data-section="settings" data-tab="settings">Настройки</button>
     </nav>
 
@@ -408,7 +408,16 @@
             <div class="tool-list-controls">
               <input class="tool-search" id="vbaModuleSearchInput" placeholder="Поиск модулей..." autocomplete="off">
               <div class="tool-list-actions">
+                <button class="secondary" id="addVbaUserFormButton" type="button">+ UserForm</button>
                 <button class="secondary" id="refreshVbaButton" type="button">Загрузить VBA</button>
+              </div>
+              <div class="vba-create hidden" id="vbaCreateBox">
+                <input class="tool-search" id="vbaCreateNameInput" maxlength="40" placeholder="UserForm1" autocomplete="off">
+                <div class="tool-list-actions">
+                  <button class="accent-soft" id="confirmVbaCreateButton" type="button">Создать</button>
+                  <button class="secondary" id="cancelVbaCreateButton" type="button">Отмена</button>
+                </div>
+                <small>Создаётся пустая форма; в RNAssistant редактируется её code-behind.</small>
               </div>
             </div>
             <select class="hidden" id="vbaModuleSelect" aria-hidden="true" tabindex="-1"></select>
@@ -770,16 +779,16 @@
   <script src="js/app-tools.js?v=log-filters-20260824-1"></script>
   <script src="js/app-skills.js?v=log-filters-20260824-1"></script>
   <script src="js/app-vba-diff.js?v=vba-modules-20260823-1"></script>
-  <script src="js/app-vba-actions.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-vba-project.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-vba.js?v=vba-modules-20260823-3"></script>
+  <script src="js/app-vba-actions.js?v=userform-20260824-1"></script>
+  <script src="js/app-vba-project.js?v=userform-20260824-1"></script>
+  <script src="js/app-vba.js?v=userform-20260824-1"></script>
   <script src="js/app-html-workspace-preview.js?v=workspace-modules-20260823-1"></script>
   <script src="js/app-html-workspace-artifacts.js?v=workspace-modules-20260823-1"></script>
-  <script src="js/app-html-workspace-model.js?v=workspace-modules-20260823-4"></script>
-  <script src="js/app-html-workspace-editor.js?v=workspace-modules-20260823-5"></script>
-  <script src="js/app-html-workspace-tree.js?v=workspace-modules-20260823-2"></script>
-  <script src="js/app-html-workspace-actions.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-html-workspace.js?v=workspace-modules-20260823-5"></script>
+  <script src="js/app-html-workspace-model.js?v=vba-tab-20260824-1"></script>
+  <script src="js/app-html-workspace-editor.js?v=vba-tab-20260824-1"></script>
+  <script src="js/app-html-workspace-tree.js?v=vba-tab-20260824-1"></script>
+  <script src="js/app-html-workspace-actions.js?v=vba-tab-20260824-1"></script>
+  <script src="js/app-html-workspace.js?v=vba-tab-20260824-1"></script>
   <script src="js/app-context.js?v=log-filters-20260824-1"></script>
   <script src="js/app-context-inspector.js?v=context-inspector-20260824-1"></script>
   <script src="js/app-agent-data.js?v=agent-ui-20260821-2"></script>

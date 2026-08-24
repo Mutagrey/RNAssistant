@@ -3,6 +3,25 @@
   overflow: auto;
 }
 
+.vba-create {
+  display: grid;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid #d8e0eb;
+  border-radius: 7px;
+  background: #fbfcfe;
+}
+
+.vba-create .tool-search {
+  margin-bottom: 0;
+}
+
+.vba-create small {
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
 .vba-module-group {
   margin-bottom: 8px;
 }

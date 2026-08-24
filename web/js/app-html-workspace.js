@@ -32,7 +32,7 @@
   });
   var syncHtmlEditorToState = workspaceEditor.sync;
   var markHtmlWorkspaceDirty = workspaceEditor.markDirty;
-  var confirmDiscardHtmlWorkspaceChanges = workspaceEditor.confirmDiscard;
+  var confirmDiscardHtmlChanges = workspaceEditor.confirmDiscard;
   var updateHtmlWorkspaceStatus = workspaceEditor.updateStatus;
   var setHtmlWorkspaceMode = workspaceEditor.setMode;
   var applyHtmlWorkspaceMode = workspaceEditor.applyMode;
@@ -112,9 +112,11 @@
       artifacts: (state.artifacts || []).map(workspaceTreeArtifact),
       plans: latestPlanArtifacts().map(workspaceTreeArtifact),
       selected: state.htmlWorkspaceSelection || {},
-      onSelect: selectHtmlWorkspaceItem
+      onSelect: selectHtmlWorkspaceItem,
+      onDelete: deleteHtmlWorkspaceTreeItem
     });
   }
+
   function selectHtmlWorkspaceItem(type, id) {
     var selected = state.htmlWorkspaceSelection || {};
     var changingSelection = String(selected.type || "") !== String(type || "") || String(selected.id || "") !== String(id || "");
@@ -133,8 +135,23 @@
     renderHtmlWorkspace();
   }
 
-  function workspaceActionSelection() {
-    var selected = selectedItem();
+  function workspaceActionSelection(type, id) {
+    var selected = null;
+    if (!type) {
+      selected = selectedItem();
+    } else if (type === "plan" || type === "artifact") {
+      (state.artifacts || []).forEach(function (item) {
+        if (artifactId(item) === id) selected = { type: type, item: item };
+      });
+    } else if (type === "data") {
+      dataSources().forEach(function (item) {
+        if (dataId(item) === id) selected = { type: "data", item: item };
+      });
+    } else if (type === "file") {
+      files().forEach(function (item) {
+        if (fileId(item) === id) selected = { type: "file", item: item };
+      });
+    }
     if (!selected) return null;
     var result = { type: selected.type, item: selected.item };
     if (selected.type === "plan") {
@@ -151,6 +168,28 @@
       result.content = fileContent(selected.item);
     }
     return result;
+  }
+
+  function deleteHtmlWorkspaceTreeItem(type, id) {
+    var current = state.htmlWorkspaceSelection || {};
+    var changingSelection = String(current.type || "") !== String(type || "") || String(current.id || "") !== String(id || "");
+    if (state.htmlWorkspaceDirty && changingSelection) {
+      window.alert("Сначала сохраните изменения текущего артефакта.");
+      return;
+    }
+    return workspaceActions.deleteSelection(workspaceActionSelection(type, id));
+  }
+
+  function confirmDiscardArtifactChanges(action) {
+    if (!confirmDiscardHtmlChanges(action)) return false;
+    if (!state.vbaEditorDirty) return true;
+    var accepted = window.confirm(
+      "В VBA-модуле есть несохранённые изменения. " +
+      (action || "Продолжить") +
+      " и потерять их?"
+    );
+    if (accepted) state.vbaEditorDirty = false;
+    return accepted;
   }
 
   function workspaceActionState() {
@@ -230,9 +269,7 @@
 
   function updateHtmlSidebarToggle() {
     var button = $("toggleHtmlSidebarButton");
-    if (!button) {
-      return;
-    }
+    if (!button) return;
     var label = state.htmlWorkspaceSidebarHidden ? "Показать список" : "Скрыть список";
     button.setAttribute("title", label);
     button.setAttribute("aria-label", label);
@@ -291,5 +328,5 @@
   window.bindHtmlWorkspaceActions = bindHtmlWorkspaceActions;
   window.saveHtmlWorkspaceSelection = workspaceActions.saveSelection;
   window.markHtmlWorkspaceDirty = markHtmlWorkspaceDirty;
-  window.confirmDiscardHtmlWorkspaceChanges = confirmDiscardHtmlWorkspaceChanges;
+  window.confirmDiscardHtmlWorkspaceChanges = confirmDiscardArtifactChanges;
 }());

@@ -16,43 +16,85 @@
     }
 
     async function refreshProject() {
-      await runWork(async function () {
+      return runWork(async function () {
         var response = await options.send("getVbaProject", {});
         options.applyProjectResponse(response);
         await options.loadSelectedModule();
       });
     }
 
+    async function createModule(moduleName, componentType, code) {
+      var created = await runWork(async function () {
+        var response = await options.send("createVbaModule", {
+          moduleName: moduleName,
+          componentType: componentType,
+          code: code
+        });
+        if (response.Success === false || response.success === false) {
+          throw new Error(response.Message || response.message || "VBA-компонент не создан.");
+        }
+        options.setStatus(response.Message || response.message || "VBA-компонент создан: " + moduleName);
+        options.log(response.Message || response.message || "VBA-компонент создан: " + moduleName, "success");
+      });
+      if (created) {
+        if (typeof options.selectModule === "function") options.selectModule(moduleName);
+        await refreshProject();
+      }
+      return created;
+    }
+
+    async function deleteModule(moduleName, expectedCodeSha256) {
+      var deleted = await runWork(async function () {
+        var response = await options.send("deleteVbaModule", {
+          moduleName: moduleName,
+          expectedCodeSha256: expectedCodeSha256
+        });
+        if (response.Success === false || response.success === false) {
+          throw new Error(response.Message || response.message || "VBA-модуль не удалён.");
+        }
+        options.setStatus(response.Message || response.message || "VBA-модуль удалён: " + moduleName);
+        options.log(response.Message || response.message || "VBA-модуль удалён: " + moduleName, "success");
+      });
+      if (deleted) await refreshProject();
+      return deleted;
+    }
+
     async function saveModule() {
       var moduleName = options.getModuleName();
       if (!moduleName) {
-        return;
+        return false;
       }
 
       options.previewDiff();
-      if (await runWork(async function () {
+      var saved = await runWork(async function () {
         var response = await options.send("saveVbaModule", {
           moduleName: moduleName,
           code: options.getEditorCode()
         });
         options.setStatus(response.Message || response.message || "VBA-модуль сохранен.");
-      })) {
+      });
+      if (saved) {
+        if (typeof options.markSaved === "function") options.markSaved();
         await refreshProject();
       }
+      return saved;
     }
 
     async function restoreBackup() {
       var backupId = options.getBackupId();
       var moduleName = options.getModuleName();
-      if (await runWork(async function () {
+      var restored = await runWork(async function () {
         var response = await options.send("restoreVbaBackup", {
           backupId: backupId,
           moduleName: moduleName
         });
         options.setStatus(response.Message || response.message || "Резервная копия VBA восстановлена.");
-      })) {
+      });
+      if (restored) {
+        if (typeof options.markSaved === "function") options.markSaved();
         await refreshProject();
       }
+      return restored;
     }
 
     async function runMacro() {
@@ -85,6 +127,8 @@
     }
 
     return {
+      createModule: createModule,
+      deleteModule: deleteModule,
       refreshProject: refreshProject,
       restoreBackup: restoreBackup,
       runMacro: runMacro,

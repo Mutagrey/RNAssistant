@@ -101,10 +101,10 @@ Discovery читает VBProject активного документа, нахо
 
 Whole-module запись удаляет текущие строки и вставляет канонический CRLF source через `CodeModule.InsertLines(1, ...)`, затем немедленно читает модуль обратно. BOM, NUL/другие control characters и Unicode line separators отклоняются до удаления исходного кода.
 
-Создавать и удалять можно только `StdModule` и `ClassModule`. Document modules и UserForms разрешено читать, искать и патчить, но нельзя создавать/удалять через RNAssistant. Public VBA mutations доступны Agent, но всегда требуют подтверждения при выключенном auto-confirm. Низкоуровневые whole-module replacement/insert/run_macro tools в Agent catalog не входят.
+Создавать можно `StdModule`, `ClassModule` и пустой `MSForm` (UserForm). Для UserForm RNAssistant читает и изменяет только code-behind через `CodeModule`: visual Designer, controls, layout, properties и бинарные `.frx` assets не входят в этот protocol и не попадают в code backup. Удалять можно только `StdModule` и `ClassModule`; document modules и UserForms не удаляются через RNAssistant. Public VBA mutations доступны Agent, но всегда требуют подтверждения при выключенном auto-confirm. Низкоуровневые whole-module replacement/insert/run_macro tools в Agent catalog не входят.
 
 Правила генерации и редактирования также встроены как skills `common.vba_tool_authoring` и `common.vba_code_editing`, чтобы модель получала их только при релевантном сценарии.
 
 ## Обязательная проверка на Windows
 
-Изменения COM/VBA lifecycle нельзя полноценно проверить на macOS. Перед merge нужны Windows x64 + Office x64 + VS 2022 smoke tests для Excel, Word и PowerPoint: LF/CRLF/final newline и граничные blank lines, кириллица, `vba_read_lines`, create/patch/clear/rollback, Office busy/modal state, discovery, typed `Application.Run`, cleanup после успеха/ошибки, permanent install/uninstall, hash drift, Trust Access off и macro-free document.
+Изменения COM/VBA lifecycle нельзя полноценно проверить на macOS. Перед merge нужны Windows x64 + Office x64 + VS 2022 smoke tests для Excel, Word и PowerPoint: LF/CRLF/final newline и граничные blank lines, кириллица, `vba_read_lines`, create/patch/clear/rollback, создание пустого MSForm и редактирование его code-behind без изменения Designer, Office busy/modal state, discovery, typed `Application.Run`, cleanup после успеха/ошибки, permanent install/uninstall, hash drift, Trust Access off и macro-free document.

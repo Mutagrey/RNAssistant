@@ -596,6 +596,27 @@ namespace RNAssistant.Office.Contracts
         public string Code { get; set; }
     }
 
+    public sealed class VbaCreateModulePayload
+    {
+        [JsonProperty("moduleName")]
+        public string ModuleName { get; set; }
+
+        [JsonProperty("componentType")]
+        public string ComponentType { get; set; }
+
+        [JsonProperty("code")]
+        public string Code { get; set; }
+    }
+
+    public sealed class VbaDeleteModulePayload
+    {
+        [JsonProperty("moduleName")]
+        public string ModuleName { get; set; }
+
+        [JsonProperty("expectedCodeSha256")]
+        public string ExpectedCodeSha256 { get; set; }
+    }
+
     public sealed class RestoreVbaBackupPayload
     {
         [JsonProperty("backupId")]

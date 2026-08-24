@@ -60,6 +60,64 @@
   overflow: auto;
 }
 
+.resource-tree-item-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.resource-tree-item-row .resource-tree-item-main {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.resource-tree-item-row.has-action .resource-tree-item-main {
+  padding-right: 34px;
+}
+
+.resource-tree-item-action {
+  position: relative;
+  z-index: 1;
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  margin-right: 3px;
+  padding: 5px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  opacity: 0;
+}
+
+.resource-tree-item-action svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.resource-tree-item-row:hover .resource-tree-item-action,
+.resource-tree-item-row:focus-within .resource-tree-item-action {
+  opacity: 1;
+}
+
+.resource-tree-item-action:hover,
+.resource-tree-item-action:focus-visible {
+  background: var(--button-danger-soft-bg);
+  color: var(--danger);
+}
+
 .html-workspace-group {
   margin-bottom: 8px;
 }
@@ -284,5 +342,9 @@
 
   .html-workspace-tree {
     max-height: 180px;
+  }
+
+  .resource-tree-item-action {
+    opacity: 0.72;
   }
 }

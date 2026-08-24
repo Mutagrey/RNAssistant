@@ -247,6 +247,54 @@ namespace RNAssistant.Harness
                 "read-back code is VBE-equivalent");
         }
 
+        private static void VbaUserFormCreateAndCodeEdit()
+        {
+            var document = new FakeVbaDocumentObject();
+            var created = VbaProjectSupport.CreateModule(document, "UserForm1", "MSForm", "Option Explicit\n");
+            AssertTrue(created.Success, "COM UserForm create succeeds");
+            var form = document.VBProject.VBComponents.Cast<FakeVbaComponent>().Single(component => component.Name == "UserForm1");
+            AssertEqual(3, form.Type, "COM UserForm uses MSForm component type");
+            var read = VbaProjectSupport.ReadModule(document, "UserForm1", 1000000);
+            AssertEqual("MSForm", (string)JObject.Parse(read.DataJson)["type"], "COM UserForm type is listed canonically");
+
+            var edited = VbaProjectSupport.ReplaceModule(
+                document,
+                "UserForm1",
+                "Option Explicit\nPrivate Sub UserForm_Initialize()\nEnd Sub",
+                false);
+            AssertTrue(edited.Success, "COM UserForm code-behind edit succeeds");
+            AssertContains(form.CodeModule.Code, "UserForm_Initialize", "COM UserForm code-behind changed");
+            AssertEqual("vba_component_type_read_only", VbaProjectSupport.DeleteModule(document, "UserForm1").ErrorCode, "COM UserForm delete remains blocked");
+
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var settings = new AppSettings { AutoConfirmToolActions = true };
+                var publicCreate = executor.Execute(
+                    Command("excel.vba_create_module", "moduleName", "UserForm2", "componentType", "MSForm", "code", "Option Explicit\n"),
+                    tools,
+                    settings,
+                    false,
+                    false);
+                AssertTrue(publicCreate.Success, "public UserForm create succeeds");
+
+                var code = adapter.GetVbaModuleCode("UserForm2");
+                var publicEdit = executor.Execute(
+                    Command(
+                        "excel.vba_replace_text",
+                        "moduleName", "UserForm2",
+                        "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(code),
+                        "find", "Option Explicit",
+                        "replace", "Option Explicit\nPrivate Sub UserForm_Activate()\nEnd Sub"),
+                    tools,
+                    settings,
+                    false,
+                    false);
+                AssertTrue(publicEdit.Success, "public UserForm code edit succeeds");
+                AssertContains(adapter.GetVbaModuleCode("UserForm2"), "UserForm_Activate", "public UserForm code changed");
+            });
+        }
+
         private static void VbaReadLinesReturnsExactRange()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

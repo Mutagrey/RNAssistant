@@ -627,6 +627,25 @@ namespace RNAssistant.Harness
             AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
             AssertEqual("Module1", controller.LastModuleName, "module name");
             AssertContains(controller.LastModuleCode, "Sub Main", "module code");
+
+            var createResponseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"b5-create\",\"type\":\"createVbaModule\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"moduleName\":\"UserForm1\",\"componentType\":\"MSForm\",\"code\":\"Option Explicit\"}}")
+                .GetAwaiter()
+                .GetResult();
+            AssertTrue(JObject.Parse(createResponseJson)["ok"].Value<bool>(), "VBA create bridge response ok");
+            AssertEqual("UserForm1", controller.LastModuleName, "create module name");
+            AssertEqual("MSForm", controller.LastModuleType, "create module type");
+            AssertContains(controller.LastModuleCode, "Option Explicit", "create module code");
+
+            var deleteResponseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"b5-delete\",\"type\":\"deleteVbaModule\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"moduleName\":\"Module3\",\"expectedCodeSha256\":\"abc123\"}}")
+                .GetAwaiter()
+                .GetResult();
+            AssertTrue(JObject.Parse(deleteResponseJson)["ok"].Value<bool>(), "VBA delete bridge response ok");
+            AssertEqual("Module3", controller.LastModuleName, "delete module name");
+            AssertEqual("abc123", controller.LastModuleHash, "delete module hash");
         }
 
         private static void BridgeReportsModelConnectionDiagnostics()

@@ -15,6 +15,7 @@ namespace RNAssistant.Office
     {
         private const int StdModuleType = 1;
         private const int ClassModuleType = 2;
+        private const int MsFormType = 3;
 
         public static object GetVbaProject(object documentObject)
         {
@@ -249,8 +250,9 @@ namespace RNAssistant.Office
             if (!TryValidateLiveCode(code, out validationError)) return ToolResult.Fail(validationError, null, "vba_code_invalid", true);
 
             var type = string.Equals(componentType, "ClassModule", StringComparison.OrdinalIgnoreCase) ? ClassModuleType :
-                string.Equals(componentType, "StdModule", StringComparison.OrdinalIgnoreCase) ? StdModuleType : 0;
-            if (type == 0) return ToolResult.Fail("Only StdModule and ClassModule can be created.", null, "vba_component_type_read_only", false);
+                string.Equals(componentType, "StdModule", StringComparison.OrdinalIgnoreCase) ? StdModuleType :
+                string.Equals(componentType, "MSForm", StringComparison.OrdinalIgnoreCase) || string.Equals(componentType, "UserForm", StringComparison.OrdinalIgnoreCase) ? MsFormType : 0;
+            if (type == 0) return ToolResult.Fail("Only StdModule, ClassModule, and MSForm can be created.", null, "vba_component_type_read_only", false);
 
             dynamic vbProject = GetVbaProject(documentObject);
             if (FindComponent(vbProject, moduleName) != null) return ToolResult.Fail("VBA module already exists: " + moduleName, null, "vba_module_exists", false);
@@ -264,6 +266,7 @@ namespace RNAssistant.Office
                 return ToolResult.Ok("Inserted VBA module: " + moduleName, JsonConvert.SerializeObject(new
                 {
                     moduleName = (string)component.Name,
+                    componentType = ComponentTypeName((int)component.Type),
                     lineCount = (int)component.CodeModule.CountOfLines,
                     codeSha256 = VbaToolManifestParser.LiveCodeSha256(ReadComponentCode(component))
                 }));
@@ -303,7 +306,7 @@ namespace RNAssistant.Office
             if (component == null) return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
             var type = (int)component.Type;
             if (type != StdModuleType && type != ClassModuleType)
-                return ToolResult.Fail("Document modules and UserForms are read/search/patch only and cannot be deleted.", null, "vba_component_type_read_only", false);
+                return ToolResult.Fail("Document modules and UserForms cannot be deleted through RNAssistant.", null, "vba_component_type_read_only", false);
             vbProject.VBComponents.Remove(component);
             if (FindComponent(vbProject, moduleName) != null)
             {

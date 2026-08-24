@@ -182,6 +182,8 @@ var vbaActions = window.RNAssistantVbaActions.create({
   previewDiff: previewVbaDiff,
   applyProjectResponse: readVbaResult,
   loadSelectedModule: loadSelectedVbaModule,
+  selectModule: function (moduleName) { state.vba.selectedModule = moduleName; },
+  markSaved: function () { state.vbaEditorDirty = false; },
   setStatus: function (text) { $("vbaStatus").textContent = text; },
   getMacroToolId: vbaMacroToolId,
   getMacroName: function () {
@@ -194,7 +196,89 @@ var vbaActions = window.RNAssistantVbaActions.create({
 });
 
 function refreshVbaProject() {
+  if (state.vbaEditorDirty && !window.confirm("Перезагрузить VBA project и потерять несохранённые изменения?")) {
+    return Promise.resolve(false);
+  }
+  state.vbaEditorDirty = false;
   return vbaActions.refreshProject();
+}
+
+function nextVbaUserFormName() {
+  var names = {};
+  (state.vba.modules || []).forEach(function (module) {
+    names[vbaModuleName(module).toLowerCase()] = true;
+  });
+  var index = 1;
+  while (names[("UserForm" + index).toLowerCase()]) index += 1;
+  return "UserForm" + index;
+}
+
+function showVbaUserFormCreate() {
+  if (state.bridgeUnavailable) return;
+  if (state.vbaEditorDirty) {
+    window.alert("Сначала сохраните изменения текущего VBA-модуля.");
+    return;
+  }
+  var box = $("vbaCreateBox");
+  var input = $("vbaCreateNameInput");
+  box.classList.remove("hidden");
+  input.value = nextVbaUserFormName();
+  input.focus();
+  input.select();
+}
+
+function hideVbaUserFormCreate() {
+  $("vbaCreateBox").classList.add("hidden");
+}
+
+async function createVbaUserForm() {
+  if (state.bridgeUnavailable || state.vbaEditorDirty) return false;
+  var input = $("vbaCreateNameInput");
+  var moduleName = (input.value || "").trim();
+  if (!/^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(moduleName)) {
+    window.alert("Имя UserForm должно начинаться с латинской буквы и содержать только буквы, цифры или underscore (до 40 символов).");
+    input.focus();
+    return false;
+  }
+  $("vbaModuleSearchInput").value = "";
+  state.vbaEditorMode = "edit";
+  var created = await vbaActions.createModule(moduleName, "MSForm", "Option Explicit\n");
+  if (created) hideVbaUserFormCreate();
+  return created;
+}
+
+async function deleteVbaModule(moduleName) {
+  var module = (state.vba.modules || []).filter(function (item) {
+    return vbaModuleName(item) === moduleName;
+  })[0] || null;
+  var type = String(vbaModuleType(module)).toLowerCase();
+  if (!module || (type !== "stdmodule" && type !== "classmodule")) return false;
+  var selectedName = vbaModuleName(selectedVbaModule());
+  if (state.vbaEditorDirty && selectedName !== moduleName) {
+    window.alert("Сначала сохраните изменения текущего VBA-модуля.");
+    return false;
+  }
+  var warning = "Удалить VBA-модуль «" + moduleName + "»? Перед удалением будет создана резервная копия.";
+  if (state.vbaEditorDirty) warning = "Есть несохранённые изменения. " + warning;
+  if (!window.confirm(warning)) return false;
+
+  try {
+    var read = await send("getVbaModule", { moduleName: moduleName });
+    if (read.Success === false || read.success === false) {
+      throw new Error(read.Message || read.message || "VBA-модуль не прочитан.");
+    }
+    var data = JSON.parse(read.DataJson || read.dataJson || "{}");
+    var hash = data.codeSha256 || data.CodeSha256 || "";
+    if (!hash) throw new Error("Не получен актуальный hash VBA-модуля.");
+    var deleted = await vbaActions.deleteModule(moduleName, hash);
+    if (!deleted) return false;
+    state.vbaEditorDirty = false;
+    return true;
+  } catch (error) {
+    $("vbaStatus").textContent = error.message;
+    log(error.detail || error.message, "error");
+    return false;
+  }
 }
 
 function saveVbaModule() {
@@ -212,6 +296,18 @@ function runVbaMacro() {
 function bindVbaActions() {
   $("refreshVbaButton").addEventListener("click", refreshVbaProject);
   $("refreshVbaEmptyButton").addEventListener("click", refreshVbaProject);
+  $("addVbaUserFormButton").addEventListener("click", showVbaUserFormCreate);
+  $("confirmVbaCreateButton").addEventListener("click", createVbaUserForm);
+  $("cancelVbaCreateButton").addEventListener("click", hideVbaUserFormCreate);
+  $("vbaCreateNameInput").addEventListener("keydown", function (event) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      createVbaUserForm();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      hideVbaUserFormCreate();
+    }
+  });
   $("vbaModuleSearchInput").addEventListener("input", renderVbaProject);
   $("vbaModuleSelect").addEventListener("change", function () {
     renderSelectedVbaModule();
@@ -231,9 +327,7 @@ function bindVbaActions() {
   $("runVbaMacroButton").addEventListener("click", runVbaMacro);
   Array.prototype.slice.call(document.querySelectorAll("#tab-vba details")).forEach(function (details) {
     details.addEventListener("toggle", function () {
-      if (typeof refreshCodeEditors === "function") {
-        refreshCodeEditors(["vbaCodeInput"]);
-      }
+      if (typeof refreshCodeEditors === "function") refreshCodeEditors(["vbaCodeInput"]);
     });
   });
   renderVbaProject();
