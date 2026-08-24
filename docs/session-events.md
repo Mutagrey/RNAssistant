@@ -55,6 +55,8 @@ Artifact metadata and lineage remain in the session stream. HTML undo/redo is de
 
 Settings → Diagnostics → Trajectory reads the last 500 events from the same stream. It shows run, turn, and step correlation. Event metadata and state operations are inline; model payloads and streaming-frame batches are fetched lazily by event id and shown as a bounded preview. The bridge never includes API keys or authorization headers.
 
+The prioritized follow-up work for trajectory queries, HTML branches, CAS lifecycle, and document-scoped VBA recovery is tracked in [trajectory-roadmap.md](trajectory-roadmap.md).
+
 ## Format policy
 
 `ChatSession.CurrentFormatVersion` is 4 and `SessionEvent.CurrentSchemaVersion` is 1. Unsupported event schemas and old snapshot files are refused rather than guessed or migrated. During development, use **Clear Chats/Data** once after upgrading.
