@@ -1,7 +1,7 @@
 var settingsDirty = false;
 
 var modelSettingsDefaults = {
-  model: "gpt-4o-mini",
+  model: "",
   reasoningRequestMode: "chat_template_kwargs",
   reasoningCustomJson: "{}",
   maxTokens: 3072,

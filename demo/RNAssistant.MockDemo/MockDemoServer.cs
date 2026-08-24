@@ -110,7 +110,8 @@ namespace RNAssistant.MockDemo
                     return;
                 }
 
-                if (string.Equals(path, "/config/models.json", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(path, "/v1/models", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(path, "/config/models.json", StringComparison.OrdinalIgnoreCase))
                 {
                     WriteText(context, 200, ScriptedDemoLlm.CatalogJson(), "application/json");
                     return;

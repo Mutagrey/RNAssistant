@@ -339,12 +339,8 @@ namespace RNAssistant.Core.Llm
 
         public static string BuildModelsConfigUrl(string baseUrl)
         {
-            if (string.IsNullOrWhiteSpace(baseUrl))
-            {
-                baseUrl = "https://api.openai.com";
-            }
-
-            var url = baseUrl.Trim();
+            var url = (baseUrl ?? string.Empty).Trim();
+            if (url.Length == 0) return string.Empty;
             var completionsIndex = url.IndexOf("/chat/completions", StringComparison.OrdinalIgnoreCase);
             if (completionsIndex >= 0)
             {
@@ -357,14 +353,26 @@ namespace RNAssistant.Core.Llm
                 url = url.Substring(0, url.Length - 3).TrimEnd('/');
             }
 
-            return url + "/config/models.json";
+            return url + "/v1/models";
         }
 
         public static string BuildModelsConfigUrl(AppSettings settings)
         {
             if (settings != null && !string.IsNullOrWhiteSpace(settings.ModelsConfigUrl))
             {
-                return settings.ModelsConfigUrl.Trim();
+                var configured = settings.ModelsConfigUrl.Trim();
+                Uri absolute;
+                if (Uri.TryCreate(configured, UriKind.Absolute, out absolute) &&
+                    (string.Equals(absolute.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(absolute.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return configured;
+                }
+                var baseModelsUrl = BuildModelsConfigUrl(settings.BaseUrl);
+                if (string.IsNullOrWhiteSpace(baseModelsUrl)) return string.Empty;
+                var versionIndex = baseModelsUrl.LastIndexOf("/v1/models", StringComparison.OrdinalIgnoreCase);
+                var root = versionIndex < 0 ? baseModelsUrl.TrimEnd('/') : baseModelsUrl.Substring(0, versionIndex);
+                return root.TrimEnd('/') + "/" + configured.TrimStart('/');
             }
             return BuildModelsConfigUrl(settings == null ? null : settings.BaseUrl);
         }
@@ -373,7 +381,7 @@ namespace RNAssistant.Core.Llm
         {
             if (string.IsNullOrWhiteSpace(baseUrl))
             {
-                baseUrl = "https://api.openai.com";
+                return string.Empty;
             }
 
             if (baseUrl.IndexOf("/chat/completions", StringComparison.OrdinalIgnoreCase) >= 0)

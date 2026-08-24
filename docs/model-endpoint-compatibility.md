@@ -19,6 +19,7 @@ Settings → Agent → «Запустить тест» checks three exact sentin
 ## Optional capabilities
 
 - Provider token usage; otherwise the UI uses an estimate.
+- Model catalog at `GET /v1/models` by default; an absolute or Base-URL-relative override remains configurable.
 - SSE streaming.
 - Reasoning metadata in supported response fields or one leading `<think>` block. It is stored separately from visible content.
 - Model catalog metadata for context/output limits and Vision/Audio support.

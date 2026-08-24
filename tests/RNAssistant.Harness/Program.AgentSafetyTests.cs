@@ -32,6 +32,13 @@ namespace RNAssistant.Harness
             AssertEqual(AppSettings.DefaultMaxAgentFormatRetries, settings.MaxAgentFormatRetries, "long-run format retry default");
             AssertEqual(AppSettings.DefaultMaxAgentToolSteps, settings.MaxAgentToolSteps, "long-run tool step default");
             AssertEqual(ReasoningRequestModes.ChatTemplateKwargs, settings.ReasoningRequestMode, "reasoning request mode default");
+            AssertEqual(string.Empty, settings.BaseUrl, "base URL default");
+            AssertEqual("/v1/models", settings.ModelsConfigUrl, "models endpoint default");
+            AssertEqual(string.Empty, settings.Model, "model default");
+            AssertEqual(5, AppSettings.DefaultMaxImagesPerPrompt, "configured image count default");
+            AssertEqual(AppSettings.DefaultMaxImagesPerPrompt, ModelContextBudget.MaxImagesPerPrompt(settings), "image count default");
+            settings.BaseUrl = "http://127.0.0.1:8000/v1";
+            AssertEqual("http://127.0.0.1:8000/v1/models", LlmClient.BuildModelsConfigUrl(settings), "relative models endpoint");
         }
 
         private static void AgentSupportsSelectableResponseFormats()

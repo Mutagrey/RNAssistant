@@ -188,7 +188,7 @@ function renderModelCapabilityList() {
     appendModelCapabilitySelect(row, "Audio: " + value, audioMode, function (mode) {
       setModelCapabilityOverride("audio", value, mode);
     });
-    appendModelCapabilityNumber(row, "Изображений в запросе: " + value, maxImages, "3", function (next) {
+    appendModelCapabilityNumber(row, "Изображений в запросе: " + value, maxImages, "5", function (next) {
       setStoredModelCapabilityField(value, "MaxImagesPerPrompt", next);
     });
     list.appendChild(row);

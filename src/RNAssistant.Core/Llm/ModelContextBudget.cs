@@ -132,7 +132,9 @@ namespace RNAssistant.Core.Llm
         public static int MaxImagesPerPrompt(AppSettings settings, string model = null)
         {
             var capability = Capability(settings, model);
-            return Math.Max(1, capability == null ? 3 : capability.MaxImagesPerPrompt.GetValueOrDefault(3));
+            return Math.Max(1, capability == null
+                ? AppSettings.DefaultMaxImagesPerPrompt
+                : capability.MaxImagesPerPrompt.GetValueOrDefault(AppSettings.DefaultMaxImagesPerPrompt));
         }
 
         public static int EstimateTextTokens(string text)

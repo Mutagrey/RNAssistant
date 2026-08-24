@@ -571,7 +571,7 @@
               </div>
               <div class="form-grid two-columns">
                 <label><span>Адрес API</span><input id="baseUrlInput" autocomplete="off" placeholder="https://host"></label>
-                <label><span>URL каталога моделей</span><input id="modelsConfigUrlInput" autocomplete="off" placeholder="Пусто = вычислять из адреса API"></label>
+                <label><span>URL каталога моделей</span><input id="modelsConfigUrlInput" autocomplete="off" placeholder="Относительно адреса API, например /v1/models"></label>
                 <label><span>API-ключ</span><input id="apiKeyInput" type="password" autocomplete="off" placeholder="Оставьте пустым, чтобы не менять"><small id="apiKeyStatus"></small></label>
                 <label class="wide"><span>HTTP-заголовки</span><textarea id="headersInput" rows="4" placeholder="Header-Name: value"></textarea></label>
                 <label class="wide"><span>Разрешённые origins HTML workspace</span><textarea id="htmlNetworkOriginsInput" rows="3" placeholder="https://api.example.com"></textarea><small>По одному HTTP(S) origin на строку. Удалите строку, чтобы отозвать доступ.</small></label>
@@ -811,13 +811,13 @@
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js?v=library-editor-20260824-1"></script>
   <script src="js/app-markdown.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-settings.js?v=token-estimate-20260824-2"></script>
+  <script src="js/app-settings.js?v=endpoint-defaults-20260824-1"></script>
   <script src="js/app-logs.js?v=log-filters-20260824-1"></script>
   <script src="js/app-diagnostics.js?v=log-filters-20260824-1"></script>
   <script src="js/app-prompts.js?v=library-editor-20260824-1"></script>
   <script src="js/app-model-data.js?v=media-routing-20260824-1"></script>
   <script src="js/app-model-picker.js?v=model-modules-20260823-2"></script>
-  <script src="js/app-model-capabilities.js?v=media-routing-20260824-1"></script>
+  <script src="js/app-model-capabilities.js?v=attachment-limit-20260824-1"></script>
   <script src="js/app-model-render.js?v=media-routing-20260824-1"></script>
   <script src="js/app-models.js?v=chat-binding-20260824-1"></script>
   <script src="js/app-context-data.js"></script>

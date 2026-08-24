@@ -109,6 +109,7 @@ namespace RNAssistant.Core.Models
     public sealed class AppSettings
     {
         public const int DefaultMaxTokens = 3072;
+        public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;
         public const int DefaultMaxAgentIterations = 256;
         public const int DefaultMaxAgentFormatRetries = 10;
@@ -159,9 +160,9 @@ namespace RNAssistant.Core.Models
 
         public AppSettings()
         {
-            BaseUrl = "https://api.openai.com";
-            ModelsConfigUrl = string.Empty;
-            Model = "gpt-4o-mini";
+            BaseUrl = string.Empty;
+            ModelsConfigUrl = "/v1/models";
+            Model = string.Empty;
             SystemPrompt =
                 "# RNAssistant Agent\n\n" +
                 "## Role\n\n" +

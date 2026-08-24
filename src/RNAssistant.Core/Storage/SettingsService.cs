@@ -66,16 +66,11 @@ namespace RNAssistant.Core.Storage
             {
                 settings.HtmlNetworkAllowedOrigins = new List<string>();
             }
-            if (string.IsNullOrWhiteSpace(settings.BaseUrl))
-            {
-                settings.BaseUrl = defaults.BaseUrl;
-            }
             settings.BaseUrl = NormalizeBaseUrl(settings.BaseUrl);
-            settings.ModelsConfigUrl = (settings.ModelsConfigUrl ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(settings.Model))
-            {
-                settings.Model = defaults.Model;
-            }
+            settings.ModelsConfigUrl = string.IsNullOrWhiteSpace(settings.ModelsConfigUrl)
+                ? defaults.ModelsConfigUrl
+                : settings.ModelsConfigUrl.Trim();
+            settings.Model = (settings.Model ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(settings.SystemPrompt))
             {
                 settings.SystemPrompt = defaults.SystemPrompt;
@@ -251,7 +246,7 @@ namespace RNAssistant.Core.Storage
             var value = (baseUrl ?? string.Empty).Trim().TrimEnd('/');
             if (value.Length == 0)
             {
-                return new AppSettings().BaseUrl;
+                return string.Empty;
             }
 
             var completionsIndex = value.IndexOf("/chat/completions", StringComparison.OrdinalIgnoreCase);
