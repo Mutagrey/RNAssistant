@@ -10,6 +10,8 @@ namespace RNAssistant.Core.Storage
     public sealed class SkillStore
     {
         private const long MaxSkillFileBytes = 2100000;
+        private const long MaxSkillReferenceFileBytes = 2100000;
+        private const int MaxSkillReferences = 64;
         private readonly AppDataPaths _paths;
 
         public SkillStore(AppDataPaths paths)
@@ -35,6 +37,7 @@ namespace RNAssistant.Core.Storage
 
                 skill.BuiltIn = false;
                 skill.StoragePath = Path.GetDirectoryName(file);
+                skill.References = LoadReferences(skill.StoragePath);
                 result.Add(skill);
             }
 
@@ -96,6 +99,84 @@ namespace RNAssistant.Core.Storage
             }
 
             return found;
+        }
+
+        public bool TryReadReference(
+            SkillDefinition skill,
+            string referencePath,
+            out string content,
+            out SkillReferenceMetadata metadata,
+            out string error)
+        {
+            content = null;
+            metadata = null;
+            error = null;
+            if (skill == null || string.IsNullOrWhiteSpace(skill.StoragePath))
+            {
+                error = "Skill has no readable references.";
+                return false;
+            }
+
+            string normalizedPath;
+            if (!TryNormalizeReferencePath(referencePath, out normalizedPath))
+            {
+                error = "Reference path must be one UTF-8 Markdown file directly under references/.";
+                return false;
+            }
+
+            var references = skill.References ?? LoadReferences(skill.StoragePath);
+            var expected = references.FirstOrDefault(item => item != null &&
+                string.Equals(item.Path, normalizedPath, StringComparison.OrdinalIgnoreCase));
+            if (expected == null)
+            {
+                error = "Skill reference not found: " + normalizedPath;
+                return false;
+            }
+
+            var path = Path.Combine(skill.StoragePath, "references", Path.GetFileName(normalizedPath));
+            try
+            {
+                var info = new FileInfo(path);
+                if (!info.Exists || info.Length > MaxSkillReferenceFileBytes ||
+                    (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+                {
+                    error = "Skill reference is unavailable: " + normalizedPath;
+                    return false;
+                }
+
+                var bytes = File.ReadAllBytes(path);
+                var revision = Sha256(bytes);
+                if (!string.Equals(revision, expected.Revision, StringComparison.OrdinalIgnoreCase))
+                {
+                    error = "Skill reference changed after the runtime catalog was built: " + normalizedPath;
+                    return false;
+                }
+
+                var start = bytes.Length >= 3 && bytes[0] == 0xef && bytes[1] == 0xbb && bytes[2] == 0xbf ? 3 : 0;
+                content = new UTF8Encoding(false, true).GetString(bytes, start, bytes.Length - start);
+                metadata = new SkillReferenceMetadata
+                {
+                    Path = expected.Path,
+                    ByteLength = bytes.LongLength,
+                    Revision = revision
+                };
+                return true;
+            }
+            catch (DecoderFallbackException)
+            {
+                error = "Skill reference must be valid UTF-8 Markdown: " + normalizedPath;
+                return false;
+            }
+            catch (IOException)
+            {
+                error = "Skill reference could not be read: " + normalizedPath;
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                error = "Skill reference could not be read: " + normalizedPath;
+                return false;
+            }
         }
 
         private void Reconcile(IEnumerable<SkillDefinition> skills, string host)
@@ -161,6 +242,82 @@ namespace RNAssistant.Core.Storage
             catch (UnauthorizedAccessException)
             {
                 return null;
+            }
+        }
+
+        private static List<SkillReferenceMetadata> LoadReferences(string skillDirectory)
+        {
+            var result = new List<SkillReferenceMetadata>();
+            if (string.IsNullOrWhiteSpace(skillDirectory)) return result;
+            var directory = Path.Combine(skillDirectory, "references");
+            try
+            {
+                if (!Directory.Exists(directory) ||
+                    (File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+                {
+                    return result;
+                }
+
+                foreach (var file in Directory.GetFiles(directory, "*.md", SearchOption.TopDirectoryOnly)
+                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(path => path, StringComparer.Ordinal)
+                    .Take(MaxSkillReferences))
+                {
+                    var info = new FileInfo(file);
+                    if (!info.Exists || info.Length > MaxSkillReferenceFileBytes ||
+                        (File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0)
+                    {
+                        continue;
+                    }
+                    result.Add(new SkillReferenceMetadata
+                    {
+                        Path = "references/" + Path.GetFileName(file),
+                        ByteLength = info.Length,
+                        Revision = Sha256File(file)
+                    });
+                }
+            }
+            catch (IOException)
+            {
+                return new List<SkillReferenceMetadata>();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return new List<SkillReferenceMetadata>();
+            }
+            return result;
+        }
+
+        private static bool TryNormalizeReferencePath(string value, out string normalized)
+        {
+            normalized = (value ?? string.Empty).Trim().Replace('\\', '/');
+            const string prefix = "references/";
+            if (!normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
+            var fileName = normalized.Substring(prefix.Length);
+            if (string.IsNullOrWhiteSpace(fileName) || fileName.IndexOf('/') >= 0 ||
+                !string.Equals(Path.GetExtension(fileName), ".md", StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(Path.GetFileName(fileName), fileName, StringComparison.Ordinal))
+            {
+                return false;
+            }
+            normalized = prefix + fileName;
+            return true;
+        }
+
+        private static string Sha256File(string path)
+        {
+            using (var stream = File.OpenRead(path))
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            {
+                return BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
+            }
+        }
+
+        private static string Sha256(byte[] value)
+        {
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            {
+                return BitConverter.ToString(sha.ComputeHash(value ?? new byte[0])).Replace("-", string.Empty).ToLowerInvariant();
             }
         }
 

@@ -216,7 +216,7 @@ Each chat stores an explicit execution mode:
 
 Editable Agent instructions use `developer` by default and may use `system` or `user`. The Prompts page edits the Agent prompt, Chat prompt, context-compaction prompt, and title prompt. Agent-side prompt changes use `common.prompts_read` with `includeDefaults:true` and confirmed `common.prompts_save`.
 
-In Agent mode the prompt contains all runnable tools in native-like function JSON and a compact catalog (`id`, `name`, `description`, automatic Markdown `revision`) of enabled skills. When a catalog description is relevant, the model loads that skill's complete Markdown through `common.skills_read`; the revision is loaded only while its successful non-truncated result remains in active context. In strict response-schema mode, optional tool arguments are nullable; runtime treats synthetic `null` as omitted and applies code-owned schema defaults instead of forcing the model to invent values, while preserving `null` explicitly allowed by the original tool schema. The model returns one raw JSON object. A tool turn contains one or more calls:
+In Agent mode the prompt contains all runnable tools in native-like function JSON and a compact catalog (`id`, `name`, `description`, package `revision`, `bodyChars`, `referenceCount`) of enabled skills. When a catalog description is relevant, the model loads that skill's complete core Markdown through `common.skills_read`; it counts as loaded only while active context contains the matching complete result with top-level `data.loaded=true` and `data.truncated=false`. In strict response-schema mode, optional tool arguments are nullable; runtime treats synthetic `null` as omitted and applies code-owned schema defaults instead of forcing the model to invent values, while preserving `null` explicitly allowed by the original tool schema. The model returns one raw JSON object. A tool turn contains one or more calls:
 
 ```json
 {
@@ -248,16 +248,19 @@ Context compaction preserves the full stored transcript and replays a checkpoint
 The HTML tab is tied to the active chat session. Agent-created HTML pages are stored with the chat, not inside the Office document.
 Agent mode and document-independent local tools remain usable when that chat's Office document is closed. Office reads, writes, VBA actions, and Office-backed HTML bindings become available again only after the bound document is opened.
 
-- Use `common.html_workspace_upsert` with `resourceType:"file"` for `index.html`, CSS, and scripts; runtime infers file kind from the extension.
+- Use `common.html_workspace_upsert` with `resourceType:"file"` for `index.html`, CSS, and scripts; runtime infers file kind from the extension. Default `mode:"upsert"` creates or updates, while `createOnly` and `updateOnly` enforce strict existence.
 - Use the same tool with `resourceType:"data"` for JSON data sources exposed as `window.RNAssistantData`.
+- Use `common.html_workspace_search` for bounded literal/regex discovery across HTML, CSS, and JavaScript files.
+- Use `common.html_workspace_apply_patch` for atomic ordered edits to one current file. Exact replace/insert operations reject ambiguous anchors; line and bounded regex replacements are also supported.
 - Use `common.html_data_bind` to create a refreshable data source from an approved read-only Office tool. The binding stores exact source arguments and can keep raw JSON or normalize row arrays to `{columns, rows, rowCount}`.
 - Use `common.html_data_refresh` to update one or all bindings locally without another LLM request. `refreshPolicy:"on_preview"` is refreshed by the Artifacts UI; `common.html_data_freeze` keeps the current JSON and removes the binding.
 - Use `common.html_workspace_delete` with `resourceType` and `name` to remove an item. Deletions are recorded in workspace history and can be undone.
-- Call `common.html_workspace_read` without arguments for the compact manifest, then pass `resourceType` and exact `name` to read a body. Use `common.html_workspace_set_active` to choose the displayed HTML file.
+- Call `common.html_workspace_read` without arguments for the compact manifest, then pass `resourceType` and exact `name` to read a body. File reads accept optional `startLine`/`lineCount`. Use `common.html_workspace_set_active` to choose the displayed HTML file.
 - Every workspace mutation also records an immutable chat artifact revision. Full revision bodies are addressed by SHA-256 in the shared CAS; editing or forking from an older message activates the exact existing revision instead of duplicating it.
 - Undo/redo history is bounded by item count and stored content size. UI responses carry only snapshot ids/labels/timestamps; Agent reads return a manifest or one targeted current item, never history bodies.
-Workspace upsert/delete resolve and validate the current item internally; a separate read is needed only when the model must inspect existing content first.
+Workspace upsert/patch/delete resolve and validate current state internally; a separate read is needed only when the model must inspect existing content first.
 HTML preview and its scripts are always enabled inside a sandboxed iframe. Pages can use `window.RNAssistantData`, `window.RNAssistantDataMeta`, or `window.RNAssistant.data`. The UI can export the assembled page, current JSON, CSS, and JavaScript as one offline HTML file.
+The active HTML file is the entry page. Preview injects all workspace CSS into its head and all classic JavaScript before its closing body in workspace order; local `link`/`script src` references and ES module imports are not the workspace composition mechanism.
 
 ## Tool Library
 
@@ -310,7 +313,7 @@ Markdown skills are stored under:
 
 `%AppData%\RNAssistant\skills`
 
-Each custom skill is a `SKILL.md` guidance file with simple metadata (`id`, `host`, `name`, `description`, `version`, `enabled`) and Markdown instructions. Every enabled visible skill contributes `id`, `name`, `description`, and a deterministic body `revision` to `RUNTIME_CONTEXT.skills`. There is no skill router, activation state, dependency graph, or hidden tool ownership. The model calls `common.skills_read` with an exact id for each clearly relevant catalog entry; omitting id lists metadata. Agent authoring is `common.skills_read/upsert/delete`; upsert creates missing ids and preserves omitted fields on update, while upsert/delete requires confirmation unless auto-confirm is enabled.
+Each custom skill is a concise `SKILL.md` guidance file with simple metadata (`id`, `host`, `name`, `description`, `version`, `enabled`) and Markdown instructions. Optional detailed UTF-8 Markdown references may be placed directly under the same package's `references/` directory. Every enabled visible skill contributes `id`, `name`, `description`, package `revision`, `bodyChars`, and `referenceCount` to `RUNTIME_CONTEXT.skills`; the revision covers the core body and reference manifest. There is no skill router, activation state, dependency graph, or hidden tool ownership. The model calls `common.skills_read` with an exact id for each clearly relevant catalog entry; omitting id lists metadata. Agent authoring is `common.skills_read/upsert/delete`; upsert creates missing ids and preserves omitted fields on update, while upsert/delete requires confirmation unless auto-confirm is enabled.
 
 ```markdown
 ---
@@ -328,7 +331,9 @@ enabled: true
 - Preserve the requested column order.
 ```
 
-At runtime the catalog entry is `{"id","name","description","revision"}`. `common.skills_read` returns the same automatic revision, metadata, `format: "markdown"`, and the complete body once in `bodyMarkdown` inside a normal `TOOL_RESULT.data` object. Only a successful non-truncated matching result in active context counts as loaded; compaction or a changed revision requires another read. A truncated read is not retried unchanged: the skill must be reduced or loaded in a new chat with sufficient context. There is no separate activation state.
+At runtime the catalog entry is `{"id","name","description","revision","bodyChars","referenceCount"}`. The core `common.skills_read` result returns `kind:"skill"`, the same package revision, metadata, `format:"markdown"`, the complete `bodyMarkdown`, and explicit `loaded:true`, `complete:true`, `truncated:false`. Generic context bounding removes this loaded marker and returns top-level `data.truncated:true`, so an oversized result cannot be mistaken for a loaded skill. Compaction or a changed revision requires another core read.
+
+The core read lists reference paths, sizes, and independent revisions without loading their text. Read a needed file by passing its exact `referencePath`; `offset` and `maxChars` page it with `nextOffset`. Reference chunks never replace the core loaded-state evidence. Keep `SKILL.md` below roughly 500 lines and move only detailed, selectively useful material into direct `references/*.md` files.
 
 ## VBA Workflow
 

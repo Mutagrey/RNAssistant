@@ -139,9 +139,11 @@ namespace RNAssistant.Harness
             AssertContains(prompt, "common.test", "skill id present");
             AssertContains(prompt, "Test workflow", "skill description present");
             AssertContains(prompt, "\"revision\":\"" + SkillRevision.Compute(skills[0]) + "\"", "skill revision present");
+            AssertContains(prompt, "\"bodyChars\":27", "skill body size present");
+            AssertContains(prompt, "\"referenceCount\":0", "skill reference count present");
             AssertTrue(prompt.IndexOf("TEST_SKILL_SENTINEL", StringComparison.Ordinal) < 0, "full skill is not in catalog");
             AssertContains(prompt, "common.skills_read", "skill loading guidance present");
-            AssertContains(prompt, "successful, non-truncated result with the same id and revision", "skill loading state is explicit");
+            AssertContains(prompt, "`loaded=true`", "skill loading state is explicit");
             AssertContains(prompt, "several tool_calls", "multi-tool guidance present");
             AssertContains(prompt, "data.truncated=true", "bounded tool-result guidance present");
             AssertTrue(prompt.IndexOf("ROUTE:", StringComparison.OrdinalIgnoreCase) < 0, "no route wrapper");
@@ -252,6 +254,8 @@ namespace RNAssistant.Harness
                 AssertContains(replay, "\"format\":\"markdown\"", "loaded skill format");
                 AssertContains(replay, "\"version\":\"2.0.0\"", "loaded skill version");
                 AssertContains(replay, "\"revision\":\"" + revision + "\"", "loaded skill revision matches catalog");
+                AssertContains(replay, "\"loaded\":true", "loaded skill result is explicit");
+                AssertContains(replay, "\"complete\":true", "loaded skill body is complete");
                 AssertTrue(replay.IndexOf("\"truncated\":true", StringComparison.Ordinal) < 0,
                     "loaded skill is not duplicated into a truncated result");
             });

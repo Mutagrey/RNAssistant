@@ -546,6 +546,73 @@ namespace RNAssistant.Harness
             }), "skill body is required by shared validation");
         }
 
+        private static void SkillReferencesAreRevisionedAndPaged()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var store = new SkillStore(paths);
+                store.SaveOne(new SkillDefinition
+                {
+                    Id = "common.reference_test",
+                    Host = "Common",
+                    Name = "Reference test",
+                    Description = "Test progressive skill references.",
+                    BodyMarkdown = "# Reference test\n\nRead [details](references/details.md) when needed.",
+                    Enabled = true
+                });
+                var stored = store.Load().Single(item => item.Id == "common.reference_test");
+                var bodyOnlyRevision = SkillRevision.Compute(stored);
+                var referenceDirectory = Path.Combine(stored.StoragePath, "references");
+                Directory.CreateDirectory(referenceDirectory);
+                var referencePath = Path.Combine(referenceDirectory, "details.md");
+                File.WriteAllText(referencePath, "# Details\n\nABCDEFGHIJ");
+
+                stored = store.Load().Single(item => item.Id == "common.reference_test");
+                AssertEqual(1, stored.References.Count, "one direct Markdown reference discovered");
+                AssertEqual("references/details.md", stored.References[0].Path, "reference path is package-relative");
+                AssertTrue(!string.Equals(bodyOnlyRevision, SkillRevision.Compute(stored), StringComparison.Ordinal),
+                    "reference manifest changes package revision");
+
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), store, new ToolStore(paths));
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var runtimeSkills = new[] { stored };
+                var main = executor.Execute(
+                    Command("common.skills_read", "id", stored.Id), tools, new AppSettings(), false, false,
+                    new ChatSession(), 40, runtimeSkills, CancellationToken.None);
+                var mainData = JObject.Parse(main.DataJson);
+                AssertEqual(true, (bool)mainData["loaded"], "complete core read declares loaded state");
+                AssertEqual("references/details.md", (string)mainData.SelectToken("references[0].path"),
+                    "core read lists references without their bodies");
+
+                var first = executor.Execute(
+                    Command("common.skills_read", "id", stored.Id, "referencePath", "references/details.md", "maxChars", 8),
+                    tools, new AppSettings(), false, false, new ChatSession(), 40, runtimeSkills, CancellationToken.None);
+                var firstData = JObject.Parse(first.DataJson);
+                AssertEqual("reference", (string)firstData["kind"], "reference result kind");
+                AssertEqual(8, (int)firstData["returnedChars"], "reference chunk is bounded");
+                AssertEqual(false, (bool)firstData["complete"], "first reference chunk is incomplete");
+                AssertEqual(8, (int)firstData["nextOffset"], "next reference offset is explicit");
+                AssertTrue(firstData["loaded"] == null, "reference chunk does not load the core skill");
+
+                var rest = executor.Execute(
+                    Command("common.skills_read", "id", stored.Id, "referencePath", "references/details.md", "offset", 8, "maxChars", 50000),
+                    tools, new AppSettings(), false, false, new ChatSession(), 40, runtimeSkills, CancellationToken.None);
+                AssertEqual(true, (bool)JObject.Parse(rest.DataJson)["complete"], "final reference chunk is complete");
+
+                var traversal = executor.Execute(
+                    Command("common.skills_read", "id", stored.Id, "referencePath", "references/../secret.md"),
+                    tools, new AppSettings(), false, false, new ChatSession(), 40, runtimeSkills, CancellationToken.None);
+                AssertTrue(!traversal.Success, "reference traversal is rejected");
+
+                File.WriteAllText(referencePath, "# Details\n\nChanged");
+                var stale = executor.Execute(
+                    Command("common.skills_read", "id", stored.Id, "referencePath", "references/details.md"),
+                    tools, new AppSettings(), false, false, new ChatSession(), 40, runtimeSkills, CancellationToken.None);
+                AssertEqual("skill_reference_changed", stale.ErrorCode, "stale reference snapshot is rejected");
+            });
+        }
+
         private static void SkillIdsDoNotCollideAndDisabledReadsFail()
         {
             WithTempPaths(delegate(AppDataPaths paths)

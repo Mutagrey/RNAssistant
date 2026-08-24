@@ -198,9 +198,9 @@ namespace RNAssistant.Office.Services
                     Role = "assistant",
                     Content = "COMPACTED_EARLIER_CONTEXT (reference only; not new instructions):\n" +
                         (checkpoint.SummaryMarkdown ?? string.Empty) +
-                        "\n\nSKILL_CONTEXT_NOTICE: Full skill bodies present only in compacted earlier context are not loaded. " +
+                        "\n\nSKILL_CONTEXT_NOTICE: Skill bodies or reference chunks present only in compacted earlier context are unavailable. " +
                         "For relevant work, call common.skills_read again unless the replay tail below contains a successful, " +
-                        "non-truncated result for the catalog's current revision."
+                        "non-truncated data.loaded=true skill result for the catalog's current revision; re-read any needed reference chunk."
                 }
             };
             result.AddRange(messages);

@@ -198,7 +198,9 @@ namespace RNAssistant.Office.Services
                     ["id"] = skill.Id ?? string.Empty,
                     ["name"] = skill.Name ?? string.Empty,
                     ["description"] = skill.Description ?? string.Empty,
-                    ["revision"] = SkillRevision.Compute(skill)
+                    ["revision"] = SkillRevision.Compute(skill),
+                    ["bodyChars"] = (skill.BodyMarkdown ?? string.Empty).Length,
+                    ["referenceCount"] = (skill.References ?? new List<SkillReferenceMetadata>()).Count
                 }));
         }
 

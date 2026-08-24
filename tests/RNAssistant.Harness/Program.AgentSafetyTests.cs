@@ -23,9 +23,11 @@ namespace RNAssistant.Harness
             var settings = new AppSettings();
             AssertTrue(settings.SystemPrompt.StartsWith("# RNAssistant Agent", StringComparison.Ordinal), "agent prompt Markdown heading");
             AssertContains(settings.SystemPrompt, "## Response contract", "agent prompt structured section");
-            AssertContains(settings.SystemPrompt, "deterministic Markdown `revision`", "agent prompt describes skill revisions");
-            AssertContains(settings.SystemPrompt, "successful, non-truncated result", "agent prompt defines loaded skill state");
-            AssertContains(settings.SystemPrompt, "do not retry the same read unchanged", "agent prompt prevents truncated skill loops");
+            AssertContains(settings.SystemPrompt, "package `revision`", "agent prompt describes skill revisions");
+            AssertContains(settings.SystemPrompt, "data` has matching `id` and `revision`", "agent prompt defines loaded skill identity");
+            AssertContains(settings.SystemPrompt, "`loaded=true`", "agent prompt defines explicit loaded evidence");
+            AssertContains(settings.SystemPrompt, "do not retry unchanged", "agent prompt prevents truncated skill loops");
+            AssertContains(settings.SystemPrompt, "referencePath", "agent prompt explains progressive reference reads");
             AssertTrue(settings.ChatSystemPrompt.StartsWith("# RNAssistant Chat", StringComparison.Ordinal), "chat prompt Markdown heading");
             AssertTrue(settings.ContextCompactionPrompt.StartsWith("# Context compaction", StringComparison.Ordinal), "compaction prompt Markdown heading");
             AssertContains(settings.ContextCompactionPrompt, "Skill ids and revisions", "compaction preserves pending skill references");
@@ -237,6 +239,12 @@ namespace RNAssistant.Harness
             AssertTrue(result.SelectToken("data.original_chars").Value<int>() > 49000, "original size retained");
             AssertTrue(((string)result.SelectToken("data.preview") ?? string.Empty).Length < 1000, "preview is bounded");
             AssertEqual("call_large", (string)result["tool_call_id"], "tool call id retained");
+
+            var skillCommand = new ToolCommand { ToolId = "common.skills_read", ToolCallId = "call_skill_large" };
+            var skillData = JsonConvert.SerializeObject(new { kind = "skill", loaded = true, bodyMarkdown = new string('x', 50000) });
+            var boundedSkill = JObject.Parse(AgentJsonProtocol.BuildToolResult(skillCommand, ToolResult.Ok("read", skillData), 256));
+            AssertEqual(true, (bool)boundedSkill.SelectToken("data.truncated"), "oversized skill data is marked truncated");
+            AssertTrue(boundedSkill.SelectToken("data.loaded") == null, "truncated skill does not retain top-level loaded evidence");
 
             var nestedData = JsonConvert.SerializeObject(new { value = new string('x', 200000) });
             var pipeline = AgentTranscript.CreateToolActivity(command, ToolResult.Ok("pipeline", JsonConvert.SerializeObject(new

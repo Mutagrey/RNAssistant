@@ -22,7 +22,7 @@ namespace RNAssistant.Office.Tools
 
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
-            yield return ControllerToolDefinition.Create("common.skills_read", "Common", "Read-only: Load complete Markdown instructions and their automatic revision for one exact skill id. A truncated result is not loaded and must not be retried unchanged; omit id only to list available metadata.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact skill id from RUNTIME_CONTEXT.skills; omit to list metadata only.\"}},\"required\":[],\"additionalProperties\":false}");
+            yield return ControllerToolDefinition.Create("common.skills_read", "Common", "Read-only: Load one complete Markdown skill or a bounded chunk of one listed references/*.md file. Only a non-truncated skill result with data.loaded=true loads the skill; reference chunks never replace that evidence. Omit id only to list metadata.", SkillReadSchema());
             yield return ControllerToolDefinition.Create("common.skills_upsert", "Common", "Mutates settings: Create a missing Markdown skill or update an existing custom skill. Omitted fields are preserved on update; use strict mode only when existence itself matters.", SkillUpsertSchema(), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
             yield return ControllerToolDefinition.Create("common.skills_delete", "Common", "Mutates settings: Delete a custom markdown skill by id.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable identifier.\"}},\"required\":[\"id\"],\"additionalProperties\":false}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
         }
@@ -36,9 +36,13 @@ namespace RNAssistant.Office.Tools
         {
             if (string.Equals(command.ToolId, "common.skills_read", StringComparison.OrdinalIgnoreCase))
             {
-                return string.IsNullOrWhiteSpace(ToolArgumentReader.String(command.Arguments, "id", string.Empty))
-                    ? ListSkills(manualRun, runtimeSkills)
-                    : ReadSkill(command, manualRun, runtimeSkills);
+                if (string.IsNullOrWhiteSpace(ToolArgumentReader.String(command.Arguments, "id", string.Empty)))
+                {
+                    return HasArgument(command, "referencePath") || HasArgument(command, "offset") || HasArgument(command, "maxChars")
+                        ? ToolResult.Fail("Skill id is required when reading a reference.", null, "skill_id_required", false)
+                        : ListSkills(manualRun, runtimeSkills);
+                }
+                return ReadSkill(command, manualRun, runtimeSkills);
             }
 
             if (string.Equals(command.ToolId, "common.skills_upsert", StringComparison.OrdinalIgnoreCase))
@@ -65,6 +69,8 @@ namespace RNAssistant.Office.Tools
                 description = s.Description,
                 version = s.Version,
                 revision = SkillRevision.Compute(s),
+                bodyChars = (s.BodyMarkdown ?? string.Empty).Length,
+                referenceCount = (s.References ?? new List<SkillReferenceMetadata>()).Count,
                 builtIn = s.BuiltIn,
                 enabled = s.Enabled
             }).ToArray();
@@ -81,17 +87,78 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Fail("Skill not found: " + id);
             }
 
+            if (HasArgument(command, "referencePath"))
+            {
+                return ReadSkillReference(command, skill);
+            }
+            if (HasArgument(command, "offset") || HasArgument(command, "maxChars"))
+            {
+                return ToolResult.Fail("offset and maxChars require referencePath.", null, "skill_reference_path_required", false);
+            }
+
             return ToolResult.Ok("Skill loaded: " + skill.Id, JsonConvert.SerializeObject(new
             {
+                kind = "skill",
+                loaded = true,
+                complete = true,
+                truncated = false,
                 id = skill.Id,
                 host = skill.Host,
                 name = skill.Name,
                 description = skill.Description,
                 version = string.IsNullOrWhiteSpace(skill.Version) ? "1.0.0" : skill.Version,
                 revision = SkillRevision.Compute(skill),
+                bodyChars = (skill.BodyMarkdown ?? string.Empty).Length,
                 enabled = skill.Enabled,
                 format = "markdown",
+                references = (skill.References ?? new List<SkillReferenceMetadata>()).Select(item => new
+                {
+                    path = item.Path,
+                    byteLength = item.ByteLength,
+                    revision = item.Revision
+                }).ToArray(),
                 bodyMarkdown = skill.BodyMarkdown ?? string.Empty
+            }));
+        }
+
+        private ToolResult ReadSkillReference(ToolCommand command, SkillDefinition skill)
+        {
+            var referencePath = ToolArgumentReader.String(command.Arguments, "referencePath", string.Empty);
+            string content;
+            string error;
+            SkillReferenceMetadata metadata;
+            if (!_skillStore.TryReadReference(skill, referencePath, out content, out metadata, out error))
+            {
+                var changed = (error ?? string.Empty).IndexOf("changed after", StringComparison.OrdinalIgnoreCase) >= 0;
+                return ToolResult.Fail(error, null, changed ? "skill_reference_changed" : "skill_reference_unavailable", false);
+            }
+
+            var offset = ToolArgumentReader.Int32(command.Arguments, "offset", 0);
+            if (offset < 0 || offset > (content ?? string.Empty).Length)
+            {
+                return ToolResult.Fail("Skill reference offset is outside the file.", null, "skill_reference_offset_invalid", false);
+            }
+            var maxChars = Math.Max(1, Math.Min(50000, ToolArgumentReader.Int32(command.Arguments, "maxChars", 24000)));
+            var end = Math.Min(content.Length, offset + maxChars);
+            if (end > offset && end < content.Length && char.IsHighSurrogate(content[end - 1]) && char.IsLowSurrogate(content[end]))
+            {
+                end += 1;
+            }
+            var complete = end >= content.Length;
+            return ToolResult.Ok("Skill reference read: " + metadata.Path, JsonConvert.SerializeObject(new
+            {
+                kind = "reference",
+                id = skill.Id,
+                skillRevision = SkillRevision.Compute(skill),
+                path = metadata.Path,
+                revision = metadata.Revision,
+                format = "markdown",
+                offset = offset,
+                returnedChars = end - offset,
+                totalChars = content.Length,
+                complete = complete,
+                nextOffset = complete ? (int?)null : end,
+                content = content.Substring(offset, end - offset)
             }));
         }
 
@@ -260,6 +327,44 @@ namespace RNAssistant.Office.Tools
                     }
                 },
                 ["required"] = new JArray("id"),
+                ["additionalProperties"] = false
+            }.ToString(Formatting.None);
+        }
+
+        private static string SkillReadSchema()
+        {
+            return new JObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JObject
+                {
+                    ["id"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Exact skill id from RUNTIME_CONTEXT.skills; omit only to list metadata.",
+                        ["maxLength"] = 128
+                    },
+                    ["referencePath"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Exact references/*.md path listed by a previously loaded skill.",
+                        ["maxLength"] = 260
+                    },
+                    ["offset"] = new JObject
+                    {
+                        ["type"] = "integer",
+                        ["description"] = "Zero-based character offset for a reference chunk.",
+                        ["minimum"] = 0
+                    },
+                    ["maxChars"] = new JObject
+                    {
+                        ["type"] = "integer",
+                        ["description"] = "Maximum reference characters returned; use a smaller value after data.truncated=true.",
+                        ["minimum"] = 1,
+                        ["maximum"] = 50000
+                    }
+                },
+                ["required"] = new JArray(),
                 ["additionalProperties"] = false
             }.ToString(Formatting.None);
         }

@@ -11,14 +11,16 @@ Every Agent request contains the editable Markdown `SystemPrompt` and one `RUNTI
 
 - current host and document identity;
 - every enabled, schema-valid tool that the agent may run in this request;
-- the enabled skill catalog with `id`, `name`, `description`, and a deterministic Markdown `revision`;
+- the enabled skill catalog with `id`, `name`, `description`, package `revision`, `bodyChars`, and `referenceCount`;
 - chat-owned user context and artifact references.
 
 Visible planning is optional data, not a protocol phase. `common.plan_create/read/update/delete` stores a versioned plan artifact for the active chat. The model explicitly supplies every step status; runtime does not infer progress from tool calls. The active plan artifact id appears in the artifact index.
 
 A confirmed tool result always returns to the Agent loop, including `ok:false`, so the model can explain the failure, correct arguments, or choose another tool. An explicit user cancellation is terminal for that run and does not invoke the model again.
 
-When a catalog description matches the task, the model calls `common.skills_read` with the exact id. Its `TOOL_RESULT.data` contains `id`, `host`, `name`, `description`, the human-authored `version`, the automatic `revision`, `enabled`, `format: "markdown"`, and the complete body once in authoring-compatible `bodyMarkdown`, subject only to the remaining request budget. A revision is loaded only while the active model context contains its successful non-truncated read result with the complete body. Compaction or a revision mismatch requires another read. A truncated read is not loaded and is not retried unchanged; the skill must be reduced or read in a new chat with sufficient context. Several clearly relevant skills may be read as independent calls. The result is normal conversation history; there is no router or activation state.
+When a catalog description matches the task, the model calls `common.skills_read` with the exact id. Its core `TOOL_RESULT.data` contains `kind:"skill"`, `id`, metadata, the human-authored `version`, package `revision`, `format:"markdown"`, the complete `bodyMarkdown`, and explicit `loaded:true`, `complete:true`, `truncated:false`. A revision is loaded only while that exact top-level evidence remains in active model context. Generic bounding replaces oversized data with top-level `truncated:true` and therefore cannot preserve a false loaded marker. Compaction or a revision mismatch requires another core read; an unchanged truncated core read is not retried.
+
+A custom skill package may contain up to 64 direct UTF-8 `references/*.md` files. Their paths, byte sizes, and content revisions are listed by the core read without bodies and are included in the package revision. The model reads only a needed reference through the same tool using exact `referencePath`; optional zero-based `offset` and `maxChars` produce bounded chunks with `nextOffset`. A reference chunk is ordinary context evidence but never loads the core skill. Several clearly relevant skills may be read independently. There is no router or activation state.
 
 Tools use a native-like description:
 

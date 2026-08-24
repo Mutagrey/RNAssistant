@@ -82,6 +82,12 @@ namespace RNAssistant.Harness
             AssertTrue(upgraded.IndexOf(AgentSkillPromptPolicy.LegacyInstructions, StringComparison.Ordinal) < 0,
                 "legacy policy is removed after upgrade");
 
+            var revisionPolicy = settings.SystemPrompt.Replace(
+                AgentSkillPromptPolicy.CurrentInstructions,
+                AgentSkillPromptPolicy.RevisionInstructions);
+            AssertContains(AgentSkillPromptPolicy.Upgrade(revisionPolicy), AgentSkillPromptPolicy.CurrentInstructions,
+                "revision-only policy is upgraded to explicit loaded evidence");
+
             const string custom = "Custom prompt without the default skill policy.";
             AssertEqual(custom, AgentSkillPromptPolicy.Upgrade(custom),
                 "custom prompt without legacy policy is preserved");
