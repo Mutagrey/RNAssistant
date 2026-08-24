@@ -12,7 +12,7 @@
 
 .trajectory-querybar {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(120px, .65fr) minmax(110px, auto) auto;
+  grid-template-columns: minmax(125px, .7fr) minmax(140px, 1fr) minmax(120px, .65fr) minmax(110px, auto) auto;
   gap: 6px;
   margin: 7px 0 5px;
 }

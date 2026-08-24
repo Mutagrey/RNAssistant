@@ -89,6 +89,11 @@ namespace RNAssistant.Core.Llm
         public int MessageCount { get; set; }
         public int? Attempt { get; set; }
         public int? EstimatedPromptTokens { get; set; }
+        public int? PromptTokens { get; set; }
+        public int? CompletionTokens { get; set; }
+        public int? TotalTokens { get; set; }
+        public int? ReasoningTokens { get; set; }
+        public string UsageJson { get; set; }
         public int? StatusCode { get; set; }
         public string FailureKind { get; set; }
         public string Error { get; set; }

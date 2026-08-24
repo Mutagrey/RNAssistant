@@ -39,6 +39,7 @@ namespace RNAssistant.Office
         public string LastHtmlPath { get; private set; }
         public string LastHtmlDataName { get; private set; }
         public string LastTrajectoryCursor { get; private set; }
+        public string LastTrajectoryView { get; private set; }
         public string LastTrajectorySearch { get; private set; }
         public string LastTrajectoryVisibility { get; private set; }
         public IReadOnlyList<string> LastTrajectoryEventTypes { get; private set; }
@@ -48,13 +49,14 @@ namespace RNAssistant.Office
         public ChatTrajectoryResponse GetChatTrajectory(ChatTrajectoryRequest request)
         {
             LastChatId = request == null ? null : request.ChatId;
+            LastTrajectoryView = request == null ? null : request.View;
             LastTrajectoryCursor = request == null ? null : request.Cursor;
             LastTrajectorySearch = request == null ? null : request.Search;
             LastTrajectoryVisibility = request == null ? null : request.Visibility;
             LastTrajectoryEventTypes = request == null
                 ? (IReadOnlyList<string>)new string[0]
                 : request.EventTypes ?? new List<string>();
-            return new ChatTrajectoryResponse { ChatId = LastChatId, Revision = 1, Events = new SessionEventDto[0] };
+            return new ChatTrajectoryResponse { ChatId = LastChatId, Revision = 1, Events = new SessionEventDto[0], Rows = new TrajectoryViewRowDto[0] };
         }
         public ChatEventPayloadResponse GetChatEventPayload(string chatId, string eventId)
         {

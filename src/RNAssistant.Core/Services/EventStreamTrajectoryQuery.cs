@@ -11,6 +11,7 @@ namespace RNAssistant.Core.Services
     public interface ITrajectoryQuery
     {
         TrajectoryQueryPage Query(IReadOnlyList<SessionEvent> events, TrajectoryQueryRequest request);
+        TrajectoryViewPage QueryView(IReadOnlyList<SessionEvent> events, TrajectoryViewQueryRequest request);
     }
 
     /// <summary>
@@ -21,6 +22,7 @@ namespace RNAssistant.Core.Services
         private const int MaxPageSize = 200;
         private const int MaxSearchChars = 512;
         private const string CursorPrefix = "seq:";
+        private const string ViewCursorPrefix = "view:";
 
         public TrajectoryQueryPage Query(IReadOnlyList<SessionEvent> events, TrajectoryQueryRequest request)
         {
@@ -45,6 +47,42 @@ namespace RNAssistant.Core.Services
                 NextCursor = hasMore && page.Count > 0 ? CursorPrefix + page[page.Count - 1].Event.Sequence.ToString(CultureInfo.InvariantCulture) : null,
                 HasMore = hasMore,
                 Records = page
+            };
+        }
+
+        public TrajectoryViewPage QueryView(IReadOnlyList<SessionEvent> events, TrajectoryViewQueryRequest request)
+        {
+            request = request ?? new TrajectoryViewQueryRequest();
+            Validate(request);
+            var source = (events ?? new List<SessionEvent>()).Where(item => item != null).OrderBy(item => item.Sequence).ToList();
+            var cursor = ParseViewCursor(request.Cursor, request.View);
+            var snapshotSequence = cursor == null
+                ? (source.Count == 0 ? 0 : source[source.Count - 1].Sequence)
+                : cursor.SnapshotSequence;
+            var snapshot = source.Where(item => item.Sequence <= snapshotSequence).ToList();
+            var rows = TrajectoryDerivedProjection.Build(snapshot, request.View);
+            var filtered = rows.Where(item => Matches(item, request))
+                .OrderByDescending(item => item.LastSequence)
+                .ThenBy(item => item.Id, StringComparer.Ordinal)
+                .ToList();
+            var offset = cursor == null ? 0 : cursor.Offset;
+            if (offset > filtered.Count) offset = filtered.Count;
+            var pageSize = request.PageSize <= 0 ? 100 : Math.Min(MaxPageSize, request.PageSize);
+            var page = filtered.Skip(offset).Take(pageSize).ToList();
+            var nextOffset = offset + page.Count;
+            var hasMore = nextOffset < filtered.Count;
+            return new TrajectoryViewPage
+            {
+                View = request.View,
+                TotalEvents = snapshot.Count,
+                TotalRows = rows.Count,
+                TotalMatches = filtered.Count,
+                Cursor = request.Cursor,
+                NextCursor = hasMore
+                    ? ViewCursorPrefix + request.View + ":" + snapshotSequence.ToString(CultureInfo.InvariantCulture) + ":" + nextOffset.ToString(CultureInfo.InvariantCulture)
+                    : null,
+                HasMore = hasMore,
+                Rows = page
             };
         }
 
@@ -82,6 +120,31 @@ namespace RNAssistant.Core.Services
             ParseCursor(request.Cursor);
         }
 
+        private static void Validate(TrajectoryViewQueryRequest request)
+        {
+            request.View = (request.View ?? string.Empty).Trim().ToLowerInvariant();
+            request.Search = (request.Search ?? string.Empty).Trim();
+            request.RunId = TrimOrNull(request.RunId);
+            request.TurnId = TrimOrNull(request.TurnId);
+            request.StepId = TrimOrNull(request.StepId);
+            request.ToolCallId = TrimOrNull(request.ToolCallId);
+            request.ArtifactId = TrimOrNull(request.ArtifactId);
+            request.Status = TrimOrNull(request.Status);
+            if (!TrajectoryViews.IsSupported(request.View) || string.Equals(request.View, TrajectoryViews.Raw, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException("Unsupported derived trajectory view: " + request.View + ".", "request");
+            }
+            if (request.MinSequence.HasValue && request.MaxSequence.HasValue && request.MinSequence.Value > request.MaxSequence.Value)
+            {
+                throw new ArgumentException("Trajectory minSequence cannot exceed maxSequence.", "request");
+            }
+            if (request.Search.Length > MaxSearchChars)
+            {
+                throw new ArgumentException("Trajectory search is limited to " + MaxSearchChars + " characters.", "request");
+            }
+            ParseViewCursor(request.Cursor, request.View);
+        }
+
         private static string TrimOrNull(string value)
         {
             value = (value ?? string.Empty).Trim();
@@ -98,6 +161,43 @@ namespace RNAssistant.Core.Services
                 throw new ArgumentException("Invalid trajectory cursor.", "cursor");
             }
             return sequence;
+        }
+
+        private static ViewCursor ParseViewCursor(string cursor, string view)
+        {
+            if (string.IsNullOrWhiteSpace(cursor)) return null;
+            var parts = cursor.Split(':');
+            long snapshot;
+            int offset;
+            if (parts.Length != 4 || !string.Equals(parts[0] + ":", ViewCursorPrefix, StringComparison.Ordinal) ||
+                !string.Equals(parts[1], view, StringComparison.OrdinalIgnoreCase) ||
+                !long.TryParse(parts[2], NumberStyles.None, CultureInfo.InvariantCulture, out snapshot) || snapshot < 0 ||
+                !int.TryParse(parts[3], NumberStyles.None, CultureInfo.InvariantCulture, out offset) || offset < 0)
+            {
+                throw new ArgumentException("Invalid trajectory view cursor.", "cursor");
+            }
+            return new ViewCursor { SnapshotSequence = snapshot, Offset = offset };
+        }
+
+        private static bool Matches(TrajectoryViewRow row, TrajectoryViewQueryRequest request)
+        {
+            if (request.MinSequence.HasValue && row.LastSequence < request.MinSequence.Value ||
+                request.MaxSequence.HasValue && row.FirstSequence > request.MaxSequence.Value ||
+                !MatchesValue(request.RunId, row.RunId, new string[0]) ||
+                !MatchesValue(request.TurnId, row.TurnId, new string[0]) ||
+                !MatchesValue(request.StepId, row.StepId, new string[0]) ||
+                !MatchesValue(request.ToolCallId, row.ToolCallId, new string[0]) ||
+                !MatchesValue(request.ArtifactId, row.ArtifactId, new[] { row.ParentArtifactId }) ||
+                !MatchesValue(request.Status, row.Status, new string[0])) return false;
+            var terms = (request.Search ?? string.Empty).Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+            if (terms.Length == 0) return true;
+            var text = string.Join("\n", new[]
+            {
+                row.Id, row.View, row.Kind, row.Title, row.Status, row.RunId, row.TurnId, row.StepId,
+                row.ToolCallId, row.ToolId, row.ArtifactId, row.ParentArtifactId,
+                row.Data == null ? string.Empty : row.Data.ToString(Formatting.None)
+            }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray());
+            return terms.All(term => text.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
         private static Dictionary<string, long> BuildCurrentTargets(IEnumerable<SessionEvent> events)
@@ -314,6 +414,12 @@ namespace RNAssistant.Core.Services
         {
             var value = Property(token, name);
             return value == null || value.Type == JTokenType.Null ? null : (string)value;
+        }
+
+        private sealed class ViewCursor
+        {
+            public long SnapshotSequence { get; set; }
+            public int Offset { get; set; }
         }
     }
 }

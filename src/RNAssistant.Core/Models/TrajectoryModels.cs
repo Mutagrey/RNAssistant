@@ -74,4 +74,109 @@ namespace RNAssistant.Core.Models
             Records = new List<TrajectoryEventRecord>();
         }
     }
+
+    public static class TrajectoryViews
+    {
+        public const string Raw = "raw";
+        public const string ModelReplay = "model-replay";
+        public const string ToolExecution = "tool-execution";
+        public const string ArtifactLineage = "artifact-lineage";
+        public const string ConfirmationPauses = "confirmation-pauses";
+        public const string FailureRetries = "failure-retries";
+        public const string TurnUsage = "turn-usage";
+
+        public static bool IsSupported(string value)
+        {
+            return string.Equals(value, Raw, System.StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, ModelReplay, System.StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, ToolExecution, System.StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, ArtifactLineage, System.StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, ConfirmationPauses, System.StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, FailureRetries, System.StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, TurnUsage, System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static string Normalize(string value)
+        {
+            value = (value ?? string.Empty).Trim().ToLowerInvariant();
+            return IsSupported(value) ? value : Raw;
+        }
+    }
+
+    public sealed class TrajectoryViewQueryRequest
+    {
+        public string View { get; set; }
+        public string Cursor { get; set; }
+        public int PageSize { get; set; }
+        public string Search { get; set; }
+        public long? MinSequence { get; set; }
+        public long? MaxSequence { get; set; }
+        public string RunId { get; set; }
+        public string TurnId { get; set; }
+        public string StepId { get; set; }
+        public string ToolCallId { get; set; }
+        public string ArtifactId { get; set; }
+        public string Status { get; set; }
+
+        public TrajectoryViewQueryRequest()
+        {
+            View = TrajectoryViews.ModelReplay;
+            PageSize = 100;
+        }
+    }
+
+    public sealed class TrajectoryViewRow
+    {
+        public string Id { get; set; }
+        public string View { get; set; }
+        public string Kind { get; set; }
+        public string Title { get; set; }
+        public string Status { get; set; }
+        public System.DateTime CreatedUtc { get; set; }
+        public System.DateTime? CompletedUtc { get; set; }
+        public long? DurationMs { get; set; }
+        public long FirstSequence { get; set; }
+        public long LastSequence { get; set; }
+        public string RunId { get; set; }
+        public string TurnId { get; set; }
+        public string StepId { get; set; }
+        public string ToolCallId { get; set; }
+        public string ToolId { get; set; }
+        public string ArtifactId { get; set; }
+        public string ParentArtifactId { get; set; }
+        public int AttemptCount { get; set; }
+        public int FailureCount { get; set; }
+        public int? PromptTokens { get; set; }
+        public int? CompletionTokens { get; set; }
+        public int? TotalTokens { get; set; }
+        public int? EstimatedPromptTokens { get; set; }
+        public decimal? CostUsd { get; set; }
+        public Newtonsoft.Json.Linq.JObject Data { get; set; }
+        public List<long> SourceEventSeqs { get; set; }
+        public List<string> SourceEventIds { get; set; }
+
+        public TrajectoryViewRow()
+        {
+            Data = new Newtonsoft.Json.Linq.JObject();
+            SourceEventSeqs = new List<long>();
+            SourceEventIds = new List<string>();
+        }
+    }
+
+    public sealed class TrajectoryViewPage
+    {
+        public string View { get; set; }
+        public int TotalEvents { get; set; }
+        public int TotalRows { get; set; }
+        public int TotalMatches { get; set; }
+        public string Cursor { get; set; }
+        public string NextCursor { get; set; }
+        public bool HasMore { get; set; }
+        public List<TrajectoryViewRow> Rows { get; set; }
+
+        public TrajectoryViewPage()
+        {
+            Rows = new List<TrajectoryViewRow>();
+        }
+    }
 }

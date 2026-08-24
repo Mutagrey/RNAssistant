@@ -28,7 +28,7 @@
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=media-routing-20260824-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=cas-health-20260825-1">
-  <link rel="stylesheet" href="css/app-trajectory.css?v=trajectory-query-20260825-1">
+  <link rel="stylesheet" href="css/app-trajectory.css?v=trajectory-views-20260825-1">
   <link rel="stylesheet" href="css/app-tools.css?v=library-editor-20260824-1">
   <link rel="stylesheet" href="css/app-vba.css?v=userform-20260824-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
@@ -818,6 +818,7 @@
                   </div>
                 </div>
                 <div class="trajectory-querybar">
+                  <select id="trajectoryViewInput" aria-label="Представление траектории"><option value="raw">Raw events</option><option value="model-replay">Model replay</option><option value="tool-execution">Tool execution</option><option value="artifact-lineage">Artifact lineage</option><option value="confirmation-pauses">Confirmations</option><option value="failure-retries">Failures / retries</option><option value="turn-usage">Turn usage</option></select>
                   <input id="trajectorySearchInput" maxlength="512" placeholder="Поиск по metadata и event data">
                   <input id="trajectoryTypeInput" maxlength="256" placeholder="Типы через запятую">
                   <select id="trajectoryVisibilityInput" aria-label="Состояние события"><option value="">Все состояния</option><option value="current">Current</option><option value="shadowed">Shadowed</option><option value="log-only">Log-only</option></select>
@@ -889,7 +890,7 @@
   <script src="js/app-settings.js?v=screen-protection-20260824-1"></script>
   <script src="js/app-logs.js?v=log-filters-20260824-1"></script>
   <script src="js/app-diagnostics.js?v=cas-health-20260825-1"></script>
-  <script src="js/app-trajectory.js?v=trajectory-query-20260825-1"></script>
+  <script src="js/app-trajectory.js?v=trajectory-views-20260825-1"></script>
   <script src="js/app-prompts.js?v=library-editor-20260824-1"></script>
   <script src="js/app-model-data.js?v=media-routing-20260824-1"></script>
   <script src="js/app-model-picker.js?v=model-modules-20260823-2"></script>

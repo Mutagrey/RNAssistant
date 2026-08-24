@@ -116,6 +116,7 @@
     <Compile Include="Services\HtmlWorkspaceHistoryPolicy.cs" />
     <Compile Include="Services\HtmlWorkspaceNavigationService.cs" />
     <Compile Include="Services\EventStreamTrajectoryQuery.cs" />
+    <Compile Include="Services\TrajectoryDerivedProjection.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
     <Compile Include="Storage\AttachmentStore.cs" />
     <Compile Include="Storage\PdfAttachmentTextExtractor.cs" />

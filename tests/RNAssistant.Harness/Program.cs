@@ -105,6 +105,7 @@ namespace RNAssistant.Harness
                 Test("storage: json save remains atomic", JsonFileStoreWritesAtomicUtf8),
                 Test("storage: event log is canonical", SessionEventLogIsCanonical),
                 Test("storage: trajectory query paginates and filters", TrajectoryQueryPaginatesAndFilters),
+                Test("storage: trajectory derived views retain sources and usage", TrajectoryDerivedViewsRetainSourcesAndUsage),
                 Test("storage: fork lineage is canonical", SessionForkLineageIsCanonical),
                 Test("storage: stale chat save is rejected", StaleChatRevisionIsRejected),
                 Test("storage: event integrity rejects tampering", SessionEventIntegrityRejectsTampering),

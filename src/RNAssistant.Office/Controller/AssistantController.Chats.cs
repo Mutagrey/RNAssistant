@@ -24,17 +24,43 @@ namespace RNAssistant.Office
             request = request ?? new ChatTrajectoryRequest();
             var session = LoadSession(request.ChatId);
             var events = _chatStore.ReadEvents(session.Host, session.DocumentKey, session.Id);
+            if (!string.IsNullOrWhiteSpace(request.View) && !TrajectoryViews.IsSupported(request.View))
+            {
+                throw new InvalidOperationException("Unsupported trajectory view: " + request.View + ".");
+            }
+            var view = TrajectoryViews.Normalize(request.View);
+            if (!string.Equals(view, TrajectoryViews.Raw, StringComparison.OrdinalIgnoreCase))
+            {
+                var derived = _trajectoryQuery.QueryView(events, request.ToViewQueryRequest(view));
+                return new ChatTrajectoryResponse
+                {
+                    ChatId = session.Id,
+                    Revision = session.Revision,
+                    View = view,
+                    TotalEvents = derived.TotalEvents,
+                    TotalRows = derived.TotalRows,
+                    TotalMatches = derived.TotalMatches,
+                    Cursor = derived.Cursor,
+                    NextCursor = derived.NextCursor,
+                    HasMore = derived.HasMore,
+                    Events = new List<SessionEventDto>(),
+                    Rows = derived.Rows.Select(TrajectoryViewRowDto.From).Where(item => item != null).ToList()
+                };
+            }
             var page = _trajectoryQuery.Query(events, request.ToQueryRequest());
             return new ChatTrajectoryResponse
             {
                 ChatId = session.Id,
                 Revision = session.Revision,
+                View = TrajectoryViews.Raw,
                 TotalEvents = page.TotalEvents,
+                TotalRows = page.TotalEvents,
                 TotalMatches = page.TotalMatches,
                 Cursor = page.Cursor,
                 NextCursor = page.NextCursor,
                 HasMore = page.HasMore,
-                Events = page.Records.Select(SessionEventDto.From).Where(item => item != null).ToList()
+                Events = page.Records.Select(SessionEventDto.From).Where(item => item != null).ToList(),
+                Rows = new List<TrajectoryViewRowDto>()
             };
         }
 

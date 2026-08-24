@@ -2,6 +2,7 @@
   var events = [];
   var selected = null;
   var nextCursor = null;
+  var activeView = "raw";
 
   function value(source, pascal, camel, fallback) {
     source = source || {};
@@ -23,7 +24,52 @@
 
   function eventId(item) { return value(item, "EventId", "eventId", ""); }
 
+  function itemId(item) {
+    return activeView === "raw" ? eventId(item) : value(item, "Id", "id", "");
+  }
+
+  function selectDerivedRow(item, button) {
+    selected = item;
+    Array.prototype.slice.call($("trajectoryEvents").querySelectorAll(".trajectory-event")).forEach(function (node) {
+      node.classList.toggle("active", node === button);
+      node.setAttribute("aria-selected", node === button ? "true" : "false");
+    });
+    var firstSequence = value(item, "FirstSequence", "firstSequence", 0);
+    var lastSequence = value(item, "LastSequence", "lastSequence", 0);
+    var duration = value(item, "DurationMs", "durationMs", null);
+    var promptTokens = value(item, "PromptTokens", "promptTokens", null);
+    var completionTokens = value(item, "CompletionTokens", "completionTokens", null);
+    var totalTokens = value(item, "TotalTokens", "totalTokens", null);
+    var costUsd = value(item, "CostUsd", "costUsd", null);
+    var sourceSeqs = value(item, "SourceEventSeqs", "sourceEventSeqs", []) || [];
+    var sourceIds = value(item, "SourceEventIds", "sourceEventIds", []) || [];
+    $("trajectoryEventTitle").textContent = value(item, "Title", "title", value(item, "Kind", "kind", "row"));
+    $("trajectoryEventMeta").textContent = [
+      "seq=" + firstSequence + (lastSequence !== firstSequence ? "…" + lastSequence : ""),
+      value(item, "Status", "status", ""),
+      value(item, "RunId", "runId", "") ? "run=" + value(item, "RunId", "runId", "") : "",
+      value(item, "TurnId", "turnId", "") ? "turn=" + value(item, "TurnId", "turnId", "") : "",
+      value(item, "StepId", "stepId", "") ? "step=" + value(item, "StepId", "stepId", "") : "",
+      value(item, "ToolId", "toolId", "") ? "tool=" + value(item, "ToolId", "toolId", "") : "",
+      value(item, "ArtifactId", "artifactId", "") ? "artifact=" + value(item, "ArtifactId", "artifactId", "") : "",
+      duration === null ? "" : "duration=" + duration + "ms",
+      totalTokens === null ? "" : "tokens=" + totalTokens + " (" + (promptTokens || 0) + "+" + (completionTokens || 0) + ")",
+      costUsd === null ? "" : "cost=$" + costUsd,
+      "sources=" + sourceSeqs.length + "/" + sourceIds.length
+    ].filter(Boolean).join(" · ");
+    $("trajectoryEventData").textContent = prettyJson(value(item, "DataJson", "dataJson", "{}")) +
+      (value(item, "DataTruncated", "dataTruncated", false) ? "\n\n[preview truncated]" : "") +
+      "\n\nsourceEventSeqs: " + JSON.stringify(sourceSeqs) + "\nsourceEventIds: " + JSON.stringify(sourceIds);
+    $("trajectoryEventPayload").textContent = "";
+    $("trajectoryEventPayload").classList.add("hidden");
+    $("loadTrajectoryPayloadButton").classList.add("hidden");
+  }
+
   function selectEvent(item, button) {
+    if (activeView !== "raw") {
+      selectDerivedRow(item, button);
+      return;
+    }
     selected = item;
     Array.prototype.slice.call($("trajectoryEvents").querySelectorAll(".trajectory-event")).forEach(function (node) {
       node.classList.toggle("active", node === button);
@@ -66,7 +112,10 @@
   }
 
   function renderEvents(response, append) {
-    var page = value(response, "Events", "events", []) || [];
+    activeView = value(response, "View", "view", "raw") || "raw";
+    var page = activeView === "raw"
+      ? (value(response, "Events", "events", []) || [])
+      : (value(response, "Rows", "rows", []) || []);
     events = append ? events.concat(page) : page;
     var root = $("trajectoryEvents");
     root.replaceChildren();
@@ -80,13 +129,17 @@
       first.className = "trajectory-event-line";
       var sequence = document.createElement("span");
       sequence.className = "trajectory-event-sequence";
-      sequence.textContent = "#" + value(item, "Sequence", "sequence", 0);
+      var firstSequence = value(item, "FirstSequence", "firstSequence", value(item, "Sequence", "sequence", 0));
+      var lastSequence = value(item, "LastSequence", "lastSequence", firstSequence);
+      sequence.textContent = "#" + firstSequence + (lastSequence !== firstSequence ? "…" + lastSequence : "");
       var type = document.createElement("span");
       type.className = "trajectory-event-type";
-      type.textContent = value(item, "Type", "type", "event");
+      type.textContent = activeView === "raw"
+        ? value(item, "Type", "type", "event")
+        : value(item, "Title", "title", value(item, "Kind", "kind", "row"));
       first.appendChild(sequence);
       first.appendChild(type);
-      if (value(item, "PayloadByteLength", "payloadByteLength", null) !== null) {
+      if (activeView === "raw" && value(item, "PayloadByteLength", "payloadByteLength", null) !== null) {
         var payload = document.createElement("span");
         payload.className = "trajectory-event-payload";
         payload.textContent = "payload";
@@ -102,23 +155,25 @@
       root.appendChild(button);
     });
 
-    var total = value(response, "TotalEvents", "totalEvents", events.length);
+    var total = activeView === "raw"
+      ? value(response, "TotalEvents", "totalEvents", events.length)
+      : value(response, "TotalRows", "totalRows", events.length);
     var matches = value(response, "TotalMatches", "totalMatches", events.length);
     nextCursor = value(response, "NextCursor", "nextCursor", null);
     var hasMore = !!value(response, "HasMore", "hasMore", false);
     $("trajectoryStatus").textContent = "Совпадений: " + matches + " из " + total + " · загружено " + events.length +
-      " · payload только по запросу";
+      (activeView === "raw" ? " · payload только по запросу" : " · проекция rebuildable из event stream");
     $("loadMoreTrajectoryButton").classList.toggle("hidden", !hasMore);
     $("trajectoryWorkspace").classList.toggle("hidden", events.length === 0);
     if (!append && events.length) {
       selectEvent(events[0], root.firstElementChild);
       root.scrollTop = 0;
     } else if (append && selected) {
-      var selectedIndex = events.map(eventId).indexOf(eventId(selected));
+      var selectedIndex = events.map(itemId).indexOf(itemId(selected));
       if (selectedIndex >= 0) selectEvent(events[selectedIndex], root.children[selectedIndex]);
     } else if (!events.length) {
       selected = null;
-      $("trajectoryEventTitle").textContent = "Событие не выбрано";
+      $("trajectoryEventTitle").textContent = activeView === "raw" ? "Событие не выбрано" : "Строка не выбрана";
       $("trajectoryEventMeta").textContent = "";
       $("trajectoryEventData").textContent = "";
       $("trajectoryEventPayload").textContent = "";
@@ -129,11 +184,12 @@
   function queryPayload(chatId, cursor) {
     return {
       chatId: chatId,
+      view: $("trajectoryViewInput").value || "raw",
       cursor: cursor || null,
       pageSize: 100,
       search: $("trajectorySearchInput").value.trim(),
-      eventTypes: $("trajectoryTypeInput").value.split(",").map(function (item) { return item.trim(); }).filter(Boolean),
-      visibility: $("trajectoryVisibilityInput").value || null
+      eventTypes: $("trajectoryViewInput").value === "raw" ? $("trajectoryTypeInput").value.split(",").map(function (item) { return item.trim(); }).filter(Boolean) : [],
+      visibility: $("trajectoryViewInput").value === "raw" ? ($("trajectoryVisibilityInput").value || null) : null
     };
   }
 
@@ -161,7 +217,7 @@
   }
 
   async function loadPayload() {
-    if (!selected || !state.activeChatId) return;
+    if (activeView !== "raw" || !selected || !state.activeChatId) return;
     var button = $("loadTrajectoryPayloadButton");
     var target = $("trajectoryEventPayload");
     var selectedId = eventId(selected);
@@ -198,6 +254,13 @@
       $(id).addEventListener("keydown", function (event) { if (event.key === "Enter") refreshTrajectory(false); });
     });
     $("trajectoryVisibilityInput").addEventListener("change", function () { refreshTrajectory(false); });
+    $("trajectoryViewInput").addEventListener("change", function () {
+      var raw = $("trajectoryViewInput").value === "raw";
+      $("trajectoryTypeInput").disabled = !raw;
+      $("trajectoryVisibilityInput").disabled = !raw;
+      nextCursor = null;
+      refreshTrajectory(false);
+    });
     if (payload) payload.addEventListener("click", loadPayload);
   };
 }());

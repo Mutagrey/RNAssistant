@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
@@ -605,6 +606,7 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class ChatTrajectoryRequest : ChatPayload
     {
+        [JsonProperty("view")] public string View { get; set; }
         [JsonProperty("cursor")] public string Cursor { get; set; }
         [JsonProperty("pageSize")] public int? PageSize { get; set; }
         [JsonProperty("search")] public string Search { get; set; }
@@ -638,18 +640,96 @@ namespace RNAssistant.Office.Contracts
                 Visibility = Visibility
             };
         }
+
+        public TrajectoryViewQueryRequest ToViewQueryRequest(string view)
+        {
+            return new TrajectoryViewQueryRequest
+            {
+                View = view,
+                Cursor = Cursor,
+                PageSize = PageSize.GetValueOrDefault(100),
+                Search = Search,
+                MinSequence = MinSequence,
+                MaxSequence = MaxSequence,
+                RunId = RunId,
+                TurnId = TurnId,
+                StepId = StepId,
+                ToolCallId = ToolCallId,
+                ArtifactId = ArtifactId,
+                Status = Status
+            };
+        }
     }
 
     public sealed class ChatTrajectoryResponse
     {
         [JsonProperty("chatId")] public string ChatId { get; set; }
         [JsonProperty("revision")] public long Revision { get; set; }
+        [JsonProperty("view")] public string View { get; set; }
         [JsonProperty("totalEvents")] public int TotalEvents { get; set; }
+        [JsonProperty("totalRows")] public int TotalRows { get; set; }
         [JsonProperty("totalMatches")] public int TotalMatches { get; set; }
         [JsonProperty("cursor")] public string Cursor { get; set; }
         [JsonProperty("nextCursor")] public string NextCursor { get; set; }
         [JsonProperty("hasMore")] public bool HasMore { get; set; }
         [JsonProperty("events")] public IReadOnlyList<SessionEventDto> Events { get; set; }
+        [JsonProperty("rows")] public IReadOnlyList<TrajectoryViewRowDto> Rows { get; set; }
+    }
+
+    public sealed class TrajectoryViewRowDto
+    {
+        private const int MaxInlineDataChars = 65536;
+
+        [JsonProperty("id")] public string Id { get; set; }
+        [JsonProperty("view")] public string View { get; set; }
+        [JsonProperty("kind")] public string Kind { get; set; }
+        [JsonProperty("title")] public string Title { get; set; }
+        [JsonProperty("status")] public string Status { get; set; }
+        [JsonProperty("createdUtc")] public DateTime CreatedUtc { get; set; }
+        [JsonProperty("completedUtc")] public DateTime? CompletedUtc { get; set; }
+        [JsonProperty("durationMs")] public long? DurationMs { get; set; }
+        [JsonProperty("firstSequence")] public long FirstSequence { get; set; }
+        [JsonProperty("lastSequence")] public long LastSequence { get; set; }
+        [JsonProperty("runId")] public string RunId { get; set; }
+        [JsonProperty("turnId")] public string TurnId { get; set; }
+        [JsonProperty("stepId")] public string StepId { get; set; }
+        [JsonProperty("toolCallId")] public string ToolCallId { get; set; }
+        [JsonProperty("toolId")] public string ToolId { get; set; }
+        [JsonProperty("artifactId")] public string ArtifactId { get; set; }
+        [JsonProperty("parentArtifactId")] public string ParentArtifactId { get; set; }
+        [JsonProperty("attemptCount")] public int AttemptCount { get; set; }
+        [JsonProperty("failureCount")] public int FailureCount { get; set; }
+        [JsonProperty("promptTokens")] public int? PromptTokens { get; set; }
+        [JsonProperty("completionTokens")] public int? CompletionTokens { get; set; }
+        [JsonProperty("totalTokens")] public int? TotalTokens { get; set; }
+        [JsonProperty("estimatedPromptTokens")] public int? EstimatedPromptTokens { get; set; }
+        [JsonProperty("costUsd")] public decimal? CostUsd { get; set; }
+        [JsonProperty("dataJson")] public string DataJson { get; set; }
+        [JsonProperty("dataTruncated")] public bool DataTruncated { get; set; }
+        [JsonProperty("sourceEventSeqs")] public IReadOnlyList<long> SourceEventSeqs { get; set; }
+        [JsonProperty("sourceEventIds")] public IReadOnlyList<string> SourceEventIds { get; set; }
+
+        public static TrajectoryViewRowDto From(TrajectoryViewRow row)
+        {
+            if (row == null) return null;
+            var data = row.Data == null ? "{}" : row.Data.ToString(Formatting.None);
+            var bounded = data.Length <= MaxInlineDataChars ? data : data.Substring(0, MaxInlineDataChars);
+            return new TrajectoryViewRowDto
+            {
+                Id = row.Id, View = row.View, Kind = row.Kind, Title = row.Title, Status = row.Status,
+                CreatedUtc = row.CreatedUtc, CompletedUtc = row.CompletedUtc, DurationMs = row.DurationMs,
+                FirstSequence = row.FirstSequence, LastSequence = row.LastSequence,
+                RunId = row.RunId, TurnId = row.TurnId, StepId = row.StepId,
+                ToolCallId = row.ToolCallId, ToolId = row.ToolId,
+                ArtifactId = row.ArtifactId, ParentArtifactId = row.ParentArtifactId,
+                AttemptCount = row.AttemptCount, FailureCount = row.FailureCount,
+                PromptTokens = row.PromptTokens, CompletionTokens = row.CompletionTokens, TotalTokens = row.TotalTokens,
+                EstimatedPromptTokens = row.EstimatedPromptTokens, CostUsd = row.CostUsd,
+                DataJson = bounded, DataTruncated = bounded.Length < data.Length,
+                SourceEventSeqs = row.SourceEventSeqs ?? new List<long>(),
+                SourceEventIds = row.SourceEventIds ?? new List<string>()
+            };
+        }
     }
 
     public sealed class SessionEventDto

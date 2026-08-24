@@ -341,13 +341,14 @@ namespace RNAssistant.Harness
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
                 "{\"id\":\"trajectory1\",\"type\":\"getChatTrajectory\",\"bridgeToken\":\"" + token +
-                "\",\"payload\":{\"chatId\":\"chat-query\",\"cursor\":\"seq:42\",\"pageSize\":25,\"search\":\"tool failure\",\"eventTypes\":[\"session.commit\",\"llm.failure\"],\"visibility\":\"log-only\"}}")
+                "\",\"payload\":{\"chatId\":\"chat-query\",\"view\":\"failure-retries\",\"cursor\":\"view:failure-retries:42:25\",\"pageSize\":25,\"search\":\"tool failure\",\"eventTypes\":[\"session.commit\",\"llm.failure\"],\"visibility\":\"log-only\"}}")
                 .GetAwaiter()
                 .GetResult();
 
             AssertTrue(JObject.Parse(responseJson)["ok"].Value<bool>(), "trajectory bridge response ok");
             AssertEqual("chat-query", controller.LastChatId, "trajectory chat id");
-            AssertEqual("seq:42", controller.LastTrajectoryCursor, "trajectory cursor");
+            AssertEqual("failure-retries", controller.LastTrajectoryView, "trajectory view");
+            AssertEqual("view:failure-retries:42:25", controller.LastTrajectoryCursor, "trajectory cursor");
             AssertEqual("tool failure", controller.LastTrajectorySearch, "trajectory search");
             AssertEqual("log-only", controller.LastTrajectoryVisibility, "trajectory visibility");
             AssertEqual("llm.failure", controller.LastTrajectoryEventTypes[1], "trajectory event types remain native array");

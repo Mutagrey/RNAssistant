@@ -626,6 +626,11 @@ namespace RNAssistant.Core.Llm
                 ResponseFormat = requestOptions == null ? null : requestOptions.ResponseFormat,
                 MessageCount = messageCount,
                 EstimatedPromptTokens = estimatedPromptTokens,
+                PromptTokens = result == null ? null : result.PromptTokens,
+                CompletionTokens = result == null ? null : result.CompletionTokens,
+                TotalTokens = result == null ? null : result.TotalTokens,
+                ReasoningTokens = result == null ? null : result.ReasoningTokens,
+                UsageJson = result == null ? null : result.UsageJson,
                 StatusCode = statusCode,
                 PayloadJson = payloadJson ?? JsonConvert.SerializeObject(result, Formatting.None),
                 PayloadContentType = "application/json"

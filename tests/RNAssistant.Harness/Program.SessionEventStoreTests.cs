@@ -145,6 +145,105 @@ namespace RNAssistant.Harness
             }).TotalMatches, "event type and sequence filters compose");
         }
 
+        private static void TrajectoryDerivedViewsRetainSourcesAndUsage()
+        {
+            var started = new DateTime(2026, 8, 25, 10, 0, 0, DateTimeKind.Utc);
+            var events = new List<SessionEvent>
+            {
+                TrajectoryEvent(1, SessionEventTypes.TurnStarted, started, "run-1", "turn-1", null, new JObject { ["Status"] = "running" }),
+                TrajectoryEvent(2, SessionEventTypes.StepStarted, started.AddSeconds(1), "run-1", "turn-1", "step-1", new JObject { ["Purpose"] = "agent", ["Status"] = "running" }),
+                TrajectoryEvent(3, SessionEventTypes.LlmRequest, started.AddSeconds(2), "run-1", "turn-1", "step-1", new JObject { ["Model"] = "model-a", ["EstimatedPromptTokens"] = 12 }),
+                TrajectoryEvent(4, SessionEventTypes.LlmResponse, started.AddSeconds(3), "run-1", "turn-1", "step-1", new JObject
+                {
+                    ["PromptTokens"] = 10,
+                    ["CompletionTokens"] = 4,
+                    ["TotalTokens"] = 14,
+                    ["UsageJson"] = "{\"cost_usd\":0.002}"
+                }),
+                TrajectoryEvent(5, SessionEventTypes.StepEnded, started.AddSeconds(4), "run-1", "turn-1", "step-1", new JObject { ["Status"] = "completed" }),
+                TrajectoryEvent(6, SessionEventTypes.SessionCommit, started.AddSeconds(5), "run-1", "turn-1", null, new JObject
+                {
+                    ["Operations"] = new JArray(
+                        new JObject
+                        {
+                            ["Type"] = SessionOperationTypes.ToolCallRecorded,
+                            ["Data"] = new JObject { ["Value"] = new JObject { ["ToolCalls"] = new JArray(new JObject { ["Id"] = "call-1", ["Name"] = "excel.inspect" }) } }
+                        },
+                        new JObject
+                        {
+                            ["Type"] = SessionOperationTypes.ToolExecutionFinished,
+                            ["Data"] = new JObject { ["Value"] = new JObject { ["Activity"] = new JObject { ["ToolCallId"] = "call-1", ["ToolId"] = "excel.inspect", ["Status"] = "waiting", ["ExecutionStatus"] = "waiting_confirmation" } } }
+                        },
+                        new JObject
+                        {
+                            ["Type"] = SessionOperationTypes.ArtifactRevisionCreated,
+                            ["Data"] = new JObject { ["Value"] = new JObject { ["Id"] = "artifact-1", ["ParentArtifactId"] = "artifact-root", ["Kind"] = "html_workspace", ["Title"] = "Dashboard", ["Revision"] = 2 } }
+                        })
+                }),
+                TrajectoryEvent(7, SessionEventTypes.SessionCommit, started.AddSeconds(7), "run-1", "turn-1", null, new JObject
+                {
+                    ["Operations"] = new JArray(new JObject
+                    {
+                        ["Type"] = SessionOperationTypes.ToolExecutionFinished,
+                        ["Data"] = new JObject { ["Value"] = new JObject { ["Activity"] = new JObject { ["ToolCallId"] = "call-1", ["ToolId"] = "excel.inspect", ["Status"] = "completed", ["ExecutionStatus"] = "completed" } } }
+                    })
+                }),
+                TrajectoryEvent(8, SessionEventTypes.AgentResponseRejected, started.AddSeconds(8), "run-1", "turn-1", "step-1", new JObject { ["Attempt"] = 2, ["FailureKind"] = "invalid_agent_response" }),
+                TrajectoryEvent(9, SessionEventTypes.TurnEnded, started.AddSeconds(10), "run-1", "turn-1", null, new JObject { ["Status"] = "completed" })
+            };
+
+            var query = new EventStreamTrajectoryQuery();
+            var model = query.QueryView(events, new TrajectoryViewQueryRequest { View = TrajectoryViews.ModelReplay }).Rows.Single();
+            AssertEqual("rejected", model.Status, "model view exposes format repair");
+            AssertEqual(14, model.TotalTokens, "model usage is correlated to the step");
+            AssertEqual(0.002m, model.CostUsd, "provider-reported cost is preserved");
+            AssertTrue(model.SourceEventSeqs.SequenceEqual(new long[] { 2, 3, 4, 5, 8 }), "model row retains every contributing event sequence");
+            AssertEqual(model.SourceEventSeqs.Count, model.SourceEventIds.Count, "model source ids remain correlated");
+
+            var tool = query.QueryView(events, new TrajectoryViewQueryRequest { View = TrajectoryViews.ToolExecution, ToolCallId = "call-1" }).Rows.Single();
+            AssertEqual("completed", tool.Status, "tool view follows execution through confirmation");
+            AssertTrue(tool.SourceEventSeqs.SequenceEqual(new long[] { 6, 7 }), "tool row deduplicates commit sources");
+            var confirmation = query.QueryView(events, new TrajectoryViewQueryRequest { View = TrajectoryViews.ConfirmationPauses }).Rows.Single();
+            AssertEqual("resolved", confirmation.Status, "confirmation pause has terminal outcome");
+            AssertEqual(2000L, confirmation.DurationMs, "confirmation duration uses waiting and terminal events");
+
+            var artifact = query.QueryView(events, new TrajectoryViewQueryRequest { View = TrajectoryViews.ArtifactLineage, ArtifactId = "artifact-root" }).Rows.Single();
+            AssertEqual("artifact-1", artifact.ArtifactId, "artifact lineage filters by parent id");
+            AssertEqual(6L, artifact.SourceEventSeqs.Single(), "artifact row retains revision source");
+
+            var failure = query.QueryView(events, new TrajectoryViewQueryRequest { View = TrajectoryViews.FailureRetries }).Rows.Single();
+            AssertEqual("model-failure", failure.Kind, "failure view records rejected model attempt");
+            AssertEqual(1, (int)failure.Data["retryCount"], "failure view exposes retry count");
+
+            var turn = query.QueryView(events, new TrajectoryViewQueryRequest { View = TrajectoryViews.TurnUsage }).Rows.Single();
+            AssertEqual(10000L, turn.DurationMs, "turn timing uses lifecycle boundaries");
+            AssertEqual(14, turn.TotalTokens, "turn usage aggregates model steps");
+            AssertEqual(0.002m, turn.CostUsd, "turn cost aggregates provider usage");
+            AssertTrue(turn.SourceEventSeqs.SequenceEqual(Enumerable.Range(1, 9).Select(value => (long)value)), "turn row retains complete event lineage");
+        }
+
+        private static SessionEvent TrajectoryEvent(
+            long sequence,
+            string type,
+            DateTime createdUtc,
+            string runId,
+            string turnId,
+            string stepId,
+            JToken data)
+        {
+            return new SessionEvent
+            {
+                Sequence = sequence,
+                EventId = "derived-event-" + sequence.ToString(CultureInfo.InvariantCulture),
+                Type = type,
+                CreatedUtc = createdUtc,
+                RunId = runId,
+                TurnId = turnId,
+                StepId = stepId,
+                Data = data
+            };
+        }
+
         private static void SessionEventIntegrityRejectsTampering()
         {
             WithTempPaths(paths =>

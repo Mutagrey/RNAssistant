@@ -42,7 +42,7 @@
 ### P2 — trajectory queries and operator UX
 
 - [x] Introduce `ITrajectoryQuery`: cursor pagination, tokenized full-text search, and filters for sequence range, event type, run, turn, step, tool call, artifact, status, and `current` / `shadowed` / `log-only`. The event stream remains authoritative; the current projection is disposable and rebuilt in memory.
-- [ ] Add derived views for model replay, tool execution, artifact lineage, confirmation pauses, failure/retry history, and per-turn timing/token/cost usage. Every projection row must retain `sourceEventSeqs` and source event ids.
+- [x] Add derived views for model replay, tool execution, artifact lineage, confirmation pauses, failure/retry history, and per-turn timing/token/cost usage. Every projection row retains complete `sourceEventSeqs` and source event ids; cost is provider-reported rather than recomputed from mutable price tables.
 - [ ] Extend the paged Diagnostics view with correlation navigation, artifact lineage, and VBA before/after diff with an explicit restore action.
 - [ ] Add an export bundle containing selected event records, a manifest of referenced CAS payloads, and integrity hashes for offline trajectory analysis and regression fixtures.
 - [ ] Add the remaining persistence seams (`ISessionPersistence`, `IBlobStore`); `ITrajectoryQuery` is now explicit. Consider an optional SQLite query backend only for scale; it must preserve append-only/CAS semantics and must not become a second durable truth beside JSONL.
