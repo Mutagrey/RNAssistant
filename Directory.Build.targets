@@ -1,4 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildThisFileDirectory)Directory.Build.local.props" Condition="Exists('$(MSBuildThisFileDirectory)Directory.Build.local.props')" />
+
+  <PropertyGroup>
+    <_RNAssistantExpectedVersion Condition="'$(RNAssistantVersionSuffix)' == ''">$(RNAssistantVersionPrefix)</_RNAssistantExpectedVersion>
+    <_RNAssistantExpectedVersion Condition="'$(RNAssistantVersionSuffix)' != ''">$(RNAssistantVersionPrefix)-$(RNAssistantVersionSuffix)</_RNAssistantExpectedVersion>
+    <_RNAssistantVersionPrefixValid>$([System.Text.RegularExpressions.Regex]::IsMatch('$(RNAssistantVersionPrefix)', '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'))</_RNAssistantVersionPrefixValid>
+    <_RNAssistantVersionSuffixValid Condition="'$(RNAssistantVersionSuffix)' != ''">$([System.Text.RegularExpressions.Regex]::IsMatch('$(RNAssistantVersionSuffix)', '^((0|[1-9][0-9]*)|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.((0|[1-9][0-9]*)|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*$'))</_RNAssistantVersionSuffixValid>
+  </PropertyGroup>
+
+  <Target Name="ValidateRNAssistantVersion" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(_RNAssistantVersionPrefixValid)' != 'True'" Text="RNAssistantVersionPrefix must be a SemVer core such as 2.0.0." />
+    <Error Condition="'$(RNAssistantVersionSuffix)' != '' and '$(_RNAssistantVersionSuffixValid)' != 'True'" Text="RNAssistantVersionSuffix must contain dot-separated SemVer prerelease identifiers, for example beta.1." />
+    <Error Condition="'$(Version)' != '$(_RNAssistantExpectedVersion)'" Text="Version must be derived from RNAssistantVersionPrefix and RNAssistantVersionSuffix." />
+    <Error Condition="'$(AssemblyVersion)' != '$(RNAssistantVersionPrefix).0'" Text="AssemblyVersion must be derived from RNAssistantVersionPrefix." />
+    <Error Condition="'$(FileVersion)' != '$(RNAssistantVersionPrefix).0'" Text="FileVersion must be derived from RNAssistantVersionPrefix." />
+    <Error Condition="'$(InformationalVersion)' != '$(_RNAssistantExpectedVersion)'" Text="InformationalVersion must match the RNAssistant product version." />
+    <Error Condition="'$(ApplicationVersion)' != '$(RNAssistantVersionPrefix).0'" Text="VSTO ApplicationVersion must be derived from RNAssistantVersionPrefix." />
+  </Target>
+
+  <Target Name="GenerateRNAssistantVersionInfo"
+          BeforeTargets="CoreCompile"
+          DependsOnTargets="ValidateRNAssistantVersion"
+          Condition="'$(MSBuildProjectExtension)' == '.csproj' and '$(UsingMicrosoftNETSdk)' != 'true'">
+    <ItemGroup>
+      <_RNAssistantAssemblyAttribute Include="System.Reflection.AssemblyVersionAttribute">
+        <_Parameter1>$(AssemblyVersion)</_Parameter1>
+      </_RNAssistantAssemblyAttribute>
+      <_RNAssistantAssemblyAttribute Include="System.Reflection.AssemblyFileVersionAttribute">
+        <_Parameter1>$(FileVersion)</_Parameter1>
+      </_RNAssistantAssemblyAttribute>
+      <_RNAssistantAssemblyAttribute Include="System.Reflection.AssemblyInformationalVersionAttribute">
+        <_Parameter1>$(InformationalVersion)</_Parameter1>
+      </_RNAssistantAssemblyAttribute>
+    </ItemGroup>
+    <WriteCodeFragment
+      Language="C#"
+      OutputFile="$(IntermediateOutputPath)RNAssistant.Version.g.cs"
+      AssemblyAttributes="@(_RNAssistantAssemblyAttribute)">
+      <Output TaskParameter="OutputFile" ItemName="Compile" />
+    </WriteCodeFragment>
+  </Target>
 </Project>

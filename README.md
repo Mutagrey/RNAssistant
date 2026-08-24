@@ -116,6 +116,16 @@ Prerequisites are still required: Visual Studio 2022 with the Office/SharePoint 
 
 The add-in projects use the VSTO project flavor (`ProjectTypeGuids`) so Visual Studio shows Office/VSTO icons and enables the VSTO property pages. If Visual Studio says the projects are incompatible, install or enable the `Office/SharePoint development` workload and the `Visual Studio Tools for Office` component in Visual Studio Installer.
 
+## Versioning
+
+The product version has one source of truth: `RNAssistantVersionPrefix` in `Directory.Build.props`. Use SemVer: patch for fixes, minor for backward-compatible features, and major for breaking changes. Set `RNAssistantVersionSuffix` only for prereleases such as `beta.1`; the UI adds the leading `v` itself.
+
+C# assembly, file, informational, and VSTO application versions are derived automatically. Do not increment the version for every commit; change it when preparing a release. Every build validates the version. Before committing a version change, the same lightweight check can be run without compiling:
+
+```powershell
+dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateRNAssistantVersion -nologo -v:minimal
+```
+
 ## Visual Studio Debug
 
 1. Run `install-local.cmd Excel` once, replacing `Excel` with the host you want to debug.

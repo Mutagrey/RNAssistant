@@ -231,6 +231,7 @@ function applyInitState(init) {
   state.bridgeUnavailable = false;
   document.body.classList.remove("bridge-unavailable");
   resetMessageEditState();
+  state.appVersion = init.appVersion || init.AppVersion || "";
   state.host = init.host;
   state.title = init.title;
   state.officeContext = init.officeContext || null;
@@ -283,6 +284,7 @@ function applyBridgeUnavailableState(error) {
   state.bridgeUnavailable = true;
   document.body.classList.add("bridge-unavailable");
   resetMessageEditState();
+  state.appVersion = "";
   state.host = "";
   state.title = "";
   state.officeContext = null;

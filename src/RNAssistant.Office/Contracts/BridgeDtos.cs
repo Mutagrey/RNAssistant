@@ -553,6 +553,9 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class SettingsResponse
     {
+        [JsonProperty("appVersion")]
+        public string AppVersion { get; set; }
+
         [JsonProperty("settings")]
         public AppSettings Settings { get; set; }
 
@@ -831,6 +834,9 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class InitResponse
     {
+        [JsonProperty("appVersion")]
+        public string AppVersion { get; set; }
+
         [JsonProperty("host")]
         public string Host { get; set; }
 

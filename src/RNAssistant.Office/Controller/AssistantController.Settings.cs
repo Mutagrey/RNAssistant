@@ -12,6 +12,7 @@ namespace RNAssistant.Office
         {
             return new SettingsResponse
             {
+                AppVersion = ApplicationVersionService.Current,
                 Settings = _settingsService.Load(),
                 HasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey())
             };

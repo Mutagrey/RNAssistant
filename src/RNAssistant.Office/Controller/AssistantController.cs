@@ -125,6 +125,7 @@ namespace RNAssistant.Office
             var chatSettings = ResolveChatSettings(session, settings);
             return new InitResponse
             {
+                AppVersion = ApplicationVersionService.Current,
                 Host = _adapter.HostName,
                 DocumentKey = _adapter.DocumentKey,
                 Title = _adapter.DocumentTitle,

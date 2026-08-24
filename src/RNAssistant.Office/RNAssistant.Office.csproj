@@ -90,6 +90,7 @@
     <Compile Include="Services\AgentRunService.cs" />
     <Compile Include="Services\AgentJsonProtocol.cs" />
     <Compile Include="Services\AgentPromptComposer.cs" />
+    <Compile Include="Services\ApplicationVersionService.cs" />
     <Compile Include="Services\ChatContextWindowBuilder.cs" />
     <Compile Include="Services\ContextCompactionService.cs" />
     <Compile Include="Services\PlainChatService.cs" />

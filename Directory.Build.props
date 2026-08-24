@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <!-- Single source of truth for the RNAssistant product version. -->
+    <RNAssistantVersionPrefix>2.0.0</RNAssistantVersionPrefix>
+    <RNAssistantVersionSuffix></RNAssistantVersionSuffix>
+
+    <VersionPrefix>$(RNAssistantVersionPrefix)</VersionPrefix>
+    <VersionSuffix>$(RNAssistantVersionSuffix)</VersionSuffix>
+    <Version Condition="'$(RNAssistantVersionSuffix)' == ''">$(RNAssistantVersionPrefix)</Version>
+    <Version Condition="'$(RNAssistantVersionSuffix)' != ''">$(RNAssistantVersionPrefix)-$(RNAssistantVersionSuffix)</Version>
+    <AssemblyVersion>$(RNAssistantVersionPrefix).0</AssemblyVersion>
+    <FileVersion>$(RNAssistantVersionPrefix).0</FileVersion>
+    <InformationalVersion>$(Version)</InformationalVersion>
+    <ApplicationVersion>$(RNAssistantVersionPrefix).0</ApplicationVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+</Project>

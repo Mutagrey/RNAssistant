@@ -1,4 +1,5 @@
 var state = {
+  appVersion: "",
   host: "",
   title: "",
   officeContext: null,

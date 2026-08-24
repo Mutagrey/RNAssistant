@@ -46,6 +46,26 @@
   overflow: auto;
 }
 
+.app-version-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--secondary-bg);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.app-version-card code {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: var(--title-font-weight);
+}
+
 .resource-editor-head {
   display: flex;
   gap: 10px;

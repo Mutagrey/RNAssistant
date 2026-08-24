@@ -99,6 +99,11 @@ function renderSettings() {
   var s = state.settings || {};
   applyUiFontScale(s);
   var uiTheme = applyUiTheme(s);
+  var appVersion = $("appVersion");
+  if (appVersion) {
+    var appVersionText = String(state.appVersion || "").trim();
+    appVersion.textContent = appVersionText ? "v" + appVersionText.replace(/^v/i, "") : "—";
+  }
   $("baseUrlInput").value = s.BaseUrl || s.baseUrl || "";
   $("modelsConfigUrlInput").value = s.ModelsConfigUrl || s.modelsConfigUrl || "";
   $("modelInput").value = s.Model || s.model || "";
@@ -201,6 +206,7 @@ async function persistSettingsFromForm() {
   var apiKey = $("apiKeyInput").value;
   var nextSettings = readSettings();
   var response = await send("saveSettings", { settings: nextSettings, apiKey: apiKey || null });
+  state.appVersion = response.appVersion || response.AppVersion || state.appVersion;
   state.settings = response.settings || response.Settings || nextSettings;
   state.hasApiKey = !!(response.hasApiKey || response.HasApiKey);
   $("apiKeyInput").value = "";

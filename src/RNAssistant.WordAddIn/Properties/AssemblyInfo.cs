@@ -7,6 +7,3 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyProduct("RNAssistant")]
 [assembly: ComVisible(false)]
 [assembly: Guid("e8f6db3d-5628-4f03-bfbe-c4d177686091")]
-[assembly: AssemblyVersion("0.1.0.0")]
-[assembly: AssemblyFileVersion("0.1.0.0")]
-
