@@ -199,16 +199,33 @@ namespace RNAssistant.Office.Services
 
         private static void LinkHtmlWorkspace(ChatSession session, ChatMessage message)
         {
+            var htmlArtifactIds = new HashSet<string>(session.Artifacts
+                .Where(item => item != null && string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
+                .Select(item => item.Id), StringComparer.OrdinalIgnoreCase);
+            message.ArtifactIds.RemoveAll(id => htmlArtifactIds.Contains(id));
+
             var activity = message.Activity;
-            var toolId = activity == null ? null : activity.ToolId;
-            if (string.IsNullOrWhiteSpace(toolId) ||
-                !toolId.StartsWith("common.html_workspace_", StringComparison.OrdinalIgnoreCase) ||
-                string.IsNullOrWhiteSpace(message.HtmlWorkspaceCheckpointId))
+            if (activity == null || string.IsNullOrWhiteSpace(activity.DataJson))
             {
                 return;
             }
+            string artifactId;
+            try
+            {
+                var data = JObject.Parse(activity.DataJson);
+                if (!string.Equals((string)data["type"], "rnassistant.htmlWorkspaceMutation", StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+                artifactId = (string)data["revisionArtifactId"];
+            }
+            catch (JsonException)
+            {
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(artifactId)) return;
             var artifact = session.Artifacts.FirstOrDefault(item => item != null &&
-                string.Equals(item.Id, message.HtmlWorkspaceCheckpointId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase));
             if (artifact != null)
             {

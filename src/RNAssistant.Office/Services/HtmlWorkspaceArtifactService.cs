@@ -25,6 +25,11 @@ namespace RNAssistant.Office.Services
             {
                 return current.Id;
             }
+            if (current == null && snapshot.Files.Count == 0 && snapshot.DataSources.Count == 0)
+            {
+                session.ActiveHtmlArtifactId = null;
+                return string.Empty;
+            }
             var artifact = new ChatArtifact
             {
                 Kind = ChatArtifactKinds.HtmlWorkspace,

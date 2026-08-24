@@ -17,6 +17,21 @@
     return value(message, "ArtifactIds", "artifactIds", []) || [];
   }
 
+  function htmlWorkspaceRevisionId(message) {
+    var activity = value(message, "Activity", "activity", null);
+    var dataJson = value(activity, "DataJson", "dataJson", "") || "";
+    if (!dataJson) return "";
+    try {
+      var data = JSON.parse(dataJson);
+      var type = value(data, "Type", "type", "");
+      return type === "rnassistant.htmlWorkspaceMutation"
+        ? value(data, "RevisionArtifactId", "revisionArtifactId", "") || ""
+        : "";
+    } catch (error) {
+      return "";
+    }
+  }
+
   function kindLabel(kind) {
     var labels = {
       plan: "План",
@@ -102,6 +117,7 @@
     if (!parent || !message) return;
     var artifacts = messageArtifactIds(message).map(artifactById).filter(Boolean).filter(function (artifact) {
       var kind = artifactKind(artifact);
+      if (kind === "html_workspace") return artifactId(artifact) === htmlWorkspaceRevisionId(message);
       return kind !== "attachment" && kind !== "image" && (kind !== "plan" || latestPlanRevision(artifact));
     });
     if (!artifacts.length) return;
