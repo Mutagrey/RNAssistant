@@ -29,7 +29,7 @@
   <link rel="stylesheet" href="css/app-models.css?v=media-routing-20260824-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=cas-health-20260825-1">
   <link rel="stylesheet" href="css/app-trajectory.css?v=trajectory-views-20260825-1">
-  <link rel="stylesheet" href="css/app-tools.css?v=library-editor-20260824-1">
+  <link rel="stylesheet" href="css/app-tools.css?v=skill-references-20260825-1">
   <link rel="stylesheet" href="css/app-vba.css?v=userform-20260824-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
   <link rel="stylesheet" href="css/app-context-inspector.css?v=context-inspector-20260824-1">
@@ -37,7 +37,7 @@
   <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260702-2">
   <link rel="stylesheet" href="css/app-artifacts.css?v=ui-simplify-20260821-3">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=html-recovery-20260825-1">
-  <link rel="stylesheet" href="css/app-responsive.css?v=library-editor-20260824-2">
+  <link rel="stylesheet" href="css/app-responsive.css?v=skill-references-20260825-1">
   <link rel="stylesheet" href="css/app-agent.css?v=ui-simplify-20260821-4">
   <link rel="stylesheet" href="css/app-agent-data.css?v=agent-ui-20260821-2">
   <link rel="stylesheet" href="css/app-theme.css?v=media-routing-20260824-1">
@@ -376,8 +376,13 @@
                 <label class="checkline skill-enabled-field"><input type="checkbox" id="skillEnabledInput"> <span>Включён</span></label>
                 <label class="wide">Описание<textarea id="skillDescriptionInput" rows="3" placeholder="Когда агенту использовать этот навык"></textarea></label>
               </div>
+              <div class="skill-reference-row">
+                <label><span>Файл инструкции</span><select id="skillResourceSelect" aria-label="Файл навыка"><option value="">SKILL.md</option></select></label>
+                <button class="secondary" id="addSkillReferenceButton" type="button">+ Reference</button>
+                <button class="secondary danger-soft" id="deleteSkillReferenceButton" type="button">Удалить reference</button>
+              </div>
               <div class="library-editor-mode-row">
-                <span class="library-editor-section-label">SKILL.md</span>
+                <span class="library-editor-section-label" id="skillResourceLabel">SKILL.md</span>
                 <div class="mode-toggle instruction-mode-toggle" role="group" aria-label="Режим навыка">
                   <button class="mode-button instruction-mode-button active" type="button" data-instruction-mode="edit">Редактор</button>
                   <button class="mode-button instruction-mode-button" type="button" data-instruction-mode="preview">Просмотр</button>
@@ -911,7 +916,7 @@
   <script src="js/app-tools-structured.js?v=tools-modules-20260823-1"></script>
   <script src="js/app-tools-actions.js?v=log-filters-20260824-1"></script>
   <script src="js/app-tools.js?v=userform-package-20260825-1"></script>
-  <script src="js/app-skills.js?v=library-editor-20260824-1"></script>
+  <script src="js/app-skills.js?v=skill-references-20260825-1"></script>
   <script src="js/app-vba-diff.js?v=vba-modules-20260823-1"></script>
   <script src="js/app-vba-actions.js?v=userform-20260824-1"></script>
   <script src="js/app-vba-project.js?v=userform-20260824-1"></script>

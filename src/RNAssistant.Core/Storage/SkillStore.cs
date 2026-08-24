@@ -9,6 +9,7 @@ namespace RNAssistant.Core.Storage
 {
     public sealed class SkillStore
     {
+        public const int MaximumSkillReferenceCharacters = 500000;
         private const long MaxSkillFileBytes = 2100000;
         private const long MaxSkillReferenceFileBytes = 2100000;
         private const int MaxSkillReferences = 64;
@@ -133,6 +134,7 @@ namespace RNAssistant.Core.Storage
                 return false;
             }
 
+            normalizedPath = expected.Path;
             var path = Path.Combine(skill.StoragePath, "references", Path.GetFileName(normalizedPath));
             try
             {
@@ -175,6 +177,131 @@ namespace RNAssistant.Core.Storage
             catch (UnauthorizedAccessException)
             {
                 error = "Skill reference could not be read: " + normalizedPath;
+                return false;
+            }
+        }
+
+        public bool TrySaveReference(
+            SkillDefinition skill,
+            string referencePath,
+            string content,
+            out SkillReferenceMetadata metadata,
+            out string error)
+        {
+            metadata = null;
+            error = null;
+            if (skill == null || string.IsNullOrWhiteSpace(skill.StoragePath))
+            {
+                error = "Custom skill not found.";
+                return false;
+            }
+
+            string normalizedPath;
+            if (!TryNormalizeReferencePath(referencePath, out normalizedPath))
+            {
+                error = "Reference path must be one UTF-8 Markdown file directly under references/.";
+                return false;
+            }
+            var value = content ?? string.Empty;
+            if (value.Length > MaximumSkillReferenceCharacters || Encoding.UTF8.GetByteCount(value) > MaxSkillReferenceFileBytes)
+            {
+                error = "Skill reference is too large.";
+                return false;
+            }
+
+            var current = LoadReferences(skill.StoragePath);
+            var existing = current.FirstOrDefault(item => item != null &&
+                string.Equals(item.Path, normalizedPath, StringComparison.OrdinalIgnoreCase));
+            if (existing == null && current.Count >= MaxSkillReferences)
+            {
+                error = "Skill reference limit reached: " + MaxSkillReferences + ".";
+                return false;
+            }
+            if (existing != null) normalizedPath = existing.Path;
+
+            var directory = Path.Combine(skill.StoragePath, "references");
+            var path = Path.Combine(directory, Path.GetFileName(normalizedPath));
+            try
+            {
+                if (Directory.Exists(directory) &&
+                    (File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+                {
+                    error = "Skill references directory cannot be a symbolic link.";
+                    return false;
+                }
+                Directory.CreateDirectory(directory);
+                if (File.Exists(path) && (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+                {
+                    error = "Skill reference cannot be a symbolic link: " + normalizedPath;
+                    return false;
+                }
+
+                StorageFileSystem.WriteAllTextAtomic(path, value, new UTF8Encoding(false));
+                metadata = LoadReferences(skill.StoragePath).FirstOrDefault(item => item != null &&
+                    string.Equals(item.Path, normalizedPath, StringComparison.OrdinalIgnoreCase));
+                if (metadata == null)
+                {
+                    error = "Skill reference was written but could not be verified: " + normalizedPath;
+                    return false;
+                }
+                return true;
+            }
+            catch (IOException)
+            {
+                error = "Skill reference could not be saved: " + normalizedPath;
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                error = "Skill reference could not be saved: " + normalizedPath;
+                return false;
+            }
+        }
+
+        public bool TryDeleteReference(SkillDefinition skill, string referencePath, out string error)
+        {
+            error = null;
+            if (skill == null || string.IsNullOrWhiteSpace(skill.StoragePath))
+            {
+                error = "Custom skill not found.";
+                return false;
+            }
+
+            string normalizedPath;
+            if (!TryNormalizeReferencePath(referencePath, out normalizedPath))
+            {
+                error = "Reference path must be one UTF-8 Markdown file directly under references/.";
+                return false;
+            }
+            var current = LoadReferences(skill.StoragePath);
+            var existing = current.FirstOrDefault(item => item != null &&
+                string.Equals(item.Path, normalizedPath, StringComparison.OrdinalIgnoreCase));
+            if (existing == null)
+            {
+                error = "Skill reference not found: " + normalizedPath;
+                return false;
+            }
+            normalizedPath = existing.Path;
+
+            var path = Path.Combine(skill.StoragePath, "references", Path.GetFileName(normalizedPath));
+            try
+            {
+                if (!File.Exists(path) || (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+                {
+                    error = "Skill reference is unavailable: " + normalizedPath;
+                    return false;
+                }
+                File.Delete(path);
+                return true;
+            }
+            catch (IOException)
+            {
+                error = "Skill reference could not be deleted: " + normalizedPath;
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                error = "Skill reference could not be deleted: " + normalizedPath;
                 return false;
             }
         }
@@ -288,15 +415,27 @@ namespace RNAssistant.Core.Storage
             return result;
         }
 
-        private static bool TryNormalizeReferencePath(string value, out string normalized)
+        public static bool TryNormalizeReferencePath(string value, out string normalized)
         {
             normalized = (value ?? string.Empty).Trim().Replace('\\', '/');
             const string prefix = "references/";
             if (!normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
             var fileName = normalized.Substring(prefix.Length);
             if (string.IsNullOrWhiteSpace(fileName) || fileName.IndexOf('/') >= 0 ||
-                !string.Equals(Path.GetExtension(fileName), ".md", StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(Path.GetFileName(fileName), fileName, StringComparison.Ordinal))
+                !string.Equals(fileName, fileName.Trim(), StringComparison.Ordinal) ||
+                fileName.Any(char.IsControl) || fileName.IndexOfAny(new[] { '<', '>', ':', '"', '|', '?', '*' }) >= 0)
+            {
+                return false;
+            }
+            try
+            {
+                if (!string.Equals(Path.GetExtension(fileName), ".md", StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(Path.GetFileName(fileName), fileName, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+            catch (ArgumentException)
             {
                 return false;
             }

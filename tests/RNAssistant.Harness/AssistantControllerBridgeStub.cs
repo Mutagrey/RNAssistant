@@ -35,6 +35,9 @@ namespace RNAssistant.Office
         public string LastContextText { get; private set; }
         public string LastToolsJson { get; private set; }
         public string LastSkillsJson { get; private set; }
+        public string LastSkillReferenceId { get; private set; }
+        public string LastSkillReferencePath { get; private set; }
+        public string LastSkillReferenceContent { get; private set; }
         public string LastDocumentHost { get; private set; }
         public string LastHtmlPath { get; private set; }
         public string LastHtmlDataName { get; private set; }
@@ -219,6 +222,39 @@ namespace RNAssistant.Office
         {
             LastSkillsJson = JsonConvert.SerializeObject(skills ?? new SkillDefinition[0]);
             return new SkillDefinition[0];
+        }
+        public SkillReferenceResponse ReadSkillReference(string skillId, string path)
+        {
+            LastSkillReferenceId = skillId;
+            LastSkillReferencePath = path;
+            return SkillReferenceResult(skillId, path, "reference", false);
+        }
+        public SkillReferenceResponse SaveSkillReference(string skillId, string path, string content)
+        {
+            LastSkillReferenceId = skillId;
+            LastSkillReferencePath = path;
+            LastSkillReferenceContent = content;
+            return SkillReferenceResult(skillId, path, content, false);
+        }
+        public SkillReferenceResponse DeleteSkillReference(string skillId, string path)
+        {
+            LastSkillReferenceId = skillId;
+            LastSkillReferencePath = path;
+            return SkillReferenceResult(skillId, path, null, true);
+        }
+        private static SkillReferenceResponse SkillReferenceResult(string skillId, string path, string content, bool deleted)
+        {
+            var reference = new SkillReferenceMetadata { Path = path, Revision = "ref", ByteLength = content == null ? 0 : content.Length };
+            return new SkillReferenceResponse
+            {
+                SkillId = skillId,
+                Path = path,
+                Content = content,
+                Deleted = deleted,
+                PackageRevision = "package",
+                Reference = reference,
+                References = deleted ? new List<SkillReferenceMetadata>() : new List<SkillReferenceMetadata> { reference }
+            };
         }
         public ChatStateResponse ConfirmAgentTool(string pendingId, string chatId = null) { return ChatState(pendingId, chatId); }
         public Task<ChatStateResponse> ConfirmAgentToolAsync(

@@ -23,8 +23,8 @@ namespace RNAssistant.Office.Tools
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
             yield return ControllerToolDefinition.Create("common.skills_read", "Common", "Read-only: Load one complete Markdown skill or a bounded chunk of one listed references/*.md file. Only a non-truncated skill result with data.loaded=true loads the skill; reference chunks never replace that evidence. Omit id only to list metadata.", SkillReadSchema());
-            yield return ControllerToolDefinition.Create("common.skills_upsert", "Common", "Mutates settings: Create a missing Markdown skill or update an existing custom skill. Omitted fields are preserved on update; use strict mode only when existence itself matters.", SkillUpsertSchema(), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
-            yield return ControllerToolDefinition.Create("common.skills_delete", "Common", "Mutates settings: Delete a custom markdown skill by id.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable identifier.\"}},\"required\":[\"id\"],\"additionalProperties\":false}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
+            yield return ControllerToolDefinition.Create("common.skills_upsert", "Common", "Mutates settings: Create/update one custom skill core or one direct references/*.md file. Omitted core fields are preserved; referencePath and referenceMarkdown select a reference-only mutation. Use strict mode only when existence itself matters.", SkillUpsertSchema(), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
+            yield return ControllerToolDefinition.Create("common.skills_delete", "Common", "Mutates settings: Delete a custom skill, or delete one direct Markdown reference when referencePath is supplied.", SkillDeleteSchema(), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
         }
 
         public ToolResult ExecuteControllerTool(
@@ -185,6 +185,10 @@ namespace RNAssistant.Office.Tools
             }
 
             var existing = _skillStore.Load().FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (HasArgument(command, "referencePath") || HasArgument(command, "referenceMarkdown"))
+            {
+                return UpsertSkillReference(command, existing, settings, dryRun, manualRun);
+            }
             if (existing != null && string.Equals(mode, "createOnly", StringComparison.OrdinalIgnoreCase))
             {
                 return ToolResult.Fail("Skill already exists: " + id + ". Use mode=upsert or updateOnly.", null, "skill_already_exists", false);
@@ -211,6 +215,70 @@ namespace RNAssistant.Office.Tools
             SetString(command, "bodyMarkdown", value => skill.BodyMarkdown = value);
             if (HasArgument(command, "enabled")) skill.Enabled = ReadBool(command, "enabled", skill.Enabled);
             return PersistSkill(skill, settings, dryRun, manualRun, "update");
+        }
+
+        private ToolResult UpsertSkillReference(
+            ToolCommand command,
+            SkillDefinition skill,
+            AppSettings settings,
+            bool dryRun,
+            bool manualRun)
+        {
+            var id = ToolArgumentReader.String(command.Arguments, "id", string.Empty);
+            if (!HasArgument(command, "referencePath") || !HasArgument(command, "referenceMarkdown"))
+            {
+                return ToolResult.Fail("referencePath and referenceMarkdown must be supplied together.", null, "invalid_skill_reference", false);
+            }
+            if (new[] { "host", "name", "description", "version", "bodyMarkdown", "enabled" }.Any(name => HasArgument(command, name)))
+            {
+                return ToolResult.Fail("Update a skill core and a reference in separate calls.", null, "mixed_skill_reference_update", false);
+            }
+            if (skill == null)
+            {
+                return ToolResult.Fail("Custom skill not found: " + id, null, "skill_not_found", false);
+            }
+
+            string normalizedPath;
+            if (!SkillStore.TryNormalizeReferencePath(
+                ToolArgumentReader.String(command.Arguments, "referencePath", string.Empty), out normalizedPath))
+            {
+                return ToolResult.Fail("Reference path must be one Markdown file directly under references/.", null, "invalid_skill_reference", false);
+            }
+            var existing = (skill.References ?? new List<SkillReferenceMetadata>()).FirstOrDefault(item => item != null &&
+                string.Equals(item.Path, normalizedPath, StringComparison.OrdinalIgnoreCase));
+            var mode = ToolArgumentReader.String(command.Arguments, "mode", "upsert");
+            if (existing != null && string.Equals(mode, "createOnly", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Fail("Skill reference already exists: " + normalizedPath, null, "skill_reference_exists", false);
+            }
+            if (existing == null && string.Equals(mode, "updateOnly", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Fail("Skill reference not found: " + normalizedPath, null, "skill_reference_not_found", false);
+            }
+            var operation = existing == null ? "create" : "update";
+            if (!dryRun && !manualRun && !(settings ?? new AppSettings()).AutoConfirmToolActions)
+            {
+                return ToolResult.WaitingConfirmation("Skill reference " + operation + " requires confirmation: " + normalizedPath);
+            }
+            if (dryRun)
+            {
+                return ToolResult.Ok("Dry run: would " + operation + " skill reference " + normalizedPath);
+            }
+
+            string error;
+            SkillReferenceMetadata savedReference;
+            if (!_skillStore.TrySaveReference(
+                skill,
+                normalizedPath,
+                ToolArgumentReader.String(command.Arguments, "referenceMarkdown", string.Empty),
+                out savedReference,
+                out error))
+            {
+                return ToolResult.Fail(error, null, "invalid_skill_reference", false);
+            }
+            var savedSkill = _skillStore.Load().First(item => string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
+            return ToolResult.Ok("Skill reference " + (operation == "create" ? "created: " : "updated: ") + normalizedPath,
+                SkillReferenceMutationJson(savedSkill, savedReference, false));
         }
 
         private ToolResult PersistSkill(SkillDefinition skill, AppSettings settings, bool dryRun, bool manualRun, string operation)
@@ -247,9 +315,15 @@ namespace RNAssistant.Office.Tools
             {
                 return ToolResult.Fail("Built-in skills cannot be deleted: " + id);
             }
-            if (!_skillStore.Load().Any(skill => skill != null && string.Equals(skill.Id, id, StringComparison.OrdinalIgnoreCase)))
+            var customSkill = _skillStore.Load().FirstOrDefault(skill => skill != null &&
+                string.Equals(skill.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (customSkill == null)
             {
                 return ToolResult.Fail("Custom skill not found: " + id, null, "skill_not_found", false);
+            }
+            if (HasArgument(command, "referencePath"))
+            {
+                return DeleteSkillReference(command, customSkill, settings, dryRun, manualRun);
             }
             if (!dryRun && !manualRun && !(settings ?? new AppSettings()).AutoConfirmToolActions)
             {
@@ -264,6 +338,60 @@ namespace RNAssistant.Office.Tools
             return _skillStore.Delete(id)
                 ? ToolResult.Ok("Skill deleted: " + id)
                 : ToolResult.Fail("Skill not found: " + id);
+        }
+
+        private ToolResult DeleteSkillReference(
+            ToolCommand command,
+            SkillDefinition skill,
+            AppSettings settings,
+            bool dryRun,
+            bool manualRun)
+        {
+            string normalizedPath;
+            if (!SkillStore.TryNormalizeReferencePath(
+                ToolArgumentReader.String(command.Arguments, "referencePath", string.Empty), out normalizedPath))
+            {
+                return ToolResult.Fail("Reference path must be one Markdown file directly under references/.", null, "invalid_skill_reference", false);
+            }
+            var existing = (skill.References ?? new List<SkillReferenceMetadata>()).FirstOrDefault(item => item != null &&
+                string.Equals(item.Path, normalizedPath, StringComparison.OrdinalIgnoreCase));
+            if (existing == null)
+            {
+                return ToolResult.Fail("Skill reference not found: " + normalizedPath, null, "skill_reference_not_found", false);
+            }
+            if (!dryRun && !manualRun && !(settings ?? new AppSettings()).AutoConfirmToolActions)
+            {
+                return ToolResult.WaitingConfirmation("Skill reference delete requires confirmation: " + normalizedPath);
+            }
+            if (dryRun)
+            {
+                return ToolResult.Ok("Dry run: would delete skill reference " + normalizedPath);
+            }
+
+            string error;
+            if (!_skillStore.TryDeleteReference(skill, normalizedPath, out error))
+            {
+                return ToolResult.Fail(error, null, "skill_reference_delete_failed", false);
+            }
+            var savedSkill = _skillStore.Load().First(item => string.Equals(item.Id, skill.Id, StringComparison.OrdinalIgnoreCase));
+            return ToolResult.Ok("Skill reference deleted: " + normalizedPath,
+                SkillReferenceMutationJson(savedSkill, existing, true));
+        }
+
+        private static string SkillReferenceMutationJson(
+            SkillDefinition skill,
+            SkillReferenceMetadata reference,
+            bool deleted)
+        {
+            return JsonConvert.SerializeObject(new
+            {
+                id = skill == null ? string.Empty : skill.Id,
+                revision = SkillRevision.Compute(skill),
+                deleted = deleted,
+                reference = reference,
+                references = skill == null ? new SkillReferenceMetadata[0] :
+                    (skill.References ?? new List<SkillReferenceMetadata>()).ToArray()
+            });
         }
 
         private SkillDefinition ReadSkillDefinition(ToolCommand command)
@@ -318,12 +446,50 @@ namespace RNAssistant.Office.Tools
                     ["version"] = version,
                     ["bodyMarkdown"] = new JObject { ["type"] = "string", ["description"] = "Complete Markdown instructions for the skill.", ["maxLength"] = 500000 },
                     ["enabled"] = enabled,
+                    ["referencePath"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Exact direct references/*.md path for a reference-only mutation; supply referenceMarkdown and no core fields.",
+                        ["maxLength"] = 260
+                    },
+                    ["referenceMarkdown"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Complete UTF-8 Markdown reference content used only with referencePath.",
+                        ["maxLength"] = SkillStore.MaximumSkillReferenceCharacters
+                    },
                     ["mode"] = new JObject
                     {
                         ["type"] = "string",
                         ["description"] = "Existence policy; upsert is normally sufficient.",
                         ["enum"] = new JArray("upsert", "createOnly", "updateOnly"),
                         ["default"] = "upsert"
+                    }
+                },
+                ["required"] = new JArray("id"),
+                ["additionalProperties"] = false
+            }.ToString(Formatting.None);
+        }
+
+        private static string SkillDeleteSchema()
+        {
+            return new JObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JObject
+                {
+                    ["id"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Exact stable custom skill id.",
+                        ["minLength"] = 1,
+                        ["maxLength"] = 128
+                    },
+                    ["referencePath"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Exact direct references/*.md path to delete; omit to delete the entire custom skill.",
+                        ["maxLength"] = 260
                     }
                 },
                 ["required"] = new JArray("id"),

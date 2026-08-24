@@ -1,3 +1,95 @@
+function skillEditorValue() {
+  return typeof getCodeEditorValue === "function"
+    ? getCodeEditorValue("skillBodyInput")
+    : (($("skillBodyInput") && $("skillBodyInput").value) || "");
+}
+
+function setSkillEditorValue(value) {
+  if (typeof setCodeEditorValue === "function") setCodeEditorValue("skillBodyInput", value || "");
+  else if ($("skillBodyInput")) $("skillBodyInput").value = value || "";
+}
+
+function skillReferencePath(reference) {
+  return (reference && (reference.Path || reference.path)) || "";
+}
+
+function ensureSkillReferenceState(skill) {
+  if (!skill) return;
+  if (!skill.References) skill.References = [];
+  if (!skill._referenceDrafts) skill._referenceDrafts = {};
+  if (!skill._referenceLoaded) skill._referenceLoaded = {};
+  if (!skill._referenceLoading) skill._referenceLoading = {};
+  if (!skill._referenceDirty) skill._referenceDirty = {};
+  if (!skill._selectedReferencePath) skill._selectedReferencePath = "";
+}
+
+function selectedSkillReferencePath(skill) {
+  ensureSkillReferenceState(skill);
+  return skill ? (skill._selectedReferencePath || "") : "";
+}
+
+function captureSelectedSkillResource(skill) {
+  if (!skill) return;
+  ensureSkillReferenceState(skill);
+  var value = skillEditorValue();
+  var path = selectedSkillReferencePath(skill);
+  if (path) {
+    if (!skill._referenceLoaded[path] || skill._referenceDrafts[path] !== value) {
+      skill._referenceDirty[path] = true;
+    }
+    skill._referenceDrafts[path] = value;
+    skill._referenceLoaded[path] = true;
+  } else {
+    skill.BodyMarkdown = value;
+  }
+}
+
+function mergeSkillReferenceMetadata(skill, references) {
+  if (!skill) return;
+  ensureSkillReferenceState(skill);
+  var server = (references || []).slice();
+  skill.References.forEach(function (reference) {
+    var path = skillReferencePath(reference);
+    if (reference && reference.Pending && !server.some(function (item) {
+      return skillReferencePath(item).toLowerCase() === path.toLowerCase();
+    })) server.push(reference);
+  });
+  skill.References = server;
+}
+
+function preserveSkillReferenceState(skills) {
+  var transient = {};
+  (state.skills || []).forEach(function (skill) {
+    if (!skill || !skill.Id) return;
+    ensureSkillReferenceState(skill);
+    transient[String(skill.Id).toLowerCase()] = {
+      selected: skill._selectedReferencePath || "",
+      drafts: skill._referenceDrafts,
+      loaded: skill._referenceLoaded,
+      loading: skill._referenceLoading,
+      dirty: skill._referenceDirty,
+      pending: (skill.References || []).filter(function (item) { return !!item.Pending; })
+    };
+  });
+  (skills || []).forEach(function (skill) {
+    var saved = transient[String((skill && skill.Id) || "").toLowerCase()];
+    ensureSkillReferenceState(skill);
+    if (!saved) return;
+    skill._selectedReferencePath = saved.selected;
+    skill._referenceDrafts = saved.drafts;
+    skill._referenceLoaded = saved.loaded;
+    skill._referenceLoading = saved.loading;
+    skill._referenceDirty = saved.dirty;
+    saved.pending.forEach(function (reference) {
+      var path = skillReferencePath(reference);
+      if (!skill.References.some(function (item) {
+        return skillReferencePath(item).toLowerCase() === path.toLowerCase();
+      })) skill.References.push(reference);
+    });
+  });
+  return skills || [];
+}
+
 function renderSkills() {
   renderInstructions();
 }
@@ -12,36 +104,103 @@ function skillMatchesSearch(skill, query) {
   return text.indexOf(query) >= 0;
 }
 
+function renderSkillReferenceControls(skill, disabled, builtIn) {
+  var select = $("skillResourceSelect");
+  if (!select) return;
+  ensureSkillReferenceState(skill);
+  select.innerHTML = "";
+  var core = document.createElement("option");
+  core.value = "";
+  core.textContent = "SKILL.md";
+  select.appendChild(core);
+  (skill ? skill.References : []).forEach(function (reference) {
+    var path = skillReferencePath(reference);
+    if (!path) return;
+    var option = document.createElement("option");
+    option.value = path;
+    option.textContent = path + (reference.Pending ? " · новый" : "");
+    select.appendChild(option);
+  });
+  var selected = selectedSkillReferencePath(skill);
+  if (selected && !Array.prototype.some.call(select.options, function (option) { return option.value === selected; })) {
+    skill._selectedReferencePath = "";
+    selected = "";
+  }
+  select.value = selected;
+  select.disabled = disabled || builtIn;
+  if ($("skillResourceLabel")) $("skillResourceLabel").textContent = selected || "SKILL.md";
+  if ($("addSkillReferenceButton")) $("addSkillReferenceButton").disabled = disabled || builtIn || !!state.bridgeUnavailable;
+  if ($("deleteSkillReferenceButton")) $("deleteSkillReferenceButton").disabled = disabled || builtIn || !selected || !!state.bridgeUnavailable;
+}
+
+async function loadSelectedSkillReference(skill, path) {
+  if (!skill || !path) return;
+  ensureSkillReferenceState(skill);
+  if (skill._referenceLoaded[path] || skill._referenceLoading[path]) return;
+  var reference = skill.References.filter(function (item) {
+    return skillReferencePath(item).toLowerCase() === path.toLowerCase();
+  })[0];
+  if (reference && reference.Pending) {
+    skill._referenceLoaded[path] = true;
+    return;
+  }
+  skill._referenceLoading[path] = true;
+  if ($("saveSkillsButton")) $("saveSkillsButton").disabled = true;
+  if (selectedSkillReferencePath(skill) === path && typeof setCodeEditorReadOnly === "function") {
+    setCodeEditorReadOnly("skillBodyInput", true);
+  }
+  try {
+    var response = await send("readSkillReference", { skillId: skill.Id || "", path: path });
+    skill._referenceDrafts[path] = (response && response.content) || "";
+    skill._referenceLoaded[path] = true;
+    delete skill._referenceDirty[path];
+    mergeSkillReferenceMetadata(skill, response && response.references);
+    if (state.skills[state.selectedSkillIndex] === skill && selectedSkillReferencePath(skill) === path) {
+      setSkillEditorValue(skill._referenceDrafts[path]);
+      renderSkillPreview();
+    }
+  } catch (error) {
+    log(error.detail || error.message, "error");
+  } finally {
+    skill._referenceLoading[path] = false;
+    if (state.skills[state.selectedSkillIndex] === skill && typeof setCodeEditorReadOnly === "function") {
+      setCodeEditorReadOnly("skillBodyInput", !!skill.BuiltIn);
+    }
+    if ($("saveSkillsButton")) $("saveSkillsButton").disabled = !!state.bridgeUnavailable;
+  }
+}
+
 function renderSkillEditor() {
   var skill = state.skills[state.selectedSkillIndex] || null;
   var disabled = !skill;
   var builtIn = !!(skill && skill.BuiltIn);
+  ensureSkillReferenceState(skill);
+  var referencePath = selectedSkillReferencePath(skill);
+  var references = skill ? (skill.References || []) : [];
   var panel = $("skillEditorPanel");
   if (panel) panel.classList.toggle("hidden", disabled);
   if ($("skillTitle")) $("skillTitle").textContent = skill ? (skill.Id || skill.Name || "Навык") : "Навык";
-  if ($("skillMeta")) $("skillMeta").textContent = skill ? ((skill.BuiltIn ? "Встроенный навык" : "Пользовательский навык") + " · " + (skill.Host || "Common")) : "";
+  if ($("skillMeta")) $("skillMeta").textContent = skill
+    ? ((skill.BuiltIn ? "Встроенный навык" : "Пользовательский навык") + " · " + (skill.Host || "Common") + " · references: " + references.length)
+    : "";
   $("skillEnabledInput").checked = skill ? skill.Enabled !== false : false;
   $("skillIdInput").value = skill ? (skill.Id || "") : "";
   $("skillHostInput").value = skill ? (skill.Host || "Common") : "Common";
   $("skillDescriptionInput").value = skill ? (skill.Description || "") : "";
-  $("skillBodyInput").value = skill ? (skill.BodyMarkdown || "") : "";
-  if (typeof setCodeEditorValue === "function") {
-    setCodeEditorValue("skillBodyInput", $("skillBodyInput").value);
-  }
+  var body = skill ? (referencePath ? (skill._referenceDrafts[referencePath] || "") : (skill.BodyMarkdown || "")) : "";
+  setSkillEditorValue(body);
+  renderSkillReferenceControls(skill, disabled, builtIn);
   renderSkillPreview();
   applyInstructionMode();
 
-  [
-    "skillEnabledInput",
-    "skillIdInput",
-    "skillHostInput",
-    "skillDescriptionInput",
-    "skillBodyInput"
-  ].forEach(function (id) {
+  ["skillEnabledInput", "skillDescriptionInput", "skillBodyInput"].forEach(function (id) {
     $(id).disabled = disabled || builtIn;
   });
+  var identityLocked = references.length > 0;
+  $("skillIdInput").disabled = disabled || builtIn || identityLocked;
+  $("skillHostInput").disabled = disabled || builtIn || identityLocked;
   if (typeof setCodeEditorReadOnly === "function") {
-    setCodeEditorReadOnly("skillBodyInput", disabled || builtIn);
+    setCodeEditorReadOnly("skillBodyInput", disabled || builtIn || !!(referencePath && skill._referenceLoading[referencePath]));
   }
 
   $("deleteSkillButton").disabled = disabled || builtIn;
@@ -50,6 +209,7 @@ function renderSkillEditor() {
   $("askSkillBuilderButton").disabled = disabled;
   $("addSkillButton").disabled = !!state.bridgeUnavailable;
   $("saveSkillsButton").disabled = !!state.bridgeUnavailable;
+  if (referencePath && !skill._referenceLoaded[referencePath]) loadSelectedSkillReference(skill, referencePath);
 }
 
 function syncSelectedSkillFromEditor() {
@@ -57,15 +217,13 @@ function syncSelectedSkillFromEditor() {
     syncCodeEditors(["skillBodyInput"]);
   }
   var skill = state.skills[state.selectedSkillIndex];
-  if (!skill || skill.BuiltIn) {
-    return;
-  }
+  if (!skill || skill.BuiltIn) return;
 
+  captureSelectedSkillResource(skill);
   skill.Id = $("skillIdInput").value.trim();
   skill.Host = $("skillHostInput").value;
   skill.Name = skill.Id;
   skill.Description = $("skillDescriptionInput").value;
-  skill.BodyMarkdown = $("skillBodyInput").value;
   skill.Enabled = $("skillEnabledInput").checked;
   skill.BuiltIn = false;
 }
@@ -112,7 +270,7 @@ function selectedSkillContext() {
     return "";
   }
 
-  return [
+  var sections = [
     "# Skill",
     "id: " + (skill.Id || ""),
     "host: " + (skill.Host || "Common"),
@@ -124,7 +282,19 @@ function selectedSkillContext() {
     "```markdown",
     skill.BodyMarkdown || "",
     "```"
-  ].join("\n");
+  ];
+  var references = skill.References || [];
+  if (references.length) {
+    sections.push("", "## References", references.map(function (reference) {
+      return "- " + skillReferencePath(reference);
+    }).join("\n"));
+  }
+  var selectedReference = selectedSkillReferencePath(skill);
+  if (selectedReference && skill._referenceLoaded[selectedReference]) {
+    sections.push("", "## Selected reference: " + selectedReference, "```markdown",
+      skill._referenceDrafts[selectedReference] || "", "```");
+  }
+  return sections.join("\n");
 }
 
 async function addSelectedSkillContextToContext() {
@@ -148,6 +318,96 @@ async function addSelectedSkillContextToContext() {
   return true;
 }
 
+async function saveSelectedSkillResource() {
+  syncSelectedSkillFromEditor();
+  var skill = state.skills[state.selectedSkillIndex];
+  if (!skill) return;
+  var selectedId = skill.Id || "";
+  var response = await send("saveSkills", { skills: readSkills() });
+  state.skills = preserveSkillReferenceState(response || []);
+  state.selectedSkillIndex = state.skills.findIndex(function (item) {
+    return String((item && item.Id) || "").toLowerCase() === String(selectedId).toLowerCase();
+  });
+  if (state.selectedSkillIndex < 0 && state.skills.length) state.selectedSkillIndex = 0;
+  var savedReferences = 0;
+  for (var skillIndex = 0; skillIndex < state.skills.length; skillIndex += 1) {
+    var saved = state.skills[skillIndex];
+    if (!saved || saved.BuiltIn) continue;
+    ensureSkillReferenceState(saved);
+    var dirtyPaths = Object.keys(saved._referenceDirty).filter(function (path) {
+      return !!saved._referenceDirty[path];
+    });
+    for (var pathIndex = 0; pathIndex < dirtyPaths.length; pathIndex += 1) {
+      var referencePath = dirtyPaths[pathIndex];
+      var referenceContent = saved._referenceDrafts[referencePath] || "";
+      var referenceResponse = await send("saveSkillReference", {
+        skillId: saved.Id || "",
+        path: referencePath,
+        content: referenceContent
+      });
+      mergeSkillReferenceMetadata(saved, referenceResponse && referenceResponse.references);
+      saved._referenceDrafts[referencePath] = (referenceResponse && referenceResponse.content) || referenceContent;
+      saved._referenceLoaded[referencePath] = true;
+      delete saved._referenceDirty[referencePath];
+      savedReferences += 1;
+    }
+  }
+  log(savedReferences ? ("Навыки и references сохранены: " + savedReferences + ".") : "Навыки сохранены.");
+  renderSkills();
+}
+
+function addSkillReference() {
+  syncSelectedSkillFromEditor();
+  var skill = state.skills[state.selectedSkillIndex];
+  if (!skill || skill.BuiltIn) return;
+  var name = window.prompt("Имя reference Markdown", "details.md");
+  if (name === null) return;
+  name = String(name || "").trim();
+  if (name.toLowerCase().indexOf("references/") === 0) name = name.substring("references/".length);
+  if (!name || !/^[^\\\/:*?"<>|]+\.md$/i.test(name)) {
+    log("Используйте одно имя Markdown-файла, например details.md.", "error");
+    return;
+  }
+  var path = "references/" + name;
+  ensureSkillReferenceState(skill);
+  if (skill.References.some(function (reference) {
+    return skillReferencePath(reference).toLowerCase() === path.toLowerCase();
+  })) {
+    log("Reference уже существует: " + path, "error");
+    return;
+  }
+  skill.References.push({ Path: path, ByteLength: 0, Revision: "", Pending: true });
+  skill._referenceDrafts[path] = "# " + name.replace(/\.md$/i, "").replace(/[-_]+/g, " ") + "\n\n";
+  skill._referenceLoaded[path] = true;
+  skill._referenceDirty[path] = true;
+  skill._selectedReferencePath = path;
+  renderSkillEditor();
+}
+
+async function deleteSelectedSkillReference() {
+  syncSelectedSkillFromEditor();
+  var skill = state.skills[state.selectedSkillIndex];
+  var path = selectedSkillReferencePath(skill);
+  if (!skill || skill.BuiltIn || !path) return;
+  if (!window.confirm("Удалить reference " + path + "?")) return;
+  var reference = (skill.References || []).filter(function (item) {
+    return skillReferencePath(item).toLowerCase() === path.toLowerCase();
+  })[0];
+  if (reference && reference.Pending) {
+    skill.References = skill.References.filter(function (item) { return skillReferencePath(item) !== path; });
+  } else {
+    var response = await send("deleteSkillReference", { skillId: skill.Id || "", path: path });
+    mergeSkillReferenceMetadata(skill, response && response.references);
+  }
+  delete skill._referenceDrafts[path];
+  delete skill._referenceLoaded[path];
+  delete skill._referenceLoading[path];
+  delete skill._referenceDirty[path];
+  skill._selectedReferencePath = "";
+  renderSkillEditor();
+  log("Reference удалён: " + path);
+}
+
 function bindSkillActions() {
   Array.prototype.slice.call(document.querySelectorAll(".instruction-mode-button")).forEach(function (button) {
     button.addEventListener("click", function () { syncSelectedSkillFromEditor(); state.promptEditorMode = button.getAttribute("data-instruction-mode"); applyInstructionMode(); });
@@ -163,6 +423,7 @@ function bindSkillActions() {
       Description: "",
       Version: "1.0.0",
       BodyMarkdown: "# Новый навык\n\nИспользуйте этот навык, когда...\n",
+      References: [],
       Enabled: true,
       BuiltIn: false
     });
@@ -186,6 +447,7 @@ function bindSkillActions() {
       Description: source.Description || "",
       Version: source.Version || "1.0.0",
       BodyMarkdown: source.BodyMarkdown || "",
+      References: [],
       Enabled: true,
       BuiltIn: false
     });
@@ -197,14 +459,32 @@ function bindSkillActions() {
   $("saveSkillsButton").addEventListener("click", async function () {
     setControlBusy("saveSkillsButton", true);
     try {
-      var response = await send("saveSkills", { skills: readSkills() });
-      state.skills = response || [];
-      renderSkills();
-      log("Навыки сохранены.");
+      await saveSelectedSkillResource();
     } catch (error) {
-      log(error.message, "error");
+      log(error.detail || error.message, "error");
     } finally {
       setControlBusy("saveSkillsButton", false);
+    }
+  });
+
+  $("skillResourceSelect").addEventListener("change", function () {
+    var skill = state.skills[state.selectedSkillIndex];
+    if (!skill) return;
+    captureSelectedSkillResource(skill);
+    skill._selectedReferencePath = $("skillResourceSelect").value || "";
+    renderSkillEditor();
+  });
+
+  $("addSkillReferenceButton").addEventListener("click", addSkillReference);
+
+  $("deleteSkillReferenceButton").addEventListener("click", async function () {
+    setControlBusy("deleteSkillReferenceButton", true);
+    try {
+      await deleteSelectedSkillReference();
+    } catch (error) {
+      log(error.detail || error.message, "error");
+    } finally {
+      setControlBusy("deleteSkillReferenceButton", false);
     }
   });
 

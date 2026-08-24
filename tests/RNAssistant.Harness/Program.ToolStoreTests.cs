@@ -500,6 +500,34 @@ namespace RNAssistant.Harness
                     BodyMarkdown = "# Review style\n\nPreserve workbook conventions."
                 }) + "\"", "skill read returns body revision");
 
+                var referenceUpsert = Command(
+                    "common.skills_upsert",
+                    "id", "excel.review_style",
+                    "referencePath", "references/checklist.md",
+                    "referenceMarkdown", "# Checklist\n\n- Preserve formats.");
+                AssertEqual("waiting_confirmation",
+                    executor.Execute(referenceUpsert, tools, new AppSettings(), false, false).Status,
+                    "agent reference upsert requires confirmation");
+                var referenceCreated = executor.Execute(
+                    referenceUpsert, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+                AssertTrue(referenceCreated.Success, "agent reference upsert succeeds");
+                AssertContains(referenceCreated.DataJson, "references/checklist.md", "reference mutation returns path");
+
+                var referenceRead = executor.Execute(
+                    Command("common.skills_read", "id", "excel.review_style", "referencePath", "references/checklist.md"),
+                    tools, new AppSettings(), false, true);
+                AssertTrue(referenceRead.Success, "agent-created reference can be read");
+                AssertContains(referenceRead.DataJson, "Preserve formats", "agent-created reference content");
+
+                var referenceDelete = Command(
+                    "common.skills_delete", "id", "excel.review_style", "referencePath", "references/checklist.md");
+                AssertEqual("waiting_confirmation",
+                    executor.Execute(referenceDelete, tools, new AppSettings(), false, false).Status,
+                    "agent reference delete requires confirmation");
+                AssertTrue(executor.Execute(
+                    referenceDelete, tools, new AppSettings { AutoConfirmToolActions = true }, false, false).Success,
+                    "agent reference delete succeeds");
+
                 var emptyUpdate = executor.Execute(Command("common.skills_upsert", "id", "excel.review_style"), tools, new AppSettings(), false, false);
                 AssertTrue(!emptyUpdate.Success, "empty skill update fails before confirmation");
                 AssertEqual("skill_update_empty", emptyUpdate.ErrorCode, "empty skill update error");
@@ -562,10 +590,26 @@ namespace RNAssistant.Harness
                 });
                 var stored = store.Load().Single(item => item.Id == "common.reference_test");
                 var bodyOnlyRevision = SkillRevision.Compute(stored);
-                var referenceDirectory = Path.Combine(stored.StoragePath, "references");
-                Directory.CreateDirectory(referenceDirectory);
-                var referencePath = Path.Combine(referenceDirectory, "details.md");
-                File.WriteAllText(referencePath, "# Details\n\nABCDEFGHIJ");
+                string saveError;
+                SkillReferenceMetadata savedReference;
+                AssertTrue(store.TrySaveReference(
+                    stored,
+                    "references/details.md",
+                    "# Details\n\nABCDEFGHIJ",
+                    out savedReference,
+                    out saveError), "reference save succeeds: " + saveError);
+                AssertTrue(!store.TrySaveReference(
+                    stored,
+                    "references/bad:name.md",
+                    "invalid",
+                    out savedReference,
+                    out saveError), "reference rejects platform-sensitive file names");
+                AssertTrue(store.TrySaveReference(
+                    stored,
+                    "references/DETAILS.md",
+                    "# Details\n\nABCDEFGHIJ",
+                    out savedReference,
+                    out saveError), "case-insensitive reference update preserves one file: " + saveError);
 
                 stored = store.Load().Single(item => item.Id == "common.reference_test");
                 AssertEqual(1, stored.References.Count, "one direct Markdown reference discovered");
@@ -605,11 +649,19 @@ namespace RNAssistant.Harness
                     tools, new AppSettings(), false, false, new ChatSession(), 40, runtimeSkills, CancellationToken.None);
                 AssertTrue(!traversal.Success, "reference traversal is rejected");
 
+                var referencePath = Path.Combine(stored.StoragePath, "references", "details.md");
                 File.WriteAllText(referencePath, "# Details\n\nChanged");
                 var stale = executor.Execute(
                     Command("common.skills_read", "id", stored.Id, "referencePath", "references/details.md"),
                     tools, new AppSettings(), false, false, new ChatSession(), 40, runtimeSkills, CancellationToken.None);
                 AssertEqual("skill_reference_changed", stale.ErrorCode, "stale reference snapshot is rejected");
+
+                stored = store.Load().Single(item => item.Id == "common.reference_test");
+                string deleteError;
+                AssertTrue(store.TryDeleteReference(stored, "references/details.md", out deleteError),
+                    "reference delete succeeds: " + deleteError);
+                AssertEqual(0, store.Load().Single(item => item.Id == "common.reference_test").References.Count,
+                    "deleted reference leaves the package manifest");
             });
         }
 

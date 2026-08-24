@@ -590,11 +590,29 @@ namespace RNAssistant.Harness
                 "{\"id\":\"b7\",\"type\":\"saveSkills\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"skills\":[{\"Id\":\"common.review\",\"Host\":\"Common\",\"BodyMarkdown\":\"# Review\",\"Enabled\":true}]}}")
                 .GetAwaiter()
                 .GetResult();
+            var readReferenceJson = bridge.HandleMessageAsync(
+                "{\"id\":\"b8\",\"type\":\"readSkillReference\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"skillId\":\"common.review\",\"path\":\"references/rules.md\"}}")
+                .GetAwaiter()
+                .GetResult();
+            var saveReferenceJson = bridge.HandleMessageAsync(
+                "{\"id\":\"b9\",\"type\":\"saveSkillReference\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"skillId\":\"common.review\",\"path\":\"references/rules.md\",\"content\":\"# Rules\"}}")
+                .GetAwaiter()
+                .GetResult();
+            var deleteReferenceJson = bridge.HandleMessageAsync(
+                "{\"id\":\"b10\",\"type\":\"deleteSkillReference\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"skillId\":\"common.review\",\"path\":\"references/rules.md\"}}")
+                .GetAwaiter()
+                .GetResult();
 
             AssertTrue(JObject.Parse(toolsResponseJson)["ok"].Value<bool>(), "tools bridge response ok");
             AssertTrue(JObject.Parse(skillsResponseJson)["ok"].Value<bool>(), "skills bridge response ok");
+            AssertTrue(JObject.Parse(readReferenceJson)["ok"].Value<bool>(), "skill reference read bridge response ok");
+            AssertTrue(JObject.Parse(saveReferenceJson)["ok"].Value<bool>(), "skill reference save bridge response ok");
+            AssertTrue(JObject.Parse(deleteReferenceJson)["ok"].Value<bool>(), "skill reference delete bridge response ok");
             AssertEqual("excel.custom", JArray.Parse(controller.LastToolsJson)[0]["Id"].Value<string>(), "tool id");
             AssertEqual("common.review", JArray.Parse(controller.LastSkillsJson)[0]["Id"].Value<string>(), "skill id");
+            AssertEqual("common.review", controller.LastSkillReferenceId, "skill reference id");
+            AssertEqual("references/rules.md", controller.LastSkillReferencePath, "skill reference path");
+            AssertEqual("# Rules", controller.LastSkillReferenceContent, "skill reference content");
         }
 
         private static void BridgeUsesTypedContextPayload()

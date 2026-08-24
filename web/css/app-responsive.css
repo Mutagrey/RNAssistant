@@ -276,6 +276,14 @@
     grid-template-columns: minmax(0, 1fr) minmax(120px, .65fr);
   }
 
+  .skill-reference-row {
+    flex-wrap: wrap;
+  }
+
+  .skill-reference-row label {
+    flex-basis: 100%;
+  }
+
   .rn-code-editor-toolPipelineInput,
   .rn-code-editor-toolCodeInput {
     min-height: 180px !important;

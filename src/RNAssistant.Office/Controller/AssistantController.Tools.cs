@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using RNAssistant.Core.Models;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office
@@ -53,6 +54,85 @@ namespace RNAssistant.Office
                 _skillStore.Save(custom, _adapter.HostName);
                 return GetSkills();
             }
+        }
+
+        public SkillReferenceResponse ReadSkillReference(string skillId, string path)
+        {
+            var skill = RequireCustomSkill(skillId);
+            string content;
+            string error;
+            SkillReferenceMetadata metadata;
+            if (!_skillStore.TryReadReference(skill, path, out content, out metadata, out error))
+            {
+                throw new InvalidOperationException(error);
+            }
+            return SkillReferenceResult(skill, metadata, content, false);
+        }
+
+        public SkillReferenceResponse SaveSkillReference(string skillId, string path, string content)
+        {
+            using (_chatRuns.ReserveMaintenance())
+            {
+                EnsureNoActiveRuns();
+                var skill = RequireCustomSkill(skillId);
+                string error;
+                SkillReferenceMetadata metadata;
+                if (!_skillStore.TrySaveReference(skill, path, content, out metadata, out error))
+                {
+                    throw new InvalidOperationException(error);
+                }
+                return SkillReferenceResult(RequireCustomSkill(skillId), metadata, content ?? string.Empty, false);
+            }
+        }
+
+        public SkillReferenceResponse DeleteSkillReference(string skillId, string path)
+        {
+            using (_chatRuns.ReserveMaintenance())
+            {
+                EnsureNoActiveRuns();
+                var skill = RequireCustomSkill(skillId);
+                string normalizedPath;
+                string error = null;
+                if (!RNAssistant.Core.Storage.SkillStore.TryNormalizeReferencePath(path, out normalizedPath) ||
+                    !_skillStore.TryDeleteReference(skill, normalizedPath, out error))
+                {
+                    throw new InvalidOperationException(error ?? "Invalid skill reference path.");
+                }
+                return SkillReferenceResult(RequireCustomSkill(skillId), new SkillReferenceMetadata
+                {
+                    Path = normalizedPath,
+                    ByteLength = 0,
+                    Revision = string.Empty
+                }, null, true);
+            }
+        }
+
+        private SkillDefinition RequireCustomSkill(string id)
+        {
+            var skill = _skillStore.Load().FirstOrDefault(item => item != null &&
+                string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (skill == null) throw new InvalidOperationException("Custom skill not found: " + (id ?? string.Empty));
+            return skill;
+        }
+
+        private static SkillReferenceResponse SkillReferenceResult(
+            SkillDefinition skill,
+            SkillReferenceMetadata reference,
+            string content,
+            bool deleted)
+        {
+            return new SkillReferenceResponse
+            {
+                SkillId = skill == null ? string.Empty : skill.Id,
+                Path = reference == null ? string.Empty : reference.Path,
+                Content = content,
+                Deleted = deleted,
+                PackageRevision = SkillRevision.Compute(skill),
+                Reference = reference,
+                References = skill == null || skill.References == null
+                    ? new List<SkillReferenceMetadata>()
+                    : new List<SkillReferenceMetadata>(skill.References)
+            };
         }
 
         public ToolResult RunTool(
