@@ -118,9 +118,9 @@ The add-in projects use the VSTO project flavor (`ProjectTypeGuids`) so Visual S
 
 ## Versioning
 
-The product version has one source of truth: `RNAssistantVersionPrefix` in `Directory.Build.props`. Use SemVer: patch for fixes, minor for backward-compatible features, and major for breaking changes. Set `RNAssistantVersionSuffix` only for prereleases such as `beta.1`; the UI adds the leading `v` itself.
+The product version has one source of truth: `RNAssistantVersionPrefix` in `Directory.Build.props`. Before every commit, ensure it is higher than the version in `HEAD`. Use SemVer based on the highest-impact change: patch for fixes, documentation, and compatible refactoring; minor for backward-compatible features; and major for breaking changes. Set `RNAssistantVersionSuffix` only for prereleases such as `beta.1`; the UI adds the leading `v` itself.
 
-C# assembly, file, informational, and VSTO application versions are derived automatically. Do not increment the version for every commit; change it when preparing a release. Every build validates the version. Before committing a version change, the same lightweight check can be run without compiling:
+C# assembly, file, informational, and VSTO application versions are derived automatically. If the working tree already contains the correct version bump, do not increment it again. Every build validates the version. Before committing, run the same lightweight check without compiling:
 
 ```powershell
 dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateRNAssistantVersion -nologo -v:minimal
