@@ -25,6 +25,7 @@ namespace RNAssistant.Office
         private readonly ToolStore _toolStore;
         private readonly SkillStore _skillStore;
         private readonly VbaJournalStore _vbaJournalStore;
+        private readonly CasMaintenanceService _casMaintenanceService;
         private readonly OfficeToolExecutor _toolExecutor;
         private readonly ToolCatalogService _toolCatalog;
         private readonly SkillCatalogService _skillCatalog;
@@ -74,6 +75,13 @@ namespace RNAssistant.Office
             _toolCatalog = new ToolCatalogService(_adapter, _toolExecutor, _toolStore);
             _skillCatalog = new SkillCatalogService(_adapter, _skillStore);
             _chatRuns = new ChatRunRegistry(_paths);
+            _casMaintenanceService = new CasMaintenanceService(
+                _paths,
+                _chatStore,
+                _vbaJournalStore,
+                () => _settingsService.LoadStorageProtector(),
+                _chatRuns.ReserveMaintenance,
+                EnsureNoActiveRuns);
             _chatSessions = new ChatSessionService(_adapter, _chatStore);
             _lifetimeCancellation = new CancellationTokenSource();
             _chatSessions.RunStateProvider = _chatRuns.Get;

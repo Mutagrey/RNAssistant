@@ -263,6 +263,92 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        internal void ScanCasReferences(CasReachabilityScan scan)
+        {
+            if (scan == null) throw new ArgumentNullException("scan");
+            string[] paths;
+            try
+            {
+                paths = Directory.Exists(_paths.VbaJournalDirectory)
+                    ? Directory.GetFiles(_paths.VbaJournalDirectory, JournalFileName, SearchOption.AllDirectories)
+                    : new string[0];
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                scan.AddSourceIssue(
+                    CasHealthIssueKinds.SourceUnreadable,
+                    "vba",
+                    "vba-journals",
+                    "VBA mutation journals could not be enumerated: " + ex.Message);
+                return;
+            }
+
+            foreach (var path in paths.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
+            {
+                scan.VbaJournalCount += 1;
+                var sourceId = CasMaintenanceService.RelativePath(_paths.VbaJournalDirectory, path);
+                try
+                {
+                    lock (PersistenceSync)
+                    {
+                        using (AcquireJournalPathLock(path))
+                        {
+                            var identity = ReadFirstEvent(path);
+                            if (identity == null)
+                            {
+                                scan.AddSourceIssue(CasHealthIssueKinds.SourceInvalid, "vba", sourceId,
+                                    "The VBA mutation journal is empty or invalid.");
+                                continue;
+                            }
+                            var log = ReadEventLog(path, identity.Host, identity.DocumentKey);
+                            if (log == null || log.Events.Count == 0)
+                            {
+                                scan.AddSourceIssue(CasHealthIssueKinds.SourceInvalid, "vba", sourceId,
+                                    "The VBA mutation journal is empty or invalid.");
+                                continue;
+                            }
+                            foreach (var journalEvent in log.Events)
+                            {
+                                scan.AddTokenReferences(journalEvent.Data, "vba", sourceId,
+                                    "event#" + journalEvent.Sequence + ".Data");
+                            }
+                            if (log.HasIncompleteTail)
+                            {
+                                scan.AddSourceIssue(CasHealthIssueKinds.IncompleteTail, "vba", sourceId,
+                                    "The VBA mutation journal has an incomplete final record.");
+                            }
+
+                            ProjectMutations(log.Events);
+                            foreach (var backupEvent in log.Events.Where(item =>
+                                string.Equals(item.Type, VbaJournalEventTypes.BackupCreated, StringComparison.Ordinal)))
+                            {
+                                var backup = backupEvent.Data == null ? null : backupEvent.Data.ToObject<VbaModuleBackup>();
+                                if (!ValidBackup(backupEvent, backup))
+                                {
+                                    throw new VbaJournalException("The VBA mutation journal contains an invalid backup record.");
+                                }
+                            }
+
+                            var canonicalPath = JournalPath(identity.Host, identity.DocumentKey);
+                            if (!string.Equals(Path.GetFullPath(path), Path.GetFullPath(canonicalPath), StringComparison.OrdinalIgnoreCase))
+                            {
+                                scan.AddSourceIssue(CasHealthIssueKinds.SourceInvalid, "vba", sourceId,
+                                    "The VBA mutation journal is outside its canonical document path.");
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex) when (
+                    ex is IOException || ex is UnauthorizedAccessException || ex is JsonException ||
+                    ex is InvalidOperationException || ex is ArgumentException || ex is CryptographicException ||
+                    ex is DecoderFallbackException)
+                {
+                    scan.AddSourceIssue(CasHealthIssueKinds.SourceUnreadable, "vba", sourceId,
+                        "The VBA mutation journal could not be validated: " + ex.Message);
+                }
+            }
+        }
+
         private void Append(
             string host,
             string documentKey,
@@ -367,6 +453,16 @@ namespace RNAssistant.Core.Storage
                 result.Events.Add(journalEvent);
             }
             return result;
+        }
+
+        private static VbaJournalEvent ReadFirstEvent(string path)
+        {
+            foreach (var line in File.ReadLines(path, Utf8))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                return JsonConvert.DeserializeObject<VbaJournalEvent>(line);
+            }
+            return null;
         }
 
         private static void ValidateEvent(
@@ -586,9 +682,14 @@ namespace RNAssistant.Core.Storage
 
         private IDisposable AcquireLock(string host, string documentKey)
         {
+            return AcquireJournalPathLock(JournalPath(host, documentKey));
+        }
+
+        private IDisposable AcquireJournalPathLock(string journalPath)
+        {
             var directory = Path.Combine(_paths.Root, "locks");
             Directory.CreateDirectory(directory);
-            var lockPath = Path.Combine(directory, "vba_" + AppDataPaths.SafeFileName(JournalPath(host, documentKey)) + ".lck");
+            var lockPath = Path.Combine(directory, "vba_" + AppDataPaths.SafeFileName(Path.GetFullPath(journalPath)) + ".lck");
             var deadline = DateTime.UtcNow.AddSeconds(10);
             while (true)
             {

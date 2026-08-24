@@ -285,6 +285,11 @@ html[data-theme="dark"] .agent-error-meta {
   color: #f1aaa5;
 }
 
+html[data-theme="dark"] .model-compatibility-summary.warning {
+  background: rgba(245, 158, 11, .14);
+  color: #fbbf24;
+}
+
 html[data-theme="dark"] .json-box,
 html[data-theme="dark"] .log-box,
 html[data-theme="dark"] .rn-code-editor.CodeMirror {

@@ -34,6 +34,19 @@ namespace RNAssistant.Office
             return GetRuntimeLog();
         }
 
+        public CasHealthResponse GetCasHealth()
+        {
+            return CasHealthResponse.From(_casMaintenanceService.Audit());
+        }
+
+        public CasGarbageCollectionResponse CollectCasGarbage()
+        {
+            var result = _casMaintenanceService.Collect();
+            RuntimeLog.Info("CAS GC: deleted " + result.DeletedBlobCount + " blob(s), " +
+                result.DeletedStoredByteLength + " stored byte(s); completed=" + result.Completed + ".");
+            return CasGarbageCollectionResponse.From(result);
+        }
+
         private void ReportModelRequestDiagnostics(LlmRequestDiagnosticUpdate update)
         {
             var handler = ModelRequestDiagnostics;

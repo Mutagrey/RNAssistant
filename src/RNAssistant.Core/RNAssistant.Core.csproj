@@ -83,6 +83,7 @@
     <Compile Include="Models\ArtifactModels.cs" />
     <Compile Include="Models\AgentResponseModels.cs" />
     <Compile Include="Models\ChatModels.cs" />
+    <Compile Include="Models\CasMaintenanceModels.cs" />
     <Compile Include="Models\SessionEventModels.cs" />
     <Compile Include="Models\ChartArtifactModels.cs" />
     <Compile Include="Models\ContextModels.cs" />
@@ -118,6 +119,7 @@
     <Compile Include="Storage\PdfAttachmentTextExtractor.cs" />
     <Compile Include="Storage\ChatStore.cs" />
     <Compile Include="Storage\ChatBlobStore.cs" />
+    <Compile Include="Storage\CasMaintenanceService.cs" />
     <Compile Include="Storage\JsonFileStore.cs" />
     <Compile Include="Storage\ProtectedSecretStore.cs" />
     <Compile Include="Storage\SettingsService.cs" />

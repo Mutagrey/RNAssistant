@@ -682,6 +682,24 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static void BridgeReportsCasMaintenance()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
+            var health = JObject.Parse(bridge.HandleMessageAsync(
+                "{\"id\":\"cas1\",\"type\":\"getCasHealth\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
+                .GetAwaiter().GetResult());
+            var collected = JObject.Parse(bridge.HandleMessageAsync(
+                "{\"id\":\"cas2\",\"type\":\"collectCasGarbage\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
+                .GetAwaiter().GetResult());
+
+            AssertTrue(health["ok"].Value<bool>(), "CAS health bridge response ok");
+            AssertTrue(health.SelectToken("payload.reachabilityComplete").Value<bool>(), "CAS reachability forwarded");
+            AssertTrue(collected["ok"].Value<bool>(), "CAS GC bridge response ok");
+            AssertTrue(collected.SelectToken("payload.completed").Value<bool>(), "CAS GC result forwarded");
+        }
+
         private static void BridgeUsesTypedHtmlWorkspaceDeletePayloads()
         {
             var controller = new AssistantController();

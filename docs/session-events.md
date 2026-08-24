@@ -67,11 +67,12 @@ Current history encryption does not cover transient attachment staging, settings
 - Startup recovery marks tool effect as unknown only when the stream contains `tool.execution.started` without the matching `tool.execution.finished` for that run.
 - Recovery closes open model steps with `step.ended { Status: "interrupted", Synthetic: true }`, then closes the logical turn through the normal persisted run transition.
 - Missing or corrupt CAS content leaves its metadata visible but is never hydrated as trusted content.
+- CAS health scans every validated chat stream and VBA journal, then verifies referenced bodies and reports missing, corrupt, and orphaned blobs. Garbage collection rebuilds this reachability under the maintenance gate and deletes only exact canonical orphan files. Any invalid, unreadable, misplaced, or incomplete source blocks deletion; see [cas-maintenance.md](cas-maintenance.md).
 - VBA preparations left without a terminal record are compared with live module state on the next safe VBA access and closed as `committed`, `not_applied`, or `unknown`; recovery never replays an Office mutation.
 
 ## Inspection
 
-Settings → Diagnostics → Trajectory reads the last 500 events from the same stream. It shows run, turn, and step correlation. Event metadata and state operations are inline; model payloads and streaming-frame batches are fetched lazily by event id and shown as a bounded preview. The bridge never includes API keys or authorization headers.
+Settings → Diagnostics → Trajectory reads the last 500 events from the same stream. It shows run, turn, and step correlation. Event metadata and state operations are inline; model payloads and streaming-frame batches are fetched lazily by event id and shown as a bounded preview. CAS storage audits all retained chat/VBA references and exposes an explicitly confirmed orphan cleanup. The bridge never includes API keys, history secrets, or authorization headers.
 
 The prioritized follow-up work for trajectory queries, HTML branches, CAS lifecycle, and document-scoped VBA recovery is tracked in [trajectory-roadmap.md](trajectory-roadmap.md).
 

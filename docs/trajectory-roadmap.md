@@ -11,7 +11,7 @@
 
 ## Known gaps
 
-- Missing or corrupt CAS content fails closed, but there is no repository-wide health report or reachability garbage collector. A crash after storing a blob but before appending its reference can leave a harmless orphan.
+- Diagnostics now provides a repository-wide CAS health report and fail-closed orphan collector. Retention/pruning, re-keying, and redacted export lifecycles are still missing.
 - VBA package install/remove still emits per-component rollback backups rather than one multi-module transaction manifest.
 - VBA recovery state is canonical, but Diagnostics does not yet expose paged mutation history or before/after diffs.
 - Diagnostics expose a bounded recent tail; there is no reusable paged query API for complete turn, step, tool, artifact, and failure trajectories.
@@ -25,9 +25,10 @@
 - [x] Reconcile interrupted VBA writes on the next safe VBA access: compare the live module with recorded before/after hashes, append `committed`, `not_applied`, or `unknown`, and never auto-retry or auto-restore an external mutation.
 - [x] Make VBA restore a journaled transaction: validate the live guard, snapshot current source, persist the prepared record, write, read back, then append the terminal outcome. Preserve explicit confirmation.
 - [x] Make HTML redo branch-aware. Redo without an id is valid only with exactly one child; multiple children return an explicit branch-choice result. Expose child revision metadata in the bridge while keeping bodies lazy and CAS-backed.
-- [ ] Add a CAS health/GC service that scans all validated event streams and document-scoped VBA journals, reports missing/corrupt/orphaned blobs, and removes only proven unreachable blobs under the maintenance gate. Corrupt or unreadable journals must make deletion fail closed.
+- [x] Add a CAS health/GC service that scans all validated event streams and document-scoped VBA journals, reports missing/corrupt/orphaned blobs, and removes only proven unreachable blobs under the maintenance gate. Corrupt, unreadable, misplaced, or incomplete sources make deletion fail closed.
 - [x] Add harness coverage for interrupted VBA prepare/write reconciliation, journal tail recovery/corruption, CAS-backed projections, correlation, and history protection.
-- [ ] Add explicit blob-before-event crash injection and complete HTML branch recovery fixtures. VBA/COM behavior also requires Windows x64 + Office x64 + VS 2022 smoke tests.
+- [x] Add explicit blob-before-event crash injection and verify that fail-closed GC preserves candidates when a chat tail or VBA journal is invalid.
+- [ ] Complete HTML branch recovery fixtures. VBA/COM behavior also requires Windows x64 + Office x64 + VS 2022 smoke tests.
 
 ### P1 — trajectory queries and operator UX
 
@@ -39,7 +40,7 @@
 
 ### P2 — lifecycle, evaluation, and tamper resistance
 
-- [ ] Add reference-aware CAS garbage collection and retention policies for chats, model payloads, attachments, artifacts, VBA snapshots, and diagnostic exports; add configurable redaction before share/export.
+- [ ] Add retention/pruning policies for chats, model payloads, attachments, artifacts, VBA snapshots, and diagnostic exports on top of the reference-aware collector; add configurable redaction before share/export.
 - [ ] Add reproducible replay fixtures and trajectory evaluations for malformed Agent output, confirmation continuation, tool failures, HTML branch navigation, VBA stale guards, and crash recovery.
 - [ ] Surface aggregate latency, tokens, cost, model failures, format repairs, tool outcomes, uncertain effects, and restore outcomes from the same canonical journal without mixing telemetry into model replay.
 - [x] Add optional HMAC-SHA256 event authentication and optional authenticated encryption-at-rest for event data and committed CAS; keep both disabled by default and expose API/custom-secret key selection in Settings.

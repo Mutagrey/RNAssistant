@@ -230,6 +230,83 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        internal void ScanCasReferences(CasReachabilityScan scan)
+        {
+            if (scan == null) throw new ArgumentNullException("scan");
+            string[] paths;
+            try
+            {
+                paths = Directory.Exists(_paths.ChatDirectory)
+                    ? Directory.GetFiles(_paths.ChatDirectory, "*" + EventFileSuffix, SearchOption.AllDirectories)
+                    : new string[0];
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                scan.AddSourceIssue(
+                    CasHealthIssueKinds.SourceUnreadable,
+                    "chat",
+                    "chats",
+                    "Chat event streams could not be enumerated: " + ex.Message);
+                return;
+            }
+
+            foreach (var path in paths.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
+            {
+                scan.ChatStreamCount += 1;
+                var sourceId = CasMaintenanceService.RelativePath(_paths.ChatDirectory, path);
+                try
+                {
+                    lock (PersistenceSync)
+                    {
+                        using (AcquireDocumentPathLock(path))
+                        {
+                            var log = ReadEventLog(path);
+                            if (log == null || log.Events.Count == 0)
+                            {
+                                scan.AddSourceIssue(CasHealthIssueKinds.SourceInvalid, "chat", sourceId,
+                                    "The chat event stream is empty or invalid.");
+                                continue;
+                            }
+                            foreach (var sessionEvent in log.Events)
+                            {
+                                scan.AddReference(sessionEvent.Payload, "chat", sourceId,
+                                    "event#" + sessionEvent.Sequence + ".Payload");
+                                scan.AddTokenReferences(sessionEvent.Data, "chat", sourceId,
+                                    "event#" + sessionEvent.Sequence + ".Data");
+                            }
+                            if (log.HasIncompleteTail)
+                            {
+                                scan.AddSourceIssue(CasHealthIssueKinds.IncompleteTail, "chat", sourceId,
+                                    "The chat event stream has an incomplete final record.");
+                            }
+
+                            var projected = Project(log, false);
+                            if (projected == null)
+                            {
+                                scan.AddSourceIssue(CasHealthIssueKinds.SourceInvalid, "chat", sourceId,
+                                    "The chat event stream cannot be projected.");
+                                continue;
+                            }
+                            var canonicalPath = GetSessionPath(projected.Host, projected.DocumentKey, projected.Id);
+                            if (!string.Equals(Path.GetFullPath(path), Path.GetFullPath(canonicalPath), StringComparison.OrdinalIgnoreCase))
+                            {
+                                scan.AddSourceIssue(CasHealthIssueKinds.SourceInvalid, "chat", sourceId,
+                                    "The chat event stream is outside its canonical document/session path.");
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex) when (
+                    ex is IOException || ex is UnauthorizedAccessException || ex is JsonException ||
+                    ex is InvalidOperationException || ex is ArgumentException || ex is CryptographicException ||
+                    ex is DecoderFallbackException)
+                {
+                    scan.AddSourceIssue(CasHealthIssueKinds.SourceUnreadable, "chat", sourceId,
+                        "The chat event stream could not be validated: " + ex.Message);
+                }
+            }
+        }
+
         public string ReadEventPayload(SessionEvent sessionEvent)
         {
             return sessionEvent == null || sessionEvent.Payload == null

@@ -27,7 +27,7 @@
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=media-routing-20260824-1">
-  <link rel="stylesheet" href="css/app-workspace.css?v=settings-sections-20260824-1">
+  <link rel="stylesheet" href="css/app-workspace.css?v=cas-health-20260825-1">
   <link rel="stylesheet" href="css/app-trajectory.css?v=session-events-20260824-1">
   <link rel="stylesheet" href="css/app-tools.css?v=library-editor-20260824-1">
   <link rel="stylesheet" href="css/app-vba.css?v=userform-20260824-1">
@@ -797,6 +797,19 @@
                 </div>
                 <div class="model-compatibility-results" id="modelConnectionResults" aria-live="polite"></div>
               </section>
+              <section class="model-compatibility-panel diagnostics-model-panel" aria-labelledby="casHealthTitle">
+                <div class="model-compatibility-head">
+                  <div>
+                    <h3 id="casHealthTitle">Хранилище CAS</h3>
+                    <p>Проверяет ссылки из всех chat streams и VBA journals. Удаляются только доказанные orphan blobs.</p>
+                  </div>
+                  <div class="cas-health-actions">
+                    <button class="secondary" id="auditCasButton" type="button">Проверить CAS</button>
+                    <button class="danger" id="collectCasButton" type="button" disabled>Удалить orphan</button>
+                  </div>
+                </div>
+                <div class="model-compatibility-results" id="casHealthResults" aria-live="polite"></div>
+              </section>
               <section class="model-compatibility-panel trajectory-panel" aria-labelledby="trajectoryTitle">
                 <div class="model-compatibility-head">
                   <div>
@@ -870,7 +883,7 @@
   <script src="js/app-markdown.js?v=log-filters-20260824-1"></script>
   <script src="js/app-settings.js?v=screen-protection-20260824-1"></script>
   <script src="js/app-logs.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-diagnostics.js?v=log-filters-20260824-1"></script>
+  <script src="js/app-diagnostics.js?v=cas-health-20260825-1"></script>
   <script src="js/app-trajectory.js?v=session-events-20260824-1"></script>
   <script src="js/app-prompts.js?v=library-editor-20260824-1"></script>
   <script src="js/app-model-data.js?v=media-routing-20260824-1"></script>

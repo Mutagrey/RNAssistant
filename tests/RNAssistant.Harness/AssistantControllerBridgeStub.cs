@@ -121,6 +121,8 @@ namespace RNAssistant.Office
         public SettingsResponse GetSettings() { return new SettingsResponse { Settings = new AppSettings(), HasApiKey = false, HasHistorySecret = false }; }
         public RuntimeLogResponse GetRuntimeLog() { return new RuntimeLogResponse { Content = "runtime log", Path = "runtime.log" }; }
         public RuntimeLogResponse ClearRuntimeLog() { return new RuntimeLogResponse { Content = string.Empty, Path = "runtime.log" }; }
+        public CasHealthResponse GetCasHealth() { return new CasHealthResponse { Healthy = true, ReachabilityComplete = true, CanGarbageCollect = true }; }
+        public CasGarbageCollectionResponse CollectCasGarbage() { return new CasGarbageCollectionResponse { Completed = true, Health = GetCasHealth() }; }
         public Task<ModelCatalogResponse> GetModelCatalogAsync(AppSettings settings, string apiKey) { return Task.FromResult(new ModelCatalogResponse { Catalog = new JObject() }); }
 
         public SettingsResponse SaveSettings(AppSettings settings, string apiKey, string historySecret)

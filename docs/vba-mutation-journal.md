@@ -38,6 +38,6 @@ This differs deliberately from HTML navigation. HTML undo/redo only changes the 
 
 ## Remaining work
 
-- CAS health/reachability reporting and fail-closed garbage collection must scan both chat streams and VBA journals.
+- CAS health/reachability and fail-closed garbage collection now include every VBA journal; invalid or incomplete journals block all deletion.
 - Diagnostics still needs paged VBA mutation queries and before/after diff views.
 - Multi-module VBA package install/remove still needs one transaction manifest with per-component outcomes.

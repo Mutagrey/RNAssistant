@@ -101,22 +101,27 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private string PathFor(string sha256)
+        internal string PathFor(string sha256)
         {
             var normalized = (sha256 ?? string.Empty).ToLowerInvariant();
             var prefix = normalized.Length >= 2 ? normalized.Substring(0, 2) : "00";
             return Path.Combine(_rootDirectory, prefix, normalized + ".blob");
         }
 
-        private static bool ValidReference(ChatBlobReference reference)
+        internal static bool ValidReference(ChatBlobReference reference)
         {
-            if (reference == null || reference.ByteLength < 0 || string.IsNullOrWhiteSpace(reference.Sha256) || reference.Sha256.Length != 64)
+            return reference != null && reference.ByteLength >= 0 && ValidSha256(reference.Sha256);
+        }
+
+        internal static bool ValidSha256(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Length != 64)
             {
                 return false;
             }
-            for (var index = 0; index < reference.Sha256.Length; index++)
+            for (var index = 0; index < value.Length; index++)
             {
-                var character = reference.Sha256[index];
+                var character = value[index];
                 if (!((character >= '0' && character <= '9') ||
                     (character >= 'a' && character <= 'f') ||
                     (character >= 'A' && character <= 'F')))
@@ -125,6 +130,22 @@ namespace RNAssistant.Core.Storage
                 }
             }
             return true;
+        }
+
+        internal bool IsCanonicalPath(string path, string sha256)
+        {
+            if (!ValidSha256(sha256) || string.IsNullOrWhiteSpace(path)) return false;
+            try
+            {
+                return string.Equals(
+                    Path.GetFullPath(path),
+                    Path.GetFullPath(PathFor(sha256)),
+                    StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException)
+            {
+                return false;
+            }
         }
 
         private static string Sha256(byte[] bytes)

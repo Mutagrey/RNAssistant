@@ -204,6 +204,12 @@ namespace RNAssistant.Office.WebView
                     case "clearRuntimeLog":
                         responsePayload = _controller.ClearRuntimeLog();
                         break;
+                    case "getCasHealth":
+                        responsePayload = _controller.GetCasHealth();
+                        break;
+                    case "collectCasGarbage":
+                        responsePayload = _controller.CollectCasGarbage();
+                        break;
                     case "getModelCatalog":
                         var modelCatalog = Payload<ModelCatalogPayload>(payload);
                         responsePayload = await _controller.GetModelCatalogAsync(
