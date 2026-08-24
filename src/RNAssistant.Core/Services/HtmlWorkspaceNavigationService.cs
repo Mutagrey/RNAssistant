@@ -10,6 +10,8 @@ namespace RNAssistant.Core.Services
 {
     public static class HtmlWorkspaceNavigationService
     {
+        private const int MaxRecoveryCandidates = 100;
+
         public static List<HtmlWorkspaceRedoBranch> GetRedoBranches(ChatSession session)
         {
             if (session == null || string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId))
@@ -37,6 +39,51 @@ namespace RNAssistant.Core.Services
                 .ToList();
         }
 
+        public static HtmlWorkspaceRecoveryState CreateRecoveryState(
+            ChatSession session,
+            string status,
+            string issue,
+            string message,
+            string activeArtifactId,
+            string problemArtifactId,
+            bool canMutate)
+        {
+            var degraded = string.Equals(status, HtmlWorkspaceRecoveryStatuses.Degraded, StringComparison.OrdinalIgnoreCase);
+            return new HtmlWorkspaceRecoveryState
+            {
+                Status = string.IsNullOrWhiteSpace(status) ? HtmlWorkspaceRecoveryStatuses.Empty : status,
+                Issue = issue,
+                Message = message,
+                ActiveArtifactId = activeArtifactId,
+                ProblemArtifactId = problemArtifactId,
+                CanMutate = canMutate,
+                Candidates = degraded
+                    ? GetRecoveryCandidates(session, activeArtifactId)
+                    : new List<HtmlWorkspaceRecoveryCandidate>()
+            };
+        }
+
+        public static List<HtmlWorkspaceRecoveryCandidate> GetRecoveryCandidates(ChatSession session, string excludedArtifactId)
+        {
+            var artifacts = session == null ? new List<ChatArtifact>() : session.Artifacts ?? new List<ChatArtifact>();
+            var active = artifacts.FirstOrDefault(item => item != null &&
+                string.Equals(item.Id, excludedArtifactId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase));
+            var preferredParentId = active == null ? null : active.ParentArtifactId;
+            return artifacts
+                .Where(item => item != null &&
+                    !string.IsNullOrWhiteSpace(item.Id) &&
+                    !string.Equals(item.Id, excludedArtifactId, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(item => string.Equals(item.Id, preferredParentId, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .ThenByDescending(item => item.CreatedUtc)
+                .ThenByDescending(item => item.Revision)
+                .ThenBy(item => item.Id, StringComparer.Ordinal)
+                .Take(MaxRecoveryCandidates)
+                .Select(ToRecoveryCandidate)
+                .ToList();
+        }
+
         private static HtmlWorkspaceRedoBranch ToBranch(ChatArtifact artifact)
         {
             int? fileCount = null;
@@ -55,6 +102,34 @@ namespace RNAssistant.Core.Services
                 }
             }
             return new HtmlWorkspaceRedoBranch
+            {
+                Id = artifact.Id,
+                ParentArtifactId = artifact.ParentArtifactId,
+                Label = string.IsNullOrWhiteSpace(artifact.Title) ? "HTML workspace" : artifact.Title,
+                Revision = Math.Max(1, artifact.Revision),
+                FileCount = fileCount,
+                DataSourceCount = dataSourceCount,
+                CreatedUtc = artifact.CreatedUtc
+            };
+        }
+
+        private static HtmlWorkspaceRecoveryCandidate ToRecoveryCandidate(ChatArtifact artifact)
+        {
+            int? fileCount = null;
+            int? dataSourceCount = null;
+            if (!string.IsNullOrWhiteSpace(artifact.MetadataJson))
+            {
+                try
+                {
+                    var metadata = JObject.Parse(artifact.MetadataJson);
+                    fileCount = ReadCount(metadata, "fileCount", "FileCount");
+                    dataSourceCount = ReadCount(metadata, "dataSourceCount", "DataSourceCount");
+                }
+                catch (JsonException)
+                {
+                }
+            }
+            return new HtmlWorkspaceRecoveryCandidate
             {
                 Id = artifact.Id,
                 ParentArtifactId = artifact.ParentArtifactId,

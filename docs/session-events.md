@@ -45,6 +45,8 @@ When history encryption is enabled, committed CAS files contain authenticated ci
 
 Artifact metadata and lineage remain in the session stream. HTML undo follows the active artifact's parent. Redo is derived only from its direct children: one child is deterministic, while multiple children require an explicit artifact id. The bridge exposes child revision/count metadata without loading their CAS bodies, and no mutable redo stack is stored. Chart UI data is derived from a chart artifact. Context checkpoints are derived from compaction artifacts. These values are not persisted again as competing state.
 
+HTML recovery is derived from the same validated artifact graph and CAS on every replay. If the active artifact metadata is missing, or its body is unavailable or invalid, the editable workspace projection is empty and all HTML mutations fail closed. Ordinary chat commits remain allowed, retain the active artifact id, and cannot create an empty replacement revision. Recovery candidates contain metadata only; selecting one verifies and parses that exact CAS body before moving `ActiveHtmlArtifactId`. If only an ancestor is broken, the readable active revision remains editable and undo history stops at the damaged edge with a degraded warning.
+
 ## Optional history protection
 
 Settings → Diagnostics → History protection controls two independent features. Both are off by default: events use the ordinary SHA-256 chain and history remains plaintext.
@@ -67,6 +69,7 @@ Current history encryption does not cover transient attachment staging, settings
 - Startup recovery marks tool effect as unknown only when the stream contains `tool.execution.started` without the matching `tool.execution.finished` for that run.
 - Recovery closes open model steps with `step.ended { Status: "interrupted", Synthetic: true }`, then closes the logical turn through the normal persisted run transition.
 - Missing or corrupt CAS content leaves its metadata visible but is never hydrated as trusted content.
+- HTML branch recovery never guesses or auto-replays content: an unreadable active revision requires explicit selection of a verified revision; an unreadable ancestor only truncates derived navigation.
 - CAS health scans every validated chat stream and VBA journal, then verifies referenced bodies and reports missing, corrupt, and orphaned blobs. Garbage collection rebuilds this reachability under the maintenance gate and deletes only exact canonical orphan files. Any invalid, unreadable, misplaced, or incomplete source blocks deletion; see [cas-maintenance.md](cas-maintenance.md).
 - VBA preparations left without a terminal record are compared with live module state on the next safe VBA access and closed as `committed`, `not_applied`, or `unknown`; recovery never replays an Office mutation.
 

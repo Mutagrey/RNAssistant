@@ -212,6 +212,10 @@ namespace RNAssistant.Office
                 {
                     fork.ActiveHtmlArtifactId = workspaceCheckpoint;
                 }
+                else if (source.HtmlWorkspaceRecovery != null && !source.HtmlWorkspaceRecovery.CanMutate)
+                {
+                    throw new InvalidOperationException("Сначала восстановите HTML workspace на доступную ревизию, затем повторите создание ветки чата.");
+                }
                 else
                 {
                     fork.HtmlWorkspace = ChatCloneService.CloneWorkspaceForFork(source.HtmlWorkspace);
@@ -551,7 +555,9 @@ namespace RNAssistant.Office
                 ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId,
                 ActivePlanArtifactId = session == null ? string.Empty : session.ActivePlanArtifactId,
                 ContextUsage = ContextUsageEstimator.FromSession(session, ResolveChatSettings(session)),
-                HtmlWorkspace = HtmlWorkspaceDto.From(session == null ? null : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace))
+                HtmlWorkspace = HtmlWorkspaceDto.From(
+                    session == null ? null : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace),
+                    session == null ? null : session.HtmlWorkspaceRecovery)
             };
         }
 

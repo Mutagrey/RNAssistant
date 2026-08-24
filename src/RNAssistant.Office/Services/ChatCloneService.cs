@@ -38,6 +38,7 @@ namespace RNAssistant.Office.Services
                 Context = CloneContext(session.Context),
                 LastRun = CloneRun(session.LastRun),
                 HtmlWorkspace = CloneWorkspace(session.HtmlWorkspace),
+                HtmlWorkspaceRecovery = CloneWorkspaceRecovery(session.HtmlWorkspaceRecovery),
                 Messages = messages,
                 ContextCheckpoints = CloneContextCheckpoints(session.ContextCheckpoints, messages),
                 ActiveContextCheckpointId = session.ActiveContextCheckpointId,
@@ -134,6 +135,32 @@ namespace RNAssistant.Office.Services
                 History = CloneSnapshots(workspace.History),
                 RedoBranches = CloneRedoBranches(workspace.RedoBranches),
                 UpdatedUtc = workspace.UpdatedUtc
+            };
+        }
+
+        private static HtmlWorkspaceRecoveryState CloneWorkspaceRecovery(HtmlWorkspaceRecoveryState recovery)
+        {
+            recovery = recovery ?? new HtmlWorkspaceRecoveryState();
+            return new HtmlWorkspaceRecoveryState
+            {
+                Status = recovery.Status,
+                Issue = recovery.Issue,
+                Message = recovery.Message,
+                ActiveArtifactId = recovery.ActiveArtifactId,
+                ProblemArtifactId = recovery.ProblemArtifactId,
+                CanMutate = recovery.CanMutate,
+                Candidates = (recovery.Candidates ?? new List<HtmlWorkspaceRecoveryCandidate>())
+                    .Where(item => item != null)
+                    .Select(item => new HtmlWorkspaceRecoveryCandidate
+                    {
+                        Id = item.Id,
+                        ParentArtifactId = item.ParentArtifactId,
+                        Label = item.Label,
+                        Revision = item.Revision,
+                        FileCount = item.FileCount,
+                        DataSourceCount = item.DataSourceCount,
+                        CreatedUtc = item.CreatedUtc
+                    }).ToList()
             };
         }
 

@@ -249,7 +249,9 @@ namespace RNAssistant.Office
                 ActiveHtmlArtifactId = session.ActiveHtmlArtifactId,
                 ActivePlanArtifactId = session.ActivePlanArtifactId,
                 ContextUsage = ContextUsageEstimator.FromSession(session, chatSettings),
-                HtmlWorkspace = HtmlWorkspaceDto.From(session == null ? null : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace)),
+                HtmlWorkspace = HtmlWorkspaceDto.From(
+                    session == null ? null : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace),
+                    session == null ? null : session.HtmlWorkspaceRecovery),
                 QuickAction = DequeueQuickAction()
             };
         }
@@ -881,7 +883,9 @@ namespace RNAssistant.Office
                 ContextUsage = completion == null
                     ? ContextUsageEstimator.FromSession(session, settings)
                     : completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings),
-                HtmlWorkspace = HtmlWorkspaceDto.From(session == null ? null : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace))
+                HtmlWorkspace = HtmlWorkspaceDto.From(
+                    session == null ? null : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace),
+                    session == null ? null : session.HtmlWorkspaceRecovery)
             };
         }
 

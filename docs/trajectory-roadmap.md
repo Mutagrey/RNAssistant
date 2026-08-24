@@ -6,6 +6,7 @@
 - Immutable payloads and artifact bodies are stored once in the shared SHA-256 `chat-blobs` CAS. Events keep verified references rather than competing body copies.
 - History protection is explicit and disabled by default. HMAC-SHA256 can authenticate the event chain, while authenticated AES-256-CBC + HMAC-SHA256 encryption protects event data and committed CAS using either the API key or a separate DPAPI-protected custom secret.
 - Every real HTML workspace change creates an immutable workspace artifact with a parent id. Undo and redo only move `ActiveHtmlArtifactId` to an existing revision, so navigation survives replay without creating duplicate revisions.
+- HTML recovery is a disposable replay projection, not another journal. An unavailable active body blocks HTML mutations and preserves the active pointer across unrelated chat commits; the user must explicitly select a revision whose CAS body verifies and parses. A broken ancestor only truncates undo history while a readable active revision remains editable.
 - VBA is deliberately not a chat artifact. The Office document is the authority for current live VBA state; a document-scoped append-only journal records prepared/terminal mutations, CAS-backed before/intended source, rollback backups, correlation, and deterministic recovery evidence.
 - Chat replay, fork, prune, HTML undo, and HTML redo must never replay or mutate VBA or any other external Office state.
 
@@ -14,9 +15,12 @@
 - Diagnostics now provides a repository-wide CAS health report and fail-closed orphan collector. Retention/pruning, re-keying, and redacted export lifecycles are still missing.
 - VBA package install/remove now has one CAS-backed multi-component transaction manifest; Diagnostics does not yet expose its component outcomes and diffs.
 - VBA recovery state is canonical, but Diagnostics does not yet expose paged mutation history or before/after diffs.
-- Diagnostics now uses the reusable paged raw-event query API; correlated derived views across complete turns, tools, artifacts and failures remain to be added.
+- Correlated derived trajectory views exist, but Diagnostics still lacks convenient cross-navigation between their source events, artifact lineage, and VBA before/after state.
+- Prompt-size preflight may use learned linear token-estimation coefficients. Historical monetary cost is different: it remains `null` unless the provider usage saved with that response reports cost, and is never recomputed from current price tables.
 
 ## Next implementation order
+
+After HTML recovery, priority is: (1) Windows/Office smoke coverage for VBA packages and code-only UserForms, (2) recovery-oriented Diagnostics navigation and VBA diffs, (3) redacted export plus replay/eval fixtures, (4) retention policies and re-key/export lifecycle, and only then (5) persistence seams or an optional disposable SQLite query accelerator. Full Designer/FRX UserForms remain a separate later protocol decision.
 
 ### P0 — deterministic recovery and storage health
 
@@ -28,7 +32,8 @@
 - [x] Add a CAS health/GC service that scans all validated event streams and document-scoped VBA journals, reports missing/corrupt/orphaned blobs, and removes only proven unreachable blobs under the maintenance gate. Corrupt, unreadable, misplaced, or incomplete sources make deletion fail closed.
 - [x] Add harness coverage for interrupted VBA prepare/write reconciliation, journal tail recovery/corruption, CAS-backed projections, correlation, and history protection.
 - [x] Add explicit blob-before-event crash injection and verify that fail-closed GC preserves candidates when a chat tail or VBA journal is invalid.
-- [ ] Complete HTML branch recovery fixtures. VBA/COM behavior also requires Windows x64 + Office x64 + VS 2022 smoke tests.
+- [x] Complete HTML branch recovery fixtures: branch replay after an incomplete event tail, corrupt active CAS fail-closed behavior, unrelated chat commits without an empty replacement branch, explicit healthy-revision selection, and readable-active behavior with a missing ancestor.
+- [ ] Run VBA/COM recovery validation on Windows x64 + Office x64 + VS 2022; this cannot be validated on the current machine.
 
 ### P1 — code-only UserForms and atomic VBA packages
 

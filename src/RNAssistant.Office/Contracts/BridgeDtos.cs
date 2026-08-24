@@ -1208,9 +1208,15 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("history")] public IReadOnlyList<HtmlWorkspaceSnapshotDto> History { get; set; }
         [JsonProperty("redoHistory")] public IReadOnlyList<HtmlWorkspaceSnapshotDto> RedoHistory { get; set; }
         [JsonProperty("redoBranches")] public IReadOnlyList<HtmlWorkspaceRedoBranchDto> RedoBranches { get; set; }
+        [JsonProperty("recovery")] public HtmlWorkspaceRecoveryDto Recovery { get; set; }
         [JsonProperty("updatedUtc")] public System.DateTime UpdatedUtc { get; set; }
 
         public static HtmlWorkspaceDto From(HtmlWorkspace workspace)
+        {
+            return From(workspace, null);
+        }
+
+        public static HtmlWorkspaceDto From(HtmlWorkspace workspace, HtmlWorkspaceRecoveryState recovery)
         {
             workspace = workspace ?? new HtmlWorkspace();
             var redoBranches = RedoBranchSummaries(workspace.RedoBranches);
@@ -1227,6 +1233,7 @@ namespace RNAssistant.Office.Contracts
                     CreatedUtc = item.CreatedUtc
                 }).ToList(),
                 RedoBranches = redoBranches,
+                Recovery = HtmlWorkspaceRecoveryDto.From(recovery),
                 UpdatedUtc = workspace.UpdatedUtc
             };
         }
@@ -1262,6 +1269,54 @@ namespace RNAssistant.Office.Contracts
             }
             return result;
         }
+    }
+
+    public sealed class HtmlWorkspaceRecoveryDto
+    {
+        [JsonProperty("status")] public string Status { get; set; }
+        [JsonProperty("issue")] public string Issue { get; set; }
+        [JsonProperty("message")] public string Message { get; set; }
+        [JsonProperty("activeArtifactId")] public string ActiveArtifactId { get; set; }
+        [JsonProperty("problemArtifactId")] public string ProblemArtifactId { get; set; }
+        [JsonProperty("canMutate")] public bool CanMutate { get; set; }
+        [JsonProperty("candidates")] public IReadOnlyList<HtmlWorkspaceRecoveryCandidateDto> Candidates { get; set; }
+
+        public static HtmlWorkspaceRecoveryDto From(HtmlWorkspaceRecoveryState recovery)
+        {
+            recovery = recovery ?? new HtmlWorkspaceRecoveryState();
+            return new HtmlWorkspaceRecoveryDto
+            {
+                Status = recovery.Status,
+                Issue = recovery.Issue,
+                Message = recovery.Message,
+                ActiveArtifactId = recovery.ActiveArtifactId,
+                ProblemArtifactId = recovery.ProblemArtifactId,
+                CanMutate = recovery.CanMutate,
+                Candidates = (recovery.Candidates ?? new List<HtmlWorkspaceRecoveryCandidate>())
+                    .Where(item => item != null)
+                    .Select(item => new HtmlWorkspaceRecoveryCandidateDto
+                    {
+                        Id = item.Id,
+                        ParentArtifactId = item.ParentArtifactId,
+                        Label = item.Label,
+                        Revision = item.Revision,
+                        FileCount = item.FileCount,
+                        DataSourceCount = item.DataSourceCount,
+                        CreatedUtc = item.CreatedUtc
+                    }).ToList()
+            };
+        }
+    }
+
+    public sealed class HtmlWorkspaceRecoveryCandidateDto
+    {
+        [JsonProperty("id")] public string Id { get; set; }
+        [JsonProperty("parentArtifactId")] public string ParentArtifactId { get; set; }
+        [JsonProperty("label")] public string Label { get; set; }
+        [JsonProperty("revision")] public int Revision { get; set; }
+        [JsonProperty("fileCount")] public int? FileCount { get; set; }
+        [JsonProperty("dataSourceCount")] public int? DataSourceCount { get; set; }
+        [JsonProperty("createdUtc")] public System.DateTime CreatedUtc { get; set; }
     }
 
     public sealed class HtmlWorkspaceSnapshotDto

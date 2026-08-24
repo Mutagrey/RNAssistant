@@ -13,6 +13,14 @@ namespace RNAssistant.Office.Services
         public static string CaptureCurrent(ChatSession session, string title)
         {
             if (session == null) return string.Empty;
+            if (session.HtmlWorkspaceRecovery != null && !session.HtmlWorkspaceRecovery.CanMutate)
+            {
+                if (HasContent(session.HtmlWorkspace))
+                {
+                    throw new InvalidOperationException("HTML workspace mutation is blocked until a healthy revision is selected.");
+                }
+                return session.ActiveHtmlArtifactId ?? session.HtmlWorkspaceRecovery.ActiveArtifactId ?? string.Empty;
+            }
             session.HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace);
             session.Artifacts = session.Artifacts ?? new List<ChatArtifact>();
             var snapshot = HtmlWorkspaceCopyService.CaptureSnapshot(
@@ -79,25 +87,103 @@ namespace RNAssistant.Office.Services
             return true;
         }
 
+        public static void EnsureMutable(ChatSession session)
+        {
+            if (session == null)
+            {
+                throw new InvalidOperationException("Chat session is required.");
+            }
+            var recovery = session.HtmlWorkspaceRecovery;
+            if (recovery == null || recovery.CanMutate) return;
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(recovery.Message)
+                ? "HTML workspace mutation is blocked until a healthy revision is selected."
+                : recovery.Message);
+        }
+
         public static void RebuildNavigation(ChatSession session)
         {
             if (session == null || session.HtmlWorkspace == null) return;
             session.HtmlWorkspace.History = new List<HtmlWorkspaceSnapshot>();
             session.HtmlWorkspace.RedoBranches = new List<HtmlWorkspaceRedoBranch>();
             var active = FindArtifact(session, session.ActiveHtmlArtifactId);
-            if (active == null) return;
+            if (string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId))
+            {
+                session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
+                    session, HtmlWorkspaceRecoveryStatuses.Empty, null, null, null, null, true);
+                return;
+            }
+            if (active == null)
+            {
+                session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
+                    session,
+                    HtmlWorkspaceRecoveryStatuses.Degraded,
+                    HtmlWorkspaceRecoveryIssues.ActiveArtifactMissing,
+                    "The active HTML workspace revision metadata is missing. Select another revision before editing.",
+                    session.ActiveHtmlArtifactId,
+                    session.ActiveHtmlArtifactId,
+                    false);
+                return;
+            }
+            var activeSnapshot = ParseSnapshot(active);
+            if (activeSnapshot == null)
+            {
+                var missing = string.IsNullOrWhiteSpace(active.InlineText);
+                session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
+                    session,
+                    HtmlWorkspaceRecoveryStatuses.Degraded,
+                    missing ? HtmlWorkspaceRecoveryIssues.ActiveBodyUnavailable : HtmlWorkspaceRecoveryIssues.ActiveBodyInvalid,
+                    missing
+                        ? "The active HTML workspace body is unavailable. Select another revision before editing."
+                        : "The active HTML workspace body is invalid. Select another revision before editing.",
+                    active.Id,
+                    active.Id,
+                    false);
+                return;
+            }
             var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { active.Id };
             var current = active;
-            while (!string.IsNullOrWhiteSpace(current.ParentArtifactId) && visited.Add(current.ParentArtifactId))
+            string issue = null;
+            string message = null;
+            string problemArtifactId = null;
+            while (!string.IsNullOrWhiteSpace(current.ParentArtifactId))
             {
-                current = FindArtifact(session, current.ParentArtifactId);
+                problemArtifactId = current.ParentArtifactId;
+                if (!visited.Add(problemArtifactId))
+                {
+                    issue = HtmlWorkspaceRecoveryIssues.LineageCycle;
+                    message = "The HTML workspace revision lineage contains a cycle. The active revision is readable, but older undo history is incomplete.";
+                    break;
+                }
+                current = FindArtifact(session, problemArtifactId);
+                if (current == null)
+                {
+                    issue = HtmlWorkspaceRecoveryIssues.ParentArtifactMissing;
+                    message = "An older HTML workspace revision is missing. The active revision is readable, but undo history is incomplete.";
+                    break;
+                }
                 var snapshot = ParseSnapshot(current);
-                if (snapshot == null) break;
+                if (snapshot == null)
+                {
+                    var missing = string.IsNullOrWhiteSpace(current.InlineText);
+                    issue = missing ? HtmlWorkspaceRecoveryIssues.ParentBodyUnavailable : HtmlWorkspaceRecoveryIssues.ParentBodyInvalid;
+                    message = missing
+                        ? "An older HTML workspace body is unavailable. The active revision is readable, but undo history is incomplete."
+                        : "An older HTML workspace body is invalid. The active revision is readable, but undo history is incomplete.";
+                    break;
+                }
                 session.HtmlWorkspace.History.Add(snapshot);
             }
             session.HtmlWorkspace.History = HtmlWorkspaceHistoryPolicy.Trim(session.HtmlWorkspace.History);
 
             session.HtmlWorkspace.RedoBranches = HtmlWorkspaceNavigationService.GetRedoBranches(session);
+            session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
+                session,
+                issue == null ? HtmlWorkspaceRecoveryStatuses.Healthy : HtmlWorkspaceRecoveryStatuses.Degraded,
+                issue,
+                message,
+                active.Id,
+                problemArtifactId,
+                true);
         }
 
         public static string CheckpointAtOrBefore(IReadOnlyList<ChatMessage> messages, int index)
@@ -176,6 +262,13 @@ namespace RNAssistant.Office.Services
                 Files = snapshot.Files ?? new List<HtmlWorkspaceFile>(),
                 DataSources = snapshot.DataSources ?? new List<HtmlWorkspaceDataSource>()
             }, Formatting.None);
+        }
+
+        private static bool HasContent(HtmlWorkspace workspace)
+        {
+            return workspace != null &&
+                ((workspace.Files != null && workspace.Files.Any(item => item != null)) ||
+                 (workspace.DataSources != null && workspace.DataSources.Any(item => item != null)));
         }
 
     }

@@ -102,26 +102,31 @@ namespace RNAssistant.Office.Tools
 
                 if (string.Equals(command.ToolId, ApplyPatchToolId, StringComparison.OrdinalIgnoreCase))
                 {
+                    HtmlWorkspaceArtifactService.EnsureMutable(session);
                     return ApplyWorkspacePatch(session, command, dryRun, cancellationToken);
                 }
 
                 if (string.Equals(command.ToolId, BindDataToolId, StringComparison.OrdinalIgnoreCase))
                 {
+                    HtmlWorkspaceArtifactService.EnsureMutable(session);
                     return BindDataSource(session, command, dryRun, cancellationToken);
                 }
 
                 if (string.Equals(command.ToolId, RefreshDataToolId, StringComparison.OrdinalIgnoreCase))
                 {
+                    HtmlWorkspaceArtifactService.EnsureMutable(session);
                     return RefreshDataSources(session, command, dryRun, cancellationToken);
                 }
 
                 if (string.Equals(command.ToolId, FreezeDataToolId, StringComparison.OrdinalIgnoreCase))
                 {
+                    HtmlWorkspaceArtifactService.EnsureMutable(session);
                     return FreezeDataSource(session, command, dryRun);
                 }
 
                 if (string.Equals(command.ToolId, UpsertToolId, StringComparison.OrdinalIgnoreCase))
                 {
+                    HtmlWorkspaceArtifactService.EnsureMutable(session);
                     var resourceType = ToolArgumentReader.String(command.Arguments, "resourceType", string.Empty);
                     var name = ToolArgumentReader.String(command.Arguments, "name", string.Empty);
                     var content = ToolArgumentReader.String(command.Arguments, "content", string.Empty);
@@ -158,6 +163,7 @@ namespace RNAssistant.Office.Tools
 
                 if (string.Equals(command.ToolId, DeleteToolId, StringComparison.OrdinalIgnoreCase))
                 {
+                    HtmlWorkspaceArtifactService.EnsureMutable(session);
                     var resourceType = ToolArgumentReader.String(command.Arguments, "resourceType", string.Empty);
                     var name = ToolArgumentReader.String(command.Arguments, "name", string.Empty);
                     if (string.Equals(resourceType, "file", StringComparison.OrdinalIgnoreCase))
@@ -185,6 +191,7 @@ namespace RNAssistant.Office.Tools
 
                 if (string.Equals(command.ToolId, SetActiveToolId, StringComparison.OrdinalIgnoreCase))
                 {
+                    HtmlWorkspaceArtifactService.EnsureMutable(session);
                     var path = ToolArgumentReader.String(command.Arguments, "name", "index.html");
                     if (dryRun)
                     {
@@ -936,6 +943,7 @@ namespace RNAssistant.Office.Tools
                 throw new InvalidOperationException("Chat session is required.");
             }
 
+            HtmlWorkspaceArtifactService.EnsureMutable(session);
             ValidateFile(path, kind, content);
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
             var normalizedPath = NormalizePath(path);
@@ -984,6 +992,7 @@ namespace RNAssistant.Office.Tools
                 throw new InvalidOperationException("Chat session is required.");
             }
 
+            HtmlWorkspaceArtifactService.EnsureMutable(session);
             ValidateDataSource(name, json);
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
             var normalizedName = NormalizeDataName(name);
@@ -1019,6 +1028,7 @@ namespace RNAssistant.Office.Tools
                 throw new InvalidOperationException("Chat session is required.");
             }
 
+            HtmlWorkspaceArtifactService.EnsureMutable(session);
             ValidatePath(path);
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
             var file = FindFile(session.HtmlWorkspace, path, true);
@@ -1030,6 +1040,7 @@ namespace RNAssistant.Office.Tools
 
         public static HtmlWorkspaceFile DeleteFile(ChatSession session, string path)
         {
+            HtmlWorkspaceArtifactService.EnsureMutable(session);
             var file = FindFile(session, path);
             session.HtmlWorkspace.Files.Remove(file);
             session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
@@ -1040,6 +1051,7 @@ namespace RNAssistant.Office.Tools
 
         public static HtmlWorkspaceDataSource DeleteDataSource(ChatSession session, string name)
         {
+            HtmlWorkspaceArtifactService.EnsureMutable(session);
             var data = FindDataSource(session, name);
             session.HtmlWorkspace.DataSources.Remove(data);
             session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
@@ -1178,6 +1190,7 @@ namespace RNAssistant.Office.Tools
                 revisionArtifactId = session.ActiveHtmlArtifactId,
                 activeFileId = workspace.ActiveFileId,
                 updatedUtc = workspace.UpdatedUtc,
+                recovery = RecoveryManifest(session.HtmlWorkspaceRecovery),
                 files = workspace.Files.Where(file => file != null).Select(file => new
                 {
                     file.Id,
@@ -1197,6 +1210,32 @@ namespace RNAssistant.Office.Tools
                     data.UpdatedUtc
                 })
             });
+        }
+
+        private static object RecoveryManifest(HtmlWorkspaceRecoveryState recovery)
+        {
+            recovery = recovery ?? new HtmlWorkspaceRecoveryState();
+            return new
+            {
+                recovery.Status,
+                recovery.Issue,
+                recovery.Message,
+                recovery.ActiveArtifactId,
+                recovery.ProblemArtifactId,
+                recovery.CanMutate,
+                candidates = (recovery.Candidates ?? new List<HtmlWorkspaceRecoveryCandidate>())
+                    .Where(item => item != null)
+                    .Select(item => new
+                    {
+                        item.Id,
+                        item.ParentArtifactId,
+                        item.Label,
+                        item.Revision,
+                        item.FileCount,
+                        item.DataSourceCount,
+                        item.CreatedUtc
+                    })
+            };
         }
 
         private static string WorkspaceMutationJson(ChatSession session, string itemType, string itemId)

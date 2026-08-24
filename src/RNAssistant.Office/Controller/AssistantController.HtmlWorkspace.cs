@@ -85,19 +85,30 @@ namespace RNAssistant.Office
         {
             return WithReservedSession(LoadSession(chatId), session =>
             {
-                var targetId = string.IsNullOrWhiteSpace(snapshotId)
-                    ? session.HtmlWorkspace.History.Select(item => item == null ? null : item.Id)
-                        .FirstOrDefault(id => !string.IsNullOrWhiteSpace(id))
-                    : snapshotId;
+                var recovery = session.HtmlWorkspaceRecovery ?? new HtmlWorkspaceRecoveryState();
+                var degraded = string.Equals(recovery.Status, HtmlWorkspaceRecoveryStatuses.Degraded, System.StringComparison.OrdinalIgnoreCase);
+                if (!recovery.CanMutate && string.IsNullOrWhiteSpace(snapshotId))
+                {
+                    throw new System.InvalidOperationException("Select an explicit healthy HTML workspace revision to recover editing.");
+                }
+                var targetId = degraded && !string.IsNullOrWhiteSpace(snapshotId)
+                    ? snapshotId
+                    : string.IsNullOrWhiteSpace(snapshotId)
+                        ? session.HtmlWorkspace.History.Select(item => item == null ? null : item.Id)
+                            .FirstOrDefault(id => !string.IsNullOrWhiteSpace(id))
+                        : session.HtmlWorkspace.History
+                            .Where(item => item != null && string.Equals(item.Id, snapshotId, System.StringComparison.OrdinalIgnoreCase))
+                            .Select(item => item.Id)
+                            .FirstOrDefault();
                 if (string.IsNullOrWhiteSpace(targetId))
                 {
                     throw new System.InvalidOperationException("HTML workspace snapshot was not found.");
                 }
-                if (!_chatStore.LoadArtifactBody(session, targetId))
+                string error;
+                if (!_chatStore.TryActivateHtmlWorkspaceRevision(session, targetId, out error))
                 {
-                    throw new System.InvalidOperationException("HTML workspace artifact body is missing or corrupt.");
+                    throw new System.InvalidOperationException(error ?? "HTML workspace artifact body is missing or corrupt.");
                 }
-                HtmlArtifactToolExecutor.RestoreSnapshot(session, targetId);
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
             });
@@ -120,11 +131,11 @@ namespace RNAssistant.Office
                     throw new System.InvalidOperationException("HTML workspace redo target must be a direct child revision.");
                 }
                 var targetId = branch.Id;
-                if (!_chatStore.LoadArtifactBody(session, targetId))
+                string error;
+                if (!_chatStore.TryActivateHtmlWorkspaceRevision(session, targetId, out error))
                 {
-                    throw new System.InvalidOperationException("HTML workspace artifact body is missing or corrupt.");
+                    throw new System.InvalidOperationException(error ?? "HTML workspace artifact body is missing or corrupt.");
                 }
-                HtmlArtifactToolExecutor.RedoSnapshot(session, targetId);
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
             });
@@ -135,7 +146,9 @@ namespace RNAssistant.Office
             return new HtmlWorkspaceResponse
             {
                 ActiveChatId = session.Id,
-                Workspace = HtmlWorkspaceDto.From(session == null ? null : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace)),
+                Workspace = HtmlWorkspaceDto.From(
+                    session == null ? null : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace),
+                    session == null ? null : session.HtmlWorkspaceRecovery),
                 RedoChoiceRequired = redoChoiceRequired
             };
         }

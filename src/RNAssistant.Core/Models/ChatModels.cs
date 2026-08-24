@@ -141,6 +141,8 @@ namespace RNAssistant.Core.Models
         public DocumentContext Context { get; set; }
         public ChatRunRecord LastRun { get; set; }
         public HtmlWorkspace HtmlWorkspace { get; set; }
+        [JsonIgnore]
+        public HtmlWorkspaceRecoveryState HtmlWorkspaceRecovery { get; set; }
         public List<ChatMessage> Messages { get; set; }
         public List<ContextCheckpoint> ContextCheckpoints { get; set; }
         public string ActiveContextCheckpointId { get; set; }
@@ -156,6 +158,7 @@ namespace RNAssistant.Core.Models
             UpdatedUtc = DateTime.UtcNow;
             Context = new DocumentContext();
             HtmlWorkspace = new HtmlWorkspace();
+            HtmlWorkspaceRecovery = new HtmlWorkspaceRecoveryState();
             Messages = new List<ChatMessage>();
             ContextCheckpoints = new List<ContextCheckpoint>();
             Artifacts = new List<ChatArtifact>();
@@ -272,6 +275,53 @@ namespace RNAssistant.Core.Models
     }
 
     public sealed class HtmlWorkspaceRedoBranch
+    {
+        public string Id { get; set; }
+        public string ParentArtifactId { get; set; }
+        public string Label { get; set; }
+        public int Revision { get; set; }
+        public int? FileCount { get; set; }
+        public int? DataSourceCount { get; set; }
+        public DateTime CreatedUtc { get; set; }
+    }
+
+    public static class HtmlWorkspaceRecoveryStatuses
+    {
+        public const string Empty = "empty";
+        public const string Healthy = "healthy";
+        public const string Degraded = "degraded";
+    }
+
+    public static class HtmlWorkspaceRecoveryIssues
+    {
+        public const string ActiveArtifactMissing = "active_artifact_missing";
+        public const string ActiveBodyUnavailable = "active_body_unavailable";
+        public const string ActiveBodyInvalid = "active_body_invalid";
+        public const string ParentArtifactMissing = "parent_artifact_missing";
+        public const string ParentBodyUnavailable = "parent_body_unavailable";
+        public const string ParentBodyInvalid = "parent_body_invalid";
+        public const string LineageCycle = "lineage_cycle";
+    }
+
+    public sealed class HtmlWorkspaceRecoveryState
+    {
+        public string Status { get; set; }
+        public string Issue { get; set; }
+        public string Message { get; set; }
+        public string ActiveArtifactId { get; set; }
+        public string ProblemArtifactId { get; set; }
+        public bool CanMutate { get; set; }
+        public List<HtmlWorkspaceRecoveryCandidate> Candidates { get; set; }
+
+        public HtmlWorkspaceRecoveryState()
+        {
+            Status = HtmlWorkspaceRecoveryStatuses.Empty;
+            CanMutate = true;
+            Candidates = new List<HtmlWorkspaceRecoveryCandidate>();
+        }
+    }
+
+    public sealed class HtmlWorkspaceRecoveryCandidate
     {
         public string Id { get; set; }
         public string ParentArtifactId { get; set; }

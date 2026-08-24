@@ -138,6 +138,23 @@
       }
     }
 
+    async function recoverRevision() {
+      var actionState = options.getActionState();
+      if (actionState.bridgeUnavailable || !actionState.recoverySnapshotId) return;
+      if (actionState.dirty && !window.confirm("Восстановление отменит несохранённые изменения. Продолжить?")) return;
+      try {
+        var response = await options.send("restoreHtmlWorkspaceSnapshot", {
+          chatId: actionState.chatId,
+          snapshotId: actionState.recoverySnapshotId
+        });
+        if (!options.applyWorkspaceResponse(response, actionState.chatId)) return;
+        options.log("HTML workspace восстановлен на выбранную ревизию.");
+      } catch (error) {
+        options.log(error.detail || error.message, "error");
+        window.alert(error.message || "Выбранная HTML-ревизия недоступна.");
+      }
+    }
+
     async function createPlan() {
       if (state.bridgeUnavailable) return;
       var chatId = state.activeChatId;
@@ -242,6 +259,7 @@
       createFile: createFile,
       createPlan: createPlan,
       deleteSelection: deleteSelection,
+      recoverRevision: recoverRevision,
       refreshAll: function () { return refreshData("", "all", true); },
       refreshAuto: function () { return refreshData("", "on_preview", false); },
       redo: function () { return restore("redo"); },

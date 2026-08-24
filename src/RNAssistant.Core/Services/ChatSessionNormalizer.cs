@@ -70,6 +70,7 @@ namespace RNAssistant.Core.Services
         private static void NormalizeWorkspace(ChatSession session)
         {
             if (session.HtmlWorkspace == null) session.HtmlWorkspace = new HtmlWorkspace();
+            if (session.HtmlWorkspaceRecovery == null) session.HtmlWorkspaceRecovery = new HtmlWorkspaceRecoveryState();
             if (session.HtmlWorkspace.Files == null) session.HtmlWorkspace.Files = new List<HtmlWorkspaceFile>();
             if (session.HtmlWorkspace.DataSources == null) session.HtmlWorkspace.DataSources = new List<HtmlWorkspaceDataSource>();
             foreach (var dataSource in session.HtmlWorkspace.DataSources.Where(item => item != null && item.Binding != null))
@@ -133,12 +134,6 @@ namespace RNAssistant.Core.Services
                 session.ActiveContextCheckpointId = null;
             }
 
-            if (!session.Artifacts.Any(item =>
-                string.Equals(item.Id, session.ActiveHtmlArtifactId, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase)))
-            {
-                session.ActiveHtmlArtifactId = null;
-            }
             if (!session.Artifacts.Any(item =>
                 string.Equals(item.Id, session.ActivePlanArtifactId, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(item.Kind, ChatArtifactKinds.Plan, StringComparison.OrdinalIgnoreCase)))

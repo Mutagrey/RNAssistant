@@ -136,13 +136,60 @@
 
 .html-workspace-editor {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 0;
   min-width: 0;
   min-height: 0;
   padding: 0;
   overflow: hidden;
   background: #fff;
+}
+
+.html-workspace-head {
+  grid-row: 1;
+}
+
+.html-workspace-recovery {
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 260px) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid #efc4c0;
+  background: #fff6f4;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.html-workspace-recovery-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.html-workspace-recovery-copy span {
+  overflow-wrap: anywhere;
+}
+
+.html-workspace-recovery select {
+  width: 100%;
+  height: var(--control-height);
+}
+
+.html-workspace-editor > .resource-editor-empty,
+.html-workspace-editor > .html-workspace-view {
+  grid-row: 3;
+}
+
+@media (max-width: 760px) {
+  .html-workspace-recovery {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .html-workspace-recovery-copy {
+    grid-column: 1 / -1;
+  }
 }
 
 .html-workspace-head {

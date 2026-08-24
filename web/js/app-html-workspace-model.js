@@ -15,6 +15,15 @@
       current.redoHistory = prop(current, "RedoHistory", "redoHistory", []) || [];
       current.redoBranches = prop(current, "RedoBranches", "redoBranches", current.redoHistory) || [];
       current.activeFileId = prop(current, "ActiveFileId", "activeFileId", "") || "";
+      var recoveryState = prop(current, "Recovery", "recovery", {}) || {};
+      recoveryState.status = String(prop(recoveryState, "Status", "status", "empty") || "empty").toLowerCase();
+      recoveryState.issue = prop(recoveryState, "Issue", "issue", "") || "";
+      recoveryState.message = prop(recoveryState, "Message", "message", "") || "";
+      recoveryState.activeArtifactId = prop(recoveryState, "ActiveArtifactId", "activeArtifactId", "") || "";
+      recoveryState.problemArtifactId = prop(recoveryState, "ProblemArtifactId", "problemArtifactId", "") || "";
+      recoveryState.canMutate = prop(recoveryState, "CanMutate", "canMutate", true) !== false;
+      recoveryState.candidates = prop(recoveryState, "Candidates", "candidates", []) || [];
+      current.recovery = recoveryState;
       state.htmlWorkspace = current;
       return current;
     }
@@ -83,6 +92,15 @@
 
     function redoBranches() {
       return workspace().redoBranches || [];
+    }
+
+    function recovery() {
+      return workspace().recovery;
+    }
+
+    function recoveryBlocked() {
+      var current = recovery();
+      return current.status === "degraded" && !current.canMutate;
     }
 
     function fileId(file) {
@@ -251,6 +269,8 @@
       latestPlanArtifacts: latestPlanArtifacts,
       planStableId: planStableId,
       prop: prop,
+      recovery: recovery,
+      recoveryBlocked: recoveryBlocked,
       redoBranches: redoBranches,
       selectedItem: selectedItem,
       setArtifactInlineText: setArtifactInlineText,

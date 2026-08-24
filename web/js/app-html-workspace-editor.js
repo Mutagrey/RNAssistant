@@ -18,6 +18,8 @@
     var setArtifactInlineText = model.setArtifactInlineText;
     var historyItems = model.historyItems;
     var redoBranches = model.redoBranches;
+    var recovery = model.recovery;
+    var recoveryBlocked = model.recoveryBlocked;
     var filePath = model.filePath;
     var fileKind = model.fileKind;
     var fileContent = model.fileContent;
@@ -72,6 +74,7 @@
     function markHtmlWorkspaceDirty() {
       var selected = selectedItem();
       if (!selected || selected.type === "artifact") return;
+      if (recoveryBlocked() && selected.type !== "plan") return;
       syncHtmlEditorToState();
       state.htmlWorkspaceDirty = true;
       updateHtmlWorkspaceStatus();
@@ -103,13 +106,17 @@
       var status = $("htmlWorkspaceStatus");
       var save = $("saveHtmlWorkspaceButton");
       var selected = selectedItem();
+      var blocked = recoveryBlocked();
+      renderHtmlWorkspaceRecovery();
       if ($("addPlanButton")) $("addPlanButton").disabled = !!state.bridgeUnavailable;
       ["addHtmlFileButton", "addCssFileButton", "addJsFileButton", "addHtmlDataButton"].forEach(function (id) {
-        if ($(id)) $(id).disabled = !!state.bridgeUnavailable;
+        if ($(id)) $(id).disabled = !!state.bridgeUnavailable || blocked;
       });
       if (status) {
         if (state.bridgeUnavailable) {
           status.textContent = "Office bridge недоступен.";
+        } else if (blocked) {
+          status.textContent = "HTML workspace требует восстановления.";
         } else if (!files().length && !dataSources().length && !(state.artifacts || []).length) {
           status.textContent = "Артефактов пока нет.";
         } else {
@@ -117,12 +124,12 @@
         }
       }
       if (save) {
-        save.disabled = state.bridgeUnavailable || !selected || selected.type === "artifact" || !state.htmlWorkspaceDirty;
+        save.disabled = state.bridgeUnavailable || !selected || selected.type === "artifact" || !state.htmlWorkspaceDirty || (blocked && selected.type !== "plan");
         save.title = "Сохранить изменения (Ctrl+S)";
       }
       if ($("refreshHtmlDataButton")) {
         var boundCount = boundDataSources().length;
-        $("refreshHtmlDataButton").disabled = state.bridgeUnavailable || !!state.htmlWorkspaceDirty || !!state.htmlWorkspaceRefreshPending || !boundCount;
+        $("refreshHtmlDataButton").disabled = state.bridgeUnavailable || blocked || !!state.htmlWorkspaceDirty || !!state.htmlWorkspaceRefreshPending || !boundCount;
         $("refreshHtmlDataButton").textContent = state.htmlWorkspaceRefreshPending ? "Обновляю…" : "Данные ↻";
         $("refreshHtmlDataButton").title = boundCount ? "Перечитать " + boundCount + " привязанных наборов из Office" : "Нет привязанных данных";
       }
@@ -131,14 +138,14 @@
         $("exportHtmlWorkspaceButton").title = "Скачать автономный HTML с текущими данными, CSS и JavaScript";
       }
       if ($("deleteHtmlWorkspaceButton")) {
-        $("deleteHtmlWorkspaceButton").disabled = state.bridgeUnavailable || !selected || selected.type === "artifact";
+        $("deleteHtmlWorkspaceButton").disabled = state.bridgeUnavailable || !selected || selected.type === "artifact" || (blocked && selected.type !== "plan");
         $("deleteHtmlWorkspaceButton").title = selected
           ? (selected.type === "plan" ? "Удалить план" : "Удалить выбранный файл или источник данных")
           : "Выберите артефакт";
       }
       if ($("undoHtmlWorkspaceButton")) {
         $("undoHtmlWorkspaceButton").classList.toggle("hidden", !!selected && (selected.type === "plan" || selected.type === "artifact"));
-        $("undoHtmlWorkspaceButton").disabled = state.bridgeUnavailable || !historyItems().length;
+        $("undoHtmlWorkspaceButton").disabled = state.bridgeUnavailable || blocked || !historyItems().length;
         $("undoHtmlWorkspaceButton").title = historyItems().length
           ? "Вернуть: " + snapshotLabel(historyItems()[0])
           : "Нет предыдущих версий";
@@ -147,12 +154,47 @@
         renderRedoBranches(selected);
         var branches = redoBranches();
         $("redoHtmlWorkspaceButton").classList.toggle("hidden", !!selected && (selected.type === "plan" || selected.type === "artifact"));
-        $("redoHtmlWorkspaceButton").disabled = state.bridgeUnavailable || !branches.length;
+        $("redoHtmlWorkspaceButton").disabled = state.bridgeUnavailable || blocked || !branches.length;
         $("redoHtmlWorkspaceButton").title = branches.length > 1
           ? "Повторить выбранную ветку"
           : branches.length
             ? "Повторить: " + snapshotLabel(branches[0])
           : "Нет отмененных версий";
+      }
+    }
+
+    function renderHtmlWorkspaceRecovery() {
+      var panel = $("htmlWorkspaceRecovery");
+      if (!panel) return;
+      var current = recovery();
+      var degraded = current.status === "degraded";
+      panel.classList.toggle("hidden", !degraded);
+      if (!degraded) return;
+      if ($("htmlWorkspaceRecoveryMessage")) {
+        $("htmlWorkspaceRecoveryMessage").textContent = current.message || "Цепочка HTML-ревизий повреждена. Выберите доступную ревизию.";
+      }
+      var select = $("htmlWorkspaceRecoverySelect");
+      var candidates = current.candidates || [];
+      var selectedId = select ? select.value : "";
+      if (select) {
+        select.innerHTML = "";
+        candidates.forEach(function (candidate) {
+          var option = document.createElement("option");
+          var revision = Number(model.prop(candidate, "Revision", "revision", 1) || 1);
+          option.value = model.prop(candidate, "Id", "id", "");
+          option.textContent = "v" + revision + " · " + model.prop(candidate, "Label", "label", "HTML workspace");
+          select.appendChild(option);
+        });
+        if (candidates.some(function (candidate) { return model.prop(candidate, "Id", "id", "") === selectedId; })) {
+          select.value = selectedId;
+        }
+        select.disabled = !candidates.length || !!state.bridgeUnavailable;
+      }
+      if ($("recoverHtmlWorkspaceButton")) {
+        $("recoverHtmlWorkspaceButton").disabled = !candidates.length || !!state.bridgeUnavailable;
+        $("recoverHtmlWorkspaceButton").title = candidates.length
+          ? "Проверить и активировать выбранную HTML-ревизию"
+          : "Нет других HTML-ревизий";
       }
     }
 
@@ -202,6 +244,7 @@
       var hasItems = !!selected;
       var isPlan = !!selected && selected.type === "plan";
       var isArtifact = !!selected && selected.type === "artifact";
+      var blocked = recoveryBlocked();
       if (editor) {
         editor.classList.toggle("is-empty", !hasItems);
       }
@@ -227,6 +270,7 @@
       if (editButton) {
         editButton.textContent = isPlan ? "JSON" : "Код";
         editButton.classList.toggle("hidden", isArtifact);
+        editButton.disabled = blocked && !isPlan;
       }
       if (isArtifact) state.htmlWorkspaceMode = "preview";
       if ($("saveHtmlWorkspaceButton")) $("saveHtmlWorkspaceButton").classList.toggle("hidden", isArtifact);
@@ -236,7 +280,7 @@
       } else if ($("htmlWorkspaceEditorInput")) {
         $("htmlWorkspaceEditorInput").value = selectedEditorValue(selected);
       }
-      if (typeof setCodeEditorReadOnly === "function") setCodeEditorReadOnly("htmlWorkspaceEditorInput", isArtifact);
+      if (typeof setCodeEditorReadOnly === "function") setCodeEditorReadOnly("htmlWorkspaceEditorInput", isArtifact || (blocked && !isPlan));
       renderHtmlWorkspacePreview();
     }
 

@@ -764,6 +764,104 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void HtmlRecoveryBlocksMutationAndSelectsHealthyRevision()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Word", "html-recovery", "Recovery.docx", "Recovery");
+                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "healthy root", true);
+                store.Save(session);
+                var rootId = session.ActiveHtmlArtifactId;
+                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "broken active", true);
+                store.Save(session);
+                var brokenId = session.ActiveHtmlArtifactId;
+                var brokenArtifact = session.Artifacts.Single(item => item.Id == brokenId);
+                var brokenBlob = Path.Combine(
+                    paths.ChatBlobDirectory,
+                    brokenArtifact.ContentSha256.Substring(0, 2),
+                    brokenArtifact.ContentSha256 + ".blob");
+                File.WriteAllText(brokenBlob, "corrupt");
+
+                var loaded = store.Load(session.Host, session.DocumentKey, session.Id);
+                AssertEqual(HtmlWorkspaceRecoveryStatuses.Degraded, loaded.HtmlWorkspaceRecovery.Status,
+                    "corrupt active revision enters recovery");
+                AssertTrue(!loaded.HtmlWorkspaceRecovery.CanMutate, "corrupt active revision blocks mutation");
+                AssertEqual(HtmlWorkspaceRecoveryIssues.ActiveBodyUnavailable, loaded.HtmlWorkspaceRecovery.Issue,
+                    "recovery identifies unavailable active body");
+                AssertEqual(0, loaded.HtmlWorkspace.Files.Count, "corrupt active body is not projected as editable content");
+                AssertTrue(loaded.HtmlWorkspaceRecovery.Candidates.Any(item => item.Id == rootId),
+                    "healthy ancestor is offered without eagerly loading its body");
+
+                var blocked = false;
+                try
+                {
+                    HtmlArtifactToolExecutor.UpsertFile(loaded, "index.html", "html", "must not write", true);
+                }
+                catch (InvalidOperationException)
+                {
+                    blocked = true;
+                }
+                AssertTrue(blocked, "direct HTML mutation fails closed during recovery");
+
+                var artifactCount = loaded.Artifacts.Count;
+                loaded.Messages.Add(new ChatMessage { Role = "user", Content = "chat still works" });
+                store.Save(loaded);
+                loaded = store.Load(loaded.Id);
+                AssertEqual(brokenId, loaded.ActiveHtmlArtifactId, "unrelated save preserves broken active pointer");
+                AssertEqual(artifactCount, loaded.Artifacts.Count, "unrelated save does not create an empty HTML branch");
+                AssertTrue(!loaded.HtmlWorkspaceRecovery.CanMutate, "recovery survives unrelated session commits");
+
+                string error;
+                AssertTrue(!store.TryActivateHtmlWorkspaceRevision(loaded, brokenId, out error),
+                    "corrupt recovery candidate is rejected");
+                AssertEqual(brokenId, loaded.ActiveHtmlArtifactId, "failed selection does not move the active pointer");
+                AssertTrue(store.TryActivateHtmlWorkspaceRevision(loaded, rootId, out error),
+                    "explicit healthy revision activates");
+                AssertTrue(string.IsNullOrWhiteSpace(error), "successful recovery has no error");
+                AssertEqual("healthy root", loaded.HtmlWorkspace.Files.Single().Content, "healthy revision body is restored");
+                AssertEqual(HtmlWorkspaceRecoveryStatuses.Healthy, loaded.HtmlWorkspaceRecovery.Status,
+                    "successful selection clears recovery block");
+                store.Save(loaded);
+
+                loaded = store.Load(loaded.Id);
+                AssertEqual(rootId, loaded.ActiveHtmlArtifactId, "recovered active revision survives replay");
+                AssertEqual("healthy root", loaded.HtmlWorkspace.Files.Single().Content, "recovered body survives replay");
+            });
+        }
+
+        private static void HtmlRecoveryKeepsReadableActiveWithBrokenParent()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Word", "html-parent-recovery", "Parent.docx", "Parent recovery");
+                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "root", true);
+                store.Save(session);
+                var rootId = session.ActiveHtmlArtifactId;
+                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "readable child", true);
+                store.Save(session);
+                session.Artifacts.RemoveAll(item => item != null && item.Id == rootId);
+                store.Save(session);
+
+                var loaded = store.Load(session.Id);
+                AssertEqual("readable child", loaded.HtmlWorkspace.Files.Single().Content,
+                    "readable active revision remains available");
+                AssertEqual(HtmlWorkspaceRecoveryStatuses.Degraded, loaded.HtmlWorkspaceRecovery.Status,
+                    "broken parent degrades navigation");
+                AssertEqual(HtmlWorkspaceRecoveryIssues.ParentArtifactMissing, loaded.HtmlWorkspaceRecovery.Issue,
+                    "broken parent is classified");
+                AssertTrue(loaded.HtmlWorkspaceRecovery.CanMutate,
+                    "readable active revision remains mutable despite truncated ancestry");
+                AssertEqual(0, loaded.HtmlWorkspace.History.Count, "undo stops before missing parent");
+
+                HtmlArtifactToolExecutor.UpsertFile(loaded, "index.html", "html", "new child", true);
+                store.Save(loaded);
+                AssertEqual("new child", store.Load(loaded.Id).HtmlWorkspace.Files.Single().Content,
+                    "new revision can extend a readable degraded branch");
+            });
+        }
+
         private static void HtmlRedoBranchesAreExplicitAndLazy()
         {
             WithTempPaths(paths =>
@@ -789,6 +887,8 @@ namespace RNAssistant.Harness
                 HtmlArtifactToolExecutor.RestoreSnapshot(session, rootId);
                 store.Save(session);
 
+                File.AppendAllText(SessionEventFile(paths, session), "{\"SchemaVersion\":");
+
                 var loaded = store.Load(session.Host, session.DocumentKey, session.Id);
                 AssertEqual(rootId, loaded.ActiveHtmlArtifactId, "branch point survives replay");
                 AssertEqual(2, loaded.HtmlWorkspace.RedoBranches.Count, "both direct redo branches are exposed");
@@ -801,10 +901,12 @@ namespace RNAssistant.Harness
                     .All(artifact => artifact.InlineText == null),
                     "redo branch bodies remain lazy after replay");
 
-                var transport = HtmlWorkspaceDto.From(loaded.HtmlWorkspace);
+                var transport = HtmlWorkspaceDto.From(loaded.HtmlWorkspace, loaded.HtmlWorkspaceRecovery);
                 AssertEqual(2, transport.RedoBranches.Count, "bridge exposes branch metadata");
                 AssertTrue(transport.RedoBranches.All(branch => branch.Revision > 1),
                     "bridge exposes revision numbers");
+                AssertEqual(HtmlWorkspaceRecoveryStatuses.Healthy, transport.Recovery.Status,
+                    "bridge exposes derived recovery state");
 
                 var ambiguousRejected = false;
                 try

@@ -14,6 +14,7 @@
   var planStableId = workspaceModel.planStableId;
   var latestPlanArtifacts = workspaceModel.latestPlanArtifacts;
   var historyItems = workspaceModel.historyItems;
+  var recoveryBlocked = workspaceModel.recoveryBlocked;
   var redoBranches = workspaceModel.redoBranches;
   var fileId = workspaceModel.fileId;
   var filePath = workspaceModel.filePath;
@@ -136,7 +137,7 @@
   function applyHtmlWorkspaceResponse(response, expectedChatId) {
     if (expectedChatId && state.activeChatId !== expectedChatId) return false;
     response = response || {};
-    state.htmlWorkspace = response.workspace || response.Workspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [] };
+    state.htmlWorkspace = response.workspace || response.Workspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } };
     state.htmlWorkspaceDirty = false;
     renderHtmlWorkspace();
     return true;
@@ -204,11 +205,13 @@
     var undo = historyItems()[0];
     var branches = redoBranches();
     var redoSelect = $("redoHtmlWorkspaceBranchSelect");
+    var recoverySelect = $("htmlWorkspaceRecoverySelect");
     var redoId = branches.length > 1 && redoSelect ? redoSelect.value : (branches[0] ? prop(branches[0], "Id", "id", "") : "");
     return {
       bridgeUnavailable: !!state.bridgeUnavailable,
       chatId: state.activeChatId,
       dirty: !!state.htmlWorkspaceDirty,
+      recoverySnapshotId: recoverySelect ? recoverySelect.value : "",
       undoSnapshotId: undo ? prop(undo, "Id", "id", "") : "",
       redoSnapshotId: redoId
     };
@@ -227,7 +230,7 @@
   }
 
   function addHtmlWorkspaceFile(kind) {
-    if (state.bridgeUnavailable) return;
+    if (state.bridgeUnavailable || recoveryBlocked()) return;
     var fallback = kind === "css" ? "styles.css" : (kind === "script" ? "app.js" : "index.html");
     showHtmlWorkspaceCreate(kind, fallback);
   }
@@ -255,7 +258,7 @@
   }
 
   async function confirmHtmlWorkspaceCreate() {
-    if (state.bridgeUnavailable) {
+    if (state.bridgeUnavailable || recoveryBlocked()) {
       return;
     }
     var kind = state.htmlWorkspaceCreateKind || "html";
@@ -273,7 +276,7 @@
   }
 
   async function addHtmlWorkspaceData() {
-    if (state.bridgeUnavailable) {
+    if (state.bridgeUnavailable || recoveryBlocked()) {
       return;
     }
     showHtmlWorkspaceCreate("data", "data");
@@ -331,6 +334,7 @@
     $("deleteHtmlWorkspaceButton").addEventListener("click", workspaceActions.deleteSelection);
     $("undoHtmlWorkspaceButton").addEventListener("click", workspaceActions.undo);
     $("redoHtmlWorkspaceButton").addEventListener("click", workspaceActions.redo);
+    $("recoverHtmlWorkspaceButton").addEventListener("click", workspaceActions.recoverRevision);
     $("refreshHtmlDataButton").addEventListener("click", workspaceActions.refreshAll);
     $("exportHtmlWorkspaceButton").addEventListener("click", exportHtmlWorkspace);
     $("toggleHtmlSidebarButton").addEventListener("click", toggleHtmlWorkspaceSidebar);

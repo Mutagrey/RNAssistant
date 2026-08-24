@@ -70,7 +70,7 @@ var state = {
   htmlWorkspaceSidebarHidden: false,
   htmlWorkspaceDirty: false,
   htmlWorkspaceCreateKind: "",
-  htmlWorkspace: { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [] },
+  htmlWorkspace: { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } },
   collapsedResourceGroups: {},
   promptDrafts: {},
   toolsPath: "",
