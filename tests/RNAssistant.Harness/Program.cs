@@ -194,6 +194,7 @@ namespace RNAssistant.Harness
                 Test("tools: safety metadata gates mutations", ToolSafetyMetadataGatesMutations),
                 Test("tools: confirmation matrix", ConfirmationMatrixCoversDryAndManualRuns),
                 Test("tools: html workspace updates session", HtmlWorkspaceToolsUpdateChatSession),
+                Test("tools: html source read search and patch", HtmlWorkspaceSourceToolsAreBoundedAndAtomic),
                 Test("tools: html workspace undo", HtmlWorkspaceUndoRestoresPreviousVersion),
                 Test("tools: html workspace history is bounded", HtmlWorkspaceHistoryIsBoundedAndTransportIsCompact),
                 Test("storage: html workspace persists", HtmlWorkspacePersistsWithChatSession),

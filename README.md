@@ -251,6 +251,7 @@ Agent mode and document-independent local tools remain usable when that chat's O
 - Use `common.html_workspace_upsert` with `resourceType:"file"` for `index.html`, CSS, and scripts; runtime infers file kind from the extension. Default `mode:"upsert"` creates or updates, while `createOnly` and `updateOnly` enforce strict existence.
 - Use the same tool with `resourceType:"data"` for JSON data sources exposed as `window.RNAssistantData`.
 - Use `common.html_workspace_search` for bounded literal/regex discovery across HTML, CSS, and JavaScript files.
+- Use `common.html_workspace_inspect` after material edits for bounded static preflight checks across the selected entry, injected CSS/scripts, and data references. It reports CSP/assembly conflicts and likely missing references but does not execute JavaScript or render WebView.
 - Use `common.html_workspace_apply_patch` for atomic ordered edits to one current file. Exact replace/insert operations reject ambiguous anchors; line and bounded regex replacements are also supported.
 - Use `common.html_data_bind` to create a refreshable data source from an approved read-only Office tool. The binding stores exact source arguments and can keep raw JSON or normalize row arrays to `{columns, rows, rowCount}`.
 - Use `common.html_data_refresh` to update one or all bindings locally without another LLM request. `refreshPolicy:"on_preview"` is refreshed by the Artifacts UI; `common.html_data_freeze` keeps the current JSON and removes the binding.

@@ -393,6 +393,113 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void HtmlWorkspaceSourceToolsAreBoundedAndAtomic()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var session = new ChatSession
+                {
+                    Host = adapter.HostName,
+                    DocumentKey = adapter.DocumentKey,
+                    DocumentTitle = adapter.DocumentTitle,
+                    Title = "HTML source tools"
+                };
+                var tools = new List<ToolDefinition>(adapter.GetBuiltInTools());
+                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "one\ntwo\nthree\nfour", true);
+                HtmlArtifactToolExecutor.UpsertFile(session, "app.js", "script", "alpha\nconst beta = 1;\nalpha beta;", false);
+
+                var rangedRead = new ToolCommand { ToolId = HtmlArtifactToolExecutor.ReadWorkspaceToolId };
+                rangedRead.Arguments["resourceType"] = "file";
+                rangedRead.Arguments["name"] = "index.html";
+                rangedRead.Arguments["startLine"] = 2;
+                rangedRead.Arguments["lineCount"] = 2;
+                var readResult = executor.Execute(rangedRead, tools, new AppSettings(), false, false, session);
+                AssertTrue(readResult.Success, "bounded HTML read succeeds");
+                var readFile = JObject.Parse(readResult.DataJson)["file"] as JObject;
+                AssertEqual("two\nthree", (string)readFile["Content"], "bounded HTML read returns exact lines");
+                AssertEqual(4, (int)readFile["totalLines"], "bounded HTML read reports total lines");
+                AssertTrue((bool)readFile["truncated"], "bounded HTML read reports truncation");
+
+                var search = new ToolCommand { ToolId = HtmlArtifactToolExecutor.SearchWorkspaceToolId };
+                search.Arguments["query"] = "beta";
+                search.Arguments["kind"] = "script";
+                search.Arguments["maxResults"] = 1;
+                var searchResult = executor.Execute(search, tools, new AppSettings(), false, false, session);
+                AssertTrue(searchResult.Success, "HTML source search succeeds");
+                var searchData = JObject.Parse(searchResult.DataJson);
+                AssertEqual(2, (int)searchData["matchCount"], "HTML search counts all matches");
+                AssertEqual(1, (int)searchData["returnedCount"], "HTML search bounds returned matches");
+                AssertTrue((bool)searchData["truncated"], "HTML search reports truncation");
+                AssertEqual(2, (int)searchData["matches"][0]["line"], "HTML search reports source line");
+
+                var patch = new ToolCommand { ToolId = HtmlArtifactToolExecutor.ApplyPatchToolId };
+                patch.Arguments["name"] = "app.js";
+                patch.Arguments["patch"] = new JArray
+                {
+                    new JObject { ["op"] = "replace", ["find"] = "const beta = 1;", ["text"] = "const beta = 2;" },
+                    new JObject { ["op"] = "insertAfter", ["find"] = "alpha beta;", ["text"] = "\nwindow.ready = true;" }
+                };
+                var artifactCount = session.Artifacts.Count;
+                var patchResult = executor.Execute(patch, tools, new AppSettings(), false, false, session);
+                AssertTrue(patchResult.Success, "HTML structured patch succeeds");
+                AssertContains(session.HtmlWorkspace.Files.Single(item => item.Path == "app.js").Content, "beta = 2", "HTML patch replaces exact source");
+                AssertContains(session.HtmlWorkspace.Files.Single(item => item.Path == "app.js").Content, "window.ready", "HTML patch inserts source");
+                AssertEqual(artifactCount + 1, session.Artifacts.Count, "HTML patch creates one artifact revision");
+
+                var failedPatch = new ToolCommand { ToolId = HtmlArtifactToolExecutor.ApplyPatchToolId };
+                failedPatch.Arguments["name"] = "app.js";
+                failedPatch.Arguments["patch"] = new JArray
+                {
+                    new JObject { ["op"] = "replace", ["find"] = "alpha", ["text"] = "omega" }
+                };
+                var beforeFailure = session.HtmlWorkspace.Files.Single(item => item.Path == "app.js").Content;
+                artifactCount = session.Artifacts.Count;
+                var failedResult = executor.Execute(failedPatch, tools, new AppSettings(), false, false, session);
+                AssertTrue(!failedResult.Success, "ambiguous HTML patch fails");
+                AssertEqual("text_patch_ambiguous", failedResult.ErrorCode, "ambiguous HTML patch has stable code");
+                AssertEqual(beforeFailure, session.HtmlWorkspace.Files.Single(item => item.Path == "app.js").Content, "failed HTML patch is atomic");
+                AssertEqual(artifactCount, session.Artifacts.Count, "failed HTML patch creates no revision");
+
+                var strictCreate = new ToolCommand { ToolId = HtmlArtifactToolExecutor.UpsertToolId };
+                strictCreate.Arguments["resourceType"] = "file";
+                strictCreate.Arguments["name"] = "index.html";
+                strictCreate.Arguments["content"] = "overwrite";
+                strictCreate.Arguments["mode"] = "createOnly";
+                var strictCreateResult = executor.Execute(strictCreate, tools, new AppSettings(), false, false, session);
+                AssertTrue(!strictCreateResult.Success, "HTML createOnly rejects an existing file");
+                AssertEqual("one\ntwo\nthree\nfour", session.HtmlWorkspace.Files.Single(item => item.Path == "index.html").Content, "strict upsert preserves existing content");
+
+                var strictUpdate = new ToolCommand { ToolId = HtmlArtifactToolExecutor.UpsertToolId };
+                strictUpdate.Arguments["resourceType"] = "file";
+                strictUpdate.Arguments["name"] = "missing.css";
+                strictUpdate.Arguments["content"] = "body{}";
+                strictUpdate.Arguments["mode"] = "updateOnly";
+                var strictUpdateResult = executor.Execute(strictUpdate, tools, new AppSettings(), false, false, session);
+                AssertTrue(!strictUpdateResult.Success, "HTML updateOnly rejects a missing file");
+
+                var inspectSession = new ChatSession
+                {
+                    Host = adapter.HostName,
+                    DocumentKey = adapter.DocumentKey,
+                    DocumentTitle = adapter.DocumentTitle,
+                    Title = "HTML inspection"
+                };
+                HtmlArtifactToolExecutor.UpsertFile(inspectSession, "index.html", "html", "<main id=\"total\"></main><div id='total'></div><script src=\"local.js\"></script>", true);
+                HtmlArtifactToolExecutor.UpsertFile(inspectSession, "styles.css", "css", "@import url('theme.css');", false);
+                HtmlArtifactToolExecutor.UpsertFile(inspectSession, "app.js", "script", "import thing from 'pkg';\ndocument.getElementById('missing');\nRNAssistantData.missingData;", false);
+                var inspect = new ToolCommand { ToolId = HtmlArtifactToolExecutor.InspectWorkspaceToolId };
+                var inspectResult = executor.Execute(inspect, tools, new AppSettings(), false, false, inspectSession);
+                AssertTrue(inspectResult.Success, "HTML static inspection succeeds even when findings exist");
+                var inspection = JObject.Parse(inspectResult.DataJson);
+                AssertTrue(!(bool)inspection["runtimeExecuted"], "HTML inspection identifies static-only scope");
+                AssertTrue(!(bool)inspection["passed"], "HTML inspection fails preflight when errors exist");
+                AssertTrue((int)inspection["errorCount"] >= 4, "HTML inspection reports assembly and CSP errors");
+                AssertTrue((int)inspection["warningCount"] >= 2, "HTML inspection reports likely missing references");
+                AssertTrue(inspection["issues"].Any(item => (string)item["code"] == "html.duplicate_id"), "HTML inspection finds duplicate ids");
+                AssertTrue(inspection["issues"].Any(item => (string)item["code"] == "script.module_syntax_unsupported"), "HTML inspection finds module syntax");
+            });
+        }
+
         private static void HtmlWorkspacePersistsWithChatSession()
         {
             WithTempPaths(delegate(AppDataPaths paths)

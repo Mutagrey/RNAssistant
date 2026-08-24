@@ -104,6 +104,7 @@
     <Compile Include="Tools\ToolArgumentNormalizer.cs" />
     <Compile Include="Tools\ToolSchemaSupport.cs" />
     <Compile Include="Tools\TextPatternEngine.cs" />
+    <Compile Include="Tools\StructuredTextPatchEngine.cs" />
     <Compile Include="Tools\VbaToolManifestParser.cs" />
     <Compile Include="Tools\AgentResponseParser.cs" />
     <Compile Include="Tools\AgentResponseSchemaBuilder.cs" />
