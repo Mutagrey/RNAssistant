@@ -34,6 +34,7 @@ async function addAttachmentFiles(files) {
   files = Array.prototype.slice.call(files || []);
   if (!files.length) return;
   if (currentActiveSend() || state.bridgeUnavailable) return;
+  var targetChatId = state.activeChatId;
 
   var existingBytes = state.draftAttachments.reduce(function (sum, item) { return sum + attachmentSize(item); }, 0);
   if (state.draftAttachments.length + files.length > ATTACHMENT_MAX_FILES) {
@@ -55,8 +56,16 @@ async function addAttachmentFiles(files) {
       });
       var attachment = response.attachment || response.Attachment;
       if (file.type.indexOf("image/") === 0) attachment.previewUrl = URL.createObjectURL(file);
-      state.draftAttachments.push(attachment);
-      renderAttachmentDrafts();
+      if (state.activeChatId === targetChatId) {
+        state.draftAttachments.push(attachment);
+        renderAttachmentDrafts();
+      } else {
+        var drafts = chatDraftStore();
+        var draft = drafts[targetChatId] || { text: "", attachments: [] };
+        draft.attachments = draft.attachments || [];
+        draft.attachments.push(attachment);
+        drafts[targetChatId] = draft;
+      }
     }
   } catch (error) {
     log(error.detail || error.message, "error");
@@ -65,6 +74,7 @@ async function addAttachmentFiles(files) {
 }
 
 async function removeDraftAttachment(item) {
+  var targetChatId = state.activeChatId;
   try {
     await send("deleteDraftAttachment", { id: attachmentId(item) });
   } catch (error) {
@@ -72,8 +82,15 @@ async function removeDraftAttachment(item) {
     return;
   }
   if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
-  state.draftAttachments = state.draftAttachments.filter(function (candidate) { return attachmentId(candidate) !== attachmentId(item); });
-  renderAttachmentDrafts();
+  if (state.activeChatId === targetChatId) {
+    state.draftAttachments = state.draftAttachments.filter(function (candidate) { return attachmentId(candidate) !== attachmentId(item); });
+    renderAttachmentDrafts();
+  } else {
+    var draft = chatDraftStore()[targetChatId];
+    if (draft && draft.attachments) {
+      draft.attachments = draft.attachments.filter(function (candidate) { return attachmentId(candidate) !== attachmentId(item); });
+    }
+  }
 }
 
 function attachmentCard(item, removable) {
@@ -127,6 +144,7 @@ function renderAttachmentDrafts() {
 function clearDraftAttachments() {
   state.draftAttachments.forEach(function (item) { if (item.previewUrl) URL.revokeObjectURL(item.previewUrl); });
   state.draftAttachments = [];
+  if (state.activeChatId) delete chatDraftStore()[state.activeChatId];
   renderAttachmentDrafts();
 }
 

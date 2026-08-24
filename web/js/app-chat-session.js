@@ -52,7 +52,7 @@ async function createDocumentChat(documentItem) {
 }
 
 async function selectChat(id) {
-  if (!id || id === state.activeChatId) {
+  if (!id || (id === state.activeChatId && !state.pendingChatSelectionId)) {
     return;
   }
   if (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
@@ -62,14 +62,18 @@ async function selectChat(id) {
   }
 
   var navigationVersion = beginChatNavigation();
+  state.pendingChatSelectionId = id;
   try {
     applyChatNavigationState(await send("selectChat", { chatId: id }), navigationVersion);
-    restoreActiveChatRun();
     clearSendError();
     log("Чат открыт.");
   } catch (error) {
     log(error.detail || error.message, "error");
     renderChatSessions();
+  } finally {
+    if (navigationVersion === state.chatNavigationVersion) {
+      state.pendingChatSelectionId = "";
+    }
   }
 }
 
@@ -148,8 +152,9 @@ async function renameChat(chatIdValue) {
     return;
   }
 
+  var navigationVersion = beginChatNavigation();
   try {
-    applyChatState(await send("renameChat", { chatId: targetChatId, title: title.trim() }));
+    applyChatNavigationState(await send("renameChat", { chatId: targetChatId, title: title.trim() }), navigationVersion);
     log("Чат переименован.");
   } catch (error) {
     log(error.detail || error.message, "error");
@@ -165,8 +170,9 @@ async function clearChat() {
   }
 
   setControlBusy("clearChatButton", true);
+  var targetChatId = state.activeChatId;
   try {
-    applyChatState(await send("clearChat", { chatId: state.activeChatId }));
+    applyChatStateForChat(await send("clearChat", { chatId: targetChatId }), targetChatId);
     clearSendError();
     log("Чат очищен.");
   } catch (error) {
@@ -178,10 +184,11 @@ async function clearChat() {
 
 async function compactChatContext() {
   if (!state.activeChatId || currentActiveSend()) return;
+  var targetChatId = state.activeChatId;
   var previousCheckpointId = state.activeContextCheckpointId || "";
   setControlBusy("compactContextButton", true);
   try {
-    applyChatState(await send("compactChatContext", { chatId: state.activeChatId }));
+    applyChatStateForChat(await send("compactChatContext", { chatId: targetChatId }), targetChatId);
     log(state.activeContextCheckpointId && state.activeContextCheckpointId !== previousCheckpointId
       ? "Ранний контекст сжат; полная история сохранена."
       : "Контекст пока не требует сжатия.");
@@ -225,9 +232,10 @@ async function deleteMessage(message, index) {
     return;
   }
 
+  var targetChatId = state.activeChatId;
   try {
-    var response = await send("deleteMessage", { chatId: state.activeChatId, id: messageId(message), index: index });
-    applyChatState(response);
+    var response = await send("deleteMessage", { chatId: targetChatId, id: messageId(message), index: index });
+    applyChatStateForChat(response, targetChatId);
     log("Сообщение удалено.");
   } catch (error) {
     showSendError(error.detail || error.message, state.failedSend ? state.failedSend.text : "");
@@ -252,6 +260,11 @@ async function forkChatAtMessage(message, index) {
 
 function applyInitState(init) {
   state.chatStateApplyVersion = (state.chatStateApplyVersion || 0) + 1;
+  init = init || {};
+  var previousChatId = state.activeChatId || "";
+  var nextChatId = init.activeChatId || init.ActiveChatId || "";
+  var chatChanged = previousChatId !== nextChatId;
+  if (chatChanged) captureChatDraft(previousChatId);
   state.bridgeUnavailable = false;
   document.body.classList.remove("bridge-unavailable");
   resetMessageEditState();
@@ -270,7 +283,7 @@ function applyInitState(init) {
   state.contextUsage = init.contextUsage || {};
   state.htmlWorkspace = init.htmlWorkspace || init.HtmlWorkspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [] };
   state.htmlWorkspaceDirty = false;
-  state.activeChatId = init.activeChatId || "";
+  state.activeChatId = nextChatId;
   state.activeChatModel = init.activeChatModel || "";
   state.activeChatMode = init.activeChatMode || init.ActiveChatMode || "agent";
   state.activeChatHtmlMode = !!(init.activeChatHtmlMode || init.ActiveChatHtmlMode);
@@ -282,6 +295,7 @@ function applyInitState(init) {
   state.activeContextCheckpointId = init.activeContextCheckpointId || init.ActiveContextCheckpointId || "";
   state.activeHtmlArtifactId = init.activeHtmlArtifactId || init.ActiveHtmlArtifactId || "";
   state.activePlanArtifactId = init.activePlanArtifactId || init.ActivePlanArtifactId || "";
+  if (chatChanged) restoreChatDraft(state.activeChatId);
   $("toolsPath").textContent = state.toolsPath ? "Хранилище: " + state.toolsPath : "";
   if ($("skillsPath")) $("skillsPath").textContent = state.skillsPath ? "Хранилище: " + state.skillsPath : "";
   renderSettings();
@@ -304,9 +318,14 @@ function applyInitState(init) {
   if (init.quickAction) {
     runQuickAction(init.quickAction);
   }
+  if (chatChanged && typeof restoreActiveChatRun === "function") {
+    restoreActiveChatRun();
+  }
 }
 
 function applyBridgeUnavailableState(error) {
+  var previousChatId = state.activeChatId || "";
+  captureChatDraft(previousChatId);
   state.bridgeUnavailable = true;
   document.body.classList.add("bridge-unavailable");
   resetMessageEditState();
@@ -320,6 +339,10 @@ function applyBridgeUnavailableState(error) {
   state.activeChatHtmlMode = false;
   state.activeChatReasoning = false;
   state.messages = [];
+  state.liveActivity = null;
+  state.liveAgentRun = null;
+  state.liveStreamContent = null;
+  if (typeof resetLiveReasoning === "function") resetLiveReasoning();
   state.artifacts = [];
   state.activeContextCheckpointId = "";
   state.activeHtmlArtifactId = "";
@@ -333,6 +356,7 @@ function applyBridgeUnavailableState(error) {
   state.contextUsage = { usedChars: 0, limitChars: 0, percent: 0, actual: false };
   state.htmlWorkspace = { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [] };
   state.htmlWorkspaceDirty = false;
+  restoreChatDraft("");
 
   $("toolsPath").textContent = "";
   if ($("skillsPath")) $("skillsPath").textContent = "";
@@ -372,7 +396,7 @@ function chatNavigationSignature(payload) {
 }
 
 async function synchronizeChatState(force) {
-  if (state.bridgeUnavailable || currentActiveSend() || (!force && (document.hidden || !document.hasFocus()))) return;
+  if (state.bridgeUnavailable || (!force && (document.hidden || !document.hasFocus()))) return;
   if (state.chatSyncPromise) {
     var pendingSync = state.chatSyncPromise;
     if (!force) return pendingSync;
@@ -388,7 +412,12 @@ async function synchronizeChatState(force) {
       if (navigationVersion === state.chatNavigationVersion &&
           stateApplyVersion === state.chatStateApplyVersion &&
           chatNavigationSignature(response) !== chatNavigationSignature(current)) {
-        applyChatState(response);
+        var responseChatId = response.activeChatId || response.ActiveChatId || "";
+        if (currentActiveSend() && responseChatId === state.activeChatId) {
+          applyChatCatalogState(response);
+        } else {
+          applyChatState(response);
+        }
       }
     } catch (error) {
       logOnce("Не удалось синхронизировать список чатов: " + (error.detail || error.message), "warning");

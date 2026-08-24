@@ -22,12 +22,13 @@
     var state = options.state;
     var refreshPending = false;
 
-    async function refreshPlan(planId) {
-      var response = await options.send("selectChat", { chatId: state.activeChatId });
-      options.applyPlanRefresh(planId, response);
+    async function refreshPlan(planId, chatId) {
+      if (state.activeChatId !== chatId) return false;
+      var response = await options.send("selectChat", { chatId: chatId });
+      return options.applyPlanRefresh(planId, response, chatId);
     }
 
-    async function savePlan(selection) {
+    async function savePlan(selection, chatId) {
       var plan = options.validatePlanDraft(selection.item);
       var result = await options.send("runTool", {
         toolId: "common.plan_update",
@@ -35,36 +36,38 @@
         dryRun: false
       });
       if (!toolSucceeded(result)) throw new Error(toolMessage(result, "План не сохранён."));
-      await refreshPlan(plan.id);
+      if (!await refreshPlan(plan.id, chatId)) return false;
       options.log("План сохранён как новая версия.");
+      return true;
     }
 
     async function saveSelection() {
       var selected = options.getSelection();
       if (!selected || selected.type === "artifact" || state.bridgeUnavailable) return;
+      var chatId = state.activeChatId;
       options.syncEditor();
       selected = options.getSelection();
       if (!selected || selected.type === "artifact") return;
       try {
         if (selected.type === "plan") {
-          await savePlan(selected);
+          await savePlan(selected, chatId);
           return;
         }
         if (selected.type === "data") {
           if (selected.binding && !window.confirm("Сохранение JSON отключит привязку к Office и автообновление. Продолжить?")) return;
-          options.applyWorkspaceResponse(await options.send("saveHtmlWorkspaceData", {
-            chatId: state.activeChatId,
+          if (!options.applyWorkspaceResponse(await options.send("saveHtmlWorkspaceData", {
+            chatId: chatId,
             name: selected.name,
             json: selected.json
-          }));
+          }), chatId)) return;
         } else {
-          options.applyWorkspaceResponse(await options.send("saveHtmlWorkspaceFile", {
-            chatId: state.activeChatId,
+          if (!options.applyWorkspaceResponse(await options.send("saveHtmlWorkspaceFile", {
+            chatId: chatId,
             path: selected.path,
             kind: selected.kind,
             content: selected.content,
             setActive: selected.kind === "html"
-          }));
+          }), chatId)) return;
         }
         options.log("Артефакт сохранён.");
       } catch (error) {
@@ -81,6 +84,7 @@
         : "Удалить «" + selected.label + "» из HTML? Удаление можно отменить через Undo.";
       if (state.htmlWorkspaceDirty) warning = "Есть несохраненные изменения. " + warning;
       if (!window.confirm(warning)) return;
+      var chatId = state.activeChatId;
 
       try {
         if (selected.type === "plan") {
@@ -90,15 +94,16 @@
             dryRun: false
           });
           if (!toolSucceeded(result)) throw new Error(toolMessage(result, "План не удалён."));
-          await refreshPlan(selected.planId);
+          if (!await refreshPlan(selected.planId, chatId)) return;
           options.log("План удалён: " + selected.label);
           return;
         }
         var response = selected.type === "data"
-          ? await options.send("deleteHtmlWorkspaceData", { chatId: state.activeChatId, name: selected.name })
-          : await options.send("deleteHtmlWorkspaceFile", { chatId: state.activeChatId, path: selected.path });
+          ? await options.send("deleteHtmlWorkspaceData", { chatId: chatId, name: selected.name })
+          : await options.send("deleteHtmlWorkspaceFile", { chatId: chatId, path: selected.path });
+        if (state.activeChatId !== chatId) return;
         state.htmlWorkspaceSelection = { type: "file", id: "" };
-        options.applyWorkspaceResponse(response);
+        options.applyWorkspaceResponse(response, chatId);
         options.log("Удалено из HTML: " + selected.label);
       } catch (error) {
         options.log(error.detail || error.message, "error");
@@ -117,10 +122,10 @@
 
       var method = direction === "redo" ? "redoHtmlWorkspaceSnapshot" : "restoreHtmlWorkspaceSnapshot";
       try {
-        options.applyWorkspaceResponse(await options.send(method, {
+        if (!options.applyWorkspaceResponse(await options.send(method, {
           chatId: actionState.chatId,
           snapshotId: snapshotId
-        }));
+        }), actionState.chatId)) return;
         options.log(direction === "redo" ? "HTML workspace redo выполнен." : "HTML workspace восстановлен.");
       } catch (error) {
         options.log(error.detail || error.message, "error");
@@ -130,6 +135,7 @@
 
     async function createPlan() {
       if (state.bridgeUnavailable) return;
+      var chatId = state.activeChatId;
       try {
         var result = await options.send("runTool", {
           toolId: "common.plan_create",
@@ -143,7 +149,8 @@
         var payload = {};
         try { payload = JSON.parse(result.DataJson || result.dataJson || "{}"); } catch (ignore) {}
         var plan = payload.plan || payload.Plan || {};
-        await refreshPlan(plan.id || plan.Id || "");
+        if (!await refreshPlan(plan.id || plan.Id || "", chatId)) return;
+        if (state.activeChatId !== chatId) return;
         state.htmlWorkspaceMode = "preview";
         options.render();
         options.log("План создан.");
@@ -154,14 +161,16 @@
     }
 
     async function createFile(kind, path) {
+      var chatId = state.activeChatId;
       try {
         options.applyWorkspaceResponse(await options.send("saveHtmlWorkspaceFile", {
-          chatId: state.activeChatId,
+          chatId: chatId,
           path: path,
           kind: kind,
           content: defaultFileContent(kind),
           setActive: kind === "html"
-        }));
+        }), chatId);
+        if (state.activeChatId !== chatId) return;
         state.htmlWorkspaceSelection = { type: "file", id: path.toLowerCase() };
         options.hideCreate();
         options.render();
@@ -172,12 +181,14 @@
     }
 
     async function createData(name) {
+      var chatId = state.activeChatId;
       try {
         options.applyWorkspaceResponse(await options.send("saveHtmlWorkspaceData", {
-          chatId: state.activeChatId,
+          chatId: chatId,
           name: name,
           json: "{\n  \"items\": []\n}\n"
-        }));
+        }), chatId);
+        if (state.activeChatId !== chatId) return;
         state.htmlWorkspaceSelection = { type: "data", id: name.toLowerCase() };
         options.hideCreate();
         options.render();
@@ -194,6 +205,7 @@
         if (!interactive || !window.confirm("Обновление данных отменит несохранённые изменения. Продолжить?")) return;
       }
       refreshPending = true;
+      var chatId = state.activeChatId;
       state.htmlWorkspaceRefreshPending = true;
       options.render();
       try {
@@ -204,7 +216,8 @@
           arguments: args,
           dryRun: false
         });
-        options.applyWorkspaceResponse(await options.send("getHtmlWorkspace", { chatId: state.activeChatId }));
+        if (state.activeChatId !== chatId) return;
+        if (!options.applyWorkspaceResponse(await options.send("getHtmlWorkspace", { chatId: chatId }), chatId)) return;
         if (!toolSucceeded(result)) {
           throw new Error(toolMessage(result, "Данные обновлены частично."));
         }

@@ -76,13 +76,65 @@ function activeChatUsesCurrentDocument() {
   return !active || chatIsCurrentDocument(active);
 }
 
+function chatDraftStore() {
+  state.chatDrafts = state.chatDrafts || {};
+  return state.chatDrafts;
+}
+
+function captureChatDraft(chatIdValue) {
+  if (!chatIdValue) return;
+  var input = $("chatInput");
+  var editing = typeof hasActiveMessageEdit === "function" && hasActiveMessageEdit();
+  var text = editing && state.editingDraftCaptured
+    ? (state.editingDraftText || "")
+    : (input ? input.value : "");
+  var attachments = (state.draftAttachments || []).slice();
+  var drafts = chatDraftStore();
+  if (!text && !attachments.length) {
+    delete drafts[chatIdValue];
+    return;
+  }
+  drafts[chatIdValue] = { text: text, attachments: attachments };
+}
+
+function restoreChatDraft(chatIdValue) {
+  var draft = chatIdValue ? chatDraftStore()[chatIdValue] : null;
+  state.draftAttachments = draft && draft.attachments ? draft.attachments.slice() : [];
+  if (typeof renderAttachmentDrafts === "function") {
+    renderAttachmentDrafts();
+  }
+  if (typeof setChatInputText === "function") {
+    setChatInputText(draft ? draft.text : "", false);
+  } else if ($("chatInput")) {
+    $("chatInput").value = draft ? draft.text : "";
+  }
+}
+
+function applyChatStateForChat(response, expectedChatId) {
+  if (!expectedChatId || state.activeChatId === expectedChatId) {
+    applyChatState(response);
+    return true;
+  }
+  applyChatCatalogState(response);
+  return false;
+}
+
 function applyChatState(response) {
   state.chatStateApplyVersion = (state.chatStateApplyVersion || 0) + 1;
   response = response || {};
+  var previousChatId = state.activeChatId || "";
+  var hasResponseChatId = response.activeChatId !== undefined || response.ActiveChatId !== undefined;
+  var nextChatId = hasResponseChatId
+    ? (response.activeChatId || response.ActiveChatId || "")
+    : previousChatId;
+  var chatChanged = previousChatId !== nextChatId;
+  if (chatChanged) {
+    captureChatDraft(previousChatId);
+  }
   if (typeof resetMessageEditState === "function") {
     resetMessageEditState();
   }
-  state.activeChatId = response.activeChatId || response.ActiveChatId || state.activeChatId || "";
+  state.activeChatId = nextChatId;
   if (response.activeChatModel !== undefined || response.ActiveChatModel !== undefined) {
     state.activeChatModel = response.activeChatModel || response.ActiveChatModel || "";
   }
@@ -106,6 +158,7 @@ function applyChatState(response) {
   }
   if (response.messages || response.Messages) {
     state.liveActivity = null;
+    state.liveAgentRun = null;
     state.liveStreamContent = null;
     if (typeof resetLiveReasoning === "function") resetLiveReasoning();
     state.messages = response.messages || response.Messages || [];
@@ -130,6 +183,10 @@ function applyChatState(response) {
     state.htmlWorkspace = response.htmlWorkspace || response.HtmlWorkspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [] };
     state.htmlWorkspaceDirty = false;
   }
+  if (chatChanged) {
+    restoreChatDraft(state.activeChatId);
+    if (typeof clearSendError === "function") clearSendError();
+  }
   renderChatSessions();
   renderMessages();
   renderContext(true);
@@ -143,6 +200,9 @@ function applyChatState(response) {
   }
   if (typeof syncPromptContextInspectorState === "function") {
     syncPromptContextInspectorState();
+  }
+  if (chatChanged && typeof restoreActiveChatRun === "function") {
+    restoreActiveChatRun();
   }
 }
 

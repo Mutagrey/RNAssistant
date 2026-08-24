@@ -33,9 +33,10 @@ async function saveChatModelSelection(value) {
   if ($("sendButton")) {
     $("sendButton").disabled = true;
   }
+  var targetChatId = state.activeChatId;
   try {
-    var response = await send("setChatModel", { chatId: state.activeChatId, model: value });
-    applyChatState(response);
+    var response = await send("setChatModel", { chatId: targetChatId, model: value });
+    if (!applyChatStateForChat(response, targetChatId)) return false;
     updateEstimatedContextUsage();
     renderContextMeter();
     log(value ? ("Chat model selected: " + value) : "Chat model uses default.");
@@ -60,9 +61,10 @@ async function saveChatReasoningSelection(enabled) {
   state.reasoningSaving = true;
   renderReasoningToggle();
   renderSendControls();
+  var targetChatId = state.activeChatId;
   try {
-    var response = await send("setChatReasoning", { chatId: state.activeChatId, enabled: !!enabled });
-    applyChatState(response);
+    var response = await send("setChatReasoning", { chatId: targetChatId, enabled: !!enabled });
+    if (!applyChatStateForChat(response, targetChatId)) return false;
     log(enabled ? "Reasoning enabled." : "Reasoning disabled.");
     return state.activeChatReasoning === !!enabled;
   } catch (error) {

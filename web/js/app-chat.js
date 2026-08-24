@@ -20,12 +20,13 @@ async function toggleChatHtmlMode() {
     return;
   }
 
+  var targetChatId = state.activeChatId;
   try {
-    applyChatState(await send("setChatHtmlMode", {
-      chatId: state.activeChatId,
+    var applied = applyChatStateForChat(await send("setChatHtmlMode", {
+      chatId: targetChatId,
       enabled: !state.activeChatHtmlMode
-    }));
-    log(state.activeChatHtmlMode ? "HTML mode включен." : "HTML mode выключен.");
+    }), targetChatId);
+    if (applied) log(state.activeChatHtmlMode ? "HTML mode включен." : "HTML mode выключен.");
   } catch (error) {
     log(error.detail || error.message, "error");
   }
@@ -35,12 +36,13 @@ async function saveChatMode(mode) {
   if (!state.activeChatId || state.bridgeUnavailable || currentActiveSend() || hasActiveMessageEdit()) {
     return;
   }
+  var targetChatId = state.activeChatId;
   try {
-    applyChatState(await send("setChatMode", {
-      chatId: state.activeChatId,
+    var applied = applyChatStateForChat(await send("setChatMode", {
+      chatId: targetChatId,
       mode: mode || "agent"
-    }));
-    log("Режим чата: " + state.activeChatMode + ".");
+    }), targetChatId);
+    if (applied) log("Режим чата: " + state.activeChatMode + ".");
   } catch (error) {
     $("chatModeSelect").value = state.activeChatMode || "agent";
     log(error.detail || error.message, "error");

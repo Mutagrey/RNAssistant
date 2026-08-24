@@ -470,13 +470,32 @@ namespace RNAssistant.Harness
                 var store = new ChatStore(paths);
                 var current = store.Create("Excel", "doc", "MockWorkbook.xlsx", "Current chat");
                 current.DocumentPath = "C:\\Demo\\MockWorkbook.xlsx";
+                current.Messages.Add(new ChatMessage { Role = "user", Content = "current history A" });
                 store.Save(current);
+                var currentSecond = store.Create("Excel", "doc", "MockWorkbook.xlsx", "Current chat 2");
+                currentSecond.DocumentPath = "C:\\Demo\\MockWorkbook.xlsx";
+                currentSecond.Messages.Add(new ChatMessage { Role = "user", Content = "current history B" });
+                store.Save(currentSecond);
                 var forecast = store.Create("Excel", "forecast-doc", "Forecast.xlsx", "Forecast chat");
                 forecast.DocumentPath = "C:\\Demo\\Forecast.xlsx";
+                forecast.Messages.Add(new ChatMessage { Role = "user", Content = "forecast history A" });
                 store.Save(forecast);
+                var forecastSecond = store.Create("Excel", "forecast-doc", "Forecast.xlsx", "Forecast chat 2");
+                forecastSecond.DocumentPath = "C:\\Demo\\Forecast.xlsx";
+                forecastSecond.Messages.Add(new ChatMessage { Role = "user", Content = "forecast history B" });
+                store.Save(forecastSecond);
+                store.SaveActiveSessionId("Excel", "doc", current.Id);
+                store.SaveActiveSessionId("Excel", "forecast-doc", forecast.Id);
 
                 var service = new ChatSessionService(adapter, store);
                 AssertEqual(current.Id, service.LoadSession(null).Id, "current document active chat");
+                AssertEqual("current history A", service.GetActiveSession().Messages[0].Content,
+                    "current document history is isolated");
+
+                AssertEqual(currentSecond.Id, service.LoadSession(currentSecond.Id).Id,
+                    "second chat in current document selected");
+                AssertEqual("current history B", service.GetActiveSession().Messages[0].Content,
+                    "second current-document history is isolated");
 
                 AssertEqual(forecast.Id, service.LoadSession(forecast.Id).Id, "archived chat selected");
                 AssertEqual(forecast.Id, service.GetActiveSessionForOfficeState().Id,
@@ -485,11 +504,24 @@ namespace RNAssistant.Harness
                 adapter.ActivateDocument("forecast-doc");
                 AssertEqual(forecast.Id, service.GetActiveSessionForOfficeState().Id,
                     "external Office switch restores target chat");
+                AssertEqual(forecastSecond.Id, service.LoadSession(forecastSecond.Id).Id,
+                    "second chat in forecast document selected");
+                AssertEqual("forecast history B", service.GetActiveSession().Messages[0].Content,
+                    "second forecast history is isolated");
 
                 adapter.ActivateDocument("doc");
                 var restored = service.GetActiveSessionForOfficeState();
-                AssertEqual(current.Id, restored.Id, "returning to document restores its active chat");
+                AssertEqual(currentSecond.Id, restored.Id, "returning to document restores its last active chat");
+                AssertEqual("current history B", restored.Messages[0].Content,
+                    "returning to document restores only its selected history");
                 AssertTrue(service.IsCurrentDocument(restored), "restored chat belongs to current document");
+
+                adapter.ActivateDocument("forecast-doc");
+                var forecastRestored = service.GetActiveSessionForOfficeState();
+                AssertEqual(forecastSecond.Id, forecastRestored.Id,
+                    "returning to forecast restores its last active chat");
+                AssertEqual("forecast history B", forecastRestored.Messages[0].Content,
+                    "returning to forecast restores only its selected history");
             });
         }
 

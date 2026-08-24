@@ -133,11 +133,13 @@
     renderHtmlWorkspace();
   }
 
-  function applyHtmlWorkspaceResponse(response) {
+  function applyHtmlWorkspaceResponse(response, expectedChatId) {
+    if (expectedChatId && state.activeChatId !== expectedChatId) return false;
     response = response || {};
     state.htmlWorkspace = response.workspace || response.Workspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [] };
     state.htmlWorkspaceDirty = false;
     renderHtmlWorkspace();
+    return true;
   }
 
   function workspaceActionSelection(type, id) {
@@ -210,14 +212,16 @@
     };
   }
 
-  function applyPlanRefresh(planId, response) {
-    if (typeof applyChatState === "function") applyChatState(response);
+  function applyPlanRefresh(planId, response, expectedChatId) {
+    if (typeof applyChatStateForChat === "function" &&
+        !applyChatStateForChat(response, expectedChatId)) return false;
     var latest = latestPlanArtifacts().filter(function (artifact) { return planStableId(artifact) === planId; })[0] || null;
     state.htmlWorkspaceSelection = latest
       ? { type: "plan", id: artifactId(latest) }
       : { type: "file", id: "" };
     state.htmlWorkspaceDirty = false;
     renderHtmlWorkspace();
+    return true;
   }
 
   function addHtmlWorkspaceFile(kind) {
