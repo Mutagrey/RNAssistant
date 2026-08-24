@@ -122,10 +122,15 @@
 
       var method = direction === "redo" ? "redoHtmlWorkspaceSnapshot" : "restoreHtmlWorkspaceSnapshot";
       try {
-        if (!options.applyWorkspaceResponse(await options.send(method, {
+        var response = await options.send(method, {
           chatId: actionState.chatId,
           snapshotId: snapshotId
-        }), actionState.chatId)) return;
+        });
+        if (!options.applyWorkspaceResponse(response, actionState.chatId)) return;
+        if (direction === "redo" && (response.redoChoiceRequired || response.RedoChoiceRequired)) {
+          options.log("Выберите ветку HTML redo.");
+          return;
+        }
         options.log(direction === "redo" ? "HTML workspace redo выполнен." : "HTML workspace восстановлен.");
       } catch (error) {
         options.log(error.detail || error.message, "error");

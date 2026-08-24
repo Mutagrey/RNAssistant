@@ -166,6 +166,13 @@
   overflow-x: auto;
 }
 
+.html-redo-branch {
+  width: min(220px, 24vw);
+  height: var(--control-height);
+  padding: 0 26px 0 8px;
+  font-size: 11px;
+}
+
 .html-workspace-editor.is-empty .resource-editor-actions,
 .html-workspace-editor.is-empty .html-workspace-mode-toggle,
 .html-workspace-editor.is-empty .html-workspace-view {

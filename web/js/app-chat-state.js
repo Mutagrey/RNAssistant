@@ -180,7 +180,7 @@ function applyChatState(response) {
     syncTokenEstimateCalibrationFromUsage();
   }
   if (response.htmlWorkspace || response.HtmlWorkspace) {
-    state.htmlWorkspace = response.htmlWorkspace || response.HtmlWorkspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [] };
+    state.htmlWorkspace = response.htmlWorkspace || response.HtmlWorkspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [] };
     state.htmlWorkspaceDirty = false;
   }
   if (chatChanged) {

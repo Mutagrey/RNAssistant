@@ -19,7 +19,7 @@ namespace RNAssistant.Core.Services
                 Files = CloneFiles(workspace.Files),
                 DataSources = CloneDataSources(workspace.DataSources),
                 History = new List<HtmlWorkspaceSnapshot>(),
-                RedoHistory = new List<HtmlWorkspaceSnapshot>(),
+                RedoBranches = new List<HtmlWorkspaceRedoBranch>(),
                 UpdatedUtc = workspace.UpdatedUtc
             };
         }
@@ -50,7 +50,7 @@ namespace RNAssistant.Core.Services
                 Files = CloneFiles(snapshot.Files),
                 DataSources = CloneDataSources(snapshot.DataSources),
                 History = new List<HtmlWorkspaceSnapshot>(),
-                RedoHistory = new List<HtmlWorkspaceSnapshot>(),
+                RedoBranches = new List<HtmlWorkspaceRedoBranch>(),
                 UpdatedUtc = DateTime.UtcNow
             };
         }

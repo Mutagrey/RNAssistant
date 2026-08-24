@@ -121,6 +121,7 @@ namespace RNAssistant.Harness
                 Test("storage: chart activity projects from artifact", ChartActivityProjectsFromArtifact),
                 Test("storage: compaction projects from artifact", CompactionProjectsFromArtifact),
                 Test("storage: html navigation projects from artifacts", HtmlNavigationProjectsFromArtifacts),
+                Test("storage: html redo branches are explicit and lazy", HtmlRedoBranchesAreExplicitAndLazy),
                 Test("storage: html checkpoints stay internal until mutation", HtmlWorkspaceCheckpointsStayInternalUntilMutation),
                 Test("chat sessions: document key migration", ChatSessionServiceMigratesDocumentKey),
                 Test("chat sessions: stale requested id fallback", ChatSessionServiceFallsBackForStaleRequestedId),

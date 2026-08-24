@@ -17,7 +17,7 @@
     var artifactInlineText = model.artifactInlineText;
     var setArtifactInlineText = model.setArtifactInlineText;
     var historyItems = model.historyItems;
-    var redoItems = model.redoItems;
+    var redoBranches = model.redoBranches;
     var filePath = model.filePath;
     var fileKind = model.fileKind;
     var fileContent = model.fileContent;
@@ -30,6 +30,25 @@
     var setDataJson = model.setDataJson;
     var selectedItem = model.selectedItem;
     var snapshotLabel = model.snapshotLabel;
+
+    function renderRedoBranches(selected) {
+      var select = $("redoHtmlWorkspaceBranchSelect");
+      if (!select) return;
+      var branches = redoBranches();
+      var selectedId = select.value;
+      select.innerHTML = "";
+      branches.forEach(function (branch) {
+        var option = document.createElement("option");
+        var revision = Number(model.prop(branch, "Revision", "revision", 1) || 1);
+        option.value = model.prop(branch, "Id", "id", "");
+        option.textContent = "v" + revision + " · " + snapshotLabel(branch);
+        select.appendChild(option);
+      });
+      if (branches.some(function (branch) { return model.prop(branch, "Id", "id", "") === selectedId; })) {
+        select.value = selectedId;
+      }
+      select.classList.toggle("hidden", branches.length <= 1 || !!selected && (selected.type === "plan" || selected.type === "artifact"));
+    }
 
     function syncHtmlEditorToState() {
       var selected = selectedItem();
@@ -125,10 +144,14 @@
           : "Нет предыдущих версий";
       }
       if ($("redoHtmlWorkspaceButton")) {
+        renderRedoBranches(selected);
+        var branches = redoBranches();
         $("redoHtmlWorkspaceButton").classList.toggle("hidden", !!selected && (selected.type === "plan" || selected.type === "artifact"));
-        $("redoHtmlWorkspaceButton").disabled = state.bridgeUnavailable || !redoItems().length;
-        $("redoHtmlWorkspaceButton").title = redoItems().length
-          ? "Повторить: " + snapshotLabel(redoItems()[0])
+        $("redoHtmlWorkspaceButton").disabled = state.bridgeUnavailable || !branches.length;
+        $("redoHtmlWorkspaceButton").title = branches.length > 1
+          ? "Повторить выбранную ветку"
+          : branches.length
+            ? "Повторить: " + snapshotLabel(branches[0])
           : "Нет отмененных версий";
       }
     }

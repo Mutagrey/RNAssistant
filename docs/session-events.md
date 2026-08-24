@@ -43,7 +43,7 @@ Large immutable content is stored once by SHA-256 in `chat-blobs`; the event str
 
 When history encryption is enabled, committed CAS files contain authenticated ciphertext while their references retain the plaintext SHA-256 and byte length for deterministic identity and post-decryption verification.
 
-Artifact metadata and lineage remain in the session stream. HTML undo/redo is derived from the active artifact and its parent/child chain. Chart UI data is derived from a chart artifact. Context checkpoints are derived from compaction artifacts. These values are not persisted again as competing state.
+Artifact metadata and lineage remain in the session stream. HTML undo follows the active artifact's parent. Redo is derived only from its direct children: one child is deterministic, while multiple children require an explicit artifact id. The bridge exposes child revision/count metadata without loading their CAS bodies, and no mutable redo stack is stored. Chart UI data is derived from a chart artifact. Context checkpoints are derived from compaction artifacts. These values are not persisted again as competing state.
 
 ## Optional history protection
 

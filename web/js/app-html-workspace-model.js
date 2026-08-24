@@ -13,6 +13,7 @@
       current.dataSources = prop(current, "DataSources", "dataSources", []) || [];
       current.history = prop(current, "History", "history", []) || [];
       current.redoHistory = prop(current, "RedoHistory", "redoHistory", []) || [];
+      current.redoBranches = prop(current, "RedoBranches", "redoBranches", current.redoHistory) || [];
       current.activeFileId = prop(current, "ActiveFileId", "activeFileId", "") || "";
       state.htmlWorkspace = current;
       return current;
@@ -80,8 +81,8 @@
       return workspace().history || [];
     }
 
-    function redoItems() {
-      return workspace().redoHistory || [];
+    function redoBranches() {
+      return workspace().redoBranches || [];
     }
 
     function fileId(file) {
@@ -250,7 +251,7 @@
       latestPlanArtifacts: latestPlanArtifacts,
       planStableId: planStableId,
       prop: prop,
-      redoItems: redoItems,
+      redoBranches: redoBranches,
       selectedItem: selectedItem,
       setArtifactInlineText: setArtifactInlineText,
       setDataJson: setDataJson,

@@ -10,6 +10,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
@@ -550,15 +551,92 @@ namespace RNAssistant.Harness
                 AssertEqual(firstId, loaded.HtmlWorkspace.History.Single().Id, "undo points to parent artifact");
                 HtmlArtifactToolExecutor.RestoreSnapshot(loaded, firstId);
                 AssertEqual(firstId, loaded.ActiveHtmlArtifactId, "undo activates prior artifact");
-                AssertEqual(secondId, loaded.HtmlWorkspace.RedoHistory.Single().Id, "redo points to child artifact");
+                AssertEqual(secondId, loaded.HtmlWorkspace.RedoBranches.Single().Id, "redo points to direct child artifact");
                 store.Save(loaded);
 
                 loaded = store.Load(loaded.Id);
                 AssertEqual("version one", loaded.HtmlWorkspace.Files.Single().Content, "undo survives replay");
+                AssertTrue(store.LoadArtifactBody(loaded, secondId), "redo artifact body loads lazily");
                 HtmlArtifactToolExecutor.RedoSnapshot(loaded, secondId);
                 AssertEqual("version two", loaded.HtmlWorkspace.Files.Single().Content, "redo activates child artifact");
                 AssertEqual(2, loaded.Artifacts.Count(item => item.Kind == ChatArtifactKinds.HtmlWorkspace),
                     "undo and redo do not duplicate revisions");
+            });
+        }
+
+        private static void HtmlRedoBranchesAreExplicitAndLazy()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Word", "html-branches", "Branches.docx", "Branches");
+                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "root", true);
+                store.Save(session);
+                var rootId = session.ActiveHtmlArtifactId;
+
+                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "branch A", true);
+                store.Save(session);
+                var branchAId = session.ActiveHtmlArtifactId;
+                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "branch A child", true);
+                store.Save(session);
+                var descendantId = session.ActiveHtmlArtifactId;
+
+                HtmlArtifactToolExecutor.RestoreSnapshot(session, rootId);
+                store.Save(session);
+                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "branch B", true);
+                store.Save(session);
+                var branchBId = session.ActiveHtmlArtifactId;
+                HtmlArtifactToolExecutor.RestoreSnapshot(session, rootId);
+                store.Save(session);
+
+                var loaded = store.Load(session.Host, session.DocumentKey, session.Id);
+                AssertEqual(rootId, loaded.ActiveHtmlArtifactId, "branch point survives replay");
+                AssertEqual(2, loaded.HtmlWorkspace.RedoBranches.Count, "both direct redo branches are exposed");
+                AssertTrue(loaded.HtmlWorkspace.RedoBranches.All(branch => branch.ParentArtifactId == rootId),
+                    "redo choices are direct children");
+                AssertTrue(loaded.HtmlWorkspace.RedoBranches.Any(branch => branch.Id == branchAId) &&
+                    loaded.HtmlWorkspace.RedoBranches.Any(branch => branch.Id == branchBId),
+                    "redo choices preserve both branches");
+                AssertTrue(loaded.Artifacts.Where(artifact => artifact.ParentArtifactId == rootId)
+                    .All(artifact => artifact.InlineText == null),
+                    "redo branch bodies remain lazy after replay");
+
+                var transport = HtmlWorkspaceDto.From(loaded.HtmlWorkspace);
+                AssertEqual(2, transport.RedoBranches.Count, "bridge exposes branch metadata");
+                AssertTrue(transport.RedoBranches.All(branch => branch.Revision > 1),
+                    "bridge exposes revision numbers");
+
+                var ambiguousRejected = false;
+                try
+                {
+                    HtmlArtifactToolExecutor.RedoSnapshot(loaded, null);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    ambiguousRejected = ex.Message.IndexOf("multiple branches", StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+                AssertTrue(ambiguousRejected, "redo without id rejects an ambiguous branch point");
+
+                var descendantRejected = false;
+                try
+                {
+                    HtmlArtifactToolExecutor.RedoSnapshot(loaded, descendantId);
+                }
+                catch (InvalidOperationException)
+                {
+                    descendantRejected = true;
+                }
+                AssertTrue(descendantRejected, "redo cannot jump over a direct child");
+
+                AssertTrue(store.LoadArtifactBody(loaded, branchAId), "selected branch body loads on demand");
+                HtmlArtifactToolExecutor.RedoSnapshot(loaded, branchAId);
+                AssertEqual("branch A", loaded.HtmlWorkspace.Files.Single().Content, "explicit branch redo succeeds");
+                AssertEqual(descendantId, loaded.HtmlWorkspace.RedoBranches.Single().Id,
+                    "next direct child becomes the only redo choice");
+                AssertTrue(store.LoadArtifactBody(loaded, descendantId), "next branch body loads on demand");
+                HtmlArtifactToolExecutor.RedoSnapshot(loaded, null);
+                AssertEqual("branch A child", loaded.HtmlWorkspace.Files.Single().Content,
+                    "redo without id succeeds for exactly one child");
             });
         }
 

@@ -1116,23 +1116,7 @@ namespace RNAssistant.Core.Storage
             }
             workspace.History = HtmlWorkspaceHistoryPolicy.Trim(workspace.History);
 
-            current = active;
-            while (current != null)
-            {
-                var child = (session.Artifacts ?? new List<ChatArtifact>())
-                    .Where(item => item != null &&
-                        string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase) &&
-                        string.Equals(item.ParentArtifactId, current.Id, StringComparison.OrdinalIgnoreCase) &&
-                        !visited.Contains(item.Id))
-                    .OrderByDescending(item => item.CreatedUtc)
-                    .FirstOrDefault();
-                if (child == null || !visited.Add(child.Id) || !HydrateArtifact(child)) break;
-                var snapshot = ParseWorkspaceSnapshot(child);
-                if (snapshot == null) break;
-                workspace.RedoHistory.Add(snapshot);
-                current = child;
-            }
-            workspace.RedoHistory = HtmlWorkspaceHistoryPolicy.Trim(workspace.RedoHistory);
+            workspace.RedoBranches = HtmlWorkspaceNavigationService.GetRedoBranches(session);
             session.HtmlWorkspace = workspace;
         }
 

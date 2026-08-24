@@ -11,7 +11,6 @@
 
 ## Known gaps
 
-- HTML history is a graph after undo followed by a new edit. When one revision has multiple children, redo without an explicit artifact id currently selects the newest child; the UI does not expose branch choice.
 - Missing or corrupt CAS content fails closed, but there is no repository-wide health report or reachability garbage collector. A crash after storing a blob but before appending its reference can leave a harmless orphan.
 - VBA backups are separate document-scoped JSON files with inline source. They are not linked to a durable VBA mutation record or deduplicated in CAS.
 - A process/COM crash between `tool.execution.started` and `tool.execution.finished` is correctly classified as an unknown effect, but runtime cannot yet compare live VBA with the intended before/after states to distinguish applied, not applied, and divergent outcomes.
@@ -25,7 +24,7 @@
 - [ ] Replace inline VBA backup source with CAS references and derive the backup list from the VBA journal. Keep this journal document-scoped rather than chat-owned so chat fork/prune semantics cannot change the live Office project.
 - [ ] Reconcile interrupted VBA writes on the next safe document attach: compare the live module with the recorded before/after hashes. Report `committed` or `not_applied` when exact, otherwise `unknown`; never auto-retry or auto-restore an external mutation.
 - [ ] Make VBA restore a journaled transaction: validate the live guard, snapshot current source, persist the prepared record, write, read back, then append the terminal outcome. Preserve explicit confirmation.
-- [ ] Make HTML redo branch-aware. Redo without an id is valid only with exactly one child; multiple children return an explicit branch-choice result. Expose child revision metadata in the bridge while keeping bodies lazy and CAS-backed.
+- [x] Make HTML redo branch-aware. Redo without an id is valid only with exactly one child; multiple children return an explicit branch-choice result. Expose child revision metadata in the bridge while keeping bodies lazy and CAS-backed.
 - [ ] Add a CAS health/GC service that scans all validated event streams and document-scoped VBA journals, reports missing/corrupt/orphaned blobs, and removes only proven unreachable blobs under the maintenance gate. Corrupt or unreadable journals must make deletion fail closed.
 - [ ] Add harness crash-injection coverage for blob-before-event, HTML branching, interrupted VBA prepare/write/verify, and deterministic reconciliation. VBA/COM behavior also requires Windows x64 + Office x64 + VS 2022 smoke tests.
 

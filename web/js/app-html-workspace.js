@@ -14,7 +14,7 @@
   var planStableId = workspaceModel.planStableId;
   var latestPlanArtifacts = workspaceModel.latestPlanArtifacts;
   var historyItems = workspaceModel.historyItems;
-  var redoItems = workspaceModel.redoItems;
+  var redoBranches = workspaceModel.redoBranches;
   var fileId = workspaceModel.fileId;
   var filePath = workspaceModel.filePath;
   var fileKind = workspaceModel.fileKind;
@@ -136,7 +136,7 @@
   function applyHtmlWorkspaceResponse(response, expectedChatId) {
     if (expectedChatId && state.activeChatId !== expectedChatId) return false;
     response = response || {};
-    state.htmlWorkspace = response.workspace || response.Workspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [] };
+    state.htmlWorkspace = response.workspace || response.Workspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [] };
     state.htmlWorkspaceDirty = false;
     renderHtmlWorkspace();
     return true;
@@ -202,13 +202,15 @@
 
   function workspaceActionState() {
     var undo = historyItems()[0];
-    var redo = redoItems()[0];
+    var branches = redoBranches();
+    var redoSelect = $("redoHtmlWorkspaceBranchSelect");
+    var redoId = branches.length > 1 && redoSelect ? redoSelect.value : (branches[0] ? prop(branches[0], "Id", "id", "") : "");
     return {
       bridgeUnavailable: !!state.bridgeUnavailable,
       chatId: state.activeChatId,
       dirty: !!state.htmlWorkspaceDirty,
       undoSnapshotId: undo ? prop(undo, "Id", "id", "") : "",
-      redoSnapshotId: redo ? prop(redo, "Id", "id", "") : ""
+      redoSnapshotId: redoId
     };
   }
 

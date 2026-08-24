@@ -309,8 +309,6 @@ namespace RNAssistant.Office.Tools
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
             var id = DataSourceId(name);
             ValidateWorkspaceCapacity(session.HtmlWorkspace, null, null, id, json);
-            PushHistory(session.HtmlWorkspace, "Before binding data " + name);
-            ClearRedoHistory(session.HtmlWorkspace);
             var now = DateTime.UtcNow;
             var data = session.HtmlWorkspace.DataSources.FirstOrDefault(item =>
                 item != null && string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
@@ -478,8 +476,6 @@ namespace RNAssistant.Office.Tools
             var sourceToolId = data.Binding.ToolId;
             var transform = data.Binding.Transform;
             var refreshPolicy = data.Binding.RefreshPolicy;
-            PushHistory(session.HtmlWorkspace, "Before freezing data " + data.Name);
-            ClearRedoHistory(session.HtmlWorkspace);
             data.Binding = null;
             data.UpdatedUtc = DateTime.UtcNow;
             session.HtmlWorkspace.UpdatedUtc = data.UpdatedUtc;
@@ -849,9 +845,9 @@ namespace RNAssistant.Office.Tools
             {
                 workspace.History = new List<HtmlWorkspaceSnapshot>();
             }
-            if (workspace.RedoHistory == null)
+            if (workspace.RedoBranches == null)
             {
-                workspace.RedoHistory = new List<HtmlWorkspaceSnapshot>();
+                workspace.RedoBranches = new List<HtmlWorkspaceRedoBranch>();
             }
 
             foreach (var file in workspace.Files.Where(f => f != null))
@@ -890,7 +886,7 @@ namespace RNAssistant.Office.Tools
             }
 
             workspace.History = NormalizeSnapshots(workspace.History);
-            workspace.RedoHistory = NormalizeSnapshots(workspace.RedoHistory);
+            workspace.RedoBranches = workspace.RedoBranches.Where(item => item != null).ToList();
 
             if (string.IsNullOrWhiteSpace(workspace.ActiveFileId) ||
                 !workspace.Files.Any(f => f != null &&
@@ -921,8 +917,6 @@ namespace RNAssistant.Office.Tools
             var normalizedPath = NormalizePath(path);
             var id = FileId(normalizedPath);
             ValidateWorkspaceCapacity(session.HtmlWorkspace, id, content, null, null);
-            PushHistory(session.HtmlWorkspace, "Before saving " + normalizedPath);
-            ClearRedoHistory(session.HtmlWorkspace);
             var now = DateTime.UtcNow;
             var file = session.HtmlWorkspace.Files.FirstOrDefault(f =>
                 f != null && string.Equals(f.Id, id, StringComparison.OrdinalIgnoreCase));
@@ -971,8 +965,6 @@ namespace RNAssistant.Office.Tools
             var normalizedName = NormalizeDataName(name);
             var id = DataSourceId(normalizedName);
             ValidateWorkspaceCapacity(session.HtmlWorkspace, null, null, id, json);
-            PushHistory(session.HtmlWorkspace, "Before saving data " + normalizedName);
-            ClearRedoHistory(session.HtmlWorkspace);
             var now = DateTime.UtcNow;
             var data = session.HtmlWorkspace.DataSources.FirstOrDefault(d =>
                 d != null && string.Equals(d.Id, id, StringComparison.OrdinalIgnoreCase));
@@ -1006,9 +998,6 @@ namespace RNAssistant.Office.Tools
             ValidatePath(path);
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
             var file = FindFile(session.HtmlWorkspace, path, true);
-            PushHistory(session.HtmlWorkspace, "Before selecting " + NormalizePath(path));
-            ClearRedoHistory(session.HtmlWorkspace);
-
             session.HtmlWorkspace.ActiveFileId = file.Id;
             session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
             HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML active file: " + file.Path);
@@ -1018,8 +1007,6 @@ namespace RNAssistant.Office.Tools
         public static HtmlWorkspaceFile DeleteFile(ChatSession session, string path)
         {
             var file = FindFile(session, path);
-            PushHistory(session.HtmlWorkspace, "Before deleting " + file.Path);
-            ClearRedoHistory(session.HtmlWorkspace);
             session.HtmlWorkspace.Files.Remove(file);
             session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
             NormalizeWorkspace(session.HtmlWorkspace);
@@ -1030,8 +1017,6 @@ namespace RNAssistant.Office.Tools
         public static HtmlWorkspaceDataSource DeleteDataSource(ChatSession session, string name)
         {
             var data = FindDataSource(session, name);
-            PushHistory(session.HtmlWorkspace, "Before deleting data " + data.Name);
-            ClearRedoHistory(session.HtmlWorkspace);
             session.HtmlWorkspace.DataSources.Remove(data);
             session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
             NormalizeWorkspace(session.HtmlWorkspace);
@@ -1070,19 +1055,27 @@ namespace RNAssistant.Office.Tools
             }
 
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
-            var snapshot = string.IsNullOrWhiteSpace(snapshotId)
-                ? session.HtmlWorkspace.RedoHistory.OrderByDescending(h => h.CreatedUtc).FirstOrDefault()
-                : session.HtmlWorkspace.RedoHistory.FirstOrDefault(h => h != null && string.Equals(h.Id, snapshotId, StringComparison.OrdinalIgnoreCase));
-            if (snapshot == null)
+            var branches = HtmlWorkspaceNavigationService.GetRedoBranches(session);
+            if (string.IsNullOrWhiteSpace(snapshotId) && branches.Count > 1)
+            {
+                throw new InvalidOperationException("HTML workspace redo has multiple branches; an explicit snapshot id is required.");
+            }
+            var branch = string.IsNullOrWhiteSpace(snapshotId)
+                ? branches.SingleOrDefault()
+                : branches.FirstOrDefault(item => string.Equals(item.Id, snapshotId, StringComparison.OrdinalIgnoreCase));
+            if (branch == null)
             {
                 throw new InvalidOperationException("HTML workspace redo snapshot was not found.");
             }
 
-            if (!HtmlWorkspaceArtifactService.Restore(session, snapshot.Id))
+            if (!HtmlWorkspaceArtifactService.Restore(session, branch.Id))
             {
                 throw new InvalidOperationException("HTML workspace artifact could not be restored.");
             }
-            return snapshot;
+            var restored = HtmlWorkspaceCopyService.CaptureSnapshot(session.HtmlWorkspace, branch.Label);
+            restored.Id = branch.Id;
+            restored.CreatedUtc = branch.CreatedUtc;
+            return restored;
         }
 
         private static string ReadWorkspaceDataJson(ChatSession session, ToolCommand command)
@@ -1274,77 +1267,6 @@ namespace RNAssistant.Office.Tools
                 .OrderByDescending(h => h.CreatedUtc)
                 .ToList();
             return HtmlWorkspaceHistoryPolicy.Trim(ordered);
-        }
-
-        private static void PushHistory(HtmlWorkspace workspace, string label)
-        {
-            workspace = NormalizeWorkspace(workspace);
-            InsertSnapshot(workspace.History, CreateSnapshot(workspace, label));
-        }
-
-        private static void ClearRedoHistory(HtmlWorkspace workspace)
-        {
-            if (workspace == null)
-            {
-                return;
-            }
-
-            workspace.RedoHistory = new List<HtmlWorkspaceSnapshot>();
-        }
-
-        private static HtmlWorkspaceSnapshot CreateSnapshot(HtmlWorkspace workspace, string label)
-        {
-            if (!HasWorkspaceContent(workspace))
-            {
-                return null;
-            }
-
-            return HtmlWorkspaceCopyService.CaptureSnapshot(
-                workspace,
-                string.IsNullOrWhiteSpace(label) ? "HTML workspace snapshot" : label);
-        }
-
-        private static void InsertSnapshot(List<HtmlWorkspaceSnapshot> snapshots, HtmlWorkspaceSnapshot snapshot)
-        {
-            if (snapshots == null || snapshot == null)
-            {
-                return;
-            }
-            if (snapshots.Count > 0 && SnapshotEquals(snapshot, snapshots[0]))
-            {
-                return;
-            }
-
-            snapshots.Insert(0, snapshot);
-            var bounded = HtmlWorkspaceHistoryPolicy.Trim(snapshots);
-            snapshots.Clear();
-            snapshots.AddRange(bounded);
-        }
-
-        private static void ApplySnapshot(HtmlWorkspace workspace, HtmlWorkspaceSnapshot snapshot)
-        {
-            workspace.Files = HtmlWorkspaceCopyService.CloneFiles(snapshot.Files);
-            workspace.DataSources = HtmlWorkspaceCopyService.CloneDataSources(snapshot.DataSources);
-            workspace.ActiveFileId = snapshot.ActiveFileId;
-        }
-
-        private static bool HasWorkspaceContent(HtmlWorkspace workspace)
-        {
-            return workspace != null &&
-                (((workspace.Files != null) && workspace.Files.Any(f => f != null)) ||
-                 ((workspace.DataSources != null) && workspace.DataSources.Any(d => d != null)));
-        }
-
-        private static bool SnapshotEquals(HtmlWorkspaceSnapshot left, HtmlWorkspaceSnapshot right)
-        {
-            if (left == null || right == null)
-            {
-                return false;
-            }
-
-            return string.Equals(left.ActiveFileId, right.ActiveFileId, StringComparison.OrdinalIgnoreCase) &&
-                JsonConvert.SerializeObject(left.Files) == JsonConvert.SerializeObject(right.Files) &&
-                JsonConvert.SerializeObject(left.DataSources) == JsonConvert.SerializeObject(right.DataSources);
         }
 
         private static void ValidateFile(string path, string kind, string content)

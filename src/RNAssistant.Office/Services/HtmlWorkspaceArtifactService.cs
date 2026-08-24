@@ -30,7 +30,7 @@ namespace RNAssistant.Office.Services
             {
                 session.ActiveHtmlArtifactId = null;
                 session.HtmlWorkspace.History = new List<HtmlWorkspaceSnapshot>();
-                session.HtmlWorkspace.RedoHistory = new List<HtmlWorkspaceSnapshot>();
+                session.HtmlWorkspace.RedoBranches = new List<HtmlWorkspaceRedoBranch>();
                 return string.Empty;
             }
             var artifact = new ChatArtifact
@@ -83,7 +83,7 @@ namespace RNAssistant.Office.Services
         {
             if (session == null || session.HtmlWorkspace == null) return;
             session.HtmlWorkspace.History = new List<HtmlWorkspaceSnapshot>();
-            session.HtmlWorkspace.RedoHistory = new List<HtmlWorkspaceSnapshot>();
+            session.HtmlWorkspace.RedoBranches = new List<HtmlWorkspaceRedoBranch>();
             var active = FindArtifact(session, session.ActiveHtmlArtifactId);
             if (active == null) return;
             var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { active.Id };
@@ -97,23 +97,7 @@ namespace RNAssistant.Office.Services
             }
             session.HtmlWorkspace.History = HtmlWorkspaceHistoryPolicy.Trim(session.HtmlWorkspace.History);
 
-            current = active;
-            while (current != null)
-            {
-                var child = (session.Artifacts ?? new List<ChatArtifact>())
-                    .Where(item => item != null &&
-                        string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase) &&
-                        string.Equals(item.ParentArtifactId, current.Id, StringComparison.OrdinalIgnoreCase) &&
-                        !visited.Contains(item.Id))
-                    .OrderByDescending(item => item.CreatedUtc)
-                    .FirstOrDefault();
-                if (child == null || !visited.Add(child.Id)) break;
-                var snapshot = ParseSnapshot(child);
-                if (snapshot == null) break;
-                session.HtmlWorkspace.RedoHistory.Add(snapshot);
-                current = child;
-            }
-            session.HtmlWorkspace.RedoHistory = HtmlWorkspaceHistoryPolicy.Trim(session.HtmlWorkspace.RedoHistory);
+            session.HtmlWorkspace.RedoBranches = HtmlWorkspaceNavigationService.GetRedoBranches(session);
         }
 
         public static string CheckpointAtOrBefore(IReadOnlyList<ChatMessage> messages, int index)

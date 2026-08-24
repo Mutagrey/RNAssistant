@@ -84,7 +84,7 @@ namespace RNAssistant.Core.Services
                 if (binding.UpdatedUtc == default(DateTime)) binding.UpdatedUtc = binding.CreatedUtc;
             }
             if (session.HtmlWorkspace.History == null) session.HtmlWorkspace.History = new List<HtmlWorkspaceSnapshot>();
-            if (session.HtmlWorkspace.RedoHistory == null) session.HtmlWorkspace.RedoHistory = new List<HtmlWorkspaceSnapshot>();
+            if (session.HtmlWorkspace.RedoBranches == null) session.HtmlWorkspace.RedoBranches = new List<HtmlWorkspaceRedoBranch>();
             if (session.HtmlWorkspace.UpdatedUtc == default(DateTime))
             {
                 session.HtmlWorkspace.UpdatedUtc = session.UpdatedUtc == default(DateTime) ? DateTime.UtcNow : session.UpdatedUtc;

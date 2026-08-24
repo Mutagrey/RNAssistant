@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
@@ -941,6 +942,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("workspace")]
         public HtmlWorkspaceDto Workspace { get; set; }
+
+        [JsonProperty("redoChoiceRequired")]
+        public bool RedoChoiceRequired { get; set; }
     }
 
     public sealed class HtmlWorkspaceDto
@@ -950,20 +954,44 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("dataSources")] public IReadOnlyList<HtmlWorkspaceDataSource> DataSources { get; set; }
         [JsonProperty("history")] public IReadOnlyList<HtmlWorkspaceSnapshotDto> History { get; set; }
         [JsonProperty("redoHistory")] public IReadOnlyList<HtmlWorkspaceSnapshotDto> RedoHistory { get; set; }
+        [JsonProperty("redoBranches")] public IReadOnlyList<HtmlWorkspaceRedoBranchDto> RedoBranches { get; set; }
         [JsonProperty("updatedUtc")] public System.DateTime UpdatedUtc { get; set; }
 
         public static HtmlWorkspaceDto From(HtmlWorkspace workspace)
         {
             workspace = workspace ?? new HtmlWorkspace();
+            var redoBranches = RedoBranchSummaries(workspace.RedoBranches);
             return new HtmlWorkspaceDto
             {
                 ActiveFileId = workspace.ActiveFileId,
                 Files = HtmlWorkspaceCopyService.CloneFiles(workspace.Files),
                 DataSources = HtmlWorkspaceCopyService.CloneDataSources(workspace.DataSources),
                 History = SnapshotSummaries(workspace.History),
-                RedoHistory = SnapshotSummaries(workspace.RedoHistory),
+                RedoHistory = redoBranches.Select(item => new HtmlWorkspaceSnapshotDto
+                {
+                    Id = item.Id,
+                    Label = item.Label,
+                    CreatedUtc = item.CreatedUtc
+                }).ToList(),
+                RedoBranches = redoBranches,
                 UpdatedUtc = workspace.UpdatedUtc
             };
+        }
+
+        private static IReadOnlyList<HtmlWorkspaceRedoBranchDto> RedoBranchSummaries(IEnumerable<HtmlWorkspaceRedoBranch> branches)
+        {
+            return (branches ?? new HtmlWorkspaceRedoBranch[0])
+                .Where(branch => branch != null)
+                .Select(branch => new HtmlWorkspaceRedoBranchDto
+                {
+                    Id = branch.Id,
+                    ParentArtifactId = branch.ParentArtifactId,
+                    Label = branch.Label,
+                    Revision = branch.Revision,
+                    FileCount = branch.FileCount,
+                    DataSourceCount = branch.DataSourceCount,
+                    CreatedUtc = branch.CreatedUtc
+                }).ToList();
         }
 
         private static IReadOnlyList<HtmlWorkspaceSnapshotDto> SnapshotSummaries(IEnumerable<HtmlWorkspaceSnapshot> snapshots)
@@ -987,6 +1015,17 @@ namespace RNAssistant.Office.Contracts
     {
         [JsonProperty("id")] public string Id { get; set; }
         [JsonProperty("label")] public string Label { get; set; }
+        [JsonProperty("createdUtc")] public System.DateTime CreatedUtc { get; set; }
+    }
+
+    public sealed class HtmlWorkspaceRedoBranchDto
+    {
+        [JsonProperty("id")] public string Id { get; set; }
+        [JsonProperty("parentArtifactId")] public string ParentArtifactId { get; set; }
+        [JsonProperty("label")] public string Label { get; set; }
+        [JsonProperty("revision")] public int Revision { get; set; }
+        [JsonProperty("fileCount")] public int? FileCount { get; set; }
+        [JsonProperty("dataSourceCount")] public int? DataSourceCount { get; set; }
         [JsonProperty("createdUtc")] public System.DateTime CreatedUtc { get; set; }
     }
 

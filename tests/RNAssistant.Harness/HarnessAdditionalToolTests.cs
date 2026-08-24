@@ -374,13 +374,13 @@ namespace RNAssistant.Harness
                 HtmlArtifactToolExecutor.UpsertFile(failedSession, "index.html", "html", "<h1>Second</h1>", true);
                 HtmlArtifactToolExecutor.RestoreSnapshot(failedSession, failedSession.HtmlWorkspace.History[0].Id);
                 var failedHistoryCount = failedSession.HtmlWorkspace.History.Count;
-                var failedRedoCount = failedSession.HtmlWorkspace.RedoHistory.Count;
+                var failedRedoCount = failedSession.HtmlWorkspace.RedoBranches.Count;
                 var missingActive = new ToolCommand { ToolId = "common.html_workspace_set_active" };
                 missingActive.Arguments["name"] = "missing.html";
                 var missingResult = executor.Execute(missingActive, tools, new AppSettings(), false, false, failedSession);
                 AssertTrue(!missingResult.Success, "missing active HTML file fails");
                 AssertEqual(failedHistoryCount, failedSession.HtmlWorkspace.History.Count, "failed set-active preserves history");
-                AssertEqual(failedRedoCount, failedSession.HtmlWorkspace.RedoHistory.Count, "failed set-active preserves redo");
+                AssertEqual(failedRedoCount, failedSession.HtmlWorkspace.RedoBranches.Count, "failed set-active preserves redo branches");
                 var missingDryRun = executor.Execute(missingActive, tools, new AppSettings(), true, false, failedSession);
                 AssertTrue(!missingDryRun.Success, "set-active dry run validates file existence");
 
@@ -432,12 +432,12 @@ namespace RNAssistant.Harness
             AssertEqual("index.html", session.HtmlWorkspace.ActiveFileId, "html undo keeps active file");
             AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "html undo keeps data");
             AssertEqual(historyCount - 1, session.HtmlWorkspace.History.Count, "html undo consumes restored version");
-            AssertEqual(1, session.HtmlWorkspace.RedoHistory.Count, "html undo creates redo version");
+            AssertEqual(1, session.HtmlWorkspace.RedoBranches.Count, "html undo exposes one redo branch");
 
-            HtmlArtifactToolExecutor.RedoSnapshot(session, session.HtmlWorkspace.RedoHistory[0].Id);
+            HtmlArtifactToolExecutor.RedoSnapshot(session, session.HtmlWorkspace.RedoBranches[0].Id);
             AssertContains(session.HtmlWorkspace.Files[0].Content, "Second", "html redo restores undone file content");
             AssertEqual("index.html", session.HtmlWorkspace.ActiveFileId, "html redo keeps active file");
-            AssertEqual(0, session.HtmlWorkspace.RedoHistory.Count, "html redo consumes redo version");
+            AssertEqual(0, session.HtmlWorkspace.RedoBranches.Count, "html redo has no direct child after moving forward");
             AssertEqual(historyCount, session.HtmlWorkspace.History.Count, "html redo restores undo history");
         }
 
@@ -474,7 +474,7 @@ namespace RNAssistant.Harness
 
             HtmlArtifactToolExecutor.RestoreSnapshot(largeSession, largeSession.HtmlWorkspace.History[0].Id);
             AssertEqual('k', largeSession.HtmlWorkspace.Files[0].Content[0], "bounded history still supports undo");
-            HtmlArtifactToolExecutor.RedoSnapshot(largeSession, largeSession.HtmlWorkspace.RedoHistory[0].Id);
+            HtmlArtifactToolExecutor.RedoSnapshot(largeSession, largeSession.HtmlWorkspace.RedoBranches[0].Id);
             AssertEqual('l', largeSession.HtmlWorkspace.Files[0].Content[0], "bounded history still supports redo");
 
             var transportSession = new ChatSession { Title = "HTML compact transport" };

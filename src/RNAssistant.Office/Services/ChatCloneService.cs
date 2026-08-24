@@ -132,9 +132,25 @@ namespace RNAssistant.Office.Services
                 Files = HtmlWorkspaceCopyService.CloneFiles(workspace.Files),
                 DataSources = HtmlWorkspaceCopyService.CloneDataSources(workspace.DataSources),
                 History = CloneSnapshots(workspace.History),
-                RedoHistory = CloneSnapshots(workspace.RedoHistory),
+                RedoBranches = CloneRedoBranches(workspace.RedoBranches),
                 UpdatedUtc = workspace.UpdatedUtc
             };
+        }
+
+        private static List<HtmlWorkspaceRedoBranch> CloneRedoBranches(IEnumerable<HtmlWorkspaceRedoBranch> branches)
+        {
+            return (branches ?? new HtmlWorkspaceRedoBranch[0])
+                .Where(branch => branch != null)
+                .Select(branch => new HtmlWorkspaceRedoBranch
+                {
+                    Id = branch.Id,
+                    ParentArtifactId = branch.ParentArtifactId,
+                    Label = branch.Label,
+                    Revision = branch.Revision,
+                    FileCount = branch.FileCount,
+                    DataSourceCount = branch.DataSourceCount,
+                    CreatedUtc = branch.CreatedUtc
+                }).ToList();
         }
 
         private static List<HtmlWorkspaceSnapshot> CloneSnapshots(IEnumerable<HtmlWorkspaceSnapshot> snapshots)
