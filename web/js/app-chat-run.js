@@ -11,6 +11,11 @@ function removeLocalMessage(text) {
 async function sendChat(text, attachments) {
   attachments = attachments || [];
   var sentChatId = state.activeChatId;
+  var knownMessageIds = {};
+  (state.messages || []).forEach(function (message) {
+    var id = message && !message.Local ? (message.Id || message.id || "") : "";
+    if (id) knownMessageIds[id] = true;
+  });
   var request = send("sendChat", {
     chatId: state.activeChatId,
     text: text,
@@ -29,8 +34,16 @@ async function sendChat(text, attachments) {
       logToolResults(response.toolResults);
     }
   } catch (error) {
+    var failedRunId = state.chatRuns[sentChatId] && state.chatRuns[sentChatId].runId
+      ? state.chatRuns[sentChatId].runId
+      : "";
+    var refreshed = await refreshChatAfterSendFailure(sentChatId);
+    var activeChatStillSelected = state.activeChatId === sentChatId;
+    var persisted = activeChatStillSelected && refreshed && (state.messages || []).some(function (message) {
+      return matchesPersistedSend(message, knownMessageIds, failedRunId, text, attachments);
+    });
     if (error.cancelled) {
-      if (state.activeChatId === sentChatId) {
+      if (activeChatStillSelected && !persisted) {
         removeLocalMessage(text);
         if (!$("chatInput").value.trim()) setChatInputText(text, false);
         state.draftAttachments = attachments.slice();
@@ -40,13 +53,25 @@ async function sendChat(text, attachments) {
         clearSendError();
       }
       renderChatSessions();
-      log("Chat request cancelled.", "warning");
+      log(persisted ? "Chat request cancelled and recorded in history." : "Chat request cancelled.", "warning");
     } else {
-      if (state.activeChatId === sentChatId) {
-        markLocalMessage(text, { Pending: false, Failed: true });
+      if (activeChatStillSelected && !persisted) {
+        if (!markLocalMessage(text, { Pending: false, Failed: true })) {
+          state.messages.push({
+            Id: "local-" + Date.now(),
+            Role: "user",
+            Content: text,
+            Attachments: attachments,
+            Local: true,
+            Pending: false,
+            Failed: true
+          });
+        }
         renderMessages();
         showSendError(error.detail || error.message, text);
         state.failedSend.attachments = attachments;
+      } else if (persisted) {
+        clearSendError();
       }
       log(error.message, "error");
       if (error.detail && error.detail !== error.message) {
@@ -64,6 +89,34 @@ async function sendChat(text, attachments) {
   }
 }
 
+function matchesPersistedSend(message, knownMessageIds, runId, text, attachments) {
+  var id = message ? (message.Id || message.id || "") : "";
+  var role = message ? (message.Role || message.role || "") : "";
+  if (!id || knownMessageIds[id] || String(role).toLowerCase() !== "user") return false;
+
+  var messageRunId = message.RunId || message.runId || "";
+  if (runId) return messageRunId === runId;
+  if (messageContent(message) !== text) return false;
+
+  var expectedIds = (attachments || []).map(attachmentId).sort();
+  var actualIds = (message.Attachments || message.attachments || []).map(attachmentId).sort();
+  return expectedIds.length === actualIds.length && expectedIds.every(function (value, index) {
+    return value === actualIds[index];
+  });
+}
+
+async function refreshChatAfterSendFailure(chatId) {
+  try {
+    var response = await send("listChats", {});
+    if (state.activeChatId === chatId) applyChatState(response);
+    else applyChatCatalogState(response);
+    return true;
+  } catch (syncError) {
+    log(syncError.detail || syncError.message, "error");
+    return false;
+  }
+}
+
 async function submitChatInput() {
   if (hasActiveMessageEdit()) {
     if (!currentActiveSend() && !state.modelSaving && !state.reasoningSaving) {
@@ -75,6 +128,9 @@ async function submitChatInput() {
     return;
   }
   if (currentActiveSend() || state.modelSaving || state.reasoningSaving) {
+    return;
+  }
+  if (typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity()) {
     return;
   }
 
@@ -96,7 +152,9 @@ async function submitChatInput() {
 }
 
 function retryFailedSend() {
-  if (currentActiveSend() || hasActiveMessageEdit() || !state.failedSend || (!state.failedSend.text && !(state.failedSend.attachments || []).length)) {
+  if (currentActiveSend() || hasActiveMessageEdit() ||
+    (typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity()) ||
+    !state.failedSend || (!state.failedSend.text && !(state.failedSend.attachments || []).length)) {
     return;
   }
 
@@ -204,6 +262,7 @@ async function confirmAgentTool(pendingId) {
     else applyChatCatalogState(response);
     log("Agent tool confirmed.");
   } catch (error) {
+    await refreshChatAfterSendFailure(chatId);
     log(error.detail || error.message, "error");
   } finally {
     delete state.activeSends[chatId];
@@ -217,6 +276,7 @@ async function cancelAgentTool(pendingId) {
     return;
   }
 
+  var chatId = state.activeChatId;
   var approvalDock = $("agentApprovalDock");
   if (approvalDock) {
     Array.prototype.slice.call(approvalDock.querySelectorAll("button")).forEach(function (button) {
@@ -224,11 +284,13 @@ async function cancelAgentTool(pendingId) {
     });
   }
   try {
-    applyChatState(await send("cancelAgentTool", { chatId: state.activeChatId, pendingId: pendingId }));
+    var response = await send("cancelAgentTool", { chatId: chatId, pendingId: pendingId });
+    if (state.activeChatId === chatId) applyChatState(response);
+    else applyChatCatalogState(response);
     log("Agent tool cancelled.", "warning");
   } catch (error) {
+    await refreshChatAfterSendFailure(chatId);
     log(error.detail || error.message, "error");
     if (typeof renderAgentApprovalDock === "function") renderAgentApprovalDock();
   }
 }
-

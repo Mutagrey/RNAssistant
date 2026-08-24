@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Storage;
 
 namespace RNAssistant.Office.Services
 {
@@ -9,18 +11,15 @@ namespace RNAssistant.Office.Services
     {
         private const string PendingActionCancelledReason = "Pending action cancelled because chat history changed.";
 
-        private readonly AttachmentStore _attachmentStore;
         private readonly Action<string> _removePendingAgentTools;
         private readonly Action<ChatSession, string> _cancelPendingActivities;
         private readonly Func<ChatSession, string, bool> _loadHtmlArtifactBody;
 
         public ChatHistoryEditService(
-            AttachmentStore attachmentStore,
             Action<string> removePendingAgentTools,
             Action<ChatSession, string> cancelPendingActivities,
             Func<ChatSession, string, bool> loadHtmlArtifactBody = null)
         {
-            _attachmentStore = attachmentStore ?? throw new ArgumentNullException(nameof(attachmentStore));
             _removePendingAgentTools = removePendingAgentTools ?? throw new ArgumentNullException(nameof(removePendingAgentTools));
             _cancelPendingActivities = cancelPendingActivities ?? throw new ArgumentNullException(nameof(cancelPendingActivities));
             _loadHtmlArtifactBody = loadHtmlArtifactBody;
@@ -71,9 +70,10 @@ namespace RNAssistant.Office.Services
                 session.ActiveHtmlArtifactId = null;
             }
 
+            var removedMessages = new List<ChatMessage>();
             for (var messageIndex = messages.Count - 1; messageIndex > targetIndex; messageIndex--)
             {
-                _attachmentStore.DeleteMessage(messages[messageIndex]);
+                removedMessages.Add(messages[messageIndex]);
                 messages.RemoveAt(messageIndex);
             }
 
@@ -88,8 +88,106 @@ namespace RNAssistant.Office.Services
             return new ChatHistoryEditResult
             {
                 Message = target,
-                Index = targetIndex
+                Index = targetIndex,
+                RemovedMessages = removedMessages
             };
+        }
+
+        internal static List<ChatMessage> SelectMessagesForDeletion(
+            IReadOnlyList<ChatMessage> messages,
+            int targetIndex)
+        {
+            if (messages == null || targetIndex < 0 || targetIndex >= messages.Count)
+            {
+                return new List<ChatMessage>();
+            }
+
+            var targetMessage = messages[targetIndex];
+            var toolCallIds = ToolProtocolMessages.Ids(targetMessage);
+            if (toolCallIds.Count == 0) return new List<ChatMessage> { targetMessage };
+
+            var first = FindExchangeStart(messages, targetIndex, toolCallIds);
+            var callIds = ToolProtocolMessages.Ids(messages[first]);
+            if (ToolProtocolMessages.IsCall(messages[first]) && callIds.Count > 0)
+            {
+                toolCallIds = callIds;
+            }
+            var last = first;
+            while (last + 1 < messages.Count &&
+                ToolProtocolMessages.IsExchange(messages[last + 1]) &&
+                !ToolProtocolMessages.IsCall(messages[last + 1]))
+            {
+                last += 1;
+            }
+
+            var result = new List<ChatMessage>();
+            for (var index = first; index <= last; index++)
+            {
+                var message = messages[index];
+                if (ReferenceEquals(message, targetMessage) || ToolProtocolMessages.Uses(message, toolCallIds))
+                {
+                    result.Add(message);
+                }
+            }
+            return result;
+        }
+
+        internal static void ExcludeUnmatchedToolCalls(IReadOnlyList<ChatMessage> messages)
+        {
+            if (messages == null) return;
+            for (var index = 0; index < messages.Count; index++)
+            {
+                var call = messages[index];
+                var ids = ToolProtocolMessages.Ids(call);
+                if (!ToolProtocolMessages.IsCall(call) ||
+                    ToolProtocolMessages.HasAllResults(messages, index, ids, messages.Count))
+                {
+                    continue;
+                }
+
+                call.ExcludeFromModelContext = true;
+                for (var resultIndex = index + 1; resultIndex < messages.Count; resultIndex++)
+                {
+                    var message = messages[resultIndex];
+                    if (!ToolProtocolMessages.IsExchange(message) || ToolProtocolMessages.IsCall(message)) break;
+                    if (ToolProtocolMessages.Uses(message, ids)) message.ExcludeFromModelContext = true;
+                }
+            }
+        }
+
+        internal static bool HasResultForLatestToolCall(
+            IReadOnlyList<ChatMessage> messages,
+            string toolCallId)
+        {
+            if (messages == null || string.IsNullOrWhiteSpace(toolCallId)) return false;
+            for (var index = messages.Count - 1; index >= 0; index--)
+            {
+                var call = messages[index];
+                var ids = ToolProtocolMessages.Ids(call);
+                if (ToolProtocolMessages.IsCall(call) && ids.Contains(toolCallId))
+                {
+                    return ToolProtocolMessages.HasAllResults(
+                        messages,
+                        index,
+                        new HashSet<string>(new[] { toolCallId }, StringComparer.Ordinal),
+                        messages.Count);
+                }
+            }
+            return false;
+        }
+
+        private static int FindExchangeStart(
+            IReadOnlyList<ChatMessage> messages,
+            int targetIndex,
+            ISet<string> toolCallIds)
+        {
+            if (ToolProtocolMessages.IsCall(messages[targetIndex])) return targetIndex;
+            for (var index = targetIndex - 1; index >= 0 && ToolProtocolMessages.IsExchange(messages[index]); index--)
+            {
+                if (!ToolProtocolMessages.IsCall(messages[index])) continue;
+                return ToolProtocolMessages.Uses(messages[index], toolCallIds) ? index : targetIndex;
+            }
+            return targetIndex;
         }
 
         private static void InvalidateContextCheckpoints(ChatSession session)
@@ -146,9 +244,103 @@ namespace RNAssistant.Office.Services
         }
     }
 
+    internal static class ToolProtocolMessages
+    {
+        public static bool IsExchange(ChatMessage message)
+        {
+            return message != null && (message.ProtocolMessage || message.Activity != null);
+        }
+
+        public static bool IsCall(ChatMessage message)
+        {
+            return message != null && message.ProtocolMessage &&
+                string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) &&
+                !IsResult(message) && Ids(message).Count > 0;
+        }
+
+        public static bool IsResult(ChatMessage message)
+        {
+            return message != null && message.ProtocolMessage &&
+                (string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase) ||
+                 (message.Content ?? string.Empty).StartsWith("TOOL_RESULT:", StringComparison.Ordinal));
+        }
+
+        public static HashSet<string> Ids(ChatMessage message)
+        {
+            var result = new HashSet<string>(StringComparer.Ordinal);
+            AddIds(message, result);
+            return result;
+        }
+
+        public static bool Uses(ChatMessage message, ISet<string> ids)
+        {
+            return IsExchange(message) && ids != null && Ids(message).Any(ids.Contains);
+        }
+
+        public static bool HasAllResults(
+            IReadOnlyList<ChatMessage> messages,
+            int callIndex,
+            ISet<string> callIds,
+            int endExclusive)
+        {
+            if (messages == null || callIds == null || callIds.Count == 0) return false;
+            var remaining = new HashSet<string>(callIds, StringComparer.Ordinal);
+            var end = Math.Min(messages.Count, Math.Max(0, endExclusive));
+            for (var index = callIndex + 1; index < end; index++)
+            {
+                var message = messages[index];
+                if (!IsExchange(message) || IsCall(message)) break;
+                if (IsResult(message)) remaining.ExceptWith(Ids(message));
+                if (remaining.Count == 0) return true;
+            }
+            return false;
+        }
+
+        public static int PreserveCompletePrefix(IReadOnlyList<ChatMessage> messages, int prefixCount)
+        {
+            var safeCount = Math.Max(0, Math.Min(prefixCount, messages == null ? 0 : messages.Count));
+            for (var index = 0; index < safeCount; index++)
+            {
+                var call = messages[index];
+                if (IsCall(call) && !HasAllResults(messages, index, Ids(call), safeCount)) return index;
+            }
+            return safeCount;
+        }
+
+        private static void AddIds(ChatMessage message, ISet<string> target)
+        {
+            if (message == null || target == null) return;
+            if (!string.IsNullOrWhiteSpace(message.ToolCallId)) target.Add(message.ToolCallId);
+            foreach (var call in message.ToolCalls ?? new List<RNAssistant.Core.Llm.LlmToolCall>())
+            {
+                if (call != null && !string.IsNullOrWhiteSpace(call.Id)) target.Add(call.Id);
+            }
+            AddIds(message.Activity, target);
+
+            var content = message.Content ?? string.Empty;
+            if (!message.ProtocolMessage || !content.StartsWith("TOOL_RESULT:", StringComparison.Ordinal)) return;
+            try
+            {
+                var id = (string)JObject.Parse(content.Substring("TOOL_RESULT:".Length).Trim())["tool_call_id"];
+                if (!string.IsNullOrWhiteSpace(id)) target.Add(id);
+            }
+            catch (JsonException)
+            {
+            }
+        }
+
+        private static void AddIds(ChatActivity activity, ISet<string> target)
+        {
+            if (activity == null || target == null) return;
+            if (!string.IsNullOrWhiteSpace(activity.ToolCallId)) target.Add(activity.ToolCallId);
+            foreach (var child in activity.Children ?? new List<ChatActivity>()) AddIds(child, target);
+        }
+    }
+
     internal sealed class ChatHistoryEditResult
     {
         public ChatMessage Message { get; set; }
         public int Index { get; set; }
+        public IReadOnlyList<ChatMessage> RemovedMessages { get; set; }
     }
 }

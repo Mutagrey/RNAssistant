@@ -1,5 +1,8 @@
+using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Storage;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
 {
@@ -21,6 +24,37 @@ namespace RNAssistant.Harness
             session.Model = " ";
             effective = ChatSettingsResolver.Resolve(settings, session);
             AssertEqual("global-model", effective.Model, "blank chat model fallback");
+        }
+
+        private static void PromptSavePreservesGlobalModel()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var global = new AppSettings { Model = "global-model", SystemPrompt = "Old prompt" };
+                var executor = new OfficeToolExecutor(
+                    adapter,
+                    new VbaBackupStore(paths),
+                    new SkillStore(paths),
+                    new ToolStore(paths),
+                    () => global,
+                    value => global = value);
+                var runtime = global.Clone();
+                runtime.Model = "per-chat-model";
+                var command = new ToolCommand { ToolId = "common.prompts_save" };
+                command.Arguments["systemPrompt"] = "New prompt";
+
+                var result = executor.Execute(
+                    command,
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    runtime,
+                    false,
+                    true);
+
+                AssertTrue(result.Success, "prompt save succeeds");
+                AssertEqual("New prompt", global.SystemPrompt, "global prompt updated");
+                AssertEqual("global-model", global.Model, "per-chat model is not copied into global settings");
+            });
         }
     }
 }

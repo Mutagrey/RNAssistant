@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
@@ -15,6 +16,11 @@ namespace RNAssistant.Office
         ContextNote CaptureSelectionContext(string mode, int maxChars);
         IEnumerable<ToolDefinition> GetBuiltInTools();
         ToolResult ExecuteTool(ToolCommand command);
+    }
+
+    public interface IOfficeDocumentExecutionGuard
+    {
+        IDisposable BeginExpectedDocument(string host, string documentKey, string runtimeDocumentKey);
     }
 
     public interface IOfficeContextProvider

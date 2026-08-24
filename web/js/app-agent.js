@@ -347,7 +347,8 @@ function appendAgentRunFooter(node, items, finalMessage) {
   var actions = document.createElement("div");
   actions.className = "message-actions";
   var last = finalMessage || items[items.length - 1];
-  var historyActionsBlocked = !!currentActiveSend() || hasActiveMessageEdit();
+  var historyActionsBlocked = !!currentActiveSend() || hasActiveMessageEdit() ||
+    (typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity());
   if (!historyActionsBlocked) {
     actions.appendChild(smallIconButton("Ответвить чат отсюда", "branch", function () {
       forkChatAtMessage(last.message, last.index);

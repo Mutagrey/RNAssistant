@@ -14,13 +14,18 @@ namespace RNAssistant.Office.Services
             long storedCharacters = 0;
             foreach (var snapshot in snapshots ?? new HtmlWorkspaceSnapshot[0])
             {
-                if (snapshot == null || result.Count >= MaxItems)
+                if (snapshot == null)
                 {
                     continue;
                 }
+                if (result.Count >= MaxItems) break;
 
                 var snapshotCharacters = EstimateContentCharacters(snapshot);
-                if (result.Count > 0 && storedCharacters + snapshotCharacters > MaxContentCharacters)
+                if (snapshotCharacters > MaxContentCharacters)
+                {
+                    break;
+                }
+                if (storedCharacters + snapshotCharacters > MaxContentCharacters)
                 {
                     break;
                 }

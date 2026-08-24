@@ -15,7 +15,8 @@ namespace RNAssistant.Office.Tools
             bool requiresConfirmation = false,
             bool agentCanRun = true,
             int riskLevel = 0,
-            string name = null)
+            string name = null,
+            string scope = "global")
         {
             return new ToolDefinition
             {
@@ -30,7 +31,8 @@ namespace RNAssistant.Office.Tools
                 MutatesLocalState = mutatesLocalState,
                 RequiresConfirmation = requiresConfirmation,
                 AgentCanRun = agentCanRun,
-                RiskLevel = riskLevel
+                RiskLevel = riskLevel,
+                Scope = scope
             };
         }
     }

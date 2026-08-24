@@ -25,7 +25,7 @@ Future changes should prefer extending the editable prompt, skill text, native-l
 
 Known trade-offs of this simpler design:
 
-- the full enabled tool catalog consumes context and can outgrow a small model window; skill bodies consume context only after `common.skills_read`;
+- the full runnable tool and enabled-skill catalogs consume context and can outgrow a small model window; the run then stops with an explicit budget diagnostic, while skill bodies consume context only after `common.skills_read`;
 - independent multi-tool calls reduce model round trips, but result-dependent calls still require another model turn;
 - strict tool schemas improve selection and validation, but their descriptions, defaults, enums, and required fields must stay synchronized with executor behavior;
 - the selected endpoint should support the configured `json_object` or `json_schema` format and result role; repeated malformed responses stop after the configured 1–20 correction attempts;

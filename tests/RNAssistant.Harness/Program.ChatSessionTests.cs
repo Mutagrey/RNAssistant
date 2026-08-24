@@ -168,6 +168,12 @@ namespace RNAssistant.Harness
                 AssertEqual("Indexed chat", store.ListHeaders()[0].Title, "broken sidecar rebuilt");
                 AssertTrue(JObject.Parse(File.ReadAllText(sidecarPath)) != null, "rebuilt sidecar is valid json");
 
+                var staleSidecar = JObject.Parse(File.ReadAllText(sidecarPath));
+                staleSidecar["Header"]["Title"] = "Stale indexed title";
+                staleSidecar["Header"]["Revision"] = Math.Max(0, session.Revision - 1);
+                File.WriteAllText(sidecarPath, staleSidecar.ToString(Formatting.Indented));
+                AssertEqual("Indexed chat", store.ListHeaders()[0].Title, "sidecar revision mismatch is rebuilt");
+
                 var root = JObject.Parse(File.ReadAllText(sessionPath));
                 root["Title"] = "Externally changed";
                 File.WriteAllText(sessionPath, root.ToString(Formatting.Indented));
@@ -182,6 +188,51 @@ namespace RNAssistant.Harness
 
                 AssertTrue(store.Delete("Word", "moved-doc", session.Id), "indexed chat deleted");
                 AssertEqual(0, store.ListHeaders().Count, "deleted chat removed from index");
+            });
+        }
+
+        private static void StaleChatRevisionIsRejected()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var store = new ChatStore(paths);
+                var created = store.Create("Excel", "revision-doc", "Revision.xlsx", "Initial");
+                var first = store.Load(created.Id);
+                var stale = store.Load(created.Id);
+
+                first.Title = "First writer";
+                store.Save(first);
+                AssertTrue(first.Revision > created.Revision, "successful save advances revision");
+
+                stale.Title = "Stale writer";
+                try
+                {
+                    store.Save(stale);
+                    throw new InvalidOperationException("stale save unexpectedly succeeded");
+                }
+                catch (ChatConcurrencyException)
+                {
+                }
+
+                var loaded = store.Load(created.Id);
+                AssertEqual("First writer", loaded.Title, "stale writer does not overwrite newer state");
+                AssertEqual(loaded.Revision, store.ListHeaders()[0].Revision, "summary revision matches chat revision");
+
+                var staleMover = store.Load(created.Id);
+                loaded.Title = "Changed before move";
+                store.Save(loaded);
+                try
+                {
+                    store.Move(staleMover, "Excel", "revision-doc-moved", "Moved.xlsx");
+                    throw new InvalidOperationException("stale move unexpectedly succeeded");
+                }
+                catch (ChatConcurrencyException)
+                {
+                }
+                AssertEqual("Changed before move", store.Load(created.Id).Title,
+                    "stale move does not delete a newer source revision");
+                AssertEqual(0, store.List("Excel", "revision-doc-moved", "Moved.xlsx").Count,
+                    "stale move does not create a destination copy");
             });
         }
 
@@ -218,15 +269,24 @@ namespace RNAssistant.Harness
                 var session = service.LoadSession(null);
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "before save" });
                 store.Save(session);
+                var otherSession = store.Create("Excel", "doc", "Harness.xlsx", "Other running chat");
 
+                var runOwned = true;
+                service.RunOwnershipProvider = id => runOwned && string.Equals(id, otherSession.Id, StringComparison.OrdinalIgnoreCase);
                 adapter.DocumentKeyValue = "saved-doc";
+                var stillRunning = service.LoadSession(null);
+                AssertEqual("doc", stillRunning.DocumentKey, "active run postpones document migration");
+                AssertEqual(2, store.List("Excel", "doc", "Harness.xlsx").Count, "all source chats remain while another chat owns a run");
+
+                runOwned = false;
                 var migrated = service.LoadSession(null);
 
                 AssertEqual(session.Id, migrated.Id, "migrated session id");
                 AssertEqual("saved-doc", migrated.DocumentKey, "migrated document key");
+                AssertEqual("saved-doc", migrated.Context.DocumentKey, "migrated chat context identity");
                 AssertEqual(1, migrated.Messages.Count, "migrated message count");
                 AssertEqual(0, store.List("Excel", "doc", "Harness.xlsx").Count, "old document sessions");
-                AssertEqual(1, store.List("Excel", "saved-doc", "Harness.xlsx").Count, "new document sessions");
+                AssertEqual(2, store.List("Excel", "saved-doc", "Harness.xlsx").Count, "new document sessions");
             });
         }
 
@@ -374,7 +434,27 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void InterruptedRunIsRecoveredAsCancelled()
+        private static void LoadingActiveChatRefreshesPersistedState()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var service = new ChatSessionService(adapter, store);
+                var session = service.LoadSession(null);
+                store.Save(session);
+                service.NotifySaved(session);
+
+                var changed = store.Load(session.Id);
+                changed.Title = "Changed in another window";
+                store.Save(changed);
+
+                AssertEqual("Changed in another window", service.LoadSession(session.Id).Title,
+                    "addressed active chat reloads its current persisted revision");
+            });
+        }
+
+        private static void InterruptedRunIsRecoveredAsUnknown()
         {
             WithTempPaths(delegate(AppDataPaths paths)
             {
@@ -389,15 +469,124 @@ namespace RNAssistant.Harness
                     Phase = "executing",
                     StartedUtc = DateTime.UtcNow
                 };
+                session.Messages.Add(new ChatMessage
+                {
+                    Role = "assistant",
+                    RunId = "earlier-run",
+                    Activity = new ChatActivity
+                    {
+                        RunId = "earlier-run",
+                        Status = "running",
+                        ExecutionStatus = "executing",
+                        PendingId = "old-pending"
+                    }
+                });
+                session.Messages.Add(new ChatMessage
+                {
+                    Role = "assistant",
+                    RunId = "old-run",
+                    Activity = new ChatActivity
+                    {
+                        RunId = "old-run",
+                        Status = "running",
+                        ExecutionStatus = "executing",
+                        PendingId = "pending"
+                    }
+                });
+                session.Messages.Add(new ChatMessage
+                {
+                    Role = "assistant",
+                    Content = "Running tool.",
+                    ProtocolMessage = true,
+                    ToolCallId = "call-without-result",
+                    CreatedUtc = session.LastRun.StartedUtc.AddMilliseconds(1),
+                    ToolCalls = new List<LlmToolCall>
+                    {
+                        new LlmToolCall { Id = "call-without-result", Name = "rna_excel_read_range" }
+                    }
+                });
                 store.Save(session);
 
-                new ChatSessionService(adapter, store).ReconcileInterruptedRuns("new-runtime");
+                var registry = new ChatRunRegistry(paths);
+                var service = new ChatSessionService(adapter, store)
+                {
+                    RunOwnershipProvider = registry.IsExternallyRunning,
+                    RunRecoveryLeaseProvider = value => registry.Start(value.Id, "recovery", value)
+                };
+                service.ReconcileInterruptedRuns("new-runtime");
 
                 var recovered = store.Load(session.Id);
-                AssertEqual("cancelled", recovered.LastRun.Status, "interrupted run status");
+                AssertTrue(!registry.IsRunning(session.Id), "recovery lease released");
+                AssertEqual("interrupted", recovered.LastRun.Status, "interrupted run status");
                 AssertTrue(recovered.Messages.Any(message =>
-                    message.Activity != null && message.Activity.ExecutionStatus == "application_restarted"),
+                    message.Activity != null && message.Activity.ExecutionStatus == "interrupted_unknown"),
+                    "uncertain running activity stored");
+                AssertTrue(recovered.Messages.Any(message =>
+                    message.Activity != null && message.Activity.PendingId == "old-pending" &&
+                    message.Activity.ExecutionStatus == "executing"),
+                    "activity from another run is not rewritten");
+                AssertTrue(recovered.Messages.Any(message =>
+                    message.Activity != null && message.Activity.Kind == "diagnostic" &&
+                    message.Activity.ExecutionStatus == "interrupted_unknown"),
                     "restart diagnostic stored");
+                AssertTrue(recovered.Messages.Any(message =>
+                    message.ToolCallId == "call-without-result" && message.ExcludeFromModelContext),
+                    "dangling native tool call excluded from replay");
+            });
+        }
+
+        private static void InterruptedRunAtSavedBoundaryPreservesProtocol()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var session = store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "Interrupted safely");
+                session.LastRun = new ChatRunRecord
+                {
+                    RunId = "safe-run",
+                    RuntimeId = "old-runtime",
+                    Status = "running",
+                    Phase = "tool_result",
+                    StartedUtc = DateTime.UtcNow
+                };
+                session.Messages.Add(new ChatMessage
+                {
+                    Role = "assistant",
+                    RunId = "safe-run",
+                    ProtocolMessage = true,
+                    ToolCallId = "safe-call",
+                    ToolCalls = new List<LlmToolCall>
+                    {
+                        new LlmToolCall { Id = "safe-call", Name = "excel.list_sheets" }
+                    }
+                });
+                session.Messages.Add(new ChatMessage
+                {
+                    Role = "user",
+                    RunId = "safe-run",
+                    ProtocolMessage = true,
+                    ToolCallId = "safe-call",
+                    Content = "TOOL_RESULT: {\"ok\":true}"
+                });
+                store.Save(session);
+
+                var registry = new ChatRunRegistry(paths);
+                var service = new ChatSessionService(adapter, store)
+                {
+                    RunOwnershipProvider = registry.IsExternallyRunning,
+                    RunRecoveryLeaseProvider = value => registry.Start(value.Id, "recovery", value)
+                };
+                service.ReconcileInterruptedRuns("new-runtime");
+
+                var recovered = store.Load(session.Id);
+                AssertTrue(recovered.Messages.Where(message => message.ProtocolMessage)
+                    .All(message => !message.ExcludeFromModelContext),
+                    "completed tool exchange remains replayable");
+                AssertTrue(recovered.Messages.Any(message =>
+                    message.Activity != null && message.Activity.Kind == "diagnostic" &&
+                    message.Activity.ExecutionStatus == "interrupted"),
+                    "safe persisted boundary is not reported as unknown effect");
             });
         }
     }

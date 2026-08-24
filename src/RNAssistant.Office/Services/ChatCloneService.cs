@@ -8,6 +8,45 @@ namespace RNAssistant.Office.Services
 {
     public static class ChatCloneService
     {
+        public static ChatSession CloneSessionSnapshot(ChatSession session)
+        {
+            if (session == null)
+            {
+                return null;
+            }
+
+            var messages = CloneMessages(session.Messages);
+            return new ChatSession
+            {
+                FormatVersion = session.FormatVersion,
+                Revision = session.Revision,
+                Id = session.Id,
+                Host = session.Host,
+                DocumentKey = session.DocumentKey,
+                DocumentTitle = session.DocumentTitle,
+                DocumentPath = session.DocumentPath,
+                Title = session.Title,
+                Model = session.Model,
+                Mode = session.Mode,
+                HtmlModeEnabled = session.HtmlModeEnabled,
+                ReasoningEnabled = session.ReasoningEnabled,
+                CreatedUtc = session.CreatedUtc,
+                UpdatedUtc = session.UpdatedUtc,
+                Context = CloneContext(session.Context),
+                LastRun = CloneRun(session.LastRun),
+                HtmlWorkspace = CloneWorkspace(session.HtmlWorkspace),
+                Messages = messages,
+                ContextCheckpoints = CloneContextCheckpoints(session.ContextCheckpoints, messages),
+                ActiveContextCheckpointId = session.ActiveContextCheckpointId,
+                Artifacts = (session.Artifacts ?? new List<ChatArtifact>())
+                    .Where(artifact => artifact != null)
+                    .Select(CloneArtifact)
+                    .ToList(),
+                ActiveHtmlArtifactId = session.ActiveHtmlArtifactId,
+                ActivePlanArtifactId = session.ActivePlanArtifactId
+            };
+        }
+
         public static DocumentContext CloneContext(DocumentContext context)
         {
             if (context == null)
@@ -62,6 +101,51 @@ namespace RNAssistant.Office.Services
         public static HtmlWorkspace CloneWorkspaceForFork(HtmlWorkspace workspace)
         {
             return HtmlWorkspaceCopyService.CloneCurrent(workspace);
+        }
+
+        private static ChatRunRecord CloneRun(ChatRunRecord run)
+        {
+            return run == null ? null : new ChatRunRecord
+            {
+                RunId = run.RunId,
+                RuntimeId = run.RuntimeId,
+                Status = run.Status,
+                Phase = run.Phase,
+                CurrentAction = run.CurrentAction,
+                DocumentRuntimeKey = run.DocumentRuntimeKey,
+                IterationsUsed = run.IterationsUsed,
+                ToolStepsUsed = run.ToolStepsUsed,
+                StartedUtc = run.StartedUtc
+            };
+        }
+
+        private static HtmlWorkspace CloneWorkspace(HtmlWorkspace workspace)
+        {
+            workspace = workspace ?? new HtmlWorkspace();
+            return new HtmlWorkspace
+            {
+                ActiveFileId = workspace.ActiveFileId,
+                Files = HtmlWorkspaceCopyService.CloneFiles(workspace.Files),
+                DataSources = HtmlWorkspaceCopyService.CloneDataSources(workspace.DataSources),
+                History = CloneSnapshots(workspace.History),
+                RedoHistory = CloneSnapshots(workspace.RedoHistory),
+                UpdatedUtc = workspace.UpdatedUtc
+            };
+        }
+
+        private static List<HtmlWorkspaceSnapshot> CloneSnapshots(IEnumerable<HtmlWorkspaceSnapshot> snapshots)
+        {
+            return (snapshots ?? new HtmlWorkspaceSnapshot[0])
+                .Where(snapshot => snapshot != null)
+                .Select(snapshot => new HtmlWorkspaceSnapshot
+                {
+                    Id = snapshot.Id,
+                    Label = snapshot.Label,
+                    ActiveFileId = snapshot.ActiveFileId,
+                    Files = HtmlWorkspaceCopyService.CloneFiles(snapshot.Files),
+                    DataSources = HtmlWorkspaceCopyService.CloneDataSources(snapshot.DataSources),
+                    CreatedUtc = snapshot.CreatedUtc
+                }).ToList();
         }
 
         private static ChatMessage CloneMessage(ChatMessage message)
@@ -178,6 +262,7 @@ namespace RNAssistant.Office.Services
                 ErrorCode = activity.ErrorCode,
                 Retryable = activity.Retryable,
                 PendingId = activity.PendingId,
+                ConfirmationCatalogSha256 = activity.ConfirmationCatalogSha256,
                 ToolId = activity.ToolId,
                 ToolCallId = activity.ToolCallId,
                 ArgumentsJson = activity.ArgumentsJson,

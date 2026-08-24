@@ -15,6 +15,10 @@ namespace RNAssistant.Office.Services
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly OfficeToolExecutor _toolExecutor;
         private readonly ToolStore _toolStore;
+        private readonly object _documentVbaCacheSync = new object();
+        private string _documentVbaCacheKey;
+        private DateTime _documentVbaCacheUtc;
+        private List<ToolDefinition> _documentVbaCache = new List<ToolDefinition>();
 
         public ToolCatalogService(IOfficeApplicationAdapter adapter, OfficeToolExecutor toolExecutor, ToolStore toolStore)
         {
@@ -58,23 +62,120 @@ namespace RNAssistant.Office.Services
 
         private void DiscoverDocumentVbaTools(IDictionary<string, ToolDefinition> result)
         {
-            if (!SupportsVbaHost()) return;
+            var matchedGlobalPackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var discovered in GetDocumentVbaTools())
+            {
+                ToolDefinition existing;
+                if (result.TryGetValue(discovered.Id, out existing))
+                {
+                    if (!existing.BuiltIn &&
+                        string.Equals(existing.Scope, "global", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(existing.Executor, "vba", StringComparison.OrdinalIgnoreCase) &&
+                        matchedGlobalPackageIds.Add(discovered.Id))
+                    {
+                        existing.InstallationStatus = PackageMatches(existing, discovered) ? "installed" : "modified_local";
+                        if (existing.InstallationStatus == "modified_local") existing.Limitations = "Document VBA components differ from the global package.";
+                        continue;
+                    }
+                    var collisionId = discovered.Id + "#document";
+                    var suffix = 2;
+                    while (result.ContainsKey(collisionId))
+                    {
+                        collisionId = discovered.Id + "#document" + suffix;
+                        suffix += 1;
+                    }
+                    discovered.Id = collisionId;
+                    discovered.Enabled = false;
+                    discovered.CapabilityStatus = "id_collision";
+                    discovered.Limitations = "Document-local tool id collides with a built-in or global tool and cannot run until renamed.";
+                }
+                discovered.InstallationStatus = "document_local";
+                result[discovered.Id] = discovered;
+            }
+        }
+
+        public void InvalidateDocumentVbaTools()
+        {
+            lock (_documentVbaCacheSync)
+            {
+                _documentVbaCacheKey = null;
+                _documentVbaCacheUtc = DateTime.MinValue;
+                _documentVbaCache.Clear();
+            }
+        }
+
+        private List<ToolDefinition> GetDocumentVbaTools()
+        {
+            if (!SupportsVbaHost()) return new List<ToolDefinition>();
+            var host = _adapter.HostName ?? string.Empty;
+            var documentKey = _adapter.DocumentKey ?? string.Empty;
+            var runtimeDocumentKey = _adapter.RuntimeDocumentKey ?? string.Empty;
+            var cacheKey = DocumentVbaCacheKey(host, documentKey, runtimeDocumentKey);
+            lock (_documentVbaCacheSync)
+            {
+                if (string.Equals(cacheKey, _documentVbaCacheKey, StringComparison.OrdinalIgnoreCase) &&
+                    DateTime.UtcNow - _documentVbaCacheUtc <= TimeSpan.FromSeconds(2))
+                {
+                    return _documentVbaCache.Select(tool => tool.Clone()).ToList();
+                }
+
+                var documentGuard = _adapter as IOfficeDocumentExecutionGuard;
+                List<ToolDefinition> loaded;
+                using (documentGuard == null
+                    ? null
+                    : documentGuard.BeginExpectedDocument(host, documentKey, runtimeDocumentKey))
+                {
+                    loaded = LoadDocumentVbaTools();
+                }
+                if (!string.Equals(cacheKey, CurrentDocumentVbaCacheKey(), StringComparison.OrdinalIgnoreCase))
+                {
+                    return new List<ToolDefinition>();
+                }
+
+                _documentVbaCache = loaded;
+                _documentVbaCacheKey = cacheKey;
+                _documentVbaCacheUtc = DateTime.UtcNow;
+                return _documentVbaCache.Select(tool => tool.Clone()).ToList();
+            }
+        }
+
+        private string CurrentDocumentVbaCacheKey()
+        {
+            return DocumentVbaCacheKey(
+                _adapter.HostName,
+                _adapter.DocumentKey,
+                _adapter.RuntimeDocumentKey);
+        }
+
+        private static string DocumentVbaCacheKey(string host, string documentKey, string runtimeDocumentKey)
+        {
+            return (host ?? string.Empty) + "|" +
+                (documentKey ?? string.Empty) + "|" +
+                (runtimeDocumentKey ?? string.Empty);
+        }
+
+        private List<ToolDefinition> LoadDocumentVbaTools()
+        {
+            var result = new List<ToolDefinition>();
             ToolResult read;
             try
             {
                 var command = new ToolCommand { ToolId = (_adapter.HostName ?? string.Empty).ToLowerInvariant() + ".vba_list_project_components_internal" };
                 read = _adapter.ExecuteTool(command);
             }
-            catch { return; }
-            if (read == null || !read.Success || string.IsNullOrWhiteSpace(read.DataJson)) return;
+            catch { return result; }
+            if (read == null || !read.Success || string.IsNullOrWhiteSpace(read.DataJson)) return result;
 
             JArray modules;
             try { modules = JObject.Parse(read.DataJson)["modules"] as JArray; }
-            catch (JsonException) { return; }
-            if (modules == null) return;
-            var moduleMap = modules.OfType<JObject>()
-                .Where(module => !string.IsNullOrWhiteSpace((string)module["name"]))
-                .ToDictionary(module => (string)module["name"], StringComparer.OrdinalIgnoreCase);
+            catch (JsonException) { return result; }
+            if (modules == null) return result;
+            var moduleMap = new Dictionary<string, JObject>(StringComparer.OrdinalIgnoreCase);
+            foreach (var module in modules.OfType<JObject>())
+            {
+                var name = (string)module["name"];
+                if (!string.IsNullOrWhiteSpace(name) && !moduleMap.ContainsKey(name)) moduleMap.Add(name, module);
+            }
             foreach (var moduleInfo in moduleMap.Values.Where(module => string.Equals((string)module["type"], "StdModule", StringComparison.OrdinalIgnoreCase)).ToList())
             {
                 var module = ReadDocumentModule(moduleMap, (string)moduleInfo["name"]);
@@ -92,24 +193,10 @@ namespace RNAssistant.Office.Services
                     discovered.CapabilityStatus = "unavailable";
                     discovered.Limitations = "One or more declared VBA components are missing or unsupported.";
                 }
-
-                ToolDefinition existing;
-                if (result.TryGetValue(discovered.Id, out existing))
-                {
-                    if (!existing.BuiltIn && string.Equals(existing.Executor, "vba", StringComparison.OrdinalIgnoreCase))
-                    {
-                        existing.InstallationStatus = PackageMatches(existing, discovered) ? "installed" : "modified_local";
-                        if (existing.InstallationStatus == "modified_local") existing.Limitations = "Document VBA components differ from the global package.";
-                        continue;
-                    }
-                    discovered.Id = discovered.Id + "#document";
-                    discovered.Enabled = false;
-                    discovered.CapabilityStatus = "id_collision";
-                    discovered.Limitations = "Document-local tool id collides with a built-in or global tool and cannot run until renamed.";
-                }
                 discovered.InstallationStatus = "document_local";
-                result[discovered.Id] = discovered;
+                result.Add(discovered);
             }
+            return result;
         }
 
         private List<VbaToolComponent> ResolveDocumentComponents(ToolDefinition tool, IDictionary<string, JObject> modules)

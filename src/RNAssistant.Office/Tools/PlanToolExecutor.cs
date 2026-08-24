@@ -22,16 +22,16 @@ namespace RNAssistant.Office.Tools
         {
             yield return ControllerToolDefinition.Create(CreateToolId, "Common",
                 "Plan: Create a new visible multi-step plan for the active chat and make it active. Use only when a visible plan materially helps the task.",
-                CreateSchema(), mutatesLocalState: true, name: "plan_create");
+                CreateSchema(), mutatesLocalState: true, name: "plan_create", scope: "session");
             yield return ControllerToolDefinition.Create(ReadToolId, "Common",
                 "Read-only: Read the latest revision of a plan by stable plan id or any artifact revision id. Omit id to read the active chat plan.",
-                ReadSchema(), name: "plan_read");
+                ReadSchema(), name: "plan_read", scope: "session");
             yield return ControllerToolDefinition.Create(UpdateToolId, "Common",
                 "Plan: Update the goal and/or replace the complete steps of an existing plan. Omitted fields are preserved and a new artifact revision is created.",
-                UpdateSchema(), mutatesLocalState: true, name: "plan_update");
+                UpdateSchema(), mutatesLocalState: true, name: "plan_update", scope: "session");
             yield return ControllerToolDefinition.Create(DeleteToolId, "Common",
                 "Plan: Delete every stored revision of one plan from the active chat.",
-                DeleteSchema(), mutatesLocalState: true, riskLevel: 1, name: "plan_delete");
+                DeleteSchema(), mutatesLocalState: true, riskLevel: 1, name: "plan_delete", scope: "session");
         }
 
         public ToolResult ExecuteControllerTool(ToolCommand command, ChatSession session, bool dryRun)

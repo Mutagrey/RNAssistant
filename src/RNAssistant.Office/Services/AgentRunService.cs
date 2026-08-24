@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
@@ -17,6 +19,7 @@ namespace RNAssistant.Office.Services
         public string AssistantText { get; set; }
         public IReadOnlyList<object> ToolResults { get; set; }
         public object ContextUsage { get; set; }
+        public bool WaitingForConfirmation { get; set; }
     }
 
     public sealed class AgentRunService
@@ -109,10 +112,13 @@ namespace RNAssistant.Office.Services
             Action<string, string, ChatActivity> progress,
             PendingToolRegistrar pendingToolRegistrar = null,
             IReadOnlyList<SkillDefinition> skills = null,
-            CancellationToken cancellationToken = default(CancellationToken))
+            CancellationToken cancellationToken = default(CancellationToken),
+            int initialIterationsUsed = 0,
+            int initialToolStepsUsed = 0)
         {
             return RunLoopAsync(LatestUserRequest(session), session, documentContext, settings, tools, attachments,
-                progress, pendingToolRegistrar, skills, confirmedCommand, confirmedResult, cancellationToken);
+                progress, pendingToolRegistrar, skills, confirmedCommand, confirmedResult, cancellationToken,
+                initialIterationsUsed, initialToolStepsUsed);
         }
 
         private async Task<ChatTurnResult> RunLoopAsync(
@@ -127,15 +133,18 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<SkillDefinition> skills,
             ToolCommand initialCommand,
             ToolResult initialResult,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            int initialIterationsUsed = 0,
+            int initialToolStepsUsed = 0)
         {
             settings = settings ?? new AppSettings();
-            var availableTools = PrepareTools(tools);
+            var availableTools = PrepareToolsForRun(tools);
             var enabledSkills = (skills ?? new SkillDefinition[0]).Where(skill => skill != null && skill.Enabled).ToList();
             var messages = await BuildMessagesAsync(text, session, documentContext, settings, availableTools,
                 enabledSkills, attachments, initialCommand != null && initialResult != null, progress, cancellationToken).ConfigureAwait(false);
             var results = new List<object>();
-            var toolSteps = 0;
+            var toolSteps = Math.Max(0, initialToolStepsUsed);
+            var iterationsUsed = Math.Max(0, initialIterationsUsed);
             object contextUsage = null;
             var runCache = new LlmRunCache();
             var responseMode = AgentResponseModes.Normalize(settings.AgentResponseMode);
@@ -146,12 +155,16 @@ namespace RNAssistant.Office.Services
                 session.Messages.Add(confirmed);
                 messages.Add(confirmed);
                 results.Add(AgentTranscript.DescribeResult(initialCommand, initialResult));
-                toolSteps += Math.Max(1, initialResult.ToolStepsConsumed);
+                var confirmedCost = Math.Max(1, initialResult.ToolStepsConsumed);
+                toolSteps += initialToolStepsUsed > 0 ? Math.Max(0, confirmedCost - 1) : confirmedCost;
+                UpdateRunCursor(session, iterationsUsed, toolSteps, "running", "executing");
             }
 
-            for (var iteration = 0; iteration < Math.Max(1, settings.MaxAgentIterations); iteration++)
+            for (; iterationsUsed < Math.Max(1, settings.MaxAgentIterations);)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                iterationsUsed += 1;
+                UpdateRunCursor(session, iterationsUsed, toolSteps, "running", "thinking");
                 Report(progress, "thinking", "Агент выбирает следующий шаг...", null);
                 var options = BuildAgentRequestOptions(responseMode, availableTools, session, runCache);
                 string budgetError;
@@ -182,7 +195,15 @@ namespace RNAssistant.Office.Services
                 }
                 contextUsage = ContextUsageEstimator.FromPrompt(messages, settings,
                     completion == null ? null : completion.PromptTokens, options);
-                var parsed = _responseParser.Parse(completion == null ? null : completion.Content, availableTools);
+                string refusal;
+                if (TryGetRefusal(completion, out refusal))
+                {
+                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(refusal, completion));
+                    return Result(refusal, results, contextUsage, false);
+                }
+                var parsed = _responseParser.Parse(
+                    completion == null ? null : completion.Content,
+                    availableTools);
                 var configuredFormatRetries = settings.MaxAgentFormatRetries > 0
                     ? settings.MaxAgentFormatRetries
                     : new AppSettings().MaxAgentFormatRetries;
@@ -204,7 +225,14 @@ namespace RNAssistant.Office.Services
                     completion = await CompleteAsync(settings, repairMessages, options, progress, cancellationToken).ConfigureAwait(false);
                     contextUsage = ContextUsageEstimator.FromPrompt(repairMessages, settings,
                         completion == null ? null : completion.PromptTokens, options);
-                    parsed = _responseParser.Parse(completion == null ? null : completion.Content, availableTools);
+                    if (TryGetRefusal(completion, out refusal))
+                    {
+                        session.Messages.Add(AgentTranscript.CreateAssistantMessage(refusal, completion));
+                        return Result(refusal, results, contextUsage, false);
+                    }
+                    parsed = _responseParser.Parse(
+                        completion == null ? null : completion.Content,
+                        availableTools);
                 }
                 if (!parsed.Success)
                 {
@@ -217,7 +245,7 @@ namespace RNAssistant.Office.Services
                 {
                     var finalText = response.Message.Trim();
                     session.Messages.Add(AgentTranscript.CreateAssistantMessage(finalText, completion));
-                    return Result(finalText, results, contextUsage);
+                    return Result(finalText, results, contextUsage, false);
                 }
 
                 var stepId = Guid.NewGuid().ToString("N");
@@ -246,10 +274,18 @@ namespace RNAssistant.Office.Services
                     session.Messages.Add(callMessage);
                     messages.Add(callMessage);
 
+                    var activityMessage = new ChatMessage
+                    {
+                        Role = "assistant",
+                        Content = string.Empty,
+                        ExcludeFromModelContext = true,
+                        HtmlWorkspaceCheckpointId = session.ActiveHtmlArtifactId,
+                        Activity = AgentTranscript.CreateRunningToolActivity(command, stepId, stepMessage)
+                    };
+                    session.Messages.Add(activityMessage);
                     Report(progress, "tool_running",
                         string.IsNullOrWhiteSpace(stepMessage) ? "Выполняю действие" : stepMessage,
-                        AgentTranscript.CreateRunningToolActivity(
-                            command, stepId, stepMessage));
+                        activityMessage.Activity);
 
                     ToolResult toolResult;
                     if (toolSteps >= Math.Max(1, settings.MaxAgentToolSteps))
@@ -270,8 +306,12 @@ namespace RNAssistant.Office.Services
                             cancellationToken) ?? ToolResult.Fail("Tool returned no result.", null, "missing_result", true);
                     }
                     toolSteps += Math.Max(1, toolResult.ToolStepsConsumed);
+                    UpdateRunCursor(session, iterationsUsed, toolSteps, "running", "tool_result");
                     if (AgentTranscript.IsWaitingResult(toolResult) && pendingToolRegistrar != null)
                     {
+                        toolResult.ConfirmationCatalogSha256 = ToolExecutionFingerprint(
+                            availableTools,
+                            command.ToolId);
                         toolResult.PendingId = pendingToolRegistrar(session, command, toolResult);
                     }
 
@@ -281,17 +321,21 @@ namespace RNAssistant.Office.Services
                         session.Messages.Add(resultMessage);
                         messages.Add(resultMessage);
                     }
-                    var activityMessage = AgentTranscript.CreateLocalResultMessage(command, toolResult, stepId, stepMessage);
+                    var completedActivityMessage = AgentTranscript.CreateLocalResultMessage(command, toolResult, stepId, stepMessage);
+                    activityMessage.Content = completedActivityMessage.Content;
+                    activityMessage.Activity = completedActivityMessage.Activity;
                     activityMessage.HtmlWorkspaceCheckpointId = session.ActiveHtmlArtifactId;
-                    session.Messages.Add(activityMessage);
                     results.Add(AgentTranscript.DescribeResult(command, toolResult));
-                    Report(progress, "tool_result", toolResult.Message, activityMessage.Activity);
 
                     if (AgentTranscript.IsWaitingResult(toolResult))
                     {
                         var waitingText = string.IsNullOrWhiteSpace(response.Message) ? toolResult.Message : response.Message.Trim();
-                        return Result(waitingText, results, contextUsage);
+                        UpdateRunCursor(session, iterationsUsed, toolSteps,
+                            "waiting_confirmation", "waiting_confirmation");
+                        Report(progress, "tool_result", toolResult.Message, activityMessage.Activity);
+                        return Result(waitingText, results, contextUsage, true);
                     }
+                    Report(progress, "tool_result", toolResult.Message, activityMessage.Activity);
                     if (string.Equals(toolResult.ErrorCode, "tool_step_limit_reached", StringComparison.OrdinalIgnoreCase))
                     {
                         break;
@@ -301,7 +345,7 @@ namespace RNAssistant.Office.Services
 
             var limitText = "Агент остановлен: достигнут лимит шагов.";
             session.Messages.Add(AgentTranscript.CreateAssistantMessage(limitText, null));
-            return Result(limitText, results, contextUsage);
+            return Result(limitText, results, contextUsage, false);
         }
 
         private static LlmRequestOptions BuildAgentRequestOptions(
@@ -379,10 +423,12 @@ namespace RNAssistant.Office.Services
             return completion;
         }
 
-        private static List<ToolDefinition> PrepareTools(IEnumerable<ToolDefinition> tools)
+        internal static List<ToolDefinition> PrepareToolsForRun(IEnumerable<ToolDefinition> tools)
         {
             var source = (tools ?? new ToolDefinition[0])
-                .Where(tool => tool != null && tool.Enabled && !string.IsNullOrWhiteSpace(tool.Id))
+                .Where(tool => tool != null && tool.Enabled && ValidToolId(tool.Id))
+                .OrderByDescending(tool => tool.BuiltIn)
+                .ThenBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
                 .GroupBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
                 .Select(group => group.First().Clone())
                 .ToList();
@@ -404,7 +450,108 @@ namespace RNAssistant.Office.Services
                 tool.RiskLevel = profile.RiskLevel;
                 result.Add(tool);
             }
+            RemovePipelinesWithOmittedDependencies(result);
             return result.OrderBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        internal static string ToolExecutionFingerprint(IEnumerable<ToolDefinition> tools, string rootToolId)
+        {
+            var catalog = (tools ?? new ToolDefinition[0])
+                .Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))
+                .GroupBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+            var selected = new List<ToolDefinition>();
+            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var pending = new Stack<string>();
+            pending.Push(rootToolId ?? string.Empty);
+            while (pending.Count > 0)
+            {
+                var id = pending.Pop();
+                ToolDefinition tool;
+                if (!visited.Add(id)) continue;
+                if (!catalog.TryGetValue(id, out tool)) return string.Empty;
+                selected.Add(tool);
+                if (!string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase)) continue;
+
+                PipelineDefinition pipeline;
+                string error;
+                if (!PipelineDefinitionParser.TryParse(tool.Id, tool.PipelineJson, out pipeline, out error))
+                {
+                    return string.Empty;
+                }
+                foreach (var step in pipeline.Steps) pending.Push(step.ToolId);
+            }
+
+            var canonical = selected
+                .OrderBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
+                .Select(tool => new
+                {
+                    tool.Id,
+                    tool.BuiltIn,
+                    tool.Scope,
+                    tool.ArgumentSchemaJson,
+                    tool.Executor,
+                    tool.PipelineJson,
+                    codeSha256 = Sha256Text(tool.Code),
+                    tool.EntryPoint,
+                    argumentOrder = tool.ArgumentOrder ?? new List<string>(),
+                    components = (tool.Components ?? new List<VbaToolComponent>())
+                        .Where(component => component != null)
+                        .Select(component => new
+                        {
+                            component.Name,
+                            component.Type,
+                            codeSha256 = Sha256Text(component.Code)
+                        }),
+                    tool.Enabled,
+                    tool.AgentCanRun,
+                    tool.MutatesDocument,
+                    tool.MutatesLocalState,
+                    tool.RequiresConfirmation,
+                    tool.RiskLevel,
+                    tool.CapabilityStatus
+                })
+                .ToList();
+            var json = JsonConvert.SerializeObject(canonical, Formatting.None);
+            return Sha256Text(json);
+        }
+
+        private static string Sha256Text(string value)
+        {
+            using (var sha = SHA256.Create())
+            {
+                return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(value ?? string.Empty)))
+                    .Replace("-", string.Empty)
+                    .ToLowerInvariant();
+            }
+        }
+
+        private static void RemovePipelinesWithOmittedDependencies(List<ToolDefinition> tools)
+        {
+            var changed = true;
+            while (changed)
+            {
+                changed = false;
+                var ids = new HashSet<string>(tools.Select(tool => tool.Id), StringComparer.OrdinalIgnoreCase);
+                for (var index = tools.Count - 1; index >= 0; index--)
+                {
+                    var tool = tools[index];
+                    if (!string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase)) continue;
+                    PipelineDefinition pipeline;
+                    string error;
+                    if (!PipelineDefinitionParser.TryParse(tool.Id, tool.PipelineJson, out pipeline, out error) ||
+                        pipeline.Steps.Any(step => !ids.Contains(step.ToolId)))
+                    {
+                        tools.RemoveAt(index);
+                        changed = true;
+                    }
+                }
+            }
+        }
+
+        private static bool ValidToolId(string id)
+        {
+            return !string.IsNullOrWhiteSpace(id) && !id.Any(char.IsWhiteSpace);
         }
 
         private static ChatTurnResult FinishWithDiagnostic(
@@ -424,17 +571,43 @@ namespace RNAssistant.Office.Services
                 ResultMessage = text
             };
             session.Messages.Add(AgentTranscript.CreateAssistantMessage(text, null, activity));
-            return Result(text, results, contextUsage);
+            return Result(text, results, contextUsage, false);
         }
 
-        private static ChatTurnResult Result(string text, IReadOnlyList<object> results, object contextUsage)
+        private static ChatTurnResult Result(
+            string text,
+            IReadOnlyList<object> results,
+            object contextUsage,
+            bool waitingForConfirmation)
         {
             return new ChatTurnResult
             {
                 AssistantText = text ?? string.Empty,
                 ToolResults = results ?? new object[0],
-                ContextUsage = contextUsage
+                ContextUsage = contextUsage,
+                WaitingForConfirmation = waitingForConfirmation
             };
+        }
+
+        private static void UpdateRunCursor(
+            ChatSession session,
+            int iterationsUsed,
+            int toolStepsUsed,
+            string status,
+            string phase)
+        {
+            if (session == null || session.LastRun == null) return;
+            session.LastRun.IterationsUsed = Math.Max(0, iterationsUsed);
+            session.LastRun.ToolStepsUsed = Math.Max(0, toolStepsUsed);
+            if (!string.IsNullOrWhiteSpace(status)) session.LastRun.Status = status;
+            if (!string.IsNullOrWhiteSpace(phase)) session.LastRun.Phase = phase;
+        }
+
+        private static bool TryGetRefusal(LlmCompletionResult completion, out string refusal)
+        {
+            refusal = completion == null ? string.Empty : completion.RefusalContent ?? string.Empty;
+            return string.IsNullOrWhiteSpace(completion == null ? null : completion.Content) &&
+                !string.IsNullOrWhiteSpace(refusal);
         }
 
         private static ChatMessage CreateBoundedToolResultMessage(
@@ -446,7 +619,11 @@ namespace RNAssistant.Office.Services
             var inputBudget = ModelContextBudget.InputBudgetTokens(settings);
             var used = ModelContextBudget.EstimateMessagesTokens(messages);
             var availableForData = Math.Max(0, inputBudget - used - ToolResultEnvelopeReserveTokens);
-            var maxDataTokens = Math.Min(AgentJsonProtocol.DefaultMaxToolResultDataTokens, availableForData);
+            var toolId = command == null ? null : command.ToolId;
+            var maxDataTokens = string.Equals(toolId, "common.skills_read", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, HtmlArtifactToolExecutor.ReadWorkspaceToolId, StringComparison.OrdinalIgnoreCase)
+                    ? availableForData
+                    : Math.Min(AgentJsonProtocol.DefaultMaxToolResultDataTokens, availableForData);
             return AgentJsonProtocol.CreateToolResultMessage(command, result, maxDataTokens, settings.ToolResultRole);
         }
 

@@ -30,7 +30,6 @@ namespace RNAssistant.Harness
                 var pendingRemoved = false;
                 var pendingCancelled = false;
                 var service = new ChatHistoryEditService(
-                    attachmentStore,
                     delegate(string id)
                     {
                         pendingRemoved = string.Equals(id, sessionId, StringComparison.OrdinalIgnoreCase);
@@ -137,7 +136,10 @@ namespace RNAssistant.Harness
                 AssertEqual("Второй вопрос после правки", target.Content, "edited message text stored");
                 AssertEqual(1, target.Attachments.Count, "edited message attachments preserved");
                 AssertTrue(File.Exists(targetPath), "edited attachment file still exists");
-                AssertTrue(!File.Exists(tailPath), "tail attachment file removed");
+                AssertTrue(File.Exists(tailPath), "tail attachment retained until rewritten history is durable");
+                AssertTrue(result.RemovedMessages.Contains(tail), "removed tail is returned for post-save cleanup");
+                foreach (var removed in result.RemovedMessages) attachmentStore.DeleteMessage(removed);
+                AssertTrue(!File.Exists(tailPath), "tail attachment file removed after durable-save cleanup");
                 AssertTrue(session.Messages.All(message => message == null || message.Content != "Третий вопрос"), "tail user turn removed");
                 AssertTrue(target.PromptTokens == null && target.CompletionTokens == null && target.TotalTokens == null, "edited usage cleared");
                 AssertTrue(target.UsageJson == null && target.ReasoningContent == null && target.ReasoningTokens == null, "edited reasoning cleared");
@@ -223,7 +225,7 @@ namespace RNAssistant.Harness
                     Content = "<h1>Later state</h1>"
                 });
 
-                var service = new ChatHistoryEditService(new AttachmentStore(paths), delegate { }, delegate { });
+                var service = new ChatHistoryEditService(delegate { }, delegate { });
                 service.RewriteUserMessage(session, session.Id, user.Id, -1, "Сделай иначе");
 
                 AssertEqual(0, session.HtmlWorkspace.Files.Count, "unversioned future html is not retained after edit");
@@ -236,7 +238,6 @@ namespace RNAssistant.Harness
             WithTempPaths(delegate(AppDataPaths paths)
             {
                 var service = new ChatHistoryEditService(
-                    new AttachmentStore(paths),
                     delegate { },
                     delegate { });
                 var session = new ChatSession();
@@ -276,34 +277,53 @@ namespace RNAssistant.Harness
 
         private static void ChatRunLeaseSerializesHistoryMutations()
         {
-            var registry = new ChatRunRegistry();
-            var session = new ChatSession();
-            var lease = registry.Start("chat-1", "run-1", session);
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var registry = new ChatRunRegistry(paths);
+                var secondRegistry = new ChatRunRegistry(paths);
+                var session = new ChatSession { Title = "Before run" };
+                var lease = registry.Start("chat-1", "run-1", session);
+                session.Title = "Mutated live object";
 
-            AssertTrue(registry.IsRunning("chat-1"), "run registered");
-            try
-            {
-                registry.Start("chat-1", "history-edit", session);
-                throw new InvalidOperationException("parallel history edit unexpectedly acquired a lease");
-            }
-            catch (InvalidOperationException ex)
-            {
-                if (ex.Message.IndexOf("unexpectedly", StringComparison.OrdinalIgnoreCase) >= 0)
+                AssertTrue(registry.IsRunning("chat-1"), "run registered");
+                AssertTrue(secondRegistry.IsExternallyRunning("chat-1"), "cross-registry lock is visible");
+                AssertTrue(secondRegistry.HasExternalRuns(), "maintenance detects a run in another registry");
+                AssertEqual("Before run", registry.Get("chat-1").Session.Title, "run snapshot is immutable");
+                var exposedSnapshot = registry.Get("chat-1");
+                exposedSnapshot.Session.Title = "Mutated returned snapshot";
+                AssertEqual("Before run", registry.Get("chat-1").Session.Title, "returned snapshot cannot mutate registry state");
+                try
                 {
-                    throw;
+                    secondRegistry.Start("chat-1", "history-edit", session);
+                    throw new InvalidOperationException("parallel history edit unexpectedly acquired a lease");
                 }
-                AssertContains(ex.Message, "уже выполняется", "history edit rejected while run is active");
-            }
+                catch (InvalidOperationException ex)
+                {
+                    if (ex.Message.IndexOf("unexpectedly", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        throw;
+                    }
+                    AssertContains(ex.Message, "другом окне", "history edit rejected across registries");
+                }
 
-            lease.Dispose();
-            lease.Dispose();
-            AssertTrue(!registry.IsRunning("chat-1"), "idempotent lease release removes run");
+                lease.Dispose();
+                lease.Dispose();
+                AssertTrue(!registry.IsRunning("chat-1"), "idempotent lease release removes run");
+                AssertTrue(!secondRegistry.IsExternallyRunning("chat-1"), "cross-registry lock is released");
+                AssertTrue(!secondRegistry.HasExternalRuns(), "maintenance sees no run after release");
 
-            using (registry.Start("chat-1", "history-edit", session))
-            {
-                AssertTrue(registry.IsRunning("chat-1"), "chat can be reserved after release");
-            }
-            AssertTrue(!registry.IsRunning("chat-1"), "history lease released");
+                using (registry.ReserveMaintenance())
+                using (registry.ReserveMaintenance())
+                {
+                    AssertTrue(!registry.HasRuns(), "maintenance lock is reentrant for composed operations");
+                }
+
+                using (secondRegistry.Start("chat-1", "history-edit", session))
+                {
+                    AssertTrue(secondRegistry.IsRunning("chat-1"), "chat can be reserved after release");
+                }
+                AssertTrue(!secondRegistry.IsRunning("chat-1"), "history lease released");
+            });
         }
 
         private static void ConfirmedToolRunLeaseRejectsDuplicateAndSupportsCancellation()
@@ -338,10 +358,121 @@ namespace RNAssistant.Harness
 
             var shutdownCancellation = new CancellationTokenSource();
             var shutdownLease = registry.Start("chat-shutdown", "run-shutdown", session, shutdownCancellation);
-            registry.Clear();
+            registry.CancelAll();
             AssertTrue(shutdownCancellation.IsCancellationRequested, "runtime shutdown cancels active run");
-            AssertTrue(!registry.IsRunning("chat-shutdown"), "runtime shutdown clears run registry");
+            AssertTrue(registry.IsRunning("chat-shutdown"), "runtime shutdown keeps lease until run exits");
             shutdownLease.Dispose();
+            AssertTrue(!registry.IsRunning("chat-shutdown"), "cancelled run releases lease on exit");
+        }
+
+        private static void ToolExchangeDeletionIsScoped()
+        {
+            var firstCall = new ChatMessage
+            {
+                Role = "assistant",
+                ProtocolMessage = true,
+                ToolCallId = "call_1",
+                ToolCalls = new List<LlmToolCall> { new LlmToolCall { Id = "call_1", Name = "excel.list_sheets" } }
+            };
+            var firstResult = new ChatMessage
+            {
+                Role = "developer",
+                ProtocolMessage = true,
+                Content = "TOOL_RESULT:\n{\"tool_call_id\":\"call_1\"}"
+            };
+            var secondCall = new ChatMessage
+            {
+                Role = "assistant",
+                ProtocolMessage = true,
+                ToolCallId = "call_1",
+                ToolCalls = new List<LlmToolCall> { new LlmToolCall { Id = "call_1", Name = "excel.list_sheets" } }
+            };
+            var secondActivity = new ChatMessage
+            {
+                Role = "assistant",
+                Activity = new ChatActivity { ToolCallId = "call_1", Kind = "tool" }
+            };
+            var secondResult = new ChatMessage
+            {
+                Role = "developer",
+                ProtocolMessage = true,
+                Content = "TOOL_RESULT:\n{\"tool_call_id\":\"call_1\"}"
+            };
+            var messages = new List<ChatMessage>
+            {
+                new ChatMessage { Role = "user", Content = "First" },
+                firstCall,
+                firstResult,
+                secondCall,
+                secondActivity,
+                secondResult,
+                new ChatMessage { Role = "assistant", Content = "Second done" }
+            };
+
+            var selected = ChatHistoryEditService.SelectMessagesForDeletion(messages, 4);
+            AssertEqual(3, selected.Count, "one contiguous tool exchange selected");
+            AssertTrue(selected.Contains(secondCall) && selected.Contains(secondActivity) && selected.Contains(secondResult),
+                "selected exchange is complete");
+            AssertTrue(!selected.Contains(firstCall) && !selected.Contains(firstResult),
+                "reused call id in the same run is preserved");
+
+            var danglingCall = new ChatMessage
+            {
+                Role = "assistant",
+                ProtocolMessage = true,
+                ToolCallId = "call_1",
+                ToolCalls = new List<LlmToolCall> { new LlmToolCall { Id = "call_1", Name = "excel.list_sheets" } }
+            };
+            messages.Insert(messages.Count - 1, danglingCall);
+            ChatHistoryEditService.ExcludeUnmatchedToolCalls(messages);
+            AssertTrue(!firstCall.ExcludeFromModelContext && !secondCall.ExcludeFromModelContext,
+                "completed calls remain replayable");
+            AssertTrue(danglingCall.ExcludeFromModelContext,
+                "later reused id cannot borrow an earlier result");
+            AssertTrue(!ChatHistoryEditService.HasResultForLatestToolCall(messages, "call_1"),
+                "latest reused id is reported as unmatched");
+
+            var multiCall = new ChatMessage
+            {
+                Role = "assistant",
+                ProtocolMessage = true,
+                ToolCalls = new List<LlmToolCall>
+                {
+                    new LlmToolCall { Id = "multi_1", Name = "excel.list_sheets" },
+                    new LlmToolCall { Id = "multi_2", Name = "excel.list_sheets" }
+                }
+            };
+            var multiResult1 = new ChatMessage
+            {
+                Role = "tool",
+                ProtocolMessage = true,
+                ToolCallId = "multi_1",
+                Content = "{}"
+            };
+            var incompleteMulti = new List<ChatMessage> { multiCall, multiResult1 };
+            ChatHistoryEditService.ExcludeUnmatchedToolCalls(incompleteMulti);
+            AssertTrue(multiCall.ExcludeFromModelContext && multiResult1.ExcludeFromModelContext,
+                "partial multi-call exchange is excluded as one unit");
+            AssertTrue(!ChatHistoryEditService.HasResultForLatestToolCall(incompleteMulti, "multi_2"),
+                "result matching is exact for multi-call envelopes");
+
+            var completeCall = new ChatMessage
+            {
+                Role = "assistant",
+                ProtocolMessage = true,
+                ToolCalls = new List<LlmToolCall>
+                {
+                    new LlmToolCall { Id = "complete_1", Name = "excel.list_sheets" },
+                    new LlmToolCall { Id = "complete_2", Name = "excel.list_sheets" }
+                }
+            };
+            var completeResult1 = new ChatMessage { Role = "tool", ProtocolMessage = true, ToolCallId = "complete_1" };
+            var completeResult2 = new ChatMessage { Role = "tool", ProtocolMessage = true, ToolCallId = "complete_2" };
+            var completeMulti = new List<ChatMessage> { completeCall, completeResult1, completeResult2 };
+            var completeSelection = ChatHistoryEditService.SelectMessagesForDeletion(completeMulti, 1);
+            AssertEqual(3, completeSelection.Count, "deleting one multi-call result selects the full envelope");
+            AssertTrue(ChatHistoryEditService.HasResultForLatestToolCall(completeMulti, "complete_2"),
+                "completed multi-call result is matched by exact id");
         }
 
         private static string AbsoluteAttachmentPath(AppDataPaths paths, ChatAttachment attachment)

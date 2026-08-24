@@ -174,7 +174,6 @@ namespace RNAssistant.Harness
                 AssertTrue(!string.IsNullOrWhiteSpace(loaded.Artifacts.Single(artifact => artifact.Id == afterId).InlineText),
                     "active edit body starts hydrated");
                 var service = new ChatHistoryEditService(
-                    new AttachmentStore(paths),
                     delegate { },
                     delegate { },
                     store.LoadHtmlArtifactBody);

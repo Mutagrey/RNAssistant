@@ -111,6 +111,8 @@ namespace RNAssistant.Office.Services
             return new ChatMessage
             {
                 Role = normalizedRole,
+                ToolCallId = command == null ? string.Empty : command.ToolCallId ?? string.Empty,
+                ToolName = command == null ? string.Empty : command.ToolId ?? string.Empty,
                 ToolResultRole = normalizedRole,
                 Content = "TOOL_RESULT:\n" + resultJson,
                 ProtocolMessage = true

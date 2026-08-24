@@ -69,6 +69,15 @@ namespace RNAssistant.Harness
                 var invalidHost = valid.Clone();
                 invalidHost.Host = "UnknownOffice";
                 AssertEqual("invalid_tool_host", executor.ValidateToolDefinition(invalidHost).ErrorCode, "unknown tool host rejected");
+                var oversizedCatalogEntry = valid.Clone();
+                oversizedCatalogEntry.AgentCanRun = true;
+                oversizedCatalogEntry.Description = new string('x', 7000);
+                AssertTrue(executor.ValidateToolDefinition(oversizedCatalogEntry).Success,
+                    "storage validation does not duplicate runtime prompt budgeting");
+                AssertTrue(AgentRunService.PrepareToolsForRun(
+                        adapter.GetBuiltInTools().Concat(new[] { oversizedCatalogEntry }))
+                    .Any(tool => string.Equals(tool.Id, oversizedCatalogEntry.Id, StringComparison.OrdinalIgnoreCase)),
+                    "valid catalog entry remains runnable and the complete prompt budget decides whether the request fits");
                 store.SaveOne(valid);
                 var loaded = store.Load().First(t => string.Equals(t.Id, valid.Id, StringComparison.OrdinalIgnoreCase));
                 AssertTrue(loaded.MutatesDocument, "mutation metadata preserved");
@@ -381,7 +390,7 @@ namespace RNAssistant.Harness
                 var updated = executor.Execute(update, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(updated.Success, "partial skill update succeeds");
 
-                var read = executor.Execute(Command("common.skills_read", "id", "excel.review_style"), tools, new AppSettings(), false, false);
+                var read = executor.Execute(Command("common.skills_read", "id", "excel.review_style"), tools, new AppSettings(), false, true);
                 AssertTrue(read.Success, "skill read succeeds");
                 AssertContains(read.DataJson, "Review workbook formatting consistently", "skill description updated");
                 AssertContains(read.DataJson, "Preserve workbook conventions", "omitted skill body preserved");
@@ -389,6 +398,82 @@ namespace RNAssistant.Harness
 
                 var deleted = executor.Execute(Command("common.skills_delete", "id", "excel.review_style"), tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(deleted.Success, "skill delete succeeds");
+            });
+        }
+
+        private static void SkillIdsDoNotCollideAndDisabledReadsFail()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var store = new SkillStore(paths);
+                store.Save(new[]
+                {
+                    new SkillDefinition
+                    {
+                        Id = "common.a.b",
+                        Host = "Common",
+                        Name = "Dot id",
+                        Description = "Enabled skill.",
+                        BodyMarkdown = "DOT_SKILL",
+                        Enabled = true
+                    },
+                    new SkillDefinition
+                    {
+                        Id = "common.a_b",
+                        Host = "Common",
+                        Name = "Underscore id",
+                        Description = "Disabled skill.",
+                        BodyMarkdown = "DISABLED_SKILL",
+                        Enabled = false
+                    }
+                });
+                var loaded = store.Load();
+                AssertEqual(2, loaded.Count, "similar skill ids are stored separately");
+                AssertTrue(!string.Equals(loaded[0].StoragePath, loaded[1].StoragePath, StringComparison.OrdinalIgnoreCase),
+                    "skill directories do not collide");
+                var invalidDirectory = Path.Combine(paths.SkillsDirectory, "common", "invalid_external");
+                Directory.CreateDirectory(invalidDirectory);
+                File.WriteAllText(Path.Combine(invalidDirectory, "SKILL.md"),
+                    "---\nid: common.invalid\nhost: Common\nname: Invalid\ndescription: " +
+                    new string('x', 4001) + "\n---\nBody");
+                AssertEqual(2, store.Load().Count, "invalid external skill metadata is skipped");
+                var whitespaceIdRejected = false;
+                try
+                {
+                    store.SaveOne(new SkillDefinition
+                    {
+                        Id = " common.bad ",
+                        Host = "Common",
+                        Name = "Bad id",
+                        Description = "Invalid id.",
+                        BodyMarkdown = "INVALID",
+                        Enabled = true
+                    });
+                }
+                catch (ArgumentException)
+                {
+                    whitespaceIdRejected = true;
+                }
+                AssertTrue(whitespaceIdRejected, "skill ids with surrounding whitespace are rejected");
+
+                var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), store, new ToolStore(paths));
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var enabledRead = executor.Execute(
+                    Command("common.skills_read", "id", "common.a.b"), tools, new AppSettings(), false, false,
+                    new ChatSession(), 40, loaded, CancellationToken.None);
+                AssertTrue(enabledRead.Success, "enabled runtime skill can be read");
+
+                var disabledRead = executor.Execute(
+                    Command("common.skills_read", "id", "common.a_b"), tools, new AppSettings(), false, false,
+                    new ChatSession(), 40, loaded, CancellationToken.None);
+                AssertTrue(!disabledRead.Success, "disabled runtime skill cannot be read by agent");
+                AssertTrue(disabledRead.DataJson == null || disabledRead.DataJson.IndexOf("DISABLED_SKILL", StringComparison.Ordinal) < 0,
+                    "disabled skill body is not exposed");
+                var confirmedRuntimeRead = executor.Execute(
+                    Command("common.skills_read", "id", "common.a_b"), tools, new AppSettings(), false, true,
+                    new ChatSession(), 40, loaded.Where(item => item.Enabled).ToList(), CancellationToken.None);
+                AssertTrue(!confirmedRuntimeRead.Success, "confirmation bypass does not broaden the runtime skill catalog");
             });
         }
     }

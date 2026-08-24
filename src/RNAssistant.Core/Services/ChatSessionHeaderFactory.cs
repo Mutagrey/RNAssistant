@@ -16,6 +16,7 @@ namespace RNAssistant.Core.Services
             return new ChatSessionHeader
             {
                 Id = session.Id,
+                Revision = session.Revision,
                 Host = session.Host,
                 DocumentKey = session.DocumentKey,
                 DocumentTitle = session.DocumentTitle,

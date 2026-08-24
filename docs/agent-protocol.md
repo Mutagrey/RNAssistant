@@ -10,7 +10,7 @@ RNAssistant has two explicit modes.
 Every Agent request contains the editable Markdown `SystemPrompt` and one `RUNTIME_CONTEXT` JSON object. Its instruction role is selected independently as `developer` (default), `system`, or `user`:
 
 - current host and document identity;
-- every enabled tool that the agent may run;
+- every enabled, schema-valid tool that the agent may run in this request;
 - the enabled skill catalog with `id`, `name`, and `description` only;
 - chat-owned user context and artifact references.
 
@@ -18,7 +18,7 @@ Visible planning is optional data, not a protocol phase. `common.plan_create/rea
 
 A confirmed tool result always returns to the Agent loop, including `ok:false`, so the model can explain the failure, correct arguments, or choose another tool. An explicit user cancellation is terminal for that run and does not invoke the model again.
 
-When a catalog description matches the task, the model calls `common.skills_read` with the exact id. Its `TOOL_RESULT.data` contains `id`, `host`, `name`, `description`, `version`, `enabled`, `format: "markdown"`, and the complete body in both authoring-compatible `bodyMarkdown` and model-facing `instructions`. Several clearly relevant skills may be read as independent calls. The result is normal conversation history; there is no router or activation state.
+When a catalog description matches the task, the model calls `common.skills_read` with the exact id. Its `TOOL_RESULT.data` contains `id`, `host`, `name`, `description`, `version`, `enabled`, `format: "markdown"`, and the complete body in both authoring-compatible `bodyMarkdown` and model-facing `instructions`, subject only to the remaining request budget. Several clearly relevant skills may be read as independent calls. The result is normal conversation history; there is no router or activation state.
 
 Tools use a native-like description:
 
@@ -82,9 +82,9 @@ Final answer or clarification:
 }
 ```
 
-The parser accepts one or more calls, requires a non-empty user-facing `message` for every tool turn, requires unique call ids, and checks each exact tool name. The executor validates every argument object against its tool schema immediately before execution. Calls execute locally and sequentially in array order. A multi-call response is appropriate only when calls are independent and later arguments do not depend on earlier results.
+The parser accepts one or more calls, requires a non-empty user-facing `message` for every tool turn, requires call ids to be unique within that response, and checks each exact tool name. The executor validates every argument object against its tool schema immediately before execution. Calls execute locally and sequentially in array order. A multi-call response is appropriate only when calls are independent and later arguments do not depend on earlier results.
 
-If a call needs confirmation, execution pauses at that call and later calls from the same response are not retained or executed. After confirmation, the model receives that result and chooses the remaining work normally. There is no separate batch state. The local parser tolerates additional root fields in `json_object`; strict `json_schema` rejects them at the endpoint.
+If a call needs confirmation, execution pauses at that call and later calls from the same response are not retained or executed. The pending id, cumulative iteration/tool-step counters, and execution fingerprint of that tool and its pipeline dependencies are persisted with the chat, so confirmation survives a WebView or Office restart but cannot execute a replaced definition. Cosmetic changes to unrelated tools do not invalidate it. A new request in that chat is blocked until the action is confirmed or cancelled. After confirmation, the model receives that result and chooses the remaining work normally using the remaining original budget. There is no separate batch state. The local parser tolerates additional root fields in `json_object`; strict `json_schema` rejects them at the endpoint.
 
 If parsing fails, the runtime makes up to `MaxAgentFormatRetries` correction requests (default 10, clamped to 1–20). Every attempt starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored. A refusal remains valid user-facing content when returned in `message` with an empty `tool_calls` array. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy normalization.
 
@@ -106,12 +106,16 @@ The `tool` form uses the same JSON as its message content without the text prefi
 
 `message` and `data` are bounded before they enter model context. Oversized `data` is replaced with `{truncated, original_chars, original_estimated_tokens, preview, hint}` so the model can request a smaller scope. Before every model request, including format repair and continuation after confirmation, the runtime verifies the estimated prompt against the current input budget and stops with a visible diagnostic instead of sending an oversized request.
 
+Chat-local plan/HTML mutations are serialized by the per-chat lease. Document and shared-local-state mutations are serialized by effective safety metadata, including nested pipeline safety. Waiting for another mutation is bounded and returns retryable `tool_mutation_busy`. If an unexpected exception occurs after mutation execution may have started, the result is `tool_effect_uncertain`, is not automatically retried, and tells the model/user to inspect state first.
+
 ## Local invariants
 
 - Disabled, unavailable, or `AgentCanRun=false` tools are not exposed to Agent mode.
 - Confirmation and mutation safety remain local executor rules.
+- Every Agent run pins the runtime Office document identity. The dispatched adapter rechecks it on the Office UI/STA thread immediately before execution; a switched active document returns non-retryable `active_document_changed` without starting the tool.
 - Maximum iterations and maximum tool steps bound execution.
 - Pipelines call existing tool ids through `OfficeToolExecutor`; nested safety is resolved recursively.
 - VBA mutations keep backup/strict-live-hash/stale-state checks inside the VBA tool implementation, verify final module/package state by read-back, expose bounded exact-range reads through `vba_read_lines`, and may require confirmation. Export-aware package hashes are separate from live module hashes.
 - Provider reasoning is transport metadata, not part of the agent JSON or replay history.
-- Context compaction may replace the replay prefix with a stored checkpoint, but it does not change the agent protocol or repeat Office tools.
+- Context compaction may replace a fully included replay prefix with a stored checkpoint, but it does not split a tool exchange, delete the source transcript, partially mark an oversized message as summarized, change the agent protocol, or repeat Office tools.
+- A persisted `running` or `cancelling` run without a live cross-process owner is marked interrupted and is never resumed automatically. If it stopped while a tool may have been in flight, it is marked `interrupted_unknown` and that run's protocol remains visible but is excluded from replay. Protocol through a saved tool-result boundary remains replayable.

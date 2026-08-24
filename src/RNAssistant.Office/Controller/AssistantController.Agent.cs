@@ -45,24 +45,36 @@ namespace RNAssistant.Office
 
             try
             {
-                EnsureCurrentDocument(session);
-                if (!MarkPendingActivityExecuting(session, pending.PendingId))
+                session = ReloadReservedSession(session);
+                pending = FindPendingAgentTool(session, pendingId);
+                if (pending == null)
                 {
                     throw new InvalidOperationException("Pending tool was not found or was already resolved.");
                 }
+                var documentRuntimeKey = CaptureExpectedRuntimeDocumentKey(session);
+                if (!MarkPendingActivityExecuting(session, pending.PendingId, runId))
+                {
+                    throw new InvalidOperationException("Pending tool was not found or was already resolved.");
+                }
+                SetToolCallReplay(session, pending.Command.ToolCallId, false, runId);
                 RemovePendingAgentTool(pendingId);
 
                 session.LastRun = new ChatRunRecord
                 {
                     RunId = runId,
-                    RuntimeId = RuntimeId,
+                    RuntimeId = _runtimeId,
                     Status = "running",
                     Phase = "executing",
                     CurrentAction = "Выполняю подтверждённое действие.",
+                    DocumentRuntimeKey = documentRuntimeKey,
+                    IterationsUsed = pending.IterationsUsed,
+                    ToolStepsUsed = pending.ToolStepsUsed,
                     StartedUtc = DateTime.UtcNow
                 };
                 SaveSessionChanges(session);
+                _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
 
+                var firstRunMessageIndex = session.Messages == null ? 0 : session.Messages.Count;
                 Action<string, string, ChatActivity> runProgress = (phase, message, activity) =>
                 {
                     _chatRuns.Update(sessionId, runId, phase, message);
@@ -75,36 +87,59 @@ namespace RNAssistant.Office
                     {
                         AnnotateActivity(activity, runId, null);
                     }
-                    if (progress != null)
+                    if (string.Equals(phase, "tool_running", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(phase, "tool_result", StringComparison.OrdinalIgnoreCase))
                     {
-                        progress(phase, message, activity);
+                        AnnotateRunMessages(session, firstRunMessageIndex, runId);
                     }
+                    PersistRunCheckpoint(session, runId, phase);
+                    ReportExternalProgress(progress, phase, message, activity);
                 };
 
-                var firstRunMessageIndex = session.Messages == null ? 0 : session.Messages.Count;
                 var settings = ResolveChatSettings(session);
                 settings.ToolResultRole = PendingToolResultRole(session, pending.Command, settings.ToolResultRole);
                 var tools = _toolCatalog.GetVisibleTools().Where(tool => tool.Enabled).ToList();
+                var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
                 var pendingResolved = false;
                 try
                 {
                     ReportProgress(runProgress, "executing", "Выполняю подтверждённое действие...");
-                    var result = _toolExecutor.Execute(
-                        CloneCommand(pending.Command),
-                        tools,
-                        settings,
-                        false,
-                        true,
-                        session,
-                        runCancellation.Token);
+                    var runnableTools = AgentRunService.PrepareToolsForRun(tools);
+                    var currentCatalogFingerprint = AgentRunService.ToolExecutionFingerprint(
+                        runnableTools,
+                        pending.Command.ToolId);
+                    var catalogMatches = !string.IsNullOrWhiteSpace(pending.CatalogFingerprint) &&
+                        string.Equals(pending.CatalogFingerprint, currentCatalogFingerprint, StringComparison.OrdinalIgnoreCase);
+                    var result = !catalogMatches
+                            ? ToolResult.Fail(
+                                "Runnable tools changed, or this pending action predates catalog validation. Review the current tool and ask the agent to create a new call before confirming.",
+                                null,
+                                "pending_tool_catalog_changed",
+                                false)
+                            : _toolExecutor.Execute(
+                                CloneCommand(pending.Command),
+                                runnableTools,
+                                settings,
+                                false,
+                                true,
+                                session,
+                                Math.Max(1, settings.MaxAgentToolSteps - pending.ToolStepsUsed + 1),
+                                skills,
+                                runCancellation.Token) ?? ToolResult.Fail(
+                                    "Confirmed tool returned no result.",
+                                    null,
+                                    "missing_result",
+                                    true);
                     UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
                     pendingResolved = true;
                     ReportProgress(runProgress, "tool_result", result == null ? string.Empty : result.Message,
                         AgentTranscript.CreateToolActivity(CloneCommand(pending.Command), result, "tool"));
+                    _toolCatalog.InvalidateDocumentVbaTools();
                     tools = _toolCatalog.GetVisibleTools().Where(tool => tool.Enabled).ToList();
                     var context = LoadContext(session);
-                    var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
-                    await _agentRunService.ContinueAfterToolAsync(
+                    skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
+                    SetToolCallReplay(session, pending.Command.ToolCallId, true);
+                    var completion = await _agentRunService.ContinueAfterToolAsync(
                         CloneCommand(pending.Command),
                         result,
                         session,
@@ -115,16 +150,29 @@ namespace RNAssistant.Office
                         runProgress,
                         RegisterPendingAgentTool,
                         skills,
-                        runCancellation.Token).ConfigureAwait(false);
+                        runCancellation.Token,
+                        pending.IterationsUsed,
+                        pending.ToolStepsUsed).ConfigureAwait(false);
 
                     AnnotateRunMessages(session, firstRunMessageIndex, runId);
                     HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
                     ChatArtifactService.LinkMessageArtifacts(session, 0);
-                    session.LastRun = null;
+                    if (completion == null || !completion.WaitingForConfirmation)
+                    {
+                        session.LastRun = null;
+                    }
                     SaveSessionChanges(session);
+                    _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
                 }
                 catch (Exception ex)
                 {
+                    _toolCatalog.InvalidateDocumentVbaTools();
+                    if (!ChatHistoryEditService.HasResultForLatestToolCall(
+                        session == null ? null : session.Messages,
+                        pending.Command.ToolCallId))
+                    {
+                        SetToolCallReplay(session, pending.Command.ToolCallId, false);
+                    }
                     if (!pendingResolved)
                     {
                         var failedResult = ex is OperationCanceledException
@@ -132,6 +180,7 @@ namespace RNAssistant.Office
                             : ToolResult.Fail(ex.Message, null, "confirmed_tool_failed", false);
                         UpdatePendingActivity(session, pending.PendingId, pending.Command, failedResult);
                     }
+                    CloseRunningActivities(session, firstRunMessageIndex, ex is OperationCanceledException);
                     RecordFailedTurn(session, ex);
                     if (session.LastRun != null)
                     {
@@ -143,6 +192,7 @@ namespace RNAssistant.Office
                     HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
                     ChatArtifactService.LinkMessageArtifacts(session, 0);
                     SaveSessionChanges(session);
+                    _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
                     throw;
                 }
 
@@ -172,6 +222,12 @@ namespace RNAssistant.Office
             var session = ResolvePendingAgentTool(pendingId, chatId, out pending);
             using (ReserveChatOperation(session))
             {
+                session = ReloadReservedSession(session);
+                pending = FindPendingAgentTool(session, pendingId);
+                if (pending == null)
+                {
+                    throw new InvalidOperationException("Pending tool was not found or was already resolved.");
+                }
                 RemovePendingAgentTool(pendingId);
                 var result = ToolResult.Cancelled("Tool cancelled by user.");
                 result.PendingId = pending.PendingId;
@@ -185,6 +241,7 @@ namespace RNAssistant.Office
                     settings.ToolResultRole));
                 AnnotateRunMessages(session, protocolStart, "cancel_" + Guid.NewGuid().ToString("N"));
                 // Explicit user cancellation is terminal for this run: persist it, but do not invoke the model.
+                session.LastRun = null;
                 SaveSessionChanges(session);
             }
             return ChatState(session);
@@ -198,7 +255,10 @@ namespace RNAssistant.Office
                 PendingId = pendingId,
                 SessionId = session.Id,
                 Command = CloneCommand(command),
-                Attachments = new List<ChatAttachment>(LatestUserAttachments(session))
+                Attachments = new List<ChatAttachment>(LatestUserAttachments(session)),
+                IterationsUsed = session.LastRun == null ? 0 : session.LastRun.IterationsUsed,
+                ToolStepsUsed = session.LastRun == null ? 0 : session.LastRun.ToolStepsUsed,
+                CatalogFingerprint = result == null ? string.Empty : result.ConfirmationCatalogSha256
             };
 
             lock (_syncRoot)
@@ -279,6 +339,7 @@ namespace RNAssistant.Office
             {
                 CancelPendingActivity(message == null ? null : message.Activity, reason);
             }
+            ChatHistoryEditService.ExcludeUnmatchedToolCalls(session == null ? null : session.Messages);
         }
 
         private static void CancelPendingActivity(ChatActivity activity, string reason)
@@ -290,6 +351,7 @@ namespace RNAssistant.Office
             if (!string.IsNullOrWhiteSpace(activity.PendingId))
             {
                 activity.PendingId = null;
+                activity.ConfirmationCatalogSha256 = null;
                 activity.Status = "cancelled";
                 activity.ExecutionStatus = "cancelled";
                 activity.ResultMessage = reason ?? "Pending action cancelled.";
@@ -370,12 +432,18 @@ namespace RNAssistant.Office
                     continue;
                 }
 
+                var command = CommandFromActivity(activity);
+                if (command == null) return null;
+
                 return new PendingAgentTool
                 {
                     PendingId = pendingId,
                     SessionId = session.Id,
-                    Command = CommandFromActivity(activity),
-                    Attachments = UserAttachmentsForRun(session, message.RunId)
+                    Command = command,
+                    Attachments = UserAttachmentsForRun(session, message.RunId),
+                    IterationsUsed = session.LastRun == null ? 0 : session.LastRun.IterationsUsed,
+                    ToolStepsUsed = session.LastRun == null ? 0 : session.LastRun.ToolStepsUsed,
+                    CatalogFingerprint = activity.ConfirmationCatalogSha256
                 };
             }
 
@@ -393,7 +461,7 @@ namespace RNAssistant.Office
                 string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(message.RunId, runId, StringComparison.OrdinalIgnoreCase));
             return user == null || user.Attachments == null
-                ? (IReadOnlyList<ChatAttachment>)new ChatAttachment[0]
+                ? LatestUserAttachments(session)
                 : user.Attachments;
         }
 
@@ -423,7 +491,25 @@ namespace RNAssistant.Office
             return null;
         }
 
-        private static bool MarkPendingActivityExecuting(ChatSession session, string pendingId)
+        private static bool HasPendingAgentConfirmation(ChatSession session)
+        {
+            return (session == null ? new List<ChatMessage>() : session.Messages ?? new List<ChatMessage>())
+                .Any(message => HasPendingAgentConfirmation(message == null ? null : message.Activity));
+        }
+
+        private static bool HasPendingAgentConfirmation(ChatActivity activity)
+        {
+            if (activity == null) return false;
+            if (!string.IsNullOrWhiteSpace(activity.PendingId) &&
+                (string.IsNullOrWhiteSpace(activity.Status) ||
+                 string.Equals(activity.Status, "waiting", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+            return (activity.Children ?? new List<ChatActivity>()).Any(HasPendingAgentConfirmation);
+        }
+
+        private static bool MarkPendingActivityExecuting(ChatSession session, string pendingId, string runId)
         {
             if (session == null || session.Messages == null || string.IsNullOrWhiteSpace(pendingId))
             {
@@ -441,6 +527,9 @@ namespace RNAssistant.Office
                 activity.Status = "running";
                 activity.ExecutionStatus = "executing";
                 activity.ResultMessage = "Выполняю подтверждённое действие.";
+                message.RunId = runId;
+                message.Sequence = 0;
+                AnnotateActivity(activity, runId, 0);
                 return true;
             }
 
@@ -449,14 +538,19 @@ namespace RNAssistant.Office
 
         private static ToolCommand CommandFromActivity(ChatActivity activity)
         {
+            if (activity == null || string.IsNullOrWhiteSpace(activity.ToolId) ||
+                string.IsNullOrWhiteSpace(activity.ToolCallId))
+            {
+                return null;
+            }
             var command = new ToolCommand
             {
-                ToolId = activity == null ? string.Empty : activity.ToolId,
-                ToolCallId = activity == null ? string.Empty : activity.ToolCallId,
-                Description = activity == null ? string.Empty : activity.Title
+                ToolId = activity.ToolId,
+                ToolCallId = activity.ToolCallId,
+                Description = activity.Title
             };
 
-            if (activity == null || string.IsNullOrWhiteSpace(activity.ArgumentsJson))
+            if (string.IsNullOrWhiteSpace(activity.ArgumentsJson))
             {
                 return command;
             }
@@ -468,9 +562,35 @@ namespace RNAssistant.Office
             }
             catch (JsonException)
             {
+                return null;
             }
 
             return command;
+        }
+
+        private static void SetToolCallReplay(
+            ChatSession session,
+            string toolCallId,
+            bool enabled,
+            string runId = null)
+        {
+            if (session == null || session.Messages == null || string.IsNullOrWhiteSpace(toolCallId)) return;
+            var call = session.Messages.LastOrDefault(message =>
+                message != null && message.ProtocolMessage &&
+                string.Equals(message.ToolCallId, toolCallId, StringComparison.Ordinal) &&
+                !IsToolResultProtocolMessage(message));
+            if (call != null)
+            {
+                call.ExcludeFromModelContext = !enabled;
+                if (!string.IsNullOrWhiteSpace(runId)) call.RunId = runId;
+            }
+        }
+
+        private static bool IsToolResultProtocolMessage(ChatMessage message)
+        {
+            return message != null &&
+                (string.Equals(message.Role, ToolResultRoles.Tool, StringComparison.OrdinalIgnoreCase) ||
+                 (message.Content ?? string.Empty).StartsWith("TOOL_RESULT:", StringComparison.Ordinal));
         }
 
         private static void UpdatePendingActivity(ChatSession session, string pendingId, ToolCommand command, ToolResult result)
@@ -535,6 +655,7 @@ namespace RNAssistant.Office
             target.ErrorCode = source.ErrorCode;
             target.Retryable = source.Retryable;
             target.PendingId = source.PendingId;
+            target.ConfirmationCatalogSha256 = source.ConfirmationCatalogSha256;
             target.ToolId = source.ToolId;
             target.ToolCallId = source.ToolCallId;
             target.ArgumentsJson = source.ArgumentsJson;
@@ -557,6 +678,9 @@ namespace RNAssistant.Office
             public string SessionId { get; set; }
             public ToolCommand Command { get; set; }
             public IReadOnlyList<ChatAttachment> Attachments { get; set; }
+            public int IterationsUsed { get; set; }
+            public int ToolStepsUsed { get; set; }
+            public string CatalogFingerprint { get; set; }
         }
     }
 }

@@ -88,6 +88,11 @@ namespace RNAssistant.Harness
                 new[] { new ToolDefinition { Id = "excel.list_sheets" } });
             AssertTrue(!parsed.Success, "duplicate call ids rejected");
             AssertContains(parsed.Error, "unique", "duplicate id diagnostic");
+
+            var reused = new AgentResponseParser().Parse(
+                "{\"message\":\"Inspecting.\",\"tool_calls\":[{\"id\":\"call_same\",\"name\":\"excel.list_sheets\",\"arguments\":{}}]}",
+                new[] { new ToolDefinition { Id = "excel.list_sheets" } });
+            AssertTrue(reused.Success, "call ids may be reused in a later response");
         }
 
         private static void SimpleAgentRequiresExactToolNames()
@@ -151,7 +156,7 @@ namespace RNAssistant.Harness
                     Name = "Test",
                     Description = "Test workflow",
                     Version = "2.0.0",
-                    BodyMarkdown = "Follow TEST_SKILL_SENTINEL.",
+                    BodyMarkdown = "Follow TEST_SKILL_SENTINEL.\n" + new string('x', 15000) + "\nTEST_SKILL_END.",
                     Enabled = true
                 };
                 var responses = new Queue<string>(new[]
@@ -175,6 +180,7 @@ namespace RNAssistant.Harness
                     "first request contains only catalog");
                 var replay = FlattenSimple(calls[1]);
                 AssertContains(replay, "TEST_SKILL_SENTINEL", "full instructions returned by tool");
+                AssertContains(replay, "TEST_SKILL_END", "skill body is not cut by the generic tool-result limit");
                 AssertContains(replay, "\"format\":\"markdown\"", "loaded skill format");
                 AssertContains(replay, "\"version\":\"2.0.0\"", "loaded skill version");
             });
@@ -529,6 +535,7 @@ namespace RNAssistant.Harness
                 };
                 var service = new AgentRunService(adapter, executor, completion);
                 var session = NewSession(adapter);
+                session.LastRun = new ChatRunRecord { Status = "running" };
                 var settings = new AppSettings { AutoConfirmToolActions = false, SystemPromptRole = "user" };
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var first = service.ExecuteAsync(
@@ -542,6 +549,27 @@ namespace RNAssistant.Harness
                     "waiting result not replayed");
                 AssertEqual("call_skill", session.Messages.Last(message => message.Activity != null).Activity.ToolCallId,
                     "pending activity keeps tool call id");
+                var pendingActivity = session.Messages.Last(message => message.Activity != null).Activity;
+                var expectedCatalogFingerprint = AgentRunService.ToolExecutionFingerprint(
+                    AgentRunService.PrepareToolsForRun(tools),
+                    "common.skills_create");
+                AssertEqual(expectedCatalogFingerprint, pendingActivity.ConfirmationCatalogSha256,
+                    "pending activity persists executable tool fingerprint");
+                var changedTools = tools.Select(tool => tool.Clone()).ToList();
+                changedTools.First(tool => string.Equals(
+                    tool.Id, "common.skills_create", StringComparison.OrdinalIgnoreCase)).ArgumentSchemaJson =
+                        "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}";
+                AssertTrue(!string.Equals(
+                        expectedCatalogFingerprint,
+                        AgentRunService.ToolExecutionFingerprint(
+                            AgentRunService.PrepareToolsForRun(changedTools),
+                            "common.skills_create"),
+                        StringComparison.OrdinalIgnoreCase),
+                    "tool fingerprint changes with a replaced executable definition");
+                AssertEqual(1, session.LastRun.IterationsUsed, "confirmation stores iteration cursor");
+                AssertEqual(1, session.LastRun.ToolStepsUsed, "confirmation reserves one logical tool step");
+                var initialIterationsUsed = session.LastRun.IterationsUsed;
+                var initialToolStepsUsed = session.LastRun.ToolStepsUsed;
                 foreach (var message in session.Messages)
                 {
                     message.RunId = "initial_run";
@@ -557,9 +585,14 @@ namespace RNAssistant.Harness
                     settings,
                     tools,
                     null,
-                    null).GetAwaiter().GetResult();
+                    null,
+                    cancellationToken: CancellationToken.None,
+                    initialIterationsUsed: initialIterationsUsed,
+                    initialToolStepsUsed: initialToolStepsUsed).GetAwaiter().GetResult();
 
                 AssertEqual("Skill сохранён.", final.AssistantText, "continued final response");
+                AssertEqual(2, session.LastRun.IterationsUsed, "confirmation continuation keeps cumulative iteration budget");
+                AssertEqual(1, session.LastRun.ToolStepsUsed, "confirmed result replaces reserved logical tool step");
                 var replay = FlattenSimple(calls[1]);
                 AssertContains(replay, "RUNTIME_CONTEXT", "user-role continuation keeps runtime context");
                 AssertEqual(1, replay.Split(new[] { "TOOL_RESULT:" }, StringSplitOptions.None).Length - 1, "one result replayed");
@@ -619,6 +652,53 @@ namespace RNAssistant.Harness
                 AssertContains(replay, "\"ok\":false", "confirmed failure replayed");
                 AssertContains(replay, "skill_already_exists", "confirmed failure code replayed");
                 AssertTrue(replay.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) < 0, "waiting result is not replayed after failure");
+            });
+        }
+
+        private static void ModelRefusalIsTerminalInAgentAndChat()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = 0;
+                LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
+                {
+                    calls += 1;
+                    return Task.FromResult(new LlmCompletionResult
+                    {
+                        Content = string.Empty,
+                        RefusalContent = "Запрос отклонён провайдером."
+                    });
+                };
+
+                var agentSession = NewSession(adapter);
+                var agent = new AgentRunService(adapter, executor, completion).ExecuteAsync(
+                    "Restricted request.", agentSession, NewContext(adapter), new AppSettings(),
+                    new ToolDefinition[0], (Action<string, string, ChatActivity>)null).GetAwaiter().GetResult();
+                AssertEqual("Запрос отклонён провайдером.", agent.AssistantText, "agent refusal text");
+                AssertEqual(1, calls, "agent refusal does not enter format repair");
+
+                var chatSession = NewSession(adapter);
+                chatSession.Mode = ChatModes.Chat;
+                var chat = new PlainChatService(completion).ExecuteAsync(
+                    "Restricted request.", chatSession, NewContext(adapter), new AppSettings(), null, null,
+                    CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual("Запрос отклонён провайдером.", chat.AssistantText, "chat refusal text");
+                AssertEqual(2, calls, "plain chat makes one request");
+
+                var emptyService = new PlainChatService((completionSettings, messages, options, stream, cancellationToken) =>
+                    Task.FromResult(new LlmCompletionResult { Content = string.Empty }));
+                try
+                {
+                    emptyService.ExecuteAsync(
+                        "Empty response.", NewSession(adapter), NewContext(adapter), new AppSettings(), null, null,
+                        CancellationToken.None).GetAwaiter().GetResult();
+                    throw new InvalidOperationException("empty plain response unexpectedly succeeded");
+                }
+                catch (InvalidOperationException ex)
+                {
+                    if (ex.Message.IndexOf("unexpectedly", StringComparison.OrdinalIgnoreCase) >= 0) throw;
+                    AssertContains(ex.Message, "empty response", "plain chat rejects empty provider response");
+                }
             });
         }
 
@@ -685,6 +765,13 @@ namespace RNAssistant.Harness
                         Type = "function",
                         Name = "rna_excel_read_range",
                         ArgumentsJson = "{\"range\":\"COMPACTION_TOOL_ARGUMENT\"}"
+                    },
+                    new LlmToolCall
+                    {
+                        Id = "call_2",
+                        Type = "function",
+                        Name = "rna_excel_read_range",
+                        ArgumentsJson = "{\"range\":\"COMPACTION_TOOL_ARGUMENT_2\"}"
                     }
                 }
             });
@@ -693,6 +780,14 @@ namespace RNAssistant.Harness
                 Role = "tool",
                 ToolCallId = "call_1",
                 Content = "{\"ok\":true,\"tool_call_id\":\"call_1\",\"name\":\"excel.read_range\"}",
+                ProtocolMessage = true,
+                RunId = "run_tool"
+            });
+            session.Messages.Add(new ChatMessage
+            {
+                Role = "tool",
+                ToolCallId = "call_2",
+                Content = "{\"ok\":true,\"tool_call_id\":\"call_2\",\"name\":\"excel.read_range\"}",
                 ProtocolMessage = true,
                 RunId = "run_tool"
             });
@@ -708,7 +803,120 @@ namespace RNAssistant.Harness
             var request = FlattenSimple(captured);
             AssertContains(request, "\"required\":[\"summary\"]", "single-field schema requested");
             AssertContains(request, "COMPACTION_TOOL_ARGUMENT", "native tool arguments preserved for compaction");
+            AssertContains(request, "COMPACTION_TOOL_ARGUMENT_2", "all native tool calls preserved for compaction");
             AssertTrue(request.IndexOf("\"goals\"", StringComparison.Ordinal) < 0, "no fixed summary sections");
+        }
+
+        private static void CompactionPreservesToolProtocolPairs()
+        {
+            IReadOnlyList<ChatMessage> captured = null;
+            LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
+            {
+                captured = messages.ToList();
+                return Task.FromResult(new LlmCompletionResult { Content = "{\"summary\":\"Earlier context.\"}" });
+            };
+            var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+            session.Messages.Add(new ChatMessage { Role = "user", Content = "First request." });
+            var beforePair = new ChatMessage { Role = "assistant", Content = "First answer." };
+            session.Messages.Add(beforePair);
+            var call = new ChatMessage
+            {
+                Role = "assistant",
+                Content = "Reading.",
+                ProtocolMessage = true,
+                RunId = "run_pair",
+                ToolCallId = "call_pair",
+                ToolCalls = new List<LlmToolCall>
+                {
+                    new LlmToolCall
+                    {
+                        Id = "call_pair",
+                        Type = "function",
+                        Name = "rna_excel_read_range",
+                        ArgumentsJson = "{\"marker\":\"PAIR_ARGUMENT\"}"
+                    },
+                    new LlmToolCall
+                    {
+                        Id = "call_pair_missing",
+                        Type = "function",
+                        Name = "rna_excel_read_range",
+                        ArgumentsJson = "{\"marker\":\"PAIR_MISSING_ARGUMENT\"}"
+                    }
+                }
+            };
+            session.Messages.Add(call);
+            var result = new ChatMessage
+            {
+                Role = "developer",
+                Content = "TOOL_RESULT:\n{\"ok\":true,\"tool_call_id\":\"call_pair\",\"name\":\"excel.read_range\"}",
+                ProtocolMessage = true,
+                RunId = "run_pair"
+            };
+            session.Messages.Add(result);
+            session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Done." });
+            session.Messages.Add(new ChatMessage { Role = "user", Content = "Recent request." });
+
+            var checkpoint = new ContextCompactionService(completion).EnsureWithinBudgetAsync(
+                session, new AppSettings(), null, true, null, CancellationToken.None).GetAwaiter().GetResult();
+
+            AssertTrue(checkpoint != null, "checkpoint created without splitting pair");
+            AssertEqual(beforePair.Id, checkpoint.ThroughMessageId, "checkpoint stops before tool call");
+            AssertTrue(FlattenSimple(captured).IndexOf("PAIR_ARGUMENT", StringComparison.Ordinal) < 0,
+                "tool call is not summarized without its result");
+            AssertTrue(FlattenSimple(captured).IndexOf("PAIR_MISSING_ARGUMENT", StringComparison.Ordinal) < 0,
+                "multi-call envelope is not summarized with a missing result");
+            var replay = ContextCompactionService.BuildActiveWindow(session);
+            var callIndex = replay.FindIndex(message => message != null && message.ToolCallId == "call_pair");
+            var resultIndex = replay.FindIndex(message => message != null &&
+                (message.Content ?? string.Empty).StartsWith("TOOL_RESULT:", StringComparison.Ordinal));
+            AssertTrue(callIndex >= 0 && resultIndex == callIndex + 1, "tool call and result remain adjacent in replay tail");
+
+            IReadOnlyList<ChatMessage> danglingCaptured = null;
+            LlmCompletionDelegate danglingCompletion = (settings, messages, options, stream, cancellationToken) =>
+            {
+                danglingCaptured = messages.ToList();
+                return Task.FromResult(new LlmCompletionResult { Content = "{\"summary\":\"Safe prefix.\"}" });
+            };
+            var dangling = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+            dangling.Messages.Add(new ChatMessage { Role = "user", Content = "Old request." });
+            dangling.Messages.Add(new ChatMessage { Role = "assistant", Content = "Old answer." });
+            var safeThrough = new ChatMessage { Role = "user", Content = "Next request." };
+            dangling.Messages.Add(safeThrough);
+            dangling.Messages.Add(new ChatMessage
+            {
+                Role = "assistant",
+                Content = "Running.",
+                ProtocolMessage = true,
+                RunId = "interrupted-run",
+                ToolCallId = "dangling-call",
+                ToolCalls = new List<LlmToolCall>
+                {
+                    new LlmToolCall
+                    {
+                        Id = "dangling-call",
+                        Type = "function",
+                        Name = "rna_excel_read_range",
+                        ArgumentsJson = "{\"marker\":\"DANGLING_ARGUMENT\"}"
+                    }
+                }
+            });
+            dangling.Messages.Add(new ChatMessage { Role = "assistant", Content = "Interrupted diagnostic." });
+            dangling.Messages.Add(new ChatMessage { Role = "user", Content = "Continue safely." });
+
+            var danglingCheckpoint = new ContextCompactionService(danglingCompletion).EnsureWithinBudgetAsync(
+                dangling, new AppSettings(), null, true, null, CancellationToken.None).GetAwaiter().GetResult();
+
+            AssertTrue(danglingCheckpoint != null, "checkpoint created before dangling call");
+            AssertEqual(safeThrough.Id, danglingCheckpoint.ThroughMessageId, "checkpoint excludes call without result");
+            AssertTrue(FlattenSimple(danglingCaptured).IndexOf("DANGLING_ARGUMENT", StringComparison.Ordinal) < 0,
+                "dangling tool call is not summarized");
+
+            var oversized = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+            oversized.Messages.Add(new ChatMessage { Role = "user", Content = new string('x', 500000) });
+            oversized.Messages.Add(new ChatMessage { Role = "assistant", Content = "Recent answer." });
+            var oversizedCheckpoint = new ContextCompactionService(completion).EnsureWithinBudgetAsync(
+                oversized, new AppSettings(), null, true, null, CancellationToken.None).GetAwaiter().GetResult();
+            AssertTrue(oversizedCheckpoint == null, "oversized message is not partially marked as summarized");
         }
 
         private static string FlattenSimple(IEnumerable<ChatMessage> messages)

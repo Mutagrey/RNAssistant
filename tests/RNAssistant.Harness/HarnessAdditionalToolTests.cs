@@ -107,6 +107,7 @@ namespace RNAssistant.Harness
 
             AssertTrue(profile.Valid, "nested safety profile");
             AssertTrue(profile.MutatesDocument, "nested mutation propagated");
+            AssertTrue(profile.RequiresConfirmation, "implicit custom mutation confirmation propagated");
             AssertEqual(3, profile.RiskLevel, "nested risk propagated");
         }
 
@@ -228,7 +229,11 @@ namespace RNAssistant.Harness
                 AssertTrue(dataResult.Success, "html workspace data save succeeds");
                 AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "html data count");
 
-                var readResult = executor.Execute(new ToolCommand { ToolId = "common.html_workspace_read" }, tools, new AppSettings(), false, false, session);
+                var readResult = executor.Execute(new ToolCommand
+                {
+                    ToolId = "common.html_workspace_read",
+                    Arguments = { ["dataName"] = "rows" }
+                }, tools, new AppSettings(), false, false, session);
                 AssertTrue(readResult.Success, "html workspace read succeeds");
                 AssertContains(readResult.DataJson, "rnassistant.htmlWorkspace", "workspace result type");
                 AssertContains(readResult.DataJson, "items", "workspace data included");
@@ -333,6 +338,18 @@ namespace RNAssistant.Harness
 
         private static void HtmlWorkspaceHistoryIsBoundedAndTransportIsCompact()
         {
+            var oversizedOnly = HtmlWorkspaceHistoryPolicy.Trim(new[]
+            {
+                new HtmlWorkspaceSnapshot
+                {
+                    Files = new List<HtmlWorkspaceFile>
+                    {
+                        new HtmlWorkspaceFile { Id = "large", Path = "large.html", Content = new string('x', (int)HtmlWorkspaceHistoryPolicy.MaxContentCharacters + 1) }
+                    }
+                }
+            });
+            AssertEqual(0, oversizedOnly.Count, "single oversized history snapshot is skipped");
+
             var largeSession = new ChatSession { Title = "HTML bounded history" };
             for (var revision = 0; revision < 12; revision++)
             {
@@ -365,8 +382,20 @@ namespace RNAssistant.Harness
             AssertTrue(bridgeJson.IndexOf("CURRENT_FIRST", StringComparison.Ordinal) < 0, "bridge workspace omits old snapshot bodies");
             AssertTrue(bridgeJson.IndexOf("HISTORY_SECOND", StringComparison.Ordinal) < 0, "bridge workspace history contains metadata only");
 
-            var toolResult = new HtmlArtifactToolExecutor().ExecuteControllerTool(
+            var manifestResult = new HtmlArtifactToolExecutor().ExecuteControllerTool(
                 new ToolCommand { ToolId = HtmlArtifactToolExecutor.ReadWorkspaceToolId },
+                transportSession,
+                false);
+            AssertTrue(manifestResult.Success, "html workspace manifest read succeeds");
+            AssertContains(manifestResult.DataJson, "contentCharacters", "html workspace manifest contains sizes");
+            AssertTrue(manifestResult.DataJson.IndexOf("CURRENT_THIRD", StringComparison.Ordinal) < 0, "html workspace manifest omits file bodies");
+
+            var toolResult = new HtmlArtifactToolExecutor().ExecuteControllerTool(
+                new ToolCommand
+                {
+                    ToolId = HtmlArtifactToolExecutor.ReadWorkspaceToolId,
+                    Arguments = { ["path"] = "index.html" }
+                },
                 transportSession,
                 false);
             AssertTrue(toolResult.Success, "html workspace compact read succeeds");

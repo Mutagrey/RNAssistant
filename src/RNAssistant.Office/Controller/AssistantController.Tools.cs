@@ -16,18 +16,22 @@ namespace RNAssistant.Office
 
         public IReadOnlyList<ToolDefinition> SaveTools(IEnumerable<ToolDefinition> tools)
         {
-            var customTools = (tools ?? new ToolDefinition[0]).Where(s =>
-                s != null && !s.BuiltIn && !string.Equals(s.Scope, "document", StringComparison.OrdinalIgnoreCase)).ToList();
-            foreach (var tool in customTools)
+            using (_chatRuns.ReserveMaintenance())
             {
-                var validation = _toolExecutor.ValidateToolDefinition(tool);
-                if (!validation.Success)
+                EnsureNoActiveRuns();
+                var customTools = (tools ?? new ToolDefinition[0]).Where(s =>
+                    s != null && !s.BuiltIn && !string.Equals(s.Scope, "document", StringComparison.OrdinalIgnoreCase)).ToList();
+                foreach (var tool in customTools)
                 {
-                    throw new InvalidOperationException(validation.Message);
+                    var validation = _toolExecutor.ValidateToolDefinition(tool);
+                    if (!validation.Success)
+                    {
+                        throw new InvalidOperationException(validation.Message);
+                    }
                 }
+                _toolStore.Save(customTools, _adapter.HostName);
+                return GetTools();
             }
-            _toolStore.Save(customTools, _adapter.HostName);
-            return GetTools();
         }
 
         public IReadOnlyList<SkillDefinition> GetSkills()
@@ -37,14 +41,18 @@ namespace RNAssistant.Office
 
         public IReadOnlyList<SkillDefinition> SaveSkills(IEnumerable<SkillDefinition> skills)
         {
-            var custom = (skills ?? new SkillDefinition[0]).Where(s => s != null && !s.BuiltIn).ToList();
-            var builtInIds = new HashSet<string>(
-                _skillCatalog.GetVisibleSkills().Where(s => s.BuiltIn).Select(s => s.Id),
-                StringComparer.OrdinalIgnoreCase);
-            var collision = custom.FirstOrDefault(s => builtInIds.Contains(s.Id ?? string.Empty));
-            if (collision != null) throw new InvalidOperationException("Built-in skill id is reserved: " + collision.Id);
-            _skillStore.Save(custom, _adapter.HostName);
-            return GetSkills();
+            using (_chatRuns.ReserveMaintenance())
+            {
+                EnsureNoActiveRuns();
+                var custom = (skills ?? new SkillDefinition[0]).Where(s => s != null && !s.BuiltIn).ToList();
+                var builtInIds = new HashSet<string>(
+                    _skillCatalog.GetVisibleSkills().Where(s => s.BuiltIn).Select(s => s.Id),
+                    StringComparer.OrdinalIgnoreCase);
+                var collision = custom.FirstOrDefault(s => builtInIds.Contains(s.Id ?? string.Empty));
+                if (collision != null) throw new InvalidOperationException("Built-in skill id is reserved: " + collision.Id);
+                _skillStore.Save(custom, _adapter.HostName);
+                return GetSkills();
+            }
         }
 
         public ToolResult RunTool(
@@ -64,13 +72,20 @@ namespace RNAssistant.Office
             }
 
             ReportProgress(progress, dryRun ? "checking" : "executing", (dryRun ? "Проверяю tool: " : "Исполняю tool: ") + toolId);
-            var result = _toolExecutor.Execute(command, tools, settings, dryRun, true, session, cancellationToken);
-            if (!dryRun && IsSessionArtifactTool(toolId))
+            if (dryRun)
             {
-                SaveSessionChanges(session);
+                return _toolExecutor.Execute(command, tools, settings, true, true, session, cancellationToken);
             }
 
-            return result;
+            return WithReservedSession(session, current =>
+            {
+                var result = _toolExecutor.Execute(command, tools, settings, false, true, current, cancellationToken);
+                if (IsSessionArtifactTool(toolId))
+                {
+                    SaveSessionChanges(current);
+                }
+                return result;
+            });
         }
 
         private static void ReportProgress(Action<string, string> progress, string phase, string message)

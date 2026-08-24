@@ -71,7 +71,11 @@ namespace RNAssistant.Office.Services
             {
                 return null;
             }
-            var prefix = window.Take(compactCount).ToList();
+            var sourceTokenBudget = Math.Max(768, Math.Min(inputBudget / 2, inputBudget - 768));
+            compactCount = ToolProtocolMessages.PreserveCompletePrefix(window, compactCount);
+            var prefix = TakeFullyIncludedPrefix(
+                window.Take(compactCount),
+                Math.Max(384, sourceTokenBudget / 2));
             var through = prefix.LastOrDefault(message => message != null && !string.IsNullOrWhiteSpace(message.Id));
             if (through == null)
             {
@@ -86,7 +90,11 @@ namespace RNAssistant.Office.Services
                 Status = "running"
             });
 
-            var source = BuildCompactionSource(session, prefix, Math.Max(512, inputBudget / 4));
+            var source = BuildCompactionSource(
+                session,
+                prefix,
+                Math.Max(192, sourceTokenBudget / 4),
+                sourceTokenBudget);
             var prompt = CompactionPrompt(settings);
             var request = new List<ChatMessage>
             {
@@ -105,6 +113,9 @@ namespace RNAssistant.Office.Services
             };
             var completion = await _completeAsync(settings, request, options, null, cancellationToken).ConfigureAwait(false);
             var summary = ParseSummary(completion == null ? null : completion.Content);
+            summary["summary"] = ModelContextBudget.TruncateText(
+                (string)summary["summary"] ?? string.Empty,
+                Math.Max(256, Math.Min(4096, inputBudget / 4)));
             var summaryJson = summary.ToString(Formatting.None);
             var summaryMarkdown = RenderSummary(summary);
             var checkpoint = new ContextCheckpoint
@@ -262,7 +273,11 @@ namespace RNAssistant.Office.Services
             return firstRecent;
         }
 
-        private string BuildCompactionSource(ChatSession session, IEnumerable<ChatMessage> prefix, int attachmentTokenBudget)
+        private string BuildCompactionSource(
+            ChatSession session,
+            IEnumerable<ChatMessage> prefix,
+            int attachmentTokenBudget,
+            int sourceTokenBudget)
         {
             var builder = new StringBuilder();
             var prefixMessages = (prefix ?? new ChatMessage[0]).Where(message => message != null).ToList();
@@ -274,7 +289,9 @@ namespace RNAssistant.Office.Services
             if (active != null && !string.IsNullOrWhiteSpace(active.SummaryJson))
             {
                 builder.AppendLine("PRIOR_CHECKPOINT:");
-                builder.AppendLine(active.SummaryJson);
+                builder.AppendLine(ModelContextBudget.TruncateText(
+                    active.SummaryJson,
+                    Math.Max(128, sourceTokenBudget / 8)));
             }
             var referencedArtifactIds = new HashSet<string>(
                 prefixMessages.SelectMany(message => message.ArtifactIds ?? new List<string>())
@@ -282,24 +299,9 @@ namespace RNAssistant.Office.Services
                 StringComparer.OrdinalIgnoreCase);
             if (session != null && !string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId)) referencedArtifactIds.Add(session.ActiveHtmlArtifactId);
             if (session != null && !string.IsNullOrWhiteSpace(session.ActivePlanArtifactId)) referencedArtifactIds.Add(session.ActivePlanArtifactId);
-            builder.AppendLine("ARTIFACT_INDEX:");
             var artifacts = (session == null || session.Artifacts == null ? new List<ChatArtifact>() : session.Artifacts)
                 .Where(artifact => artifact != null && referencedArtifactIds.Contains(artifact.Id))
                 .ToList();
-            if (artifacts.Count == 0)
-            {
-                builder.AppendLine("none");
-            }
-            else
-            {
-                foreach (var artifact in artifacts)
-                {
-                    builder.AppendLine(artifact.Id + " | " + artifact.Kind + " | " + artifact.Title +
-                        " | revision=" + artifact.Revision + " | parent=" + artifact.ParentArtifactId +
-                        " | policy=" + artifact.ModelContextPolicy + " | related=" +
-                        string.Join(",", (artifact.RelatedArtifactIds ?? new List<string>()).ToArray()));
-                }
-            }
             builder.AppendLine("TRANSCRIPT:");
             foreach (var message in prefixMessages)
             {
@@ -342,7 +344,49 @@ namespace RNAssistant.Office.Services
                     builder.AppendLine("[/attachment_text]");
                 }
             }
-            return builder.ToString();
+            var artifactIndex = new StringBuilder();
+            artifactIndex.AppendLine("ARTIFACT_INDEX:");
+            if (artifacts.Count == 0)
+            {
+                artifactIndex.AppendLine("none");
+            }
+            else
+            {
+                foreach (var artifact in artifacts.Take(100))
+                {
+                    artifactIndex.AppendLine(
+                        ModelContextBudget.TruncateText(artifact.Id, 64) + " | " +
+                        ModelContextBudget.TruncateText(artifact.Kind, 32) + " | " +
+                        ModelContextBudget.TruncateText(artifact.Title, 128) +
+                        " | revision=" + artifact.Revision + " | parent=" +
+                        ModelContextBudget.TruncateText(artifact.ParentArtifactId, 64) +
+                        " | policy=" + ModelContextBudget.TruncateText(artifact.ModelContextPolicy, 32));
+                }
+                if (artifacts.Count > 100) artifactIndex.AppendLine("[additional artifacts omitted]");
+            }
+            builder.AppendLine(ModelContextBudget.TruncateText(
+                artifactIndex.ToString(),
+                Math.Max(128, sourceTokenBudget / 8)));
+            var source = builder.ToString();
+            if (ModelContextBudget.EstimateTextTokens(source) <= sourceTokenBudget) return source;
+            return ModelContextBudget.TruncateText(source, sourceTokenBudget) + "\n[compaction_source_truncated]";
+        }
+
+        private static List<ChatMessage> TakeFullyIncludedPrefix(
+            IEnumerable<ChatMessage> messages,
+            int tokenBudget)
+        {
+            var source = (messages ?? new ChatMessage[0]).Where(message => message != null).ToList();
+            var count = 0;
+            var used = 0;
+            while (count < source.Count)
+            {
+                var cost = Math.Max(1, ModelContextBudget.EstimateMessageTokens(source[count], false));
+                if (used + cost > tokenBudget) break;
+                used += cost;
+                count += 1;
+            }
+            return source.Take(ToolProtocolMessages.PreserveCompletePrefix(source, count)).ToList();
         }
 
         private static bool HasExtractedText(ChatAttachment attachment)

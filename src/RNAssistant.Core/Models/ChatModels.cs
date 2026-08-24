@@ -96,6 +96,7 @@ namespace RNAssistant.Core.Models
         public string ErrorCode { get; set; }
         public bool? Retryable { get; set; }
         public string PendingId { get; set; }
+        public string ConfirmationCatalogSha256 { get; set; }
         public string ToolId { get; set; }
         public string ToolCallId { get; set; }
         public string ArgumentsJson { get; set; }
@@ -115,6 +116,7 @@ namespace RNAssistant.Core.Models
 
         [JsonProperty(Required = Required.Always)]
         public int FormatVersion { get; set; }
+        public long Revision { get; set; }
         public string Id { get; set; }
         public string Host { get; set; }
         public string DocumentKey { get; set; }
@@ -182,12 +184,16 @@ namespace RNAssistant.Core.Models
         public string Status { get; set; }
         public string Phase { get; set; }
         public string CurrentAction { get; set; }
+        public string DocumentRuntimeKey { get; set; }
+        public int IterationsUsed { get; set; }
+        public int ToolStepsUsed { get; set; }
         public DateTime StartedUtc { get; set; }
     }
 
     public sealed class ChatSessionHeader
     {
         public string Id { get; set; }
+        public long Revision { get; set; }
         public string Host { get; set; }
         public string DocumentKey { get; set; }
         public string DocumentTitle { get; set; }
@@ -213,6 +219,7 @@ namespace RNAssistant.Core.Models
     public sealed class ChatSessionSummary
     {
         public string Id { get; set; }
+        public long Revision { get; set; }
         public string Host { get; set; }
         public string DocumentKey { get; set; }
         public string DocumentTitle { get; set; }

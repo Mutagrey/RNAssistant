@@ -142,6 +142,7 @@ namespace RNAssistant.Office.Tools
 
             if (!string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
             {
+                ApplyImplicitConfirmation(tool, profile);
                 return Complete(id, profile, cache, path);
             }
 
@@ -173,7 +174,16 @@ namespace RNAssistant.Office.Tools
                 profile.RiskLevel = Math.Max(profile.RiskLevel, nestedProfile.RiskLevel);
             }
 
+            ApplyImplicitConfirmation(tool, profile);
             return Complete(id, profile, cache, path);
+        }
+
+        private static void ApplyImplicitConfirmation(ToolDefinition tool, ToolSafetyProfile profile)
+        {
+            if (profile != null && profile.MutatesDocument && !CanAgentRunMutation(tool, profile))
+            {
+                profile.RequiresConfirmation = true;
+            }
         }
 
         private static Dictionary<string, ToolDefinition> BuildCatalog(IEnumerable<ToolDefinition> tools)

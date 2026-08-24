@@ -205,6 +205,13 @@ namespace RNAssistant.Harness
                 AssertTrue(!string.Equals(sourcePath, clonedAttachment.RelativePath, StringComparison.OrdinalIgnoreCase), "fork copies attachment to its own path");
                 AssertEqual(clonedAttachment.RelativePath, clonedArtifact.RelativePath, "fork artifact points at copied attachment");
                 AssertTrue(File.Exists(AbsoluteAttachmentPath(paths, clonedAttachment)), "forked attachment file exists");
+
+                var unsafeMessage = ChatCloneService.CloneMessages(source.Messages)[0];
+                unsafeMessage.Attachments[0].Id = "../escape";
+                unsafeMessage.Attachments.Add(null);
+                store.CloneMessageAttachments(new ChatSession().Id, unsafeMessage);
+                AssertTrue(unsafeMessage.Attachments[0].Id.All(char.IsLetterOrDigit),
+                    "fork replaces an unsafe persisted attachment id");
             });
         }
 

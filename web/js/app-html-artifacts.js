@@ -41,22 +41,9 @@
     iframe.setAttribute("sandbox", "allow-scripts allow-forms allow-modals allow-popups");
     iframe.referrerPolicy = "no-referrer";
     iframe.style.height = Math.max(180, Math.min(900, Number(artifactValue(artifact, "Height", "height", 360) || 360))) + "px";
-    var url = htmlBlobUrl(String(artifactValue(artifact, "Html", "html", "")));
-    iframe.dataset.objectUrl = url;
-    iframe.src = url;
-    iframe.addEventListener("load", function () {
-      var url = iframe.dataset.objectUrl;
-      if (url) {
-        URL.revokeObjectURL(url);
-        iframe.removeAttribute("data-object-url");
-      }
-    }, { once: true });
+    iframe.srcdoc = String(artifactValue(artifact, "Html", "html", ""));
     node.appendChild(iframe);
     return node;
-  }
-
-  function htmlBlobUrl(html) {
-    return URL.createObjectURL(new Blob([html || ""], { type: "text/html" }));
   }
 
   window.tryRenderHtmlArtifact = renderHtmlArtifact;

@@ -19,7 +19,11 @@ namespace RNAssistant.Office.Services
         private ChatSession _activeSession;
         private bool _activeSessionPersisted;
         internal Func<string, ChatRunSnapshot> RunStateProvider { get; set; }
+        internal Func<string, ChatRunSnapshot> RunStatusProvider { get; set; }
         internal Func<IReadOnlyList<ChatSession>> RunSessionsProvider { get; set; }
+        internal Func<string, bool> RunOwnershipProvider { get; set; }
+        internal Func<ChatSession, IDisposable> RunRecoveryLeaseProvider { get; set; }
+        internal Func<IDisposable> MaintenanceLeaseProvider { get; set; }
 
         public ChatSessionService(IOfficeApplicationAdapter adapter, ChatStore chatStore)
         {
@@ -31,38 +35,161 @@ namespace RNAssistant.Office.Services
         {
             foreach (var header in _chatStore.ListHeaders())
             {
-                if (!IsUnfinishedRun(header.RunStatus) || string.Equals(header.RunRuntimeId, runtimeId, StringComparison.Ordinal))
+                if (!IsUnfinishedRun(header.RunStatus))
+                {
+                    continue;
+                }
+                if (RunOwnershipProvider != null)
+                {
+                    if (RunOwnershipProvider(header.Id)) continue;
+                }
+                else if (string.Equals(header.RunRuntimeId, runtimeId, StringComparison.Ordinal))
                 {
                     continue;
                 }
 
                 var session = _chatStore.Load(header.Host, header.DocumentKey, header.Id);
                 var run = session == null ? null : session.LastRun;
-                if (run == null || !IsUnfinishedRun(run.Status) || string.Equals(run.RuntimeId, runtimeId, StringComparison.Ordinal))
+                if (run == null || !IsUnfinishedRun(run.Status))
                 {
                     continue;
                 }
 
-                run.Status = "cancelled";
-                run.Phase = "cancelled";
-                run.CurrentAction = "Приложение было перезапущено.";
-                session.Messages.Add(new ChatMessage
+                IDisposable recoveryLease = null;
+                try
                 {
-                    Role = "assistant",
-                    RunId = run.RunId,
-                    Content = "Предыдущий запуск был прерван перезапуском приложения.",
-                    Activity = new ChatActivity
+                    if (RunRecoveryLeaseProvider != null)
                     {
-                        RunId = run.RunId,
-                        Kind = "diagnostic",
-                        Title = "Запуск прерван",
-                        Status = "cancelled",
-                        ExecutionStatus = "application_restarted",
-                        ResultMessage = "Приложение было перезапущено до завершения запроса."
+                        try
+                        {
+                            recoveryLease = RunRecoveryLeaseProvider(session);
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            continue;
+                        }
+                        if (recoveryLease == null) continue;
                     }
-                });
-                _chatStore.Save(session);
+                    else if (RunOwnershipProvider != null && RunOwnershipProvider(header.Id))
+                    {
+                        continue;
+                    }
+
+                    // Ownership may have changed between the initial scan and lease acquisition.
+                    session = _chatStore.Load(header.Host, header.DocumentKey, header.Id);
+                    run = session == null ? null : session.LastRun;
+                    if (run == null || !IsUnfinishedRun(run.Status))
+                    {
+                        continue;
+                    }
+
+                    var effectMayBeUnknown = EffectMayBeUnknown(run);
+                    MarkInterruptedActivities(session, run, effectMayBeUnknown);
+                    if (effectMayBeUnknown)
+                    {
+                        ExcludeInterruptedProtocolMessages(session, run);
+                    }
+                    run.Status = "interrupted";
+                    run.Phase = "interrupted";
+                    run.CurrentAction = effectMayBeUnknown
+                        ? "Предыдущий процесс завершился во время выполнения действия."
+                        : "Предыдущий процесс завершился после сохранённой границы.";
+                    session.Messages.Add(new ChatMessage
+                    {
+                        Role = "assistant",
+                        RunId = run.RunId,
+                        Content = effectMayBeUnknown
+                            ? "Предыдущий запуск был прерван. Результат выполнявшегося действия неизвестен; проверьте документ перед ручным повтором."
+                            : "Предыдущий запуск был прерван после сохранённой границы. Сохранённые результаты оставлены в истории; автоматическое продолжение не выполнялось.",
+                        Activity = new ChatActivity
+                        {
+                            RunId = run.RunId,
+                            Kind = "diagnostic",
+                            Title = "Запуск прерван",
+                            Status = "failed",
+                            ExecutionStatus = effectMayBeUnknown ? "interrupted_unknown" : "interrupted",
+                            Retryable = false,
+                            ResultMessage = effectMayBeUnknown
+                                ? "Процесс завершился до сохранения окончательного результата. Автоматический повтор отключён."
+                                : "Запуск завершился до финального ответа. Сохранённые результаты не повторялись автоматически."
+                        }
+                    });
+                    try
+                    {
+                        _chatStore.Save(session);
+                    }
+                    catch (ChatConcurrencyException)
+                    {
+                        // Another writer updated this chat before recovery acquired canonical state.
+                    }
+                }
+                finally
+                {
+                    if (recoveryLease != null) recoveryLease.Dispose();
+                }
             }
+        }
+
+        private static bool EffectMayBeUnknown(ChatRunRecord run)
+        {
+            return run != null &&
+                (string.Equals(run.Phase, "tool_running", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(run.Phase, "executing", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static void MarkInterruptedActivities(ChatSession session, ChatRunRecord run, bool effectMayBeUnknown)
+        {
+            foreach (var message in session == null || session.Messages == null
+                ? new List<ChatMessage>()
+                : session.Messages)
+            {
+                if (!BelongsToRun(message, run)) continue;
+                MarkInterruptedActivity(message.Activity, effectMayBeUnknown);
+            }
+        }
+
+        private static void MarkInterruptedActivity(ChatActivity activity, bool effectMayBeUnknown)
+        {
+            if (activity == null) return;
+            if (string.Equals(activity.Status, "running", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(activity.ExecutionStatus, "running", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(activity.ExecutionStatus, "executing", StringComparison.OrdinalIgnoreCase))
+            {
+                activity.Status = "failed";
+                activity.ExecutionStatus = effectMayBeUnknown ? "interrupted_unknown" : "interrupted";
+                activity.Retryable = false;
+                activity.PendingId = null;
+                activity.ConfirmationCatalogSha256 = null;
+                activity.ResultMessage = effectMayBeUnknown
+                    ? "Execution was interrupted; the external effect is unknown."
+                    : "Execution was interrupted after the last persisted result.";
+            }
+            foreach (var child in activity.Children ?? new List<ChatActivity>())
+            {
+                MarkInterruptedActivity(child, effectMayBeUnknown);
+            }
+        }
+
+        private static void ExcludeInterruptedProtocolMessages(ChatSession session, ChatRunRecord run)
+        {
+            var messages = session == null ? null : session.Messages;
+            if (messages == null || run == null || string.IsNullOrWhiteSpace(run.RunId)) return;
+            foreach (var message in messages.Where(item =>
+                item != null && item.ProtocolMessage && BelongsToRun(item, run)))
+            {
+                // A crashed run may have crossed an external side-effect boundary even when a
+                // matching result was persisted. Keep it visible, but replay none of its protocol.
+                message.ExcludeFromModelContext = true;
+            }
+        }
+
+        private static bool BelongsToRun(ChatMessage message, ChatRunRecord run)
+        {
+            if (message == null || run == null) return false;
+            if (string.Equals(message.RunId, run.RunId, StringComparison.OrdinalIgnoreCase)) return true;
+            return string.IsNullOrWhiteSpace(message.RunId) &&
+                run.StartedUtc != default(DateTime) &&
+                message.CreatedUtc >= run.StartedUtc;
         }
 
         private static bool IsUnfinishedRun(string status)
@@ -100,32 +227,47 @@ namespace RNAssistant.Office.Services
             var runtimeKey = _adapter.RuntimeDocumentKey;
             var title = _adapter.DocumentTitle;
 
-            if (!string.IsNullOrWhiteSpace(_activeSessionId) &&
+            var activeDocumentKeyChanged = !string.IsNullOrWhiteSpace(_activeSessionId) &&
                 string.Equals(_activeHost, host, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(_activeRuntimeDocumentKey, runtimeKey, StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(_activeDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))
+                !string.Equals(_activeDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase);
+            var migrationDeferred = false;
+            IDisposable migrationLease = null;
+            try
             {
-                var oldDocumentKey = _activeDocumentKey;
-                if (_chatStore.IsPersisted(_activeSession))
+                if (activeDocumentKeyChanged && MaintenanceLeaseProvider != null)
                 {
-                    var activeSessionId = _activeSessionId;
-                    _chatStore.MoveDocument(_activeHost, oldDocumentKey, host, documentKey, title);
-                    _activeSession = _chatStore.Load(host, documentKey, activeSessionId) ?? _activeSession;
+                    migrationLease = MaintenanceLeaseProvider();
                 }
-                else if (_activeSession != null)
+                migrationDeferred = activeDocumentKeyChanged && IsDocumentRunOwned(_activeHost, _activeDocumentKey);
+                if (activeDocumentKeyChanged && !migrationDeferred)
                 {
-                    _activeSession.Host = host;
-                    _activeSession.DocumentKey = documentKey;
-                    _activeSession.DocumentTitle = title;
-                    if (_activeSession.Context != null)
+                    var oldDocumentKey = _activeDocumentKey;
+                    if (_chatStore.IsPersisted(_activeSession))
                     {
-                        _activeSession.Context.Host = host;
-                        _activeSession.Context.DocumentKey = documentKey;
+                        var activeSessionId = _activeSessionId;
+                        _chatStore.MoveDocument(_activeHost, oldDocumentKey, host, documentKey, title);
+                        _activeSession = _chatStore.Load(host, documentKey, activeSessionId) ?? _activeSession;
                     }
+                    else if (_activeSession != null)
+                    {
+                        _activeSession.Host = host;
+                        _activeSession.DocumentKey = documentKey;
+                        _activeSession.DocumentTitle = title;
+                        if (_activeSession.Context != null)
+                        {
+                            _activeSession.Context.Host = host;
+                            _activeSession.Context.DocumentKey = documentKey;
+                        }
+                    }
+                    _activeHost = host;
+                    _activeDocumentKey = documentKey;
+                    _activeRuntimeDocumentKey = runtimeKey;
                 }
-                _activeHost = host;
-                _activeDocumentKey = documentKey;
-                _activeRuntimeDocumentKey = runtimeKey;
+            }
+            finally
+            {
+                if (migrationLease != null) migrationLease.Dispose();
             }
 
             ChatSession session = null;
@@ -135,13 +277,6 @@ namespace RNAssistant.Office.Services
                 {
                     var running = RunStateProvider(requestedSessionId);
                     if (running != null) session = running.Session;
-                }
-                if (_activeSession != null &&
-                    session == null &&
-                    !allowMissingRequestedFallback &&
-                    string.Equals(requestedSessionId, _activeSessionId, StringComparison.OrdinalIgnoreCase))
-                {
-                    session = _activeSession;
                 }
                 if (session == null)
                 {
@@ -154,6 +289,13 @@ namespace RNAssistant.Office.Services
                 {
                     session = _chatStore.Load(requestedSessionId);
                 }
+                if (session == null &&
+                    _activeSession != null &&
+                    !allowMissingRequestedFallback &&
+                    string.Equals(requestedSessionId, _activeSessionId, StringComparison.OrdinalIgnoreCase))
+                {
+                    session = _activeSession;
+                }
                 if (session == null && !allowMissingRequestedFallback)
                 {
                     throw new InvalidOperationException("Chat session was not found.");
@@ -161,9 +303,14 @@ namespace RNAssistant.Office.Services
             }
             else if (!string.IsNullOrWhiteSpace(_activeSessionId) &&
                      string.Equals(_activeHost, host, StringComparison.OrdinalIgnoreCase) &&
-                     string.Equals(_activeDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))
+                     (string.Equals(_activeDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase) || migrationDeferred))
             {
-                session = _activeSession ?? _chatStore.Load(host, documentKey, _activeSessionId);
+                var running = RunStateProvider == null ? null : RunStateProvider(_activeSessionId);
+                session = running == null
+                    ? (_activeSessionPersisted
+                        ? _chatStore.Load(_activeHost, _activeDocumentKey, _activeSessionId)
+                        : _activeSession)
+                    : running.Session;
             }
 
             if (session == null)
@@ -172,7 +319,15 @@ namespace RNAssistant.Office.Services
             }
 
             session.Mode = ChatModes.Normalize(session.Mode);
-            SetActiveSession(session);
+            if (migrationDeferred)
+            {
+                _activeSession = session;
+                _activeSessionPersisted = _chatStore.IsPersisted(session);
+            }
+            else
+            {
+                SetActiveSession(session);
+            }
             UpdateCurrentDocumentMetadata(session);
             return session;
         }
@@ -273,26 +428,24 @@ namespace RNAssistant.Office.Services
                 return false;
             }
 
-            var running = RunStateProvider == null ? null : RunStateProvider(sessionId);
-            var session = running == null ? null : running.Session;
-            if (session == null && _activeSession != null &&
-                string.Equals(_activeSessionId, sessionId, StringComparison.OrdinalIgnoreCase))
+            if (IsRunOwned(sessionId))
             {
-                session = _activeSession;
+                return false;
             }
-            if (session == null)
-            {
-                session = _chatStore.Load(host, documentKey, sessionId) ?? _chatStore.Load(sessionId);
-            }
+            var session = _chatStore.Load(host, documentKey, sessionId) ?? _chatStore.Load(sessionId);
             if (!ChatTitleBuilder.CanReplaceAutoTitle(session, expectedCurrentTitle))
             {
                 return false;
             }
 
             session.Title = generatedTitle.Trim();
-            if (running == null)
+            try
             {
                 _chatStore.Save(session);
+            }
+            catch (ChatConcurrencyException)
+            {
+                return false;
             }
             if (string.Equals(_activeSessionId, sessionId, StringComparison.OrdinalIgnoreCase))
             {
@@ -369,10 +522,13 @@ namespace RNAssistant.Office.Services
         private ChatSessionSummary ToSummary(ChatSessionHeader header)
         {
             var id = header.Id;
-            var run = RunStateProvider == null ? null : RunStateProvider(id);
+            var run = RunStatusProvider == null
+                ? (RunStateProvider == null ? null : RunStateProvider(id))
+                : RunStatusProvider(id);
             return new ChatSessionSummary
             {
                 Id = id,
+                Revision = header.Revision,
                 Host = header.Host,
                 DocumentKey = header.DocumentKey,
                 DocumentTitle = header.DocumentTitle,
@@ -424,12 +580,48 @@ namespace RNAssistant.Office.Services
             var path = officeContext == null ? string.Empty : officeContext.DocumentPath;
             if (!string.IsNullOrWhiteSpace(path) && !string.Equals(session.DocumentPath, path, StringComparison.OrdinalIgnoreCase))
             {
-                session.DocumentPath = path;
-                if (_chatStore.IsPersisted(session))
+                var persisted = _chatStore.IsPersisted(session);
+                if (persisted && IsRunOwned(session.Id))
                 {
-                    _chatStore.Save(session);
+                    return;
+                }
+                var previousPath = session.DocumentPath;
+                session.DocumentPath = path;
+                if (persisted)
+                {
+                    try
+                    {
+                        _chatStore.Save(session);
+                    }
+                    catch (ChatConcurrencyException)
+                    {
+                        session.DocumentPath = previousPath;
+                    }
                 }
             }
+        }
+
+        private bool IsRunOwned(string sessionId)
+        {
+            return RunOwnershipProvider != null
+                ? RunOwnershipProvider(sessionId)
+                : RunStateProvider != null && RunStateProvider(sessionId) != null;
+        }
+
+        private bool IsDocumentRunOwned(string host, string documentKey)
+        {
+            var runningSessions = RunSessionsProvider == null
+                ? new ChatSession[0]
+                : RunSessionsProvider();
+            if (runningSessions.Any(session => session != null &&
+                string.Equals(session.Host, host, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(session.DocumentKey, documentKey, StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+
+            return _chatStore.ListHeaders(host, documentKey, string.Empty)
+                .Any(header => header != null && IsRunOwned(header.Id));
         }
 
         private static string ResolveDocumentPath(ChatSession session)

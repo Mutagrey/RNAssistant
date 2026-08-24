@@ -8,16 +8,15 @@ namespace RNAssistant.Office
     {
         public InitResponse ClearRuntimeData()
         {
-            if (_chatRuns.HasRuns())
+            using (_chatRuns.ReserveMaintenance())
             {
-                throw new InvalidOperationException("Сначала остановите выполняющиеся запросы.");
-            }
-            _paths.ClearRuntimeData();
-            _chatSessions.Reset();
-            _chatRuns.Clear();
-            lock (_syncRoot)
-            {
-                _pendingAgentTools.Clear();
+                EnsureNoActiveRuns();
+                _paths.ClearRuntimeData();
+                _chatSessions.Reset();
+                lock (_syncRoot)
+                {
+                    _pendingAgentTools.Clear();
+                }
             }
             return Initialize();
         }
@@ -30,7 +29,9 @@ namespace RNAssistant.Office
             }
 
             try { _lifetimeCancellation.Cancel(); } catch (ObjectDisposedException) { }
-            _chatRuns.Clear();
+            // Keep per-chat locks until each cancelled run actually leaves its lease. A COM/tool
+            // call may not observe cancellation immediately, so releasing here would allow overlap.
+            _chatRuns.CancelAll();
             lock (_syncRoot)
             {
                 _pendingAgentTools.Clear();

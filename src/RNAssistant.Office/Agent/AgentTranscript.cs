@@ -14,6 +14,10 @@ namespace RNAssistant.Office
     internal static class AgentTranscript
     {
         private const int MaxTranscriptReasoningChars = 24000;
+        private const int MaxTranscriptArgumentsChars = 64000;
+        private const int MaxTranscriptDataChars = 128000;
+        private const int MaxRenderableTranscriptDataChars = 2000000;
+        private const int MaxTranscriptMessageChars = 16000;
 
         public static ChatMessage CreateLocalResultMessage(
             ToolCommand command,
@@ -87,15 +91,15 @@ namespace RNAssistant.Office
                 errorCode = result == null ? string.Empty : result.ErrorCode,
                 retryable = result == null ? null : result.Retryable,
                 pendingId = result == null ? string.Empty : result.PendingId,
-                message = result == null ? string.Empty : result.Message,
-                dataJson = result == null ? null : result.DataJson
+                message = result == null ? string.Empty : BoundText(result.Message, MaxTranscriptMessageChars),
+                dataJson = result == null ? null : BoundJson(result.DataJson, MaxTranscriptDataChars, false, true)
             };
         }
 
         public static ChatActivity CreateToolActivity(ToolCommand command, ToolResult result, string kind)
         {
             var success = result != null && result.Success;
-            var message = result == null ? string.Empty : result.Message ?? string.Empty;
+            var message = result == null ? string.Empty : BoundText(result.Message, MaxTranscriptMessageChars);
             var executionStatus = NormalizeExecutionStatus(result);
             var title = command == null
                 ? "Tool step"
@@ -103,6 +107,7 @@ namespace RNAssistant.Office
                     ? command.Description
                     : command.ToolId;
 
+            var rawDataJson = result == null ? null : result.DataJson;
             var activity = new ChatActivity
             {
                 Kind = string.IsNullOrWhiteSpace(kind) ? "tool" : kind,
@@ -113,19 +118,68 @@ namespace RNAssistant.Office
                 ErrorCode = result == null ? null : result.ErrorCode,
                 Retryable = result == null ? null : result.Retryable,
                 PendingId = result == null ? null : result.PendingId,
+                ConfirmationCatalogSha256 = result == null ? null : result.ConfirmationCatalogSha256,
                 ToolId = command == null ? string.Empty : command.ToolId,
                 ToolCallId = command == null ? string.Empty : command.ToolCallId,
-                ArgumentsJson = command == null ? null : JsonConvert.SerializeObject(command.Arguments, Formatting.Indented),
+                ArgumentsJson = command == null
+                    ? null
+                    : BoundJson(
+                        JsonConvert.SerializeObject(command.Arguments, Formatting.Indented),
+                        MaxTranscriptArgumentsChars,
+                        result != null && IsWaitingResult(result),
+                        false),
                 ResultMessage = message,
-                DataJson = result == null ? null : result.DataJson
+                DataJson = BoundJson(rawDataJson, MaxTranscriptDataChars, false, true)
             };
 
-            foreach (var child in ParsePipelineChildren(activity.DataJson))
+            foreach (var child in ParsePipelineChildren(rawDataJson))
             {
                 activity.Children.Add(child);
             }
 
             return activity;
+        }
+
+        private static string BoundJson(
+            string json,
+            int maxCharacters,
+            bool preserveFull,
+            bool preserveRenderableArtifact)
+        {
+            if (preserveFull || string.IsNullOrEmpty(json) || json.Length <= maxCharacters ||
+                preserveRenderableArtifact && json.Length <= MaxRenderableTranscriptDataChars && IsRenderableArtifact(json))
+            {
+                return json;
+            }
+            return JsonConvert.SerializeObject(new
+            {
+                truncated = true,
+                originalCharacters = json.Length,
+                preview = json.Substring(0, Math.Min(4096, json.Length))
+            });
+        }
+
+        private static bool IsRenderableArtifact(string json)
+        {
+            try
+            {
+                var root = JObject.Parse(json ?? string.Empty);
+                var type = (string)root["type"] ?? (string)root["Type"] ?? string.Empty;
+                return string.Equals(type, "rnassistant.chart", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(type, "rnassistant.html", StringComparison.OrdinalIgnoreCase);
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+        }
+
+        private static string BoundText(string value, int maxCharacters)
+        {
+            value = value ?? string.Empty;
+            return value.Length <= maxCharacters
+                ? value
+                : value.Substring(0, maxCharacters) + "\n...[truncated]";
         }
 
         public static bool IsWaitingResult(ToolResult result)
@@ -229,8 +283,8 @@ namespace RNAssistant.Office
                             ? (bool?)null
                             : retryableToken.Value<bool>(),
                         ToolId = toolId,
-                        ResultMessage = (string)step["message"],
-                        DataJson = (string)step["dataJson"]
+                        ResultMessage = BoundText((string)step["message"], MaxTranscriptMessageChars),
+                        DataJson = BoundJson((string)step["dataJson"], MaxTranscriptDataChars, false, false)
                     });
                 }
 

@@ -30,11 +30,11 @@ namespace RNAssistant.Office.Tools
                 "Common",
                 "Mutates settings: Update RNAssistant Agent, Chat, compaction, or title prompts after the user asks to edit them.",
                 "{\"type\":\"object\",\"properties\":{" +
-                    "\"systemPrompt\":{\"type\":\"string\",\"description\":\"Complete Agent-mode Markdown prompt.\"}," +
-                    "\"chatSystemPrompt\":{\"type\":\"string\",\"description\":\"Complete tool-free Chat-mode Markdown prompt.\"}," +
+                    "\"systemPrompt\":{\"type\":\"string\",\"description\":\"Complete Agent-mode Markdown prompt.\",\"maxLength\":100000}," +
+                    "\"chatSystemPrompt\":{\"type\":\"string\",\"description\":\"Complete tool-free Chat-mode Markdown prompt.\",\"maxLength\":100000}," +
                     "\"systemPromptRole\":{\"type\":\"string\",\"description\":\"Message role used for prompt instructions.\",\"enum\":[\"developer\",\"system\",\"user\"]}," +
-                    "\"contextCompactionPrompt\":{\"type\":\"string\",\"description\":\"Markdown prompt used to compact completed history.\"}," +
-                    "\"chatTitlePrompt\":{\"type\":\"string\",\"description\":\"Markdown prompt used to generate chat titles.\"}}," +
+                    "\"contextCompactionPrompt\":{\"type\":\"string\",\"description\":\"Markdown prompt used to compact completed history.\",\"maxLength\":100000}," +
+                    "\"chatTitlePrompt\":{\"type\":\"string\",\"description\":\"Markdown prompt used to generate chat titles.\",\"maxLength\":100000}}," +
                     "\"required\":[],\"additionalProperties\":false}",
                 mutatesLocalState: true,
                 requiresConfirmation: true,
@@ -42,7 +42,7 @@ namespace RNAssistant.Office.Tools
                 name: "prompts_save");
         }
 
-        public ToolResult ExecuteControllerTool(ToolCommand command, AppSettings runtimeSettings, bool dryRun)
+        public ToolResult ExecuteControllerTool(ToolCommand command, bool dryRun)
         {
             if (_loadSettings == null)
             {
@@ -67,28 +67,31 @@ namespace RNAssistant.Office.Tools
 
             if (string.Equals(command.ToolId, "common.prompts_save", StringComparison.OrdinalIgnoreCase))
             {
-                return SavePrompts(command, runtimeSettings, dryRun);
+                return SavePrompts(command, dryRun);
             }
 
             return ToolResult.Fail("Unknown prompt controller tool: " + command.ToolId);
         }
 
-        private ToolResult SavePrompts(ToolCommand command, AppSettings runtimeSettings, bool dryRun)
+        private ToolResult SavePrompts(ToolCommand command, bool dryRun)
         {
             if (_saveSettings == null)
             {
                 return ToolResult.Fail("Prompt settings store is read-only.");
             }
 
-            var source = runtimeSettings ?? _loadSettings() ?? new AppSettings();
-            var settings = dryRun
-                ? source.Clone()
-                : source;
+            var source = _loadSettings() ?? new AppSettings();
+            var settings = source.Clone();
             ApplyIfPresent(command, "systemPrompt", value => settings.SystemPrompt = value);
             ApplyIfPresent(command, "chatSystemPrompt", value => settings.ChatSystemPrompt = value);
             ApplyIfPresent(command, "systemPromptRole", value => settings.SystemPromptRole = NormalizePromptRole(value));
             ApplyIfPresent(command, "contextCompactionPrompt", value => settings.ContextCompactionPrompt = value);
             ApplyIfPresent(command, "chatTitlePrompt", value => settings.ChatTitlePrompt = value);
+            if (PromptTooLarge(settings.SystemPrompt) || PromptTooLarge(settings.ChatSystemPrompt) ||
+                PromptTooLarge(settings.ContextCompactionPrompt) || PromptTooLarge(settings.ChatTitlePrompt))
+            {
+                return ToolResult.Fail("Prompt template exceeds the 100000 character limit.", null, "prompt_too_large", false);
+            }
 
             if (dryRun)
             {
@@ -129,6 +132,11 @@ namespace RNAssistant.Office.Tools
             if (string.Equals(value, "system", StringComparison.OrdinalIgnoreCase)) return "system";
             if (string.Equals(value, "user", StringComparison.OrdinalIgnoreCase)) return "user";
             return "developer";
+        }
+
+        private static bool PromptTooLarge(string value)
+        {
+            return (value ?? string.Empty).Length > 100000;
         }
 
     }

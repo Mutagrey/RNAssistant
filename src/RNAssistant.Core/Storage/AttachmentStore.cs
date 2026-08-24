@@ -103,7 +103,8 @@ namespace RNAssistant.Core.Storage
             foreach (var id in requested)
             {
                 var metadata = LoadMetadata(id);
-                if (metadata == null)
+                if (metadata == null || !IsSafeId(metadata.Id) ||
+                    !string.Equals(metadata.Id, id, StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException("Attachment metadata is no longer available: " + id);
                 }
@@ -145,19 +146,27 @@ namespace RNAssistant.Core.Storage
 
         public void Commit(string sessionId, ChatMessage message)
         {
+            Commit(sessionId, message, true);
+        }
+
+        public void Commit(string sessionId, ChatMessage message, bool deleteDrafts)
+        {
             if (message == null || message.Attachments == null || message.Attachments.Count == 0)
             {
                 return;
             }
+            foreach (var attachment in message.Attachments.Where(item => item != null))
+            {
+                if (!File.Exists(AbsolutePath(attachment.RelativePath)))
+                {
+                    throw new InvalidOperationException("Attachment file is missing: " + (attachment.FileName ?? attachment.Id));
+                }
+            }
             var directory = MessageDirectory(sessionId, message.Id);
             Directory.CreateDirectory(directory);
-            foreach (var attachment in message.Attachments)
+            foreach (var attachment in message.Attachments.Where(item => item != null))
             {
                 var source = AbsolutePath(attachment.RelativePath);
-                if (!File.Exists(source))
-                {
-                    continue;
-                }
                 var target = Path.Combine(directory, attachment.Id + Path.GetExtension(source));
                 File.Copy(source, target, true);
                 attachment.RelativePath = RelativePath(target);
@@ -168,7 +177,26 @@ namespace RNAssistant.Core.Storage
                     File.Copy(extractedSource, extractedTarget, true);
                     attachment.ExtractedTextPath = RelativePath(extractedTarget);
                 }
-                DeleteDraft(attachment.Id);
+                if (deleteDrafts) DeleteDraft(attachment.Id);
+            }
+        }
+
+        public void DeleteDrafts(ChatMessage message)
+        {
+            foreach (var attachment in message == null || message.Attachments == null
+                ? new List<ChatAttachment>()
+                : message.Attachments.Where(item => item != null))
+            {
+                try
+                {
+                    DeleteDraft(attachment.Id);
+                }
+                catch (IOException)
+                {
+                }
+                catch (UnauthorizedAccessException)
+                {
+                }
             }
         }
 
@@ -177,13 +205,17 @@ namespace RNAssistant.Core.Storage
             var attachments = message == null || message.Attachments == null
                 ? (IEnumerable<ChatAttachment>)new ChatAttachment[0]
                 : message.Attachments;
-            foreach (var attachment in attachments)
+            foreach (var attachment in attachments.Where(item => item != null))
             {
-                SafeDeleteFile(AbsolutePath(attachment.RelativePath));
-                var extractedPath = ExtractedTextAbsolutePath(attachment);
-                if (!string.IsNullOrWhiteSpace(extractedPath))
+                try
                 {
-                    SafeDeleteFile(extractedPath);
+                    SafeDeleteFile(AbsolutePath(attachment.RelativePath));
+                    var extractedPath = ExtractedTextAbsolutePath(attachment);
+                    if (!string.IsNullOrWhiteSpace(extractedPath)) SafeDeleteFile(extractedPath);
+                }
+                catch (InvalidOperationException)
+                {
+                    // Invalid persisted paths are ignored during best-effort cleanup.
                 }
             }
         }
@@ -199,12 +231,10 @@ namespace RNAssistant.Core.Storage
             {
                 return;
             }
-            foreach (var attachment in message.Attachments)
+            foreach (var attachment in message.Attachments.Where(item => item != null))
             {
                 var source = AbsolutePath(attachment.RelativePath);
-                var cloneId = string.IsNullOrWhiteSpace(attachment.Id)
-                    ? Guid.NewGuid().ToString("N")
-                    : attachment.Id;
+                var cloneId = IsSafeId(attachment.Id) ? attachment.Id : Guid.NewGuid().ToString("N");
                 attachment.Id = cloneId;
                 if (!File.Exists(source))
                 {

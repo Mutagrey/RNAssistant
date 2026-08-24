@@ -38,7 +38,8 @@ namespace RNAssistant.Harness
                     new SkillStore(paths),
                     new ToolStore(paths),
                     () => settings,
-                    value => settings = value);
+                    value => settings = value,
+                    paths);
                 action(executor, adapter);
             });
         }

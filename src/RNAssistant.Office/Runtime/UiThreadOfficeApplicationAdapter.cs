@@ -6,10 +6,11 @@ using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office
 {
-    public sealed class UiThreadOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog
+    public sealed class UiThreadOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard
     {
         private readonly IOfficeApplicationAdapter _inner;
         private readonly OfficeUiDispatcher _dispatcher;
+        private readonly OfficeDocumentExecutionGuardState _documentGuard = new OfficeDocumentExecutionGuardState();
 
         public UiThreadOfficeApplicationAdapter(IOfficeApplicationAdapter inner, OfficeUiDispatcher dispatcher)
         {
@@ -44,7 +45,17 @@ namespace RNAssistant.Office
 
         public ToolResult ExecuteTool(ToolCommand command)
         {
-            return _dispatcher.Invoke(delegate { return _inner.ExecuteTool(command); });
+            var expectation = _documentGuard.Current;
+            return _dispatcher.Invoke(delegate
+            {
+                var mismatch = OfficeDocumentExecutionGuardState.Validate(_inner, expectation);
+                return mismatch ?? _inner.ExecuteTool(command);
+            });
+        }
+
+        public IDisposable BeginExpectedDocument(string host, string documentKey, string runtimeDocumentKey)
+        {
+            return _documentGuard.Begin(host, documentKey, runtimeDocumentKey);
         }
 
         public OfficeContext GetOfficeContext()
@@ -95,4 +106,5 @@ namespace RNAssistant.Office
             });
         }
     }
+
 }

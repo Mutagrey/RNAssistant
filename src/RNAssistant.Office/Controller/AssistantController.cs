@@ -16,7 +16,7 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController : IDisposable
     {
-        private static readonly string RuntimeId = Guid.NewGuid().ToString("N");
+        private readonly string _runtimeId = Guid.NewGuid().ToString("N");
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly AppDataPaths _paths;
         private readonly SettingsService _settingsService;
@@ -69,17 +69,24 @@ namespace RNAssistant.Office
                 _skillStore,
                 _toolStore,
                 () => _settingsService.Load(),
-                settings => _settingsService.Save(settings));
+                settings => _settingsService.Save(settings),
+                _paths);
             _toolCatalog = new ToolCatalogService(_adapter, _toolExecutor, _toolStore);
             _skillCatalog = new SkillCatalogService(_adapter, _skillStore);
+            _chatRuns = new ChatRunRegistry(_paths);
             _chatSessions = new ChatSessionService(_adapter, _chatStore);
-            _chatRuns = new ChatRunRegistry();
             _lifetimeCancellation = new CancellationTokenSource();
             _chatSessions.RunStateProvider = _chatRuns.Get;
+            _chatSessions.RunStatusProvider = _chatRuns.GetStatus;
             _chatSessions.RunSessionsProvider = _chatRuns.Sessions;
-            _chatSessions.ReconcileInterruptedRuns(RuntimeId);
+            _chatSessions.RunOwnershipProvider = _chatRuns.IsExternallyRunning;
+            _chatSessions.RunRecoveryLeaseProvider = session => _chatRuns.Start(
+                session.Id,
+                "recover_" + Guid.NewGuid().ToString("N"),
+                session);
+            _chatSessions.MaintenanceLeaseProvider = _chatRuns.ReserveMaintenance;
+            _chatSessions.ReconcileInterruptedRuns(_runtimeId);
             _chatHistoryEditService = new ChatHistoryEditService(
-                _attachmentStore,
                 RemovePendingAgentToolsForSession,
                 CancelPendingActivities,
                 _chatStore.LoadHtmlArtifactBody);
@@ -143,8 +150,8 @@ namespace RNAssistant.Office
                 ToolsPath = _paths.ToolsDirectory,
                 Skills = _skillCatalog.GetVisibleSkills(),
                 SkillsPath = _paths.SkillsDirectory,
-                Context = context,
-                Messages = session.Messages,
+                Context = ChatCloneService.CloneContext(context),
+                Messages = ChatCloneService.CloneMessages(session.Messages),
                 Artifacts = ChatArtifactDto.From(session.Artifacts),
                 ActiveContextCheckpointId = session.ActiveContextCheckpointId,
                 ActiveHtmlArtifactId = session.ActiveHtmlArtifactId,
@@ -276,6 +283,47 @@ namespace RNAssistant.Office
             }
         }
 
+        private void PersistRunCheckpoint(ChatSession session, string runId, string phase)
+        {
+            if (!string.Equals(phase, "tool_running", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(phase, "tool_result", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+            SaveSessionChanges(session);
+            _chatRuns.UpdateSessionSnapshot(session.Id, runId, session);
+        }
+
+        private static void CloseRunningActivities(ChatSession session, int firstMessageIndex, bool cancelled)
+        {
+            if (session == null || session.Messages == null) return;
+            for (var index = Math.Max(0, firstMessageIndex); index < session.Messages.Count; index++)
+            {
+                CloseRunningActivity(session.Messages[index] == null ? null : session.Messages[index].Activity, cancelled);
+            }
+        }
+
+        private static void CloseRunningActivity(ChatActivity activity, bool cancelled)
+        {
+            if (activity == null) return;
+            if (string.Equals(activity.Status, "running", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(activity.ExecutionStatus, "executing", StringComparison.OrdinalIgnoreCase))
+            {
+                activity.Status = cancelled ? "cancelled" : "failed";
+                activity.ExecutionStatus = cancelled ? "cancelled" : "runtime_error";
+                activity.Retryable = cancelled;
+                activity.PendingId = null;
+                activity.ConfirmationCatalogSha256 = null;
+                activity.ResultMessage = cancelled
+                    ? "Execution was cancelled before a result was recorded."
+                    : "Execution stopped before a result was recorded.";
+            }
+            foreach (var child in activity.Children ?? new List<ChatActivity>())
+            {
+                CloseRunningActivity(child, cancelled);
+            }
+        }
+
         public AttachmentResponse ImportAttachment(string fileName, string contentType, string base64)
         {
             var attachment = _attachmentStore.Import(fileName, contentType, base64);
@@ -340,24 +388,37 @@ namespace RNAssistant.Office
                     return;
                 }
 
-                ChatStateResponse state;
-                lock (_syncRoot)
+                try
                 {
-                    if (!_chatSessions.TryApplyGeneratedTitle(
-                        host,
-                        documentKey,
-                        sessionId,
-                        expectedCurrentTitle,
-                        title))
+                    ChatStateResponse state;
+                    using (_chatRuns.ReserveMaintenance())
                     {
-                        return;
+                        lock (_syncRoot)
+                        {
+                            if (!_chatSessions.TryApplyGeneratedTitle(
+                                host,
+                                documentKey,
+                                sessionId,
+                                expectedCurrentTitle,
+                                title))
+                            {
+                                return;
+                            }
+                            state = CreateStoredChatState(host, documentKey, documentTitle);
+                        }
                     }
-                    state = CreateStoredChatState(host, documentKey, documentTitle);
-                }
 
-                if (chatStateChanged != null)
+                    if (chatStateChanged != null)
+                    {
+                        chatStateChanged(state);
+                    }
+                }
+                catch (OperationCanceledException)
                 {
-                    chatStateChanged(state);
+                }
+                catch
+                {
+                    // Title generation is best-effort and must not fault the chat run.
                 }
             });
         }
@@ -390,6 +451,7 @@ namespace RNAssistant.Office
             public IReadOnlyList<ChatAttachment> Attachments { get; set; }
             public bool AppendUserMessage { get; set; }
             public bool CommitUserAttachments { get; set; }
+            public IReadOnlyList<ChatMessage> MessagesToDeleteAfterSave { get; set; }
         }
 
         private async Task<SendChatResponse> ExecuteChatTurnAsync(
@@ -403,7 +465,6 @@ namespace RNAssistant.Office
             string runId)
         {
             session = session ?? LoadAddressedSession(null);
-            settings = ResolveChatSettings(session, settings);
             var sessionId = session.Id;
             runId = string.IsNullOrWhiteSpace(runId) ? Guid.NewGuid().ToString("N") : runId;
 
@@ -421,16 +482,44 @@ namespace RNAssistant.Office
 
             try
             {
+                session = ReloadReservedSession(session);
+                settings = ResolveChatSettings(session, settings);
+                if (prepareTurn == null && HasPendingAgentConfirmation(session))
+                {
+                    throw new InvalidOperationException("Сначала подтвердите или отмените ожидающее действие агента.");
+                }
                 input = prepareTurn == null ? input : prepareTurn(session);
                 input = input ?? new ChatTurnInput();
                 var text = input.Text ?? string.Empty;
                 var attachments = input.Attachments ?? new ChatAttachment[0];
                 var executionMode = ChatModes.Normalize(session.Mode);
+                var documentRuntimeKey = string.Empty;
                 if (executionMode == ChatModes.Agent)
                 {
-                    EnsureCurrentDocument(session);
+                    documentRuntimeKey = CaptureExpectedRuntimeDocumentKey(session);
                 }
                 HtmlWorkspaceArtifactService.CaptureCurrent(session, "Before chat turn");
+                var firstRunMessageIndex = session.Messages == null ? 0 : session.Messages.Count;
+                ChatMessage appendedUserMessage = null;
+                var commitUserAttachments = input.CommitUserAttachments;
+                if (!input.AppendUserMessage && session.Messages != null && session.Messages.Count > 0)
+                {
+                    firstRunMessageIndex = Math.Max(0, session.Messages.Count - 1);
+                }
+                if (input.AppendUserMessage)
+                {
+                    var userMessage = new ChatMessage
+                    {
+                        Role = "user",
+                        Content = text,
+                        RunId = runId,
+                        Sequence = 1,
+                        HtmlWorkspaceCheckpointId = session.ActiveHtmlArtifactId,
+                        Attachments = new List<ChatAttachment>(attachments)
+                    };
+                    session.Messages.Add(userMessage);
+                    appendedUserMessage = userMessage;
+                }
                 var documentContext = LoadContext(session);
                 var titleUserSeed = ChatTitleBuilder.ResolveUserSeed(session, text);
                 var shouldGenerateLlmTitle = settings.SmartChatTitles && ChatTitleBuilder.ShouldAssign(session);
@@ -445,23 +534,71 @@ namespace RNAssistant.Office
                 session.LastRun = new ChatRunRecord
                 {
                     RunId = runId,
-                    RuntimeId = RuntimeId,
+                    RuntimeId = _runtimeId,
                     Status = "running",
                     Phase = "starting",
                     CurrentAction = "Preparing request.",
+                    DocumentRuntimeKey = executionMode == ChatModes.Agent ? documentRuntimeKey : null,
+                    IterationsUsed = 0,
+                    ToolStepsUsed = 0,
                     StartedUtc = DateTime.UtcNow
                 };
-                _chatStore.Save(session);
-                _chatSessions.NotifySaved(session);
-                if (!string.IsNullOrWhiteSpace(provisionalTitle) && chatStateChanged != null)
+                var preparedTurnPersisted = false;
+                try
                 {
-                    chatStateChanged(CreateStoredChatState(session.Host, session.DocumentKey, session.DocumentTitle));
+                    if (commitUserAttachments && appendedUserMessage != null)
+                    {
+                        // Keep drafts until the chat points to the copied final files durably.
+                        _attachmentStore.Commit(sessionId, appendedUserMessage, false);
+                    }
+                    _chatStore.Save(session);
+                    preparedTurnPersisted = true;
+                    _chatSessions.NotifySaved(session);
+                    if (commitUserAttachments && appendedUserMessage != null)
+                    {
+                        _attachmentStore.DeleteDrafts(appendedUserMessage);
+                    }
+                    foreach (var removedMessage in input.MessagesToDeleteAfterSave ?? new ChatMessage[0])
+                    {
+                        _attachmentStore.DeleteMessage(removedMessage);
+                    }
+                    input.MessagesToDeleteAfterSave = null;
+                    _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
+                    if (!string.IsNullOrWhiteSpace(provisionalTitle) && chatStateChanged != null)
+                    {
+                        try
+                        {
+                            chatStateChanged(CreateStoredChatState(session.Host, session.DocumentKey, session.DocumentTitle));
+                        }
+                        catch
+                        {
+                            // A UI notification cannot invalidate an already persisted request.
+                        }
+                    }
                 }
-
-                var firstRunMessageIndex = session.Messages == null ? 0 : session.Messages.Count;
-                if (!input.AppendUserMessage && session.Messages != null && session.Messages.Count > 0)
+                catch (Exception ex)
                 {
-                    firstRunMessageIndex = Math.Max(0, session.Messages.Count - 1);
+                    if (preparedTurnPersisted)
+                    {
+                        RecordFailedTurn(session, ex);
+                        if (session.LastRun != null)
+                        {
+                            session.LastRun.Status = "failed";
+                            session.LastRun.Phase = "failed";
+                            session.LastRun.CurrentAction = ex.Message;
+                        }
+                        AnnotateRunMessages(session, firstRunMessageIndex, runId);
+                        try
+                        {
+                            SaveSessionChanges(session);
+                        }
+                        catch
+                        {
+                            // Keep the original preparation failure. Draft files remain available.
+                        }
+                        _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
+                    }
+                    throw;
                 }
 
                 Action<string, string, ChatActivity> runProgress = (phase, message, activity) =>
@@ -476,10 +613,13 @@ namespace RNAssistant.Office
                     {
                         AnnotateActivity(activity, runId, null);
                     }
-                    if (progress != null)
+                    if (string.Equals(phase, "tool_running", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(phase, "tool_result", StringComparison.OrdinalIgnoreCase))
                     {
-                        progress(phase, message, activity);
+                        AnnotateRunMessages(session, firstRunMessageIndex, runId);
                     }
+                    PersistRunCheckpoint(session, runId, phase);
+                    ReportExternalProgress(progress, phase, message, activity);
                 };
 
                 ChatTurnResult completion;
@@ -490,7 +630,7 @@ namespace RNAssistant.Office
                         await _contextCompactionService.EnsureWithinBudgetAsync(
                             session,
                             settings,
-                            text,
+                            string.Empty,
                             false,
                             runProgress,
                             runCancellation.Token).ConfigureAwait(false);
@@ -524,28 +664,37 @@ namespace RNAssistant.Office
                             attachments,
                             runProgress,
                             runCancellation.Token,
-                            input.AppendUserMessage).ConfigureAwait(false);
+                            false).ConfigureAwait(false);
                     }
                     else
                     {
                         var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
                         var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
-                        completion = await _agentRunService.ExecuteAsync(
-                            text,
-                            session,
-                            documentContext,
-                            settings,
-                            tools,
-                            attachments,
-                            runProgress,
-                            RegisterPendingAgentTool,
-                            skills,
-                            runCancellation.Token,
-                            input.AppendUserMessage).ConfigureAwait(false);
+                        try
+                        {
+                            completion = await _agentRunService.ExecuteAsync(
+                                text,
+                                session,
+                                documentContext,
+                                settings,
+                                tools,
+                                attachments,
+                                runProgress,
+                                RegisterPendingAgentTool,
+                                skills,
+                                runCancellation.Token,
+                                false).ConfigureAwait(false);
+                        }
+                        finally
+                        {
+                            // Auto-confirmed VBA mutations bypass the explicit VBA bridge methods.
+                            _toolCatalog.InvalidateDocumentVbaTools();
+                        }
                     }
                 }
                 catch (Exception ex)
                 {
+                    CloseRunningActivities(session, firstRunMessageIndex, ex is OperationCanceledException);
                     RecordFailedTurn(session, ex);
                     if (session.LastRun != null)
                     {
@@ -554,13 +703,10 @@ namespace RNAssistant.Office
                         session.LastRun.CurrentAction = ex.Message;
                     }
                     AnnotateRunMessages(session, firstRunMessageIndex, runId);
-                    if (input.CommitUserAttachments)
-                    {
-                        _attachmentStore.Commit(sessionId, LatestUserMessage(session));
-                    }
                     HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
                     ChatArtifactService.LinkMessageArtifacts(session, firstRunMessageIndex);
                     SaveSessionChanges(session);
+                    _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
                     throw;
                 }
 
@@ -568,17 +714,16 @@ namespace RNAssistant.Office
                 {
                     ChatTitleBuilder.ApplyFallback(session, text, completion.AssistantText);
                 }
-
                 ReportProgress(runProgress, "saving", "Сохраняю историю чата...");
-                if (input.CommitUserAttachments)
-                {
-                    _attachmentStore.Commit(sessionId, LatestUserMessage(session));
-                }
                 HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
                 AnnotateRunMessages(session, firstRunMessageIndex, runId);
                 ChatArtifactService.LinkMessageArtifacts(session, firstRunMessageIndex);
-                session.LastRun = null;
+                if (completion == null || !completion.WaitingForConfirmation)
+                {
+                    session.LastRun = null;
+                }
                 SaveSessionChanges(session);
+                _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
                 runLease.Dispose();
                 var response = CreateSendChatResponse(session, settings, completion);
                 if (shouldGenerateLlmTitle)
@@ -617,8 +762,8 @@ namespace RNAssistant.Office
                 ActiveChatReasoning = session != null && session.ReasoningEnabled,
                 Chats = _chatSessions.GetChatSummaries(activeId),
                 Documents = ListOpenDocuments(),
-                Context = session == null ? CreateEmptyContext() : LoadContext(session),
-                Messages = session == null ? new List<ChatMessage>() : session.Messages,
+                Context = session == null ? CreateEmptyContext() : ChatCloneService.CloneContext(LoadContext(session)),
+                Messages = session == null ? new List<ChatMessage>() : ChatCloneService.CloneMessages(session.Messages),
                 Artifacts = ChatArtifactDto.From(session == null ? null : session.Artifacts),
                 ActiveContextCheckpointId = session == null ? string.Empty : session.ActiveContextCheckpointId,
                 ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId,
@@ -639,15 +784,6 @@ namespace RNAssistant.Office
                 ToolResults = new object[0],
                 ContextUsage = ContextUsageEstimator.FromSession(session, settings)
             });
-        }
-
-        private static ChatMessage LatestUserMessage(ChatSession session)
-        {
-            return session == null || session.Messages == null
-                ? null
-                : session.Messages.LastOrDefault(message =>
-                    message != null &&
-                    string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase));
         }
 
         private ChatStateResponse CreateStoredChatState(string host, string documentKey, string documentTitle)
@@ -686,6 +822,23 @@ namespace RNAssistant.Office
             if (progress != null)
             {
                 progress(phase, message, activity);
+            }
+        }
+
+        private static void ReportExternalProgress(
+            Action<string, string, ChatActivity> progress,
+            string phase,
+            string message,
+            ChatActivity activity)
+        {
+            if (progress == null) return;
+            try
+            {
+                progress(phase, message, activity);
+            }
+            catch
+            {
+                // WebView notifications cannot abort already persisted work.
             }
         }
 

@@ -12,6 +12,9 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed class PipelineToolExecutor
     {
+        private const int MaxOutputMessageCharacters = 4000;
+        private const int MaxOutputDataCharacters = 16000;
+
         internal delegate ToolResult CommandRunner(ToolCommand command, int depth, bool dryRun, bool manualRun, CancellationToken cancellationToken);
 
         public ToolResult Execute(
@@ -44,11 +47,21 @@ namespace RNAssistant.Office.Tools
 
                 var result = runCommand(nested, depth + 1, dryRun, manualRun, cancellationToken) ?? ToolResult.Fail("Pipeline step returned no result.");
                 stepResults[step.Id] = result;
-                output.Add(new { id = step.Id, toolId = step.ToolId, success = result.Success, status = result.Status, errorCode = result.ErrorCode, retryable = result.Retryable, message = result.Message, dataJson = result.DataJson });
+                output.Add(new
+                {
+                    id = step.Id,
+                    toolId = step.ToolId,
+                    success = result.Success,
+                    status = result.Status,
+                    errorCode = result.ErrorCode,
+                    retryable = result.Retryable,
+                    message = BoundOutput(result.Message, MaxOutputMessageCharacters),
+                    dataJson = BoundOutput(result.DataJson, MaxOutputDataCharacters)
+                });
 
                 if (!result.Success)
                 {
-                    var message = "Pipeline step failed: " + step.Id + ". " + result.Message;
+                    var message = "Pipeline step failed: " + step.Id + ". " + BoundOutput(result.Message, MaxOutputMessageCharacters);
                     var dataJson = JsonConvert.SerializeObject(new { toolId = tool.Id, dryRun = dryRun, steps = output });
                     return output.Count > 1
                         ? ToolResult.PartialFailure(message, dataJson, "pipeline_partial_failure")
@@ -62,6 +75,14 @@ namespace RNAssistant.Office.Tools
         private static object ResolvePipelineValue(JToken token, IDictionary<string, object> inputArgs, IDictionary<string, ToolResult> stepResults)
         {
             return ToolArgumentNormalizer.NormalizeToken(ResolvePipelineToken(token, inputArgs, stepResults));
+        }
+
+        private static string BoundOutput(string value, int maxCharacters)
+        {
+            value = value ?? string.Empty;
+            return value.Length <= maxCharacters
+                ? value
+                : value.Substring(0, maxCharacters) + "\n...[truncated]";
         }
 
         private static JToken ResolvePipelineToken(JToken token, IDictionary<string, object> inputArgs, IDictionary<string, ToolResult> stepResults)

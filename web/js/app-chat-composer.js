@@ -64,6 +64,7 @@ function renderSendControls() {
   var isEditing = hasActiveMessageEdit();
   var isSending = !!activeSend;
   var isCanceling = isSending && !!activeSend.canceling;
+  var approvalPending = !isEditing && typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity();
   var sendButton = $("sendButton");
   var stopButton = $("stopButton");
   var input = $("chatInput");
@@ -98,12 +99,14 @@ function renderSendControls() {
     stopButton.setAttribute("aria-label", stopButton.title);
   }
   if (input) {
-    input.readOnly = isSending || state.reasoningSaving || state.bridgeUnavailable;
+    input.readOnly = isSending || approvalPending || state.reasoningSaving || state.bridgeUnavailable;
     input.placeholder = isEditing
       ? "Измените сообщение..."
       : (state.bridgeUnavailable
         ? "Откройте RNAssistant внутри Office, чтобы начать чат..."
-        : (currentDocumentAvailable ? "Спросите про текущий документ..." : "Обсудите сохранённый контекст..."));
+        : (approvalPending
+          ? "Подтвердите или отмените действие агента..."
+          : (currentDocumentAvailable ? "Спросите про текущий документ..." : "Обсудите сохранённый контекст...")));
   }
   if (clearButton) {
     clearButton.disabled = isSending || state.editingBusy;
@@ -128,7 +131,7 @@ function renderSendControls() {
     $("toggleHtmlModeButton").disabled = isSending || isEditing || state.bridgeUnavailable || !state.activeChatId;
   }
   if ($("attachFileButton")) {
-    $("attachFileButton").disabled = isSending || isEditing || state.bridgeUnavailable || !state.activeChatId;
+    $("attachFileButton").disabled = isSending || approvalPending || isEditing || state.bridgeUnavailable || !state.activeChatId;
   }
   var optionsMenu = $("composerOptionsMenu");
   if (optionsMenu) {
@@ -180,6 +183,7 @@ function updateSendButtonAvailability(hasContent) {
   var canSaveEdit = !!editingTarget && canSaveMessageEdit(editingTarget.message, editingTarget.index);
   sendButton.disabled =
     !!currentActiveSend() ||
+    (!hasActiveMessageEdit() && typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity()) ||
     state.modelSaving ||
     state.reasoningSaving ||
     state.bridgeUnavailable ||
@@ -223,4 +227,3 @@ function setChatInputText(text, shouldFocus) {
     input.focus();
   }
 }
-

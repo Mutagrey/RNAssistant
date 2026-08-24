@@ -70,7 +70,13 @@ namespace RNAssistant.Office.Services
             {
                 throw new InvalidOperationException("Model returned no completion.");
             }
-            var assistantText = completion.Content ?? string.Empty;
+            var assistantText = string.IsNullOrWhiteSpace(completion.Content) && !string.IsNullOrWhiteSpace(completion.RefusalContent)
+                ? completion.RefusalContent
+                : completion.Content ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(assistantText))
+            {
+                throw new InvalidOperationException("Model returned an empty response.");
+            }
             session.Messages.Add(AgentTranscript.CreateAssistantMessage(assistantText, completion));
             return new ChatTurnResult
             {

@@ -93,6 +93,7 @@ namespace RNAssistant.Core.Models
         public string ErrorCode { get; set; }
         public bool? Retryable { get; set; }
         public string PendingId { get; set; }
+        public string ConfirmationCatalogSha256 { get; set; }
         public string Message { get; set; }
         public string DataJson { get; set; }
         public int ToolStepsConsumed { get; set; }

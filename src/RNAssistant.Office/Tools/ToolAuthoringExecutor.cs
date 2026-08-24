@@ -317,17 +317,17 @@ namespace RNAssistant.Office.Tools
 
         private static string IdSchema()
         {
-            return "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable custom tool id.\",\"minLength\":1}},\"required\":[\"id\"],\"additionalProperties\":false}";
+            return "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable custom tool id.\",\"minLength\":1,\"maxLength\":128}},\"required\":[\"id\"],\"additionalProperties\":false}";
         }
 
         private static string ToolPayloadSchema(bool update)
         {
             var properties = new JObject
             {
-                ["id"] = Property("string", "Exact stable custom tool id; it cannot shadow a built-in id."),
+                ["id"] = BoundedStringProperty("Exact stable custom tool id; it cannot shadow a built-in id.", 128),
                 ["host"] = EnumProperty("Office host where the tool is available.", "Common", "Excel", "Word", "PowerPoint", "Outlook"),
-                ["name"] = Property("string", "Human-readable tool name."),
-                ["description"] = Property("string", "Clear model-facing description of what the tool does."),
+                ["name"] = BoundedStringProperty("Human-readable tool name.", 200),
+                ["description"] = BoundedStringProperty("Clear model-facing description of what the tool does.", 8000),
                 ["parameters"] = ParametersProperty(),
                 ["executor"] = EnumProperty("Execution type.", "pipeline", "vba"),
                 ["pipeline"] = PipelineProperty(),
@@ -335,6 +335,7 @@ namespace RNAssistant.Office.Tools
                 {
                     ["type"] = "array",
                     ["description"] = "Ordered VBA package source components; the first component is the StdModule containing the manifest and entry function.",
+                    ["maxItems"] = 50,
                     ["items"] = new JObject
                     {
                         ["type"] = "object",
@@ -343,13 +344,13 @@ namespace RNAssistant.Office.Tools
                             ["name"] = Property("string", "Exact VBA component name."),
                             ["type"] = EnumProperty("VBA component type.", "StdModule", "ClassModule"),
                             ["fileName"] = Property("string", "Optional source file name ending in .bas or .cls."),
-                            ["code"] = Property("string", "Complete VBA source code for this component.")
+                            ["code"] = BoundedStringProperty("Complete VBA source code for this component.", 1000000)
                         },
                         ["required"] = new JArray("name", "type", "code"),
                         ["additionalProperties"] = false
                     }
                 },
-                ["readme"] = Property("string", "Markdown documentation stored with the custom tool."),
+                ["readme"] = BoundedStringProperty("Markdown documentation stored with the custom tool.", 500000),
                 ["enabled"] = Property("boolean", "Whether the tool is enabled."),
                 ["requiresConfirmation"] = Property("boolean", "Whether execution requires explicit user confirmation."),
                 ["mutatesDocument"] = Property("boolean", "Whether execution may change the Office document."),
@@ -362,10 +363,10 @@ namespace RNAssistant.Office.Tools
                     ["minimum"] = 0,
                     ["maximum"] = 3
                 },
-                ["useWhen"] = Property("string", "Positive selection guidance for the model."),
-                ["doNotUseWhen"] = Property("string", "Cases where the model should not select this tool."),
+                ["useWhen"] = BoundedStringProperty("Positive selection guidance for the model.", 4000),
+                ["doNotUseWhen"] = BoundedStringProperty("Cases where the model should not select this tool.", 4000),
                 ["capabilityStatus"] = EnumProperty("Current capability status.", "available", "partial", "unavailable"),
-                ["limitations"] = Property("string", "Known limitations presented to the model.")
+                ["limitations"] = BoundedStringProperty("Known limitations presented to the model.", 4000)
             };
             if (!update)
             {
@@ -391,6 +392,16 @@ namespace RNAssistant.Office.Tools
         private static JObject Property(string type, string description)
         {
             return new JObject { ["type"] = type, ["description"] = description };
+        }
+
+        private static JObject BoundedStringProperty(string description, int maxLength)
+        {
+            return new JObject
+            {
+                ["type"] = "string",
+                ["description"] = description,
+                ["maxLength"] = maxLength
+            };
         }
 
         private static JObject ParametersProperty()
@@ -489,9 +500,34 @@ namespace RNAssistant.Office.Tools
             {
                 return ToolResult.Fail("Tool id cannot contain whitespace: " + tool.Id);
             }
+            if (tool.Id.Length > 128)
+            {
+                return ToolResult.Fail("Tool id is too long (maximum 128 characters).", null, "tool_definition_too_large", false);
+            }
             if (string.IsNullOrWhiteSpace(tool.Host))
             {
                 return ToolResult.Fail("Tool host is required.");
+            }
+            if ((tool.Name ?? string.Empty).Length > 200 ||
+                (tool.Description ?? string.Empty).Length > 8000 ||
+                (tool.ArgumentSchemaJson ?? string.Empty).Length > 64000 ||
+                (tool.PipelineJson ?? string.Empty).Length > 250000 ||
+                (tool.Code ?? string.Empty).Length > 1000000 ||
+                (tool.Readme ?? string.Empty).Length > 500000 ||
+                (tool.UseWhen ?? string.Empty).Length > 4000 ||
+                (tool.DoNotUseWhen ?? string.Empty).Length > 4000 ||
+                (tool.Limitations ?? string.Empty).Length > 4000)
+            {
+                return ToolResult.Fail("Tool definition exceeds a supported text size limit.", null, "tool_definition_too_large", false);
+            }
+            var componentsForSize = (tool.Components ?? new List<VbaToolComponent>())
+                .Where(component => component != null)
+                .ToList();
+            if (componentsForSize.Count > 50 ||
+                componentsForSize.Any(component => (component.Code ?? string.Empty).Length > 1000000) ||
+                componentsForSize.Sum(component => (long)(component.Code ?? string.Empty).Length) > 2000000)
+            {
+                return ToolResult.Fail("VBA package exceeds the supported component or source size limit.", null, "tool_definition_too_large", false);
             }
             if (!new[] { "Common", "Excel", "Word", "PowerPoint", "Outlook" }
                 .Any(host => string.Equals(host, tool.Host, StringComparison.OrdinalIgnoreCase)))
@@ -557,6 +593,12 @@ namespace RNAssistant.Office.Tools
                 tool.AgentCanRun = manifest.Tool.AgentCanRun;
                 tool.RequiresConfirmation = manifest.Tool.RequiresConfirmation;
                 tool.RiskLevel = manifest.Tool.RiskLevel;
+                if ((tool.Name ?? string.Empty).Length > 200 ||
+                    (tool.Description ?? string.Empty).Length > 8000 ||
+                    (tool.ArgumentSchemaJson ?? string.Empty).Length > 64000)
+                {
+                    return ToolResult.Fail("VBA manifest metadata exceeds a supported size limit.", null, "tool_definition_too_large", false);
+                }
                 if (tool.Components == null || tool.Components.Count == 0)
                 {
                     tool.Components = manifest.Tool.Components;

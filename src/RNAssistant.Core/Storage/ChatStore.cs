@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
@@ -11,6 +12,14 @@ using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
 {
+    public sealed class ChatConcurrencyException : InvalidOperationException
+    {
+        public ChatConcurrencyException(string message)
+            : base(message)
+        {
+        }
+    }
+
     public sealed class ChatStore
     {
         private static readonly object PersistenceSync = new object();
@@ -107,15 +116,53 @@ namespace RNAssistant.Core.Storage
 
         public void Save(ChatSession session)
         {
+            SaveInternal(session, false);
+        }
+
+        private void SaveInternal(ChatSession session, bool allowRelocatedSession)
+        {
+            if (session == null)
+            {
+                throw new ArgumentNullException("session");
+            }
+
             lock (PersistenceSync)
             {
-                NormalizeSession(session, session == null ? null : session.Host, session == null ? null : session.DocumentKey, session == null ? null : session.DocumentTitle);
-                session.UpdatedUtc = DateTime.UtcNow;
+                NormalizeSession(session, session.Host, session.DocumentKey, session.DocumentTitle);
                 var path = GetSessionPath(session.Host, session.DocumentKey, session.Id);
-                _htmlArtifactBodies.SaveMissing(session);
-                _json.Save(path, session, PersistenceJsonSettings);
-                _index.Save(path, session);
-                _htmlArtifactBodies.Prune(session);
+                using (AcquireDocumentLock(session.Host, session.DocumentKey))
+                {
+                    var exists = File.Exists(path);
+                    var storedRevision = exists ? ReadRevision(path) : 0;
+                    if (exists && storedRevision != session.Revision)
+                    {
+                        throw new ChatConcurrencyException(
+                            "Chat was changed by another RNAssistant instance. Reload the chat before saving again.");
+                    }
+                    if (!exists && session.Revision > 0 && !allowRelocatedSession)
+                    {
+                        throw new ChatConcurrencyException(
+                            "Chat storage changed while this session was open. Reload the chat before saving again.");
+                    }
+
+                    var previousRevision = session.Revision;
+                    var previousUpdatedUtc = session.UpdatedUtc;
+                    session.Revision = Math.Max(previousRevision, storedRevision) + 1;
+                    session.UpdatedUtc = DateTime.UtcNow;
+                    try
+                    {
+                        _htmlArtifactBodies.SaveMissing(session);
+                        _json.Save(path, session, PersistenceJsonSettings);
+                    }
+                    catch
+                    {
+                        session.Revision = previousRevision;
+                        session.UpdatedUtc = previousUpdatedUtc;
+                        throw;
+                    }
+                    _index.Save(path, session);
+                    _htmlArtifactBodies.Prune(session);
+                }
             }
         }
 
@@ -153,19 +200,67 @@ namespace RNAssistant.Core.Storage
             }
 
             var oldPath = GetSessionPath(session.Host, session.DocumentKey, session.Id);
+            var sourceRevision = session.Revision;
+            if (File.Exists(oldPath))
+            {
+                lock (PersistenceSync)
+                {
+                    using (AcquireDocumentPathLock(oldPath))
+                    {
+                        if (File.Exists(oldPath) && ReadRevision(oldPath) != sourceRevision)
+                        {
+                            throw new ChatConcurrencyException(
+                                "Chat changed before document identity migration. Reload it before moving.");
+                        }
+                    }
+                }
+            }
+            var oldHost = session.Host;
+            var oldDocumentKey = session.DocumentKey;
+            var oldDocumentTitle = session.DocumentTitle;
+            var oldContextHost = session.Context == null ? null : session.Context.Host;
+            var oldContextDocumentKey = session.Context == null ? null : session.Context.DocumentKey;
             session.Host = host;
             session.DocumentKey = documentKey;
             session.DocumentTitle = documentTitle;
+            if (session.Context != null)
+            {
+                session.Context.Host = host;
+                session.Context.DocumentKey = documentKey;
+            }
             NormalizeSession(session, host, documentKey, documentTitle);
-            Save(session);
+            try
+            {
+                SaveInternal(session, true);
+            }
+            catch
+            {
+                session.Host = oldHost;
+                session.DocumentKey = oldDocumentKey;
+                session.DocumentTitle = oldDocumentTitle;
+                if (session.Context != null)
+                {
+                    session.Context.Host = oldContextHost;
+                    session.Context.DocumentKey = oldContextDocumentKey;
+                }
+                throw;
+            }
 
             var newPath = GetSessionPath(session.Host, session.DocumentKey, session.Id);
             if (!string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase))
             {
                 lock (PersistenceSync)
                 {
-                    if (File.Exists(oldPath)) File.Delete(oldPath);
-                    _index.Delete(oldPath);
+                    using (AcquireDocumentPathLock(oldPath))
+                    {
+                        // The source may have been updated while the destination copy was written.
+                        // Never delete a newer source revision; leaving a duplicate is recoverable.
+                        if (File.Exists(oldPath) && ReadRevision(oldPath) == sourceRevision)
+                        {
+                            File.Delete(oldPath);
+                            _index.Delete(oldPath);
+                        }
+                    }
                 }
             }
 
@@ -215,9 +310,13 @@ namespace RNAssistant.Core.Storage
 
             lock (PersistenceSync)
             {
-                File.Delete(path);
-                _index.Delete(path);
-                _htmlArtifactBodies.DeleteSession(sessionId);
+                using (AcquireDocumentLock(host, documentKey))
+                {
+                    if (!File.Exists(path)) return false;
+                    File.Delete(path);
+                    _index.Delete(path);
+                    _htmlArtifactBodies.DeleteSession(sessionId);
+                }
             }
             if (string.Equals(LoadActiveSessionId(host, documentKey), sessionId, StringComparison.OrdinalIgnoreCase))
             {
@@ -237,15 +336,19 @@ namespace RNAssistant.Core.Storage
 
             lock (PersistenceSync)
             {
-                var sessionIds = SafeGetSessionFiles(directory)
-                    .Select(ReadSessionId)
-                    .Where(id => !string.IsNullOrWhiteSpace(id))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-                Directory.Delete(directory, true);
-                foreach (var sessionId in sessionIds)
+                using (AcquireDocumentLock(host, documentKey))
                 {
-                    _htmlArtifactBodies.DeleteSession(sessionId);
+                    if (!Directory.Exists(directory)) return false;
+                    var sessionIds = SafeGetSessionFiles(directory)
+                        .Select(ReadSessionId)
+                        .Where(id => !string.IsNullOrWhiteSpace(id))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                    Directory.Delete(directory, true);
+                    foreach (var sessionId in sessionIds)
+                    {
+                        _htmlArtifactBodies.DeleteSession(sessionId);
+                    }
                 }
             }
             return true;
@@ -313,7 +416,7 @@ namespace RNAssistant.Core.Storage
             foreach (var directory in SafeGetDirectories(_paths.ChatDirectory))
             {
                 headers.AddRange(SafeGetSessionFiles(directory)
-                    .Select(path => _index.LoadOrCreate(path, LoadIndexedSession))
+                    .Select(path => LoadHeader(path, LoadIndexedSession))
                     .Where(header => header != null));
             }
             return headers.OrderByDescending(header => header.UpdatedUtc).ToList();
@@ -328,7 +431,7 @@ namespace RNAssistant.Core.Storage
             }
 
             return SafeGetSessionFiles(directory)
-                .Select(path => _index.LoadOrCreate(path, value => LoadIndexedSession(value, host, documentKey, documentTitle)))
+                .Select(path => LoadHeader(path, value => LoadIndexedSession(value, host, documentKey, documentTitle)))
                 .Where(header => header != null)
                 .OrderByDescending(header => header.UpdatedUtc)
                 .ToList();
@@ -344,9 +447,23 @@ namespace RNAssistant.Core.Storage
 
             try
             {
-                return (File.ReadAllText(path) ?? string.Empty).Trim();
+                lock (PersistenceSync)
+                {
+                    using (AcquireDocumentLock(host, documentKey))
+                    {
+                        return File.Exists(path) ? (File.ReadAllText(path) ?? string.Empty).Trim() : string.Empty;
+                    }
+                }
             }
             catch (IOException)
+            {
+                return string.Empty;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return string.Empty;
+            }
+            catch (ChatConcurrencyException)
             {
                 return string.Empty;
             }
@@ -355,8 +472,112 @@ namespace RNAssistant.Core.Storage
         public void SaveActiveSessionId(string host, string documentKey, string sessionId)
         {
             var path = GetActivePath(host, documentKey);
-            Directory.CreateDirectory(Path.GetDirectoryName(path));
-            File.WriteAllText(path, sessionId ?? string.Empty);
+            try
+            {
+                lock (PersistenceSync)
+                {
+                    using (AcquireDocumentLock(host, documentKey))
+                    {
+                        StorageFileSystem.WriteAllTextAtomic(path, sessionId ?? string.Empty);
+                    }
+                }
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+            catch (ChatConcurrencyException)
+            {
+            }
+        }
+
+        private ChatSessionHeader LoadHeader(string path, Func<string, ChatSession> loadSession)
+        {
+            try
+            {
+                return _index.LoadOrCreate(path, loadSession);
+            }
+            catch (IOException)
+            {
+                return null;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return null;
+            }
+            catch (ChatConcurrencyException)
+            {
+                return null;
+            }
+        }
+
+        private IDisposable AcquirePathLock(string targetPath)
+        {
+            var directory = Path.Combine(_paths.Root, "locks");
+            Directory.CreateDirectory(directory);
+            var normalized = Path.GetFullPath(targetPath ?? _paths.Root);
+            var lockPath = Path.Combine(directory, "chat_" + AppDataPaths.SafeFileName(normalized) + ".lck");
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            while (true)
+            {
+                try
+                {
+                    return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                }
+                catch (IOException)
+                {
+                    if (DateTime.UtcNow >= deadline)
+                    {
+                        throw new ChatConcurrencyException("Timed out waiting for another RNAssistant instance to finish saving this chat.");
+                    }
+                    Thread.Sleep(25);
+                }
+            }
+        }
+
+        private IDisposable AcquireDocumentLock(string host, string documentKey)
+        {
+            return AcquireDocumentDirectoryLock(GetDocumentDirectory(host, documentKey));
+        }
+
+        private IDisposable AcquireDocumentPathLock(string path)
+        {
+            return AcquireDocumentDirectoryLock(Path.GetDirectoryName(path ?? string.Empty));
+        }
+
+        private IDisposable AcquireDocumentDirectoryLock(string directory)
+        {
+            return AcquirePathLock((directory ?? _paths.ChatDirectory) + ".document");
+        }
+
+        internal static long ReadRevision(string path)
+        {
+            try
+            {
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete))
+                using (var textReader = new StreamReader(stream))
+                using (var reader = new JsonTextReader(textReader))
+                {
+                    while (reader.Read())
+                    {
+                        if (reader.TokenType != JsonToken.PropertyName || reader.Depth != 1 ||
+                            !string.Equals(Convert.ToString(reader.Value), "Revision", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+                        if (!reader.Read()) return 0;
+                        long revision;
+                        return long.TryParse(Convert.ToString(reader.Value), out revision) ? Math.Max(0, revision) : 0;
+                    }
+                }
+                return 0;
+            }
+            catch (JsonException ex)
+            {
+                throw new ChatConcurrencyException("Cannot verify the stored chat revision: " + ex.Message);
+            }
         }
 
         private static void NormalizeSession(ChatSession session, string host, string documentKey, string documentTitle)

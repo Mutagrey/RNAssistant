@@ -143,13 +143,29 @@ namespace RNAssistant.Harness
                 adapter.SetVbaModule("RNA_EchoService", tool.Components[1].Code, "ClassModule");
                 var store = new ToolStore(paths);
                 var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths), store);
-                var catalog = new ToolCatalogService(adapter, executor, store).GetVisibleTools();
+                var catalogService = new ToolCatalogService(adapter, executor, store);
+                var catalog = catalogService.GetVisibleTools();
                 var discovered = catalog.FirstOrDefault(item => string.Equals(item.Id, tool.Id, StringComparison.OrdinalIgnoreCase));
 
                 AssertTrue(discovered != null, "document VBA tool discovered");
                 AssertEqual("document", discovered.Scope, "document scope");
-                AssertEqual("document", discovered.Scope, "document scope");
                 AssertEqual(2, discovered.Components.Count, "document components resolved");
+                var discoveryCalls = adapter.Executed.Count(item =>
+                    string.Equals(item.ToolId, "excel.vba_list_project_components_internal", StringComparison.OrdinalIgnoreCase));
+                catalogService.GetVisibleTools();
+                AssertEqual(discoveryCalls, adapter.Executed.Count(item =>
+                    string.Equals(item.ToolId, "excel.vba_list_project_components_internal", StringComparison.OrdinalIgnoreCase)),
+                    "document VBA discovery uses short cache");
+                adapter.RuntimeDocumentKeyValue = "runtime-reopened-document";
+                catalogService.GetVisibleTools();
+                AssertEqual(discoveryCalls + 1, adapter.Executed.Count(item =>
+                    string.Equals(item.ToolId, "excel.vba_list_project_components_internal", StringComparison.OrdinalIgnoreCase)),
+                    "document VBA discovery cache is scoped to the runtime document");
+                catalogService.InvalidateDocumentVbaTools();
+                catalogService.GetVisibleTools();
+                AssertEqual(discoveryCalls + 2, adapter.Executed.Count(item =>
+                    string.Equals(item.ToolId, "excel.vba_list_project_components_internal", StringComparison.OrdinalIgnoreCase)),
+                    "document VBA discovery cache invalidates");
 
                 var result = executor.Execute(
                     Command(discovered.Id, "text", "hello", "count", 2, "ratio", 1.5),
@@ -159,6 +175,18 @@ namespace RNAssistant.Harness
                     false);
                 AssertTrue(result.Success, "document VBA tool runs");
                 AssertContains(adapter.GetVbaModuleCode("RNA_Echo"), "<RNAssistantTool>", "document source is not removed after run");
+
+                store.SaveOne(tool);
+                var duplicateCode = tool.Components[0].Code.Replace(
+                    "\"components\":[\"RNA_Echo\",",
+                    "\"components\":[\"RNA_EchoDuplicate\",");
+                adapter.SetVbaModule("RNA_EchoDuplicate", duplicateCode, "StdModule");
+                catalogService.InvalidateDocumentVbaTools();
+                var duplicateCatalog = catalogService.GetVisibleTools();
+                AssertTrue(duplicateCatalog.Any(item =>
+                    item.Id.StartsWith(tool.Id + "#document", StringComparison.OrdinalIgnoreCase) &&
+                    !item.Enabled && string.Equals(item.CapabilityStatus, "id_collision", StringComparison.OrdinalIgnoreCase)),
+                    "second document manifest cannot hide behind matched global package");
             });
         }
 

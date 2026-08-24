@@ -5,7 +5,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -25,6 +24,7 @@ namespace RNAssistant.Office
             var session = LoadAddressedSession(chatId);
             using (ReserveChatOperation(session))
             {
+                session = ReloadReservedSession(session);
                 await _contextCompactionService.EnsureWithinBudgetAsync(
                     session,
                     ResolveChatSettings(session),
@@ -39,8 +39,7 @@ namespace RNAssistant.Office
 
         public ChatStateResponse DeleteMessage(string id, int index, string chatId = null)
         {
-            var session = LoadSession(chatId);
-            using (ReserveChatOperation(session))
+            return WithReservedChatState(LoadSession(chatId), session =>
             {
                 var targetIndex = -1;
                 if (!string.IsNullOrWhiteSpace(id))
@@ -62,18 +61,19 @@ namespace RNAssistant.Office
                     throw new InvalidOperationException("Message was not found.");
                 }
 
-                var removedMessage = session.Messages[targetIndex];
-                session.Messages.RemoveAt(targetIndex);
-                _attachmentStore.DeleteMessage(removedMessage);
+                var removedMessages = ChatHistoryEditService.SelectMessagesForDeletion(
+                    session.Messages,
+                    targetIndex);
+                session.Messages.RemoveAll(message => removedMessages.Contains(message));
                 RemovePendingAgentToolsForSession(session.Id);
                 CancelPendingActivities(session, "Pending action cancelled because chat history changed.");
+                session.LastRun = null;
                 session.ContextCheckpoints = new List<ContextCheckpoint>();
                 session.ActiveContextCheckpointId = null;
                 ChatArtifactService.PruneUnreachable(session);
                 SaveSessionChanges(session);
-            }
-
-            return ChatState(session);
+                foreach (var removedMessage in removedMessages) _attachmentStore.DeleteMessage(removedMessage);
+            });
         }
 
         public ChatStateResponse ForkChat(string id, int index, string chatId = null)
@@ -82,6 +82,11 @@ namespace RNAssistant.Office
             ChatSession fork;
             using (ReserveChatOperation(source))
             {
+                source = ReloadReservedSession(source);
+                if (HasPendingAgentConfirmation(source))
+                {
+                    throw new InvalidOperationException("Сначала подтвердите или отмените ожидающее действие агента.");
+                }
                 var sourceMessages = source.Messages ?? new List<ChatMessage>();
                 var targetIndex = -1;
                 if (!string.IsNullOrWhiteSpace(id))
@@ -111,6 +116,7 @@ namespace RNAssistant.Office
                 fork.Messages = targetIndex < 0
                     ? new List<ChatMessage>()
                     : ChatCloneService.CloneMessages(sourceMessages.Take(targetIndex + 1));
+                ChatHistoryEditService.ExcludeUnmatchedToolCalls(fork.Messages);
                 _chatStore.LoadHtmlArtifactBodies(
                     source,
                     ChatArtifactService.ReachableForMessages(source.Artifacts, fork.Messages)
@@ -169,7 +175,8 @@ namespace RNAssistant.Office
                             ? (IReadOnlyList<ChatAttachment>)new ChatAttachment[0]
                             : edit.Message.Attachments,
                         AppendUserMessage = false,
-                        CommitUserAttachments = false
+                        CommitUserAttachments = false,
+                        MessagesToDeleteAfterSave = edit.RemovedMessages
                     };
                 },
                 progress,
@@ -197,17 +204,18 @@ namespace RNAssistant.Office
                 throw new InvalidOperationException("Only rnassistant.chart activity data can be updated.");
             }
 
-            var session = LoadSession(chatId);
-            var message = (session.Messages ?? new List<ChatMessage>()).FirstOrDefault(m =>
-                m != null && string.Equals(m.Id, messageId, StringComparison.OrdinalIgnoreCase));
-            if (message == null || message.Activity == null)
+            return WithReservedChatState(LoadSession(chatId), session =>
             {
-                throw new InvalidOperationException("Message activity was not found.");
-            }
+                var message = (session.Messages ?? new List<ChatMessage>()).FirstOrDefault(m =>
+                    m != null && string.Equals(m.Id, messageId, StringComparison.OrdinalIgnoreCase));
+                if (message == null || message.Activity == null)
+                {
+                    throw new InvalidOperationException("Message activity was not found.");
+                }
 
-            message.Activity.DataJson = parsed.ToString(Formatting.None);
-            SaveSessionChanges(session);
-            return ChatState(session);
+                message.Activity.DataJson = parsed.ToString(Formatting.None);
+                SaveSessionChanges(session);
+            });
         }
 
         public ChatStateResponse ListChats()
@@ -218,14 +226,20 @@ namespace RNAssistant.Office
 
         public ChatStateResponse CreateChat(string title)
         {
-            var session = _chatSessions.CreateChat(title);
-            return ChatState(session);
+            using (_chatRuns.ReserveMaintenance())
+            {
+                var session = _chatSessions.CreateChat(title);
+                return ChatState(session);
+            }
         }
 
         public ChatStateResponse CreateDocumentChat(string title, string host, string documentKey, string documentTitle, string documentPath)
         {
-            var session = _chatSessions.CreateChatForDocument(title, host, documentKey, documentTitle, documentPath);
-            return ChatState(session);
+            using (_chatRuns.ReserveMaintenance())
+            {
+                var session = _chatSessions.CreateChatForDocument(title, host, documentKey, documentTitle, documentPath);
+                return ChatState(session);
+            }
         }
 
         public ChatStateResponse SelectChat(string chatId)
@@ -260,60 +274,60 @@ namespace RNAssistant.Office
 
         public ChatStateResponse RenameChat(string chatId, string title)
         {
-            lock (_syncRoot)
+            return WithReservedChatState(LoadSession(chatId), session =>
             {
-                var session = LoadSession(chatId);
                 if (!string.IsNullOrWhiteSpace(title))
                 {
                     session.Title = title.Trim();
                     SaveSessionChanges(session);
                 }
-
-                return ChatState(session);
-            }
+            });
         }
 
         public ChatStateResponse SetChatModel(string chatId, string model)
         {
-            var session = LoadSession(chatId);
-            session.Model = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
-            SaveSessionChanges(session);
-            return ChatState(session);
+            return WithReservedChatState(LoadSession(chatId), session =>
+            {
+                session.Model = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
+                SaveSessionChanges(session);
+            });
         }
 
         public ChatStateResponse SetChatMode(string chatId, string mode)
         {
-            var session = LoadSession(chatId);
-            session.Mode = ChatModes.Normalize(mode);
-            RemovePendingAgentToolsForSession(session.Id);
-            CancelPendingActivities(session, "Pending action cancelled because chat mode changed.");
-            SaveSessionChanges(session);
-            return ChatState(session);
+            return WithReservedChatState(LoadSession(chatId), session =>
+            {
+                session.Mode = ChatModes.Normalize(mode);
+                RemovePendingAgentToolsForSession(session.Id);
+                CancelPendingActivities(session, "Pending action cancelled because chat mode changed.");
+                session.LastRun = null;
+                SaveSessionChanges(session);
+            });
         }
 
         public ChatStateResponse SetChatHtmlMode(string chatId, bool enabled)
         {
-            var session = LoadSession(chatId);
-            session.HtmlModeEnabled = enabled;
-            SaveSessionChanges(session);
-            return ChatState(session);
+            return WithReservedChatState(LoadSession(chatId), session =>
+            {
+                session.HtmlModeEnabled = enabled;
+                SaveSessionChanges(session);
+            });
         }
 
         public ChatStateResponse SetChatReasoning(string chatId, bool enabled)
         {
-            var session = LoadSession(chatId);
-            session.ReasoningEnabled = enabled;
-            SaveSessionChanges(session);
-            return ChatState(session);
+            return WithReservedChatState(LoadSession(chatId), session =>
+            {
+                session.ReasoningEnabled = enabled;
+                SaveSessionChanges(session);
+            });
         }
 
         public ChatStateResponse ClearChat(string chatId)
         {
-            var session = LoadSession(chatId);
-            using (ReserveChatOperation(session))
+            return WithReservedChatState(LoadSession(chatId), session =>
             {
                 var sessionId = session.Id;
-                _attachmentStore.DeleteSession(sessionId);
                 RemovePendingAgentToolsForSession(sessionId);
                 session.Messages.Clear();
                 session.Context = CreateEmptyContext();
@@ -323,25 +337,23 @@ namespace RNAssistant.Office
                 session.ActiveContextCheckpointId = null;
                 session.ActiveHtmlArtifactId = null;
                 session.ActivePlanArtifactId = null;
+                session.LastRun = null;
                 NormalizeContext(session.Context, session);
                 SaveSessionChanges(session);
-            }
-
-            return ChatState(session);
+                _attachmentStore.DeleteSession(sessionId);
+            });
         }
 
         public ChatStateResponse DeleteChat(string chatId)
         {
-            var current = LoadSession(chatId);
-            ChatSession next;
-            using (ReserveChatOperation(current))
+            var next = WithReservedSession(LoadSession(chatId), current =>
             {
                 var sessionId = current.Id;
-                _attachmentStore.DeleteSession(sessionId);
+                var selected = _chatSessions.DeleteAndSelectNext(sessionId);
                 RemovePendingAgentToolsForSession(sessionId);
-                next = _chatSessions.DeleteAndSelectNext(sessionId);
-            }
-
+                _attachmentStore.DeleteSession(sessionId);
+                return selected;
+            });
             return ChatState(next);
         }
 
@@ -351,19 +363,22 @@ namespace RNAssistant.Office
             {
                 throw new InvalidOperationException("Документ не указан.");
             }
-            if (_chatRuns.IsDocumentRunning(host, documentKey))
+            using (_chatRuns.ReserveMaintenance())
             {
-                throw new InvalidOperationException("Сначала остановите запросы в чатах этого документа.");
-            }
+                // Deletion is rare and destructive. A short global coordination window is safer
+                // than racing a newly created chat that was not present during enumeration.
+                EnsureNoActiveRuns();
 
-            var sessions = _chatStore.ListHeaders(host, documentKey, string.Empty);
-            foreach (var session in sessions)
-            {
-                _attachmentStore.DeleteSession(session.Id);
-                RemovePendingAgentToolsForSession(session.Id);
+                var sessions = _chatStore.ListHeaders(host, documentKey, string.Empty)
+                    .OrderBy(session => session.Id, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                _chatStore.DeleteDocument(host, documentKey);
+                foreach (var header in sessions)
+                {
+                    _attachmentStore.DeleteSession(header.Id);
+                    RemovePendingAgentToolsForSession(header.Id);
+                }
             }
-
-            _chatStore.DeleteDocument(host, documentKey);
             _chatSessions.Reset();
             return ChatState(LoadSession(null));
         }
@@ -389,6 +404,39 @@ namespace RNAssistant.Office
             return _chatRuns.Start(sessionId, Guid.NewGuid().ToString("N"), session);
         }
 
+        private ChatSession ReloadReservedSession(ChatSession session)
+        {
+            if (session == null || !_chatStore.IsPersisted(session)) return session;
+            return _chatStore.Load(session.Host, session.DocumentKey, session.Id) ?? session;
+        }
+
+        private T WithReservedSession<T>(ChatSession session, Func<ChatSession, T> action)
+        {
+            if (action == null) throw new ArgumentNullException("action");
+            using (ReserveChatOperation(session))
+            {
+                return action(ReloadReservedSession(session));
+            }
+        }
+
+        private void EnsureNoActiveRuns()
+        {
+            if (_chatRuns.HasRuns() || _chatRuns.HasExternalRuns())
+            {
+                throw new InvalidOperationException("Сначала остановите выполняющиеся запросы во всех окнах RNAssistant.");
+            }
+        }
+
+        private ChatStateResponse WithReservedChatState(ChatSession session, Action<ChatSession> action)
+        {
+            var updated = WithReservedSession(session, current =>
+            {
+                action(current);
+                return current;
+            });
+            return ChatState(updated);
+        }
+
         private ChatStateResponse ChatState(ChatSession session)
         {
             var activeId = session.Id;
@@ -401,8 +449,8 @@ namespace RNAssistant.Office
                 ActiveChatReasoning = session != null && session.ReasoningEnabled,
                 Chats = _chatSessions.GetChatSummaries(activeId),
                 Documents = ListOpenDocuments(),
-                Context = session == null ? CreateEmptyContext() : LoadContext(session),
-                Messages = session == null ? new List<ChatMessage>() : session.Messages,
+                Context = session == null ? CreateEmptyContext() : ChatCloneService.CloneContext(LoadContext(session)),
+                Messages = session == null ? new List<ChatMessage>() : ChatCloneService.CloneMessages(session.Messages),
                 Artifacts = ChatArtifactDto.From(session == null ? null : session.Artifacts),
                 ActiveContextCheckpointId = session == null ? string.Empty : session.ActiveContextCheckpointId,
                 ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId,

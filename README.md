@@ -183,6 +183,7 @@ Runtime data is stored under:
 - `html-artifact-bodies` - session-scoped immutable HTML revision bodies, kept outside chat JSON and restored transparently.
 
 Settings has `Clear Chats/Data` for development resets. It clears chats, attachments, HTML revision bodies, chat context, VBA backups and WebView user data, while keeping settings, saved API key and custom tools and skills.
+The reset is rejected while any RNAssistant window owns an active chat operation.
 
 Diagnostics shows passive timing for real model requests (local preparation, HTTP headers, first response data and total duration) and offers one manual short model check. It does not poll the endpoint in the background.
 
@@ -219,13 +220,13 @@ In Agent mode the prompt contains all runnable tools in native-like function JSO
 
 Independent calls may be placed in the same array and execute locally in order. Dependent calls and calls that may require confirmation are emitted one at a time. If confirmation pauses a multi-call response, calls after it are not executed; the model selects them again after the confirmed result. There is no persistent batch state.
 
-To answer, clarify, or refuse, the model returns `{"message":"...","tool_calls":[]}`. Agent mode always requests `json_object`; there are no response-mode fallbacks, native tool-call transport, planner state machine, router, tool slicer, skill activation, automatic tool retries, or separate verification phase. Invalid output gets up to `MaxAgentFormatRetries` ephemeral correction requests (default 10, range 1–20); every retry starts from the original accepted prompt and neither rejected output nor correction instructions enter chat history.
+To answer, clarify, or refuse, the model returns `{"message":"...","tool_calls":[]}`. Agent mode uses the configured `json_object` (default) or strict runtime-generated `json_schema`; an explicitly rejected schema may fall back once, request-locally, to `json_object` when enabled. There are no native tool-call transport, planner state machine, router, skill activation, automatic tool retries, or separate verification phase. Invalid output gets up to `MaxAgentFormatRetries` ephemeral correction requests (default 10, range 1–20); every retry starts from the original accepted prompt and neither rejected output nor correction instructions enter chat history.
 
 Office tools execute locally. The next model turn receives a string protocol message such as `TOOL_RESULT:\n{"ok":true,"tool_call_id":"call_1","name":"excel.read_range","status":"completed","message":"Range read.","data":{...},"error":null}`. The model decides what to do next. Tool-result data is bounded and oversized data is replaced by a structured preview; the prompt budget is checked before every model request. Excel value/formula/profile reads reject ranges above 100000 cells before loading COM `Value2`. The runtime also enforces exact tool ids, formal argument schemas, safety/confirmation metadata, and iteration/tool-step limits.
 
 For complex work, the model can explicitly create and maintain one visible plan through `common.plan_create/read/update/delete`. Each update creates a chat-artifact revision and the UI shows the active goal, progress count, and step statuses. The runtime never infers a plan, maps tool calls to steps, or changes statuses automatically.
 
-Context compaction preserves the full stored transcript and replays a checkpoint plus an exact tail. Pipeline safety is resolved recursively, so nested mutation, risk, confirmation, missing-reference, and cycle errors cannot be hidden by top-level metadata.
+Context compaction preserves the full stored transcript and replays a checkpoint plus an exact tail. The current request and `LastRun` are persisted before the endpoint call, and each tool-start/result boundary is checkpointed. Confirmation state and cumulative limits survive restart; the runtime and UI block new input until the pending action is confirmed or cancelled. Stale chat revisions are rejected instead of overwriting another window. Interrupted in-flight actions are recovered as unknown-effect diagnostics without automatic retry, while already persisted tool results remain replayable. Pipeline safety is resolved recursively, so nested mutation, risk, confirmation, missing-reference, and cycle errors cannot be hidden by top-level metadata.
 
 ## HTML Workspace
 
@@ -234,9 +235,9 @@ The HTML tab is tied to the active chat session. Agent-created HTML pages are st
 - Use `common.html_workspace_upsert_file` for `index.html`, CSS, and script files (`kind`: `html`, `css`, or `script`).
 - Use `common.html_workspace_upsert_data` for JSON data sources. Preview exposes them as `window.RNAssistantData`.
 - Use `common.html_workspace_delete_file` and `common.html_workspace_delete_data` to remove workspace items. Deletions are recorded in workspace history and can be undone.
-- Use `common.html_workspace_read` to inspect the current workspace and `common.html_workspace_set_active` to choose the displayed HTML file.
+- Call `common.html_workspace_read` without arguments for the compact manifest, then pass one exact `path` or `dataName` to read a body. Use `common.html_workspace_set_active` to choose the displayed HTML file.
 - Every workspace mutation also records an immutable chat artifact revision. Full revision bodies are stored outside chat JSON; editing or forking from an older message still restores/copies the exact revision at that point.
-- Undo/redo history is bounded by item count and stored content size. UI responses carry only snapshot ids/labels/timestamps, and Agent reads return only the current workspace state.
+- Undo/redo history is bounded by item count and stored content size. UI responses carry only snapshot ids/labels/timestamps; Agent reads return a manifest or one targeted current item, never history bodies.
 Edits and deletions of an existing workspace require a successful workspace read in the current agent run.
 HTML preview and its scripts are always enabled inside a sandboxed iframe.
 

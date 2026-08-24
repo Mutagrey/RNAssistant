@@ -170,7 +170,8 @@ function appendMessageFooter(node, message, index, activity) {
 
   var actions = document.createElement("div");
   actions.className = "message-actions";
-  var historyActionsBlocked = !!currentActiveSend() || hasActiveMessageEdit();
+  var historyActionsBlocked = !!currentActiveSend() || hasActiveMessageEdit() ||
+    (typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity());
   if (!historyActionsBlocked) {
     actions.appendChild(smallIconButton("Ответвить чат отсюда", "branch", function () {
       forkChatAtMessage(message, index);

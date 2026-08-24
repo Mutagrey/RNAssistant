@@ -2,6 +2,7 @@ using System;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office
 {
@@ -9,7 +10,7 @@ namespace RNAssistant.Office
     {
         public DocumentContext GetContext(string chatId = null)
         {
-            return LoadContext(LoadAddressedSession(chatId));
+            return ChatCloneService.CloneContext(LoadContext(LoadAddressedSession(chatId)));
         }
 
         public DocumentContext AddSelectionContextFromBridge(string mode, string chatId = null)
@@ -23,45 +24,49 @@ namespace RNAssistant.Office
             {
                 throw new ArgumentException("Context text is empty.", "text");
             }
-            var session = LoadAddressedSession(chatId);
-            var settings = ResolveChatSettings(session);
-            var context = AddContextNote(session, new ContextNote
+            return WithReservedSession(LoadAddressedSession(chatId), session =>
             {
-                Host = _adapter.HostName,
-                Kind = string.IsNullOrWhiteSpace(kind) ? "context" : kind.Trim(),
-                Title = string.IsNullOrWhiteSpace(title) ? "Context" : title.Trim(),
-                Reference = string.IsNullOrWhiteSpace(reference) ? title : reference.Trim(),
-                Source = string.IsNullOrWhiteSpace(reference) ? title : reference.Trim(),
-                Text = ContextNormalizer.TrimForContext(text ?? string.Empty, ModelContextBudget.InputBudgetTokens(settings) * 3),
-                Preview = ContextNormalizer.TrimForContext(text ?? string.Empty, 360),
-                DetailsJson = detailsJson
-            }, kind);
-            return context;
+                var settings = ResolveChatSettings(session);
+                var context = AddContextNote(session, new ContextNote
+                {
+                    Host = _adapter.HostName,
+                    Kind = string.IsNullOrWhiteSpace(kind) ? "context" : kind.Trim(),
+                    Title = string.IsNullOrWhiteSpace(title) ? "Context" : title.Trim(),
+                    Reference = string.IsNullOrWhiteSpace(reference) ? title : reference.Trim(),
+                    Source = string.IsNullOrWhiteSpace(reference) ? title : reference.Trim(),
+                    Text = ContextNormalizer.TrimForContext(text ?? string.Empty, ModelContextBudget.InputBudgetTokens(settings) * 3),
+                    Preview = ContextNormalizer.TrimForContext(text ?? string.Empty, 360),
+                    DetailsJson = detailsJson
+                }, kind);
+                return ChatCloneService.CloneContext(context);
+            });
         }
 
         public DocumentContext AddSelectionContext(string mode, string chatId = null)
         {
-            var session = LoadAddressedSession(chatId);
-            var settings = ResolveChatSettings(session);
-            EnsureCurrentDocument(session);
-            var context = LoadContext(session);
-            try
+            return WithReservedSession(LoadAddressedSession(chatId), session =>
             {
-                _adapter.PrepareForContextCapture();
-            }
-            catch
-            {
-            }
-            var note = _adapter.CaptureSelectionContext(mode, ModelContextBudget.InputBudgetTokens(settings) * 3);
-            if (note == null)
-            {
-                throw new InvalidOperationException("No selectable Office context was found.");
-            }
+                var settings = ResolveChatSettings(session);
+                EnsureCurrentDocument(session);
+                var context = LoadContext(session);
+                try
+                {
+                    _adapter.PrepareForContextCapture();
+                }
+                catch
+                {
+                }
+                var note = _adapter.CaptureSelectionContext(mode, ModelContextBudget.InputBudgetTokens(settings) * 3);
+                if (note == null)
+                {
+                    throw new InvalidOperationException("No selectable Office context was found.");
+                }
 
-            _contextService.NormalizeContextNote(note, mode);
-            ContextNormalizer.UpsertContextNote(context, note);
-            SaveSessionContext(session);
-            return context;
+                _contextService.NormalizeContextNote(note, mode);
+                ContextNormalizer.UpsertContextNote(context, note);
+                SaveSessionContext(session);
+                return ChatCloneService.CloneContext(context);
+            });
         }
 
         private DocumentContext AddContextNote(ChatSession session, ContextNote note, string mode)
@@ -75,23 +80,27 @@ namespace RNAssistant.Office
 
         public DocumentContext RemoveContextItem(string id, string chatId = null)
         {
-            var session = LoadAddressedSession(chatId);
-            var context = LoadContext(session);
-            if (context.Notes != null && !string.IsNullOrWhiteSpace(id))
+            return WithReservedSession(LoadAddressedSession(chatId), session =>
             {
-                context.Notes.RemoveAll(n => n != null && string.Equals(n.Id, id, StringComparison.OrdinalIgnoreCase));
-                SaveSessionContext(session);
-            }
+                var context = LoadContext(session);
+                if (context.Notes != null && !string.IsNullOrWhiteSpace(id))
+                {
+                    context.Notes.RemoveAll(n => n != null && string.Equals(n.Id, id, StringComparison.OrdinalIgnoreCase));
+                    SaveSessionContext(session);
+                }
 
-            return context;
+                return ChatCloneService.CloneContext(context);
+            });
         }
 
         public DocumentContext ClearContext(string chatId = null)
         {
-            var session = LoadAddressedSession(chatId);
-            session.Context = CreateEmptyContext();
-            SaveSessionContext(session);
-            return session.Context;
+            return WithReservedSession(LoadAddressedSession(chatId), session =>
+            {
+                session.Context = CreateEmptyContext();
+                SaveSessionContext(session);
+                return ChatCloneService.CloneContext(session.Context);
+            });
         }
 
         private DocumentContext LoadContext(ChatSession session)
@@ -125,6 +134,26 @@ namespace RNAssistant.Office
             {
                 throw new InvalidOperationException("Документ закрыт. Откройте файл, чтобы использовать Office context и инструменты.");
             }
+        }
+
+        private string CaptureRuntimeDocumentKey()
+        {
+            try
+            {
+                return _adapter.RuntimeDocumentKey;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private string CaptureExpectedRuntimeDocumentKey(ChatSession session)
+        {
+            EnsureCurrentDocument(session);
+            var runtimeDocumentKey = CaptureRuntimeDocumentKey();
+            EnsureCurrentDocument(session);
+            return runtimeDocumentKey;
         }
     }
 }

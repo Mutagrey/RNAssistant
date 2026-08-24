@@ -9,6 +9,7 @@ namespace RNAssistant.Core.Storage
 {
     public sealed class SkillStore
     {
+        private const long MaxSkillFileBytes = 2100000;
         private readonly AppDataPaths _paths;
 
         public SkillStore(AppDataPaths paths)
@@ -27,7 +28,7 @@ namespace RNAssistant.Core.Storage
             foreach (var file in StorageFileSystem.GetFilesRecursive(_paths.SkillsDirectory, "SKILL.md"))
             {
                 var skill = LoadSkill(file);
-                if (skill == null || string.IsNullOrWhiteSpace(skill.Id))
+                if (skill == null || !string.IsNullOrWhiteSpace(ValidateDefinition(skill)))
                 {
                     continue;
                 }
@@ -48,15 +49,16 @@ namespace RNAssistant.Core.Storage
         public void Save(IEnumerable<SkillDefinition> skills, string host)
         {
             var incoming = new List<SkillDefinition>((skills ?? new SkillDefinition[0])
-                .Where(s => s != null && !s.BuiltIn && !string.IsNullOrWhiteSpace(s.Id)));
+                .Where(s => s != null && !s.BuiltIn));
             Reconcile(incoming, host);
         }
 
         public SkillDefinition SaveOne(SkillDefinition skill)
         {
-            if (skill == null || string.IsNullOrWhiteSpace(skill.Id))
+            var validationError = ValidateDefinition(skill);
+            if (!string.IsNullOrWhiteSpace(validationError))
             {
-                throw new ArgumentException("Skill id is required.", "skill");
+                throw new ArgumentException(validationError, "skill");
             }
 
             skill.BuiltIn = false;
@@ -99,8 +101,16 @@ namespace RNAssistant.Core.Storage
         private void Reconcile(IEnumerable<SkillDefinition> skills, string host)
         {
             var incoming = (skills ?? new SkillDefinition[0])
-                .Where(s => s != null && !s.BuiltIn && !string.IsNullOrWhiteSpace(s.Id))
+                .Where(s => s != null && !s.BuiltIn)
                 .ToList();
+            foreach (var skill in incoming)
+            {
+                var validationError = ValidateDefinition(skill);
+                if (!string.IsNullOrWhiteSpace(validationError)) throw new ArgumentException(validationError, "skills");
+            }
+            var duplicate = incoming.GroupBy(skill => skill.Id, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(group => group.Count() > 1);
+            if (duplicate != null) throw new ArgumentException("Duplicate skill id: " + duplicate.Key, "skills");
             var incomingDirectories = new HashSet<string>(incoming.Select(SkillDirectory), StringComparer.OrdinalIgnoreCase);
             var existingSkills = Load();
             foreach (var skill in incoming)
@@ -132,14 +142,17 @@ namespace RNAssistant.Core.Storage
             return Path.Combine(
                 _paths.SkillsDirectory,
                 HostFolder(skill == null ? null : skill.Host),
-                StorageFileSystem.SafeSegment(skill == null || skill.Id == null ? "skill" : skill.Id.ToLowerInvariant(), "skill"));
+                SkillFolder(skill == null ? null : skill.Id));
         }
 
         private static SkillDefinition LoadSkill(string path)
         {
             try
             {
-                return Parse(File.ReadAllLines(path), File.ReadAllText(path));
+                var info = new FileInfo(path);
+                if (!info.Exists || info.Length > MaxSkillFileBytes) return null;
+                var text = File.ReadAllText(path);
+                return Parse(text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n'), text);
             }
             catch (IOException)
             {
@@ -200,16 +213,63 @@ namespace RNAssistant.Core.Storage
         {
             var builder = new StringBuilder();
             builder.AppendLine("---");
-            builder.AppendLine("id: " + (skill.Id ?? string.Empty));
-            builder.AppendLine("host: " + FirstNonEmpty(skill.Host, "Common"));
-            builder.AppendLine("name: " + FirstNonEmpty(skill.Name, skill.Id));
-            builder.AppendLine("description: " + (skill.Description ?? string.Empty).Replace("\r", " ").Replace("\n", " "));
-            builder.AppendLine("version: " + FirstNonEmpty(skill.Version, "1.0.0"));
+            builder.AppendLine("id: " + FrontMatterScalar(skill.Id));
+            builder.AppendLine("host: " + FrontMatterScalar(FirstNonEmpty(skill.Host, "Common")));
+            builder.AppendLine("name: " + FrontMatterScalar(FirstNonEmpty(skill.Name, skill.Id)));
+            builder.AppendLine("description: " + FrontMatterScalar(skill.Description));
+            builder.AppendLine("version: " + FrontMatterScalar(FirstNonEmpty(skill.Version, "1.0.0")));
             builder.AppendLine("enabled: " + (skill.Enabled != false ? "true" : "false"));
             builder.AppendLine("---");
             builder.AppendLine();
             builder.Append(skill.BodyMarkdown ?? string.Empty);
             return builder.ToString();
+        }
+
+        public static string ValidateDefinition(SkillDefinition skill)
+        {
+            if (skill == null || string.IsNullOrWhiteSpace(skill.Id)) return "Skill id is required.";
+            var id = skill.Id.Trim();
+            if (!string.Equals(skill.Id, id, StringComparison.Ordinal))
+            {
+                return "Skill id cannot have leading or trailing whitespace.";
+            }
+            if (id.Length > 128 || HasLineBreak(id))
+            {
+                return "Skill id must be 1-128 characters without line breaks.";
+            }
+            if ((skill.Name ?? string.Empty).Length > 200) return "Skill name is too long.";
+            if ((skill.Description ?? string.Empty).Length > 4000) return "Skill description is too long.";
+            if ((skill.Version ?? string.Empty).Length > 64) return "Skill version is too long.";
+            if ((skill.BodyMarkdown ?? string.Empty).Length > 500000) return "Skill bodyMarkdown is too large.";
+            var skillHost = FirstNonEmpty(skill.Host, "Common");
+            if (!new[] { "Common", "Excel", "Word", "PowerPoint", "Outlook" }
+                .Any(host => string.Equals(host, skillHost, StringComparison.OrdinalIgnoreCase)))
+            {
+                return "Unsupported skill host: " + (skill.Host ?? string.Empty) + ".";
+            }
+            if (HasLineBreak(skill.Host) || HasLineBreak(skill.Name) || HasLineBreak(skill.Version))
+            {
+                return "Skill front-matter fields cannot contain line breaks.";
+            }
+            return null;
+        }
+
+        private static bool HasLineBreak(string value)
+        {
+            return !string.IsNullOrEmpty(value) && (value.IndexOf('\r') >= 0 || value.IndexOf('\n') >= 0);
+        }
+
+        private static string FrontMatterScalar(string value)
+        {
+            return (value ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
+        }
+
+        private static string SkillFolder(string id)
+        {
+            var normalized = string.IsNullOrWhiteSpace(id) ? "skill" : id.Trim().ToLowerInvariant();
+            var readable = StorageFileSystem.SafeSegment(normalized, "skill");
+            if (readable.Length > 40) readable = readable.Substring(0, 40).TrimEnd('_');
+            return readable + "_" + AppDataPaths.SafeFileName(normalized).Substring(0, 16);
         }
 
         private static string Value(IDictionary<string, string> values, string key)

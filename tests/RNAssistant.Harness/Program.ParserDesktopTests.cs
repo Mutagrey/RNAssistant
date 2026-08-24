@@ -120,6 +120,18 @@ namespace RNAssistant.Harness
 
             AssertTrue(createdOnThread != 0, "created thread");
             AssertEqual(createdOnThread, executeOnThread, "execute thread");
+
+            adapter = new FakeOfficeAdapter();
+            using (var dispatched = new DispatchedOfficeApplicationAdapter(delegate { return adapter; }))
+            using (((IOfficeDocumentExecutionGuard)dispatched).BeginExpectedDocument(
+                "Excel", adapter.DocumentKey, adapter.RuntimeDocumentKey))
+            {
+                adapter.ActivateDocument("forecast-doc");
+                var blocked = dispatched.ExecuteTool(new ToolCommand { ToolId = "excel.read_range" });
+                AssertEqual("active_document_changed", blocked.ErrorCode,
+                    "document guard blocks a tool after active document changes");
+                AssertEqual(0, adapter.Executed.Count, "blocked tool never reaches Office adapter");
+            }
         }
 
         private static void DocumentCatalogActivatesSelectedDocument()

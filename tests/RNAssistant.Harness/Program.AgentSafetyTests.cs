@@ -10,6 +10,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
@@ -159,6 +160,18 @@ namespace RNAssistant.Harness
             AssertTrue(result.SelectToken("data.original_chars").Value<int>() > 49000, "original size retained");
             AssertTrue(((string)result.SelectToken("data.preview") ?? string.Empty).Length < 1000, "preview is bounded");
             AssertEqual("call_large", (string)result["tool_call_id"], "tool call id retained");
+
+            var nestedData = JsonConvert.SerializeObject(new { value = new string('x', 200000) });
+            var pipeline = AgentTranscript.CreateToolActivity(command, ToolResult.Ok("pipeline", JsonConvert.SerializeObject(new
+            {
+                steps = new[]
+                {
+                    new { id = "nested", toolId = "excel.read_range", success = true, dataJson = nestedData }
+                }
+            })), "tool");
+            AssertEqual(1, pipeline.Children.Count, "pipeline child retained");
+            AssertContains(pipeline.Children[0].DataJson, "truncated", "nested pipeline data is bounded");
+            AssertTrue(pipeline.Children[0].DataJson.Length < 10000, "nested pipeline preview is bounded");
         }
 
         private static void AgentToolResultFitsRemainingPromptBudget()

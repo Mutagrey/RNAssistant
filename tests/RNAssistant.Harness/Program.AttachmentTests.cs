@@ -26,8 +26,12 @@ namespace RNAssistant.Harness
                 AssertEqual("hello attachment", drafts[0].ExtractedText, "extracted text");
 
                 var message = new ChatMessage { Role = "user", Content = "analyze", Attachments = drafts };
-                store.Commit("session", message);
+                store.Commit("session", message, false);
                 AssertTrue(store.ReadBytes(message.Attachments[0]).Length > 0, "committed bytes");
+                AssertTrue(File.Exists(Path.Combine(paths.AttachmentDirectory, "staging", attachment.Id + ".meta.json")), "draft retained until durable save");
+                store.DeleteDrafts(message);
+                AssertTrue(!File.Exists(Path.Combine(paths.AttachmentDirectory, "staging", attachment.Id + ".meta.json")), "draft deleted after durable save");
+                AssertTrue(store.ReadBytes(message.Attachments[0]).Length > 0, "committed bytes survive draft cleanup");
                 store.DeleteMessage(message);
                 AssertTrue(store.ReadBytes(message.Attachments[0]) == null, "deleted bytes");
             });

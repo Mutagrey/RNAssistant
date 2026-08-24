@@ -9,7 +9,7 @@ namespace RNAssistant.Core.Storage
     internal sealed class ChatIndexStore
     {
         internal const string SidecarSuffix = ".summary.json";
-        private const int CurrentIndexFormatVersion = 1;
+        private const int CurrentIndexFormatVersion = 2;
         private readonly JsonFileStore _json = new JsonFileStore();
 
         public ChatSessionHeader LoadOrCreate(string sessionPath, Func<string, ChatSession> loadSession)
@@ -105,7 +105,8 @@ namespace RNAssistant.Core.Storage
             }
 
             var expectedName = AppDataPaths.SafeFileName(entry.Header.Id) + ".json";
-            return string.Equals(sessionInfo.Name, expectedName, StringComparison.OrdinalIgnoreCase);
+            return string.Equals(sessionInfo.Name, expectedName, StringComparison.OrdinalIgnoreCase) &&
+                entry.Header.Revision == ChatStore.ReadRevision(sessionInfo.FullName);
         }
 
         private sealed class ChatIndexEntry
