@@ -237,6 +237,25 @@ namespace RNAssistant.Harness
                 AssertTrue(executor.Execute(deleteObserved, tools, settings, false, false, session).Success,
                     "same-tool retry deletes after the stale warning");
                 AssertEqual(2, backupStore.List("Excel", "doc").Count, "retried delete keeps the current source backup");
+
+                adapter.SetVbaModule("Module3", "Sub SeenInFirstChat()\nEnd Sub", "StdModule");
+                AssertTrue(executor.Execute(
+                    Command("common.vba_read_module", "moduleName", "Module3"),
+                    tools,
+                    new AppSettings(),
+                    false,
+                    false,
+                    session).Success, "first chat records its optional observation");
+                adapter.SetVbaModule("Module3", "Sub ChangedForSecondChat()\nEnd Sub", "StdModule");
+                var secondSession = NewSession(adapter);
+                var secondChatDelete = executor.Execute(
+                    Command("common.vba_delete_module", "moduleName", "Module3"),
+                    tools,
+                    settings,
+                    false,
+                    false,
+                    secondSession);
+                AssertTrue(secondChatDelete.Success, "an observation from another chat does not block an intentional mutation");
             });
         }
 
