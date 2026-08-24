@@ -302,11 +302,41 @@ namespace RNAssistant.Core.Models
         public string Id { get; set; }
         public string Name { get; set; }
         public string Json { get; set; }
+        public HtmlWorkspaceDataBinding Binding { get; set; }
         public DateTime CreatedUtc { get; set; }
         public DateTime UpdatedUtc { get; set; }
 
         public HtmlWorkspaceDataSource()
         {
+            CreatedUtc = DateTime.UtcNow;
+            UpdatedUtc = CreatedUtc;
+        }
+    }
+
+    public sealed class HtmlWorkspaceDataBinding
+    {
+        public string ToolId { get; set; }
+        public string ArgumentsJson { get; set; }
+        public string Transform { get; set; }
+        public string Headers { get; set; }
+        public string RefreshPolicy { get; set; }
+        public string Host { get; set; }
+        public string DocumentKey { get; set; }
+        public string DocumentTitle { get; set; }
+        public string Status { get; set; }
+        public string LastError { get; set; }
+        public string ContentSha256 { get; set; }
+        public DateTime CreatedUtc { get; set; }
+        public DateTime UpdatedUtc { get; set; }
+        public DateTime? LastRefreshUtc { get; set; }
+
+        public HtmlWorkspaceDataBinding()
+        {
+            ArgumentsJson = "{}";
+            Transform = "raw";
+            Headers = "firstRow";
+            RefreshPolicy = "on_preview";
+            Status = "ready";
             CreatedUtc = DateTime.UtcNow;
             UpdatedUtc = CreatedUtc;
         }

@@ -85,11 +85,34 @@ namespace RNAssistant.Core.Services
                     Id = dataSource.Id,
                     Name = dataSource.Name,
                     Json = dataSource.Json,
+                    Binding = CloneBinding(dataSource.Binding),
                     CreatedUtc = dataSource.CreatedUtc,
                     UpdatedUtc = dataSource.UpdatedUtc
                 });
             }
             return result;
+        }
+
+        private static HtmlWorkspaceDataBinding CloneBinding(HtmlWorkspaceDataBinding binding)
+        {
+            if (binding == null) return null;
+            return new HtmlWorkspaceDataBinding
+            {
+                ToolId = binding.ToolId,
+                ArgumentsJson = binding.ArgumentsJson,
+                Transform = binding.Transform,
+                Headers = binding.Headers,
+                RefreshPolicy = binding.RefreshPolicy,
+                Host = binding.Host,
+                DocumentKey = binding.DocumentKey,
+                DocumentTitle = binding.DocumentTitle,
+                Status = binding.Status,
+                LastError = binding.LastError,
+                ContentSha256 = binding.ContentSha256,
+                CreatedUtc = binding.CreatedUtc,
+                UpdatedUtc = binding.UpdatedUtc,
+                LastRefreshUtc = binding.LastRefreshUtc
+            };
         }
     }
 }

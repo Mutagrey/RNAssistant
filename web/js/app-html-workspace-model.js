@@ -123,6 +123,22 @@
       return prop(data, "Json", "json", "{}") || "{}";
     }
 
+    function dataBinding(data) {
+      return prop(data, "Binding", "binding", null);
+    }
+
+    function bindingValue(binding, pascal, camel, fallback) {
+      return prop(binding || {}, pascal, camel, fallback);
+    }
+
+    function boundDataSources(refreshPolicy) {
+      return dataSources().filter(function (data) {
+        var binding = dataBinding(data);
+        if (!binding) return false;
+        return !refreshPolicy || String(bindingValue(binding, "RefreshPolicy", "refreshPolicy", "manual")).toLowerCase() === String(refreshPolicy).toLowerCase();
+      });
+    }
+
     function setDataJson(data, value) {
       if (!data) {
         return;
@@ -217,6 +233,9 @@
       artifactKind: artifactKind,
       artifactRevision: artifactRevision,
       artifactTitle: artifactTitle,
+      bindingValue: bindingValue,
+      boundDataSources: boundDataSources,
+      dataBinding: dataBinding,
       dataId: dataId,
       dataJson: dataJson,
       dataName: dataName,

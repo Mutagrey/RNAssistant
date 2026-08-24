@@ -108,7 +108,7 @@ The `tool` form uses the same JSON as its message content without the text prefi
 
 `message` and `data` are bounded before they enter model context. Oversized `data` is replaced with `{truncated, original_chars, original_estimated_tokens, preview, hint}` so the model can request a smaller scope. Before every model request, including format repair and continuation after confirmation, the runtime verifies the estimated prompt against the current input budget and stops with a visible diagnostic instead of sending an oversized request.
 
-Chat-local plan/HTML mutations are serialized by the per-chat lease. Document and shared-local-state mutations are serialized by effective safety metadata, including nested pipeline safety. Waiting for another mutation is bounded and returns retryable `tool_mutation_busy`. If an unexpected exception occurs after mutation execution may have started, the result is `tool_effect_uncertain`, is not automatically retried, and tells the model/user to inspect state first.
+Chat-local plan/HTML mutations are serialized by the per-chat lease. HTML bindings may replay only adapter tools explicitly marked `CanSourceHtmlData`; they must remain read-only, confirmation-free, enabled, and Agent-runnable. Refresh keeps the last good JSON on source failure. Document and shared-local-state mutations are serialized by effective safety metadata, including nested pipeline safety. Waiting for another mutation is bounded and returns retryable `tool_mutation_busy`. If an unexpected exception occurs after mutation execution may have started, the result is `tool_effect_uncertain`, is not automatically retried, and tells the model/user to inspect state first.
 
 ## Local invariants
 

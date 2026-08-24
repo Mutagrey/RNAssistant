@@ -248,7 +248,7 @@ namespace RNAssistant.Harness
                 AssertContains(preparedPipeline.PipelineJson, "\"kind\":\"shapes\"", "legacy pipeline selector injected");
 
                 var controllerRunnable = AgentRunService.PrepareToolsForRun(executor.GetControllerTools());
-                AssertEqual(24, controllerRunnable.Count, "compact common runnable tool count");
+                AssertEqual(27, controllerRunnable.Count, "compact common runnable tool count");
                 AssertTrue(controllerRunnable.All(item => item.Id != "common.skills_list" &&
                     item.Id != "common.skills_create" &&
                     item.Id != "common.skills_update" &&
@@ -409,6 +409,48 @@ namespace RNAssistant.Harness
                 AssertEqual(0, session.HtmlWorkspace.DataSources.Count, "html data deleted");
                 HtmlArtifactToolExecutor.RestoreSnapshot(session, session.HtmlWorkspace.History[0].Id);
                 AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "html data delete can be undone");
+
+                var boundSession = new ChatSession
+                {
+                    Host = adapter.HostName,
+                    DocumentKey = adapter.DocumentKey,
+                    DocumentTitle = adapter.DocumentTitle,
+                    Title = "Bound HTML data"
+                };
+                var bind = new ToolCommand { ToolId = HtmlArtifactToolExecutor.BindDataToolId };
+                bind.Arguments["dataName"] = "sales";
+                bind.Arguments["sourceTool"] = "excel.read_range";
+                bind.Arguments["sourceArguments"] = new JObject
+                {
+                    ["sheet"] = "Data",
+                    ["address"] = "A1:B4",
+                    ["content"] = "values"
+                };
+                bind.Arguments["transform"] = "table";
+                bind.Arguments["headers"] = "firstRow";
+                bind.Arguments["refreshPolicy"] = "on_preview";
+                var bindResult = executor.Execute(bind, tools, new AppSettings(), false, false, boundSession);
+                AssertTrue(bindResult.Success, "html Office data binding succeeds");
+                AssertEqual("excel.read_range", boundSession.HtmlWorkspace.DataSources[0].Binding.ToolId, "html binding source persisted");
+                var table = JObject.Parse(boundSession.HtmlWorkspace.DataSources[0].Json);
+                AssertEqual("rnassistant.table.v1", (string)table["schema"], "html table transform schema");
+                AssertEqual(3, table["rowCount"].Value<int>(), "html table transform row count");
+                AssertEqual("Jan", (string)table["rows"][0]["month"], "html table header becomes stable key");
+
+                adapter.ExecuteTool(Command("excel.write_range", "kind", "value", "sheet", "Data", "address", "B2", "value", "999"));
+                var historyBeforeRefresh = boundSession.HtmlWorkspace.History.Count;
+                var refresh = new ToolCommand { ToolId = HtmlArtifactToolExecutor.RefreshDataToolId };
+                refresh.Arguments["name"] = "sales";
+                var refreshResult = executor.Execute(refresh, tools, new AppSettings(), false, false, boundSession);
+                AssertTrue(refreshResult.Success, "bound HTML data refresh succeeds");
+                AssertContains(boundSession.HtmlWorkspace.DataSources[0].Json, "999", "bound HTML data refreshes without model rewrite");
+                AssertEqual(historyBeforeRefresh, boundSession.HtmlWorkspace.History.Count, "automatic data refresh does not spam undo history");
+
+                var freeze = new ToolCommand { ToolId = HtmlArtifactToolExecutor.FreezeDataToolId };
+                freeze.Arguments["name"] = "sales";
+                var freezeResult = executor.Execute(freeze, tools, new AppSettings(), false, false, boundSession);
+                AssertTrue(freezeResult.Success, "bound HTML data can be frozen");
+                AssertTrue(boundSession.HtmlWorkspace.DataSources[0].Binding == null, "freeze keeps JSON and removes binding");
 
                 var invalidData = new ToolCommand { ToolId = "common.html_workspace_upsert_data" };
                 invalidData.Arguments["name"] = "bad";

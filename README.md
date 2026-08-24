@@ -236,12 +236,14 @@ The HTML tab is tied to the active chat session. Agent-created HTML pages are st
 
 - Use `common.html_workspace_upsert` with `resourceType:"file"` for `index.html`, CSS, and scripts; runtime infers file kind from the extension.
 - Use the same tool with `resourceType:"data"` for JSON data sources exposed as `window.RNAssistantData`.
+- Use `common.html_data_bind` to create a refreshable data source from an approved read-only Office tool. The binding stores exact source arguments and can keep raw JSON or normalize row arrays to `{columns, rows, rowCount}`.
+- Use `common.html_data_refresh` to update one or all bindings locally without another LLM request. `refreshPolicy:"on_preview"` is refreshed by the Artifacts UI; `common.html_data_freeze` keeps the current JSON and removes the binding.
 - Use `common.html_workspace_delete` with `resourceType` and `name` to remove an item. Deletions are recorded in workspace history and can be undone.
 - Call `common.html_workspace_read` without arguments for the compact manifest, then pass `resourceType` and exact `name` to read a body. Use `common.html_workspace_set_active` to choose the displayed HTML file.
 - Every workspace mutation also records an immutable chat artifact revision. Full revision bodies are stored outside chat JSON; editing or forking from an older message still restores/copies the exact revision at that point.
 - Undo/redo history is bounded by item count and stored content size. UI responses carry only snapshot ids/labels/timestamps; Agent reads return a manifest or one targeted current item, never history bodies.
 Workspace upsert/delete resolve and validate the current item internally; a separate read is needed only when the model must inspect existing content first.
-HTML preview and its scripts are always enabled inside a sandboxed iframe.
+HTML preview and its scripts are always enabled inside a sandboxed iframe. Pages can use `window.RNAssistantData`, `window.RNAssistantDataMeta`, or `window.RNAssistant.data`. The UI can export the assembled page, current JSON, CSS, and JavaScript as one offline HTML file.
 
 ## Tool Library
 

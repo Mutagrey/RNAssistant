@@ -45,7 +45,7 @@ namespace RNAssistant.Office.Tools
             _skillExecutor = new SkillToolExecutor(adapter, skillStore);
             _toolAuthoringExecutor = new ToolAuthoringExecutor(adapter, toolStore);
             _promptToolExecutor = new PromptToolExecutor(loadSettings, saveSettings);
-            _htmlArtifactExecutor = new HtmlArtifactToolExecutor();
+            _htmlArtifactExecutor = new HtmlArtifactToolExecutor(_adapter, _adapterTools);
             _planToolExecutor = new PlanToolExecutor();
             _mutationLockDirectory = paths == null ? null : Path.Combine(paths.Root, "locks");
             var controllerTools = new List<ToolDefinition>();
@@ -652,7 +652,7 @@ namespace RNAssistant.Office.Tools
                 case ControllerExecutorKind.Prompt:
                     return _promptToolExecutor.ExecuteControllerTool(command, dryRun);
                 case ControllerExecutorKind.HtmlArtifact:
-                    return _htmlArtifactExecutor.ExecuteControllerTool(command, context.Session, dryRun);
+                    return _htmlArtifactExecutor.ExecuteControllerTool(command, context.Session, dryRun, cancellationToken);
                 case ControllerExecutorKind.Plan:
                     return _planToolExecutor.ExecuteControllerTool(command, context.Session, dryRun);
                 default:

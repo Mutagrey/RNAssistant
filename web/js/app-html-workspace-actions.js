@@ -20,6 +20,7 @@
   function create(options) {
     options = options || {};
     var state = options.state;
+    var refreshPending = false;
 
     async function refreshPlan(planId) {
       var response = await options.send("selectChat", { chatId: state.activeChatId });
@@ -50,6 +51,7 @@
           return;
         }
         if (selected.type === "data") {
+          if (selected.binding && !window.confirm("Сохранение JSON отключит привязку к Office и автообновление. Продолжить?")) return;
           options.applyWorkspaceResponse(await options.send("saveHtmlWorkspaceData", {
             chatId: state.activeChatId,
             name: selected.name,
@@ -185,11 +187,45 @@
       }
     }
 
+    async function refreshData(name, policy, interactive) {
+      if (state.bridgeUnavailable || refreshPending) return;
+      if (typeof options.hasRefreshableData === "function" && !options.hasRefreshableData(policy)) return;
+      if (state.htmlWorkspaceDirty) {
+        if (!interactive || !window.confirm("Обновление данных отменит несохранённые изменения. Продолжить?")) return;
+      }
+      refreshPending = true;
+      state.htmlWorkspaceRefreshPending = true;
+      options.render();
+      try {
+        var args = { policy: policy || "all" };
+        if (name) args.name = name;
+        var result = await options.send("runTool", {
+          toolId: "common.html_data_refresh",
+          arguments: args,
+          dryRun: false
+        });
+        options.applyWorkspaceResponse(await options.send("getHtmlWorkspace", { chatId: state.activeChatId }));
+        if (!toolSucceeded(result)) {
+          throw new Error(toolMessage(result, "Данные обновлены частично."));
+        }
+        options.log(toolMessage(result, "Данные HTML обновлены."));
+      } catch (error) {
+        options.log(error.detail || error.message, "error");
+        if (interactive) window.alert(error.message || "Данные HTML не обновлены.");
+      } finally {
+        refreshPending = false;
+        state.htmlWorkspaceRefreshPending = false;
+        options.render();
+      }
+    }
+
     return {
       createData: createData,
       createFile: createFile,
       createPlan: createPlan,
       deleteSelection: deleteSelection,
+      refreshAll: function () { return refreshData("", "all", true); },
+      refreshAuto: function () { return refreshData("", "on_preview", false); },
       redo: function () { return restore("redo"); },
       saveSelection: saveSelection,
       undo: function () { return restore("undo"); }

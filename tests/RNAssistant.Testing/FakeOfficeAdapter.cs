@@ -1274,9 +1274,9 @@ namespace RNAssistant.Harness
             return new[]
             {
                 BuiltIn("Excel", "excel.get_context", false, false, true),
-                BuiltIn("Excel", "excel.get_selection", false, false, true),
-                BuiltIn("Excel", "excel.inspect", false, false, true),
-                BuiltIn("Excel", "excel.read_range", false, false, true),
+                BuiltIn("Excel", "excel.get_selection", false, false, true, canSourceHtmlData: true),
+                BuiltIn("Excel", "excel.inspect", false, false, true, canSourceHtmlData: true),
+                BuiltIn("Excel", "excel.read_range", false, false, true, canSourceHtmlData: true),
                 BuiltIn("Excel", "excel.find_cells", false, false, true),
                 BuiltIn("Excel", "excel.replace_cells", true, true, true),
                 BuiltIn("Excel", "excel.create_chat_chart", false, false, true),
@@ -1303,9 +1303,9 @@ namespace RNAssistant.Harness
             return new[]
             {
                 BuiltIn("Word", "word.get_context", false, false, true),
-                BuiltIn("Word", "word.read_text", false, false, true),
+                BuiltIn("Word", "word.read_text", false, false, true, canSourceHtmlData: true),
                 BuiltIn("Word", "word.find_text", false, false, true),
-                BuiltIn("Word", "word.inspect", false, false, true),
+                BuiltIn("Word", "word.inspect", false, false, true, canSourceHtmlData: true),
                 BuiltIn("Word", "word.write_text", false, true, true),
                 BuiltIn("Word", "word.replace_text", true, true, true),
                 BuiltIn("Word", "word.format_text", false, true, true, 1),
@@ -1325,9 +1325,9 @@ namespace RNAssistant.Harness
             return new[]
             {
                 BuiltIn("PowerPoint", "powerpoint.get_context", false, false, true),
-                BuiltIn("PowerPoint", "powerpoint.get_selection", false, false, true),
-                BuiltIn("PowerPoint", "powerpoint.read_slides", false, false, true),
-                BuiltIn("PowerPoint", "powerpoint.list_objects", false, false, true),
+                BuiltIn("PowerPoint", "powerpoint.get_selection", false, false, true, canSourceHtmlData: true),
+                BuiltIn("PowerPoint", "powerpoint.read_slides", false, false, true, canSourceHtmlData: true),
+                BuiltIn("PowerPoint", "powerpoint.list_objects", false, false, true, canSourceHtmlData: true),
                 BuiltIn("PowerPoint", "powerpoint.search_text", false, false, true),
                 BuiltIn("PowerPoint", "powerpoint.add_slide", false, true, true, 1),
                 BuiltIn("PowerPoint", "powerpoint.set_text", false, true, true),
@@ -1348,15 +1348,15 @@ namespace RNAssistant.Harness
             return new[]
             {
                 BuiltIn("Outlook", "outlook.get_context", false, false, true),
-                BuiltIn("Outlook", "outlook.read_mail", false, false, true),
+                BuiltIn("Outlook", "outlook.read_mail", false, false, true, canSourceHtmlData: true),
                 BuiltIn("Outlook", "outlook.search_mail", false, false, true),
                 BuiltIn("Outlook", "outlook.create_draft", false, true, true, 1),
                 BuiltIn("Outlook", "outlook.update_mail", false, true, true, 1),
-                BuiltIn("Outlook", "outlook.collect_mail", false, false, true)
+                BuiltIn("Outlook", "outlook.collect_mail", false, false, true, canSourceHtmlData: true)
             };
         }
 
-        private static ToolDefinition BuiltIn(string host, string id, bool requiresConfirmation, bool mutatesDocument, bool agentCanRun, int riskLevel = 0)
+        private static ToolDefinition BuiltIn(string host, string id, bool requiresConfirmation, bool mutatesDocument, bool agentCanRun, int riskLevel = 0, bool canSourceHtmlData = false)
         {
             return new ToolDefinition
             {
@@ -1369,6 +1369,7 @@ namespace RNAssistant.Harness
                 BuiltIn = true,
                 RequiresConfirmation = requiresConfirmation,
                 MutatesDocument = mutatesDocument,
+                CanSourceHtmlData = canSourceHtmlData,
                 AgentCanRun = agentCanRun,
                 RiskLevel = mutatesDocument && riskLevel <= 0 ? 2 : riskLevel
             };
@@ -1497,6 +1498,7 @@ namespace RNAssistant.Harness
                 RequiresConfirmation = tool.RequiresConfirmation,
                 MutatesDocument = tool.MutatesDocument,
                 MutatesLocalState = tool.MutatesLocalState,
+                CanSourceHtmlData = tool.CanSourceHtmlData,
                 AgentCanRun = tool.AgentCanRun,
                 PipelineJson = tool.PipelineJson,
                 Code = tool.Code,

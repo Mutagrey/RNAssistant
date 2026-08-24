@@ -324,6 +324,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var session = NewSession(adapter);
+                session.HtmlModeEnabled = true;
                 var settings = new AppSettings { SystemPrompt = "SYSTEM_PROMPT_SENTINEL" };
                 var result = new AgentRunService(adapter, executor, completion).ExecuteAsync(
                     "List sheets.", session, NewContext(adapter), settings,
@@ -339,6 +340,9 @@ namespace RNAssistant.Harness
                     AssertEqual(1, request.Count(message =>
                         (message.Content ?? string.Empty).IndexOf("RUNTIME_CONTEXT:", StringComparison.Ordinal) >= 0),
                         "runtime context appears once per request");
+                    AssertTrue(request.Any(message =>
+                        (message.Content ?? string.Empty).IndexOf("\"html_workspace_preferred\":true", StringComparison.Ordinal) >= 0),
+                        "runtime context exposes HTML preference");
                 }
                 AssertTrue(!session.Messages.Any(message =>
                     (message.Content ?? string.Empty).IndexOf("SYSTEM_PROMPT_SENTINEL", StringComparison.Ordinal) >= 0 ||

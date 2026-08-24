@@ -9,6 +9,11 @@
     return String(value || "").split(/\r?\n/)[0].trim().slice(0, 140);
   }
 
+  function bindingValue(binding, pascal, camel, fallback) {
+    binding = binding || {};
+    return binding[camel] !== undefined ? binding[camel] : (binding[pascal] !== undefined ? binding[pascal] : fallback);
+  }
+
   function isScriptFile(file) {
     return file.kind === "script" || file.kind === "js" || /\.js$/i.test(file.path);
   }
@@ -92,13 +97,18 @@
     group.className += " html-workspace-group";
     var body = group.treeChildren || group;
     items.forEach(function (data) {
-      if (!matchesText([data.name, data.json].join(" "), query)) return;
+      var binding = data.binding || null;
+      var sourceTool = bindingValue(binding, "ToolId", "toolId", "");
+      var status = bindingValue(binding, "Status", "status", "ready");
+      var lastError = bindingValue(binding, "LastError", "lastError", "");
+      var refreshPolicy = bindingValue(binding, "RefreshPolicy", "refreshPolicy", "manual");
+      if (!matchesText([data.name, data.json, sourceTool, status, lastError].join(" "), query)) return;
       appendTreeItem(body, {
         title: data.name,
         active: isSelected(options, "data", data.id),
-        meta: "data/*.json",
+        meta: binding ? sourceTool + " · " + status : "data/*.json · static",
         icon: "JSON",
-        description: firstLine(data.json) || "JSON data source",
+        description: binding ? (lastError || (refreshPolicy === "on_preview" ? "Обновляется при открытии" : "Обновляется вручную")) : (firstLine(data.json) || "JSON data source"),
         compact: true,
         depth: 1,
         onClick: function () { select(options, "data", data.id); }

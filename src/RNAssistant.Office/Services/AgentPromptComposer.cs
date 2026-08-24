@@ -99,6 +99,10 @@ namespace RNAssistant.Office.Services
                     ["key"] = adapter == null ? string.Empty : adapter.DocumentKey ?? string.Empty,
                     ["title"] = adapter == null ? string.Empty : adapter.DocumentTitle ?? string.Empty
                 },
+                ["chat"] = new JObject
+                {
+                    ["html_workspace_preferred"] = session != null && session.HtmlModeEnabled
+                },
                 ["tools"] = BuildTools(tools),
                 ["skills"] = BuildSkills(skills),
                 ["user_context"] = BuildUserContext(context)

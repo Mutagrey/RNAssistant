@@ -24,6 +24,9 @@
     var setFileContent = model.setFileContent;
     var dataName = model.dataName;
     var dataJson = model.dataJson;
+    var dataBinding = model.dataBinding;
+    var bindingValue = model.bindingValue;
+    var boundDataSources = model.boundDataSources;
     var setDataJson = model.setDataJson;
     var selectedItem = model.selectedItem;
     var snapshotLabel = model.snapshotLabel;
@@ -97,6 +100,16 @@
       if (save) {
         save.disabled = state.bridgeUnavailable || !selected || selected.type === "artifact" || !state.htmlWorkspaceDirty;
         save.title = "Сохранить изменения (Ctrl+S)";
+      }
+      if ($("refreshHtmlDataButton")) {
+        var boundCount = boundDataSources().length;
+        $("refreshHtmlDataButton").disabled = state.bridgeUnavailable || !!state.htmlWorkspaceDirty || !!state.htmlWorkspaceRefreshPending || !boundCount;
+        $("refreshHtmlDataButton").textContent = state.htmlWorkspaceRefreshPending ? "Обновляю…" : "Данные ↻";
+        $("refreshHtmlDataButton").title = boundCount ? "Перечитать " + boundCount + " привязанных наборов из Office" : "Нет привязанных данных";
+      }
+      if ($("exportHtmlWorkspaceButton")) {
+        $("exportHtmlWorkspaceButton").disabled = !files().some(function (file) { return fileKind(file) === "html"; });
+        $("exportHtmlWorkspaceButton").title = "Скачать автономный HTML с текущими данными, CSS и JavaScript";
       }
       if ($("deleteHtmlWorkspaceButton")) {
         $("deleteHtmlWorkspaceButton").disabled = state.bridgeUnavailable || !selected || selected.type === "artifact";
@@ -178,9 +191,12 @@
           : "Артефакт не выбран";
       }
       if (meta) {
+        var binding = selected && selected.type === "data" ? dataBinding(selected.item) : null;
+        var bindingStatus = binding ? String(bindingValue(binding, "Status", "status", "ready")) : "";
         meta.textContent = selected
-          ? (isPlan ? "План · JSON · v" + artifactRevision(selected.item) : (isArtifact ? workspaceArtifacts.typeLabel(artifactKind(selected.item)) + " · только чтение" : (selected.type === "data" ? "JSON data source" : (fileKind(selected.item) || "file"))))
+          ? (isPlan ? "План · JSON · v" + artifactRevision(selected.item) : (isArtifact ? workspaceArtifacts.typeLabel(artifactKind(selected.item)) + " · только чтение" : (selected.type === "data" ? (binding ? "JSON · " + bindingValue(binding, "ToolId", "toolId", "Office") + " · " + bindingStatus + " · " + bindingValue(binding, "RefreshPolicy", "refreshPolicy", "manual") : "JSON data source · static") : (fileKind(selected.item) || "file"))))
           : "";
+        meta.title = binding && bindingValue(binding, "LastError", "lastError", "") ? bindingValue(binding, "LastError", "lastError", "") : "";
       }
       var previewButton = document.querySelector('.html-workspace-mode-button[data-html-mode="preview"]');
       var editButton = document.querySelector('.html-workspace-mode-button[data-html-mode="edit"]');

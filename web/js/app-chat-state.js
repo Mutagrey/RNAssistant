@@ -406,8 +406,8 @@ function renderHtmlModeToggle() {
   button.classList.toggle("active", !!state.activeChatHtmlMode);
   button.setAttribute("aria-pressed", state.activeChatHtmlMode ? "true" : "false");
   button.title = state.activeChatHtmlMode
-    ? "HTML mode включен: агент будет работать через HTML workspace"
-    : "Вести этот чат как HTML workspace";
+    ? "HTML-предпочтение включено: агент будет чаще создавать отчёты и визуализации в workspace"
+    : "Предпочитать HTML для отчётов и визуализаций в этом чате";
 }
 
 function chatHasHtml(chat) {

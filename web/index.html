@@ -148,7 +148,7 @@
                 <div class="composer-options-panel">
                   <div class="composer-options-title">Контекст</div>
                   <div class="composer-option-actions">
-                    <button type="button" class="composer-option-button context-toggle-button html-mode-toggle-button" id="toggleHtmlModeButton" title="Вести этот чат как HTML workspace">
+                    <button type="button" class="composer-option-button context-toggle-button html-mode-toggle-button" id="toggleHtmlModeButton" title="Предпочитать HTML для отчётов и визуализаций в этом чате">
                       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 9-4 3 4 3"/><path d="m16 9 4 3-4 3"/><path d="m14 5-4 14"/></svg>
                       <span>HTML workspace</span>
                     </button>
@@ -529,6 +529,8 @@
                 <button class="mode-button html-workspace-mode-button" type="button" data-html-mode="edit">Код</button>
               </div>
               <div class="resource-editor-actions">
+                <button class="secondary" id="refreshHtmlDataButton" type="button">Данные ↻</button>
+                <button class="secondary" id="exportHtmlWorkspaceButton" type="button">Экспорт</button>
                 <button class="secondary" id="undoHtmlWorkspaceButton" type="button">Отменить</button>
                 <button class="secondary" id="redoHtmlWorkspaceButton" type="button">Повторить</button>
                 <button class="secondary danger-soft" id="deleteHtmlWorkspaceButton" type="button">Удалить</button>
@@ -810,7 +812,7 @@
   <script src="js/app-model-render.js?v=token-estimate-20260824-2"></script>
   <script src="js/app-models.js?v=log-filters-20260824-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=token-estimate-20260824-2"></script>
+  <script src="js/app-chat-state.js?v=html-preference-20260824-1"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
   <script src="js/app-tools-structured.js?v=tools-modules-20260823-1"></script>
   <script src="js/app-tools-actions.js?v=log-filters-20260824-1"></script>
@@ -820,13 +822,13 @@
   <script src="js/app-vba-actions.js?v=userform-20260824-1"></script>
   <script src="js/app-vba-project.js?v=userform-20260824-1"></script>
   <script src="js/app-vba.js?v=userform-20260824-1"></script>
-  <script src="js/app-html-workspace-preview.js?v=workspace-modules-20260823-1"></script>
+  <script src="js/app-html-workspace-preview.js?v=html-data-20260824-1"></script>
   <script src="js/app-html-workspace-artifacts.js?v=workspace-modules-20260823-1"></script>
-  <script src="js/app-html-workspace-model.js?v=vba-tab-20260824-1"></script>
-  <script src="js/app-html-workspace-editor.js?v=vba-tab-20260824-1"></script>
-  <script src="js/app-html-workspace-tree.js?v=vba-tab-20260824-1"></script>
-  <script src="js/app-html-workspace-actions.js?v=vba-tab-20260824-1"></script>
-  <script src="js/app-html-workspace.js?v=vba-tab-20260824-1"></script>
+  <script src="js/app-html-workspace-model.js?v=html-data-20260824-1"></script>
+  <script src="js/app-html-workspace-editor.js?v=html-data-20260824-1"></script>
+  <script src="js/app-html-workspace-tree.js?v=html-data-20260824-1"></script>
+  <script src="js/app-html-workspace-actions.js?v=html-data-20260824-1"></script>
+  <script src="js/app-html-workspace.js?v=html-data-20260824-1"></script>
   <script src="js/app-context.js?v=log-filters-20260824-1"></script>
   <script src="js/app-context-inspector.js?v=token-estimate-20260824-2"></script>
   <script src="js/app-agent-data.js?v=agent-ui-20260821-2"></script>

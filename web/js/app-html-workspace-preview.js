@@ -61,16 +61,33 @@
 
   function dataScript(dataSources) {
     var data = {};
+    var metadata = {};
     dataSources.forEach(function (source) {
       var name = prop(source, "Name", "name", prop(source, "Id", "id", ""));
       var json = prop(source, "Json", "json", "{}") || "{}";
+      var binding = prop(source, "Binding", "binding", null);
       try {
         data[name] = JSON.parse(json);
       } catch (error) {
         data[name] = null;
       }
+      metadata[name] = binding ? {
+        bound: true,
+        sourceTool: prop(binding, "ToolId", "toolId", ""),
+        transform: prop(binding, "Transform", "transform", "raw"),
+        refreshPolicy: prop(binding, "RefreshPolicy", "refreshPolicy", "manual"),
+        status: prop(binding, "Status", "status", "ready"),
+        lastError: prop(binding, "LastError", "lastError", ""),
+        lastRefreshUtc: prop(binding, "LastRefreshUtc", "lastRefreshUtc", null),
+        documentTitle: prop(binding, "DocumentTitle", "documentTitle", "")
+      } : { bound: false, status: "static" };
     });
-    return "<script>window.RNAssistantData=" + escapeScriptJson(JSON.stringify(data)) + ";</script>";
+    return "<script>(function(){" +
+      "var data=" + escapeScriptJson(JSON.stringify(data)) + ",meta=" + escapeScriptJson(JSON.stringify(metadata)) + ";" +
+      "window.RNAssistantData=data;window.RNAssistantDataMeta=meta;" +
+      "window.RNAssistant={data:Object.freeze({get:function(name){return data[name];},meta:function(name){return meta[name]||null;},names:function(){return Object.keys(data);}})};" +
+      "Object.freeze(window.RNAssistant);" +
+      "}());<\/script>";
   }
 
   function cssBlock(files) {
@@ -109,7 +126,8 @@
     var dataSources = options.dataSources || [];
     var file = activeHtmlFile(files, options.activeFileId || "");
     var html = file ? fileContent(file) : "";
-    var headInject = previewContentSecurityPolicy() + "\n" + previewViewportReset() + "\n" + networkBridgeScript() + "\n" + dataScript(dataSources) + "\n" + cssBlock(files);
+    var hostBridge = options.hostBridge === false ? "" : networkBridgeScript() + "\n";
+    var headInject = previewContentSecurityPolicy() + "\n" + previewViewportReset() + "\n" + hostBridge + dataScript(dataSources) + "\n" + cssBlock(files);
     var bodyInject = scriptBlock(files);
     if (!html.trim()) {
       html = "<div style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">HTML workspace пуст.</div>";

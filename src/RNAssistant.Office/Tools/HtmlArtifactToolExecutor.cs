@@ -1,10 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.Tools
@@ -15,11 +19,31 @@ namespace RNAssistant.Office.Tools
         public const string UpsertToolId = "common.html_workspace_upsert";
         public const string DeleteToolId = "common.html_workspace_delete";
         public const string SetActiveToolId = "common.html_workspace_set_active";
+        public const string BindDataToolId = "common.html_data_bind";
+        public const string RefreshDataToolId = "common.html_data_refresh";
+        public const string FreezeDataToolId = "common.html_data_freeze";
 
         private const int MaxHtmlChars = 300000;
         private const int MaxDataChars = 300000;
         private const int MaxWorkspaceItems = 100;
         private const int MaxWorkspaceCharacters = 1500000;
+
+        private readonly IOfficeApplicationAdapter _adapter;
+        private readonly Dictionary<string, ToolDefinition> _dataSourceTools;
+
+        public HtmlArtifactToolExecutor()
+            : this(null, null)
+        {
+        }
+
+        public HtmlArtifactToolExecutor(IOfficeApplicationAdapter adapter, IEnumerable<ToolDefinition> adapterTools)
+        {
+            _adapter = adapter;
+            _dataSourceTools = (adapterTools ?? new ToolDefinition[0])
+                .Where(IsEligibleDataSourceTool)
+                .OrderBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(tool => tool.Id, tool => tool.Clone(), StringComparer.OrdinalIgnoreCase);
+        }
 
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
@@ -27,9 +51,15 @@ namespace RNAssistant.Office.Tools
             yield return ControllerToolDefinition.Create(UpsertToolId, "Common", "Workspace: Create or update one file or JSON data source. File kind is inferred from its extension; missing items are created automatically.", "{\"type\":\"object\",\"properties\":{\"resourceType\":{\"type\":\"string\",\"enum\":[\"file\",\"data\"],\"description\":\"Resource to write: file or data.\"},\"name\":{\"type\":\"string\",\"description\":\"Workspace-relative file path or stable data-source name.\",\"maxLength\":260},\"content\":{\"type\":\"string\",\"description\":\"Complete file text or valid JSON text for a data source.\",\"maxLength\":300000},\"setActive\":{\"type\":\"boolean\",\"description\":\"For an HTML file, make it the active preview after writing. Ignored for data.\",\"default\":true}},\"required\":[\"resourceType\",\"name\",\"content\"],\"additionalProperties\":false}", mutatesLocalState: true, name: "html_workspace_upsert", scope: "session");
             yield return ControllerToolDefinition.Create(DeleteToolId, "Common", "Workspace: Delete one exact file or JSON data source. Workspace history keeps the operation recoverable.", "{\"type\":\"object\",\"properties\":{\"resourceType\":{\"type\":\"string\",\"enum\":[\"file\",\"data\"],\"description\":\"Resource to delete: file or data.\"},\"name\":{\"type\":\"string\",\"description\":\"Exact workspace-relative file path or data-source name.\",\"maxLength\":260}},\"required\":[\"resourceType\",\"name\"],\"additionalProperties\":false}", mutatesLocalState: true, riskLevel: 1, name: "html_workspace_delete", scope: "session");
             yield return ControllerToolDefinition.Create(SetActiveToolId, "Common", "Workspace: Select the active HTML file displayed on the HTML tab for the active chat.", "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Exact workspace-relative HTML file path.\",\"default\":\"index.html\",\"maxLength\":260}},\"required\":[],\"additionalProperties\":false}", mutatesLocalState: true, name: "html_workspace_set_active", scope: "session");
+            if (_dataSourceTools.Count > 0)
+            {
+                yield return ControllerToolDefinition.Create(BindDataToolId, "Common", BuildBindDescription(), BuildBindSchema(), mutatesLocalState: true, name: "html_data_bind", scope: "session");
+            }
+            yield return ControllerToolDefinition.Create(RefreshDataToolId, "Common", "Workspace: Re-run a bound read-only Office source and replace its JSON without another model request. Omit name to refresh all matching bound sources.", "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Optional exact bound data-source name; omit to refresh all matching sources.\",\"maxLength\":128},\"policy\":{\"type\":\"string\",\"enum\":[\"all\",\"on_preview\"],\"description\":\"Refresh all bound sources or only sources configured for preview refresh.\",\"default\":\"all\"}},\"required\":[],\"additionalProperties\":false}", mutatesLocalState: true, name: "html_data_refresh", scope: "session");
+            yield return ControllerToolDefinition.Create(FreezeDataToolId, "Common", "Workspace: Keep the current JSON of one bound data source but remove its Office binding so future refreshes cannot overwrite it.", "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Exact bound data-source name.\",\"maxLength\":128}},\"required\":[\"name\"],\"additionalProperties\":false}", mutatesLocalState: true, name: "html_data_freeze", scope: "session");
         }
 
-        public ToolResult ExecuteControllerTool(ToolCommand command, ChatSession session, bool dryRun)
+        public ToolResult ExecuteControllerTool(ToolCommand command, ChatSession session, bool dryRun, CancellationToken cancellationToken = default(CancellationToken))
         {
             if (command == null)
             {
@@ -46,6 +76,21 @@ namespace RNAssistant.Office.Tools
                 if (string.Equals(command.ToolId, ReadWorkspaceToolId, StringComparison.OrdinalIgnoreCase))
                 {
                     return ToolResult.Ok("HTML workspace read.", ReadWorkspaceDataJson(session, command));
+                }
+
+                if (string.Equals(command.ToolId, BindDataToolId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return BindDataSource(session, command, dryRun, cancellationToken);
+                }
+
+                if (string.Equals(command.ToolId, RefreshDataToolId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return RefreshDataSources(session, command, dryRun, cancellationToken);
+                }
+
+                if (string.Equals(command.ToolId, FreezeDataToolId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return FreezeDataSource(session, command, dryRun);
                 }
 
                 if (string.Equals(command.ToolId, UpsertToolId, StringComparison.OrdinalIgnoreCase))
@@ -133,6 +178,652 @@ namespace RNAssistant.Office.Tools
             return ToolResult.Fail("Unknown HTML workspace tool: " + command.ToolId);
         }
 
+        private static bool IsEligibleDataSourceTool(ToolDefinition tool)
+        {
+            if (tool == null || string.IsNullOrWhiteSpace(tool.Id) || !tool.Enabled || !tool.AgentCanRun ||
+                !tool.CanSourceHtmlData || tool.MutatesDocument || tool.MutatesLocalState || tool.RequiresConfirmation)
+            {
+                return false;
+            }
+
+            JObject ignoredSchema;
+            string ignoredError;
+            return ToolSchemaSupport.TryParse(tool, out ignoredSchema, out ignoredError);
+        }
+
+        private string BuildBindDescription()
+        {
+            return "Workspace: Bind a JSON data source to one approved read-only Office tool, execute it now, and save refresh metadata. " +
+                "Use transform=table for a row array that should become columns plus object rows. Available sources: " +
+                string.Join(", ", _dataSourceTools.Keys.ToArray()) + ".";
+        }
+
+        private string BuildBindSchema()
+        {
+            var sourceProperties = new JObject();
+            foreach (var tool in _dataSourceTools.Values)
+            {
+                JObject schema;
+                string error;
+                if (!ToolSchemaSupport.TryParse(tool, out schema, out error)) continue;
+                foreach (var property in ((JObject)schema["properties"]).Properties())
+                {
+                    if (sourceProperties[property.Name] == null)
+                    {
+                        sourceProperties[property.Name] = property.Value.DeepClone();
+                    }
+                }
+            }
+
+            return new JObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JObject
+                {
+                    ["dataName"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Stable HTML workspace data-source name exposed under window.RNAssistantData.",
+                        ["maxLength"] = 128
+                    },
+                    ["sourceTool"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["enum"] = new JArray(_dataSourceTools.Keys.ToArray()),
+                        ["description"] = "Exact approved read-only Office tool to execute on bind and refresh."
+                    },
+                    ["sourceArguments"] = new JObject
+                    {
+                        ["type"] = "object",
+                        ["description"] = "Native JSON arguments for sourceTool. Use only fields from that selected tool's schema.",
+                        ["properties"] = sourceProperties,
+                        ["required"] = new JArray(),
+                        ["additionalProperties"] = false
+                    },
+                    ["transform"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["enum"] = new JArray("raw", "table"),
+                        ["description"] = "Keep source JSON unchanged or normalize a row array to a table envelope.",
+                        ["default"] = "raw"
+                    },
+                    ["headers"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["enum"] = new JArray("firstRow", "none"),
+                        ["description"] = "For array rows with transform=table, use the first row as column labels or generate labels.",
+                        ["default"] = "firstRow"
+                    },
+                    ["refreshPolicy"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["enum"] = new JArray("manual", "on_preview"),
+                        ["description"] = "Refresh only on request or whenever the user opens HTML preview.",
+                        ["default"] = "on_preview"
+                    }
+                },
+                ["required"] = new JArray("dataName", "sourceTool", "sourceArguments"),
+                ["additionalProperties"] = false
+            }.ToString(Formatting.None);
+        }
+
+        private ToolResult BindDataSource(ChatSession session, ToolCommand command, bool dryRun, CancellationToken cancellationToken)
+        {
+            EnsureAdapterMatchesSession(session);
+            var name = NormalizeDataName(ToolArgumentReader.String(command.Arguments, "dataName", string.Empty));
+            var sourceToolId = ToolArgumentReader.String(command.Arguments, "sourceTool", string.Empty);
+            var transform = NormalizeTransform(ToolArgumentReader.String(command.Arguments, "transform", "raw"));
+            var headers = NormalizeHeaders(ToolArgumentReader.String(command.Arguments, "headers", "firstRow"));
+            var refreshPolicy = NormalizeRefreshPolicy(ToolArgumentReader.String(command.Arguments, "refreshPolicy", "on_preview"));
+            var sourceArguments = ReadObjectArgument(command, "sourceArguments");
+            ToolDefinition sourceTool;
+            JObject normalizedSourceArguments;
+            var sourceCommand = BuildSourceCommand(sourceToolId, sourceArguments, out sourceTool, out normalizedSourceArguments);
+
+            if (dryRun)
+            {
+                return ToolResult.Ok(
+                    "Dry run: would bind HTML data " + name + " to " + sourceTool.Id + ".",
+                    DataBindingResultJson(session, name, sourceTool.Id, transform, refreshPolicy, "dry_run", false, 0));
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            var sourceResult = _adapter.ExecuteTool(sourceCommand) ?? ToolResult.Fail("Office data source returned no result.");
+            if (!sourceResult.Success)
+            {
+                return ToolResult.Fail(
+                    "Could not bind HTML data " + name + ": " + (sourceResult.Message ?? "Office source failed."),
+                    sourceResult.DataJson,
+                    sourceResult.ErrorCode ?? "html_data_source_failed",
+                    sourceResult.Retryable);
+            }
+
+            var json = TransformSourceJson(sourceResult.DataJson, transform, headers);
+            ValidateDataSource(name, json);
+            session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
+            var id = DataSourceId(name);
+            ValidateWorkspaceCapacity(session.HtmlWorkspace, null, null, id, json);
+            PushHistory(session.HtmlWorkspace, "Before binding data " + name);
+            ClearRedoHistory(session.HtmlWorkspace);
+            var now = DateTime.UtcNow;
+            var data = session.HtmlWorkspace.DataSources.FirstOrDefault(item =>
+                item != null && string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (data == null)
+            {
+                data = new HtmlWorkspaceDataSource { Id = id, Name = name, CreatedUtc = now };
+                session.HtmlWorkspace.DataSources.Add(data);
+            }
+
+            data.Name = name;
+            data.Json = json;
+            data.Binding = new HtmlWorkspaceDataBinding
+            {
+                ToolId = sourceTool.Id,
+                ArgumentsJson = normalizedSourceArguments.ToString(Formatting.None),
+                Transform = transform,
+                Headers = headers,
+                RefreshPolicy = refreshPolicy,
+                Host = _adapter.HostName,
+                DocumentKey = session.DocumentKey,
+                DocumentTitle = session.DocumentTitle,
+                Status = "ready",
+                LastError = null,
+                ContentSha256 = Sha256(json),
+                CreatedUtc = now,
+                UpdatedUtc = now,
+                LastRefreshUtc = now
+            };
+            data.UpdatedUtc = now;
+            session.HtmlWorkspace.UpdatedUtc = now;
+            HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML bound data: " + name);
+            return ToolResult.Ok(
+                "HTML data bound and loaded: " + name + ".",
+                DataBindingResultJson(session, name, sourceTool.Id, transform, refreshPolicy, "ready", true, json.Length));
+        }
+
+        private ToolResult RefreshDataSources(ChatSession session, ToolCommand command, bool dryRun, CancellationToken cancellationToken)
+        {
+            EnsureAdapterMatchesSession(session);
+            var name = ToolArgumentReader.String(command.Arguments, "name", string.Empty);
+            var policy = ToolArgumentReader.String(command.Arguments, "policy", "all");
+            if (!string.Equals(policy, "all", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(policy, "on_preview", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("policy must be all or on_preview.");
+            }
+
+            var workspace = dryRun ? NormalizedWorkspaceCopy(session.HtmlWorkspace) : NormalizeWorkspace(session.HtmlWorkspace);
+            List<HtmlWorkspaceDataSource> targets;
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                var exact = FindDataSource(workspace, name);
+                if (exact.Binding == null) throw new InvalidOperationException("HTML workspace data source is not bound: " + exact.Name);
+                targets = new List<HtmlWorkspaceDataSource> { exact };
+            }
+            else
+            {
+                targets = workspace.DataSources.Where(item => item != null && item.Binding != null &&
+                    (!string.Equals(policy, "on_preview", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(item.Binding.RefreshPolicy, "on_preview", StringComparison.OrdinalIgnoreCase))).ToList();
+            }
+
+            if (targets.Count == 0)
+            {
+                return ToolResult.Ok("No matching bound HTML data sources to refresh.", RefreshResultJson(new JArray(), 0, 0, dryRun));
+            }
+
+            if (dryRun)
+            {
+                foreach (var target in targets) ValidateBinding(target.Binding);
+                return ToolResult.Ok(
+                    "Dry run: would refresh " + targets.Count + " HTML data source(s).",
+                    RefreshResultJson(new JArray(targets.Select(item => new JObject
+                    {
+                        ["name"] = item.Name,
+                        ["sourceTool"] = item.Binding.ToolId,
+                        ["status"] = "dry_run"
+                    })), targets.Count, 0, true));
+            }
+
+            var summaries = new JArray();
+            var succeeded = 0;
+            var failed = 0;
+            foreach (var target in targets)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var refreshed = RefreshDataSource(session, target, cancellationToken);
+                if (refreshed.Success) succeeded += 1;
+                else failed += 1;
+                summaries.Add(ResultSummary(target, refreshed));
+            }
+
+            var dataJson = RefreshResultJson(summaries, succeeded, failed, false);
+            if (failed > 0)
+            {
+                return ToolResult.PartialFailure(
+                    "Refreshed " + succeeded + " HTML data source(s); " + failed + " failed and kept their previous JSON.",
+                    dataJson,
+                    "html_data_refresh_partial");
+            }
+            return ToolResult.Ok("Refreshed " + succeeded + " HTML data source(s).", dataJson);
+        }
+
+        private ToolResult RefreshDataSource(ChatSession session, HtmlWorkspaceDataSource data, CancellationToken cancellationToken)
+        {
+            var binding = data == null ? null : data.Binding;
+            try
+            {
+                ValidateBinding(binding);
+                var arguments = JObject.Parse(binding.ArgumentsJson);
+                ToolDefinition sourceTool;
+                var sourceCommand = BuildSourceCommand(binding.ToolId, arguments, out sourceTool);
+                cancellationToken.ThrowIfCancellationRequested();
+                var result = _adapter.ExecuteTool(sourceCommand) ?? ToolResult.Fail("Office data source returned no result.");
+                if (!result.Success)
+                {
+                    MarkBindingError(session, data, result.Message);
+                    return ToolResult.Fail(result.Message ?? "Office source failed.", null, result.ErrorCode ?? "html_data_source_failed", result.Retryable);
+                }
+
+                var json = TransformSourceJson(result.DataJson, binding.Transform, binding.Headers);
+                ValidateDataSource(data.Name, json);
+                ValidateWorkspaceCapacity(session.HtmlWorkspace, null, null, data.Id, json);
+                var now = DateTime.UtcNow;
+                var hash = Sha256(json);
+                var changed = !string.Equals(binding.ContentSha256, hash, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(data.Json, json, StringComparison.Ordinal);
+                if (changed)
+                {
+                    data.Json = json;
+                    data.UpdatedUtc = now;
+                }
+                binding.ContentSha256 = hash;
+                binding.DocumentKey = session.DocumentKey;
+                binding.DocumentTitle = session.DocumentTitle;
+                binding.Status = "ready";
+                binding.LastError = null;
+                binding.LastRefreshUtc = now;
+                binding.UpdatedUtc = now;
+                session.HtmlWorkspace.UpdatedUtc = now;
+                return ToolResult.Ok(changed ? "Data changed." : "Data is unchanged.", JsonConvert.SerializeObject(new { changed = changed }));
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                MarkBindingError(session, data, ex.Message);
+                return ToolResult.Fail(ex.Message, null, "html_data_refresh_failed", false);
+            }
+        }
+
+        private ToolResult FreezeDataSource(ChatSession session, ToolCommand command, bool dryRun)
+        {
+            var name = ToolArgumentReader.String(command.Arguments, "name", string.Empty);
+            var workspace = dryRun ? NormalizedWorkspaceCopy(session.HtmlWorkspace) : NormalizeWorkspace(session.HtmlWorkspace);
+            var data = FindDataSource(workspace, name);
+            if (data.Binding == null) throw new InvalidOperationException("HTML workspace data source is not bound: " + data.Name);
+            if (dryRun)
+            {
+                return ToolResult.Ok("Dry run: would freeze HTML data " + data.Name + ".", DataBindingResultJson(session, data.Name, data.Binding.ToolId, data.Binding.Transform, data.Binding.RefreshPolicy, "dry_run", false, (data.Json ?? string.Empty).Length));
+            }
+
+            var sourceToolId = data.Binding.ToolId;
+            var transform = data.Binding.Transform;
+            var refreshPolicy = data.Binding.RefreshPolicy;
+            PushHistory(session.HtmlWorkspace, "Before freezing data " + data.Name);
+            ClearRedoHistory(session.HtmlWorkspace);
+            data.Binding = null;
+            data.UpdatedUtc = DateTime.UtcNow;
+            session.HtmlWorkspace.UpdatedUtc = data.UpdatedUtc;
+            HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML frozen data: " + data.Name);
+            return ToolResult.Ok("HTML data frozen: " + data.Name + ".", DataBindingResultJson(session, data.Name, sourceToolId, transform, refreshPolicy, "frozen", true, (data.Json ?? string.Empty).Length));
+        }
+
+        private ToolCommand BuildSourceCommand(string sourceToolId, JObject arguments, out ToolDefinition sourceTool)
+        {
+            JObject ignored;
+            return BuildSourceCommand(sourceToolId, arguments, out sourceTool, out ignored);
+        }
+
+        private ToolCommand BuildSourceCommand(string sourceToolId, JObject arguments, out ToolDefinition sourceTool, out JObject normalizedArguments)
+        {
+            if (!_dataSourceTools.TryGetValue(sourceToolId ?? string.Empty, out sourceTool))
+            {
+                throw new InvalidOperationException("HTML data source tool is unavailable or not approved: " + sourceToolId);
+            }
+
+            JObject schema;
+            string schemaError;
+            if (!ToolSchemaSupport.TryParse(sourceTool, out schema, out schemaError))
+            {
+                throw new InvalidOperationException(schemaError);
+            }
+            arguments = arguments == null ? new JObject() : (JObject)arguments.DeepClone();
+            ToolSchemaSupport.RemoveOptionalNulls(arguments, schema);
+            string argumentError;
+            if (!ToolSchemaSupport.ValidateArguments(arguments, schema, true, out argumentError))
+            {
+                throw new InvalidOperationException("Invalid arguments for " + sourceTool.Id + ": " + argumentError);
+            }
+
+            normalizedArguments = (JObject)arguments.DeepClone();
+            var command = new ToolCommand { ToolId = sourceTool.Id };
+            ToolArgumentNormalizer.AddProperties(arguments, command.Arguments);
+            return command;
+        }
+
+        private void ValidateBinding(HtmlWorkspaceDataBinding binding)
+        {
+            if (binding == null) throw new InvalidOperationException("HTML data binding is missing.");
+            if (!string.IsNullOrWhiteSpace(binding.Host) &&
+                !string.Equals(binding.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("HTML data binding belongs to " + binding.Host + ", not " + _adapter.HostName + ".");
+            }
+            JObject arguments;
+            try
+            {
+                arguments = JObject.Parse(string.IsNullOrWhiteSpace(binding.ArgumentsJson) ? "{}" : binding.ArgumentsJson);
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidOperationException("Stored HTML data source arguments are invalid: " + ex.Message);
+            }
+            ToolDefinition ignored;
+            BuildSourceCommand(binding.ToolId, arguments, out ignored);
+        }
+
+        private void EnsureAdapterMatchesSession(ChatSession session)
+        {
+            if (_adapter == null) throw new InvalidOperationException("HTML data binding requires an Office adapter.");
+            if (session != null && !string.IsNullOrWhiteSpace(session.Host) &&
+                !string.Equals(session.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("HTML workspace belongs to " + session.Host + ", not " + _adapter.HostName + ".");
+            }
+        }
+
+        private static JObject ReadObjectArgument(ToolCommand command, string name)
+        {
+            object raw;
+            if (command == null || command.Arguments == null || !command.Arguments.TryGetValue(name, out raw) || raw == null)
+            {
+                return new JObject();
+            }
+            var token = raw as JToken;
+            if (token is JObject) return (JObject)token.DeepClone();
+            var text = raw as string;
+            if (text != null) return JObject.Parse(text);
+            return JObject.FromObject(raw);
+        }
+
+        private static string TransformSourceJson(string sourceJson, string transform, string headers)
+        {
+            if (string.IsNullOrWhiteSpace(sourceJson))
+            {
+                throw new InvalidOperationException("Office data source returned no JSON data.");
+            }
+            JToken source;
+            try
+            {
+                source = JToken.Parse(sourceJson);
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidOperationException("Office data source returned invalid JSON: " + ex.Message);
+            }
+            return string.Equals(transform, "table", StringComparison.OrdinalIgnoreCase)
+                ? BuildTableEnvelope(source, headers).ToString(Formatting.None)
+                : source.ToString(Formatting.None);
+        }
+
+        private static JObject BuildTableEnvelope(JToken source, string headers)
+        {
+            JArray sourceRows = source as JArray;
+            var sourceMetadata = new JObject();
+            if (sourceRows == null)
+            {
+                var sourceObject = source as JObject;
+                if (sourceObject != null)
+                {
+                    var preferredNames = new[] { "values", "rows", "items", "results", "messages", "slides", "objects", "data" };
+                    foreach (var preferred in preferredNames)
+                    {
+                        var property = sourceObject.Properties().FirstOrDefault(item => string.Equals(item.Name, preferred, StringComparison.OrdinalIgnoreCase) && item.Value is JArray);
+                        if (property != null)
+                        {
+                            sourceRows = (JArray)property.Value;
+                            break;
+                        }
+                    }
+                    if (sourceRows == null)
+                    {
+                        var firstArray = sourceObject.Properties().FirstOrDefault(item => item.Value is JArray);
+                        sourceRows = firstArray == null ? null : (JArray)firstArray.Value;
+                    }
+                    foreach (var property in sourceObject.Properties().Where(item => !(item.Value is JContainer)))
+                    {
+                        sourceMetadata[property.Name] = property.Value.DeepClone();
+                    }
+                }
+            }
+            if (sourceRows == null)
+            {
+                throw new InvalidOperationException("transform=table requires a JSON array or an object containing an array.");
+            }
+
+            var columns = new JArray();
+            var rows = new JArray();
+            var nonNull = sourceRows.FirstOrDefault(item => item != null && item.Type != JTokenType.Null);
+            if (nonNull is JObject)
+            {
+                BuildObjectRows(sourceRows, columns, rows);
+            }
+            else if (nonNull is JArray || sourceRows.Count == 0)
+            {
+                BuildArrayRows(sourceRows, columns, rows, headers);
+            }
+            else
+            {
+                columns.Add(Column("value", "Value", InferType(sourceRows)));
+                foreach (var value in sourceRows)
+                {
+                    rows.Add(new JObject { ["value"] = value == null ? JValue.CreateNull() : value.DeepClone() });
+                }
+            }
+
+            return new JObject
+            {
+                ["schema"] = "rnassistant.table.v1",
+                ["source"] = sourceMetadata,
+                ["columns"] = columns,
+                ["rows"] = rows,
+                ["rowCount"] = rows.Count
+            };
+        }
+
+        private static void BuildObjectRows(JArray sourceRows, JArray columns, JArray rows)
+        {
+            var names = new List<string>();
+            foreach (var row in sourceRows.OfType<JObject>())
+            {
+                foreach (var property in row.Properties())
+                {
+                    if (!names.Contains(property.Name, StringComparer.Ordinal)) names.Add(property.Name);
+                }
+            }
+            foreach (var name in names)
+            {
+                columns.Add(Column(name, name, InferType(sourceRows.OfType<JObject>().Select(item => item[name]))));
+            }
+            foreach (var token in sourceRows)
+            {
+                var sourceRow = token as JObject;
+                var row = new JObject();
+                foreach (var name in names)
+                {
+                    row[name] = sourceRow == null || sourceRow[name] == null ? JValue.CreateNull() : sourceRow[name].DeepClone();
+                }
+                rows.Add(row);
+            }
+        }
+
+        private static void BuildArrayRows(JArray sourceRows, JArray columns, JArray rows, string headers)
+        {
+            var arrays = sourceRows.Select(item => item as JArray ?? new JArray(item == null ? JValue.CreateNull() : item.DeepClone())).ToList();
+            var headerRow = arrays.Count > 0 && string.Equals(headers, "firstRow", StringComparison.OrdinalIgnoreCase) ? arrays[0] : null;
+            var dataRows = headerRow == null ? arrays : arrays.Skip(1).ToList();
+            var count = Math.Max(headerRow == null ? 0 : headerRow.Count, dataRows.Count == 0 ? 0 : dataRows.Max(item => item.Count));
+            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var names = new List<string>();
+            for (var index = 0; index < count; index++)
+            {
+                var label = headerRow != null && index < headerRow.Count && headerRow[index].Type != JTokenType.Null
+                    ? (headerRow[index] is JValue ? Convert.ToString(((JValue)headerRow[index]).Value) : headerRow[index].ToString(Formatting.None))
+                    : "Column " + (index + 1);
+                var key = UniqueColumnKey(label, index, keys);
+                names.Add(key);
+                columns.Add(Column(key, string.IsNullOrWhiteSpace(label) ? "Column " + (index + 1) : label, InferType(dataRows.Select(item => index < item.Count ? item[index] : null))));
+            }
+            foreach (var sourceRow in dataRows)
+            {
+                var row = new JObject();
+                for (var index = 0; index < names.Count; index++)
+                {
+                    row[names[index]] = index < sourceRow.Count ? sourceRow[index].DeepClone() : JValue.CreateNull();
+                }
+                rows.Add(row);
+            }
+        }
+
+        private static JObject Column(string key, string label, string type)
+        {
+            return new JObject { ["key"] = key, ["label"] = label, ["type"] = type };
+        }
+
+        private static string UniqueColumnKey(string label, int index, ISet<string> existing)
+        {
+            var builder = new StringBuilder();
+            foreach (var character in (label ?? string.Empty).Trim())
+            {
+                if (char.IsLetterOrDigit(character) || character == '_') builder.Append(char.ToLowerInvariant(character));
+                else if (builder.Length > 0 && builder[builder.Length - 1] != '_') builder.Append('_');
+            }
+            var value = builder.ToString().Trim('_');
+            if (string.IsNullOrWhiteSpace(value)) value = "column_" + (index + 1);
+            if (char.IsDigit(value[0])) value = "column_" + value;
+            var candidate = value;
+            var suffix = 2;
+            while (existing.Contains(candidate)) candidate = value + "_" + suffix++;
+            existing.Add(candidate);
+            return candidate;
+        }
+
+        private static string InferType(IEnumerable<JToken> values)
+        {
+            var types = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var value in values ?? new JToken[0])
+            {
+                if (value == null || value.Type == JTokenType.Null || value.Type == JTokenType.Undefined) continue;
+                if (value.Type == JTokenType.Integer || value.Type == JTokenType.Float) types.Add("number");
+                else if (value.Type == JTokenType.Boolean) types.Add("boolean");
+                else if (value.Type == JTokenType.Array) types.Add("array");
+                else if (value.Type == JTokenType.Object) types.Add("object");
+                else types.Add("string");
+            }
+            return types.Count == 0 ? "null" : (types.Count == 1 ? types.First() : "mixed");
+        }
+
+        private static void MarkBindingError(ChatSession session, HtmlWorkspaceDataSource data, string message)
+        {
+            if (data == null || data.Binding == null) return;
+            var now = DateTime.UtcNow;
+            data.Binding.Status = "error";
+            data.Binding.LastError = string.IsNullOrWhiteSpace(message) ? "Refresh failed." : message;
+            data.Binding.LastRefreshUtc = now;
+            data.Binding.UpdatedUtc = now;
+            if (session != null && session.HtmlWorkspace != null) session.HtmlWorkspace.UpdatedUtc = now;
+        }
+
+        private static JObject ResultSummary(HtmlWorkspaceDataSource data, ToolResult result)
+        {
+            var changed = false;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(result == null ? null : result.DataJson)) changed = JObject.Parse(result.DataJson)["changed"].Value<bool>();
+            }
+            catch
+            {
+            }
+            return new JObject
+            {
+                ["name"] = data == null ? string.Empty : data.Name,
+                ["sourceTool"] = data == null || data.Binding == null ? string.Empty : data.Binding.ToolId,
+                ["ok"] = result != null && result.Success,
+                ["changed"] = changed,
+                ["status"] = data == null || data.Binding == null ? "error" : data.Binding.Status,
+                ["message"] = result == null ? "Refresh failed." : result.Message
+            };
+        }
+
+        private static string RefreshResultJson(JArray results, int succeeded, int failed, bool dryRun)
+        {
+            return new JObject
+            {
+                ["type"] = "rnassistant.htmlDataRefresh",
+                ["version"] = 1,
+                ["dryRun"] = dryRun,
+                ["succeeded"] = succeeded,
+                ["failed"] = failed,
+                ["results"] = results ?? new JArray()
+            }.ToString(Formatting.None);
+        }
+
+        private static string DataBindingResultJson(ChatSession session, string name, string sourceTool, string transform, string refreshPolicy, string status, bool saved, int jsonCharacters)
+        {
+            return new JObject
+            {
+                ["type"] = "rnassistant.htmlDataBinding",
+                ["version"] = 1,
+                ["name"] = name,
+                ["sourceTool"] = sourceTool,
+                ["transform"] = transform,
+                ["refreshPolicy"] = refreshPolicy,
+                ["status"] = status,
+                ["saved"] = saved,
+                ["jsonCharacters"] = jsonCharacters,
+                ["revisionArtifactId"] = session == null ? null : session.ActiveHtmlArtifactId
+            }.ToString(Formatting.None);
+        }
+
+        private static string NormalizeTransform(string value)
+        {
+            return string.Equals(value, "table", StringComparison.OrdinalIgnoreCase) ? "table" : "raw";
+        }
+
+        private static string NormalizeHeaders(string value)
+        {
+            return string.Equals(value, "none", StringComparison.OrdinalIgnoreCase) ? "none" : "firstRow";
+        }
+
+        private static string NormalizeRefreshPolicy(string value)
+        {
+            return string.Equals(value, "manual", StringComparison.OrdinalIgnoreCase) ? "manual" : "on_preview";
+        }
+
+        private static string Sha256(string value)
+        {
+            using (var sha = SHA256.Create())
+            {
+                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(value ?? string.Empty));
+                var builder = new StringBuilder(hash.Length * 2);
+                foreach (var item in hash) builder.Append(item.ToString("x2"));
+                return builder.ToString();
+            }
+        }
+
         public static HtmlWorkspace NormalizeWorkspace(HtmlWorkspace workspace)
         {
             if (workspace == null)
@@ -178,6 +869,10 @@ namespace RNAssistant.Office.Tools
                 dataSource.Name = NormalizeDataName(string.IsNullOrWhiteSpace(dataSource.Name) ? dataSource.Id : dataSource.Name);
                 dataSource.Id = DataSourceId(dataSource.Name);
                 dataSource.Json = dataSource.Json ?? "{}";
+                if (dataSource.Binding != null)
+                {
+                    NormalizeBinding(dataSource.Binding, dataSource);
+                }
                 if (dataSource.CreatedUtc == default(DateTime))
                 {
                     dataSource.CreatedUtc = DateTime.UtcNow;
@@ -288,6 +983,7 @@ namespace RNAssistant.Office.Tools
 
             data.Name = normalizedName;
             data.Json = json ?? "{}";
+            data.Binding = null;
             data.UpdatedUtc = now;
             session.HtmlWorkspace.UpdatedUtc = now;
             HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML data: " + normalizedName);
@@ -419,7 +1115,7 @@ namespace RNAssistant.Office.Tools
                     type = "rnassistant.htmlWorkspaceData",
                     version = 1,
                     revisionArtifactId = session.ActiveHtmlArtifactId,
-                    data = new { data.Id, data.Name, data.Json, data.CreatedUtc, data.UpdatedUtc }
+                    data = new { data.Id, data.Name, data.Json, binding = BindingDetails(data.Binding), data.CreatedUtc, data.UpdatedUtc }
                 });
             }
             if (!string.IsNullOrWhiteSpace(resourceType))
@@ -448,6 +1144,7 @@ namespace RNAssistant.Office.Tools
                     data.Id,
                     data.Name,
                     jsonCharacters = (data.Json ?? string.Empty).Length,
+                    binding = BindingManifest(data.Binding),
                     data.UpdatedUtc
                 })
             });
@@ -466,8 +1163,70 @@ namespace RNAssistant.Office.Tools
                 activeFileId = workspace.ActiveFileId,
                 fileCount = workspace.Files.Count,
                 dataSourceCount = workspace.DataSources.Count,
+                boundDataSourceCount = workspace.DataSources.Count(item => item != null && item.Binding != null),
                 updatedUtc = workspace.UpdatedUtc
             });
+        }
+
+        private static object BindingManifest(HtmlWorkspaceDataBinding binding)
+        {
+            if (binding == null) return null;
+            return new
+            {
+                binding.ToolId,
+                binding.Transform,
+                binding.Headers,
+                binding.RefreshPolicy,
+                binding.Host,
+                binding.DocumentTitle,
+                binding.Status,
+                binding.LastError,
+                binding.LastRefreshUtc,
+                binding.UpdatedUtc
+            };
+        }
+
+        private static object BindingDetails(HtmlWorkspaceDataBinding binding)
+        {
+            if (binding == null) return null;
+            JToken arguments;
+            try
+            {
+                arguments = JToken.Parse(string.IsNullOrWhiteSpace(binding.ArgumentsJson) ? "{}" : binding.ArgumentsJson);
+            }
+            catch (JsonException)
+            {
+                arguments = new JObject();
+            }
+            return new
+            {
+                binding.ToolId,
+                sourceArguments = arguments,
+                binding.Transform,
+                binding.Headers,
+                binding.RefreshPolicy,
+                binding.Host,
+                binding.DocumentTitle,
+                binding.Status,
+                binding.LastError,
+                binding.LastRefreshUtc,
+                binding.CreatedUtc,
+                binding.UpdatedUtc
+            };
+        }
+
+        private static void NormalizeBinding(HtmlWorkspaceDataBinding binding, HtmlWorkspaceDataSource dataSource)
+        {
+            if (binding == null) return;
+            binding.ToolId = (binding.ToolId ?? string.Empty).Trim();
+            binding.ArgumentsJson = string.IsNullOrWhiteSpace(binding.ArgumentsJson) ? "{}" : binding.ArgumentsJson;
+            binding.Transform = NormalizeTransform(binding.Transform);
+            binding.Headers = NormalizeHeaders(binding.Headers);
+            binding.RefreshPolicy = NormalizeRefreshPolicy(binding.RefreshPolicy);
+            binding.Status = string.Equals(binding.Status, "error", StringComparison.OrdinalIgnoreCase) ? "error" : "ready";
+            if (binding.CreatedUtc == default(DateTime)) binding.CreatedUtc = dataSource == null || dataSource.CreatedUtc == default(DateTime) ? DateTime.UtcNow : dataSource.CreatedUtc;
+            if (binding.UpdatedUtc == default(DateTime)) binding.UpdatedUtc = binding.CreatedUtc;
+            if (string.IsNullOrWhiteSpace(binding.ContentSha256) && dataSource != null) binding.ContentSha256 = Sha256(dataSource.Json);
         }
 
         private static List<HtmlWorkspaceSnapshot> NormalizeSnapshots(List<HtmlWorkspaceSnapshot> snapshots)
@@ -504,6 +1263,7 @@ namespace RNAssistant.Office.Tools
                     dataSource.Name = NormalizeDataName(string.IsNullOrWhiteSpace(dataSource.Name) ? dataSource.Id : dataSource.Name);
                     dataSource.Id = DataSourceId(dataSource.Name);
                     dataSource.Json = dataSource.Json ?? "{}";
+                    if (dataSource.Binding != null) NormalizeBinding(dataSource.Binding, dataSource);
                 }
             }
 

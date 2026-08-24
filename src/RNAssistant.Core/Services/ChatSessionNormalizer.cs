@@ -68,6 +68,17 @@ namespace RNAssistant.Core.Services
             if (session.HtmlWorkspace == null) session.HtmlWorkspace = new HtmlWorkspace();
             if (session.HtmlWorkspace.Files == null) session.HtmlWorkspace.Files = new List<HtmlWorkspaceFile>();
             if (session.HtmlWorkspace.DataSources == null) session.HtmlWorkspace.DataSources = new List<HtmlWorkspaceDataSource>();
+            foreach (var dataSource in session.HtmlWorkspace.DataSources.Where(item => item != null && item.Binding != null))
+            {
+                var binding = dataSource.Binding;
+                binding.ArgumentsJson = string.IsNullOrWhiteSpace(binding.ArgumentsJson) ? "{}" : binding.ArgumentsJson;
+                binding.Transform = string.Equals(binding.Transform, "table", StringComparison.OrdinalIgnoreCase) ? "table" : "raw";
+                binding.Headers = string.Equals(binding.Headers, "none", StringComparison.OrdinalIgnoreCase) ? "none" : "firstRow";
+                binding.RefreshPolicy = string.Equals(binding.RefreshPolicy, "manual", StringComparison.OrdinalIgnoreCase) ? "manual" : "on_preview";
+                binding.Status = string.IsNullOrWhiteSpace(binding.Status) ? "ready" : binding.Status.Trim().ToLowerInvariant();
+                if (binding.CreatedUtc == default(DateTime)) binding.CreatedUtc = dataSource.CreatedUtc == default(DateTime) ? DateTime.UtcNow : dataSource.CreatedUtc;
+                if (binding.UpdatedUtc == default(DateTime)) binding.UpdatedUtc = binding.CreatedUtc;
+            }
             if (session.HtmlWorkspace.History == null) session.HtmlWorkspace.History = new List<HtmlWorkspaceSnapshot>();
             if (session.HtmlWorkspace.RedoHistory == null) session.HtmlWorkspace.RedoHistory = new List<HtmlWorkspaceSnapshot>();
             if (session.HtmlWorkspace.UpdatedUtc == default(DateTime))

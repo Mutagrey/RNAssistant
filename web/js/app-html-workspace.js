@@ -22,6 +22,8 @@
   var dataId = workspaceModel.dataId;
   var dataName = workspaceModel.dataName;
   var dataJson = workspaceModel.dataJson;
+  var dataBinding = workspaceModel.dataBinding;
+  var boundDataSources = workspaceModel.boundDataSources;
   var selectedItem = workspaceModel.selectedItem;
   var ensureSelection = workspaceModel.ensureSelection;
   var workspaceEditor = window.RNAssistantHtmlWorkspaceEditor.create({
@@ -46,6 +48,9 @@
     syncEditor: syncHtmlEditorToState,
     applyWorkspaceResponse: applyHtmlWorkspaceResponse,
     applyPlanRefresh: applyPlanRefresh,
+    hasRefreshableData: function (policy) {
+      return boundDataSources(policy === "on_preview" ? "on_preview" : "").length > 0;
+    },
     validatePlanDraft: workspaceArtifacts.validatePlanDraft,
     hideCreate: hideHtmlWorkspaceCreate,
     render: renderHtmlWorkspace
@@ -86,7 +91,7 @@
   }
 
   function workspaceTreeData(data) {
-    return { id: dataId(data), name: dataName(data), json: dataJson(data) };
+    return { id: dataId(data), name: dataName(data), json: dataJson(data), binding: dataBinding(data) };
   }
 
   function workspaceTreeArtifact(artifact) {
@@ -161,6 +166,7 @@
       result.label = dataName(selected.item);
       result.name = dataName(selected.item);
       result.json = dataJson(selected.item);
+      result.binding = dataBinding(selected.item);
     } else if (selected.type === "file") {
       result.label = filePath(selected.item);
       result.path = filePath(selected.item);
@@ -294,12 +300,33 @@
     updateHtmlWorkspaceStatus();
   }
 
+  function exportHtmlWorkspace() {
+    if (!files().some(function (file) { return fileKind(file) === "html"; })) return;
+    var html = htmlPreview.build({
+      activeFileId: workspace().activeFileId,
+      dataSources: dataSources(),
+      files: files(),
+      hostBridge: false
+    });
+    var url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+    var link = document.createElement("a");
+    link.href = url;
+    link.download = "rnassistant-workspace.html";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    log("HTML экспортирован как автономный файл.");
+  }
+
   function bindHtmlWorkspaceActions() {
     $("htmlWorkspaceSearchInput").addEventListener("input", renderHtmlWorkspaceList);
     $("saveHtmlWorkspaceButton").addEventListener("click", workspaceActions.saveSelection);
     $("deleteHtmlWorkspaceButton").addEventListener("click", workspaceActions.deleteSelection);
     $("undoHtmlWorkspaceButton").addEventListener("click", workspaceActions.undo);
     $("redoHtmlWorkspaceButton").addEventListener("click", workspaceActions.redo);
+    $("refreshHtmlDataButton").addEventListener("click", workspaceActions.refreshAll);
+    $("exportHtmlWorkspaceButton").addEventListener("click", exportHtmlWorkspace);
     $("toggleHtmlSidebarButton").addEventListener("click", toggleHtmlWorkspaceSidebar);
     $("addPlanButton").addEventListener("click", workspaceActions.createPlan);
     $("addHtmlFileButton").addEventListener("click", function () { addHtmlWorkspaceFile("html"); });
@@ -320,8 +347,11 @@
     Array.prototype.slice.call(document.querySelectorAll(".html-workspace-mode-button")).forEach(function (button) {
       button.addEventListener("click", function () {
         setHtmlWorkspaceMode(button.getAttribute("data-html-mode"));
+        if (button.getAttribute("data-html-mode") === "preview") workspaceActions.refreshAuto();
       });
     });
+    var artifactsTab = document.querySelector('.tab[data-tab="artifacts"]');
+    if (artifactsTab) artifactsTab.addEventListener("click", workspaceActions.refreshAuto);
   }
 
   window.renderHtmlWorkspace = renderHtmlWorkspace;
