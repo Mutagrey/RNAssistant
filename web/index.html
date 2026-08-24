@@ -27,7 +27,7 @@
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-capabilities-20260820-1">
-  <link rel="stylesheet" href="css/app-workspace.css?v=log-filters-20260824-1">
+  <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-layout-20260824-1">
   <link rel="stylesheet" href="css/app-tools.css?v=unified-ui-20260821-1">
   <link rel="stylesheet" href="css/app-prompts.css?v=library-ui-20260821-1">
   <link rel="stylesheet" href="css/app-vba.css?v=library-ui-20260821-1">
@@ -476,6 +476,7 @@
             <button class="settings-nav-button" type="button" data-settings-page="agent">Агент</button>
             <button class="settings-nav-button" type="button" data-settings-page="interface">Интерфейс</button>
             <button class="settings-nav-button" type="button" data-settings-page="service">Диагностика</button>
+            <span class="settings-nav-version" id="appVersion" aria-label="Версия RNAssistant">—</span>
           </nav>
 
           <div class="settings-pages">
@@ -637,12 +638,8 @@
                 <h2>Диагностика</h2>
                 <p>События текущей сессии и очистка локальных данных.</p>
               </div>
-              <div class="app-version-card" aria-label="Версия приложения">
-                <span>RNAssistant</span>
-                <code id="appVersion">—</code>
-              </div>
               <input id="debugModelTrafficInput" type="checkbox" hidden>
-              <section class="model-compatibility-panel" aria-labelledby="modelConnectionTitle">
+              <section class="model-compatibility-panel diagnostics-model-panel" aria-labelledby="modelConnectionTitle">
                 <div class="model-compatibility-head">
                   <div>
                     <h3 id="modelConnectionTitle">Связь с моделью</h3>
@@ -652,13 +649,6 @@
                 </div>
                 <div class="model-compatibility-results" id="modelConnectionResults" aria-live="polite"></div>
               </section>
-              <div class="danger-zone">
-                <div>
-                  <div class="danger-zone-title">Сброс локальных данных</div>
-                  <div class="danger-zone-text">Удаляет чаты, контекст, резервные копии VBA и кеш WebView.</div>
-                </div>
-                <button class="danger" id="clearRuntimeDataButton" type="button">Очистить данные</button>
-              </div>
               <div class="logs-workspace diagnostics-logs">
                 <section class="log-section surface-panel padded">
                   <div class="log-section-head"><strong>События текущей сессии</strong><button class="secondary" id="clearLogButton" type="button">Очистить</button></div>
@@ -671,6 +661,13 @@
                   </div>
                   <pre class="log-box" id="logBox" aria-live="polite" aria-label="Журнал событий"></pre>
                 </section>
+              </div>
+              <div class="danger-zone diagnostics-danger-zone">
+                <div>
+                  <div class="danger-zone-title">Сброс локальных данных</div>
+                  <div class="danger-zone-text">Удаляет чаты, контекст, резервные копии VBA и кеш WebView.</div>
+                </div>
+                <button class="danger" id="clearRuntimeDataButton" type="button">Очистить данные</button>
               </div>
             </section>
             <div class="settings-actions-row action-bar" hidden>

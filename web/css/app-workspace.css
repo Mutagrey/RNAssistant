@@ -46,24 +46,12 @@
   overflow: auto;
 }
 
-.app-version-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-  padding: 9px 10px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--secondary-bg);
+.settings-nav-version {
+  margin-top: 4px;
+  padding: 4px 8px;
   color: var(--muted);
-  font-size: 12px;
-}
-
-.app-version-card code {
-  color: var(--text);
-  font-size: 12px;
-  font-weight: var(--title-font-weight);
+  font-size: 10.5px;
+  line-height: 1.3;
 }
 
 .resource-editor-head {
@@ -705,6 +693,7 @@
 
   .settings-nav-button { width: auto; flex: 0 0 auto; min-height: 29px; padding: 0 9px; border-radius: 6px; }
   .settings-nav-button.active { box-shadow: inset 0 -2px 0 var(--accent); }
+  .settings-nav-version { flex: 0 0 auto; margin: 0; padding: 7px 6px; white-space: nowrap; }
 
   .form-grid.two-columns {
     grid-template-columns: 1fr;
@@ -760,16 +749,62 @@
 .settings-page[data-settings-page="service"].active {
   height: 100%;
   min-height: 0;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   overflow: hidden;
+}
+
+.diagnostics-model-panel {
+  align-self: start;
+  gap: 7px;
+  padding: 9px 10px;
+  border-radius: 7px;
+}
+
+.diagnostics-model-panel .model-compatibility-results {
+  max-height: 150px;
+  overflow: auto;
 }
 
 .diagnostics-logs {
   min-height: 0;
   max-height: none;
+  overflow: hidden;
 }
 
 .diagnostics-logs .log-section,
 .diagnostics-logs .log-box {
   min-height: 0;
+}
+
+.diagnostics-logs .log-section {
+  overflow: hidden;
+}
+
+.diagnostics-danger-zone {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  margin-top: 0;
+  padding: 8px 10px;
+}
+
+.diagnostics-danger-zone > div,
+.diagnostics-danger-zone > button {
+  align-self: center;
+}
+
+.diagnostics-danger-zone > button {
+  justify-self: end;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .diagnostics-danger-zone {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
+  }
+
+  .diagnostics-danger-zone > button {
+    justify-self: start;
+  }
 }
