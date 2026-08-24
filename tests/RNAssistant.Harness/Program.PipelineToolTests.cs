@@ -53,7 +53,8 @@ namespace RNAssistant.Harness
                 AssertEqual(2, adapter.Executed.Count, "adapter execution count");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "first tool");
                 AssertEqual("Report", adapter.Executed[0].Arguments["name"], "first arg");
-                AssertEqual("excel.write_table", adapter.Executed[1].ToolId, "second tool");
+                AssertEqual("excel.write_range", adapter.Executed[1].ToolId, "second tool");
+                AssertEqual("table", adapter.Executed[1].Arguments["kind"], "legacy table mode normalized");
                 AssertEqual("Report", adapter.Executed[1].Arguments["sheet"], "second arg");
             });
         }
@@ -69,8 +70,8 @@ namespace RNAssistant.Harness
 
                 AssertTrue(result.Success, "pipeline result");
                 AssertEqual(2, adapter.Executed.Count, "adapter execution count");
-                AssertEqual("added sheet Report", adapter.Executed[1].Arguments["sourceMessage"], "step message placeholder");
-                AssertEqual(true, adapter.Executed[1].Arguments["sourceSuccess"], "step success placeholder");
+                AssertEqual("added sheet Report", adapter.CellValue("Report", "A1"), "step message placeholder");
+                AssertEqual("True", adapter.CellValue("Report", "B1"), "step success placeholder");
 
                 var nested = new ToolDefinition
                 {
@@ -93,7 +94,7 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                adapter.QueueResult("excel.write_table", ToolResult.Fail("No table values provided."));
+                adapter.QueueResult("excel.write_range", ToolResult.Fail("No table values provided."));
                 var tools = BuildThreeStepPipelineTools();
                 var command = new ToolCommand { ToolId = "excel.full_report" };
                 command.Arguments["sheet"] = "Report";
@@ -107,7 +108,7 @@ namespace RNAssistant.Harness
                 AssertContains(result.DataJson, "\"id\":\"table\"", "failure data keeps failed step");
                 AssertEqual(2, adapter.Executed.Count, "adapter execution count");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "first tool");
-                AssertEqual("excel.write_table", adapter.Executed[1].ToolId, "failed tool");
+                AssertEqual("excel.write_range", adapter.Executed[1].ToolId, "failed tool");
             });
         }
 

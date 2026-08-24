@@ -237,7 +237,7 @@ namespace RNAssistant.Core.Storage
             var sourceDirectory = Path.Combine(directory, "src");
             foreach (var component in tool.Components)
             {
-                if (component == null || !VbaToolManifestParser.ValidIdentifier(component.Name)) continue;
+                if (component == null || !VbaToolManifestParser.ValidComponentName(component.Name)) continue;
                 component.FileName = SourceFileName(component);
                 var path = Path.Combine(sourceDirectory, component.FileName);
                 component.Code = ReadOptional(path, component.Code);
@@ -281,7 +281,7 @@ namespace RNAssistant.Core.Storage
                 Directory.CreateDirectory(sourceDirectory);
                 foreach (var component in tool.Components)
                 {
-                    if (component == null || string.IsNullOrWhiteSpace(component.Code) || !VbaToolManifestParser.ValidIdentifier(component.Name)) continue;
+                    if (component == null || string.IsNullOrWhiteSpace(component.Code) || !VbaToolManifestParser.ValidComponentName(component.Name)) continue;
                     component.FileName = SourceFileName(component);
                     StorageFileSystem.WriteAllTextAtomic(Path.Combine(sourceDirectory, component.FileName), component.Code);
                 }

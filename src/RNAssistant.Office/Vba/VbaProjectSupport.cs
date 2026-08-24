@@ -244,7 +244,7 @@ namespace RNAssistant.Office
 
         public static ToolResult CreateModule(object documentObject, string moduleName, string componentType, string code)
         {
-            if (!VbaToolManifestParser.ValidIdentifier(moduleName)) return ToolResult.Fail("Invalid VBA module name.", null, "vba_module_name_invalid", false);
+            if (!VbaToolManifestParser.ValidComponentName(moduleName)) return ToolResult.Fail("Invalid VBA module name; use 1-31 ASCII letters, numbers, or underscore and start with a letter.", null, "vba_module_name_invalid", false);
             code = code ?? string.Empty;
             string validationError;
             if (!TryValidateLiveCode(code, out validationError)) return ToolResult.Fail(validationError, null, "vba_code_invalid", true);
@@ -357,7 +357,7 @@ namespace RNAssistant.Office
                 Code = (string)item["code"] ?? string.Empty
             }).ToList();
             if (components.Count == 0) return ToolResult.Fail("VBA package has no components.", null, "vba_package_empty", false);
-            if (components.Any(component => !VbaToolManifestParser.ValidIdentifier(component.Name) ||
+            if (components.Any(component => !VbaToolManifestParser.ValidComponentName(component.Name) ||
                 (!string.Equals(component.Type, "StdModule", StringComparison.OrdinalIgnoreCase) && !string.Equals(component.Type, "ClassModule", StringComparison.OrdinalIgnoreCase))))
             {
                 return ToolResult.Fail("VBA package supports only valid StdModule and ClassModule components.", null, "vba_component_invalid", false);

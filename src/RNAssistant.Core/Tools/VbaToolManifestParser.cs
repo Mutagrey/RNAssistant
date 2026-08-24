@@ -29,6 +29,7 @@ namespace RNAssistant.Core.Tools
         private const string OpenMarker = "<RNAssistantTool>";
         private const string CloseMarker = "</RNAssistantTool>";
         private static readonly Regex IdentifierPattern = new Regex("^[A-Za-z][A-Za-z0-9_]{0,39}$", RegexOptions.CultureInvariant);
+        private static readonly Regex ComponentNamePattern = new Regex("^[A-Za-z][A-Za-z0-9_]{0,30}$", RegexOptions.CultureInvariant);
 
         public VbaToolManifestParseResult Parse(string code)
         {
@@ -52,7 +53,7 @@ namespace RNAssistant.Core.Tools
         public VbaToolManifestParseResult Parse(string moduleName, string code)
         {
             code = code ?? string.Empty;
-            if (!ValidIdentifier(moduleName)) return VbaToolManifestParseResult.Fail("invalid_component_name", "VBA component name must start with a letter, contain only letters/numbers/underscore, and be at most 40 characters.");
+            if (!ValidComponentName(moduleName)) return VbaToolManifestParseResult.Fail("invalid_component_name", "VBA component name must start with a letter, contain only letters/numbers/underscore, and be at most 31 characters.");
             var start = code.IndexOf(OpenMarker, StringComparison.Ordinal);
             var end = code.IndexOf(CloseMarker, StringComparison.Ordinal);
             if (start < 0 || end < start) return VbaToolManifestParseResult.Fail("manifest_missing", "VBA tool manifest markers were not found.");
@@ -84,7 +85,7 @@ namespace RNAssistant.Core.Tools
             {
                 return VbaToolManifestParseResult.Fail("manifest_components", "components must list the entry module first.");
             }
-            if (components.Any(name => !ValidIdentifier(name)) || components.Distinct(StringComparer.OrdinalIgnoreCase).Count() != components.Count)
+            if (components.Any(name => !ValidComponentName(name)) || components.Distinct(StringComparer.OrdinalIgnoreCase).Count() != components.Count)
             {
                 return VbaToolManifestParseResult.Fail("manifest_components", "components must contain unique valid VBA component names.");
             }
@@ -165,6 +166,11 @@ namespace RNAssistant.Core.Tools
         public static bool ValidIdentifier(string value)
         {
             return !string.IsNullOrWhiteSpace(value) && IdentifierPattern.IsMatch(value);
+        }
+
+        public static bool ValidComponentName(string value)
+        {
+            return !string.IsNullOrWhiteSpace(value) && ComponentNamePattern.IsMatch(value);
         }
 
         public static string CodeSha256(string code)

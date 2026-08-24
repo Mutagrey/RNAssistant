@@ -195,7 +195,7 @@ namespace RNAssistant.MockDemo
             }
             var transcriptJson = messages.ToString(Formatting.None);
             if (transcriptJson.IndexOf("excel.add_sheet", StringComparison.OrdinalIgnoreCase) < 0 ||
-                transcriptJson.IndexOf("excel.add_chart", StringComparison.OrdinalIgnoreCase) < 0)
+                transcriptJson.IndexOf("excel.upsert_chart", StringComparison.OrdinalIgnoreCase) < 0)
             {
                 throw new InvalidOperationException("agent transcript did not retain executed tool activities");
             }

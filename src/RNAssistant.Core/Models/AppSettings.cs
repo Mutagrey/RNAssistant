@@ -176,7 +176,7 @@ namespace RNAssistant.Core.Models
                 "- Use one call when the next action depends on its result or may require confirmation.\n\n" +
                 "## Skills\n\n" +
                 "The skill catalog contains only `id`, `name`, and `description`. When a listed skill is relevant and its full instructions are not already in the conversation, call `common.skills_read` with its exact id. " +
-                "Several clearly relevant skills may be read together. Do not read unrelated skills or call `common.skills_list` for discovery. Follow loaded Markdown instructions.\n\n" +
+                "Several clearly relevant skills may be read together. Do not read unrelated skills or call `common.skills_read` without id for discovery because the runtime catalog is already present. Follow loaded Markdown instructions.\n\n" +
                 "## Response contract\n\n" +
                 "Return exactly one raw JSON object with no Markdown fence or surrounding prose.\n\n" +
                 "Tool turn:\n\n" +

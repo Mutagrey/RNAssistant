@@ -97,6 +97,7 @@ namespace RNAssistant.Harness
                 {
                     CustomTool("Common", "common.inspect"),
                     CustomTool("Excel", "excel.custom"),
+                    CustomTool("Excel", "excel.list_charts"),
                     CustomTool("Word", "word.hidden")
                 });
                 var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths));
@@ -106,6 +107,7 @@ namespace RNAssistant.Harness
                 AssertTrue(HasTool(catalog, "common.vba_apply_patch"), "common controller VBA tool visible");
                 AssertTrue(HasTool(catalog, "common.inspect"), "common custom tool visible");
                 AssertTrue(HasTool(catalog, "excel.custom"), "host custom tool visible");
+                AssertTrue(!HasTool(catalog, "excel.list_charts"), "reserved legacy alias stays out of catalog");
                 AssertTrue(!HasTool(catalog, "word.hidden"), "other host custom tool hidden");
             });
         }
@@ -123,10 +125,11 @@ namespace RNAssistant.Harness
                     AssertTrue(HasTool(tools, "common.vba_write_module"), host + " exposes common VBA upsert");
                     AssertTrue(HasTool(tools, "common.vba_apply_patch"), host + " exposes common VBA patch");
                     AssertTrue(!HasTool(tools, "common.vba_read_lines") &&
+                        !HasTool(tools, "common.vba_list_modules") &&
                         !HasTool(tools, "common.vba_replace_text") &&
                         !HasTool(tools, "common.vba_create_module"), host + " omits redundant public aliases");
                     var vbaTools = tools.Where(tool => (tool.Id ?? string.Empty).StartsWith("common.vba_", StringComparison.OrdinalIgnoreCase)).ToList();
-                    AssertEqual(8, vbaTools.Count, host + " exposes the compact eight-tool VBA facade");
+                    AssertEqual(7, vbaTools.Count, host + " exposes the compact seven-tool VBA facade");
                     AssertTrue(vbaTools.All(tool => string.Equals(tool.Host, "Common", StringComparison.OrdinalIgnoreCase)), host + " VBA facade is host-neutral");
                     AssertTrue(!HasTool(tools, host.ToLowerInvariant() + ".vba_apply_patch"), host + " does not publish a host-specific patch facade");
                 }
@@ -150,6 +153,14 @@ namespace RNAssistant.Harness
                 AssertContains(loaded.PipelineJson, "common.vba_write_module", "legacy pipeline create id is normalized in memory");
                 AssertContains(loaded.PipelineJson, "\"mode\":\"createOnly\"", "legacy create keeps strict create semantics");
                 AssertContains(loaded.PipelineJson, "\"lineCount\":200", "legacy range read keeps range defaults");
+
+                var prepared = AgentRunService.PrepareToolsForRun(
+                    excel.GetBuiltInTools().Concat(excelExecutor.GetControllerTools()).Concat(new[] { legacyPipeline }));
+                var preparedPipeline = FindTool(prepared, legacyPipeline.Id);
+                AssertTrue(preparedPipeline != null, "direct legacy VBA pipeline remains runnable after prompt preparation");
+                AssertContains(preparedPipeline.PipelineJson, "common.vba_apply_patch", "direct pipeline patch id is canonicalized");
+                AssertContains(preparedPipeline.PipelineJson, "\"patch\":[", "direct pipeline legacy replace arguments become a structured patch");
+                AssertContains(preparedPipeline.PipelineJson, "\"mode\":\"createOnly\"", "direct pipeline legacy create keeps strict semantics");
             });
         }
 
@@ -185,6 +196,12 @@ namespace RNAssistant.Harness
                 var saveResult = executor.Execute(save, adapter.GetBuiltInTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(!saveResult.Success, "controller rejects reserved id");
                 AssertEqual("reserved_tool_id", saveResult.ErrorCode, "reserved id error code");
+
+                var aliasSave = new ToolCommand { ToolId = "common.tools_upsert" };
+                aliasSave.Arguments["id"] = "excel.list_charts";
+                var aliasSaveResult = executor.Execute(aliasSave, adapter.GetBuiltInTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
+                AssertTrue(!aliasSaveResult.Success, "controller rejects reserved compatibility alias");
+                AssertEqual("reserved_tool_id", aliasSaveResult.ErrorCode, "reserved alias error code");
             });
         }
 
@@ -211,24 +228,36 @@ namespace RNAssistant.Harness
         private static void ExpandedBuiltInToolsAreVisible()
         {
             var excel = new List<ToolDefinition>(FakeOfficeAdapter.ForHost("Excel").GetBuiltInTools());
-            AssertTrue(HasTool(excel, "excel.read_formula_range"), "excel formula reader visible");
+            AssertTrue(HasTool(excel, "excel.inspect"), "excel inspection facade visible");
+            AssertTrue(!HasTool(excel, "excel.list_charts"), "excel list aliases hidden");
+            AssertTrue(HasTool(excel, "excel.read_range"), "excel range reader visible");
+            AssertTrue(!HasTool(excel, "excel.profile_range"), "excel profile alias hidden");
             AssertTrue(HasTool(excel, "excel.find_cells"), "excel find cells visible");
+            AssertTrue(FindTool(excel, "excel.replace_cells").ArgumentSchemaJson.IndexOf("expectedScopeSha256", StringComparison.Ordinal) < 0,
+                "excel replacement owns current-scope checks");
             AssertTrue(HasTool(excel, "excel.add_table"), "excel add table visible");
-            AssertTrue(!FindTool(excel, "excel.clear_range").AgentCanRun, "excel clear requires confirmation");
+            AssertTrue(HasTool(excel, "excel.upsert_chart") && !HasTool(excel, "excel.add_chart"), "excel chart upsert facade visible");
+            AssertTrue(FindTool(excel, "excel.clear_range").RequiresConfirmation, "excel clear requires confirmation");
 
             var word = new List<ToolDefinition>(FakeOfficeAdapter.ForHost("Word").GetBuiltInTools());
+            AssertTrue(HasTool(word, "word.read_text"), "word text reader facade visible");
+            AssertTrue(HasTool(word, "word.inspect"), "word inspection facade visible");
             AssertTrue(HasTool(word, "word.find_text"), "word find text visible");
+            AssertTrue(FindTool(word, "word.replace_text").ArgumentSchemaJson.IndexOf("expectedMatches", StringComparison.Ordinal) < 0,
+                "word replacement has no model-owned precondition");
+            AssertTrue(HasTool(word, "word.format_text") && !HasTool(word, "word.apply_style"), "word formatting facade visible");
             AssertTrue(HasTool(word, "word.add_table"), "word add table visible");
 
             var powerpoint = new List<ToolDefinition>(FakeOfficeAdapter.ForHost("PowerPoint").GetBuiltInTools());
-            AssertTrue(HasTool(powerpoint, "powerpoint.list_shapes"), "powerpoint list shapes visible");
-            AssertTrue(HasTool(powerpoint, "powerpoint.set_speaker_notes"), "powerpoint notes writer visible");
-            AssertTrue(!FindTool(powerpoint, "powerpoint.move_slide").AgentCanRun, "powerpoint move requires confirmation");
+            AssertTrue(HasTool(powerpoint, "powerpoint.list_objects"), "powerpoint list facade visible");
+            AssertTrue(!HasTool(powerpoint, "powerpoint.read_speaker_notes"), "powerpoint notes alias hidden");
+            AssertTrue(HasTool(powerpoint, "powerpoint.set_text") && HasTool(powerpoint, "powerpoint.add_object"), "powerpoint mutation facades visible");
+            AssertTrue(FindTool(powerpoint, "powerpoint.move_slide").RequiresConfirmation, "powerpoint move requires confirmation");
 
             var outlook = new List<ToolDefinition>(FakeOfficeAdapter.ForHost("Outlook").GetBuiltInTools());
             AssertTrue(HasTool(outlook, "outlook.search_mail"), "outlook search visible");
-            AssertTrue(HasTool(outlook, "outlook.create_mail_draft"), "outlook draft visible");
-            AssertTrue(!FindTool(outlook, "outlook.mark_as_read").AgentCanRun, "outlook mark read requires confirmation");
+            AssertTrue(HasTool(outlook, "outlook.create_draft"), "outlook draft facade visible");
+            AssertTrue(FindTool(outlook, "outlook.update_mail").AgentCanRun, "outlook mail updates remain runnable");
         }
 
         private static void PromptToolMetadataIsWeakModelFriendly()
@@ -253,7 +282,9 @@ namespace RNAssistant.Harness
                 AssertContains(prompt, "confirmation: required", "prompt includes confirmation metadata");
                 AssertTrue(prompt.IndexOf("\"optional\"", StringComparison.OrdinalIgnoreCase) < 0, "prompt has no literal optional args");
                 AssertContains(prompt, "common.tools_validate", "prompt includes tool validation");
-                AssertContains(prompt, "common.prompts_read_defaults", "prompt includes prompt defaults reader");
+                AssertContains(prompt, "common.prompts_read", "prompt includes prompt reader");
+                AssertTrue(prompt.IndexOf("common.prompts_read_defaults", StringComparison.OrdinalIgnoreCase) < 0,
+                    "legacy prompt reader stays out of catalog");
             });
         }
 
@@ -375,7 +406,7 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var command = new ToolCommand { ToolId = "common.tools_create" };
+                var command = new ToolCommand { ToolId = "common.tools_upsert" };
                 command.Arguments["id"] = "excel.generated_report";
                 command.Arguments["host"] = "Excel";
                 command.Arguments["name"] = "Generated report";
@@ -397,7 +428,7 @@ namespace RNAssistant.Harness
                 AssertTrue(saved.Success, "tool create should succeed");
                 AssertContains(saved.Message, "created", "create message");
 
-                var update = new ToolCommand { ToolId = "common.tools_update" };
+                var update = new ToolCommand { ToolId = "common.tools_upsert" };
                 update.Arguments["id"] = "excel.generated_report";
                 update.Arguments["name"] = "Updated report";
                 var updated = executor.Execute(update, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
@@ -409,6 +440,14 @@ namespace RNAssistant.Harness
                 AssertContains(read.DataJson, "\"parameters\":{", "schema returned as native object");
                 AssertContains(read.DataJson, "Updated report", "updated field returned");
                 AssertContains(read.DataJson, "Create a generated report sheet", "omitted description preserved");
+
+                var emptyUpdate = executor.Execute(Command("common.tools_upsert", "id", "excel.generated_report"), new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings(), false, false);
+                AssertTrue(!emptyUpdate.Success, "empty tool update fails before confirmation");
+                AssertEqual("tool_update_empty", emptyUpdate.ErrorCode, "empty tool update error");
+
+                var missingDelete = executor.Execute(Command("common.tools_delete", "id", "excel.missing"), new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings(), false, false);
+                AssertTrue(!missingDelete.Success, "missing tool delete fails before confirmation");
+                AssertEqual("tool_not_found", missingDelete.ErrorCode, "missing tool delete error");
             });
         }
 
@@ -418,7 +457,7 @@ namespace RNAssistant.Harness
             {
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var create = Command(
-                    "common.skills_create",
+                    "common.skills_upsert",
                     "id", "excel.review_style",
                     "host", "Excel",
                     "name", "Review style",
@@ -429,7 +468,7 @@ namespace RNAssistant.Harness
                 var created = executor.Execute(create, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(created.Success, "skill create succeeds");
 
-                var update = Command("common.skills_update", "id", "excel.review_style", "description", "Review workbook formatting consistently.");
+                var update = Command("common.skills_upsert", "id", "excel.review_style", "description", "Review workbook formatting consistently.");
                 var updated = executor.Execute(update, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(updated.Success, "partial skill update succeeds");
 
@@ -438,6 +477,14 @@ namespace RNAssistant.Harness
                 AssertContains(read.DataJson, "Review workbook formatting consistently", "skill description updated");
                 AssertContains(read.DataJson, "Preserve workbook conventions", "omitted skill body preserved");
                 AssertContains(read.DataJson, "\"version\":\"1.0.0\"", "omitted version preserved");
+
+                var emptyUpdate = executor.Execute(Command("common.skills_upsert", "id", "excel.review_style"), tools, new AppSettings(), false, false);
+                AssertTrue(!emptyUpdate.Success, "empty skill update fails before confirmation");
+                AssertEqual("skill_update_empty", emptyUpdate.ErrorCode, "empty skill update error");
+
+                var missingDelete = executor.Execute(Command("common.skills_delete", "id", "excel.missing_skill"), tools, new AppSettings(), false, false);
+                AssertTrue(!missingDelete.Success, "missing skill delete fails before confirmation");
+                AssertEqual("skill_not_found", missingDelete.ErrorCode, "missing skill delete error");
 
                 var deleted = executor.Execute(Command("common.skills_delete", "id", "excel.review_style"), tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(deleted.Success, "skill delete succeeds");

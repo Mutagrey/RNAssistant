@@ -140,7 +140,7 @@ namespace RNAssistant.MockDemo
             {
                 return new[]
                 {
-                    Cmd("word.insert_text", "text", "\n\nRNAssistant mock summary: revenue is up, but retention requires follow-up.")
+                    Cmd("word.write_text", "mode", "insert", "text", "\n\nRNAssistant mock summary: revenue is up, but retention requires follow-up.")
                 };
             }
 
@@ -156,21 +156,21 @@ namespace RNAssistant.MockDemo
             {
                 return new[]
                 {
-                    Cmd("outlook.draft_reply", "body", "Спасибо за письмо. Предлагаю сегодня согласовать следующие шаги и срок обновленного коммерческого предложения.")
+                    Cmd("outlook.create_draft", "kind", "reply", "body", "Спасибо за письмо. Предлагаю сегодня согласовать следующие шаги и срок обновленного коммерческого предложения.")
                 };
             }
 
             return new[]
             {
                 Cmd("excel.add_sheet", "name", "Demo Report"),
-                Cmd("excel.write_table", "sheet", "Demo Report", "startAddress", "A1", "values", new[]
+                Cmd("excel.write_range", "kind", "table", "sheet", "Demo Report", "address", "A1", "values", new[]
                 {
                     new[] { "Month", "Sales" },
                     new[] { "Jan", "120" },
                     new[] { "Feb", "150" },
                     new[] { "Mar", "180" }
                 }),
-                Cmd("excel.add_chart", "sheet", "Demo Report", "sourceRange", "A1:B4", "chartType", "line", "title", "Demo Sales")
+                Cmd("excel.upsert_chart", "sheet", "Demo Report", "sourceRange", "A1:B4", "chartType", "line", "title", "Demo Sales")
             };
         }
 
@@ -189,17 +189,17 @@ namespace RNAssistant.MockDemo
                 return new[]
                 {
                     Cmd("common.html_workspace_read"),
-                    Cmd("common.html_workspace_upsert_data", "name", "sales", "json", "{\"rows\":[{\"month\":\"Jan\",\"sales\":120},{\"month\":\"Feb\",\"sales\":150},{\"month\":\"Mar\",\"sales\":180}],\"title\":\"Updated Sales HTML Dashboard\"}"),
-                    Cmd("common.html_workspace_upsert_file", "path", "app.js", "kind", "script", "content", "(function(){var data=window.RNAssistantData.sales||{};var rows=data.rows||[];var total=rows.reduce(function(sum,row){return sum+Number(row.sales||0);},0);document.getElementById('salesTitle').textContent=data.title||'Sales HTML Dashboard';document.getElementById('salesTotal').textContent='Total: '+total;var list=document.getElementById('salesRows');if(list){list.innerHTML=rows.map(function(row){return '<article class=\"row-card\"><strong>'+row.month+'</strong><span>'+row.sales+'</span></article>';}).join('');}document.body.setAttribute('data-script-ready','updated');}());", "setActive", false)
+                    Cmd("common.html_workspace_upsert", "resourceType", "data", "name", "sales", "content", "{\"rows\":[{\"month\":\"Jan\",\"sales\":120},{\"month\":\"Feb\",\"sales\":150},{\"month\":\"Mar\",\"sales\":180}],\"title\":\"Updated Sales HTML Dashboard\"}"),
+                    Cmd("common.html_workspace_upsert", "resourceType", "file", "name", "app.js", "content", "(function(){var data=window.RNAssistantData.sales||{};var rows=data.rows||[];var total=rows.reduce(function(sum,row){return sum+Number(row.sales||0);},0);document.getElementById('salesTitle').textContent=data.title||'Sales HTML Dashboard';document.getElementById('salesTotal').textContent='Total: '+total;var list=document.getElementById('salesRows');if(list){list.innerHTML=rows.map(function(row){return '<article class=\"row-card\"><strong>'+row.month+'</strong><span>'+row.sales+'</span></article>';}).join('');}document.body.setAttribute('data-script-ready','updated');}());", "setActive", false)
                 };
             }
 
             return new[]
             {
-                Cmd("common.html_workspace_upsert_data", "name", "sales", "json", "{\"rows\":[{\"month\":\"Jan\",\"sales\":120},{\"month\":\"Feb\",\"sales\":150}],\"title\":\"Sales HTML Dashboard\"}"),
-                Cmd("common.html_workspace_upsert_file", "path", "styles.css", "kind", "css", "content", "body{font-family:Segoe UI,Arial,sans-serif;margin:0;min-height:100vh;background:#f8fafc;color:#111827}.dashboard{min-height:100vh;padding:32px clamp(20px,4vw,56px);display:grid;align-content:start;gap:22px}.hero{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;border-bottom:1px solid #d0d5dd;padding-bottom:18px}.hero h1{margin:0;font-size:clamp(28px,4vw,48px);font-weight:500}.hero p{margin:8px 0 0;color:#475467}.metric{margin:0;font-size:clamp(32px,5vw,56px);font-weight:500;color:#0f766e}.rows{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.row-card{display:flex;justify-content:space-between;gap:12px;border:1px solid #d0d5dd;border-radius:8px;padding:14px;background:#fff}"),
-                Cmd("common.html_workspace_upsert_file", "path", "app.js", "kind", "script", "content", "(function(){var data=window.RNAssistantData.sales||{};var rows=data.rows||[];var total=rows.reduce(function(sum,row){return sum+Number(row.sales||0);},0);document.getElementById('salesTitle').textContent=data.title||'Sales HTML Dashboard';document.getElementById('salesTotal').textContent='Total: '+total;var list=document.getElementById('salesRows');if(list){list.innerHTML=rows.map(function(row){return '<article class=\"row-card\"><strong>'+row.month+'</strong><span>'+row.sales+'</span></article>';}).join('');}document.body.setAttribute('data-script-ready','created');}());", "setActive", false),
-                Cmd("common.html_workspace_upsert_file", "path", "index.html", "kind", "html", "content", "<!doctype html><html><head><meta charset=\"utf-8\"><title>Sales HTML Dashboard</title></head><body><main class=\"dashboard\"><section class=\"hero\"><div><h1 id=\"salesTitle\">Sales HTML Dashboard</h1><p>Data comes from RNAssistantData.sales</p></div><p id=\"salesTotal\" class=\"metric\">Total: 0</p></section><section id=\"salesRows\" class=\"rows\"></section></main></body></html>", "setActive", true)
+                Cmd("common.html_workspace_upsert", "resourceType", "data", "name", "sales", "content", "{\"rows\":[{\"month\":\"Jan\",\"sales\":120},{\"month\":\"Feb\",\"sales\":150}],\"title\":\"Sales HTML Dashboard\"}"),
+                Cmd("common.html_workspace_upsert", "resourceType", "file", "name", "styles.css", "content", "body{font-family:Segoe UI,Arial,sans-serif;margin:0;min-height:100vh;background:#f8fafc;color:#111827}.dashboard{min-height:100vh;padding:32px clamp(20px,4vw,56px);display:grid;align-content:start;gap:22px}.hero{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;border-bottom:1px solid #d0d5dd;padding-bottom:18px}.hero h1{margin:0;font-size:clamp(28px,4vw,48px);font-weight:500}.hero p{margin:8px 0 0;color:#475467}.metric{margin:0;font-size:clamp(32px,5vw,56px);font-weight:500;color:#0f766e}.rows{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.row-card{display:flex;justify-content:space-between;gap:12px;border:1px solid #d0d5dd;border-radius:8px;padding:14px;background:#fff}"),
+                Cmd("common.html_workspace_upsert", "resourceType", "file", "name", "app.js", "content", "(function(){var data=window.RNAssistantData.sales||{};var rows=data.rows||[];var total=rows.reduce(function(sum,row){return sum+Number(row.sales||0);},0);document.getElementById('salesTitle').textContent=data.title||'Sales HTML Dashboard';document.getElementById('salesTotal').textContent='Total: '+total;var list=document.getElementById('salesRows');if(list){list.innerHTML=rows.map(function(row){return '<article class=\"row-card\"><strong>'+row.month+'</strong><span>'+row.sales+'</span></article>';}).join('');}document.body.setAttribute('data-script-ready','created');}());", "setActive", false),
+                Cmd("common.html_workspace_upsert", "resourceType", "file", "name", "index.html", "content", "<!doctype html><html><head><meta charset=\"utf-8\"><title>Sales HTML Dashboard</title></head><body><main class=\"dashboard\"><section class=\"hero\"><div><h1 id=\"salesTitle\">Sales HTML Dashboard</h1><p>Data comes from RNAssistantData.sales</p></div><p id=\"salesTotal\" class=\"metric\">Total: 0</p></section><section id=\"salesRows\" class=\"rows\"></section></main></body></html>", "setActive", true)
             };
         }
 
@@ -207,7 +207,7 @@ namespace RNAssistant.MockDemo
         {
             if (IsHost(host, "Word"))
             {
-                return "Готово: добавил mock summary в документ и проверил текст через `word.read_document`.";
+                return "Готово: добавил mock summary в документ и проверил текст через `word.read_text`.";
             }
 
             if (IsHost(host, "PowerPoint"))
@@ -217,7 +217,7 @@ namespace RNAssistant.MockDemo
 
             if (IsHost(host, "Outlook"))
             {
-                return "Готово: подготовил mock reply и проверил выбранное письмо через `outlook.read_selection`.";
+                return "Готово: подготовил mock reply и проверил выбранное письмо через `outlook.read_mail`.";
             }
 
             return "Готово: создал лист `Demo Report`, записал таблицу продаж, добавил график `Demo Sales` и проверил диапазон/список графиков.";

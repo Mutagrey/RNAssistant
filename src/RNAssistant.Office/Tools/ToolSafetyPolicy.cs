@@ -235,6 +235,14 @@ namespace RNAssistant.Office.Tools
                     }
                 }
             }
+            foreach (var alias in BuiltInToolAliases.Aliases())
+            {
+                ToolDefinition canonical;
+                if (!catalog.ContainsKey(alias.Key) && catalog.TryGetValue(alias.Value, out canonical))
+                {
+                    catalog.Add(alias.Key, canonical);
+                }
+            }
             return catalog;
         }
 

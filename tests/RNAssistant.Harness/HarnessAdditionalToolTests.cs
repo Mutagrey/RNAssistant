@@ -178,6 +178,157 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void CompactToolCatalogKeepsLegacyAliasesRunnable()
+        {
+            var expectedHostCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "Excel", 17 },
+                { "Word", 10 },
+                { "PowerPoint", 11 },
+                { "Outlook", 6 }
+            };
+            foreach (var pair in expectedHostCounts)
+            {
+                var runnable = AgentRunService.PrepareToolsForRun(FakeOfficeAdapter.ForHost(pair.Key).GetBuiltInTools());
+                AssertEqual(pair.Value, runnable.Count, pair.Key + " compact runnable tool count");
+            }
+
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var listCharts = executor.Execute(Command("excel.list_charts", "sheet", "Data"), tools, new AppSettings(), false, false);
+                AssertTrue(listCharts.Success, "legacy Excel list alias executes");
+                AssertEqual("excel.inspect", adapter.Executed.Last().ToolId, "Excel list alias canonical id");
+                AssertEqual("charts", adapter.Executed.Last().Arguments["kind"], "Excel list alias selector");
+
+                var formulas = executor.Execute(Command("excel.read_formula_range", "sheet", "Data", "address", "A1:B2"), tools, new AppSettings(), false, false);
+                AssertTrue(formulas.Success, "legacy Excel formula alias executes");
+                AssertEqual("formulas", adapter.Executed.Last().Arguments["content"], "Excel formula selector");
+
+                AssertTrue(executor.Execute(Command("excel.profile_range", "sheet", "Data", "address", "A1:B2"), tools, new AppSettings(), false, false).Success,
+                    "legacy Excel profile alias executes");
+                AssertEqual("profile", adapter.Executed.Last().Arguments["content"], "Excel profile selector");
+
+                var table = executor.Execute(Command("excel.write_table", "sheet", "Report", "startAddress", "B2", "values", new JArray(new JArray("A"))), tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+                AssertTrue(table.Success, "legacy Excel table alias executes");
+                AssertEqual("excel.write_range", adapter.Executed.Last().ToolId, "Excel table alias canonical id");
+                AssertEqual("table", adapter.Executed.Last().Arguments["kind"], "Excel table selector");
+                AssertEqual("B2", adapter.Executed.Last().Arguments["address"], "Excel table address normalized");
+
+                var nullableWrite = Command("excel.write_range", "sheet", "Report", "values", new JArray(new JArray("B")));
+                nullableWrite.Arguments["kind"] = null;
+                nullableWrite.Arguments["formula"] = null;
+                AssertTrue(executor.Execute(nullableWrite, tools, new AppSettings(), false, false).Success,
+                    "Excel write inference ignores strict-schema nulls");
+                AssertEqual("table", adapter.Executed.Last().Arguments["kind"], "Excel write kind inferred from non-null payload");
+
+                AssertTrue(executor.Execute(Command("excel.add_chart", "sheet", "Data", "chartName", "Legacy Chart"), tools, new AppSettings(), false, false).Success,
+                    "legacy Excel chart create alias executes");
+                AssertEqual("excel.upsert_chart", adapter.Executed.Last().ToolId, "Excel chart canonical id");
+                AssertEqual("createOnly", adapter.Executed.Last().Arguments["mode"], "Excel chart create policy");
+
+                AssertTrue(executor.Execute(Command("excel.autofit", "sheet", "Data"), tools, new AppSettings(), false, false).Success,
+                    "legacy Excel autofit alias executes");
+                AssertEqual("excel.format_range", adapter.Executed.Last().ToolId, "Excel format canonical id");
+                AssertEqual("both", adapter.Executed.Last().Arguments["autoFit"], "Excel autofit selector");
+
+                AssertTrue(executor.Execute(new ToolCommand { ToolId = "common.skills_list" }, tools, new AppSettings(), false, false).Success,
+                    "legacy skills list alias executes");
+                AssertTrue(executor.Execute(new ToolCommand { ToolId = "common.tools_list" }, tools, new AppSettings(), false, false).Success,
+                    "legacy tools list alias executes");
+                var prompts = executor.Execute(new ToolCommand { ToolId = "common.prompts_read_defaults" }, tools, new AppSettings(), false, false);
+                AssertTrue(prompts.Success && prompts.DataJson.IndexOf("\"defaults\"", StringComparison.Ordinal) >= 0,
+                    "legacy prompt defaults alias executes");
+
+                var legacyPipeline = CustomTool("Excel", "excel.legacy_catalog_pipeline");
+                legacyPipeline.PipelineJson = "{\"steps\":[{\"id\":\"objects\",\"toolId\":\"excel.list_shapes\",\"arguments\":{}}]}";
+                var prepared = AgentRunService.PrepareToolsForRun(adapter.GetBuiltInTools().Concat(new[] { legacyPipeline }));
+                var preparedPipeline = prepared.Single(item => item.Id == legacyPipeline.Id);
+                AssertContains(preparedPipeline.PipelineJson, "excel.inspect", "legacy pipeline id canonicalized before safety");
+                AssertContains(preparedPipeline.PipelineJson, "\"kind\":\"shapes\"", "legacy pipeline selector injected");
+
+                var controllerRunnable = AgentRunService.PrepareToolsForRun(executor.GetControllerTools());
+                AssertEqual(24, controllerRunnable.Count, "compact common runnable tool count");
+                AssertTrue(controllerRunnable.All(item => item.Id != "common.skills_list" &&
+                    item.Id != "common.skills_create" &&
+                    item.Id != "common.skills_update" &&
+                    item.Id != "common.tools_list" &&
+                    item.Id != "common.tools_create" &&
+                    item.Id != "common.tools_update" &&
+                    item.Id != "common.prompts_read_defaults" &&
+                    item.Id != "common.html_workspace_upsert_file" &&
+                    item.Id != "common.vba_list_modules"), "legacy common ids stay out of model catalog");
+                AssertTrue(controllerRunnable.Any(item => item.Id == "common.skills_upsert") &&
+                    controllerRunnable.Any(item => item.Id == "common.tools_upsert"), "common authoring upserts stay visible");
+            });
+
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var tools = adapter.GetBuiltInTools().ToList();
+                AssertTrue(executor.Execute(new ToolCommand { ToolId = "word.read_selection" }, tools, new AppSettings(), false, false).Success,
+                    "legacy Word read alias executes");
+                AssertEqual("selection", adapter.Executed.Last().Arguments["source"], "Word read selector");
+                AssertTrue(executor.Execute(Command("word.insert_paragraph", "text", "Legacy"), tools, new AppSettings { AutoConfirmToolActions = true }, false, false).Success,
+                    "legacy Word write alias executes");
+                AssertEqual("paragraph", adapter.Executed.Last().Arguments["mode"], "Word write selector");
+                AssertTrue(executor.Execute(Command("word.apply_style", "style", "Heading 1"), tools, new AppSettings(), false, false).Success,
+                    "legacy Word style alias executes");
+                AssertEqual("word.format_text", adapter.Executed.Last().ToolId, "Word format canonical id");
+                AssertEqual("style", adapter.Executed.Last().Arguments["kind"], "Word format selector");
+            });
+
+            WithTempExecutor(FakeOfficeAdapter.ForHost("PowerPoint"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var tools = adapter.GetBuiltInTools().ToList();
+                AssertTrue(executor.Execute(Command("powerpoint.list_shapes", "slideIndex", 1), tools, new AppSettings(), false, false).Success,
+                    "legacy PowerPoint list alias executes");
+                AssertEqual("shapes", adapter.Executed.Last().Arguments["kind"], "PowerPoint list selector");
+                AssertTrue(executor.Execute(new ToolCommand { ToolId = "powerpoint.list_shapes" }, tools, new AppSettings(), false, false).Success,
+                    "legacy PowerPoint list default executes");
+                AssertEqual(1L, Convert.ToInt64(adapter.Executed.Last().Arguments["slideIndex"]), "legacy PowerPoint slide default preserved");
+                AssertTrue(executor.Execute(Command("powerpoint.read_speaker_notes", "slideIndex", 0), tools, new AppSettings(), false, false).Success,
+                    "legacy PowerPoint notes alias executes");
+                AssertEqual("powerpoint.read_slides", adapter.Executed.Last().ToolId, "PowerPoint notes canonical id");
+                AssertEqual("notes", adapter.Executed.Last().Arguments["content"], "PowerPoint notes selector");
+                AssertTrue(!adapter.Executed.Last().Arguments.ContainsKey("slideIndex"), "legacy all-notes sentinel removed");
+                AssertTrue(executor.Execute(Command("powerpoint.replace_selection_text", "text", "Legacy"), tools, new AppSettings { AutoConfirmToolActions = true }, false, false).Success,
+                    "legacy PowerPoint selection alias executes");
+                AssertEqual("powerpoint.set_text", adapter.Executed.Last().ToolId, "PowerPoint write alias canonical id");
+                AssertEqual("shape", adapter.Executed.Last().Arguments["target"], "PowerPoint text target selector");
+                AssertTrue(executor.Execute(Command("powerpoint.add_picture", "path", "image.png"), tools, new AppSettings(), false, false).Success,
+                    "legacy PowerPoint object alias executes");
+                AssertEqual("powerpoint.add_object", adapter.Executed.Last().ToolId, "PowerPoint object canonical id");
+                AssertEqual("picture", adapter.Executed.Last().Arguments["kind"], "PowerPoint object selector");
+                AssertEqual(1L, Convert.ToInt64(adapter.Executed.Last().Arguments["slideIndex"]), "legacy PowerPoint object slide default preserved");
+                AssertTrue(executor.Execute(Command("powerpoint.add_text_box", "text", "Legacy", "fontSize", 0), tools, new AppSettings(), false, false).Success,
+                    "legacy PowerPoint zero font default remains compatible");
+                AssertTrue(!adapter.Executed.Last().Arguments.ContainsKey("fontSize"), "legacy zero font default is omitted for the compact schema");
+                var inferredObject = Command("powerpoint.add_object", "text", "Inferred");
+                inferredObject.Arguments["kind"] = null;
+                inferredObject.Arguments["path"] = null;
+                AssertTrue(executor.Execute(inferredObject, tools, new AppSettings(), false, false).Success,
+                    "PowerPoint object inference ignores strict-schema nulls");
+                AssertEqual("textBox", adapter.Executed.Last().Arguments["kind"], "PowerPoint object inferred from text");
+            });
+
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Outlook"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var tools = adapter.GetBuiltInTools().ToList();
+                AssertTrue(executor.Execute(new ToolCommand { ToolId = "outlook.read_current_mail" }, tools, new AppSettings(), false, false).Success,
+                    "legacy Outlook read alias executes");
+                AssertTrue(executor.Execute(Command("outlook.create_reply_all_draft", "body", "Legacy"), tools, new AppSettings { AutoConfirmToolActions = true }, false, false).Success,
+                    "legacy Outlook draft alias executes");
+                AssertEqual("replyAll", adapter.Executed.Last().Arguments["kind"], "Outlook draft selector");
+                AssertTrue(executor.Execute(new ToolCommand { ToolId = "outlook.list_attachments" }, tools, new AppSettings(), false, false).Success,
+                    "legacy Outlook attachments alias executes");
+                AssertEqual("attachments", adapter.Executed.Last().Arguments["content"], "Outlook read selector");
+                AssertTrue(executor.Execute(new ToolCommand { ToolId = "outlook.mark_as_read" }, tools, new AppSettings(), false, false).Success,
+                    "legacy Outlook update alias executes");
+                AssertEqual("outlook.update_mail", adapter.Executed.Last().ToolId, "Outlook update canonical id");
+                AssertEqual("markRead", adapter.Executed.Last().Arguments["kind"], "Outlook update selector");
+            });
+        }
+
         private static void HtmlWorkspaceToolsUpdateChatSession()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
@@ -212,9 +363,9 @@ namespace RNAssistant.Harness
                 AssertEqual(1, session.HtmlWorkspace.Files.Count, "html file count");
                 AssertEqual("index.html", session.HtmlWorkspace.ActiveFileId, "active html file");
 
-                var scriptCommand = new ToolCommand { ToolId = "common.html_workspace_upsert_file" };
-                scriptCommand.Arguments["path"] = "app.js";
-                scriptCommand.Arguments["kind"] = "js";
+                var scriptCommand = new ToolCommand { ToolId = "common.html_workspace_upsert" };
+                scriptCommand.Arguments["resourceType"] = "file";
+                scriptCommand.Arguments["name"] = "app.js";
                 scriptCommand.Arguments["content"] = "window.reportReady = true;";
                 scriptCommand.Arguments["setActive"] = false;
                 var scriptResult = executor.Execute(scriptCommand, tools, new AppSettings(), false, false, session);
@@ -237,6 +388,13 @@ namespace RNAssistant.Harness
                 AssertTrue(readResult.Success, "html workspace read succeeds");
                 AssertContains(readResult.DataJson, "rnassistant.htmlWorkspace", "workspace result type");
                 AssertContains(readResult.DataJson, "items", "workspace data included");
+
+                var ambiguousRead = new ToolCommand { ToolId = "common.html_workspace_read" };
+                ambiguousRead.Arguments["path"] = "index.html";
+                ambiguousRead.Arguments["dataName"] = "rows";
+                var ambiguousResult = executor.Execute(ambiguousRead, tools, new AppSettings(), false, false, session);
+                AssertTrue(!ambiguousResult.Success, "legacy HTML read rejects conflicting selectors");
+                AssertContains(ambiguousResult.Message, "either path or dataName", "legacy HTML selector diagnostic");
 
                 var deleteScript = new ToolCommand { ToolId = "common.html_workspace_delete_file" };
                 deleteScript.Arguments["path"] = "app.js";
@@ -394,7 +552,7 @@ namespace RNAssistant.Harness
                 new ToolCommand
                 {
                     ToolId = HtmlArtifactToolExecutor.ReadWorkspaceToolId,
-                    Arguments = { ["path"] = "index.html" }
+                    Arguments = { ["resourceType"] = "file", ["name"] = "index.html" }
                 },
                 transportSession,
                 false);
@@ -479,7 +637,7 @@ namespace RNAssistant.Harness
                 AssertTrue(manualRun.Success, "manual custom tool should be allowed");
                 AssertEqual(2, adapter.Executed.Count, "manual adapter count");
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "manual first tool");
-                AssertEqual("excel.write_table", adapter.Executed[1].ToolId, "manual second tool");
+                AssertEqual("excel.write_range", adapter.Executed[1].ToolId, "manual second tool");
             });
         }
     }

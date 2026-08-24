@@ -33,8 +33,7 @@ namespace RNAssistant.Office.Tools
             }
 
             yield return ControllerToolDefinition.Create(ToolId("vba_list_backups"), "Common", "Read-only: List up to 100 latest RNAssistant VBA rollback backups for the active document as metadata without duplicating source code.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}");
-            yield return ControllerToolDefinition.Create(ToolId("vba_list_modules"), "Common", "Read-only: List all VBA components with name, type, and line count.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}");
-            yield return ControllerToolDefinition.Create(ToolId("vba_read_module"), "Common", "Read-only: Read one VBA component. Omit startLine/lineCount for the whole source, or supply them for an exact one-based range. Case and a safely normalizable name are resolved by runtime.", ReadModuleSchema());
+            yield return ControllerToolDefinition.Create(ToolId("vba_read_module"), "Common", "Read-only: List VBA component metadata when moduleName is omitted, or read one component when it is supplied. Omit startLine/lineCount for the whole source. Runtime resolves case and safely normalizable names.", ReadModuleSchema());
             yield return ControllerToolDefinition.Create(ToolId("vba_search_code"), "Common", "Read-only: Search literal or regex patterns across VBA component code. Use moduleName only to limit the search to one component.", "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Non-empty literal or regular-expression search query.\",\"minLength\":1,\"maxLength\":2048},\"moduleName\":{\"type\":\"string\",\"description\":\"Optional VBA component name; safely normalizable names are resolved by runtime.\",\"maxLength\":255},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"maxResults\":{\"type\":\"integer\",\"description\":\"Maximum number of matches returned.\",\"default\":100,\"minimum\":1,\"maximum\":500},\"contextChars\":{\"type\":\"integer\",\"description\":\"Maximum context characters returned around each match.\",\"default\":80,\"minimum\":0,\"maximum\":1000}},\"required\":[\"query\"],\"additionalProperties\":false}");
             yield return ControllerToolDefinition.Create(ToolId("vba_restore_backup"), "Common", "Mutates document: Restore a VBA module from an exact backupId, or restore the latest backup for moduleName when backupId is omitted. Runtime snapshots current state before confirmation.", RestoreBackupSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_write_module"), "Common", "Mutates document: Write the complete source of a VBA component. Updates it when present and creates it when missing. Runtime normalizes invalid new names, snapshots existing code, creates a rollback backup, and verifies read-back. componentType is used only when creating; MSForm code means code-behind only.", WriteModuleSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
@@ -68,8 +67,18 @@ namespace RNAssistant.Office.Tools
                 return ListBackups();
             }
 
-            if (string.Equals(command.ToolId, ToolId("vba_list_modules"), StringComparison.OrdinalIgnoreCase)) return ListModules();
-            if (string.Equals(command.ToolId, ToolId("vba_read_module"), StringComparison.OrdinalIgnoreCase)) return ReadModule(command, session);
+            if (string.Equals(command.ToolId, ToolId("vba_read_module"), StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty)))
+                {
+                    if (command.Arguments.ContainsKey("startLine") || command.Arguments.ContainsKey("lineCount"))
+                    {
+                        return ToolResult.Fail("moduleName is required when startLine or lineCount is supplied.", null, "invalid_arguments", true);
+                    }
+                    return ListModules();
+                }
+                return ReadModule(command, session);
+            }
             if (string.Equals(command.ToolId, ToolId("vba_search_code"), StringComparison.OrdinalIgnoreCase)) return SearchCode(command, session);
 
             if (string.Equals(command.ToolId, ToolId("vba_restore_backup"), StringComparison.OrdinalIgnoreCase))
@@ -355,7 +364,7 @@ namespace RNAssistant.Office.Tools
                         {
                             requestedModuleName = requestedModuleFilter,
                             normalizedModuleName = NormalizeModuleName(requestedModuleFilter),
-                            discoveryTool = ToolId("vba_list_modules")
+                            discoveryTool = ToolId("vba_read_module")
                         }),
                         "vba_module_not_found",
                         true);
@@ -759,12 +768,12 @@ namespace RNAssistant.Office.Tools
                 (string.Equals(requestedModuleName, normalizedName, StringComparison.Ordinal)
                     ? "."
                     : ". Runtime also tried the normalized name " + normalizedName + ".") +
-                " Use common.vba_list_modules only if the target name is unknown.",
+                " Call common.vba_read_module without moduleName only if the target name is unknown.",
                 JsonConvert.SerializeObject(new
                 {
                     requestedModuleName = requestedModuleName,
                     normalizedModuleName = normalizedName,
-                    discoveryTool = ToolId("vba_list_modules")
+                    discoveryTool = ToolId("vba_read_module")
                 }),
                 "vba_module_not_found",
                 true);
@@ -1244,7 +1253,7 @@ namespace RNAssistant.Office.Tools
         private static string NormalizeModuleName(string value)
         {
             value = (value ?? string.Empty).Trim();
-            if (VbaToolManifestParser.ValidIdentifier(value)) return value;
+            if (VbaToolManifestParser.ValidComponentName(value)) return value;
 
             var normalized = new StringBuilder();
             foreach (var character in value)
@@ -1268,7 +1277,7 @@ namespace RNAssistant.Office.Tools
             if (!IsAsciiLetter(candidate[0])) candidate = "Module_" + candidate;
             if (string.IsNullOrWhiteSpace(candidate) || !IsAsciiLetter(candidate[0])) candidate = "Module";
             var suffix = "_" + TextPatternEngine.Sha256(value).Substring(0, 8);
-            var maxBaseLength = 40 - suffix.Length;
+            var maxBaseLength = 31 - suffix.Length;
             if (candidate.Length > maxBaseLength) candidate = candidate.Substring(0, maxBaseLength).TrimEnd('_');
             if (string.IsNullOrWhiteSpace(candidate)) candidate = "Module";
             return candidate + suffix;
@@ -1301,17 +1310,17 @@ namespace RNAssistant.Office.Tools
         private static string ReadModuleSchema()
         {
             return "{\"type\":\"object\",\"properties\":{" +
-                "\"moduleName\":{\"type\":\"string\",\"description\":\"VBA component name.\",\"minLength\":1,\"maxLength\":255}," +
+                "\"moduleName\":{\"type\":\"string\",\"description\":\"Optional VBA component name; omit to list component metadata.\",\"minLength\":1,\"maxLength\":255}," +
                 "\"startLine\":{\"type\":\"integer\",\"description\":\"Optional one-based first line for range mode; omit for the whole module.\",\"minimum\":1}," +
                 "\"lineCount\":{\"type\":\"integer\",\"description\":\"Optional maximum consecutive lines; when supplied alone, range mode starts at line 1. Runtime uses 200 when only startLine is supplied.\",\"minimum\":1,\"maximum\":500}," +
                 "\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum source characters in whole-module mode.\",\"default\":30000,\"minimum\":1,\"maximum\":1000000}" +
-                "},\"required\":[\"moduleName\"],\"additionalProperties\":false}";
+                "},\"required\":[],\"additionalProperties\":false}";
         }
 
         private static string WriteModuleSchema()
         {
             return "{\"type\":\"object\",\"properties\":{" +
-                "\"moduleName\":{\"type\":\"string\",\"description\":\"Desired VBA component name. Invalid punctuation, a non-letter prefix, and names over 40 characters are normalized deterministically when creating; the result returns the actual name.\",\"minLength\":1,\"maxLength\":255}," +
+                "\"moduleName\":{\"type\":\"string\",\"description\":\"Desired VBA component name. Invalid punctuation, a non-letter prefix, and names over the VBE limit of 31 characters are normalized deterministically when creating; the result returns the actual name.\",\"minLength\":1,\"maxLength\":255}," +
                 "\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source or MSForm code-behind. Empty text intentionally clears an existing component or creates an empty one.\"}," +
                 "\"componentType\":{\"type\":\"string\",\"description\":\"Type used only if the component must be created.\",\"default\":\"StdModule\",\"enum\":[\"StdModule\",\"ClassModule\",\"MSForm\"]}," +
                 "\"mode\":{\"type\":\"string\",\"description\":\"upsert updates or creates automatically; createOnly/updateOnly are optional strict modes.\",\"default\":\"upsert\",\"enum\":[\"upsert\",\"createOnly\",\"updateOnly\"]}" +
@@ -1519,6 +1528,7 @@ namespace RNAssistant.Office.Tools
 
         public static string Canonicalize(string id)
         {
+            if (string.Equals(id, "common.vba_list_modules", StringComparison.OrdinalIgnoreCase)) return "common.vba_read_module";
             if (string.Equals(id, "common.vba_read_lines", StringComparison.OrdinalIgnoreCase)) return "common.vba_read_module";
             if (string.Equals(id, "common.vba_replace_text", StringComparison.OrdinalIgnoreCase)) return "common.vba_apply_patch";
             if (string.Equals(id, "common.vba_create_module", StringComparison.OrdinalIgnoreCase)) return "common.vba_write_module";
@@ -1527,6 +1537,7 @@ namespace RNAssistant.Office.Tools
 
         public static IEnumerable<KeyValuePair<string, string>> LegacyAliases()
         {
+            yield return new KeyValuePair<string, string>("common.vba_list_modules", "common.vba_read_module");
             yield return new KeyValuePair<string, string>("common.vba_read_lines", "common.vba_read_module");
             yield return new KeyValuePair<string, string>("common.vba_replace_text", "common.vba_apply_patch");
             yield return new KeyValuePair<string, string>("common.vba_create_module", "common.vba_write_module");

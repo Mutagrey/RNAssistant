@@ -185,22 +185,13 @@ namespace RNAssistant.OfficeHosts
             return new[]
             {
                 Tool("word.get_context", "Read-only: Return active document and selection context.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
-                Tool("word.get_selection_text", "Read-only: Read current selection text.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
-                Tool("word.read_document", "Read-only: Read current document text.", "{\"type\":\"object\",\"properties\":{\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum number of text characters returned.\",\"default\":12000}},\"required\":[],\"additionalProperties\":false}"),
-                Tool("word.read_selection", "Read-only: Read current selection text.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
-                Tool("word.read_range", "Read-only: Read document text by character range.", "{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"description\":\"Zero-based inclusive start character position.\",\"default\":0},\"end\":{\"type\":\"integer\",\"description\":\"Zero-based exclusive end character position.\"},\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum number of text characters returned.\",\"default\":12000}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("word.read_text", "Read-only: Read document, selection, or character-range text with one source selector.", "{\"type\":\"object\",\"properties\":{\"source\":{\"type\":\"string\",\"enum\":[\"document\",\"selection\",\"range\"],\"description\":\"Text source.\",\"default\":\"document\"},\"start\":{\"type\":\"integer\",\"description\":\"Zero-based inclusive start for range source.\",\"default\":0},\"end\":{\"type\":\"integer\",\"description\":\"Zero-based exclusive end for range source.\"},\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum number of text characters returned.\",\"default\":12000}},\"required\":[],\"additionalProperties\":false}", canSourceHtmlData: true),
                 Tool("word.find_text", "Read-only: Find literal or regex text across Word stories and return stable coordinates/hash.", "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Non-empty literal or regular-expression search query.\",\"minLength\":1},\"scope\":{\"type\":\"string\",\"description\":\"Search or operation scope supported by the tool.\",\"default\":\"main\",\"enum\":[\"main\",\"selection\",\"all\"]},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"maxResults\":{\"type\":\"integer\",\"description\":\"Maximum number of matches returned.\",\"default\":50},\"contextChars\":{\"type\":\"integer\",\"description\":\"Maximum context characters returned around each match.\",\"default\":80}},\"required\":[\"query\"],\"additionalProperties\":false}"),
-                Tool("word.read_headings", "Read-only: List paragraphs that use heading styles.", "{\"type\":\"object\",\"properties\":{\"maxResults\":{\"type\":\"integer\",\"description\":\"Maximum number of matches returned.\",\"default\":100}},\"required\":[],\"additionalProperties\":false}"),
-                Tool("word.read_tables", "Read-only: Read text from document tables.", "{\"type\":\"object\",\"properties\":{\"maxTables\":{\"type\":\"integer\",\"description\":\"Maximum number of tables returned.\",\"default\":20},\"maxRows\":{\"type\":\"integer\",\"description\":\"Maximum number of rows returned per table.\",\"default\":50}},\"required\":[],\"additionalProperties\":false}"),
-                Tool("word.list_comments", "Read-only: List document comments.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
-                Tool("word.document_stats", "Read-only: Return basic document counts.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
-                Tool("word.insert_text", "Mutates document: Insert text at the current cursor position.", "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Complete text to insert, replace, or assign.\"}},\"required\":[\"text\"],\"additionalProperties\":false}", true, true, 2),
-                Tool("word.insert_paragraph", "Mutates document: Insert a paragraph at selection, start, or end.", "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Complete text to insert, replace, or assign.\"},\"location\":{\"type\":\"string\",\"description\":\"Insertion target supported by the tool.\",\"default\":\"selection\",\"enum\":[\"selection\",\"start\",\"end\"]}},\"required\":[\"text\"],\"additionalProperties\":false}", true, true, 2),
-                Tool("word.replace_selection", "Mutates document: Replace selected text.", "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Complete text to insert, replace, or assign.\"}},\"required\":[\"text\"],\"additionalProperties\":false}", true, true, 2),
-                Tool("word.replace_text", "Mutates document: Replace literal or regex text after a matching search preview.", "{\"type\":\"object\",\"properties\":{\"find\":{\"type\":\"string\",\"description\":\"Literal or regular-expression text to find.\",\"minLength\":1},\"replace\":{\"type\":\"string\",\"description\":\"Replacement text; regex capture groups are allowed only in regex mode.\"},\"scope\":{\"type\":\"string\",\"description\":\"Search or operation scope supported by the tool.\",\"default\":\"main\",\"enum\":[\"main\",\"selection\",\"all\"]},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"replaceAll\":{\"type\":\"boolean\",\"description\":\"Whether all matches in scope may be replaced.\",\"default\":true},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"expectedMatches\":{\"type\":\"integer\",\"description\":\"Exact match count returned by the preceding search.\"},\"expectedScopeSha256\":{\"type\":\"string\",\"description\":\"Exact scope SHA-256 hash returned by the preceding search.\"},\"maxReplacements\":{\"type\":\"integer\",\"description\":\"Safety limit for replacements.\",\"default\":500}},\"required\":[\"find\",\"expectedMatches\",\"expectedScopeSha256\"],\"additionalProperties\":false}", true, true, 2, true),
-                Tool("word.apply_style", "Mutates document: Apply a named Word style to selection or document.", "{\"type\":\"object\",\"properties\":{\"style\":{\"type\":\"string\",\"description\":\"Built-in style name supported by the host.\"},\"target\":{\"type\":\"string\",\"description\":\"Formatting target supported by the tool.\",\"default\":\"selection\",\"enum\":[\"selection\",\"document\"]}},\"required\":[\"style\"],\"additionalProperties\":false}", true, true, 1),
-                Tool("word.format_selection", "Mutates document: Apply basic font formatting to the current selection.", "{\"type\":\"object\",\"properties\":{\"bold\":{\"type\":\"boolean\",\"description\":\"Whether bold formatting is enabled.\"},\"italic\":{\"type\":\"boolean\",\"description\":\"Whether italic formatting is enabled.\"},\"underline\":{\"type\":\"boolean\",\"description\":\"Whether underline formatting is enabled.\"},\"fontSize\":{\"type\":\"integer\",\"description\":\"Font size in points.\"},\"fontName\":{\"type\":\"string\",\"description\":\"Installed font family name.\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
-                Tool("word.add_table", "Mutates document: Insert a table at selection, start, or end.", "{\"type\":\"object\",\"properties\":{\"rows\":{\"type\":\"integer\",\"description\":\"Number of table rows.\",\"default\":2},\"columns\":{\"type\":\"integer\",\"description\":\"Number of table columns.\",\"default\":2},\"values\":{\"type\":\"array\",\"items\":{\"type\":\"array\",\"items\":{\"type\":[\"string\",\"number\",\"boolean\",\"null\"]}},\"description\":\"Two-dimensional JSON array of row arrays.\"},\"location\":{\"type\":\"string\",\"description\":\"Insertion target supported by the tool.\",\"default\":\"selection\",\"enum\":[\"selection\",\"start\",\"end\"]}},\"required\":[],\"additionalProperties\":false}", true, true, 2),
+                Tool("word.inspect", "Read-only: Inspect headings, tables, comments, or document statistics with one selector.", "{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"headings\",\"tables\",\"comments\",\"stats\"],\"description\":\"Document structure to return.\"},\"maxResults\":{\"type\":\"integer\",\"description\":\"Maximum heading count.\",\"default\":100},\"maxTables\":{\"type\":\"integer\",\"description\":\"Maximum table count.\",\"default\":20},\"maxRows\":{\"type\":\"integer\",\"description\":\"Maximum rows returned per table.\",\"default\":50}},\"required\":[\"kind\"],\"additionalProperties\":false}", canSourceHtmlData: true),
+                Tool("word.write_text", "Mutates document: Insert text, insert a paragraph, or replace the current selection.", "{\"type\":\"object\",\"properties\":{\"mode\":{\"type\":\"string\",\"enum\":[\"insert\",\"paragraph\",\"replaceSelection\"],\"description\":\"Text write operation.\"},\"text\":{\"type\":\"string\",\"description\":\"Complete text to insert or assign.\"},\"location\":{\"type\":\"string\",\"description\":\"For paragraph mode: selection, start, or end.\",\"default\":\"selection\",\"enum\":[\"selection\",\"start\",\"end\"]}},\"required\":[\"mode\",\"text\"],\"additionalProperties\":false}", true, true, 2),
+                Tool("word.replace_text", "Mutates document: Replace bounded literal or regex text in the current scope. A separate search is optional; runtime reads the scope immediately before mutation and verifies the result.", "{\"type\":\"object\",\"properties\":{\"find\":{\"type\":\"string\",\"description\":\"Literal or regular-expression text to find.\",\"minLength\":1},\"replace\":{\"type\":\"string\",\"description\":\"Replacement text; regex capture groups are allowed only in regex mode.\"},\"scope\":{\"type\":\"string\",\"description\":\"Search or operation scope supported by the tool.\",\"default\":\"main\",\"enum\":[\"main\",\"selection\",\"all\"]},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"replaceAll\":{\"type\":\"boolean\",\"description\":\"Whether all matches in scope may be replaced.\",\"default\":true},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"maxReplacements\":{\"type\":\"integer\",\"description\":\"Safety limit for replacements.\",\"default\":500}},\"required\":[\"find\"],\"additionalProperties\":false}", true, true, 2, true),
+                Tool("word.format_text", "Mutates document: Apply a named style or basic font formatting with one explicit kind selector.", "{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"style\",\"font\"],\"description\":\"Formatting operation.\"},\"style\":{\"type\":\"string\",\"description\":\"Named Word style when kind is style.\"},\"target\":{\"type\":\"string\",\"description\":\"Style target; font formatting always targets the selection.\",\"default\":\"selection\",\"enum\":[\"selection\",\"document\"]},\"bold\":{\"type\":\"boolean\",\"description\":\"Whether bold formatting is enabled for kind=font.\"},\"italic\":{\"type\":\"boolean\",\"description\":\"Whether italic formatting is enabled for kind=font.\"},\"underline\":{\"type\":\"boolean\",\"description\":\"Whether underline formatting is enabled for kind=font.\"},\"fontSize\":{\"type\":\"integer\",\"description\":\"Font size in points for kind=font.\",\"minimum\":1},\"fontName\":{\"type\":\"string\",\"description\":\"Installed font family name for kind=font.\"}},\"required\":[\"kind\"],\"additionalProperties\":false}", true, true, 1),
+                Tool("word.add_table", "Mutates document: Insert a table at selection, start, or end. Runtime infers dimensions from values when rows/columns are omitted.", "{\"type\":\"object\",\"properties\":{\"rows\":{\"type\":\"integer\",\"description\":\"Optional table row count; omit to infer it from values or use 2 for an empty table.\",\"minimum\":1},\"columns\":{\"type\":\"integer\",\"description\":\"Optional table column count; omit to infer it from values or use 2 for an empty table.\",\"minimum\":1},\"values\":{\"type\":\"array\",\"items\":{\"type\":\"array\",\"items\":{\"type\":[\"string\",\"number\",\"boolean\",\"null\"]}},\"description\":\"Optional two-dimensional row array; dimensions are inferred when omitted.\"},\"location\":{\"type\":\"string\",\"description\":\"Insertion target supported by the tool.\",\"default\":\"selection\",\"enum\":[\"selection\",\"start\",\"end\"]}},\"required\":[],\"additionalProperties\":false}", true, true, 2),
                 Tool("word.insert_page_break", "Mutates document: Insert a page break at the current cursor position.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}", true, true, 1),
                 Tool("word.add_comment", "Mutates document: Add a comment to the current selection.", "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Complete text to insert, replace, or assign.\"}},\"required\":[\"text\"],\"additionalProperties\":false}", true, true, 1),
                 Tool("word.vba_read_module", "Internal VBA backend read; use common.vba_read_module.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum number of text characters returned.\",\"default\":30000,\"minimum\":1,\"maximum\":1000000}},\"required\":[\"moduleName\"],\"additionalProperties\":false}", false, false),
@@ -300,12 +291,16 @@ namespace RNAssistant.OfficeHosts
                 {
                     case "word.get_context":
                         return ToolResult.Ok("Word context collected.", JsonConvert.SerializeObject(GetOfficeContext()));
+                    case "word.read_text":
+                        return ReadText(command);
                     case "word.read_document":
                         return ReadDocument(command);
                     case "word.read_range":
                         return ReadRange(command);
                     case "word.find_text":
                         return FindText(command);
+                    case "word.inspect":
+                        return InspectDocument(command);
                     case "word.read_headings":
                         return ReadHeadings(command);
                     case "word.read_tables":
@@ -317,6 +312,8 @@ namespace RNAssistant.OfficeHosts
                     case "word.get_selection_text":
                     case "word.read_selection":
                         return ToolResult.Ok("Selection read.", JsonConvert.SerializeObject(new { text = SelectionText() }));
+                    case "word.write_text":
+                        return WriteText(command);
                     case "word.insert_text":
                         InsertText(ToolArgumentReader.String(command.Arguments, "text", string.Empty));
                         return ToolResult.Ok("Text inserted.");
@@ -327,6 +324,8 @@ namespace RNAssistant.OfficeHosts
                         return ToolResult.Ok("Selection replaced.");
                     case "word.replace_text":
                         return ReplaceText(command);
+                    case "word.format_text":
+                        return FormatText(command);
                     case "word.apply_style":
                         return ApplyStyle(command);
                     case "word.format_selection":
@@ -376,6 +375,47 @@ namespace RNAssistant.OfficeHosts
             var maxChars = ToolArgumentReader.Int32(command.Arguments, "maxChars", 12000);
             var doc = RequireDocument();
             return ToolResult.Ok("Document read.", JsonConvert.SerializeObject(new { text = Trim(doc.Range().Text, maxChars) }));
+        }
+
+        private ToolResult ReadText(ToolCommand command)
+        {
+            var source = ToolArgumentReader.String(command.Arguments, "source", "document");
+            if (string.Equals(source, "selection", StringComparison.OrdinalIgnoreCase))
+            {
+                var maxChars = ToolArgumentReader.Int32(command.Arguments, "maxChars", 12000);
+                return ToolResult.Ok("Selection read.", JsonConvert.SerializeObject(new { text = Trim(SelectionText(), maxChars) }));
+            }
+            if (string.Equals(source, "range", StringComparison.OrdinalIgnoreCase)) return ReadRange(command);
+            return string.Equals(source, "document", StringComparison.OrdinalIgnoreCase)
+                ? ReadDocument(command)
+                : ToolResult.Fail("source must be document, selection, or range.");
+        }
+
+        private ToolResult InspectDocument(ToolCommand command)
+        {
+            var kind = ToolArgumentReader.String(command.Arguments, "kind", string.Empty);
+            if (string.Equals(kind, "headings", StringComparison.OrdinalIgnoreCase)) return ReadHeadings(command);
+            if (string.Equals(kind, "tables", StringComparison.OrdinalIgnoreCase)) return ReadTables(command);
+            if (string.Equals(kind, "comments", StringComparison.OrdinalIgnoreCase)) return ListComments();
+            if (string.Equals(kind, "stats", StringComparison.OrdinalIgnoreCase)) return DocumentStats();
+            return ToolResult.Fail("kind must be headings, tables, comments, or stats.");
+        }
+
+        private ToolResult WriteText(ToolCommand command)
+        {
+            var mode = ToolArgumentReader.String(command.Arguments, "mode", string.Empty);
+            if (string.Equals(mode, "insert", StringComparison.OrdinalIgnoreCase))
+            {
+                InsertText(ToolArgumentReader.String(command.Arguments, "text", string.Empty));
+                return ToolResult.Ok("Text inserted.");
+            }
+            if (string.Equals(mode, "paragraph", StringComparison.OrdinalIgnoreCase)) return InsertParagraph(command);
+            if (string.Equals(mode, "replaceSelection", StringComparison.OrdinalIgnoreCase))
+            {
+                ResolveSelectionRange(RequireDocument()).Text = ToolArgumentReader.String(command.Arguments, "text", string.Empty);
+                return ToolResult.Ok("Selection replaced.");
+            }
+            return ToolResult.Fail("mode must be insert, paragraph, or replaceSelection.");
         }
 
         private ToolResult ReadRange(ToolCommand command)
@@ -545,24 +585,17 @@ namespace RNAssistant.OfficeHosts
             var replace = ToolArgumentReader.String(command.Arguments, "replace", string.Empty);
             var scope = ToolArgumentReader.String(command.Arguments, "scope", "main");
             var replaceAll = ToolArgumentReader.Boolean(command.Arguments, "replaceAll", true);
-            var expectedMatches = ToolArgumentReader.Int32(command.Arguments, "expectedMatches", -1);
-            var expectedHash = ToolArgumentReader.String(command.Arguments, "expectedScopeSha256", string.Empty);
             var maxReplacements = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxReplacements", 500)));
-            if (expectedMatches < 0 || string.IsNullOrWhiteSpace(expectedHash)) return ToolResult.Fail("expectedMatches and expectedScopeSha256 from word.find_text are required.", null, "search_precondition_required", true);
             var ranges = new List<WordSearchRange>(SearchRanges(scope));
-            var hash = new System.Text.StringBuilder();
             var plans = new List<WordReplacementPlan>();
             var options = PatternOptions(command);
-            var observedMatches = 0;
             var replacementPlanned = false;
             try
             {
                 foreach (var story in ranges)
                 {
                     var text = story.Range.Text ?? string.Empty;
-                    hash.Append(story.Kind).Append('\n').Append(story.Range.Start).Append(':').Append(story.Range.End).Append('\n').Append(text).Append('\n');
                     var found = TextPatternEngine.Find(text, find, options, 1, 0);
-                    observedMatches += found.MatchCount;
                     if (found.MatchCount > 0 && (replaceAll || !replacementPlanned))
                     {
                         var edits = TextPatternEngine.PlanReplacements(text, find, replace, options, replaceAll, maxReplacements);
@@ -575,8 +608,6 @@ namespace RNAssistant.OfficeHosts
                 }
                 var replacements = 0;
                 foreach (var plan in plans) replacements += plan.Edits.Count;
-                if (!string.Equals(expectedHash, TextPatternEngine.Sha256(hash.ToString()), StringComparison.OrdinalIgnoreCase) || observedMatches != expectedMatches)
-                    return ToolResult.Fail("Word search scope changed after preview.", null, "stale_search_scope", true);
                 if (replacements > maxReplacements) return ToolResult.Fail("Replacement count exceeds maxReplacements=" + maxReplacements + ".", null, "replacement_limit_exceeded", false);
                 for (var p = plans.Count - 1; p >= 0; p--)
                 {
@@ -658,8 +689,24 @@ namespace RNAssistant.OfficeHosts
             return ToolResult.Ok("Style applied: " + style);
         }
 
+        private ToolResult FormatText(ToolCommand command)
+        {
+            var kind = ToolArgumentReader.String(command.Arguments, "kind", string.Empty);
+            if (string.Equals(kind, "style", StringComparison.OrdinalIgnoreCase)) return ApplyStyle(command);
+            if (string.Equals(kind, "font", StringComparison.OrdinalIgnoreCase)) return FormatSelection(command);
+            return ToolResult.Fail("kind must be style or font.");
+        }
+
         private ToolResult FormatSelection(ToolCommand command)
         {
+            if (!command.Arguments.ContainsKey("bold") &&
+                !command.Arguments.ContainsKey("italic") &&
+                !command.Arguments.ContainsKey("underline") &&
+                !command.Arguments.ContainsKey("fontSize") &&
+                !command.Arguments.ContainsKey("fontName"))
+            {
+                return ToolResult.Fail("kind=font requires at least one font formatting field.");
+            }
             var range = ResolveSelectionRange(RequireDocument());
             if (command.Arguments.ContainsKey("bold"))
             {
@@ -691,23 +738,24 @@ namespace RNAssistant.OfficeHosts
 
         private ToolResult AddTable(ToolCommand command)
         {
-            var rows = Math.Max(1, ToolArgumentReader.Int32(command.Arguments, "rows", 2));
-            var columns = Math.Max(1, ToolArgumentReader.Int32(command.Arguments, "columns", 2));
+            ResolvedTableArguments tableArguments;
+            string argumentError;
+            if (!TableArgumentResolver.TryResolve(command, 2, 2, out tableArguments, out argumentError))
+            {
+                return ToolResult.Fail(argumentError);
+            }
+            var rows = tableArguments.Rows;
+            var columns = tableArguments.Columns;
             var location = ToolArgumentReader.String(command.Arguments, "location", "selection");
             var doc = RequireDocument();
             var range = ResolveInsertionRange(doc, location);
             var table = doc.Tables.Add(range, rows, columns);
-            var valuesJson = ToolArgumentReader.String(command.Arguments, "values", string.Empty);
-            if (!string.IsNullOrWhiteSpace(valuesJson))
+            var values = tableArguments.Values;
+            if (values != null)
             {
-                var values = JArray.Parse(valuesJson);
                 for (var r = 1; r <= rows && r <= values.Count; r++)
                 {
-                    var row = values[r - 1] as JArray;
-                    if (row == null)
-                    {
-                        continue;
-                    }
+                    var row = (JArray)values[r - 1];
                     for (var c = 1; c <= columns && c <= row.Count; c++)
                     {
                         table.Cell(r, c).Range.Text = Convert.ToString(row[c - 1]);
@@ -1042,9 +1090,9 @@ namespace RNAssistant.OfficeHosts
                 && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
-        private static ToolDefinition Tool(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool requiresConfirmation = false)
+        private static ToolDefinition Tool(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool requiresConfirmation = false, bool canSourceHtmlData = false)
         {
-            return new ToolDefinition { Id = id, Host = "Word", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, RequiresConfirmation = requiresConfirmation };
+            return new ToolDefinition { Id = id, Host = "Word", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, RequiresConfirmation = requiresConfirmation, CanSourceHtmlData = canSourceHtmlData };
         }
 
         private static string Trim(string text, int maxChars)

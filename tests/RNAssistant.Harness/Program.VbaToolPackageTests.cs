@@ -23,6 +23,11 @@ namespace RNAssistant.Harness
             AssertEqual("Echo", parsed.Tool.EntryPoint, "entry point");
             AssertEqual(4, parsed.Tool.ArgumentOrder.Count, "argument order");
             AssertEqual(2, parsed.Tool.Components.Count, "declared components");
+            AssertTrue(VbaToolManifestParser.ValidIdentifier(new string('A', 40)), "entry-point identifier limit remains 40");
+            AssertTrue(!VbaToolManifestParser.ValidComponentName(new string('A', 32)), "VBE component names stop at 31 characters");
+            AssertEqual("invalid_component_name",
+                new VbaToolManifestParser().Parse(new string('A', 32), tool.Code).ErrorCode,
+                "overlong component rejected before COM");
 
             var invalid = tool.Code.Replace("As String\n    Echo =", "As Variant\n    Echo =");
             var invalidResult = new VbaToolManifestParser().Parse("RNA_Echo", invalid);

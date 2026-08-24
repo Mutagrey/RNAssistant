@@ -432,6 +432,7 @@ namespace RNAssistant.Office.Services
                 .GroupBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
                 .Select(group => group.First().Clone())
                 .ToList();
+            foreach (var tool in source) BuiltInToolAliases.NormalizePipeline(tool);
             var safety = ToolSafetyPolicy.ResolveAll(source);
             var result = new List<ToolDefinition>();
             foreach (var tool in source)

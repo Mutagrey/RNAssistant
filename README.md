@@ -201,9 +201,9 @@ Each chat stores an explicit execution mode:
 - `Chat` sends a normal completion without tools, skills, agent JSON, or Office execution.
 - `Agent` is the default and uses a direct model/tool loop. It can also answer ordinary questions without tools.
 
-Editable Agent instructions use `developer` by default and may use `system` or `user`. The Prompts page edits the Agent prompt, Chat prompt, context-compaction prompt, and title prompt. Agent-side prompt changes use `common.prompts_read_defaults` and confirmed `common.prompts_save`.
+Editable Agent instructions use `developer` by default and may use `system` or `user`. The Prompts page edits the Agent prompt, Chat prompt, context-compaction prompt, and title prompt. Agent-side prompt changes use `common.prompts_read` with `includeDefaults:true` and confirmed `common.prompts_save`.
 
-In Agent mode the prompt contains all runnable tools in native-like function JSON and a compact catalog (`id`, `name`, `description`) of enabled skills. When a catalog description is relevant, the model loads that skill's complete versioned Markdown through `common.skills_read`. In strict response-schema mode, optional tool arguments are nullable; runtime treats `null` as omitted and applies code-owned schema defaults instead of forcing the model to invent values. The model returns one raw JSON object. A tool turn contains one or more calls:
+In Agent mode the prompt contains all runnable tools in native-like function JSON and a compact catalog (`id`, `name`, `description`) of enabled skills. When a catalog description is relevant, the model loads that skill's complete versioned Markdown through `common.skills_read`. In strict response-schema mode, optional tool arguments are nullable; runtime treats synthetic `null` as omitted and applies code-owned schema defaults instead of forcing the model to invent values, while preserving `null` explicitly allowed by the original tool schema. The model returns one raw JSON object. A tool turn contains one or more calls:
 
 ```json
 {
@@ -224,6 +224,8 @@ To answer, clarify, or refuse, the model returns `{"message":"...","tool_calls":
 
 Office tools execute locally. The next model turn receives a string protocol message such as `TOOL_RESULT:\n{"ok":true,"tool_call_id":"call_1","name":"excel.read_range","status":"completed","message":"Range read.","data":{...},"error":null}`. The model decides what to do next. Tool-result data is bounded and oversized data is replaced by a structured preview; the prompt budget is checked before every model request. Excel value/formula/profile reads reject ranges above 100000 cells before loading COM `Value2`. The runtime also enforces exact tool ids, formal argument schemas, safety/confirmation metadata, and iteration/tool-step limits.
 
+The model-facing catalog groups uniform intents behind selectors: Excel inspect/read/write/chart-upsert/format, Word read/inspect/write/format, PowerPoint read/list/set-text/add-object, and Outlook read/draft/update/collect. Superseded fine-grained ids remain execution aliases for saved pipelines but are not shown to the model.
+
 For complex work, the model can explicitly create and maintain one visible plan through `common.plan_create/read/update/delete`. Each update creates a chat-artifact revision and the UI shows the active goal, progress count, and step statuses. The runtime never infers a plan, maps tool calls to steps, or changes statuses automatically.
 
 Context compaction preserves the full stored transcript and replays a checkpoint plus an exact tail. The current request and `LastRun` are persisted before the endpoint call, and each tool-start/result boundary is checkpointed. Confirmation state and cumulative limits survive restart; the runtime and UI block new input until the pending action is confirmed or cancelled. Stale chat revisions are rejected instead of overwriting another window. Interrupted in-flight actions are recovered as unknown-effect diagnostics without automatic retry, while already persisted tool results remain replayable. Pipeline safety is resolved recursively, so nested mutation, risk, confirmation, missing-reference, and cycle errors cannot be hidden by top-level metadata.
@@ -232,13 +234,13 @@ Context compaction preserves the full stored transcript and replays a checkpoint
 
 The HTML tab is tied to the active chat session. Agent-created HTML pages are stored with the chat, not inside the Office document.
 
-- Use `common.html_workspace_upsert_file` for `index.html`, CSS, and script files (`kind`: `html`, `css`, or `script`).
-- Use `common.html_workspace_upsert_data` for JSON data sources. Preview exposes them as `window.RNAssistantData`.
-- Use `common.html_workspace_delete_file` and `common.html_workspace_delete_data` to remove workspace items. Deletions are recorded in workspace history and can be undone.
-- Call `common.html_workspace_read` without arguments for the compact manifest, then pass one exact `path` or `dataName` to read a body. Use `common.html_workspace_set_active` to choose the displayed HTML file.
+- Use `common.html_workspace_upsert` with `resourceType:"file"` for `index.html`, CSS, and scripts; runtime infers file kind from the extension.
+- Use the same tool with `resourceType:"data"` for JSON data sources exposed as `window.RNAssistantData`.
+- Use `common.html_workspace_delete` with `resourceType` and `name` to remove an item. Deletions are recorded in workspace history and can be undone.
+- Call `common.html_workspace_read` without arguments for the compact manifest, then pass `resourceType` and exact `name` to read a body. Use `common.html_workspace_set_active` to choose the displayed HTML file.
 - Every workspace mutation also records an immutable chat artifact revision. Full revision bodies are stored outside chat JSON; editing or forking from an older message still restores/copies the exact revision at that point.
 - Undo/redo history is bounded by item count and stored content size. UI responses carry only snapshot ids/labels/timestamps; Agent reads return a manifest or one targeted current item, never history bodies.
-Edits and deletions of an existing workspace require a successful workspace read in the current agent run.
+Workspace upsert/delete resolve and validate the current item internally; a separate read is needed only when the model must inspect existing content first.
 HTML preview and its scripts are always enabled inside a sandboxed iframe.
 
 ## Tool Library
@@ -284,7 +286,7 @@ The Tools tab can run a selected tool with ad hoc JSON arguments. `Dry Run` reso
 
 For Excel, Word, and PowerPoint, `executor: "vba"` uses a strict comment manifest and a `Public Function ... As String` entry point with typed positional arguments. A global package is injected for one run and cleaned in `finally`; explicit persistent installation is allowed only in macro-enabled documents. RNAssistant also discovers valid document-local tools through the VBA project object model. Both paths require Trust Access to the VBA project object model.
 
-Agent mode manages custom tools through `common.tools_list/read/validate/create/update/delete`. Create fails for an existing id; update changes only supplied fields. `parameters`, `pipeline`, and VBA `components` are nested native JSON rather than escaped JSON strings. Create/update/delete requires confirmation unless auto-confirm is enabled. Pipeline and VBA packages are validated before persistence. Built-in and controller ids are reserved. The catalog refreshes after confirmation or on the next user run.
+Agent mode manages custom tools through `common.tools_read/validate/upsert/delete`; `tools_read` without id lists compact metadata. Upsert creates a missing id or preserves omitted fields while updating an existing one, then validates the effective definition automatically. Optional `createOnly`/`updateOnly` modes retain strict existence semantics; `tools_validate` is only a no-save preflight. `parameters`, `pipeline`, and VBA `components` are nested native JSON rather than escaped JSON strings. Upsert/delete requires confirmation unless auto-confirm is enabled. Built-in, controller, and compatibility-alias ids are reserved; an older stored collision remains on disk for manual recovery but is omitted from the runnable catalog. The catalog refreshes after confirmation or on the next user run.
 
 ## Skill Library
 
@@ -292,7 +294,7 @@ Markdown skills are stored under:
 
 `%AppData%\RNAssistant\skills`
 
-Each custom skill is a `SKILL.md` guidance file with simple metadata (`id`, `host`, `name`, `description`, `version`, `enabled`) and Markdown instructions. Every enabled visible skill contributes only `id`, `name`, and `description` to `RUNTIME_CONTEXT.skills`. There is no skill router, activation state, dependency graph, or hidden tool ownership. The model calls `common.skills_read` for each clearly relevant catalog entry before following its complete instructions. Agent CRUD is `common.skills_list/read/create/update/delete`; update preserves omitted fields, while create/update/delete requires confirmation unless auto-confirm is enabled.
+Each custom skill is a `SKILL.md` guidance file with simple metadata (`id`, `host`, `name`, `description`, `version`, `enabled`) and Markdown instructions. Every enabled visible skill contributes only `id`, `name`, and `description` to `RUNTIME_CONTEXT.skills`. There is no skill router, activation state, dependency graph, or hidden tool ownership. The model calls `common.skills_read` with an exact id for each clearly relevant catalog entry; omitting id lists metadata. Agent authoring is `common.skills_read/upsert/delete`; upsert creates missing ids and preserves omitted fields on update, while upsert/delete requires confirmation unless auto-confirm is enabled.
 
 ```markdown
 ---

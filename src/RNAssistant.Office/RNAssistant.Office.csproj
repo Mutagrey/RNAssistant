@@ -115,6 +115,8 @@
     <Compile Include="Services\SkillCatalogService.cs" />
     <Compile Include="Services\ToolCatalogService.cs" />
     <Compile Include="Tools\ToolArgumentReader.cs" />
+    <Compile Include="Tools\BuiltInToolAliases.cs" />
+    <Compile Include="Tools\TableArgumentResolver.cs" />
     <Compile Include="Tools\ToolIdSuggester.cs" />
     <Compile Include="Tools\OfficeToolExecutor.cs" />
     <Compile Include="Tools\ControllerToolDefinition.cs" />

@@ -160,7 +160,8 @@ namespace RNAssistant.Core.Tools
                 var childSchema = properties[property.Name] as JObject;
                 if (childSchema == null) continue;
                 if ((property.Value.Type == JTokenType.Null || property.Value.Type == JTokenType.Undefined) &&
-                    !required.Contains(property.Name))
+                    !required.Contains(property.Name) &&
+                    !ContainsType(childSchema["type"], "null"))
                 {
                     property.Remove();
                     continue;

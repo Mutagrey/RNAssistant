@@ -205,29 +205,17 @@ namespace RNAssistant.OfficeHosts
             return new[]
             {
                 Tool("excel.get_context", "Read-only: Return active workbook, sheet, and selection context.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
-                Tool("excel.get_selection", "Read-only: Read the current or launcher-captured selection values. Rejects selections larger than 100000 cells.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
-                Tool("excel.workbook_summary", "Read-only: Return workbook metadata, sheets, and used ranges.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
-                Tool("excel.list_sheets", "Read-only: List workbook sheet names.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
-                Tool("excel.read_range", "Read-only: Read worksheet values from an A1 range. Hard limit: 100000 cells; split larger ranges.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address containing at most 100000 cells.\",\"default\":\"A1\"}},\"required\":[],\"additionalProperties\":false}"),
-                Tool("excel.read_formula_range", "Read-only: Read formulas from an A1 range. Hard limit: 100000 cells; split larger ranges.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address containing at most 100000 cells.\",\"default\":\"A1\"}},\"required\":[],\"additionalProperties\":false}"),
-                Tool("excel.profile_range", "Read-only: Profile a range or selection for dimensions, blanks, formulas, headers, and numeric columns. Hard limit: 100000 cells.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address containing at most 100000 cells.\"}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("excel.get_selection", "Read-only: Read the current or launcher-captured selection values. Rejects selections larger than 100000 cells.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}", canSourceHtmlData: true),
+                Tool("excel.inspect", "Read-only: Inspect workbook metadata, sheets, charts, tables, defined names, or shapes. For charts, chartName returns one detailed chart; omit it to list.", "{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"workbook\",\"sheets\",\"charts\",\"tables\",\"names\",\"shapes\"],\"description\":\"Workbook information to return.\"},\"sheet\":{\"type\":\"string\",\"description\":\"Optional worksheet filter for charts, tables, or shapes.\"},\"chartName\":{\"type\":\"string\",\"description\":\"Optional exact chart name when kind is charts; omit to list chart summaries.\"}},\"required\":[\"kind\"],\"additionalProperties\":false}", canSourceHtmlData: true),
+                Tool("excel.read_range", "Read-only: Read worksheet values/formulas, or profile a range/selection. Hard limit: 100000 cells; split larger ranges.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"Optional A1 range; values/formulas default to A1, while profile uses the selection or used range when omitted.\"},\"content\":{\"type\":\"string\",\"enum\":[\"values\",\"formulas\",\"profile\"],\"description\":\"Range representation to return.\",\"default\":\"values\"}},\"required\":[],\"additionalProperties\":false}", canSourceHtmlData: true),
                 Tool("excel.find_cells", "Read-only: Find literal or regex matches in cell values or formulas and return stable scope coordinates/hash.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet filter; provide it for sheet or range scope.\"},\"address\":{\"type\":\"string\",\"description\":\"A1 range; required when scope is range.\"},\"scope\":{\"type\":\"string\",\"description\":\"Search or operation scope supported by the tool.\",\"enum\":[\"workbook\",\"sheet\",\"range\",\"selection\"]},\"query\":{\"type\":\"string\",\"description\":\"Non-empty literal or regular-expression search query.\",\"minLength\":1},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"lookIn\":{\"type\":\"string\",\"description\":\"Cell content to inspect: values or formulas.\",\"default\":\"values\",\"enum\":[\"values\",\"formulas\",\"both\"]},\"maxResults\":{\"type\":\"integer\",\"description\":\"Maximum number of matches returned.\",\"default\":50},\"contextChars\":{\"type\":\"integer\",\"description\":\"Maximum context characters returned around each match.\",\"default\":80}},\"required\":[\"query\"],\"additionalProperties\":false}"),
                 Tool("excel.create_chat_chart", "Read-only: Create an interactive chart artifact in chat from a selection or range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet containing address; omit when charting the current selection.\"},\"address\":{\"type\":\"string\",\"description\":\"A1 range to chart; omit to use the current selection.\"},\"chartType\":{\"type\":\"string\",\"description\":\"Chart type supported by the current host; use auto when available.\",\"default\":\"auto\"},\"title\":{\"type\":\"string\",\"description\":\"Human-readable title.\",\"default\":\"Excel chart\"}},\"required\":[],\"additionalProperties\":false}"),
-                Tool("excel.list_charts", "Read-only: List chart objects in the workbook or one sheet.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Optional worksheet filter; omit to list charts from all sheets.\"}},\"required\":[],\"additionalProperties\":false}"),
-                Tool("excel.get_chart", "Read-only: Read one worksheet chart, including its title, axes, series, position, and size.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Optional worksheet filter; omit to find the named chart across the workbook.\"},\"chartName\":{\"type\":\"string\",\"description\":\"Exact worksheet chart object name.\"}},\"required\":[\"chartName\"],\"additionalProperties\":false}"),
-                Tool("excel.list_tables", "Read-only: List Excel tables in the workbook or one sheet.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Optional worksheet filter; omit to list tables from all sheets.\"}},\"required\":[],\"additionalProperties\":false}"),
-                Tool("excel.list_names", "Read-only: List workbook defined names.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
-                Tool("excel.list_shapes", "Read-only: List shapes in the workbook or one sheet.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Optional worksheet filter; omit to list shapes from all sheets.\"}},\"required\":[],\"additionalProperties\":false}"),
-                Tool("excel.replace_cells", "Mutates document: Replace literal or regex matches in scoped text constants or formulas after a matching search preview.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet filter; provide it for sheet or range scope.\"},\"address\":{\"type\":\"string\",\"description\":\"A1 range; required when scope is range.\"},\"scope\":{\"type\":\"string\",\"description\":\"Search or operation scope supported by the tool.\",\"default\":\"range\",\"enum\":[\"workbook\",\"sheet\",\"range\",\"selection\"]},\"find\":{\"type\":\"string\",\"description\":\"Literal or regular-expression text to find.\",\"minLength\":1},\"replace\":{\"type\":\"string\",\"description\":\"Replacement text; regex capture groups are allowed only in regex mode.\"},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"lookIn\":{\"type\":\"string\",\"description\":\"Cell content to inspect: values or formulas.\",\"default\":\"values\",\"enum\":[\"values\",\"formulas\"]},\"replaceAll\":{\"type\":\"boolean\",\"description\":\"Whether all matches in scope may be replaced.\",\"default\":true},\"expectedMatches\":{\"type\":\"integer\",\"description\":\"Exact match count returned by the preceding search.\"},\"expectedScopeSha256\":{\"type\":\"string\",\"description\":\"Exact scope SHA-256 hash returned by the preceding search.\"},\"maxReplacements\":{\"type\":\"integer\",\"description\":\"Safety limit for replacements.\",\"default\":500}},\"required\":[\"find\",\"expectedMatches\",\"expectedScopeSha256\"],\"additionalProperties\":false}", true, true, 2, true),
-                Tool("excel.write_range", "Mutates document: Write one scalar value to a worksheet range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address.\",\"default\":\"A1\"},\"value\":{\"type\":\"string\",\"description\":\"Scalar cell value serialized as text.\"}},\"required\":[\"value\"],\"additionalProperties\":false}", true, true, 2),
-                Tool("excel.write_table", "Mutates document: Write a 2D JSON array to a worksheet starting at a cell.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"startAddress\":{\"type\":\"string\",\"description\":\"Top-left A1 cell where writing begins.\",\"default\":\"A1\"},\"values\":{\"type\":\"array\",\"items\":{\"type\":\"array\",\"items\":{\"type\":[\"string\",\"number\",\"boolean\",\"null\"]}},\"description\":\"Two-dimensional JSON array of row arrays.\"}},\"required\":[\"values\"],\"additionalProperties\":false}", true, true, 2),
-                Tool("excel.set_formula", "Mutates document: Write one formula to a worksheet range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address.\",\"default\":\"A1\"},\"formula\":{\"type\":\"string\",\"description\":\"Excel formula including the leading equals sign.\"}},\"required\":[\"formula\"],\"additionalProperties\":false}", true, true, 2),
+                Tool("excel.replace_cells", "Mutates document: Replace bounded literal or regex matches in the current scope. A separate search is optional; runtime reads the scope immediately before mutation and verifies the result.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet filter; provide it for sheet or range scope.\"},\"address\":{\"type\":\"string\",\"description\":\"A1 range; required when scope is range.\"},\"scope\":{\"type\":\"string\",\"description\":\"Search or operation scope supported by the tool.\",\"default\":\"range\",\"enum\":[\"workbook\",\"sheet\",\"range\",\"selection\"]},\"find\":{\"type\":\"string\",\"description\":\"Literal or regular-expression text to find.\",\"minLength\":1},\"replace\":{\"type\":\"string\",\"description\":\"Replacement text; regex capture groups are allowed only in regex mode.\"},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"lookIn\":{\"type\":\"string\",\"description\":\"Cell content to inspect: values or formulas.\",\"default\":\"values\",\"enum\":[\"values\",\"formulas\"]},\"replaceAll\":{\"type\":\"boolean\",\"description\":\"Whether all matches in scope may be replaced.\",\"default\":true},\"maxReplacements\":{\"type\":\"integer\",\"description\":\"Safety limit for replacements.\",\"default\":500}},\"required\":[\"find\"],\"additionalProperties\":false}", true, true, 2, true),
+                Tool("excel.write_range", "Mutates document: Write one scalar value, one formula, or a 2D table to a worksheet range.", "{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"value\",\"formula\",\"table\"],\"description\":\"Write mode.\"},\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"Target A1 range or top-left cell.\",\"default\":\"A1\"},\"value\":{\"type\":[\"string\",\"number\",\"boolean\",\"null\"],\"description\":\"Scalar value when kind is value.\"},\"formula\":{\"type\":\"string\",\"description\":\"Excel formula including the leading equals sign when kind is formula.\"},\"values\":{\"type\":\"array\",\"items\":{\"type\":\"array\",\"items\":{\"type\":[\"string\",\"number\",\"boolean\",\"null\"]}},\"description\":\"Two-dimensional row array when kind is table.\"}},\"required\":[\"kind\"],\"additionalProperties\":false}", true, true, 2),
                 Tool("excel.add_table", "Mutates document: Convert a source range into an Excel table.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"sourceRange\":{\"type\":\"string\",\"description\":\"A1 range containing the source data.\",\"default\":\"A1:B2\"},\"name\":{\"type\":\"string\",\"description\":\"Human-readable name or exact saved item name, as required by the tool.\"},\"hasHeaders\":{\"type\":\"boolean\",\"description\":\"Whether the first row contains headers.\",\"default\":true},\"style\":{\"type\":\"string\",\"description\":\"Built-in style name supported by the host.\"}},\"required\":[],\"additionalProperties\":false}", true, true, 2),
-                Tool("excel.add_chart", "Mutates document: Create and position a chart from a worksheet source range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"sourceRange\":{\"type\":\"string\",\"description\":\"A1 range containing the source data.\",\"default\":\"A1:B6\"},\"chartType\":{\"type\":\"string\",\"description\":\"Chart type supported by the current host; use auto when available.\",\"default\":\"line\"},\"title\":{\"type\":\"string\",\"description\":\"Human-readable title.\",\"default\":\"Chart\"},\"chartName\":{\"type\":\"string\",\"description\":\"Exact worksheet chart object name.\"},\"categoryLabelsRange\":{\"type\":\"string\",\"description\":\"A1 range used for chart category labels.\"},\"xAxisTitle\":{\"type\":\"string\",\"description\":\"Horizontal axis title.\"},\"yAxisTitle\":{\"type\":\"string\",\"description\":\"Vertical axis title.\"},\"left\":{\"type\":\"integer\",\"description\":\"Horizontal position in points from the slide or sheet origin.\",\"default\":300},\"top\":{\"type\":\"integer\",\"description\":\"Vertical position in points from the slide or sheet origin.\",\"default\":20},\"width\":{\"type\":\"integer\",\"description\":\"Width in points.\",\"default\":480},\"height\":{\"type\":\"integer\",\"description\":\"Height in points.\",\"default\":300}},\"required\":[],\"additionalProperties\":false}", true, true, 2),
-                Tool("excel.update_chart", "Mutates document: Update an existing chart's data, type, labels, axes, position, or size. Only supplied fields are changed.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Optional worksheet filter; omit to find the named chart across the workbook.\"},\"chartName\":{\"type\":\"string\",\"description\":\"Exact worksheet chart object name.\"},\"sourceRange\":{\"type\":\"string\",\"description\":\"A1 range containing the source data.\"},\"chartType\":{\"type\":\"string\",\"description\":\"Chart type supported by the current host; use auto when available.\"},\"title\":{\"type\":\"string\",\"description\":\"Human-readable title.\"},\"categoryLabelsRange\":{\"type\":\"string\",\"description\":\"A1 range used for chart category labels.\"},\"xAxisTitle\":{\"type\":\"string\",\"description\":\"Horizontal axis title.\"},\"yAxisTitle\":{\"type\":\"string\",\"description\":\"Vertical axis title.\"},\"left\":{\"type\":\"integer\",\"description\":\"Horizontal position in points from the slide or sheet origin.\"},\"top\":{\"type\":\"integer\",\"description\":\"Vertical position in points from the slide or sheet origin.\"},\"width\":{\"type\":\"integer\",\"description\":\"Width in points.\"},\"height\":{\"type\":\"integer\",\"description\":\"Height in points.\"}},\"required\":[\"chartName\"],\"additionalProperties\":false}", true, true, 2),
+                Tool("excel.upsert_chart", "Mutates document: Update a named existing chart or create it when missing. Omitted fields are preserved on update; creation uses runtime defaults. Use strict mode only when existence matters.", "{\"type\":\"object\",\"properties\":{\"mode\":{\"type\":\"string\",\"enum\":[\"upsert\",\"createOnly\",\"updateOnly\"],\"description\":\"Existence policy; upsert normally avoids a separate chart lookup.\",\"default\":\"upsert\"},\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended for creation or when searching all sheets by chartName.\"},\"chartName\":{\"type\":\"string\",\"description\":\"Exact chart name. Omit to create a chart with Excel's generated name.\"},\"sourceRange\":{\"type\":\"string\",\"description\":\"A1 source range; creation defaults to A1:B6.\"},\"chartType\":{\"type\":\"string\",\"description\":\"Chart type; creation defaults to line.\"},\"title\":{\"type\":\"string\",\"description\":\"Chart title; creation defaults to Chart. Empty text removes an existing title.\"},\"categoryLabelsRange\":{\"type\":\"string\",\"description\":\"A1 range used for chart category labels.\"},\"xAxisTitle\":{\"type\":\"string\",\"description\":\"Horizontal axis title.\"},\"yAxisTitle\":{\"type\":\"string\",\"description\":\"Vertical axis title.\"},\"left\":{\"type\":\"integer\",\"description\":\"Horizontal position in points; creation defaults to 300.\"},\"top\":{\"type\":\"integer\",\"description\":\"Vertical position in points; creation defaults to 20.\"},\"width\":{\"type\":\"integer\",\"description\":\"Width in points; creation defaults to 480.\"},\"height\":{\"type\":\"integer\",\"description\":\"Height in points; creation defaults to 300.\"}},\"required\":[],\"additionalProperties\":false}", true, true, 2),
                 Tool("excel.delete_chart", "Mutates document: Delete one existing worksheet chart by name.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Optional worksheet filter; omit to find the named chart across the workbook.\"},\"chartName\":{\"type\":\"string\",\"description\":\"Exact worksheet chart object name.\"}},\"required\":[\"chartName\"],\"additionalProperties\":false}", true, true, 3, true),
-                Tool("excel.format_range", "Mutates document: Apply basic number, font, fill, and alignment formatting to a range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address.\",\"default\":\"A1\"},\"numberFormat\":{\"type\":\"string\",\"description\":\"Excel number-format code.\"},\"bold\":{\"type\":\"boolean\",\"description\":\"Whether bold formatting is enabled.\"},\"italic\":{\"type\":\"boolean\",\"description\":\"Whether italic formatting is enabled.\"},\"fillColor\":{\"type\":\"string\",\"description\":\"Fill color as a hex value such as #FFF2CC.\"},\"fontColor\":{\"type\":\"string\",\"description\":\"Font color as a hex value such as #1F1F1F.\"},\"horizontalAlignment\":{\"type\":\"string\",\"description\":\"Horizontal alignment: left, center, right, or general.\",\"enum\":[\"left\",\"center\",\"right\",\"general\"]}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
-                Tool("excel.autofit", "Mutates document: Autofit rows and columns for a range or used range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address.\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
+                Tool("excel.format_range", "Mutates document: Apply number/font/fill/alignment formatting and optionally autofit rows or columns in one call.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"Optional A1 range. Formatting defaults to A1; an autofit-only call defaults to the used range.\"},\"numberFormat\":{\"type\":\"string\",\"description\":\"Excel number-format code.\"},\"bold\":{\"type\":\"boolean\",\"description\":\"Whether bold formatting is enabled.\"},\"italic\":{\"type\":\"boolean\",\"description\":\"Whether italic formatting is enabled.\"},\"fillColor\":{\"type\":\"string\",\"description\":\"Fill color as a hex value such as #FFF2CC.\"},\"fontColor\":{\"type\":\"string\",\"description\":\"Font color as a hex value such as #1F1F1F.\"},\"horizontalAlignment\":{\"type\":\"string\",\"description\":\"Horizontal alignment: left, center, right, or general.\",\"enum\":[\"left\",\"center\",\"right\",\"general\"]},\"autoFit\":{\"type\":\"string\",\"description\":\"Optional autofit operation.\",\"enum\":[\"columns\",\"rows\",\"both\"]}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
                 Tool("excel.add_sheet", "Mutates document: Add a new worksheet.", "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Human-readable name or exact saved item name, as required by the tool.\",\"default\":\"AI Sheet\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
                 Tool("excel.rename_sheet", "Mutates document: Rename a worksheet.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"newName\":{\"type\":\"string\",\"description\":\"New exact name.\"}},\"required\":[\"newName\"],\"additionalProperties\":false}", true, true, 2, true),
                 Tool("excel.clear_range", "Mutates document: Clear cell values, formats, or both in a range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address.\"},\"clearWhat\":{\"type\":\"string\",\"description\":\"Content to clear: values, formats, or all.\",\"default\":\"values\",\"enum\":[\"values\",\"formats\",\"all\"]}},\"required\":[\"address\"],\"additionalProperties\":false}", true, true, 3, true),
@@ -251,7 +239,7 @@ namespace RNAssistant.OfficeHosts
                     Host = "Excel",
                     Name = "Excel analysis reporting",
                     Description = "Analyze ranges, create summaries, tables, and charts in Excel.",
-                    BodyMarkdown = "# Excel Analysis Reporting\n\nUse this skill for Excel reporting tasks.\n\n- For a new report sheet, execute the direct sequence: `excel.add_sheet`, `excel.write_table`, optional `excel.format_range`/`excel.autofit`, then `excel.add_chart`.\n- Do not call `excel.workbook_summary` for a brand-new sheet unless existing workbook content is required. Use `excel.list_sheets` only when a naming collision must be checked.\n- Inspect sheets/ranges before modifying unknown existing content.\n- Write tables with stable headers and predictable start addresses.\n- Prefer chart source ranges that include headers.\n- Keep generated sheets named clearly and avoid overwriting existing sheets unless asked.\n- If the exact required tool is present in RUNTIME_CONTEXT.tools, execute it; do not report that the capability is missing.",
+                    BodyMarkdown = "# Excel Analysis Reporting\n\nUse this skill for Excel reporting tasks.\n\n- For a new report sheet, execute the direct sequence: `excel.add_sheet`, `excel.write_range` with kind=table, optional `excel.format_range` with autoFit, then `excel.upsert_chart`.\n- Do not inspect a brand-new sheet unless existing workbook content is required. Use `excel.inspect` with kind=sheets only when a naming collision must be checked.\n- Inspect sheets/ranges before modifying unknown existing content.\n- Write tables with stable headers and predictable start addresses.\n- Prefer chart source ranges that include headers.\n- Keep generated sheets named clearly and avoid overwriting existing sheets unless asked.\n- If the exact required tool is present in RUNTIME_CONTEXT.tools, execute it; do not report that the capability is missing.",
                     Enabled = true,
                     BuiltIn = true
                 }
@@ -352,12 +340,14 @@ namespace RNAssistant.OfficeHosts
                         return GetContextTool();
                     case "excel.get_selection":
                         return GetSelectionTool();
+                    case "excel.inspect":
+                        return InspectWorkbook(command);
                     case "excel.workbook_summary":
                         return WorkbookSummary();
                     case "excel.list_sheets":
                         return ListSheets();
                     case "excel.read_range":
-                        return ReadRange(command);
+                        return ReadRangeByContent(command);
                     case "excel.read_formula_range":
                         return ReadFormulaRange(command);
                     case "excel.profile_range":
@@ -379,13 +369,15 @@ namespace RNAssistant.OfficeHosts
                     case "excel.list_shapes":
                         return ListShapes(command);
                     case "excel.write_range":
-                        return WriteRange(command);
+                        return WriteRangeByKind(command);
                     case "excel.write_table":
                         return WriteTable(command);
                     case "excel.set_formula":
                         return SetFormula(command);
                     case "excel.add_table":
                         return AddTable(command);
+                    case "excel.upsert_chart":
+                        return UpsertChart(command);
                     case "excel.add_chart":
                         return AddChart(command);
                     case "excel.update_chart":
@@ -492,6 +484,33 @@ namespace RNAssistant.OfficeHosts
             }
 
             return ToolResult.Ok("Sheets listed.", JsonConvert.SerializeObject(names));
+        }
+
+        private ToolResult InspectWorkbook(ToolCommand command)
+        {
+            var kind = ToolArgumentReader.String(command.Arguments, "kind", string.Empty).Trim().ToLowerInvariant();
+            switch (kind)
+            {
+                case "workbook": return WorkbookSummary();
+                case "sheets": return ListSheets();
+                case "charts": return string.IsNullOrWhiteSpace(ToolArgumentReader.String(command.Arguments, "chartName", string.Empty))
+                    ? ListCharts(command)
+                    : GetChart(command);
+                case "tables": return ListTables(command);
+                case "names": return ListNames();
+                case "shapes": return ListShapes(command);
+                default: return ToolResult.Fail("kind must be workbook, sheets, charts, tables, names, or shapes.");
+            }
+        }
+
+        private ToolResult ReadRangeByContent(ToolCommand command)
+        {
+            var content = ToolArgumentReader.String(command.Arguments, "content", "values");
+            if (string.Equals(content, "formulas", StringComparison.OrdinalIgnoreCase)) return ReadFormulaRange(command);
+            if (string.Equals(content, "profile", StringComparison.OrdinalIgnoreCase)) return ProfileRange(command);
+            return string.Equals(content, "values", StringComparison.OrdinalIgnoreCase)
+                ? ReadRange(command)
+                : ToolResult.Fail("content must be values, formulas, or profile.");
         }
 
         private ToolResult ReadRange(ToolCommand command)
@@ -661,16 +680,11 @@ namespace RNAssistant.OfficeHosts
             var replacement = ToolArgumentReader.String(command.Arguments, "replace", string.Empty);
             var lookIn = ToolArgumentReader.String(command.Arguments, "lookIn", "values");
             if (string.Equals(lookIn, "both", StringComparison.OrdinalIgnoreCase)) return ToolResult.Fail("replace_cells lookIn must be values or formulas.", null, "invalid_arguments", false);
-            var expectedMatches = ToolArgumentReader.Int32(command.Arguments, "expectedMatches", -1);
-            var expectedHash = ToolArgumentReader.String(command.Arguments, "expectedScopeSha256", string.Empty);
             var replaceAll = ToolArgumentReader.Boolean(command.Arguments, "replaceAll", true);
             var maxReplacements = Math.Max(1, Math.Min(10000, ToolArgumentReader.Int32(command.Arguments, "maxReplacements", 500)));
-            if (expectedMatches < 0 || string.IsNullOrWhiteSpace(expectedHash)) return ToolResult.Fail("expectedMatches and expectedScopeSha256 from excel.find_cells are required.", null, "search_precondition_required", true);
 
             var options = PatternOptions(command);
             var targets = new List<ExcelCellReplacement>();
-            var hashBuilder = new StringBuilder();
-            var observedMatches = 0;
             var replacementPlanned = false;
             try
             {
@@ -681,12 +695,10 @@ namespace RNAssistant.OfficeHosts
                         var value = Convert.ToString(cell.Value2) ?? string.Empty;
                         var formula = Convert.ToString(cell.Formula) ?? string.Empty;
                         var hasFormula = Convert.ToBoolean(cell.HasFormula);
-                        hashBuilder.Append(item.Sheet.Name).Append('!').Append(cell.Address[false, false]).Append('\n').Append(value).Append('\n').Append(formula).Append('\n');
                         if (string.Equals(lookIn, "values", StringComparison.OrdinalIgnoreCase) && hasFormula) continue;
                         if (string.Equals(lookIn, "formulas", StringComparison.OrdinalIgnoreCase) && !hasFormula) continue;
                         var current = string.Equals(lookIn, "formulas", StringComparison.OrdinalIgnoreCase) ? formula : value;
                         var found = TextPatternEngine.Find(current, find, options, 1, 0);
-                        observedMatches += found.MatchCount;
                         if (found.MatchCount > 0 && (replaceAll || !replacementPlanned))
                         {
                             var replaced = TextPatternEngine.Replace(current, find, replacement, options, replaceAll, maxReplacements);
@@ -698,10 +710,7 @@ namespace RNAssistant.OfficeHosts
                         }
                     }
                 }
-                var currentHash = TextPatternEngine.Sha256(hashBuilder.ToString());
                 var total = targets.Sum(target => target.Count);
-                if (!string.Equals(expectedHash, currentHash, StringComparison.OrdinalIgnoreCase)) return ToolResult.Fail("Excel search scope changed after preview.", null, "stale_search_scope", true);
-                if (observedMatches != expectedMatches) return ToolResult.Fail("Excel match count changed after preview: expected " + expectedMatches + " but found " + observedMatches + ".", null, "stale_search_scope", true);
                 if (total > maxReplacements) return ToolResult.Fail("Replacement count exceeds maxReplacements=" + maxReplacements + ".", null, "replacement_limit_exceeded", false);
                 foreach (var target in targets)
                 {
@@ -933,9 +942,31 @@ namespace RNAssistant.OfficeHosts
         {
             var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
             var address = ToolArgumentReader.String(command.Arguments, "address", "A1");
-            var value = ToolArgumentReader.String(command.Arguments, "value", string.Empty);
+            object value;
+            if (command.Arguments == null || !command.Arguments.TryGetValue("value", out value))
+            {
+                return ToolResult.Fail("value is required when kind is value.");
+            }
             sheet.Range[address].Value2 = value;
             return ToolResult.Ok("Wrote value to " + sheet.Name + "!" + address);
+        }
+
+        private ToolResult WriteRangeByKind(ToolCommand command)
+        {
+            var kind = ToolArgumentReader.String(command.Arguments, "kind", "value").Trim().ToLowerInvariant();
+            if (kind == "formula") return SetFormula(command);
+            if (kind == "table")
+            {
+                if (!command.Arguments.ContainsKey("values")) return ToolResult.Fail("values is required when kind is table.");
+                if (!command.Arguments.ContainsKey("startAddress"))
+                {
+                    command.Arguments["startAddress"] = ToolArgumentReader.String(command.Arguments, "address", "A1");
+                }
+                return WriteTable(command);
+            }
+            return kind == "value"
+                ? WriteRange(command)
+                : ToolResult.Fail("kind must be value, formula, or table.");
         }
 
         private ToolResult WriteTable(ToolCommand command)
@@ -1019,6 +1050,32 @@ namespace RNAssistant.OfficeHosts
             }
 
             return ToolResult.Ok("Table added: " + table.Name, JsonConvert.SerializeObject(new { sheet = sheet.Name, name = table.Name, range = table.Range.Address[false, false] }));
+        }
+
+        private ToolResult UpsertChart(ToolCommand command)
+        {
+            var mode = ToolArgumentReader.String(command.Arguments, "mode", "upsert");
+            var chartName = ToolArgumentReader.String(command.Arguments, "chartName", string.Empty);
+            Excel.Worksheet existingSheet;
+            var existing = FindChartObject(
+                ToolArgumentReader.String(command.Arguments, "sheet", string.Empty),
+                chartName,
+                out existingSheet);
+            if (existing != null)
+            {
+                if (string.Equals(mode, "createOnly", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ToolResult.Fail("Chart already exists: " + chartName + ". Use mode=upsert or updateOnly.", null, "chart_already_exists", false);
+                }
+                return UpdateChart(command);
+            }
+            if (string.Equals(mode, "updateOnly", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Fail(string.IsNullOrWhiteSpace(chartName)
+                    ? "chartName is required for mode=updateOnly."
+                    : "Chart not found: " + chartName + ". Use mode=upsert or createOnly.", null, "chart_not_found", false);
+            }
+            return AddChart(command);
         }
 
         private ToolResult AddChart(ToolCommand command)
@@ -1119,9 +1176,22 @@ namespace RNAssistant.OfficeHosts
 
         private ToolResult FormatRange(ToolCommand command)
         {
+            var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
+            var autoFit = ToolArgumentReader.String(command.Arguments, "autoFit", string.Empty);
+            var hasFormatting = command.Arguments.ContainsKey("numberFormat") ||
+                command.Arguments.ContainsKey("bold") ||
+                command.Arguments.ContainsKey("italic") ||
+                command.Arguments.ContainsKey("fillColor") ||
+                command.Arguments.ContainsKey("fontColor") ||
+                command.Arguments.ContainsKey("horizontalAlignment");
+            if (!hasFormatting && string.IsNullOrWhiteSpace(autoFit))
+            {
+                return ToolResult.Fail("Provide at least one formatting field or autoFit operation.");
+            }
             var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
-            var address = ToolArgumentReader.String(command.Arguments, "address", "A1");
-            var range = sheet.Range[address];
+            var range = string.IsNullOrWhiteSpace(address)
+                ? (!hasFormatting && !string.IsNullOrWhiteSpace(autoFit) ? sheet.UsedRange : sheet.Range["A1"])
+                : sheet.Range[address];
             var numberFormat = ToolArgumentReader.String(command.Arguments, "numberFormat", string.Empty);
             if (!string.IsNullOrWhiteSpace(numberFormat))
             {
@@ -1153,7 +1223,18 @@ namespace RNAssistant.OfficeHosts
                 range.HorizontalAlignment = ResolveHorizontalAlignment(horizontal);
             }
 
-            return ToolResult.Ok("Range formatted: " + sheet.Name + "!" + address);
+            if (string.Equals(autoFit, "columns", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(autoFit, "both", StringComparison.OrdinalIgnoreCase))
+            {
+                range.Columns.AutoFit();
+            }
+            if (string.Equals(autoFit, "rows", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(autoFit, "both", StringComparison.OrdinalIgnoreCase))
+            {
+                range.Rows.AutoFit();
+            }
+
+            return ToolResult.Ok("Range formatted: " + sheet.Name + "!" + range.Address[false, false]);
         }
 
         private ToolResult Autofit(ToolCommand command)
@@ -1657,9 +1738,9 @@ namespace RNAssistant.OfficeHosts
                 && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
-        private static ToolDefinition Tool(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool requiresConfirmation = false)
+        private static ToolDefinition Tool(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool requiresConfirmation = false, bool canSourceHtmlData = false)
         {
-            return new ToolDefinition { Id = id, Host = "Excel", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, RequiresConfirmation = requiresConfirmation };
+            return new ToolDefinition { Id = id, Host = "Excel", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, RequiresConfirmation = requiresConfirmation, CanSourceHtmlData = canSourceHtmlData };
         }
 
         private static List<List<object>> RangeToRows(Excel.Range range)
@@ -1780,6 +1861,16 @@ namespace RNAssistant.OfficeHosts
                 throw new InvalidOperationException("chartName is required.");
             }
 
+            var chart = FindChartObject(sheetName, chartName, out resolvedSheet);
+            if (chart != null) return chart;
+            throw new InvalidOperationException("Chart not found: " + chartName);
+        }
+
+        private Excel.ChartObject FindChartObject(string sheetName, string chartName, out Excel.Worksheet resolvedSheet)
+        {
+            resolvedSheet = null;
+            if (string.IsNullOrWhiteSpace(chartName)) return null;
+
             var workbook = RequireWorkbook();
             foreach (Excel.Worksheet sheet in workbook.Worksheets)
             {
@@ -1802,7 +1893,7 @@ namespace RNAssistant.OfficeHosts
                 }
             }
 
-            throw new InvalidOperationException("Chart not found: " + chartName);
+            return null;
         }
 
         private static object ChartDetails(Excel.Worksheet sheet, Excel.ChartObject chartObject)

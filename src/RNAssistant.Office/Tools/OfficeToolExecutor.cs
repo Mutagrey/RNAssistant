@@ -241,9 +241,7 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Fail("Tool command is empty.");
             }
 
-            var requestedToolId = command.ToolId;
-            command.ToolId = CanonicalizeVbaToolId(command.ToolId);
-            _vbaExecutor.NormalizeLegacyArguments(command, requestedToolId);
+            NormalizeCompatibleCommand(command);
 
             if (depth > 8)
             {
@@ -283,14 +281,15 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Fail(safety.Error);
             }
 
-            var reservedIdResult = ValidateAuthoredToolId(command, context);
+            var reservedIdResult = ValidateAuthoredToolId(command);
             if (reservedIdResult != null)
             {
                 return reservedIdResult;
             }
 
             ControllerExecutorKind controllerKind;
-            var isVbaController = _controllerExecutors.TryGetValue(command.ToolId, out controllerKind) &&
+            var isController = _controllerExecutors.TryGetValue(command.ToolId, out controllerKind);
+            var isVbaController = isController &&
                 controllerKind == ControllerExecutorKind.Vba;
             if (isVbaController)
             {
@@ -306,11 +305,22 @@ namespace RNAssistant.Office.Tools
                     preview = _vbaExecutor.PreviewPreparedControllerTool(command, context.Session, cancellationToken);
                     if (preview != null && !preview.Success) return preview;
                 }
+                else if (isController)
+                {
+                    preview = ExecuteControllerTool(
+                        controllerKind,
+                        CloneCommand(command),
+                        context,
+                        true,
+                        true,
+                        cancellationToken);
+                    if (preview != null && !preview.Success) return preview;
+                }
                 var waiting = ToolResult.WaitingConfirmation(
                     preview == null
                         ? "Tool requires confirmation before execution: " + command.ToolId
                         : "Confirmation required. " + preview.Message);
-                if (preview != null) waiting.DataJson = preview.DataJson;
+                if (preview != null && isVbaController) waiting.DataJson = preview.DataJson;
                 return waiting;
             }
 
@@ -683,6 +693,56 @@ namespace RNAssistant.Office.Tools
                 : id;
         }
 
+        internal string CanonicalizeToolId(string id)
+        {
+            return BuiltInToolAliases.Canonicalize(CanonicalizeVbaToolId(id));
+        }
+
+        internal void CanonicalizePipeline(ToolDefinition tool)
+        {
+            if (tool == null || !string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(tool.PipelineJson)) return;
+            try
+            {
+                var pipeline = JObject.Parse(tool.PipelineJson);
+                var changed = false;
+                foreach (var step in (pipeline["steps"] as JArray ?? new JArray()).OfType<JObject>())
+                {
+                    var id = (string)step["toolId"];
+                    var command = new ToolCommand { ToolId = id };
+                    ToolArgumentNormalizer.AddProperties(step["arguments"] as JObject ?? new JObject(), command.Arguments);
+                    NormalizeCompatibleCommand(command);
+                    var normalizedArguments = JObject.FromObject(command.Arguments);
+                    if (!string.Equals(id, command.ToolId, StringComparison.Ordinal) ||
+                        !JToken.DeepEquals(step["arguments"] as JObject ?? new JObject(), normalizedArguments))
+                    {
+                        step["toolId"] = command.ToolId;
+                        step["arguments"] = normalizedArguments;
+                        changed = true;
+                    }
+                }
+                if (changed) tool.PipelineJson = pipeline.ToString(Formatting.None);
+            }
+            catch (JsonException)
+            {
+                // Definition validation reports malformed pipelines; compatibility rewriting stays best-effort.
+            }
+            catch (InvalidOperationException)
+            {
+                // Conflicting legacy arguments are reported when the pipeline step executes.
+            }
+        }
+
+        private void NormalizeCompatibleCommand(ToolCommand command)
+        {
+            if (command == null) return;
+            var requestedToolId = command.ToolId;
+            command.ToolId = CanonicalizeVbaToolId(command.ToolId);
+            _vbaExecutor.NormalizeLegacyArguments(command, requestedToolId);
+            command.ToolId = BuiltInToolAliases.Canonicalize(command.ToolId);
+            BuiltInToolAliases.NormalizeCommand(command, requestedToolId);
+        }
+
         private IReadOnlyList<ToolDefinition> KnownTools(IEnumerable<ToolDefinition> providedTools)
         {
             var result = new List<ToolDefinition>();
@@ -693,29 +753,28 @@ namespace RNAssistant.Office.Tools
             return result;
         }
 
-        private bool IsProtectedToolId(string id)
+        internal bool IsProtectedToolId(string id)
         {
-            var canonicalId = CanonicalizeVbaToolId(id);
+            var canonicalId = CanonicalizeToolId(id);
             return !string.IsNullOrWhiteSpace(id) &&
                 (_adapterTools.Any(tool => tool != null && string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase)) ||
                  _controllerExecutors.ContainsKey(id) ||
                  _controllerExecutors.ContainsKey(canonicalId ?? string.Empty) ||
+                 BuiltInToolAliases.IsLegacyAlias(id) ||
                  _vbaExecutor.IsInternalToolId(id));
         }
 
-        private static ToolResult ValidateAuthoredToolId(ToolCommand command, ToolExecutionContext context)
+        private ToolResult ValidateAuthoredToolId(ToolCommand command)
         {
             if (command == null ||
                 (!string.Equals(command.ToolId, "common.tools_validate", StringComparison.OrdinalIgnoreCase) &&
-                 !string.Equals(command.ToolId, "common.tools_create", StringComparison.OrdinalIgnoreCase) &&
-                 !string.Equals(command.ToolId, "common.tools_update", StringComparison.OrdinalIgnoreCase)))
+                 !string.Equals(command.ToolId, "common.tools_upsert", StringComparison.OrdinalIgnoreCase)))
             {
                 return null;
             }
 
             var id = ToolArgumentReader.String(command.Arguments, "id", string.Empty);
-            var existing = context.Find(id);
-            return existing != null && existing.BuiltIn ? ReservedToolId(id) : null;
+            return IsProtectedToolId(id) ? ReservedToolId(id) : null;
         }
 
         private static ToolResult ReservedToolId(string id)
@@ -735,6 +794,22 @@ namespace RNAssistant.Office.Tools
                 seen.Add(tool.Id);
                 result.Add(tool);
             }
+        }
+
+        private static ToolCommand CloneCommand(ToolCommand command)
+        {
+            var clone = new ToolCommand
+            {
+                ToolId = command == null ? string.Empty : command.ToolId,
+                Description = command == null ? string.Empty : command.Description,
+                ToolCallId = command == null ? string.Empty : command.ToolCallId,
+                RuntimeGuardJson = command == null ? null : command.RuntimeGuardJson
+            };
+            if (command != null && command.Arguments != null)
+            {
+                foreach (var pair in command.Arguments) clone.Arguments[pair.Key] = pair.Value;
+            }
+            return clone;
         }
 
         private static ToolResult UnknownTool(string requestedToolId, IReadOnlyList<ToolDefinition> knownTools)

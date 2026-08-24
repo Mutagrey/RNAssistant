@@ -41,6 +41,15 @@ namespace RNAssistant.Harness
                     value => global = value);
                 var runtime = global.Clone();
                 runtime.Model = "per-chat-model";
+                var empty = executor.Execute(
+                    new ToolCommand { ToolId = "common.prompts_save" },
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    runtime,
+                    false,
+                    false);
+                AssertTrue(!empty.Success, "empty prompt save fails before confirmation");
+                AssertEqual("prompt_update_empty", empty.ErrorCode, "empty prompt save error");
+
                 var command = new ToolCommand { ToolId = "common.prompts_save" };
                 command.Arguments["systemPrompt"] = "New prompt";
 

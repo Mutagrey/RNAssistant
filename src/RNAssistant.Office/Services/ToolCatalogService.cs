@@ -46,9 +46,11 @@ namespace RNAssistant.Office.Services
                 string.Equals(s.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(s.Host, "Common", StringComparison.OrdinalIgnoreCase)))
             {
-                if (!string.IsNullOrWhiteSpace(tool.Id) && !result.ContainsKey(tool.Id))
+                if (!string.IsNullOrWhiteSpace(tool.Id) &&
+                    !result.ContainsKey(tool.Id) &&
+                    !_toolExecutor.IsProtectedToolId(tool.Id))
                 {
-                    CanonicalizeLegacyVbaPipeline(tool);
+                    _toolExecutor.CanonicalizePipeline(tool);
                     if (string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
                     {
                         tool.Scope = "global";
@@ -61,42 +63,6 @@ namespace RNAssistant.Office.Services
             DiscoverDocumentVbaTools(result);
 
             return result.Values.OrderBy(s => s.Host).ThenBy(s => s.Id).ToList();
-        }
-
-        private void CanonicalizeLegacyVbaPipeline(ToolDefinition tool)
-        {
-            if (tool == null || !string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase) ||
-                string.IsNullOrWhiteSpace(tool.PipelineJson)) return;
-            try
-            {
-                var pipeline = JObject.Parse(tool.PipelineJson);
-                var changed = false;
-                foreach (var step in (pipeline["steps"] as JArray ?? new JArray()).OfType<JObject>())
-                {
-                    var id = (string)step["toolId"];
-                    var canonical = _toolExecutor.CanonicalizeVbaToolId(id);
-                    var arguments = step["arguments"] as JObject;
-                    if (VbaPublicToolIds.IsLegacyCreate(id) && arguments != null && arguments["mode"] == null)
-                    {
-                        arguments["mode"] = "createOnly";
-                        changed = true;
-                    }
-                    if (VbaPublicToolIds.IsLegacyReadLines(id) && arguments != null)
-                    {
-                        if (arguments["startLine"] == null) arguments["startLine"] = 1;
-                        if (arguments["lineCount"] == null) arguments["lineCount"] = 200;
-                        changed = true;
-                    }
-                    if (string.Equals(id, canonical, StringComparison.Ordinal)) continue;
-                    step["toolId"] = canonical;
-                    changed = true;
-                }
-                if (changed) tool.PipelineJson = pipeline.ToString(Formatting.None);
-            }
-            catch (JsonException)
-            {
-                // Normal validation reports malformed pipelines; compatibility rewriting stays best-effort.
-            }
         }
 
         private void DiscoverDocumentVbaTools(IDictionary<string, ToolDefinition> result)

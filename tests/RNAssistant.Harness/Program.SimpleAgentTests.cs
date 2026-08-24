@@ -237,6 +237,26 @@ namespace RNAssistant.Harness
             arguments["count"] = 4;
             AssertTrue(!ToolSchemaSupport.ValidateArguments(arguments, schema, false, out error), "maximum is enforced");
 
+            tool.ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":[\"string\",\"null\"],\"description\":\"Nullable value.\"}},\"required\":[],\"additionalProperties\":false}";
+            AssertTrue(ToolSchemaSupport.TryParse(tool, out schema, out error), "explicitly nullable schema parses");
+            arguments = new Newtonsoft.Json.Linq.JObject { ["value"] = Newtonsoft.Json.Linq.JValue.CreateNull() };
+            ToolSchemaSupport.RemoveOptionalNulls(arguments, schema);
+            AssertTrue(arguments.Property("value") != null, "explicitly allowed null is preserved");
+            AssertTrue(ToolSchemaSupport.ValidateArguments(arguments, schema, false, out error), "explicit null remains valid");
+
+            var tableCommand = new ToolCommand();
+            tableCommand.Arguments["values"] = new Newtonsoft.Json.Linq.JArray(
+                new Newtonsoft.Json.Linq.JArray("A", "B"),
+                new Newtonsoft.Json.Linq.JArray("C", "D"),
+                new Newtonsoft.Json.Linq.JArray("E", "F"));
+            ResolvedTableArguments table;
+            AssertTrue(TableArgumentResolver.TryResolve(tableCommand, 2, 2, out table, out error), "table dimensions are inferred");
+            AssertEqual(3, table.Rows, "inferred table rows");
+            AssertEqual(2, table.Columns, "inferred table columns");
+            tableCommand.Arguments["rows"] = 2;
+            AssertTrue(!TableArgumentResolver.TryResolve(tableCommand, 2, 2, out table, out error), "undersized explicit table dimensions fail before COM");
+            AssertContains(error, "omit", "table dimension recovery hint");
+
             tool.ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"count\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}";
             AssertTrue(!ToolSchemaSupport.TryParse(tool, out schema, out error), "undocumented argument is rejected");
             AssertContains(error, "description", "missing description diagnostic");
@@ -540,7 +560,7 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     "{\"message\":\"Создаю skill.\",\"tool_calls\":[" +
-                    "{\"id\":\"call_skill\",\"name\":\"common.skills_create\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
+                    "{\"id\":\"call_skill\",\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
                     "{\"message\":\"Skill сохранён.\",\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
@@ -568,18 +588,18 @@ namespace RNAssistant.Harness
                 var pendingActivity = session.Messages.Last(message => message.Activity != null).Activity;
                 var expectedCatalogFingerprint = AgentRunService.ToolExecutionFingerprint(
                     AgentRunService.PrepareToolsForRun(tools),
-                    "common.skills_create");
+                    "common.skills_upsert");
                 AssertEqual(expectedCatalogFingerprint, pendingActivity.ConfirmationCatalogSha256,
                     "pending activity persists executable tool fingerprint");
                 var changedTools = tools.Select(tool => tool.Clone()).ToList();
                 changedTools.First(tool => string.Equals(
-                    tool.Id, "common.skills_create", StringComparison.OrdinalIgnoreCase)).ArgumentSchemaJson =
+                    tool.Id, "common.skills_upsert", StringComparison.OrdinalIgnoreCase)).ArgumentSchemaJson =
                         "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}";
                 AssertTrue(!string.Equals(
                         expectedCatalogFingerprint,
                         AgentRunService.ToolExecutionFingerprint(
                             AgentRunService.PrepareToolsForRun(changedTools),
-                            "common.skills_create"),
+                            "common.skills_upsert"),
                         StringComparison.OrdinalIgnoreCase),
                     "tool fingerprint changes with a replaced executable definition");
                 AssertEqual(1, session.LastRun.IterationsUsed, "confirmation stores iteration cursor");
@@ -591,7 +611,7 @@ namespace RNAssistant.Harness
                     message.RunId = "initial_run";
                 }
 
-                var confirmedCommand = new ToolCommand { ToolId = "common.skills_create", ToolCallId = "call_skill" };
+                var confirmedCommand = new ToolCommand { ToolId = "common.skills_upsert", ToolCallId = "call_skill" };
                 confirmedCommand.Arguments["id"] = "common.test";
                 var final = service.ContinueAfterToolAsync(
                     confirmedCommand,
@@ -627,7 +647,7 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Создаю skill.\",\"tool_calls\":[{\"id\":\"call_skill_failure\",\"name\":\"common.skills_create\",\"arguments\":{\"id\":\"common.failure_test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
+                    "{\"message\":\"Создаю skill.\",\"tool_calls\":[{\"id\":\"call_skill_failure\",\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.failure_test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
                     "{\"message\":\"Skill уже существует; выберу другой id.\",\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
@@ -645,7 +665,7 @@ namespace RNAssistant.Harness
                     (Action<string, string, ChatActivity>)null,
                     (pendingSession, pendingCommand, result) => "pending_failure").GetAwaiter().GetResult();
 
-                var command = new ToolCommand { ToolId = "common.skills_create", ToolCallId = "call_skill_failure" };
+                var command = new ToolCommand { ToolId = "common.skills_upsert", ToolCallId = "call_skill_failure" };
                 command.Arguments["id"] = "common.failure_test";
                 var failure = ToolResult.Fail(
                     "Skill already exists: common.failure_test.",

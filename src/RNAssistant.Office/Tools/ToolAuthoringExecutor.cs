@@ -27,11 +27,9 @@ namespace RNAssistant.Office.Tools
                 yield break;
             }
 
-            yield return ControllerToolDefinition.Create("common.tools_list", "Common", "Read-only: List custom executable RNAssistant tools visible to the current Office host.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}");
-            yield return ControllerToolDefinition.Create("common.tools_read", "Common", "Read-only: Read one custom tool as the same native JSON shape accepted by tools_update.", IdSchema());
+            yield return ControllerToolDefinition.Create("common.tools_read", "Common", "Read-only: Read one custom tool in authoring shape; omit id to list compact metadata for visible custom tools.", OptionalIdSchema());
             yield return ControllerToolDefinition.Create("common.tools_validate", "Common", "Read-only: Validate a complete custom pipeline or manifest-based VBA tool definition without saving it.", ToolPayloadSchema(false));
-            yield return ControllerToolDefinition.Create("common.tools_create", "Common", "Mutates settings: Create a new validated custom pipeline or manifest-based VBA tool; fails if the id already exists.", ToolPayloadSchema(false), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
-            yield return ControllerToolDefinition.Create("common.tools_update", "Common", "Mutates settings: Update only supplied fields of an existing custom tool; omitted fields are preserved.", ToolPayloadSchema(true), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
+            yield return ControllerToolDefinition.Create("common.tools_upsert", "Common", "Mutates settings: Create a missing custom tool or update an existing one after validating the effective definition. Omitted fields are preserved on update; use strict mode only when existence itself matters.", ToolUpsertSchema(), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
             yield return ControllerToolDefinition.Create("common.tools_delete", "Common", "Mutates settings: Delete a custom RNAssistant tool by id.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable identifier.\"}},\"required\":[\"id\"],\"additionalProperties\":false}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
         }
 
@@ -42,14 +40,11 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Fail("Tool authoring store is not available.");
             }
 
-            if (string.Equals(command.ToolId, "common.tools_list", StringComparison.OrdinalIgnoreCase))
-            {
-                return ListTools();
-            }
-
             if (string.Equals(command.ToolId, "common.tools_read", StringComparison.OrdinalIgnoreCase))
             {
-                return ReadTool(command);
+                return string.IsNullOrWhiteSpace(ToolArgumentReader.String(command.Arguments, "id", string.Empty))
+                    ? ListTools()
+                    : ReadTool(command);
             }
 
             if (string.Equals(command.ToolId, "common.tools_validate", StringComparison.OrdinalIgnoreCase))
@@ -57,14 +52,9 @@ namespace RNAssistant.Office.Tools
                 return ValidateToolPayload(command);
             }
 
-            if (string.Equals(command.ToolId, "common.tools_create", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, "common.tools_upsert", StringComparison.OrdinalIgnoreCase))
             {
-                return CreateTool(command, settings, dryRun, manualRun);
-            }
-
-            if (string.Equals(command.ToolId, "common.tools_update", StringComparison.OrdinalIgnoreCase))
-            {
-                return UpdateTool(command, settings, dryRun, manualRun);
+                return UpsertTool(command, settings, dryRun, manualRun);
             }
 
             if (string.Equals(command.ToolId, "common.tools_delete", StringComparison.OrdinalIgnoreCase))
@@ -119,27 +109,27 @@ namespace RNAssistant.Office.Tools
             return ToolResult.Ok("Tool definition is valid: " + tool.Id, ToolPayload(tool).ToString(Formatting.None));
         }
 
-        private ToolResult CreateTool(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)
+        private ToolResult UpsertTool(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)
         {
             var id = ToolArgumentReader.String(command.Arguments, "id", string.Empty);
-            if (_toolStore.Load().Any(candidate => string.Equals(candidate.Id, id, StringComparison.OrdinalIgnoreCase)))
-            {
-                return ToolResult.Fail("Custom tool already exists: " + id + ". Use common.tools_update.", null, "tool_already_exists", false);
-            }
-
-            var tool = ReadToolDefinition(command);
-            return PersistTool(tool, settings, dryRun, manualRun, "create");
-        }
-
-        private ToolResult UpdateTool(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)
-        {
-            var id = ToolArgumentReader.String(command.Arguments, "id", string.Empty);
+            var mode = ToolArgumentReader.String(command.Arguments, "mode", "upsert");
             var existing = _toolStore.Load().FirstOrDefault(tool => string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase));
-            if (existing == null)
+            if (existing != null && string.Equals(mode, "createOnly", StringComparison.OrdinalIgnoreCase))
             {
-                return ToolResult.Fail("Custom tool not found: " + id + ". Use common.tools_create.", null, "tool_not_found", false);
+                return ToolResult.Fail("Custom tool already exists: " + id + ". Use mode=upsert or updateOnly.", null, "tool_already_exists", false);
             }
-            return PersistTool(UpdateToolDefinition(existing, command), settings, dryRun, manualRun, "update");
+            if (existing == null && string.Equals(mode, "updateOnly", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Fail("Custom tool not found: " + id + ". Use mode=upsert or createOnly.", null, "tool_not_found", false);
+            }
+            if (existing != null && !HasMutableArguments(command))
+            {
+                return ToolResult.Fail("Tool update requires at least one supplied field besides id/mode.", null, "tool_update_empty", true);
+            }
+
+            return existing == null
+                ? PersistTool(ReadToolDefinition(command), settings, dryRun, manualRun, "create")
+                : PersistTool(UpdateToolDefinition(existing, command), settings, dryRun, manualRun, "update");
         }
 
         private ToolResult PersistTool(ToolDefinition tool, AppSettings settings, bool dryRun, bool manualRun, string operation)
@@ -166,6 +156,10 @@ namespace RNAssistant.Office.Tools
             if (string.IsNullOrWhiteSpace(id))
             {
                 return ToolResult.Fail("Tool id is required.");
+            }
+            if (!_toolStore.Load().Any(tool => tool != null && string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase)))
+            {
+                return ToolResult.Fail("Custom tool not found: " + id, null, "tool_not_found", false);
             }
 
             if (!dryRun && !manualRun && !(settings ?? new AppSettings()).AutoConfirmToolActions)
@@ -320,6 +314,11 @@ namespace RNAssistant.Office.Tools
             return "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable custom tool id.\",\"minLength\":1,\"maxLength\":128}},\"required\":[\"id\"],\"additionalProperties\":false}";
         }
 
+        private static string OptionalIdSchema()
+        {
+            return "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact custom tool id; omit to list compact metadata.\"}},\"required\":[],\"additionalProperties\":false}";
+        }
+
         private static string ToolPayloadSchema(bool update)
         {
             var properties = new JObject
@@ -387,6 +386,19 @@ namespace RNAssistant.Office.Tools
                     : new JArray("id", "host", "description", "parameters", "executor"),
                 ["additionalProperties"] = false
             }.ToString(Formatting.None);
+        }
+
+        private static string ToolUpsertSchema()
+        {
+            var schema = JObject.Parse(ToolPayloadSchema(true));
+            ((JObject)schema["properties"])["mode"] = new JObject
+            {
+                ["type"] = "string",
+                ["description"] = "Existence policy; upsert is normally sufficient.",
+                ["enum"] = new JArray("upsert", "createOnly", "updateOnly"),
+                ["default"] = "upsert"
+            };
+            return schema.ToString(Formatting.None);
         }
 
         private static JObject Property(string type, string description)
@@ -468,6 +480,13 @@ namespace RNAssistant.Office.Tools
         private static bool HasArgument(ToolCommand command, string name)
         {
             return command != null && command.Arguments != null && command.Arguments.ContainsKey(name);
+        }
+
+        private static bool HasMutableArguments(ToolCommand command)
+        {
+            return command != null && command.Arguments != null && command.Arguments.Keys.Any(name =>
+                !string.Equals(name, "id", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(name, "mode", StringComparison.OrdinalIgnoreCase));
         }
 
         private static void SetString(ToolCommand command, string name, Action<string> apply)
@@ -613,7 +632,7 @@ namespace RNAssistant.Office.Tools
                     return ToolResult.Fail("VBA package contains a duplicate component: " + duplicate.Key, null, "vba_component_duplicate", false);
                 }
                 var invalid = components.FirstOrDefault(component =>
-                    !VbaToolManifestParser.ValidIdentifier(component.Name) ||
+                    !VbaToolManifestParser.ValidComponentName(component.Name) ||
                     (!string.Equals(component.Type, "StdModule", StringComparison.OrdinalIgnoreCase) &&
                      !string.Equals(component.Type, "ClassModule", StringComparison.OrdinalIgnoreCase)));
                 if (invalid != null)

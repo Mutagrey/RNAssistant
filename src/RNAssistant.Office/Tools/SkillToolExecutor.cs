@@ -22,10 +22,8 @@ namespace RNAssistant.Office.Tools
 
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
-            yield return ControllerToolDefinition.Create("common.skills_list", "Common", "Read-only: List Markdown skills available to the current execution.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}");
-            yield return ControllerToolDefinition.Create("common.skills_read", "Common", "Read-only: Load complete metadata and Markdown instructions for one exact skill id.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact skill id from RUNTIME_CONTEXT.skills or common.skills_list.\"}},\"required\":[\"id\"],\"additionalProperties\":false}");
-            yield return ControllerToolDefinition.Create("common.skills_create", "Common", "Mutates settings: Create a new Markdown skill; fails if the id already exists.", SkillPayloadSchema(false), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
-            yield return ControllerToolDefinition.Create("common.skills_update", "Common", "Mutates settings: Update only supplied fields of an existing custom Markdown skill; omitted fields are preserved.", SkillPayloadSchema(true), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
+            yield return ControllerToolDefinition.Create("common.skills_read", "Common", "Read-only: Load complete Markdown instructions for one exact skill id; omit id only to list available skill metadata.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact skill id from RUNTIME_CONTEXT.skills; omit to list metadata only.\"}},\"required\":[],\"additionalProperties\":false}");
+            yield return ControllerToolDefinition.Create("common.skills_upsert", "Common", "Mutates settings: Create a missing Markdown skill or update an existing custom skill. Omitted fields are preserved on update; use strict mode only when existence itself matters.", SkillUpsertSchema(), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
             yield return ControllerToolDefinition.Create("common.skills_delete", "Common", "Mutates settings: Delete a custom markdown skill by id.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable identifier.\"}},\"required\":[\"id\"],\"additionalProperties\":false}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
         }
 
@@ -36,24 +34,16 @@ namespace RNAssistant.Office.Tools
             bool manualRun,
             IReadOnlyList<SkillDefinition> runtimeSkills)
         {
-            if (string.Equals(command.ToolId, "common.skills_list", StringComparison.OrdinalIgnoreCase))
-            {
-                return ListSkills(manualRun, runtimeSkills);
-            }
-
             if (string.Equals(command.ToolId, "common.skills_read", StringComparison.OrdinalIgnoreCase))
             {
-                return ReadSkill(command, manualRun, runtimeSkills);
+                return string.IsNullOrWhiteSpace(ToolArgumentReader.String(command.Arguments, "id", string.Empty))
+                    ? ListSkills(manualRun, runtimeSkills)
+                    : ReadSkill(command, manualRun, runtimeSkills);
             }
 
-            if (string.Equals(command.ToolId, "common.skills_create", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, "common.skills_upsert", StringComparison.OrdinalIgnoreCase))
             {
-                return CreateSkill(command, settings, dryRun, manualRun);
-            }
-
-            if (string.Equals(command.ToolId, "common.skills_update", StringComparison.OrdinalIgnoreCase))
-            {
-                return UpdateSkill(command, settings, dryRun, manualRun);
+                return UpsertSkill(command, settings, dryRun, manualRun);
             }
 
             if (string.Equals(command.ToolId, "common.skills_delete", StringComparison.OrdinalIgnoreCase))
@@ -116,29 +106,34 @@ namespace RNAssistant.Office.Tools
                 : new SkillDefinition[0];
         }
 
-        private ToolResult CreateSkill(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)
-        {
-            var skill = ReadSkillDefinition(command);
-            if (_skillStore.Load().Any(item => string.Equals(item.Id, skill.Id, StringComparison.OrdinalIgnoreCase)) ||
-                _skillCatalog.GetVisibleSkills().Any(item => item.BuiltIn && string.Equals(item.Id, skill.Id, StringComparison.OrdinalIgnoreCase)))
-            {
-                return ToolResult.Fail("Skill already exists: " + skill.Id + ". Use common.skills_update.", null, "skill_already_exists", false);
-            }
-            return PersistSkill(skill, settings, dryRun, manualRun, "create");
-        }
-
-        private ToolResult UpdateSkill(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)
+        private ToolResult UpsertSkill(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)
         {
             var id = ToolArgumentReader.String(command.Arguments, "id", string.Empty);
+            var mode = ToolArgumentReader.String(command.Arguments, "mode", "upsert");
             if (_skillCatalog.GetVisibleSkills().Any(item => item.BuiltIn && string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase)))
             {
                 return ToolResult.Fail("Built-in skill id is reserved: " + id, null, "reserved_skill_id", false);
             }
+
             var existing = _skillStore.Load().FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (existing != null && string.Equals(mode, "createOnly", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Fail("Skill already exists: " + id + ". Use mode=upsert or updateOnly.", null, "skill_already_exists", false);
+            }
+            if (existing == null && string.Equals(mode, "updateOnly", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Fail("Custom skill not found: " + id + ". Use mode=upsert or createOnly.", null, "skill_not_found", false);
+            }
+            if (existing != null && !HasMutableArguments(command))
+            {
+                return ToolResult.Fail("Skill update requires at least one supplied field besides id/mode.", null, "skill_update_empty", true);
+            }
+
             if (existing == null)
             {
-                return ToolResult.Fail("Custom skill not found: " + id + ". Use common.skills_create.", null, "skill_not_found", false);
+                return PersistSkill(ReadSkillDefinition(command), settings, dryRun, manualRun, "create");
             }
+
             var skill = existing;
             SetString(command, "host", value => skill.Host = value);
             SetString(command, "name", value => skill.Name = value);
@@ -188,6 +183,10 @@ namespace RNAssistant.Office.Tools
             {
                 return ToolResult.Fail("Built-in skills cannot be deleted: " + id);
             }
+            if (!_skillStore.Load().Any(skill => skill != null && string.Equals(skill.Id, id, StringComparison.OrdinalIgnoreCase)))
+            {
+                return ToolResult.Fail("Custom skill not found: " + id, null, "skill_not_found", false);
+            }
             if (!dryRun && !manualRun && !(settings ?? new AppSettings()).AutoConfirmToolActions)
             {
                 return ToolResult.WaitingConfirmation("Skill delete requires confirmation: " + id);
@@ -225,7 +224,7 @@ namespace RNAssistant.Office.Tools
             return bool.TryParse(raw, out value) ? value : fallback;
         }
 
-        private static string SkillPayloadSchema(bool update)
+        private static string SkillUpsertSchema()
         {
             var host = new JObject
             {
@@ -243,12 +242,6 @@ namespace RNAssistant.Office.Tools
                 ["type"] = "boolean",
                 ["description"] = "Whether the skill is enabled and appears in Agent context."
             };
-            if (!update)
-            {
-                host["default"] = "Common";
-                version["default"] = "1.0.0";
-                enabled["default"] = true;
-            }
             return new JObject
             {
                 ["type"] = "object",
@@ -260,11 +253,16 @@ namespace RNAssistant.Office.Tools
                     ["description"] = new JObject { ["type"] = "string", ["description"] = "Concise catalog description used by the model to decide whether to load this skill.", ["maxLength"] = 4000 },
                     ["version"] = version,
                     ["bodyMarkdown"] = new JObject { ["type"] = "string", ["description"] = "Complete Markdown instructions for the skill.", ["maxLength"] = 500000 },
-                    ["enabled"] = enabled
+                    ["enabled"] = enabled,
+                    ["mode"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Existence policy; upsert is normally sufficient.",
+                        ["enum"] = new JArray("upsert", "createOnly", "updateOnly"),
+                        ["default"] = "upsert"
+                    }
                 },
-                ["required"] = update
-                    ? new JArray("id")
-                    : new JArray("id", "description", "bodyMarkdown"),
+                ["required"] = new JArray("id"),
                 ["additionalProperties"] = false
             }.ToString(Formatting.None);
         }
@@ -272,6 +270,13 @@ namespace RNAssistant.Office.Tools
         private static bool HasArgument(ToolCommand command, string name)
         {
             return command != null && command.Arguments != null && command.Arguments.ContainsKey(name);
+        }
+
+        private static bool HasMutableArguments(ToolCommand command)
+        {
+            return command != null && command.Arguments != null && command.Arguments.Keys.Any(name =>
+                !string.Equals(name, "id", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(name, "mode", StringComparison.OrdinalIgnoreCase));
         }
 
         private static void SetString(ToolCommand command, string name, Action<string> apply)

@@ -90,7 +90,7 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var tool = executor.GetControllerTools().Single(candidate => candidate.Id == "common.tools_create");
+                var tool = executor.GetControllerTools().Single(candidate => candidate.Id == "common.tools_upsert");
                 var schema = JObject.Parse(AgentResponseSchemaBuilder.Build(new[] { tool }));
                 AssertEqual("string",
                     (string)schema.SelectToken("properties.tool_calls.items.anyOf[0].properties.arguments.properties.parameters.properties.type.type"),
@@ -243,12 +243,12 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                adapter.QueueResult("excel.list_sheets", ToolResult.Ok(
+                adapter.QueueResult("excel.inspect", ToolResult.Ok(
                     "large read",
                     JsonConvert.SerializeObject(new { value = new string('x', 150000) })));
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Читаю.\",\"tool_calls\":[{\"id\":\"call_large\",\"name\":\"excel.list_sheets\",\"arguments\":{}}]}",
+                    "{\"message\":\"Читаю.\",\"tool_calls\":[{\"id\":\"call_large\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
                     "{\"message\":\"Диапазон результата нужно сузить.\",\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
@@ -262,7 +262,7 @@ namespace RNAssistant.Harness
                     ContextWindowOverrideTokens = 12000,
                     MaxTokens = 512
                 };
-                var tools = adapter.GetBuiltInTools().Where(tool => tool.Id == "excel.list_sheets").ToList();
+                var tools = adapter.GetBuiltInTools().Where(tool => tool.Id == "excel.inspect").ToList();
 
                 var turn = new AgentRunService(adapter, executor, completion).ExecuteAsync(
                     "List sheets.", NewSession(adapter), NewContext(adapter), settings, tools,

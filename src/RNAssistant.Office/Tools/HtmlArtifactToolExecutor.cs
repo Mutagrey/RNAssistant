@@ -12,10 +12,8 @@ namespace RNAssistant.Office.Tools
     internal sealed class HtmlArtifactToolExecutor
     {
         public const string ReadWorkspaceToolId = "common.html_workspace_read";
-        public const string UpsertFileToolId = "common.html_workspace_upsert_file";
-        public const string UpsertDataToolId = "common.html_workspace_upsert_data";
-        public const string DeleteFileToolId = "common.html_workspace_delete_file";
-        public const string DeleteDataToolId = "common.html_workspace_delete_data";
+        public const string UpsertToolId = "common.html_workspace_upsert";
+        public const string DeleteToolId = "common.html_workspace_delete";
         public const string SetActiveToolId = "common.html_workspace_set_active";
 
         private const int MaxHtmlChars = 300000;
@@ -25,12 +23,10 @@ namespace RNAssistant.Office.Tools
 
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
-            yield return ControllerToolDefinition.Create(ReadWorkspaceToolId, "Common", "Read-only: List the active chat HTML workspace, or read one exact file/data source by path or dataName.", "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Optional exact workspace-relative file path to read.\",\"maxLength\":260},\"dataName\":{\"type\":\"string\",\"description\":\"Optional exact JSON data-source name to read.\",\"maxLength\":128}},\"required\":[],\"additionalProperties\":false}", name: "html_workspace_read", scope: "session");
-            yield return ControllerToolDefinition.Create(UpsertFileToolId, "Common", "Workspace: Create or update a text file in the active chat HTML workspace. Use kind html, css, script, or js for index.html, styles.css, and app.js files.", "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Workspace-relative file path.\",\"default\":\"index.html\",\"maxLength\":260},\"kind\":{\"type\":\"string\",\"enum\":[\"html\",\"css\",\"script\",\"js\"],\"description\":\"Workspace file kind; omit to infer it from path.\"},\"content\":{\"type\":\"string\",\"description\":\"Complete text content of the workspace file.\",\"maxLength\":300000},\"setActive\":{\"type\":\"boolean\",\"description\":\"Whether the written HTML file becomes the active preview file.\",\"default\":true}},\"required\":[\"content\"],\"additionalProperties\":false}", mutatesLocalState: true, name: "html_workspace_upsert_file", scope: "session");
-            yield return ControllerToolDefinition.Create(UpsertDataToolId, "Common", "Workspace: Create or update a JSON data source for the active chat HTML workspace. Preview exposes it as window.RNAssistantData[name].", "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Stable data-source name exposed under window.RNAssistantData.\",\"maxLength\":128},\"json\":{\"type\":\"string\",\"description\":\"Complete valid JSON value serialized as text.\",\"maxLength\":300000}},\"required\":[\"name\",\"json\"],\"additionalProperties\":false}", mutatesLocalState: true, name: "html_workspace_upsert_data", scope: "session");
-            yield return ControllerToolDefinition.Create(DeleteFileToolId, "Common", "Workspace: Delete one file from the active chat HTML workspace. The deletion can be reverted with workspace undo.", "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Exact workspace-relative file path.\",\"maxLength\":260}},\"required\":[\"path\"],\"additionalProperties\":false}", mutatesLocalState: true, riskLevel: 1, name: "html_workspace_delete_file", scope: "session");
-            yield return ControllerToolDefinition.Create(DeleteDataToolId, "Common", "Workspace: Delete one JSON data source from the active chat HTML workspace. The deletion can be reverted with workspace undo.", "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Exact data-source name.\",\"maxLength\":128}},\"required\":[\"name\"],\"additionalProperties\":false}", mutatesLocalState: true, riskLevel: 1, name: "html_workspace_delete_data", scope: "session");
-            yield return ControllerToolDefinition.Create(SetActiveToolId, "Common", "Workspace: Select the active HTML file displayed on the HTML tab for the active chat.", "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Exact workspace-relative HTML file path.\",\"default\":\"index.html\",\"maxLength\":260}},\"required\":[],\"additionalProperties\":false}", mutatesLocalState: true, name: "html_workspace_set_active", scope: "session");
+            yield return ControllerToolDefinition.Create(ReadWorkspaceToolId, "Common", "Read-only: List the active chat HTML workspace when called without arguments, or read one exact file/data source.", "{\"type\":\"object\",\"properties\":{\"resourceType\":{\"type\":\"string\",\"enum\":[\"file\",\"data\"],\"description\":\"Optional resource type; omit both resourceType and name to read the compact workspace manifest.\"},\"name\":{\"type\":\"string\",\"description\":\"Exact file path or data-source name for the selected resource type.\",\"maxLength\":260}},\"required\":[],\"additionalProperties\":false}", name: "html_workspace_read", scope: "session");
+            yield return ControllerToolDefinition.Create(UpsertToolId, "Common", "Workspace: Create or update one file or JSON data source. File kind is inferred from its extension; missing items are created automatically.", "{\"type\":\"object\",\"properties\":{\"resourceType\":{\"type\":\"string\",\"enum\":[\"file\",\"data\"],\"description\":\"Resource to write: file or data.\"},\"name\":{\"type\":\"string\",\"description\":\"Workspace-relative file path or stable data-source name.\",\"maxLength\":260},\"content\":{\"type\":\"string\",\"description\":\"Complete file text or valid JSON text for a data source.\",\"maxLength\":300000},\"setActive\":{\"type\":\"boolean\",\"description\":\"For an HTML file, make it the active preview after writing. Ignored for data.\",\"default\":true}},\"required\":[\"resourceType\",\"name\",\"content\"],\"additionalProperties\":false}", mutatesLocalState: true, name: "html_workspace_upsert", scope: "session");
+            yield return ControllerToolDefinition.Create(DeleteToolId, "Common", "Workspace: Delete one exact file or JSON data source. Workspace history keeps the operation recoverable.", "{\"type\":\"object\",\"properties\":{\"resourceType\":{\"type\":\"string\",\"enum\":[\"file\",\"data\"],\"description\":\"Resource to delete: file or data.\"},\"name\":{\"type\":\"string\",\"description\":\"Exact workspace-relative file path or data-source name.\",\"maxLength\":260}},\"required\":[\"resourceType\",\"name\"],\"additionalProperties\":false}", mutatesLocalState: true, riskLevel: 1, name: "html_workspace_delete", scope: "session");
+            yield return ControllerToolDefinition.Create(SetActiveToolId, "Common", "Workspace: Select the active HTML file displayed on the HTML tab for the active chat.", "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Exact workspace-relative HTML file path.\",\"default\":\"index.html\",\"maxLength\":260}},\"required\":[],\"additionalProperties\":false}", mutatesLocalState: true, name: "html_workspace_set_active", scope: "session");
         }
 
         public ToolResult ExecuteControllerTool(ToolCommand command, ChatSession session, bool dryRun)
@@ -52,79 +48,69 @@ namespace RNAssistant.Office.Tools
                     return ToolResult.Ok("HTML workspace read.", ReadWorkspaceDataJson(session, command));
                 }
 
-                if (string.Equals(command.ToolId, UpsertFileToolId, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(command.ToolId, UpsertToolId, StringComparison.OrdinalIgnoreCase))
                 {
-                    var path = ToolArgumentReader.String(command.Arguments, "path", "index.html");
-                    var kind = ToolArgumentReader.String(command.Arguments, "kind", string.Empty);
+                    var resourceType = ToolArgumentReader.String(command.Arguments, "resourceType", string.Empty);
+                    var name = ToolArgumentReader.String(command.Arguments, "name", string.Empty);
                     var content = ToolArgumentReader.String(command.Arguments, "content", string.Empty);
                     var setActive = ToolArgumentReader.Boolean(command.Arguments, "setActive", true);
-                    if (dryRun)
+                    if (string.Equals(resourceType, "file", StringComparison.OrdinalIgnoreCase))
                     {
-                        ValidateFile(path, kind, content);
-                        var normalizedPath = NormalizePath(path);
-                        ValidateWorkspaceCapacity(
-                            NormalizedWorkspaceCopy(session.HtmlWorkspace),
-                            FileId(normalizedPath),
-                            content,
-                            null,
-                            null);
-                        return ToolResult.Ok("Dry run: would save HTML workspace file " + NormalizePath(path) + ".", WorkspaceMutationJson(session, "file", NormalizePath(path)));
+                        if (dryRun)
+                        {
+                            ValidateFile(name, string.Empty, content);
+                            var normalizedPath = NormalizePath(name);
+                            ValidateWorkspaceCapacity(NormalizedWorkspaceCopy(session.HtmlWorkspace), FileId(normalizedPath), content, null, null);
+                            return ToolResult.Ok("Dry run: would save HTML workspace file " + normalizedPath + ".", WorkspaceMutationJson(session, "file", normalizedPath));
+                        }
+                        var file = UpsertFile(session, name, string.Empty, content, setActive);
+                        return ToolResult.Ok("HTML workspace file saved: " + file.Path, WorkspaceMutationJson(session, "file", file.Path));
                     }
-
-                    var file = UpsertFile(session, path, kind, content, setActive);
-                    return ToolResult.Ok("HTML workspace file saved: " + file.Path, WorkspaceMutationJson(session, "file", file.Path));
+                    if (string.Equals(resourceType, "data", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (dryRun)
+                        {
+                            ValidateDataSource(name, content);
+                            var normalizedName = NormalizeDataName(name);
+                            ValidateWorkspaceCapacity(NormalizedWorkspaceCopy(session.HtmlWorkspace), null, null, DataSourceId(normalizedName), content);
+                            return ToolResult.Ok("Dry run: would save HTML workspace data source " + normalizedName + ".", WorkspaceMutationJson(session, "data", normalizedName));
+                        }
+                        var data = UpsertDataSource(session, name, content);
+                        return ToolResult.Ok("HTML workspace data saved: " + data.Name, WorkspaceMutationJson(session, "data", data.Name));
+                    }
+                    return ToolResult.Fail("resourceType must be file or data.");
                 }
 
-                if (string.Equals(command.ToolId, UpsertDataToolId, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(command.ToolId, DeleteToolId, StringComparison.OrdinalIgnoreCase))
                 {
+                    var resourceType = ToolArgumentReader.String(command.Arguments, "resourceType", string.Empty);
                     var name = ToolArgumentReader.String(command.Arguments, "name", string.Empty);
-                    var json = ToolArgumentReader.String(command.Arguments, "json", string.Empty);
-                    if (dryRun)
+                    if (string.Equals(resourceType, "file", StringComparison.OrdinalIgnoreCase))
                     {
-                        ValidateDataSource(name, json);
-                        var normalizedName = NormalizeDataName(name);
-                        ValidateWorkspaceCapacity(
-                            NormalizedWorkspaceCopy(session.HtmlWorkspace),
-                            null,
-                            null,
-                            DataSourceId(normalizedName),
-                            json);
-                        return ToolResult.Ok("Dry run: would save HTML workspace data source " + NormalizeDataName(name) + ".", WorkspaceMutationJson(session, "data", NormalizeDataName(name)));
+                        if (dryRun)
+                        {
+                            FindFile(NormalizedWorkspaceCopy(session.HtmlWorkspace), name, false);
+                            return ToolResult.Ok("Dry run: would delete HTML workspace file " + NormalizePath(name) + ".", WorkspaceMutationJson(session, "file", NormalizePath(name)));
+                        }
+                        var file = DeleteFile(session, name);
+                        return ToolResult.Ok("HTML workspace file deleted: " + file.Path, WorkspaceMutationJson(session, "file", file.Path));
                     }
-
-                    var data = UpsertDataSource(session, name, json);
-                    return ToolResult.Ok("HTML workspace data saved: " + data.Name, WorkspaceMutationJson(session, "data", data.Name));
-                }
-
-                if (string.Equals(command.ToolId, DeleteFileToolId, StringComparison.OrdinalIgnoreCase))
-                {
-                    var path = ToolArgumentReader.String(command.Arguments, "path", string.Empty);
-                    if (dryRun)
+                    if (string.Equals(resourceType, "data", StringComparison.OrdinalIgnoreCase))
                     {
-                        FindFile(NormalizedWorkspaceCopy(session.HtmlWorkspace), path, false);
-                        return ToolResult.Ok("Dry run: would delete HTML workspace file " + NormalizePath(path) + ".", WorkspaceMutationJson(session, "file", NormalizePath(path)));
+                        if (dryRun)
+                        {
+                            FindDataSource(NormalizedWorkspaceCopy(session.HtmlWorkspace), name);
+                            return ToolResult.Ok("Dry run: would delete HTML workspace data source " + NormalizeDataName(name) + ".", WorkspaceMutationJson(session, "data", NormalizeDataName(name)));
+                        }
+                        var data = DeleteDataSource(session, name);
+                        return ToolResult.Ok("HTML workspace data source deleted: " + data.Name, WorkspaceMutationJson(session, "data", data.Name));
                     }
-
-                    var file = DeleteFile(session, path);
-                    return ToolResult.Ok("HTML workspace file deleted: " + file.Path, WorkspaceMutationJson(session, "file", file.Path));
-                }
-
-                if (string.Equals(command.ToolId, DeleteDataToolId, StringComparison.OrdinalIgnoreCase))
-                {
-                    var name = ToolArgumentReader.String(command.Arguments, "name", string.Empty);
-                    if (dryRun)
-                    {
-                        FindDataSource(NormalizedWorkspaceCopy(session.HtmlWorkspace), name);
-                        return ToolResult.Ok("Dry run: would delete HTML workspace data source " + NormalizeDataName(name) + ".", WorkspaceMutationJson(session, "data", NormalizeDataName(name)));
-                    }
-
-                    var data = DeleteDataSource(session, name);
-                    return ToolResult.Ok("HTML workspace data source deleted: " + data.Name, WorkspaceMutationJson(session, "data", data.Name));
+                    return ToolResult.Fail("resourceType must be file or data.");
                 }
 
                 if (string.Equals(command.ToolId, SetActiveToolId, StringComparison.OrdinalIgnoreCase))
                 {
-                    var path = ToolArgumentReader.String(command.Arguments, "path", "index.html");
+                    var path = ToolArgumentReader.String(command.Arguments, "name", "index.html");
                     if (dryRun)
                     {
                         FindFile(NormalizedWorkspaceCopy(session.HtmlWorkspace), path, true);
@@ -404,15 +390,19 @@ namespace RNAssistant.Office.Tools
         private static string ReadWorkspaceDataJson(ChatSession session, ToolCommand command)
         {
             var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
-            var path = ToolArgumentReader.String(command.Arguments, "path", string.Empty);
-            var dataName = ToolArgumentReader.String(command.Arguments, "dataName", string.Empty);
-            if (!string.IsNullOrWhiteSpace(path) && !string.IsNullOrWhiteSpace(dataName))
+            var resourceType = ToolArgumentReader.String(command.Arguments, "resourceType", string.Empty);
+            var name = ToolArgumentReader.String(command.Arguments, "name", string.Empty);
+            if (string.IsNullOrWhiteSpace(resourceType) && !string.IsNullOrWhiteSpace(name))
             {
-                throw new InvalidOperationException("Specify either path or dataName, not both.");
+                throw new InvalidOperationException("resourceType is required when name is supplied.");
             }
-            if (!string.IsNullOrWhiteSpace(path))
+            if (!string.IsNullOrWhiteSpace(resourceType) && string.IsNullOrWhiteSpace(name))
             {
-                var file = FindFile(workspace, path, false);
+                throw new InvalidOperationException("name is required when resourceType is supplied.");
+            }
+            if (string.Equals(resourceType, "file", StringComparison.OrdinalIgnoreCase))
+            {
+                var file = FindFile(workspace, name, false);
                 return JsonConvert.SerializeObject(new
                 {
                     type = "rnassistant.htmlWorkspaceFile",
@@ -421,9 +411,9 @@ namespace RNAssistant.Office.Tools
                     file = new { file.Id, file.Path, file.Kind, file.Content, file.CreatedUtc, file.UpdatedUtc }
                 });
             }
-            if (!string.IsNullOrWhiteSpace(dataName))
+            if (string.Equals(resourceType, "data", StringComparison.OrdinalIgnoreCase))
             {
-                var data = FindDataSource(workspace, dataName);
+                var data = FindDataSource(workspace, name);
                 return JsonConvert.SerializeObject(new
                 {
                     type = "rnassistant.htmlWorkspaceData",
@@ -431,6 +421,10 @@ namespace RNAssistant.Office.Tools
                     revisionArtifactId = session.ActiveHtmlArtifactId,
                     data = new { data.Id, data.Name, data.Json, data.CreatedUtc, data.UpdatedUtc }
                 });
+            }
+            if (!string.IsNullOrWhiteSpace(resourceType))
+            {
+                throw new InvalidOperationException("resourceType must be file or data.");
             }
 
             return JsonConvert.SerializeObject(new
@@ -708,7 +702,7 @@ namespace RNAssistant.Office.Tools
             }
             if (string.IsNullOrWhiteSpace(json))
             {
-                throw new InvalidOperationException("json is required.");
+                throw new InvalidOperationException("Data content must be non-empty valid JSON.");
             }
             if (json.Length > MaxDataChars)
             {

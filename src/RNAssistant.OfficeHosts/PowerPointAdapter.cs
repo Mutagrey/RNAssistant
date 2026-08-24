@@ -201,21 +201,14 @@ namespace RNAssistant.OfficeHosts
             return new[]
             {
                 Tool("powerpoint.get_context", "Read-only: Return active presentation and slide context.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
-                Tool("powerpoint.get_selection", "Read-only: Read selected slide or shape context.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
-                Tool("powerpoint.read_slides", "Read-only: Read text from slides.", "{\"type\":\"object\",\"properties\":{\"maxSlides\":{\"type\":\"integer\",\"description\":\"Maximum number of slides returned.\",\"default\":20}},\"required\":[],\"additionalProperties\":false}"),
-                Tool("powerpoint.read_slide", "Read-only: Read text and notes from one slide.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based slide index.\",\"default\":1}},\"required\":[],\"additionalProperties\":false}"),
-                Tool("powerpoint.list_slides", "Read-only: List slide titles and text previews.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
-                Tool("powerpoint.list_shapes", "Read-only: List shapes on one slide.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based slide index.\",\"default\":1}},\"required\":[],\"additionalProperties\":false}"),
+                Tool("powerpoint.get_selection", "Read-only: Read selected slide or shape context.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}", canSourceHtmlData: true),
+                Tool("powerpoint.read_slides", "Read-only: Read slide text, speaker notes, or both from one slide or a bounded set.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\",\"description\":\"Optional one-based slide index; omit to read multiple slides.\",\"minimum\":1},\"maxSlides\":{\"type\":\"integer\",\"description\":\"Maximum number of slides returned when slideIndex is omitted.\",\"default\":20},\"content\":{\"type\":\"string\",\"enum\":[\"text\",\"notes\",\"both\"],\"description\":\"Slide content to return.\",\"default\":\"text\"}},\"required\":[],\"additionalProperties\":false}", canSourceHtmlData: true),
+                Tool("powerpoint.list_objects", "Read-only: List slide summaries or shapes on one slide with one kind selector.", "{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"slides\",\"shapes\"],\"description\":\"Objects to list.\"},\"slideIndex\":{\"type\":\"integer\",\"description\":\"Optional one-based slide for shapes; runtime uses the active slide when omitted.\",\"minimum\":1}},\"required\":[\"kind\"],\"additionalProperties\":false}", canSourceHtmlData: true),
                 Tool("powerpoint.search_text", "Read-only: Find literal or regex text in slide shapes and notes with stable coordinates/hash.", "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Non-empty literal or regular-expression search query.\",\"minLength\":1},\"scope\":{\"type\":\"string\",\"description\":\"Search or operation scope supported by the tool.\",\"default\":\"deck\",\"enum\":[\"deck\",\"slide\"]},\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based target slide when scope is slide; 0 searches the deck.\",\"default\":0},\"includeNotes\":{\"type\":\"boolean\",\"description\":\"Whether speaker notes are included.\",\"default\":true},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"maxResults\":{\"type\":\"integer\",\"description\":\"Maximum number of matches returned.\",\"default\":50},\"contextChars\":{\"type\":\"integer\",\"description\":\"Maximum context characters returned around each match.\",\"default\":80}},\"required\":[\"query\"],\"additionalProperties\":false}"),
-                Tool("powerpoint.read_speaker_notes", "Read-only: Read speaker notes from slides.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based slide to read; 0 reads up to maxSlides.\",\"default\":0},\"maxSlides\":{\"type\":\"integer\",\"description\":\"Maximum number of slides returned.\",\"default\":20}},\"required\":[],\"additionalProperties\":false}"),
                 Tool("powerpoint.add_slide", "Mutates document: Add a text slide.", "{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"description\":\"Human-readable title.\",\"default\":\"AI slide\"},\"body\":{\"type\":\"string\",\"description\":\"Body text for the item being created or updated.\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
-                Tool("powerpoint.replace_selection_text", "Mutates document: Replace text in the selected shape.", "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Complete text to insert, replace, or assign.\"}},\"required\":[\"text\"],\"additionalProperties\":false}", true, true, 2),
-                Tool("powerpoint.set_speaker_notes", "Mutates document: Set speaker notes for one slide.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based slide index.\",\"default\":1},\"notes\":{\"type\":\"string\",\"description\":\"Complete speaker-notes text.\"}},\"required\":[\"notes\"],\"additionalProperties\":false}", true, true, 1),
-                Tool("powerpoint.add_text_box", "Mutates document: Add a text box to a slide.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based slide index.\",\"default\":1},\"text\":{\"type\":\"string\",\"description\":\"Complete text to insert, replace, or assign.\"},\"left\":{\"type\":\"integer\",\"description\":\"Horizontal position in points from the slide or sheet origin.\",\"default\":60},\"top\":{\"type\":\"integer\",\"description\":\"Vertical position in points from the slide or sheet origin.\",\"default\":120},\"width\":{\"type\":\"integer\",\"description\":\"Width in points.\",\"default\":480},\"height\":{\"type\":\"integer\",\"description\":\"Height in points.\",\"default\":120},\"fontSize\":{\"type\":\"integer\",\"description\":\"Font size in points.\",\"default\":0}},\"required\":[\"text\"],\"additionalProperties\":false}", true, true, 1),
-                Tool("powerpoint.set_shape_text", "Mutates document: Set text for a named shape or selected shape.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based slide index.\",\"default\":1},\"shapeName\":{\"type\":\"string\",\"description\":\"Exact PowerPoint shape name.\"},\"text\":{\"type\":\"string\",\"description\":\"Complete text to insert, replace, or assign.\"}},\"required\":[\"text\"],\"additionalProperties\":false}", true, true, 2),
-                Tool("powerpoint.replace_text", "Mutates document: Replace literal or regex text after a matching search preview.", "{\"type\":\"object\",\"properties\":{\"find\":{\"type\":\"string\",\"description\":\"Literal or regular-expression text to find.\",\"minLength\":1},\"replace\":{\"type\":\"string\",\"description\":\"Replacement text; regex capture groups are allowed only in regex mode.\"},\"scope\":{\"type\":\"string\",\"description\":\"Search or operation scope supported by the tool.\",\"default\":\"deck\",\"enum\":[\"deck\",\"slide\"]},\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based target slide when scope is slide; 0 searches the deck.\",\"default\":0},\"includeNotes\":{\"type\":\"boolean\",\"description\":\"Whether speaker notes are included.\",\"default\":true},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"replaceAll\":{\"type\":\"boolean\",\"description\":\"Whether all matches in scope may be replaced.\",\"default\":true},\"expectedMatches\":{\"type\":\"integer\",\"description\":\"Exact match count returned by the preceding search.\"},\"expectedScopeSha256\":{\"type\":\"string\",\"description\":\"Exact scope SHA-256 hash returned by the preceding search.\"},\"maxReplacements\":{\"type\":\"integer\",\"description\":\"Safety limit for replacements.\",\"default\":500}},\"required\":[\"find\",\"expectedMatches\",\"expectedScopeSha256\"],\"additionalProperties\":false}", true, true, 2, true),
-                Tool("powerpoint.add_picture", "Mutates document: Add a local picture file to a slide.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based slide index.\",\"default\":1},\"path\":{\"type\":\"string\",\"description\":\"Workspace-relative file path or absolute local source path, as required by the tool.\"},\"left\":{\"type\":\"integer\",\"description\":\"Horizontal position in points from the slide or sheet origin.\",\"default\":60},\"top\":{\"type\":\"integer\",\"description\":\"Vertical position in points from the slide or sheet origin.\",\"default\":120},\"width\":{\"type\":\"integer\",\"description\":\"Width in points.\",\"default\":320},\"height\":{\"type\":\"integer\",\"description\":\"Height in points.\",\"default\":180}},\"required\":[\"path\"],\"additionalProperties\":false}", true, true, 1),
-                Tool("powerpoint.add_table", "Mutates document: Add a table to a slide.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based slide index.\",\"default\":1},\"rows\":{\"type\":\"integer\",\"description\":\"Number of table rows.\",\"default\":2},\"columns\":{\"type\":\"integer\",\"description\":\"Number of table columns.\",\"default\":2},\"values\":{\"type\":\"array\",\"items\":{\"type\":\"array\",\"items\":{\"type\":[\"string\",\"number\",\"boolean\",\"null\"]}},\"description\":\"Two-dimensional JSON array of row arrays.\"},\"left\":{\"type\":\"integer\",\"description\":\"Horizontal position in points from the slide or sheet origin.\",\"default\":60},\"top\":{\"type\":\"integer\",\"description\":\"Vertical position in points from the slide or sheet origin.\",\"default\":120},\"width\":{\"type\":\"integer\",\"description\":\"Width in points.\",\"default\":520},\"height\":{\"type\":\"integer\",\"description\":\"Height in points.\",\"default\":160}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
+                Tool("powerpoint.set_text", "Mutates document: Set speaker notes or shape text. The active slide/selected shape is resolved when exact coordinates are omitted.", "{\"type\":\"object\",\"properties\":{\"target\":{\"type\":\"string\",\"enum\":[\"notes\",\"shape\"],\"description\":\"Text target.\"},\"slideIndex\":{\"type\":\"integer\",\"description\":\"Optional one-based slide index; runtime uses the active slide when omitted.\",\"minimum\":1},\"shapeName\":{\"type\":\"string\",\"description\":\"Exact shape name for target=shape; omit to use the selected shape.\"},\"text\":{\"type\":\"string\",\"description\":\"Complete replacement text.\"}},\"required\":[\"target\",\"text\"],\"additionalProperties\":false}", true, true, 2),
+                Tool("powerpoint.replace_text", "Mutates document: Replace bounded literal or regex text in the current scope. A separate search is optional; runtime reads the scope immediately before mutation and verifies the result.", "{\"type\":\"object\",\"properties\":{\"find\":{\"type\":\"string\",\"description\":\"Literal or regular-expression text to find.\",\"minLength\":1},\"replace\":{\"type\":\"string\",\"description\":\"Replacement text; regex capture groups are allowed only in regex mode.\"},\"scope\":{\"type\":\"string\",\"description\":\"Search or operation scope supported by the tool.\",\"default\":\"deck\",\"enum\":[\"deck\",\"slide\"]},\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based target slide when scope is slide; 0 searches the deck.\",\"default\":0},\"includeNotes\":{\"type\":\"boolean\",\"description\":\"Whether speaker notes are included.\",\"default\":true},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"replaceAll\":{\"type\":\"boolean\",\"description\":\"Whether all matches in scope may be replaced.\",\"default\":true},\"maxReplacements\":{\"type\":\"integer\",\"description\":\"Safety limit for replacements.\",\"default\":500}},\"required\":[\"find\"],\"additionalProperties\":false}", true, true, 2, true),
+                Tool("powerpoint.add_object", "Mutates document: Add a text box, picture, or table to the active slide (or an explicit slide) with one kind selector. Table dimensions are inferred from values when omitted.", "{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"textBox\",\"picture\",\"table\"],\"description\":\"Object type to add.\"},\"slideIndex\":{\"type\":\"integer\",\"description\":\"Optional one-based slide index; runtime uses the active slide when omitted.\",\"minimum\":1},\"text\":{\"type\":\"string\",\"description\":\"Text for kind=textBox.\"},\"path\":{\"type\":\"string\",\"description\":\"Local image path for kind=picture.\"},\"rows\":{\"type\":\"integer\",\"description\":\"Optional table row count; omit to infer it from values or use 2 for an empty table.\",\"minimum\":1},\"columns\":{\"type\":\"integer\",\"description\":\"Optional table column count; omit to infer it from values or use 2 for an empty table.\",\"minimum\":1},\"values\":{\"type\":\"array\",\"items\":{\"type\":\"array\",\"items\":{\"type\":[\"string\",\"number\",\"boolean\",\"null\"]}},\"description\":\"Optional two-dimensional table values.\"},\"left\":{\"type\":\"integer\",\"description\":\"Optional horizontal position in points.\"},\"top\":{\"type\":\"integer\",\"description\":\"Optional vertical position in points.\"},\"width\":{\"type\":\"integer\",\"description\":\"Optional width in points; runtime chooses a kind-specific default.\"},\"height\":{\"type\":\"integer\",\"description\":\"Optional height in points; runtime chooses a kind-specific default.\"},\"fontSize\":{\"type\":\"integer\",\"description\":\"Optional font size for kind=textBox.\",\"minimum\":1}},\"required\":[\"kind\"],\"additionalProperties\":false}", true, true, 1),
                 Tool("powerpoint.duplicate_slide", "Mutates document: Duplicate one slide.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based slide index.\"}},\"required\":[\"slideIndex\"],\"additionalProperties\":false}", true, true, 1),
                 Tool("powerpoint.move_slide", "Mutates document: Move a slide to a new position.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based slide index.\"},\"toIndex\":{\"type\":\"integer\",\"description\":\"One-based destination slide index.\"}},\"required\":[\"slideIndex\",\"toIndex\"],\"additionalProperties\":false}", true, true, 2, true),
                 Tool("powerpoint.vba_read_module", "Internal VBA backend read; use common.vba_read_module.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum number of text characters returned.\",\"default\":30000,\"minimum\":1,\"maximum\":1000000}},\"required\":[\"moduleName\"],\"additionalProperties\":false}", false, false),
@@ -360,19 +353,23 @@ namespace RNAssistant.OfficeHosts
                     case "powerpoint.get_selection":
                         return GetSelection();
                     case "powerpoint.read_slides":
-                        return ReadSlides(command);
+                        return ReadSlidesOrSlide(command);
                     case "powerpoint.read_slide":
                         return ReadSlide(command);
                     case "powerpoint.list_slides":
                         return ListSlides();
                     case "powerpoint.list_shapes":
                         return ListShapes(command);
+                    case "powerpoint.list_objects":
+                        return ListObjects(command);
                     case "powerpoint.search_text":
                         return SearchText(command);
                     case "powerpoint.read_speaker_notes":
                         return ReadSpeakerNotes(command);
                     case "powerpoint.add_slide":
                         return AddSlide(command);
+                    case "powerpoint.set_text":
+                        return SetText(command);
                     case "powerpoint.replace_selection_text":
                         return ReplaceSelectionText(command);
                     case "powerpoint.set_speaker_notes":
@@ -383,6 +380,8 @@ namespace RNAssistant.OfficeHosts
                         return SetShapeText(command);
                     case "powerpoint.replace_text":
                         return ReplaceText(command);
+                    case "powerpoint.add_object":
+                        return AddObject(command);
                     case "powerpoint.add_picture":
                         return AddPicture(command);
                     case "powerpoint.add_table":
@@ -427,6 +426,58 @@ namespace RNAssistant.OfficeHosts
         {
             var maxSlides = ToolArgumentReader.Int32(command.Arguments, "maxSlides", 20);
             return ToolResult.Ok("Slides read.", JsonConvert.SerializeObject(new { text = ReadSlidesText(RequirePresentation(), maxSlides) }));
+        }
+
+        private ToolResult ReadSlidesOrSlide(ToolCommand command)
+        {
+            var content = ToolArgumentReader.String(command.Arguments, "content", "text");
+            if (string.Equals(content, "notes", StringComparison.OrdinalIgnoreCase)) return ReadSpeakerNotes(command);
+            if (string.Equals(content, "both", StringComparison.OrdinalIgnoreCase))
+            {
+                if (command.Arguments != null && command.Arguments.ContainsKey("slideIndex")) return ReadSlide(command);
+                return ReadSlidesWithNotes(command);
+            }
+            if (!string.Equals(content, "text", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Fail("content must be text, notes, or both.");
+            }
+            if (command.Arguments != null && command.Arguments.ContainsKey("slideIndex"))
+            {
+                var slide = ResolveSlide(ToolArgumentReader.Int32(command.Arguments, "slideIndex", 1));
+                return ToolResult.Ok("Slide text read: " + slide.SlideIndex,
+                    JsonConvert.SerializeObject(new { index = slide.SlideIndex, text = ReadSlideText(slide) }));
+            }
+            return ReadSlides(command);
+        }
+
+        private ToolResult ReadSlidesWithNotes(ToolCommand command)
+        {
+            var presentation = RequirePresentation();
+            var maxSlides = Math.Max(1, Math.Min(200, ToolArgumentReader.Int32(command.Arguments, "maxSlides", 20)));
+            var slides = new List<object>();
+            var count = Math.Min(presentation.Slides.Count, maxSlides);
+            for (var i = 1; i <= count; i++)
+            {
+                var slide = presentation.Slides[i];
+                slides.Add(new { index = i, text = ReadSlideText(slide), notes = ReadNotesText(slide) });
+            }
+            return ToolResult.Ok("Slides and notes read: " + slides.Count, JsonConvert.SerializeObject(slides));
+        }
+
+        private ToolResult ListObjects(ToolCommand command)
+        {
+            var kind = ToolArgumentReader.String(command.Arguments, "kind", string.Empty);
+            if (string.Equals(kind, "slides", StringComparison.OrdinalIgnoreCase)) return ListSlides();
+            if (string.Equals(kind, "shapes", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!command.Arguments.ContainsKey("slideIndex"))
+                {
+                    var activeSlide = TryGetActiveSlide();
+                    command.Arguments["slideIndex"] = activeSlide == null ? 1 : activeSlide.SlideIndex;
+                }
+                return ListShapes(command);
+            }
+            return ToolResult.Fail("kind must be slides or shapes.");
         }
 
         private ToolResult GetSelection()
@@ -557,25 +608,18 @@ namespace RNAssistant.OfficeHosts
             var find = ToolArgumentReader.String(command.Arguments, "find", string.Empty);
             if (string.IsNullOrWhiteSpace(find)) return ToolResult.Fail("find is required.");
             var replacement = ToolArgumentReader.String(command.Arguments, "replace", string.Empty);
-            var expectedMatches = ToolArgumentReader.Int32(command.Arguments, "expectedMatches", -1);
-            var expectedHash = ToolArgumentReader.String(command.Arguments, "expectedScopeSha256", string.Empty);
             var replaceAll = ToolArgumentReader.Boolean(command.Arguments, "replaceAll", true);
             var maxReplacements = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxReplacements", 500)));
-            if (expectedMatches < 0 || string.IsNullOrWhiteSpace(expectedHash)) return ToolResult.Fail("expectedMatches and expectedScopeSha256 from powerpoint.search_text are required.", null, "search_precondition_required", true);
             var targets = new List<PptTextTarget>(TextTargets(command));
-            var hash = new StringBuilder();
             var plans = new List<PptReplacementPlan>();
             var options = PatternOptions(command);
-            var observedMatches = 0;
             var replacementPlanned = false;
             try
             {
                 foreach (var target in targets)
                 {
                     var text = ShapeText(target.Shape);
-                    hash.Append(target.SlideIndex).Append(':').Append(target.Kind).Append(':').Append(target.Shape.Name).Append('\n').Append(text).Append('\n');
                     var found = TextPatternEngine.Find(text, find, options, 1, 0);
-                    observedMatches += found.MatchCount;
                     if (found.MatchCount > 0 && (replaceAll || !replacementPlanned))
                     {
                         var edits = TextPatternEngine.PlanReplacements(text, find, replacement, options, replaceAll, maxReplacements);
@@ -588,8 +632,6 @@ namespace RNAssistant.OfficeHosts
                 }
                 var replacements = 0;
                 foreach (var plan in plans) replacements += plan.Edits.Count;
-                if (!string.Equals(expectedHash, TextPatternEngine.Sha256(hash.ToString()), StringComparison.OrdinalIgnoreCase) || observedMatches != expectedMatches)
-                    return ToolResult.Fail("PowerPoint search scope changed after preview.", null, "stale_search_scope", true);
                 if (replacements > maxReplacements) return ToolResult.Fail("Replacement count exceeds maxReplacements=" + maxReplacements + ".", null, "replacement_limit_exceeded", false);
                 for (var p = plans.Count - 1; p >= 0; p--)
                 {
@@ -724,7 +766,7 @@ namespace RNAssistant.OfficeHosts
 
         private ToolResult SetSpeakerNotes(ToolCommand command)
         {
-            var slide = ResolveSlide(ToolArgumentReader.Int32(command.Arguments, "slideIndex", 1));
+            var slide = ResolveTargetSlide(command);
             var notes = ToolArgumentReader.String(command.Arguments, "notes", string.Empty);
             var shape = ResolveNotesTextShape(slide);
             if (shape == null)
@@ -736,9 +778,21 @@ namespace RNAssistant.OfficeHosts
             return ToolResult.Ok("Speaker notes set for slide " + slide.SlideIndex);
         }
 
+        private ToolResult SetText(ToolCommand command)
+        {
+            var target = ToolArgumentReader.String(command.Arguments, "target", string.Empty);
+            if (string.Equals(target, "notes", StringComparison.OrdinalIgnoreCase))
+            {
+                command.Arguments["notes"] = ToolArgumentReader.String(command.Arguments, "text", string.Empty);
+                return SetSpeakerNotes(command);
+            }
+            if (string.Equals(target, "shape", StringComparison.OrdinalIgnoreCase)) return SetShapeText(command);
+            return ToolResult.Fail("target must be notes or shape.");
+        }
+
         private ToolResult AddTextBox(ToolCommand command)
         {
-            var slide = ResolveSlide(ToolArgumentReader.Int32(command.Arguments, "slideIndex", 1));
+            var slide = ResolveTargetSlide(command);
             var text = ToolArgumentReader.String(command.Arguments, "text", string.Empty);
             var left = ToolArgumentReader.Int32(command.Arguments, "left", 60);
             var top = ToolArgumentReader.Int32(command.Arguments, "top", 120);
@@ -757,9 +811,23 @@ namespace RNAssistant.OfficeHosts
 
         private ToolResult SetShapeText(ToolCommand command)
         {
-            var slide = ResolveSlide(ToolArgumentReader.Int32(command.Arguments, "slideIndex", 1));
             var shapeName = ToolArgumentReader.String(command.Arguments, "shapeName", string.Empty);
-            var shape = string.IsNullOrWhiteSpace(shapeName) ? ResolveSelectedShape(slide) : ResolveShape(slide, shapeName);
+            PowerPoint.Shape shape;
+            if (string.IsNullOrWhiteSpace(shapeName))
+            {
+                var selection = TryGetSelection();
+                shape = selection != null &&
+                    selection.Type == PowerPoint.PpSelectionType.ppSelectionShapes &&
+                    TryGetSelectedShapeCount(selection) > 0
+                        ? selection.ShapeRange[1]
+                        : null;
+                if (shape != null && !ShapeBelongsToPresentation(shape, RequirePresentation())) shape = null;
+            }
+            else
+            {
+                var slide = ResolveTargetSlide(command);
+                shape = ResolveShape(slide, shapeName);
+            }
             if (shape == null)
             {
                 return ToolResult.Fail("Shape not found.");
@@ -775,7 +843,7 @@ namespace RNAssistant.OfficeHosts
 
         private ToolResult AddPicture(ToolCommand command)
         {
-            var slide = ResolveSlide(ToolArgumentReader.Int32(command.Arguments, "slideIndex", 1));
+            var slide = ResolveTargetSlide(command);
             var path = ToolArgumentReader.String(command.Arguments, "path", string.Empty);
             if (string.IsNullOrWhiteSpace(path))
             {
@@ -790,27 +858,41 @@ namespace RNAssistant.OfficeHosts
             return ToolResult.Ok("Picture added.", JsonConvert.SerializeObject(new { slide = slide.SlideIndex, shape = shape.Name }));
         }
 
+        private ToolResult AddObject(ToolCommand command)
+        {
+            var kind = ToolArgumentReader.String(command.Arguments, "kind", string.Empty);
+            if (string.Equals(kind, "textBox", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!command.Arguments.ContainsKey("text")) return ToolResult.Fail("text is required for kind=textBox.");
+                return AddTextBox(command);
+            }
+            if (string.Equals(kind, "picture", StringComparison.OrdinalIgnoreCase)) return AddPicture(command);
+            if (string.Equals(kind, "table", StringComparison.OrdinalIgnoreCase)) return AddTable(command);
+            return ToolResult.Fail("kind must be textBox, picture, or table.");
+        }
+
         private ToolResult AddTable(ToolCommand command)
         {
-            var slide = ResolveSlide(ToolArgumentReader.Int32(command.Arguments, "slideIndex", 1));
-            var rows = Math.Max(1, ToolArgumentReader.Int32(command.Arguments, "rows", 2));
-            var columns = Math.Max(1, ToolArgumentReader.Int32(command.Arguments, "columns", 2));
+            var slide = ResolveTargetSlide(command);
+            ResolvedTableArguments tableArguments;
+            string argumentError;
+            if (!TableArgumentResolver.TryResolve(command, 2, 2, out tableArguments, out argumentError))
+            {
+                return ToolResult.Fail(argumentError);
+            }
+            var rows = tableArguments.Rows;
+            var columns = tableArguments.Columns;
             var left = ToolArgumentReader.Int32(command.Arguments, "left", 60);
             var top = ToolArgumentReader.Int32(command.Arguments, "top", 120);
             var width = ToolArgumentReader.Int32(command.Arguments, "width", 520);
             var height = ToolArgumentReader.Int32(command.Arguments, "height", 160);
             var shape = slide.Shapes.AddTable(rows, columns, left, top, width, height);
-            var valuesJson = ToolArgumentReader.String(command.Arguments, "values", string.Empty);
-            if (!string.IsNullOrWhiteSpace(valuesJson))
+            var values = tableArguments.Values;
+            if (values != null)
             {
-                var values = JArray.Parse(valuesJson);
                 for (var r = 1; r <= rows && r <= values.Count; r++)
                 {
-                    var row = values[r - 1] as JArray;
-                    if (row == null)
-                    {
-                        continue;
-                    }
+                    var row = (JArray)values[r - 1];
                     for (var c = 1; c <= columns && c <= row.Count; c++)
                     {
                         shape.Table.Cell(r, c).Shape.TextFrame.TextRange.Text = Convert.ToString(row[c - 1]);
@@ -924,6 +1006,15 @@ namespace RNAssistant.OfficeHosts
                 }
             }
             return builder.ToString();
+        }
+
+        private PowerPoint.Slide ResolveTargetSlide(ToolCommand command)
+        {
+            var activeSlide = TryGetActiveSlide();
+            return ResolveSlide(ToolArgumentReader.Int32(
+                command == null ? null : command.Arguments,
+                "slideIndex",
+                activeSlide == null ? 1 : activeSlide.SlideIndex));
         }
 
         private PowerPoint.Slide ResolveSlide(int slideIndex)
@@ -1270,9 +1361,9 @@ namespace RNAssistant.OfficeHosts
                 && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
-        private static ToolDefinition Tool(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool requiresConfirmation = false)
+        private static ToolDefinition Tool(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool requiresConfirmation = false, bool canSourceHtmlData = false)
         {
-            return new ToolDefinition { Id = id, Host = "PowerPoint", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, RequiresConfirmation = requiresConfirmation };
+            return new ToolDefinition { Id = id, Host = "PowerPoint", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, RequiresConfirmation = requiresConfirmation, CanSourceHtmlData = canSourceHtmlData };
         }
 
         private static string Trim(string text, int maxChars)

@@ -140,7 +140,7 @@ namespace RNAssistant.Harness
                 var createdData = JObject.Parse(created.DataJson ?? "{}");
                 var actualName = (string)createdData["moduleName"];
                 AssertEqual(true, (bool)createdData["nameNormalized"], "name normalization is reported");
-                AssertTrue(!string.IsNullOrWhiteSpace(actualName) && actualName.Length <= 40 && char.IsLetter(actualName[0]),
+                AssertTrue(!string.IsNullOrWhiteSpace(actualName) && actualName.Length <= 31 && char.IsLetter(actualName[0]),
                     "normalized VBA component name is valid and bounded");
                 AssertContains(adapter.GetVbaModuleCode(actualName), "Public Value", "normalized module receives requested source");
 

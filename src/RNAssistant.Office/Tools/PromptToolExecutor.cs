@@ -23,8 +23,7 @@ namespace RNAssistant.Office.Tools
                 yield break;
             }
 
-            yield return ControllerToolDefinition.Create("common.prompts_read", "Common", "Read-only: Read RNAssistant editable Markdown prompt templates from Settings.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}", name: "prompts_read");
-            yield return ControllerToolDefinition.Create("common.prompts_read_defaults", "Common", "Read-only: Read current and built-in default RNAssistant Markdown prompt templates.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}", name: "prompts_read_defaults");
+            yield return ControllerToolDefinition.Create("common.prompts_read", "Common", "Read-only: Read current RNAssistant Markdown prompts, optionally including built-in defaults in the same result.", "{\"type\":\"object\",\"properties\":{\"includeDefaults\":{\"type\":\"boolean\",\"description\":\"Whether to include built-in defaults beside current prompts.\",\"default\":false}},\"required\":[],\"additionalProperties\":false}", name: "prompts_read");
             yield return ControllerToolDefinition.Create(
                 "common.prompts_save",
                 "Common",
@@ -52,17 +51,15 @@ namespace RNAssistant.Office.Tools
             if (string.Equals(command.ToolId, "common.prompts_read", StringComparison.OrdinalIgnoreCase))
             {
                 var current = _loadSettings();
-                return ToolResult.Ok("RNAssistant prompt templates read.", JsonConvert.SerializeObject(ToPayload(current)));
-            }
-
-            if (string.Equals(command.ToolId, "common.prompts_read_defaults", StringComparison.OrdinalIgnoreCase))
-            {
-                var current = _loadSettings();
-                return ToolResult.Ok("RNAssistant prompt templates and defaults read.", JsonConvert.SerializeObject(new
+                if (ToolArgumentReader.Boolean(command.Arguments, "includeDefaults", false))
                 {
-                    current = ToPayload(current),
-                    defaults = ToPayload(new AppSettings())
-                }));
+                    return ToolResult.Ok("RNAssistant prompt templates and defaults read.", JsonConvert.SerializeObject(new
+                    {
+                        current = ToPayload(current),
+                        defaults = ToPayload(new AppSettings())
+                    }));
+                }
+                return ToolResult.Ok("RNAssistant prompt templates read.", JsonConvert.SerializeObject(ToPayload(current)));
             }
 
             if (string.Equals(command.ToolId, "common.prompts_save", StringComparison.OrdinalIgnoreCase))
@@ -75,6 +72,10 @@ namespace RNAssistant.Office.Tools
 
         private ToolResult SavePrompts(ToolCommand command, bool dryRun)
         {
+            if (command == null || command.Arguments == null || command.Arguments.Count == 0)
+            {
+                return ToolResult.Fail("Prompt save requires at least one supplied prompt field.", null, "prompt_update_empty", true);
+            }
             if (_saveSettings == null)
             {
                 return ToolResult.Fail("Prompt settings store is read-only.");

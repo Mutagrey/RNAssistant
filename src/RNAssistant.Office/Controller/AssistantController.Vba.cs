@@ -39,7 +39,7 @@ namespace RNAssistant.Office
         {
             var settings = _settingsService.Load();
             var session = LoadSession(null);
-            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_list_modules") };
+            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_read_module") };
             var result = _toolExecutor.Execute(command, new ToolDefinition[0], settings, false, true, session);
             return new VbaProjectResponse
             {

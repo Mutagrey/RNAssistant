@@ -160,6 +160,7 @@ namespace RNAssistant.Harness
                 Test("skills: ids do not collide and disabled reads fail", SkillIdsDoNotCollideAndDisabledReadsFail),
                 Test("tools: unknown and disabled fail", UnknownAndDisabledToolsFail),
                 Test("tools: removed ids are unknown", RemovedToolIdsAreUnknown),
+                Test("tools: compact catalog keeps legacy aliases", CompactToolCatalogKeepsLegacyAliasesRunnable),
                 Test("tools: expanded built-ins visible", ExpandedBuiltInToolsAreVisible),
                 Test("tools: safety metadata gates mutations", ToolSafetyMetadataGatesMutations),
                 Test("tools: confirmation matrix", ConfirmationMatrixCoversDryAndManualRuns),

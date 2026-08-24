@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Outlook = Microsoft.Office.Interop.Outlook;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
@@ -110,19 +111,11 @@ namespace RNAssistant.OfficeHosts
             return new[]
             {
                 Tool("outlook.get_context", "Read-only: Return active mail or folder context.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
-                Tool("outlook.read_current_mail", "Read-only: Read selected or open mail.", "{\"type\":\"object\",\"properties\":{\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum number of text characters returned.\",\"default\":12000}},\"required\":[],\"additionalProperties\":false}"),
-                Tool("outlook.read_selection", "Read-only: Read selected email metadata and body.", "{\"type\":\"object\",\"properties\":{\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum number of text characters returned.\",\"default\":12000}},\"required\":[],\"additionalProperties\":false}"),
-                Tool("outlook.read_mail_by_entry_id", "Read-only: Read one mail item by EntryID.", "{\"type\":\"object\",\"properties\":{\"entryId\":{\"type\":\"string\",\"description\":\"Exact Outlook EntryID of a mail item.\"},\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum number of text characters returned.\",\"default\":12000}},\"required\":[\"entryId\"],\"additionalProperties\":false}"),
+                Tool("outlook.read_mail", "Read-only: Read message data, attachments, or both for selected/open mail or one exact EntryID.", "{\"type\":\"object\",\"properties\":{\"entryId\":{\"type\":\"string\",\"description\":\"Optional exact Outlook EntryID; omit to use selected or open mail.\"},\"content\":{\"type\":\"string\",\"enum\":[\"message\",\"attachments\",\"both\"],\"description\":\"Mail content to return.\",\"default\":\"message\"},\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum number of body characters returned.\",\"default\":12000}},\"required\":[],\"additionalProperties\":false}", canSourceHtmlData: true),
                 Tool("outlook.search_mail", "Read-only: Search recent mail fields with literal or regex matching and return field coordinates.", "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Non-empty literal or regular-expression search query.\",\"minLength\":1},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"fields\":{\"type\":\"string\",\"description\":\"Comma-separated mail fields to search: subject, sender, recipients, body.\",\"default\":\"subject,sender,body\"},\"maxItems\":{\"type\":\"integer\",\"description\":\"Maximum number of source items inspected.\",\"default\":100},\"maxResults\":{\"type\":\"integer\",\"description\":\"Maximum number of matches returned.\",\"default\":50},\"maxBodyChars\":{\"type\":\"integer\",\"description\":\"Maximum number of body characters returned per item.\",\"default\":1000},\"contextChars\":{\"type\":\"integer\",\"description\":\"Maximum context characters returned around each match.\",\"default\":80}},\"required\":[\"query\"],\"additionalProperties\":false}"),
-                Tool("outlook.list_attachments", "Read-only: List attachments for selected mail or EntryID.", "{\"type\":\"object\",\"properties\":{\"entryId\":{\"type\":\"string\",\"description\":\"Optional Outlook EntryID; omit to use the selected mail item.\"}},\"required\":[],\"additionalProperties\":false}"),
-                Tool("outlook.create_mail_draft", "Mutates document: Create and display a new mail draft without sending it.", "{\"type\":\"object\",\"properties\":{\"to\":{\"type\":\"string\",\"description\":\"Semicolon-separated primary recipients.\"},\"cc\":{\"type\":\"string\",\"description\":\"Semicolon-separated CC recipients.\"},\"bcc\":{\"type\":\"string\",\"description\":\"Semicolon-separated BCC recipients.\"},\"subject\":{\"type\":\"string\",\"description\":\"Mail subject text.\"},\"body\":{\"type\":\"string\",\"description\":\"Body text for the item being created or updated.\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
-                Tool("outlook.create_reply_draft", "Mutates document: Create and display a reply draft for selected mail.", "{\"type\":\"object\",\"properties\":{\"body\":{\"type\":\"string\",\"description\":\"Body text for the item being created or updated.\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
-                Tool("outlook.create_reply_all_draft", "Mutates document: Create and display a reply-all draft for selected mail.", "{\"type\":\"object\",\"properties\":{\"body\":{\"type\":\"string\",\"description\":\"Body text for the item being created or updated.\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
-                Tool("outlook.create_forward_draft", "Mutates document: Create and display a forward draft for selected mail.", "{\"type\":\"object\",\"properties\":{\"to\":{\"type\":\"string\",\"description\":\"Semicolon-separated primary recipients.\"},\"body\":{\"type\":\"string\",\"description\":\"Body text for the item being created or updated.\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1),
-                Tool("outlook.set_categories", "Mutates document: Set categories on selected mail.", "{\"type\":\"object\",\"properties\":{\"categories\":{\"type\":\"string\",\"description\":\"Comma-separated Outlook category names.\"}},\"required\":[\"categories\"],\"additionalProperties\":false}", true, true, 1),
-                Tool("outlook.mark_as_read", "Mutates document: Mark selected mail as read.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}", true, true, 1),
-                Tool("outlook.collect_folder_mail", "Read-only: Collect recent mail metadata from current folder for analysis.", "{\"type\":\"object\",\"properties\":{\"maxItems\":{\"type\":\"integer\",\"description\":\"Maximum number of source items inspected.\",\"default\":100},\"maxBodyChars\":{\"type\":\"integer\",\"description\":\"Maximum number of body characters returned per item.\",\"default\":1000}},\"required\":[],\"additionalProperties\":false}"),
-                Tool("outlook.collect_monthly_summary_data", "Read-only: Collect current folder mail grouped by month for archive summary.", "{\"type\":\"object\",\"properties\":{\"maxItems\":{\"type\":\"integer\",\"description\":\"Maximum number of source items inspected.\",\"default\":500},\"maxBodyChars\":{\"type\":\"integer\",\"description\":\"Maximum number of body characters returned per item.\",\"default\":500}},\"required\":[],\"additionalProperties\":false}")
+                Tool("outlook.create_draft", "Mutates document: Create and display a new, reply, reply-all, or forward draft without sending it.", "{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"new\",\"reply\",\"replyAll\",\"forward\"],\"description\":\"Draft operation.\"},\"to\":{\"type\":\"string\",\"description\":\"Semicolon-separated primary recipients for new/forward drafts.\"},\"cc\":{\"type\":\"string\",\"description\":\"Semicolon-separated CC recipients for a new draft.\"},\"bcc\":{\"type\":\"string\",\"description\":\"Semicolon-separated BCC recipients for a new draft.\"},\"subject\":{\"type\":\"string\",\"description\":\"Subject for a new draft.\"},\"body\":{\"type\":\"string\",\"description\":\"Body text for the draft.\"}},\"required\":[\"kind\"],\"additionalProperties\":false}", true, true, 1),
+                Tool("outlook.update_mail", "Mutates document: Set categories or mark the selected mail as read with one explicit operation.", "{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"categories\",\"markRead\"],\"description\":\"Mail update operation.\"},\"categories\":{\"type\":\"string\",\"description\":\"Comma-separated categories for kind=categories; empty text clears them.\"}},\"required\":[\"kind\"],\"additionalProperties\":false}", true, true, 1),
+                Tool("outlook.collect_mail", "Read-only: Collect recent mail metadata from the current folder, optionally grouped by month.", "{\"type\":\"object\",\"properties\":{\"groupBy\":{\"type\":\"string\",\"enum\":[\"none\",\"month\"],\"description\":\"Optional aggregation applied by runtime.\",\"default\":\"none\"},\"maxItems\":{\"type\":\"integer\",\"description\":\"Maximum number of source items inspected.\",\"default\":100},\"maxBodyChars\":{\"type\":\"integer\",\"description\":\"Maximum number of body characters returned per item.\",\"default\":1000}},\"required\":[],\"additionalProperties\":false}", canSourceHtmlData: true)
             };
         }
 
@@ -215,6 +208,8 @@ namespace RNAssistant.OfficeHosts
                 {
                     case "outlook.get_context":
                         return ToolResult.Ok("Outlook context collected.", JsonConvert.SerializeObject(GetOfficeContext()));
+                    case "outlook.read_mail":
+                        return ReadMail(command);
                     case "outlook.read_current_mail":
                     case "outlook.read_selection":
                         return ReadSelection(command);
@@ -224,6 +219,8 @@ namespace RNAssistant.OfficeHosts
                         return SearchMail(command);
                     case "outlook.list_attachments":
                         return ListAttachments(command);
+                    case "outlook.create_draft":
+                        return CreateDraft(command);
                     case "outlook.create_mail_draft":
                         return CreateMailDraft(command);
                     case "outlook.create_reply_draft":
@@ -232,10 +229,15 @@ namespace RNAssistant.OfficeHosts
                         return DraftReplyAll(command);
                     case "outlook.create_forward_draft":
                         return DraftForward(command);
+                    case "outlook.update_mail":
+                        return UpdateMail(command);
                     case "outlook.set_categories":
                         return SetCategories(command);
                     case "outlook.mark_as_read":
                         return MarkAsRead();
+                    case "outlook.collect_mail":
+                        return CollectFolderMail(command,
+                            string.Equals(ToolArgumentReader.String(command.Arguments, "groupBy", "none"), "month", StringComparison.OrdinalIgnoreCase));
                     case "outlook.collect_folder_mail":
                         return CollectFolderMail(command, false);
                     case "outlook.collect_monthly_summary_data":
@@ -273,6 +275,37 @@ namespace RNAssistant.OfficeHosts
 
             var maxChars = ToolArgumentReader.Int32(command.Arguments, "maxChars", 12000);
             return ToolResult.Ok("Email read by EntryID.", JsonConvert.SerializeObject(MailPayload(mail, maxChars)));
+        }
+
+        private ToolResult ReadMail(ToolCommand command)
+        {
+            var content = ToolArgumentReader.String(command.Arguments, "content", "message");
+            if (string.Equals(content, "attachments", StringComparison.OrdinalIgnoreCase)) return ListAttachments(command);
+            var message = string.IsNullOrWhiteSpace(ToolArgumentReader.String(command.Arguments, "entryId", string.Empty))
+                ? ReadSelection(command)
+                : ReadMailByEntryId(command);
+            if (!message.Success || string.Equals(content, "message", StringComparison.OrdinalIgnoreCase)) return message;
+            if (!string.Equals(content, "both", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Fail("content must be message, attachments, or both.");
+            }
+            var attachments = ListAttachments(command);
+            if (!attachments.Success) return attachments;
+            return ToolResult.Ok("Email and attachments read.", new JObject
+            {
+                ["message"] = JToken.Parse(message.DataJson ?? "{}"),
+                ["attachments"] = JToken.Parse(attachments.DataJson ?? "[]")
+            }.ToString(Formatting.None));
+        }
+
+        private ToolResult CreateDraft(ToolCommand command)
+        {
+            var kind = ToolArgumentReader.String(command.Arguments, "kind", string.Empty);
+            if (string.Equals(kind, "new", StringComparison.OrdinalIgnoreCase)) return CreateMailDraft(command);
+            if (string.Equals(kind, "reply", StringComparison.OrdinalIgnoreCase)) return DraftReply(command);
+            if (string.Equals(kind, "replyAll", StringComparison.OrdinalIgnoreCase)) return DraftReplyAll(command);
+            if (string.Equals(kind, "forward", StringComparison.OrdinalIgnoreCase)) return DraftForward(command);
+            return ToolResult.Fail("kind must be new, reply, replyAll, or forward.");
         }
 
         private ToolResult SearchMail(ToolCommand command)
@@ -453,6 +486,18 @@ namespace RNAssistant.OfficeHosts
             mail.UnRead = false;
             mail.Save();
             return ToolResult.Ok("Mail marked as read.");
+        }
+
+        private ToolResult UpdateMail(ToolCommand command)
+        {
+            var kind = ToolArgumentReader.String(command.Arguments, "kind", string.Empty);
+            if (string.Equals(kind, "categories", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!command.Arguments.ContainsKey("categories")) return ToolResult.Fail("categories is required for kind=categories.");
+                return SetCategories(command);
+            }
+            if (string.Equals(kind, "markRead", StringComparison.OrdinalIgnoreCase)) return MarkAsRead();
+            return ToolResult.Fail("kind must be categories or markRead.");
         }
 
         private ToolResult CollectFolderMail(ToolCommand command, bool groupedByMonth)
@@ -711,9 +756,9 @@ namespace RNAssistant.OfficeHosts
             catch { return string.Empty; }
         }
 
-        private static ToolDefinition Tool(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0)
+        private static ToolDefinition Tool(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool canSourceHtmlData = false)
         {
-            return new ToolDefinition { Id = id, Host = "Outlook", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel };
+            return new ToolDefinition { Id = id, Host = "Outlook", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, CanSourceHtmlData = canSourceHtmlData };
         }
 
         private static string Trim(string text, int maxChars)
