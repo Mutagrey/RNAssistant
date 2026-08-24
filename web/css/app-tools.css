@@ -169,14 +169,6 @@
   font-weight: 400;
 }
 
-.instruction-layout .tool-list-actions {
-  flex-wrap: wrap;
-}
-
-.instruction-layout .tool-list-actions button {
-  flex: 1 1 calc(50% - 3px);
-}
-
 .tool-list-item.is-compact .tool-list-title {
   grid-column: 1;
   grid-row: 1;
@@ -385,10 +377,13 @@
 
 .tool-editor.is-empty .tool-form,
 .tool-editor.is-empty .tool-run-output,
-.tool-editor.is-empty .tool-editor-actions,
 .tool-editor.is-empty .tool-editor-head,
 .tool-editor.is-empty .tool-page-tabs {
   display: none;
+}
+
+.tool-editor.is-empty.library-editor-pane {
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .tool-form {
@@ -458,21 +453,9 @@
   margin-top: 2px;
 }
 
-.tool-editor-actions {
-  margin-top: 0;
-}
-
-.tool-editor-actions .action-group {
-  align-items: center;
-}
-
 .rn-code-editor-toolCodeInput,
 .rn-code-editor-toolPipelineInput {
   min-height: 220px !important;
-}
-
-.rn-code-editor-skillBodyInput {
-  min-height: 390px !important;
 }
 
 .tool-editor .CodeMirror,
@@ -494,8 +477,7 @@
   display: none;
 }
 
-.tool-editor-head { margin-bottom: 8px; }
-.tool-page-tabs { margin-bottom: 10px; max-width: 100%; overflow-x: auto; }
+.tool-page-tabs { max-width: 100%; overflow-x: auto; }
 .tool-editor-page { display: grid; gap: 10px; min-width: 0; }
 .tool-editor-page.form-grid, .tool-editor-page .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .editor-section-head { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
@@ -520,13 +502,152 @@
 .component-toolbar label { flex: 1 1 180px; }
 .advanced-json summary { color: var(--muted); cursor: pointer; font-size: 12px; }
 .advanced-json textarea { width: 100%; margin-top: 6px; }
-.instruction-editor-content { display: grid; grid-template-rows: auto auto minmax(0,1fr) auto; gap: 9px; min-height: 100%; }
-.instruction-editor-content .tool-form { min-height: 0; overflow: auto; }
-.instruction-mode-toggle { grid-column: 1 / -1; }
-.instruction-preview-view { min-height: 280px; }
+.instruction-editor,
+#toolEditorPanel {
+  overflow: hidden;
+}
+
+.library-editor-pane {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.skill-editor-pane {
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+}
+
+.library-editor-head {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  align-items: center;
+  min-height: 34px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--section-line);
+  background: var(--bg);
+}
+
+.library-editor-head .resource-editor-titlebox {
+  flex: 1 1 auto;
+}
+
+.library-editor-actions {
+  flex-wrap: nowrap;
+  gap: 5px;
+}
+
+.library-editor-actions > * {
+  flex: 0 0 auto;
+}
+
+.library-save-button {
+  min-height: 30px;
+  padding: 0 10px;
+}
+
+.library-editor-menu > summary {
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  justify-content: center;
+}
+
+.library-editor-menu > summary svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  stroke: none;
+}
+
+.library-editor-menu-body {
+  gap: 5px;
+  min-width: 220px;
+}
+
+.library-editor-menu-section {
+  display: grid;
+  gap: 5px;
+  padding: 5px 0;
+  border-top: 1px solid var(--section-line);
+  border-bottom: 1px solid var(--section-line);
+}
+
+.library-editor-menu-section[hidden] {
+  display: none;
+}
+
+.library-editor-mode-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.library-editor-section-label {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--label-font-weight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-editor-scroll {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.library-editor-stage {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.library-editor-stage > .editor-preview,
+.library-editor-stage > .rn-code-editor.CodeMirror,
+.library-editor-stage > textarea {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0 !important;
+}
+
+.library-editor-stage > textarea {
+  resize: none;
+}
+
+.library-editor-stage .CodeMirror-scroll {
+  height: 100%;
+  min-height: 0;
+}
+
+.skill-editor-fields {
+  grid-template-columns: minmax(0, 1.35fr) minmax(130px, .7fr) auto;
+  gap: 8px 10px;
+  min-height: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+.skill-enabled-field {
+  align-self: end;
+  min-height: 34px;
+  padding: 0 4px;
+}
 
 @media (max-width: 760px) {
   .schema-property-row { grid-template-columns: minmax(80px,1fr) 88px 24px 30px; }
   .schema-property-row input:nth-of-type(3), .schema-property-row input:nth-of-type(4) { grid-column: 1 / -1; }
   .tool-editor-page.form-grid, .tool-editor-page .form-grid { grid-template-columns: 1fr; }
+  .skill-editor-fields { grid-template-columns: minmax(0, 1fr) minmax(120px, .65fr); }
+  .skill-enabled-field { grid-column: 1 / -1; }
 }

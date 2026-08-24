@@ -85,6 +85,7 @@
   }
 
   function selectInstructionRow(row) {
+    closeLibraryEditorMenus();
     state.selectedInstructionKind = row.kind;
     if (row.kind === "skill") state.selectedSkillIndex = row.index;
     else if (row.kind === "tool") {
@@ -212,8 +213,29 @@
     if (promptSelected) renderPromptEditor();
     if (skillSelected && typeof renderSkillEditor === "function") renderSkillEditor();
     if (toolSelected && typeof renderToolEditor === "function") renderToolEditor();
-    if ($("cloneSkillButton")) $("cloneSkillButton").classList.toggle("hidden", !skillSelected);
-    if ($("cloneToolButton")) $("cloneToolButton").classList.toggle("hidden", !toolSelected);
+  }
+
+  function closeLibraryEditorMenus(except) {
+    Array.prototype.slice.call(document.querySelectorAll(".library-editor-menu[open]")).forEach(function (menu) {
+      if (menu !== except) menu.removeAttribute("open");
+    });
+  }
+
+  function bindLibraryEditorMenus() {
+    Array.prototype.slice.call(document.querySelectorAll(".library-editor-menu")).forEach(function (menu) {
+      menu.addEventListener("toggle", function () {
+        if (menu.open) closeLibraryEditorMenus(menu);
+      });
+      menu.addEventListener("click", function (event) {
+        if (event.target.closest(".library-editor-menu-body button")) menu.removeAttribute("open");
+      });
+    });
+    document.addEventListener("click", function (event) {
+      if (!event.target.closest(".library-editor-menu")) closeLibraryEditorMenus();
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") closeLibraryEditorMenus();
+    });
   }
 
   function mountUnifiedLibrary() {
@@ -347,6 +369,7 @@
 
   function bindPromptSettingsActions() {
     mountUnifiedLibrary();
+    bindLibraryEditorMenus();
     $("skillSearchInput").addEventListener("input", function () {
       syncSelectedInstruction();
       renderInstructions();
@@ -378,6 +401,15 @@
       renderPromptEditor();
       updateSettingsSaveButton();
       log("Промпт будет сброшен после сохранения.");
+    });
+    $("resetAllPromptsButton").addEventListener("click", function () {
+      promptDefinitions.forEach(function (def) {
+        state.promptDrafts[def.key] = "";
+      });
+      settingsDirty = true;
+      renderPromptList();
+      updateSettingsSaveButton();
+      log("Все промпты будут сброшены после сохранения.");
     });
     $("savePromptButton").addEventListener("click", async function () {
       setControlBusy("savePromptButton", true);

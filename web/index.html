@@ -28,8 +28,7 @@
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-capabilities-20260820-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=settings-sections-20260824-1">
-  <link rel="stylesheet" href="css/app-tools.css?v=unified-ui-20260821-1">
-  <link rel="stylesheet" href="css/app-prompts.css?v=library-ui-20260821-1">
+  <link rel="stylesheet" href="css/app-tools.css?v=library-editor-20260824-1">
   <link rel="stylesheet" href="css/app-vba.css?v=userform-20260824-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
   <link rel="stylesheet" href="css/app-context-inspector.css?v=context-inspector-20260824-1">
@@ -37,7 +36,7 @@
   <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260702-2">
   <link rel="stylesheet" href="css/app-artifacts.css?v=ui-simplify-20260821-3">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=vba-tab-20260824-1">
-  <link rel="stylesheet" href="css/app-responsive.css?v=vba-tab-20260824-1">
+  <link rel="stylesheet" href="css/app-responsive.css?v=library-editor-20260824-2">
   <link rel="stylesheet" href="css/app-agent.css?v=ui-simplify-20260821-4">
   <link rel="stylesheet" href="css/app-agent-data.css?v=agent-ui-20260821-2">
   <link rel="stylesheet" href="css/app-theme.css?v=userform-20260824-1">
@@ -260,13 +259,29 @@
 
       <div class="hidden" id="libraryToolEditorSource">
           <div id="toolsPath" hidden></div>
-          <section class="tool-editor surface-panel hidden" id="toolEditorPanel">
+          <section class="tool-editor library-editor-pane surface-panel hidden" id="toolEditorPanel">
             <div class="resource-editor-empty" id="toolEditorEmpty">
               <div class="resource-editor-empty-title">Инструмент не выбран</div>
               <div class="resource-editor-empty-text">Выберите инструмент слева или создайте новый.</div>
             </div>
-            <div class="resource-editor-head tool-editor-head" id="toolEditorHead">
+            <div class="resource-editor-head library-editor-head tool-editor-head" id="toolEditorHead">
               <div class="resource-editor-titlebox"><div class="resource-editor-title" id="toolEditorTitle">Инструмент</div><div class="resource-editor-meta" id="toolEditorMeta"></div></div>
+              <div class="resource-editor-actions library-editor-actions">
+                <button class="icon-button secondary" id="copyToolContextButton" type="button" title="Скопировать описание инструмента" aria-label="Скопировать описание инструмента"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                <button class="icon-button secondary" id="askToolBuilderButton" type="button" title="Добавить инструмент в контекст и обсудить" aria-label="Обсудить инструмент в чате"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"/><path d="M8 9h8M8 13h5"/></svg></button>
+                <button class="accent-soft icon-text-button library-save-button" id="saveToolsButton" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>Сохранить</span></button>
+                <details class="toolbar-menu library-editor-menu" id="toolActionsMenu">
+                  <summary class="icon-button" title="Другие действия с инструментом" aria-label="Другие действия с инструментом"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></summary>
+                  <div class="toolbar-menu-body library-editor-menu-body">
+                    <button class="secondary" id="cloneToolButton" type="button">Создать копию</button>
+                    <div class="library-editor-menu-section" id="vbaPackageActions">
+                      <button class="secondary" id="installVbaToolButton" type="button">Установить в документ</button>
+                      <button class="secondary danger-soft" id="uninstallVbaToolButton" type="button">Удалить из документа</button>
+                    </div>
+                    <button class="secondary danger-soft" id="deleteToolButton" type="button">Удалить инструмент</button>
+                  </div>
+                </details>
+              </div>
             </div>
             <div class="mode-toggle tool-page-tabs" role="tablist" aria-label="Раздел инструмента">
               <button class="mode-button tool-page-button active" type="button" data-tool-page="main">Основное</button>
@@ -275,7 +290,7 @@
               <button class="mode-button tool-page-button" type="button" data-tool-page="test">Тест</button>
               <button class="mode-button tool-page-button" type="button" data-tool-page="docs">Документация</button>
             </div>
-            <div class="tool-form" id="toolForm">
+            <div class="tool-form library-editor-scroll" id="toolForm">
               <div class="form-grid tool-editor-page" data-tool-page-view="main">
                 <label>ID инструмента<input id="toolIdInput" placeholder="excel.normalize_table"></label>
                 <label>Приложение<select id="toolHostInput"><option>Common</option><option>Excel</option><option>Word</option><option>PowerPoint</option><option>Outlook</option></select></label>
@@ -311,20 +326,6 @@
               </div>
               <div class="tool-editor-page hidden" data-tool-page-view="docs"><label>README / заметки<textarea id="toolReadmeInput" rows="16" spellcheck="false" placeholder="Заметки по использованию и реализации"></textarea></label></div>
             </div>
-            <div class="toolbar tool-editor-actions action-bar">
-              <div class="action-group">
-                <button class="secondary" id="copyToolContextButton" type="button">Копировать</button>
-                <button class="secondary" id="askToolBuilderButton" type="button">Обсудить</button>
-              </div>
-              <div class="action-group" id="vbaPackageActions">
-                <button class="secondary" id="installVbaToolButton" type="button">Установить в документ</button>
-                <button class="secondary danger-soft" id="uninstallVbaToolButton" type="button">Удалить из документа</button>
-              </div>
-              <div class="action-group action-group-end">
-                <button class="accent-soft" id="saveToolsButton" type="button">Сохранить</button>
-                <button class="secondary danger-soft" id="deleteToolButton" type="button">Удалить</button>
-              </div>
-            </div>
           </section>
         </div>
 
@@ -341,14 +342,6 @@
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
                   <span>Инструмент</span>
                 </button>
-                <button class="secondary icon-text-button" id="cloneSkillButton" type="button" title="Создать копию навыка">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                  <span>Копия</span>
-                </button>
-                <button class="secondary icon-text-button hidden" id="cloneToolButton" type="button" title="Создать копию инструмента">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                  <span>Копия</span>
-                </button>
               </div>
               <input class="tool-search" id="skillSearchInput" placeholder="Поиск в библиотеке..." autocomplete="off">
             </div>
@@ -360,41 +353,66 @@
               <div class="resource-editor-empty-title">Инструкция не выбрана</div>
               <div class="resource-editor-empty-text">Выберите промпт или навык слева.</div>
             </div>
-            <div class="instruction-editor-content" id="skillEditorPanel">
-              <div class="resource-editor-head">
+            <div class="instruction-editor-content library-editor-pane skill-editor-pane" id="skillEditorPanel">
+              <div class="resource-editor-head library-editor-head">
                 <div class="resource-editor-titlebox"><div class="resource-editor-title" id="skillTitle">Навык</div><div class="resource-editor-meta" id="skillMeta"></div></div>
+                <div class="resource-editor-actions library-editor-actions">
+                  <button class="icon-button secondary" id="copySkillContextButton" type="button" title="Скопировать описание навыка" aria-label="Скопировать описание навыка"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                  <button class="icon-button secondary" id="askSkillBuilderButton" type="button" title="Добавить навык в контекст и обсудить" aria-label="Обсудить навык в чате"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"/><path d="M8 9h8M8 13h5"/></svg></button>
+                  <button class="accent-soft icon-text-button library-save-button" id="saveSkillsButton" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>Сохранить</span></button>
+                  <details class="toolbar-menu library-editor-menu" id="skillActionsMenu">
+                    <summary class="icon-button" title="Другие действия с навыком" aria-label="Другие действия с навыком"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></summary>
+                    <div class="toolbar-menu-body library-editor-menu-body">
+                      <button class="secondary" id="cloneSkillButton" type="button">Создать копию</button>
+                      <button class="secondary danger-soft" id="deleteSkillButton" type="button">Удалить навык</button>
+                    </div>
+                  </details>
+                </div>
               </div>
-              <div class="form-grid tool-form" id="skillForm">
+              <div class="form-grid tool-form skill-editor-fields" id="skillForm">
                 <label>ID навыка<input id="skillIdInput" placeholder="common.review_contract"></label>
                 <label>Приложение<select id="skillHostInput"><option>Common</option><option>Excel</option><option>Word</option><option>PowerPoint</option><option>Outlook</option></select></label>
-                <label class="checkline"><input type="checkbox" id="skillEnabledInput"> <span>Включён</span></label>
+                <label class="checkline skill-enabled-field"><input type="checkbox" id="skillEnabledInput"> <span>Включён</span></label>
                 <label class="wide">Описание<textarea id="skillDescriptionInput" rows="3" placeholder="Когда агенту использовать этот навык"></textarea></label>
+              </div>
+              <div class="library-editor-mode-row">
+                <span class="library-editor-section-label">SKILL.md</span>
                 <div class="mode-toggle instruction-mode-toggle" role="group" aria-label="Режим навыка">
                   <button class="mode-button instruction-mode-button active" type="button" data-instruction-mode="edit">Редактор</button>
                   <button class="mode-button instruction-mode-button" type="button" data-instruction-mode="preview">Просмотр</button>
                 </div>
-                <label class="wide instruction-edit-view">SKILL.md<textarea id="skillBodyInput" rows="18" spellcheck="false"></textarea></label>
-                <div class="editor-preview markdown wide instruction-preview-view hidden" id="skillPreview"></div>
               </div>
-              <div class="toolbar tool-editor-actions action-bar">
-                <div class="action-group"><button class="secondary" id="copySkillContextButton" type="button">Копировать</button><button class="secondary" id="askSkillBuilderButton" type="button">Обсудить</button></div>
-                <div class="action-group action-group-end"><button class="accent-soft" id="saveSkillsButton" type="button">Сохранить</button><button class="secondary danger-soft" id="deleteSkillButton" type="button">Удалить</button></div>
+              <div class="library-editor-stage skill-editor-stage">
+                <textarea class="editor-edit-input instruction-edit-view" id="skillBodyInput" rows="18" spellcheck="false" aria-label="SKILL.md"></textarea>
+                <div class="editor-preview markdown instruction-preview-view hidden" id="skillPreview"></div>
               </div>
             </div>
-            <div class="instruction-editor-content hidden" id="promptEditorPanel">
-              <div class="resource-editor-head">
+            <div class="instruction-editor-content library-editor-pane prompt-editor-pane hidden" id="promptEditorPanel">
+              <div class="resource-editor-head library-editor-head">
                 <div class="resource-editor-titlebox"><div class="resource-editor-title" id="promptTitle"></div><div class="resource-editor-meta" id="promptMeta"></div></div>
-                <div class="resource-editor-actions"><button class="icon-button secondary" id="copyPromptButton" type="button" title="Скопировать промпт" aria-label="Скопировать промпт">⧉</button></div>
+                <div class="resource-editor-actions library-editor-actions">
+                  <button class="icon-button secondary" id="copyPromptButton" type="button" title="Скопировать промпт" aria-label="Скопировать промпт"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                  <button class="icon-button secondary" id="addPromptToChatButton" type="button" title="Добавить промпт в контекст" aria-label="Добавить промпт в контекст"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                  <button class="accent-soft icon-text-button library-save-button" id="savePromptButton" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>Сохранить</span></button>
+                  <details class="toolbar-menu library-editor-menu" id="promptActionsMenu">
+                    <summary class="icon-button" title="Другие действия с промптом" aria-label="Другие действия с промптом"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></summary>
+                    <div class="toolbar-menu-body library-editor-menu-body">
+                      <button class="secondary" id="resetCurrentPromptButton" type="button">Сбросить текущий</button>
+                      <button class="secondary danger-soft" id="resetAllPromptsButton" type="button">Сбросить все промпты</button>
+                    </div>
+                  </details>
+                </div>
               </div>
-              <div class="mode-toggle prompt-mode-toggle" role="group" aria-label="Режим промпта">
-                <button class="mode-button prompt-mode-button active" type="button" data-prompt-mode="edit">Редактор</button>
-                <button class="mode-button prompt-mode-button" type="button" data-prompt-mode="preview">Просмотр</button>
+              <div class="library-editor-mode-row">
+                <span class="library-editor-section-label">Markdown</span>
+                <div class="mode-toggle prompt-mode-toggle" role="group" aria-label="Режим промпта">
+                  <button class="mode-button prompt-mode-button active" type="button" data-prompt-mode="edit">Редактор</button>
+                  <button class="mode-button prompt-mode-button" type="button" data-prompt-mode="preview">Просмотр</button>
+                </div>
               </div>
-              <div class="editor-preview prompt-preview markdown hidden" id="promptPreview"></div>
-              <textarea class="editor-edit-input prompt-edit-input" id="promptEditInput" rows="16" spellcheck="false"></textarea>
-              <div class="toolbar tool-editor-actions action-bar">
-                <div class="action-group"><button class="secondary" id="addPromptToChatButton" type="button">В контекст</button><button class="secondary" id="resetCurrentPromptButton" type="button">Сбросить</button></div>
-                <div class="action-group action-group-end"><button class="accent-soft" id="savePromptButton" type="button">Сохранить</button></div>
+              <div class="library-editor-stage prompt-editor-stage">
+                <div class="editor-preview prompt-preview markdown hidden" id="promptPreview"></div>
+                <textarea class="editor-edit-input prompt-edit-input" id="promptEditInput" rows="16" spellcheck="false"></textarea>
               </div>
             </div>
           </section>
@@ -778,12 +796,12 @@
   <script src="js/app-core.js?v=excel-runtime-fix-20260824-1"></script>
   <script src="js/app-utils.js?v=runtime-20260807-1"></script>
   <script src="js/app-layout.js"></script>
-  <script src="js/app-editors.js?v=agent-protocol-20260821-2"></script>
+  <script src="js/app-editors.js?v=library-editor-20260824-1"></script>
   <script src="js/app-markdown.js?v=log-filters-20260824-1"></script>
   <script src="js/app-settings.js?v=settings-reset-20260824-1"></script>
   <script src="js/app-logs.js?v=log-filters-20260824-1"></script>
   <script src="js/app-diagnostics.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-prompts.js?v=log-filters-20260824-1"></script>
+  <script src="js/app-prompts.js?v=library-editor-20260824-1"></script>
   <script src="js/app-model-data.js?v=model-capabilities-20260820-1"></script>
   <script src="js/app-model-picker.js?v=model-modules-20260823-2"></script>
   <script src="js/app-model-capabilities.js?v=model-modules-20260823-1"></script>
@@ -794,8 +812,8 @@
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
   <script src="js/app-tools-structured.js?v=tools-modules-20260823-1"></script>
   <script src="js/app-tools-actions.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-tools.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-skills.js?v=log-filters-20260824-1"></script>
+  <script src="js/app-tools.js?v=library-editor-20260824-1"></script>
+  <script src="js/app-skills.js?v=library-editor-20260824-1"></script>
   <script src="js/app-vba-diff.js?v=vba-modules-20260823-1"></script>
   <script src="js/app-vba-actions.js?v=userform-20260824-1"></script>
   <script src="js/app-vba-project.js?v=userform-20260824-1"></script>

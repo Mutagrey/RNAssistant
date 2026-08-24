@@ -16,31 +16,7 @@ var toolActions = window.RNAssistantToolActions.create({
 });
 
 function renderTools() {
-  if (typeof renderInstructions === "function" && $("instructionsList")) {
-    renderInstructions();
-    return;
-  }
-  renderResourceList({
-    listId: "toolsList",
-    searchInputId: "toolSearchInput",
-    items: state.tools,
-    emptyText: state.bridgeUnavailable ? "Office bridge недоступен. Инструменты загрузятся внутри add-in." : "Инструменты пока не загружены.",
-    getSelectedIndex: function () { return state.selectedToolIndex; },
-    setSelectedIndex: function (index) { state.selectedToolIndex = index; state.selectedToolComponentIndex = 0; },
-    matches: toolMatchesSearch,
-    title: function (tool) { return tool.Id || tool.Name || "инструмент"; },
-    enabled: function (tool) { return tool.Enabled !== false; },
-    icon: function (tool) { return tool.BuiltIn ? "BIN" : (String(tool.Executor || "PIPE").slice(0, 4).toUpperCase()); },
-    meta: toolListMeta,
-    description: function (tool) { return tool.Description || (tool.BuiltIn ? "Встроенный Office-инструмент" : "Пользовательский инструмент"); },
-    groupKey: function (tool) { return (tool.Host || "Common") + ":" + (tool.BuiltIn ? "builtin" : "custom"); },
-    groupLabel: toolGroupLabel,
-    groupStoragePrefix: "tools",
-    compact: true,
-    syncEditor: syncSelectedToolFromEditor,
-    renderEditor: renderToolEditor,
-    renderList: renderTools
-  });
+  renderInstructions();
 }
 
 function emptyToolSchema() {
@@ -101,26 +77,6 @@ function syncSelectedToolComponentFromEditor(tool) {
     return item && String(item.Type || "").toLowerCase() === "stdmodule" && String(item.Code || "").indexOf("<RNAssistantTool>") >= 0;
   })[0];
   tool.Code = entry ? (entry.Code || "") : "";
-}
-
-function cleanHostLabel(host) {
-  return String(host || "Common").toLowerCase() === "common" ? "" : (host || "Common");
-}
-
-function toolListMeta(tool) {
-  if (!tool) {
-    return "";
-  }
-  if (tool.BuiltIn) {
-    return cleanHostLabel(tool.Host);
-  }
-  return tool.Executor || "pipeline";
-}
-
-function toolGroupLabel(tool) {
-  var host = cleanHostLabel(tool && tool.Host);
-  var type = tool && tool.BuiltIn ? "Built-in" : "Custom";
-  return host ? host + " · " + type : type;
 }
 
 function toolMatchesSearch(skill, query) {
@@ -399,7 +355,6 @@ function addVbaComponent(type) {
 }
 
 function bindToolActions() {
-  if ($("toolSearchInput")) $("toolSearchInput").addEventListener("input", renderTools);
   Array.prototype.slice.call(document.querySelectorAll(".tool-page-button")).forEach(function (button) { button.addEventListener("click", function () { syncSelectedToolFromEditor(); state.toolEditorPage = button.getAttribute("data-tool-page") || "main"; applyToolEditorPage(); }); });
   toolStructuredEditor.bind();
 

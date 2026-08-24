@@ -47,16 +47,20 @@
     overflow: visible;
   }
 
-  .tool-editor-actions {
-    align-items: stretch;
+  .instruction-editor,
+  #toolEditorPanel {
+    overflow: hidden;
   }
 }
 
 @media (max-width: 560px) {
   .tool-layout,
-  .prompt-layout,
   .vba-layout {
     grid-template-columns: 1fr;
+  }
+
+  .instruction-layout {
+    grid-template-rows: clamp(145px, 24vh, 190px) minmax(0, 1fr);
   }
 
   .splitter {
@@ -72,9 +76,13 @@
     padding-right: 0;
   }
 
-  .tool-layout > .tool-editor,
-  .prompt-editor {
+  .tool-layout > .tool-editor {
     padding-left: 0;
+  }
+
+  .instruction-editor,
+  #toolEditorPanel {
+    overflow: hidden;
   }
 }
 
@@ -239,23 +247,38 @@
     padding: 0;
   }
 
-  .tool-editor-actions,
   .resource-editor-actions {
     align-items: stretch;
     justify-content: flex-start;
   }
 
-  .tool-editor-actions .action-group {
-    flex: 1 1 auto;
+  .library-editor-head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .library-editor-head .resource-editor-titlebox {
+    width: 100%;
+  }
+
+  .library-editor-actions {
+    width: 100%;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .library-editor-menu-body {
+    right: 0;
+    left: auto;
+  }
+
+  .skill-editor-fields {
+    grid-template-columns: minmax(0, 1fr) minmax(120px, .65fr);
   }
 
   .rn-code-editor-toolPipelineInput,
   .rn-code-editor-toolCodeInput {
     min-height: 180px !important;
-  }
-
-  .rn-code-editor-skillBodyInput {
-    min-height: 260px !important;
   }
 
   .rn-code-editor-vbaCodeInput,
@@ -268,6 +291,12 @@
     font-size: 12px;
   }
 
+}
+
+@media (max-width: 360px) {
+  .skill-editor-fields {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 700px) {

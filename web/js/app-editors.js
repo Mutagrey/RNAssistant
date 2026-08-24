@@ -6,8 +6,8 @@
     toolPipelineInput: { mode: { name: "javascript", json: true }, minHeight: 210 },
     toolCodeInput: { mode: "vb", minHeight: 210 },
     toolReadmeInput: { mode: "markdown", minHeight: 150, lineWrapping: true },
-    skillBodyInput: { mode: "markdown", minHeight: 360, lineWrapping: true },
-    promptEditInput: { mode: "markdown", minHeight: 280, lineWrapping: true },
+    skillBodyInput: { mode: "markdown", minHeight: 0, lineWrapping: true },
+    promptEditInput: { mode: "markdown", minHeight: 0, lineWrapping: true },
     vbaCodeInput: { mode: "vb", minHeight: 440 },
     htmlWorkspaceEditorInput: { mode: "javascript", minHeight: 440, lineWrapping: true }
   };
@@ -19,7 +19,7 @@
   function addEditorClass(cm, id, config) {
     var wrapper = cm.getWrapperElement();
     wrapper.className += " rn-code-editor rn-code-editor-" + id;
-    wrapper.style.minHeight = (config.minHeight || 160) + "px";
+    wrapper.style.minHeight = (typeof config.minHeight === "number" ? config.minHeight : 160) + "px";
   }
 
   function createEditor(id, config) {
