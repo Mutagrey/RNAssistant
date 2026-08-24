@@ -1,4 +1,6 @@
 using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace RNAssistant.Office
 {
@@ -33,6 +35,42 @@ namespace RNAssistant.Office
             {
                 return fallback;
             }
+        }
+
+        public static string RuntimeKey(string host, object document)
+        {
+            var prefix = (host ?? string.Empty) + ":Runtime:";
+            if (document == null)
+            {
+                return prefix + "none";
+            }
+
+            IntPtr identity = IntPtr.Zero;
+            try
+            {
+                if (Environment.OSVersion.Platform == PlatformID.Win32NT && Marshal.IsComObject(document))
+                {
+#pragma warning disable CA1416
+                    identity = Marshal.GetIUnknownForObject(document);
+#pragma warning restore CA1416
+                    return prefix + identity.ToInt64().ToString("x");
+                }
+            }
+            catch (PlatformNotSupportedException)
+            {
+            }
+            catch (NotSupportedException)
+            {
+            }
+            finally
+            {
+                if (identity != IntPtr.Zero)
+                {
+                    Marshal.Release(identity);
+                }
+            }
+
+            return prefix + RuntimeHelpers.GetHashCode(document).ToString("x");
         }
 
         private static string Key(string host, string id)

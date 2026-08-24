@@ -137,7 +137,6 @@ namespace RNAssistant.Desktop
             if (!forceSelect && _runtime != null &&
                 string.Equals(entry.Id, _targetRegistry.SelectedTargetId, StringComparison.OrdinalIgnoreCase))
             {
-                RefreshTargetUi(null);
                 return;
             }
 

@@ -9,19 +9,17 @@ namespace RNAssistant.ExcelAddIn
 {
     public sealed partial class ThisAddIn
     {
-        private AssistantRuntime _runtime;
         private OfficeUiDispatcher _officeDispatcher;
         private readonly Dictionary<int, PaneEntry> _panes = new Dictionary<int, PaneEntry>();
+        private readonly HashSet<int> _creatingPanes = new HashSet<int>();
+        private int _activeWindowHwnd;
         private bool _assistantVisible;
         private readonly List<CommandBarButton> _contextButtons = new List<CommandBarButton>();
 
         private void ThisAddIn_Startup(object sender, EventArgs e)
         {
             _officeDispatcher = new OfficeUiDispatcher();
-            _runtime = new AssistantRuntime(new UiThreadOfficeApplicationAdapter(new ExcelAdapter(Application), _officeDispatcher));
             Application.SheetSelectionChange += Application_SheetSelectionChange;
-            Application.WorkbookActivate += Application_WorkbookChanged;
-            Application.WorkbookOpen += Application_WorkbookChanged;
             Application.WorkbookBeforeClose += Application_WorkbookBeforeClose;
             Application.WindowActivate += Application_WindowActivate;
             InstallContextMenus();
@@ -30,8 +28,6 @@ namespace RNAssistant.ExcelAddIn
         private void ThisAddIn_Shutdown(object sender, EventArgs e)
         {
             Application.SheetSelectionChange -= Application_SheetSelectionChange;
-            Application.WorkbookActivate -= Application_WorkbookChanged;
-            Application.WorkbookOpen -= Application_WorkbookChanged;
             Application.WorkbookBeforeClose -= Application_WorkbookBeforeClose;
             Application.WindowActivate -= Application_WindowActivate;
             foreach (var entry in new List<PaneEntry>(_panes.Values))
@@ -40,7 +36,6 @@ namespace RNAssistant.ExcelAddIn
                 entry.Runtime.Dispose();
             }
             _panes.Clear();
-            if (_runtime != null) _runtime.Dispose();
             RemoveContextMenus();
             if (_officeDispatcher != null) _officeDispatcher.Dispose();
         }
@@ -48,7 +43,7 @@ namespace RNAssistant.ExcelAddIn
         public void ShowAssistant(string quickAction = null)
         {
             _assistantVisible = true;
-            var entry = EnsurePane(Application.ActiveWindow);
+            var entry = EnsurePane(SafeActiveWindow(), SafeActiveWorkbook());
             if (entry == null)
             {
                 return;
@@ -70,25 +65,28 @@ namespace RNAssistant.ExcelAddIn
 
         private void Application_SheetSelectionChange(object sheet, Excel.Range target)
         {
-            foreach (var entry in _panes.Values)
+            var entry = ActivePane();
+            if (entry != null)
             {
                 entry.Runtime.BlurComposer();
             }
         }
 
-        private void Application_WorkbookChanged(Excel.Workbook workbook)
-        {
-            RefreshAllPanes();
-        }
-
         private void Application_WindowActivate(Excel.Workbook workbook, Excel.Window window)
         {
-            var entry = _assistantVisible ? EnsurePane(window) : null;
+            var hwnd = window == null ? 0 : window.Hwnd;
+            var windowChanged = hwnd != 0 && hwnd != _activeWindowHwnd;
+            var paneAlreadyExists = hwnd != 0 && _panes.ContainsKey(hwnd);
+            if (hwnd != 0) _activeWindowHwnd = hwnd;
+            var entry = _assistantVisible ? EnsurePane(window, workbook) : null;
             if (entry != null)
             {
                 entry.Pane.Visible = true;
+                if (windowChanged && paneAlreadyExists)
+                {
+                    entry.Runtime.RefreshState();
+                }
             }
-            RefreshAllPanes();
         }
 
         private void Application_WorkbookBeforeClose(Excel.Workbook workbook, ref bool cancel)
@@ -101,15 +99,15 @@ namespace RNAssistant.ExcelAddIn
                     timer.Stop();
                     timer.Dispose();
                     RemoveClosedWindowPanes();
-                    RefreshAllPanes();
+                    RefreshActivePane();
                 };
                 timer.Start();
             }
         }
 
-        private PaneEntry EnsurePane(Excel.Window window)
+        private PaneEntry EnsurePane(Excel.Window window, Excel.Workbook workbook)
         {
-            if (window == null)
+            if (window == null || workbook == null)
             {
                 return null;
             }
@@ -120,28 +118,30 @@ namespace RNAssistant.ExcelAddIn
             {
                 return entry;
             }
-
-            var workbook = window.Parent as Excel.Workbook;
-            var fullName = SafeWorkbookValue(workbook, true);
-            var descriptor = new OfficeTargetDescriptor
+            if (!_creatingPanes.Add(key))
             {
-                Host = "Excel",
-                Hwnd = Application.Hwnd,
-                Name = SafeWorkbookValue(workbook, false),
-                FullName = fullName,
-                Path = fullName
-            };
-            var runtime = new AssistantRuntime(new UiThreadOfficeApplicationAdapter(new ExcelAdapter(Application, descriptor), _officeDispatcher));
-            var pane = CustomTaskPanes.Add(runtime.CreatePaneControl(), "RN Assistant", window);
-            pane.Width = 1200;
-            entry = new PaneEntry { Window = window, Pane = pane, Runtime = runtime };
-            _panes[key] = entry;
-            return entry;
+                return null;
+            }
+
+            try
+            {
+                var runtime = new AssistantRuntime(new UiThreadOfficeApplicationAdapter(new ExcelAdapter(Application, workbook), _officeDispatcher));
+                var pane = CustomTaskPanes.Add(runtime.CreatePaneControl(), "RN Assistant", window);
+                pane.Width = 1200;
+                entry = new PaneEntry { Window = window, Pane = pane, Runtime = runtime };
+                _panes[key] = entry;
+                return entry;
+            }
+            finally
+            {
+                _creatingPanes.Remove(key);
+            }
         }
 
-        private void RefreshAllPanes()
+        private void RefreshActivePane()
         {
-            foreach (var entry in _panes.Values)
+            var entry = ActivePane();
+            if (entry != null)
             {
                 entry.Runtime.RefreshState();
             }
@@ -171,18 +171,32 @@ namespace RNAssistant.ExcelAddIn
             }
         }
 
-        private static string SafeWorkbookValue(Excel.Workbook workbook, bool fullName)
+        private Excel.Workbook SafeActiveWorkbook()
         {
-            if (workbook == null) return null;
-            try { return fullName ? workbook.FullName : workbook.Name; }
+            try { return Application.ActiveWorkbook; }
+            catch { return null; }
+        }
+
+        private Excel.Window SafeActiveWindow()
+        {
+            try { return Application.ActiveWindow; }
             catch { return null; }
         }
 
         private AssistantRuntime ActiveRuntime()
         {
-            var window = Application.ActiveWindow;
+            var entry = ActivePane() ?? EnsurePane(SafeActiveWindow(), SafeActiveWorkbook());
+            return entry == null ? null : entry.Runtime;
+        }
+
+        private PaneEntry ActivePane()
+        {
+            Excel.Window window;
+            try { window = Application.ActiveWindow; }
+            catch { return null; }
+            if (window == null) return null;
             PaneEntry entry;
-            return window != null && _panes.TryGetValue(window.Hwnd, out entry) ? entry.Runtime : _runtime;
+            return _panes.TryGetValue(window.Hwnd, out entry) ? entry : null;
         }
 
         private sealed class PaneEntry
@@ -245,6 +259,10 @@ namespace RNAssistant.ExcelAddIn
             try
             {
                 var runtime = ActiveRuntime();
+                if (runtime == null)
+                {
+                    throw new InvalidOperationException("No active Excel workbook.");
+                }
                 runtime.AddSelectionContext(mode);
                 ShowAssistant(action == "ask" ? null : "context");
                 if (action == "ask")

@@ -40,15 +40,45 @@ namespace RNAssistant.Office
             var modules = new List<object>();
             foreach (dynamic component in vbProject.VBComponents)
             {
+                var type = (int)component.Type;
+                dynamic codeModule = component.CodeModule;
+                var lineCount = (int)codeModule.CountOfLines;
                 modules.Add(new
                 {
                     name = (string)component.Name,
-                    type = ComponentTypeName((int)component.Type),
-                    lineCount = (int)component.CodeModule.CountOfLines
+                    type = ComponentTypeName(type),
+                    lineCount = lineCount,
+                    hasToolManifest = type == StdModuleType && ContainsText(codeModule, "<RNAssistantTool>", lineCount)
                 });
             }
 
             return ToolResult.Ok("VBA components listed.", JsonConvert.SerializeObject(new { title = title, modules = modules }));
+        }
+
+        private static bool ContainsText(dynamic codeModule, string text, int lineCount)
+        {
+            if (codeModule == null || lineCount <= 0 || string.IsNullOrEmpty(text)) return false;
+            try
+            {
+                var startLine = 1;
+                var startColumn = 1;
+                var endLine = lineCount;
+                var endColumn = -1;
+                return (bool)codeModule.Find(
+                    text,
+                    ref startLine,
+                    ref startColumn,
+                    ref endLine,
+                    ref endColumn,
+                    false,
+                    false,
+                    false);
+            }
+            catch
+            {
+                // If the host does not expose Find, let discovery inspect this module normally.
+                return true;
+            }
         }
 
         public static ToolResult ReadModule(object documentObject, string moduleName, int maxChars)

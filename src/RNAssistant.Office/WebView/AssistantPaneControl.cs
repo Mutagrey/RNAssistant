@@ -42,6 +42,11 @@ namespace RNAssistant.Office.WebView
 
         public void BlurComposer()
         {
+            if (!_webContentWantsKeyboard)
+            {
+                return;
+            }
+            _webContentWantsKeyboard = false;
             ExecuteScript("window.RNAssistantHost && window.RNAssistantHost.blurComposer && window.RNAssistantHost.blurComposer();");
         }
 

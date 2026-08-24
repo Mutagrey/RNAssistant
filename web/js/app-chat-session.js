@@ -274,7 +274,9 @@ function applyInitState(init) {
     updateVbaMacroRunState();
   }
   log("Initialized " + init.host);
-  loadModelCatalog(false);
+  if (!state.modelCatalog.loaded && !state.modelCatalog.loading) {
+    loadModelCatalog(false);
+  }
   if (init.quickAction) {
     runQuickAction(init.quickAction);
   }
@@ -346,29 +348,41 @@ function chatNavigationSignature(payload) {
 }
 
 async function synchronizeChatState() {
-  if (state.bridgeUnavailable || currentActiveSend() || document.hidden) return;
-  try {
-    var response = await send("listChats", {});
-    var current = { activeChatId: state.activeChatId, chats: state.chats, documents: state.documents };
-    if (chatNavigationSignature(response) !== chatNavigationSignature(current)) {
-      applyChatState(response);
+  if (state.bridgeUnavailable || currentActiveSend() || document.hidden || !document.hasFocus()) return;
+  if (state.chatSyncPromise) return state.chatSyncPromise;
+  state.chatSyncPromise = (async function () {
+    try {
+      var response = await send("listChats", {});
+      var current = { activeChatId: state.activeChatId, chats: state.chats, documents: state.documents };
+      if (chatNavigationSignature(response) !== chatNavigationSignature(current)) {
+        applyChatState(response);
+      }
+    } catch (error) {
+      logOnce("Не удалось синхронизировать список чатов: " + (error.detail || error.message), "warning");
+    } finally {
+      state.chatSyncPromise = null;
     }
-  } catch (error) {
-    logOnce("Не удалось синхронизировать список чатов: " + (error.detail || error.message), "warning");
-  }
+  })();
+  return state.chatSyncPromise;
 }
 
 async function initialize() {
+  if (state.initializePromise) return state.initializePromise;
   if (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
       !confirmDiscardHtmlWorkspaceChanges("Обновить состояние")) {
     return;
   }
-  try {
-    var init = await send("init");
-    applyInitState(init);
-  } catch (error) {
-    applyBridgeUnavailableState(error);
-  }
+  state.initializePromise = (async function () {
+    try {
+      var init = await send("init");
+      applyInitState(init);
+    } catch (error) {
+      applyBridgeUnavailableState(error);
+    } finally {
+      state.initializePromise = null;
+    }
+  })();
+  return state.initializePromise;
 }
 
 async function clearRuntimeData() {

@@ -112,7 +112,7 @@ Chat-local plan/HTML mutations are serialized by the per-chat lease. Document an
 
 - Disabled, unavailable, or `AgentCanRun=false` tools are not exposed to Agent mode.
 - Confirmation and mutation safety remain local executor rules.
-- Every Agent run pins the runtime Office document identity. The dispatched adapter rechecks it on the Office UI/STA thread immediately before execution; a switched active document returns non-retryable `active_document_changed` without starting the tool.
+- Every Agent run pins the runtime COM identity, with the stable document key as fallback when no runtime identity is available. The UI/STA adapter rechecks it immediately before execution; a genuinely different document returns non-retryable `active_document_changed` without starting the tool.
 - Maximum iterations and maximum tool steps bound execution.
 - Pipelines call existing tool ids through `OfficeToolExecutor`; nested safety is resolved recursively.
 - VBA mutations keep backup/strict-live-hash/stale-state checks inside the VBA tool implementation, verify final module/package state by read-back, expose bounded exact-range reads through `vba_read_lines`, and may require confirmation. Export-aware package hashes are separate from live module hashes.

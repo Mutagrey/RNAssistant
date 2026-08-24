@@ -54,7 +54,7 @@ namespace RNAssistant.OfficeHosts
             get
             {
                 var presentation = ActivePresentation();
-                return presentation == null ? "PowerPoint:NoPresentation" : "PowerPoint:Runtime:" + presentation.GetHashCode().ToString("x");
+                return presentation == null ? "PowerPoint:NoPresentation" : DocumentIdentity.RuntimeKey(HostName, presentation);
             }
         }
 
@@ -188,7 +188,7 @@ namespace RNAssistant.OfficeHosts
                 return "PowerPoint:NoPresentation";
             }
 
-            var runtimeKey = "PowerPoint:Runtime:" + presentation.GetHashCode().ToString("x");
+            var runtimeKey = DocumentIdentity.RuntimeKey(HostName, presentation);
             return DocumentIdentity.ForOfficeDocument(
                 HostName,
                 SafeString(delegate { return presentation.Path; }),
@@ -1244,8 +1244,10 @@ namespace RNAssistant.OfficeHosts
             try
             {
                 var parent = slide.Parent as PowerPoint.Presentation;
-                return SamePath(SafeString(delegate { return parent.FullName; }), SafeString(delegate { return presentation.FullName; }))
-                    || string.Equals(SafeString(delegate { return parent.Name; }), SafeString(delegate { return presentation.Name; }), StringComparison.OrdinalIgnoreCase);
+                return string.Equals(
+                    DocumentIdentity.RuntimeKey("PowerPoint", parent),
+                    DocumentIdentity.RuntimeKey("PowerPoint", presentation),
+                    StringComparison.OrdinalIgnoreCase);
             }
             catch
             {

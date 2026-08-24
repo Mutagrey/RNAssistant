@@ -150,6 +150,10 @@ namespace RNAssistant.Harness
                 AssertTrue(discovered != null, "document VBA tool discovered");
                 AssertEqual("document", discovered.Scope, "document scope");
                 AssertEqual(2, discovered.Components.Count, "document components resolved");
+                AssertTrue(!adapter.Executed.Any(item =>
+                    string.Equals(item.ToolId, "excel.vba_read_module", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(Convert.ToString(item.Arguments["moduleName"]), "Module1", StringComparison.OrdinalIgnoreCase)),
+                    "document VBA discovery skips standard modules without a manifest");
                 var discoveryCalls = adapter.Executed.Count(item =>
                     string.Equals(item.ToolId, "excel.vba_list_project_components_internal", StringComparison.OrdinalIgnoreCase));
                 catalogService.GetVisibleTools();

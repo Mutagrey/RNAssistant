@@ -30,6 +30,10 @@ document.addEventListener("DOMContentLoaded", function () {
   });
   window.addEventListener("focus", scheduleFocusStateReport);
   window.addEventListener("blur", scheduleFocusStateReport);
+  window.addEventListener("focus", synchronizeChatState);
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) synchronizeChatState();
+  });
   scheduleFocusStateReport();
 
   Array.prototype.slice.call(document.querySelectorAll(".tab")).forEach(function (tab) {
@@ -62,5 +66,5 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   initialize();
-  state.syncTimer = window.setInterval(synchronizeChatState, 5000);
+  state.syncTimer = window.setInterval(synchronizeChatState, 15000);
 });

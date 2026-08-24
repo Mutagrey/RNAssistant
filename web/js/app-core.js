@@ -84,7 +84,9 @@ var state = {
   highlightRetryScheduled: false,
   highlightRetryAttempts: 0,
   highlightLoadLogged: false,
-  syncTimer: null
+  syncTimer: null,
+  chatSyncPromise: null,
+  initializePromise: null
 };
 
 function $(id) {

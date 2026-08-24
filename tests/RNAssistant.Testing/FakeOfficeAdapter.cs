@@ -296,7 +296,14 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("read " + command.ToolId, JsonConvert.SerializeObject(new
                 {
                     title = DocumentTitle,
-                    modules = _vbaModules.Values.Select(module => new { name = module.Name, type = module.Type, lineCount = LineCount(module.Code) + VbaReportedLineCountOffset }).ToArray()
+                    modules = _vbaModules.Values.Select(module => new
+                    {
+                        name = module.Name,
+                        type = module.Type,
+                        lineCount = LineCount(module.Code) + VbaReportedLineCountOffset,
+                        hasToolManifest = string.Equals(module.Type, "StdModule", StringComparison.OrdinalIgnoreCase) &&
+                            (module.Code ?? string.Empty).IndexOf("<RNAssistantTool>", StringComparison.Ordinal) >= 0
+                    }).ToArray()
                 }));
             }
 

@@ -53,7 +53,7 @@ namespace RNAssistant.OfficeHosts
             get
             {
                 var doc = ActiveDocument();
-                return doc == null ? "Word:NoDocument" : "Word:Runtime:" + doc.GetHashCode().ToString("x");
+                return doc == null ? "Word:NoDocument" : DocumentIdentity.RuntimeKey(HostName, doc);
             }
         }
 
@@ -172,7 +172,7 @@ namespace RNAssistant.OfficeHosts
                 return "Word:NoDocument";
             }
 
-            var runtimeKey = "Word:Runtime:" + document.GetHashCode().ToString("x");
+            var runtimeKey = DocumentIdentity.RuntimeKey(HostName, document);
             return DocumentIdentity.ForOfficeDocument(
                 HostName,
                 SafeString(delegate { return document.Path; }),
@@ -1016,8 +1016,10 @@ namespace RNAssistant.OfficeHosts
 
             try
             {
-                return SamePath(SafeString(delegate { return range.Document.FullName; }), SafeString(delegate { return doc.FullName; }))
-                    || string.Equals(SafeString(delegate { return range.Document.Name; }), SafeString(delegate { return doc.Name; }), StringComparison.OrdinalIgnoreCase);
+                return string.Equals(
+                    DocumentIdentity.RuntimeKey("Word", range.Document),
+                    DocumentIdentity.RuntimeKey("Word", doc),
+                    StringComparison.OrdinalIgnoreCase);
             }
             catch
             {

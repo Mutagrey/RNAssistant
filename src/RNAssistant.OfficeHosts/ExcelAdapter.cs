@@ -21,9 +21,10 @@ namespace RNAssistant.OfficeHosts
 
         private readonly Excel.Application _application;
         private readonly OfficeTargetDescriptor _target;
+        private readonly Excel.Workbook _targetWorkbook;
 
         public ExcelAdapter(Excel.Application application)
-            : this(application, null)
+            : this(application, (OfficeTargetDescriptor)null)
         {
         }
 
@@ -31,6 +32,12 @@ namespace RNAssistant.OfficeHosts
         {
             _application = application;
             _target = target;
+        }
+
+        public ExcelAdapter(Excel.Application application, Excel.Workbook targetWorkbook)
+        {
+            _application = application;
+            _targetWorkbook = targetWorkbook;
         }
 
         public string HostName { get { return "Excel"; } }
@@ -58,7 +65,7 @@ namespace RNAssistant.OfficeHosts
             get
             {
                 var workbook = ActiveWorkbook();
-                return workbook == null ? "Excel:NoWorkbook" : "Excel:Runtime:" + workbook.GetHashCode().ToString("x");
+                return workbook == null ? "Excel:NoWorkbook" : DocumentIdentity.RuntimeKey(HostName, workbook);
             }
         }
 
@@ -185,7 +192,7 @@ namespace RNAssistant.OfficeHosts
             {
                 return "Excel:NoWorkbook";
             }
-            var runtimeKey = "Excel:Runtime:" + workbook.GetHashCode().ToString("x");
+            var runtimeKey = DocumentIdentity.RuntimeKey(HostName, workbook);
             return DocumentIdentity.ForOfficeDocument(
                 HostName,
                 SafeString(delegate { return workbook.Path; }),
@@ -1365,6 +1372,19 @@ namespace RNAssistant.OfficeHosts
 
         private Excel.Workbook TargetWorkbook()
         {
+            if (_targetWorkbook != null)
+            {
+                try
+                {
+                    var ignored = _targetWorkbook.Name;
+                    return _targetWorkbook;
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+
             if (!HasTargetDocument())
             {
                 return null;
@@ -1383,7 +1403,7 @@ namespace RNAssistant.OfficeHosts
 
         private bool HasTargetDocument()
         {
-            return _target != null && _target.HasDocumentIdentity;
+            return _targetWorkbook != null || _target != null && _target.HasDocumentIdentity;
         }
 
         private bool MatchesWorkbook(Excel.Workbook workbook)
@@ -1416,7 +1436,7 @@ namespace RNAssistant.OfficeHosts
             var workbook = ActiveWorkbook();
             if (workbook == null)
             {
-                throw new InvalidOperationException(_target == null || !_target.HasDocumentIdentity
+                throw new InvalidOperationException(!HasTargetDocument()
                     ? "No active workbook."
                     : "Target Excel workbook is not open.");
             }
@@ -1441,11 +1461,16 @@ namespace RNAssistant.OfficeHosts
                 {
                 }
 
-                workbook.Activate();
-                var activatedSheet = _application.ActiveSheet as Excel.Worksheet;
-                if (activatedSheet != null && SameWorkbook(activatedSheet.Parent as Excel.Workbook, workbook))
+                try
                 {
-                    return activatedSheet;
+                    var workbookActiveSheet = workbook.ActiveSheet as Excel.Worksheet;
+                    if (workbookActiveSheet != null)
+                    {
+                        return workbookActiveSheet;
+                    }
+                }
+                catch
+                {
                 }
 
                 var firstSheet = FirstWorksheet(workbook);
@@ -1609,8 +1634,10 @@ namespace RNAssistant.OfficeHosts
                 return false;
             }
 
-            return SamePath(SafeString(delegate { return left.FullName; }), SafeString(delegate { return right.FullName; }))
-                || string.Equals(SafeString(delegate { return left.Name; }), SafeString(delegate { return right.Name; }), StringComparison.OrdinalIgnoreCase);
+            return string.Equals(
+                DocumentIdentity.RuntimeKey("Excel", left),
+                DocumentIdentity.RuntimeKey("Excel", right),
+                StringComparison.OrdinalIgnoreCase);
         }
 
         private delegate string StringGetter();

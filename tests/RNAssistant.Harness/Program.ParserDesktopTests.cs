@@ -99,6 +99,12 @@ namespace RNAssistant.Harness
 
         private static void DispatchedAdapterDelegatesCalls()
         {
+            var identityObject = new object();
+            AssertEqual(
+                DocumentIdentity.RuntimeKey("Excel", identityObject),
+                DocumentIdentity.RuntimeKey("Excel", identityObject),
+                "runtime identity is stable for the same object");
+
             var createdOnThread = 0;
             var executeOnThread = 0;
             var adapter = new FakeOfficeAdapter();

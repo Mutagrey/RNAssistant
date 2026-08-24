@@ -12,12 +12,14 @@ namespace RNAssistant.Office.Services
 {
     public sealed class ToolCatalogService
     {
+        private static readonly TimeSpan DocumentVbaCacheDuration = TimeSpan.FromMinutes(1);
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly OfficeToolExecutor _toolExecutor;
         private readonly ToolStore _toolStore;
         private readonly object _documentVbaCacheSync = new object();
         private string _documentVbaCacheKey;
         private DateTime _documentVbaCacheUtc;
+        private long _documentVbaCacheGeneration;
         private List<ToolDefinition> _documentVbaCache = new List<ToolDefinition>();
 
         public ToolCatalogService(IOfficeApplicationAdapter adapter, OfficeToolExecutor toolExecutor, ToolStore toolStore)
@@ -100,6 +102,7 @@ namespace RNAssistant.Office.Services
             {
                 _documentVbaCacheKey = null;
                 _documentVbaCacheUtc = DateTime.MinValue;
+                _documentVbaCacheGeneration += 1;
                 _documentVbaCache.Clear();
             }
         }
@@ -111,27 +114,41 @@ namespace RNAssistant.Office.Services
             var documentKey = _adapter.DocumentKey ?? string.Empty;
             var runtimeDocumentKey = _adapter.RuntimeDocumentKey ?? string.Empty;
             var cacheKey = DocumentVbaCacheKey(host, documentKey, runtimeDocumentKey);
+            long cacheGeneration;
             lock (_documentVbaCacheSync)
             {
                 if (string.Equals(cacheKey, _documentVbaCacheKey, StringComparison.OrdinalIgnoreCase) &&
-                    DateTime.UtcNow - _documentVbaCacheUtc <= TimeSpan.FromSeconds(2))
+                    DateTime.UtcNow - _documentVbaCacheUtc <= DocumentVbaCacheDuration)
                 {
                     return _documentVbaCache.Select(tool => tool.Clone()).ToList();
                 }
+                cacheGeneration = _documentVbaCacheGeneration;
+            }
 
-                var documentGuard = _adapter as IOfficeDocumentExecutionGuard;
-                List<ToolDefinition> loaded;
-                using (documentGuard == null
-                    ? null
-                    : documentGuard.BeginExpectedDocument(host, documentKey, runtimeDocumentKey))
-                {
-                    loaded = LoadDocumentVbaTools();
-                }
-                if (!string.Equals(cacheKey, CurrentDocumentVbaCacheKey(), StringComparison.OrdinalIgnoreCase))
+            var documentGuard = _adapter as IOfficeDocumentExecutionGuard;
+            List<ToolDefinition> loaded;
+            using (documentGuard == null
+                ? null
+                : documentGuard.BeginExpectedDocument(host, documentKey, runtimeDocumentKey))
+            {
+                loaded = LoadDocumentVbaTools();
+            }
+            if (!string.Equals(cacheKey, CurrentDocumentVbaCacheKey(), StringComparison.OrdinalIgnoreCase))
+            {
+                return new List<ToolDefinition>();
+            }
+
+            lock (_documentVbaCacheSync)
+            {
+                if (cacheGeneration != _documentVbaCacheGeneration)
                 {
                     return new List<ToolDefinition>();
                 }
-
+                if (string.Equals(cacheKey, _documentVbaCacheKey, StringComparison.OrdinalIgnoreCase) &&
+                    DateTime.UtcNow - _documentVbaCacheUtc <= DocumentVbaCacheDuration)
+                {
+                    return _documentVbaCache.Select(tool => tool.Clone()).ToList();
+                }
                 _documentVbaCache = loaded;
                 _documentVbaCacheKey = cacheKey;
                 _documentVbaCacheUtc = DateTime.UtcNow;
@@ -176,7 +193,9 @@ namespace RNAssistant.Office.Services
                 var name = (string)module["name"];
                 if (!string.IsNullOrWhiteSpace(name) && !moduleMap.ContainsKey(name)) moduleMap.Add(name, module);
             }
-            foreach (var moduleInfo in moduleMap.Values.Where(module => string.Equals((string)module["type"], "StdModule", StringComparison.OrdinalIgnoreCase)).ToList())
+            foreach (var moduleInfo in moduleMap.Values.Where(module =>
+                string.Equals((string)module["type"], "StdModule", StringComparison.OrdinalIgnoreCase) &&
+                module.Value<bool?>("hasToolManifest") != false).ToList())
             {
                 var module = ReadDocumentModule(moduleMap, (string)moduleInfo["name"]);
                 if (module == null) continue;
