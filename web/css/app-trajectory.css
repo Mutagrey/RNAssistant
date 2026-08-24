@@ -30,10 +30,35 @@
   justify-content: space-between;
 }
 
+.trajectory-correlation-bar {
+  display: flex;
+  min-height: 27px;
+  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+
+.trajectory-correlation-actions {
+  display: flex;
+  min-width: 0;
+  gap: 5px;
+  overflow-x: auto;
+}
+
+.trajectory-correlation-actions button,
+.trajectory-correlation-chip {
+  min-height: 24px;
+  padding: 3px 6px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+
 .trajectory-workspace {
   display: grid;
   grid-template-columns: minmax(180px, 30%) minmax(0, 1fr);
-  height: 260px;
+  height: 340px;
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -98,7 +123,7 @@
 
 .trajectory-detail {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   min-width: 0;
   min-height: 0;
   gap: 6px;
@@ -149,6 +174,46 @@
 
 .trajectory-payload {
   max-height: 120px;
+}
+
+.trajectory-vba-diff {
+  min-height: 0;
+  max-height: 190px;
+  overflow: auto;
+}
+
+.trajectory-vba-component {
+  margin-bottom: 9px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+.trajectory-vba-component:last-child {
+  margin-bottom: 0;
+}
+
+.trajectory-vba-component-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+
+.trajectory-vba-component-head strong {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10.5px;
+}
+
+.trajectory-vba-component-meta {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9.5px;
+  line-height: 1.4;
+  word-break: break-word;
 }
 
 @media (max-width: 700px) {

@@ -231,6 +231,7 @@ namespace RNAssistant.Harness
                 Test("vba: restore pins backup before confirmation", VbaRestorePinsBackupBeforeConfirmation),
                 Test("vba: journal recovers tail and rejects corruption", VbaJournalRecoversTailAndRejectsCorruption),
                 Test("vba: journal records mutation correlation", VbaJournalRecordsMutationAndCorrelation),
+                Test("vba: mutation diagnostics paginate and hydrate diffs", VbaMutationDiagnosticsPaginateAndHydrateDiffs),
                 Test("vba: journal reconciles interrupted mutations", VbaJournalReconcilesInterruptedMutations),
                 Test("vba: journal uses history protection", VbaJournalUsesHistoryProtection),
                 Test("vba: manifest validates entry point", VbaToolManifestValidatesTypedEntryPoint),

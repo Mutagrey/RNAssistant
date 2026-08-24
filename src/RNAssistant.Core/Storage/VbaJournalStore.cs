@@ -33,6 +33,9 @@ namespace RNAssistant.Core.Storage
     public sealed class VbaJournalStore
     {
         private const string JournalFileName = "mutations.events.jsonl";
+        private const int MaxMutationPageSize = 200;
+        private const int MaxMutationSearchChars = 512;
+        private const string MutationCursorPrefix = "vba:";
         private static readonly object PersistenceSync = new object();
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false, true);
 
@@ -435,6 +438,57 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        public VbaMutationQueryPage QueryMutations(string host, string documentKey, VbaMutationQueryRequest request)
+        {
+            request = request ?? new VbaMutationQueryRequest();
+            NormalizeMutationQuery(request);
+            var source = ReadEvents(host, documentKey).Where(item => item != null).OrderBy(item => item.Sequence).ToList();
+            var cursor = ParseMutationCursor(request.Cursor);
+            var snapshotSequence = cursor == null
+                ? (source.Count == 0 ? 0 : source[source.Count - 1].Sequence)
+                : cursor.SnapshotSequence;
+            var snapshot = source.Where(item => item.Sequence <= snapshotSequence).ToList();
+            var rows = BuildMutationQueryRows(snapshot);
+            var filtered = rows.Where(item => MatchesMutationQuery(item, request))
+                .OrderByDescending(item => item.LastSequence)
+                .ThenBy(item => item.MutationId, StringComparer.Ordinal)
+                .ToList();
+            var offset = cursor == null ? 0 : Math.Min(cursor.Offset, filtered.Count);
+            var pageSize = request.PageSize <= 0 ? 100 : Math.Min(MaxMutationPageSize, request.PageSize);
+            var page = filtered.Skip(offset).Take(pageSize).ToList();
+            var nextOffset = offset + page.Count;
+            var hasMore = nextOffset < filtered.Count;
+            return new VbaMutationQueryPage
+            {
+                TotalEvents = snapshot.Count,
+                TotalRows = rows.Count,
+                TotalMatches = filtered.Count,
+                Cursor = request.Cursor,
+                NextCursor = hasMore
+                    ? MutationCursorPrefix + snapshotSequence.ToString(CultureInfo.InvariantCulture) + ":" + nextOffset.ToString(CultureInfo.InvariantCulture)
+                    : null,
+                HasMore = hasMore,
+                Rows = page
+            };
+        }
+
+        public VbaMutationDetail GetMutationDetail(string host, string documentKey, string mutationId)
+        {
+            mutationId = (mutationId ?? string.Empty).Trim();
+            if (mutationId.Length == 0) throw new ArgumentException("mutationId is required.", "mutationId");
+            var events = ReadEvents(host, documentKey).Where(item => item != null).OrderBy(item => item.Sequence).ToList();
+            var related = events.Where(item => string.Equals(item.MutationId, mutationId, StringComparison.OrdinalIgnoreCase)).ToList();
+            var moduleRecords = ProjectMutations(events);
+            var packageRecords = ProjectPackageMutations(events);
+            var module = moduleRecords.FirstOrDefault(item => item.Prepared != null &&
+                string.Equals(item.Prepared.MutationId, mutationId, StringComparison.OrdinalIgnoreCase));
+            if (module != null) return BuildMutationDetail(module, related);
+            var package = packageRecords.FirstOrDefault(item => item.Prepared != null &&
+                string.Equals(item.Prepared.MutationId, mutationId, StringComparison.OrdinalIgnoreCase));
+            if (package != null) return BuildPackageMutationDetail(package, related);
+            throw new VbaJournalException("VBA mutation was not found: " + mutationId + ".");
+        }
+
         internal void ScanCasReferences(CasReachabilityScan scan)
         {
             if (scan == null) throw new ArgumentNullException("scan");
@@ -520,6 +574,318 @@ namespace RNAssistant.Core.Storage
                         "The VBA mutation journal could not be validated: " + ex.Message);
                 }
             }
+        }
+
+        private static void NormalizeMutationQuery(VbaMutationQueryRequest request)
+        {
+            request.Search = (request.Search ?? string.Empty).Trim();
+            request.Kind = TrimOrNull(request.Kind);
+            request.Status = TrimOrNull(request.Status);
+            request.RunId = TrimOrNull(request.RunId);
+            request.TurnId = TrimOrNull(request.TurnId);
+            request.StepId = TrimOrNull(request.StepId);
+            request.ToolCallId = TrimOrNull(request.ToolCallId);
+            if (request.Search.Length > MaxMutationSearchChars)
+            {
+                throw new ArgumentException("VBA mutation search is limited to " + MaxMutationSearchChars + " characters.", "request");
+            }
+            if (!VbaMutationKinds.IsValid(request.Kind))
+            {
+                throw new ArgumentException("Unsupported VBA mutation kind: " + request.Kind + ".", "request");
+            }
+            ParseMutationCursor(request.Cursor);
+        }
+
+        private static MutationCursor ParseMutationCursor(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            var parts = value.Split(':');
+            long snapshot;
+            int offset;
+            if (parts.Length != 3 || !string.Equals(parts[0] + ":", MutationCursorPrefix, StringComparison.Ordinal) ||
+                !long.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out snapshot) || snapshot < 0 ||
+                !int.TryParse(parts[2], NumberStyles.None, CultureInfo.InvariantCulture, out offset) || offset < 0)
+            {
+                throw new ArgumentException("Invalid VBA mutation cursor.", "value");
+            }
+            return new MutationCursor { SnapshotSequence = snapshot, Offset = offset };
+        }
+
+        private static List<VbaMutationQueryRow> BuildMutationQueryRows(IReadOnlyList<VbaJournalEvent> events)
+        {
+            var rows = new List<VbaMutationQueryRow>();
+            var related = events.Where(item => !string.IsNullOrWhiteSpace(item.MutationId))
+                .GroupBy(item => item.MutationId, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.OrderBy(item => item.Sequence).ToList(), StringComparer.OrdinalIgnoreCase);
+            foreach (var record in ProjectMutations(events))
+            {
+                List<VbaJournalEvent> source;
+                if (record.Prepared == null || !related.TryGetValue(record.Prepared.MutationId, out source)) continue;
+                var preparedEvent = source.First(item => string.Equals(item.Type, VbaJournalEventTypes.MutationPrepared, StringComparison.Ordinal));
+                var terminalEvent = source.FirstOrDefault(item => string.Equals(item.Type, VbaJournalEventTypes.MutationTerminal, StringComparison.Ordinal));
+                rows.Add(new VbaMutationQueryRow
+                {
+                    MutationId = record.Prepared.MutationId,
+                    Kind = VbaMutationKinds.Module,
+                    Operation = record.Prepared.Operation,
+                    Status = record.Terminal == null ? VbaMutationStatuses.Open : record.Terminal.Status,
+                    CreatedUtc = preparedEvent.CreatedUtc,
+                    CompletedUtc = terminalEvent == null ? (DateTime?)null : terminalEvent.CreatedUtc,
+                    FirstSequence = preparedEvent.Sequence,
+                    LastSequence = terminalEvent == null ? preparedEvent.Sequence : terminalEvent.Sequence,
+                    SessionId = record.Prepared.SessionId,
+                    RunId = record.Prepared.RunId,
+                    TurnId = record.Prepared.TurnId,
+                    StepId = record.Prepared.StepId,
+                    ToolCallId = record.Prepared.ToolCallId,
+                    ModuleName = record.Prepared.ModuleName,
+                    ComponentType = record.Prepared.ComponentType,
+                    BackupId = record.Prepared.BackupId,
+                    ComponentCount = 1,
+                    ComponentNames = new List<string> { record.Prepared.ModuleName },
+                    ErrorCode = record.Terminal == null ? null : record.Terminal.ErrorCode,
+                    Message = record.Terminal == null ? null : record.Terminal.Message,
+                    SourceEventSeqs = SourceSequences(preparedEvent, terminalEvent),
+                    SourceEventIds = SourceEventIds(preparedEvent, terminalEvent)
+                });
+            }
+            foreach (var record in ProjectPackageMutations(events))
+            {
+                List<VbaJournalEvent> source;
+                if (record.Prepared == null || !related.TryGetValue(record.Prepared.MutationId, out source)) continue;
+                var preparedEvent = source.First(item => string.Equals(item.Type, VbaJournalEventTypes.PackageMutationPrepared, StringComparison.Ordinal));
+                var terminalEvent = source.FirstOrDefault(item => string.Equals(item.Type, VbaJournalEventTypes.PackageMutationTerminal, StringComparison.Ordinal));
+                var components = record.Prepared.Components ?? new List<VbaPackageMutationComponent>();
+                rows.Add(new VbaMutationQueryRow
+                {
+                    MutationId = record.Prepared.MutationId,
+                    Kind = VbaMutationKinds.Package,
+                    Operation = record.Prepared.Operation,
+                    Status = record.Terminal == null ? VbaMutationStatuses.Open : record.Terminal.Status,
+                    CreatedUtc = preparedEvent.CreatedUtc,
+                    CompletedUtc = terminalEvent == null ? (DateTime?)null : terminalEvent.CreatedUtc,
+                    FirstSequence = preparedEvent.Sequence,
+                    LastSequence = terminalEvent == null ? preparedEvent.Sequence : terminalEvent.Sequence,
+                    SessionId = record.Prepared.SessionId,
+                    RunId = record.Prepared.RunId,
+                    TurnId = record.Prepared.TurnId,
+                    StepId = record.Prepared.StepId,
+                    ToolCallId = record.Prepared.ToolCallId,
+                    PackageId = record.Prepared.PackageId,
+                    PackageVersion = record.Prepared.PackageVersion,
+                    ComponentCount = components.Count,
+                    ComponentNames = components.Select(item => item.ModuleName).Where(item => !string.IsNullOrWhiteSpace(item)).ToList(),
+                    ErrorCode = record.Terminal == null ? null : record.Terminal.ErrorCode,
+                    Message = record.Terminal == null ? null : record.Terminal.Message,
+                    SourceEventSeqs = SourceSequences(preparedEvent, terminalEvent),
+                    SourceEventIds = SourceEventIds(preparedEvent, terminalEvent)
+                });
+            }
+            return rows;
+        }
+
+        private static bool MatchesMutationQuery(VbaMutationQueryRow row, VbaMutationQueryRequest request)
+        {
+            if (!MatchesValue(request.Kind, row.Kind) || !MatchesValue(request.Status, row.Status) ||
+                !MatchesValue(request.RunId, row.RunId) || !MatchesValue(request.TurnId, row.TurnId) ||
+                !MatchesValue(request.StepId, row.StepId) || !MatchesValue(request.ToolCallId, row.ToolCallId))
+            {
+                return false;
+            }
+            var terms = (request.Search ?? string.Empty).Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+            if (terms.Length == 0) return true;
+            var text = string.Join("\n", new[]
+            {
+                row.MutationId, row.Kind, row.Operation, row.Status, row.SessionId, row.RunId, row.TurnId,
+                row.StepId, row.ToolCallId, row.ModuleName, row.ComponentType, row.BackupId,
+                row.PackageId, row.PackageVersion, row.ErrorCode, row.Message,
+                string.Join(" ", row.ComponentNames ?? new List<string>())
+            }.Where(item => !string.IsNullOrWhiteSpace(item)).ToArray());
+            return terms.All(term => text.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private VbaMutationDetail BuildMutationDetail(VbaMutationRecord record, IReadOnlyList<VbaJournalEvent> events)
+        {
+            var prepared = record.Prepared;
+            var terminal = record.Terminal;
+            var detail = MutationDetailBase(
+                prepared.MutationId,
+                VbaMutationKinds.Module,
+                prepared.Operation,
+                terminal == null ? VbaMutationStatuses.Open : terminal.Status,
+                prepared.CreatedUtc,
+                terminal == null ? (DateTime?)null : terminal.CreatedUtc,
+                prepared.SessionId,
+                prepared.RunId,
+                prepared.TurnId,
+                prepared.StepId,
+                prepared.ToolCallId,
+                terminal == null ? null : terminal.ErrorCode,
+                terminal == null ? null : terminal.Message,
+                events);
+            detail.Components.Add(new VbaMutationComponentDetail
+            {
+                ModuleName = prepared.ModuleName,
+                BeforeExists = prepared.BeforeExists,
+                BeforeComponentType = prepared.BeforeExists ? prepared.ComponentType : null,
+                BeforeCodeSha256 = prepared.BeforeCodeSha256,
+                BeforeCode = ReadMutationCode(prepared.BeforeExists, prepared.BeforeCodeReference, prepared.MutationId, prepared.ModuleName, "before"),
+                IntendedAfterExists = prepared.IntendedAfterExists,
+                IntendedAfterComponentType = prepared.IntendedAfterExists ? prepared.ComponentType : null,
+                IntendedAfterCodeSha256 = prepared.IntendedAfterCodeSha256,
+                IntendedAfterCode = ReadMutationCode(prepared.IntendedAfterExists, prepared.IntendedAfterCodeReference, prepared.MutationId, prepared.ModuleName, "intended-after"),
+                BackupId = prepared.BackupId,
+                CanRestore = prepared.BeforeExists && !string.IsNullOrWhiteSpace(prepared.BackupId),
+                ActualExists = terminal == null ? (bool?)null : terminal.ActualExists,
+                ActualComponentType = terminal != null && terminal.ActualExists == true ? prepared.ComponentType : null,
+                ActualCodeSha256 = terminal == null ? null : terminal.ActualCodeSha256,
+                MatchesBefore = terminal == null ? (bool?)null : MatchesModuleState(
+                    terminal.ActualExists, terminal.ActualCodeSha256, terminal.ActualComparableCodeSha256,
+                    prepared.BeforeExists, prepared.BeforeCodeSha256, prepared.BeforeComparableCodeSha256),
+                MatchesIntendedAfter = terminal == null ? (bool?)null : MatchesModuleState(
+                    terminal.ActualExists, terminal.ActualCodeSha256, terminal.ActualComparableCodeSha256,
+                    prepared.IntendedAfterExists, prepared.IntendedAfterCodeSha256, prepared.IntendedAfterComparableCodeSha256),
+                ErrorCode = terminal == null ? null : terminal.ErrorCode,
+                Message = terminal == null ? null : terminal.Message
+            });
+            return detail;
+        }
+
+        private VbaMutationDetail BuildPackageMutationDetail(VbaPackageMutationRecord record, IReadOnlyList<VbaJournalEvent> events)
+        {
+            var prepared = record.Prepared;
+            var terminal = record.Terminal;
+            var detail = MutationDetailBase(
+                prepared.MutationId,
+                VbaMutationKinds.Package,
+                prepared.Operation,
+                terminal == null ? VbaMutationStatuses.Open : terminal.Status,
+                prepared.CreatedUtc,
+                terminal == null ? (DateTime?)null : terminal.CreatedUtc,
+                prepared.SessionId,
+                prepared.RunId,
+                prepared.TurnId,
+                prepared.StepId,
+                prepared.ToolCallId,
+                terminal == null ? null : terminal.ErrorCode,
+                terminal == null ? null : terminal.Message,
+                events);
+            detail.PackageId = prepared.PackageId;
+            detail.PackageVersion = prepared.PackageVersion;
+            foreach (var component in prepared.Components ?? new List<VbaPackageMutationComponent>())
+            {
+                var assessment = terminal == null || terminal.Components == null
+                    ? null
+                    : terminal.Components.FirstOrDefault(item => string.Equals(item.ModuleName, component.ModuleName, StringComparison.OrdinalIgnoreCase));
+                detail.Components.Add(new VbaMutationComponentDetail
+                {
+                    ModuleName = component.ModuleName,
+                    BeforeExists = component.BeforeExists,
+                    BeforeComponentType = component.BeforeComponentType,
+                    BeforeCodeSha256 = component.BeforeCodeSha256,
+                    BeforeCode = ReadMutationCode(component.BeforeExists, component.BeforeCodeReference, prepared.MutationId, component.ModuleName, "before"),
+                    IntendedAfterExists = component.IntendedAfterExists,
+                    IntendedAfterComponentType = component.IntendedAfterComponentType,
+                    IntendedAfterCodeSha256 = component.IntendedAfterCodeSha256,
+                    IntendedAfterCode = ReadMutationCode(component.IntendedAfterExists, component.IntendedAfterCodeReference, prepared.MutationId, component.ModuleName, "intended-after"),
+                    BackupId = component.BackupId,
+                    CanRestore = component.BeforeExists && !string.IsNullOrWhiteSpace(component.BackupId),
+                    ActualExists = assessment == null ? (bool?)null : assessment.ActualExists,
+                    ActualComponentType = assessment == null ? null : assessment.ActualComponentType,
+                    ActualCodeSha256 = assessment == null ? null : assessment.ActualCodeSha256,
+                    MatchesBefore = assessment == null ? (bool?)null : assessment.MatchesBefore,
+                    MatchesIntendedAfter = assessment == null ? (bool?)null : assessment.MatchesIntendedAfter,
+                    ErrorCode = assessment == null ? null : assessment.ErrorCode,
+                    Message = assessment == null ? null : assessment.Message
+                });
+            }
+            return detail;
+        }
+
+        private static VbaMutationDetail MutationDetailBase(
+            string mutationId,
+            string kind,
+            string operation,
+            string status,
+            DateTime createdUtc,
+            DateTime? completedUtc,
+            string sessionId,
+            string runId,
+            string turnId,
+            string stepId,
+            string toolCallId,
+            string errorCode,
+            string message,
+            IEnumerable<VbaJournalEvent> events)
+        {
+            var source = (events ?? new List<VbaJournalEvent>()).OrderBy(item => item.Sequence).ToList();
+            return new VbaMutationDetail
+            {
+                MutationId = mutationId,
+                Kind = kind,
+                Operation = operation,
+                Status = status,
+                CreatedUtc = createdUtc,
+                CompletedUtc = completedUtc,
+                SessionId = sessionId,
+                RunId = runId,
+                TurnId = turnId,
+                StepId = stepId,
+                ToolCallId = toolCallId,
+                ErrorCode = errorCode,
+                Message = message,
+                SourceEventSeqs = source.Select(item => item.Sequence).ToList(),
+                SourceEventIds = source.Select(item => item.EventId).Where(item => !string.IsNullOrWhiteSpace(item)).ToList()
+            };
+        }
+
+        private string ReadMutationCode(bool exists, ChatBlobReference reference, string mutationId, string moduleName, string side)
+        {
+            if (!exists) return null;
+            var code = _blobs.ReadText(reference);
+            if (code == null)
+            {
+                throw new VbaJournalException("VBA " + side + " source is missing, corrupt, or protected with another key for mutation " +
+                    mutationId + ", module " + moduleName + ".");
+            }
+            return code;
+        }
+
+        private static bool MatchesModuleState(
+            bool? actualExists,
+            string actualSha256,
+            string actualComparableSha256,
+            bool expectedExists,
+            string expectedSha256,
+            string expectedComparableSha256)
+        {
+            if (!actualExists.HasValue || actualExists.Value != expectedExists) return false;
+            if (!expectedExists) return true;
+            return !string.IsNullOrWhiteSpace(actualSha256) &&
+                    string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase) ||
+                !string.IsNullOrWhiteSpace(actualComparableSha256) &&
+                    string.Equals(actualComparableSha256, expectedComparableSha256, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool MatchesValue(string expected, string actual)
+        {
+            return string.IsNullOrWhiteSpace(expected) || string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string TrimOrNull(string value)
+        {
+            value = (value ?? string.Empty).Trim();
+            return value.Length == 0 ? null : value;
+        }
+
+        private static List<long> SourceSequences(params VbaJournalEvent[] events)
+        {
+            return events.Where(item => item != null).Select(item => item.Sequence).ToList();
+        }
+
+        private static List<string> SourceEventIds(params VbaJournalEvent[] events)
+        {
+            return events.Where(item => item != null && !string.IsNullOrWhiteSpace(item.EventId)).Select(item => item.EventId).ToList();
         }
 
         private void Append(
@@ -1037,6 +1403,12 @@ namespace RNAssistant.Core.Storage
         private static string NewId(string prefix)
         {
             return prefix + "_" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff", CultureInfo.InvariantCulture) + "_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+        }
+
+        private sealed class MutationCursor
+        {
+            public long SnapshotSequence { get; set; }
+            public int Offset { get; set; }
         }
 
         private sealed class JournalReadResult

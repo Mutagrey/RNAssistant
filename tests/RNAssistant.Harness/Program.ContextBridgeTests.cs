@@ -663,6 +663,22 @@ namespace RNAssistant.Harness
             AssertTrue(JObject.Parse(readResponseJson)["ok"].Value<bool>(), "VBA read bridge response ok");
             AssertEqual("Module2", controller.LastModuleName, "read module name");
 
+            var mutationsResponseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"b5-mutations\",\"type\":\"getVbaMutations\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"cursor\":\"vba:4:2\",\"pageSize\":25,\"kind\":\"package\"}}")
+                .GetAwaiter()
+                .GetResult();
+            AssertTrue(JObject.Parse(mutationsResponseJson)["ok"].Value<bool>(), "VBA mutation query bridge response ok");
+            AssertEqual("vba:4:2", controller.LastVbaMutationCursor, "VBA mutation cursor reaches typed controller");
+
+            var mutationDetailResponseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"b5-mutation-detail\",\"type\":\"getVbaMutationDetail\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"mutationId\":\"mutation-1\"}}")
+                .GetAwaiter()
+                .GetResult();
+            AssertTrue(JObject.Parse(mutationDetailResponseJson)["ok"].Value<bool>(), "VBA mutation detail bridge response ok");
+            AssertEqual("mutation-1", controller.LastVbaMutationId, "VBA mutation id reaches typed controller");
+
             var responseJson = bridge.HandleMessageAsync(
                 "{\"id\":\"b5\",\"type\":\"saveVbaModule\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"moduleName\":\"Module1\",\"code\":\"Sub Main()\\nEnd Sub\",\"expectedCodeSha256\":\"save123\"}}")
                 .GetAwaiter()

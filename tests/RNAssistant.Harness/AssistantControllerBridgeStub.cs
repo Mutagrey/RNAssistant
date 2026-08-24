@@ -29,6 +29,8 @@ namespace RNAssistant.Office
         public string LastModuleCode { get; private set; }
         public string LastModuleHash { get; private set; }
         public string LastModuleType { get; private set; }
+        public string LastVbaMutationId { get; private set; }
+        public string LastVbaMutationCursor { get; private set; }
         public string LastContextKind { get; private set; }
         public string LastContextTitle { get; private set; }
         public string LastContextReference { get; private set; }
@@ -295,6 +297,16 @@ namespace RNAssistant.Office
         }
         public VbaProjectResponse GetVbaProject() { return new VbaProjectResponse { Result = ToolResult.Ok("ok") }; }
         public ToolResult GetVbaModule(string moduleName) { LastModuleName = moduleName; return ToolResult.Ok("read"); }
+        public VbaMutationQueryResponse GetVbaMutations(VbaMutationQueryPayload request)
+        {
+            LastVbaMutationCursor = request == null ? null : request.Cursor;
+            return new VbaMutationQueryResponse { View = "vba-mutations", Rows = new VbaMutationRowDto[0] };
+        }
+        public VbaMutationDetailResponse GetVbaMutationDetail(string mutationId)
+        {
+            LastVbaMutationId = mutationId;
+            return new VbaMutationDetailResponse { MutationId = mutationId, Components = new VbaMutationComponentDto[0] };
+        }
 
         public ToolResult SaveVbaModule(string moduleName, string code, string expectedCodeSha256 = null)
         {

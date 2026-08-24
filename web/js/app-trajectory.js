@@ -1,8 +1,12 @@
 (function () {
+  "use strict";
+
   var events = [];
   var selected = null;
   var nextCursor = null;
   var activeView = "raw";
+  var correlationFilter = {};
+  var trajectoryChatId = null;
 
   function value(source, pascal, camel, fallback) {
     source = source || {};
@@ -11,8 +15,8 @@
 
   function prettyJson(text) {
     if (!text) return "{}";
-    try { return JSON.stringify(JSON.parse(text), null, 2); }
-    catch (error) { return text; }
+    try { return JSON.stringify(typeof text === "string" ? JSON.parse(text) : text, null, 2); }
+    catch (error) { return String(text); }
   }
 
   function bytesLabel(bytes) {
@@ -23,17 +27,126 @@
   }
 
   function eventId(item) { return value(item, "EventId", "eventId", ""); }
+  function mutationId(item) { return value(item, "MutationId", "mutationId", ""); }
+  function isVbaView() { return activeView === "vba-mutations"; }
 
   function itemId(item) {
+    if (isVbaView()) return mutationId(item);
     return activeView === "raw" ? eventId(item) : value(item, "Id", "id", "");
   }
 
-  function selectDerivedRow(item, button) {
-    selected = item;
+  function selectButton(button) {
     Array.prototype.slice.call($("trajectoryEvents").querySelectorAll(".trajectory-event")).forEach(function (node) {
       node.classList.toggle("active", node === button);
       node.setAttribute("aria-selected", node === button ? "true" : "false");
     });
+  }
+
+  function resetLazyDetail() {
+    $("trajectoryEventPayload").textContent = "";
+    $("trajectoryEventPayload").classList.add("hidden");
+    $("trajectoryVbaDiff").replaceChildren();
+    $("trajectoryVbaDiff").classList.add("hidden");
+    $("loadTrajectoryPayloadButton").classList.add("hidden");
+    $("loadVbaMutationButton").classList.add("hidden");
+  }
+
+  function unique(values) {
+    var seen = {};
+    return (values || []).filter(function (item) {
+      var key = String(item || "").toLowerCase();
+      if (!key || seen[key]) return false;
+      seen[key] = true;
+      return true;
+    });
+  }
+
+  function navigateCorrelation(field, filterValue, targetView, sourceChatId) {
+    correlationFilter = {};
+    if (field === "sourceRange") {
+      correlationFilter.minSequence = filterValue.min;
+      correlationFilter.maxSequence = filterValue.max;
+    } else {
+      correlationFilter[field] = filterValue;
+    }
+    trajectoryChatId = sourceChatId || state.activeChatId;
+    $("trajectoryViewInput").value = targetView;
+    nextCursor = null;
+    updateViewControls();
+    refreshTrajectory(false);
+  }
+
+  function correlationButton(root, label, field, filterValue, targetView, sourceChatId) {
+    if (!filterValue || typeof filterValue === "object" && (!filterValue.min || !filterValue.max)) return;
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary";
+    button.textContent = label;
+    button.addEventListener("click", function () {
+      navigateCorrelation(field, filterValue, targetView, sourceChatId);
+    });
+    root.appendChild(button);
+  }
+
+  function activeFilterText() {
+    var parts = Object.keys(correlationFilter).map(function (key) {
+      return key + "=" + correlationFilter[key];
+    });
+    if (trajectoryChatId && trajectoryChatId !== state.activeChatId) parts.push("chat=" + trajectoryChatId);
+    return parts.length ? "active: " + parts.join(" · ") : "";
+  }
+
+  function renderCorrelationActions(item) {
+    var bar = $("trajectoryCorrelationBar");
+    var root = $("trajectoryCorrelationActions");
+    var clear = $("clearTrajectoryCorrelationButton");
+    root.replaceChildren();
+    var active = activeFilterText();
+    if (active) {
+      var chip = document.createElement("span");
+      chip.className = "trajectory-correlation-chip";
+      chip.textContent = active;
+      root.appendChild(chip);
+    }
+
+    var sourceChatId = value(item, "SessionId", "sessionId", null);
+    var runId = value(item, "RunId", "runId", "");
+    var turnId = value(item, "TurnId", "turnId", "");
+    var stepId = value(item, "StepId", "stepId", "");
+    var directToolCallId = value(item, "ToolCallId", "toolCallId", "");
+    unique(directToolCallId ? [directToolCallId] : value(item, "ToolCallIds", "toolCallIds", []) || []).forEach(function (id) {
+      correlationButton(root, "tool " + id, "toolCallId", id, "tool-execution", sourceChatId);
+    });
+    if (runId) correlationButton(root, "run " + runId, "runId", runId, isVbaView() ? "raw" : activeView, sourceChatId);
+    if (turnId) correlationButton(root, "turn " + turnId, "turnId", turnId, isVbaView() ? "raw" : activeView, sourceChatId);
+    if (stepId) correlationButton(root, "step " + stepId, "stepId", stepId, isVbaView() ? "raw" : activeView, sourceChatId);
+
+    var artifactIds = unique([value(item, "ArtifactId", "artifactId", "")]
+      .concat(value(item, "ArtifactIds", "artifactIds", []) || []));
+    artifactIds.forEach(function (id) {
+      correlationButton(root, "artifact " + id, "artifactId", id, "artifact-lineage", sourceChatId);
+    });
+    var parentArtifactId = value(item, "ParentArtifactId", "parentArtifactId", "");
+    if (parentArtifactId) {
+      correlationButton(root, "parent " + parentArtifactId, "artifactId", parentArtifactId, "artifact-lineage", sourceChatId);
+    }
+
+    var sourceSeqs = value(item, "SourceEventSeqs", "sourceEventSeqs", []) || [];
+    if (!isVbaView() && activeView !== "raw" && sourceSeqs.length) {
+      var minimum = Math.min.apply(Math, sourceSeqs);
+      var maximum = Math.max.apply(Math, sourceSeqs);
+      correlationButton(root, "source events #" + minimum + (maximum === minimum ? "" : "…#" + maximum),
+        "sourceRange", { min: minimum, max: maximum }, "raw", sourceChatId);
+    }
+
+    clear.classList.toggle("hidden", !active);
+    bar.classList.toggle("hidden", root.childElementCount === 0);
+  }
+
+  function selectDerivedRow(item, button) {
+    selected = item;
+    selectButton(button);
+    resetLazyDetail();
     var firstSequence = value(item, "FirstSequence", "firstSequence", 0);
     var lastSequence = value(item, "LastSequence", "lastSequence", 0);
     var duration = value(item, "DurationMs", "durationMs", null);
@@ -60,21 +173,46 @@
     $("trajectoryEventData").textContent = prettyJson(value(item, "DataJson", "dataJson", "{}")) +
       (value(item, "DataTruncated", "dataTruncated", false) ? "\n\n[preview truncated]" : "") +
       "\n\nsourceEventSeqs: " + JSON.stringify(sourceSeqs) + "\nsourceEventIds: " + JSON.stringify(sourceIds);
-    $("trajectoryEventPayload").textContent = "";
-    $("trajectoryEventPayload").classList.add("hidden");
-    $("loadTrajectoryPayloadButton").classList.add("hidden");
+    renderCorrelationActions(item);
+  }
+
+  function selectVbaMutation(item, button) {
+    selected = item;
+    selectButton(button);
+    resetLazyDetail();
+    var firstSequence = value(item, "FirstSequence", "firstSequence", 0);
+    var lastSequence = value(item, "LastSequence", "lastSequence", firstSequence);
+    var moduleName = value(item, "ModuleName", "moduleName", "");
+    var packageId = value(item, "PackageId", "packageId", "");
+    var operation = value(item, "Operation", "operation", "mutation");
+    $("trajectoryEventTitle").textContent = operation + " · " + (moduleName || packageId || mutationId(item));
+    $("trajectoryEventMeta").textContent = [
+      "journal seq=" + firstSequence + (lastSequence !== firstSequence ? "…" + lastSequence : ""),
+      value(item, "Kind", "kind", ""),
+      value(item, "Status", "status", ""),
+      "components=" + value(item, "ComponentCount", "componentCount", 0),
+      value(item, "ErrorCode", "errorCode", "")
+    ].filter(Boolean).join(" · ");
+    $("trajectoryEventData").textContent = prettyJson(item);
+    var detailButton = $("loadVbaMutationButton");
+    detailButton.classList.remove("hidden");
+    detailButton.disabled = false;
+    detailButton.textContent = "Показать before / after";
+    renderCorrelationActions(item);
   }
 
   function selectEvent(item, button) {
+    if (isVbaView()) {
+      selectVbaMutation(item, button);
+      return;
+    }
     if (activeView !== "raw") {
       selectDerivedRow(item, button);
       return;
     }
     selected = item;
-    Array.prototype.slice.call($("trajectoryEvents").querySelectorAll(".trajectory-event")).forEach(function (node) {
-      node.classList.toggle("active", node === button);
-      node.setAttribute("aria-selected", node === button ? "true" : "false");
-    });
+    selectButton(button);
+    resetLazyDetail();
     var sequence = value(item, "Sequence", "sequence", 0);
     var type = value(item, "Type", "type", "event");
     var hash = value(item, "Hash", "hash", "");
@@ -103,12 +241,21 @@
     var data = value(item, "DataJson", "dataJson", "");
     $("trajectoryEventData").textContent = prettyJson(data) +
       (value(item, "DataTruncated", "dataTruncated", false) ? "\n\n[preview truncated]" : "");
-    $("trajectoryEventPayload").textContent = "";
-    $("trajectoryEventPayload").classList.add("hidden");
     var payloadButton = $("loadTrajectoryPayloadButton");
     payloadButton.classList.toggle("hidden", payloadSize === null);
     payloadButton.disabled = false;
     payloadButton.textContent = "Показать payload";
+    renderCorrelationActions(item);
+  }
+
+  function rowTitle(item) {
+    if (isVbaView()) {
+      return value(item, "Operation", "operation", "mutation") + " · " +
+        (value(item, "ModuleName", "moduleName", "") || value(item, "PackageId", "packageId", "") || mutationId(item));
+    }
+    return activeView === "raw"
+      ? value(item, "Type", "type", "event")
+      : value(item, "Title", "title", value(item, "Kind", "kind", "row"));
   }
 
   function renderEvents(response, append) {
@@ -131,12 +278,10 @@
       sequence.className = "trajectory-event-sequence";
       var firstSequence = value(item, "FirstSequence", "firstSequence", value(item, "Sequence", "sequence", 0));
       var lastSequence = value(item, "LastSequence", "lastSequence", firstSequence);
-      sequence.textContent = "#" + firstSequence + (lastSequence !== firstSequence ? "…" + lastSequence : "");
+      sequence.textContent = (isVbaView() ? "V#" : "#") + firstSequence + (lastSequence !== firstSequence ? "…" + lastSequence : "");
       var type = document.createElement("span");
       type.className = "trajectory-event-type";
-      type.textContent = activeView === "raw"
-        ? value(item, "Type", "type", "event")
-        : value(item, "Title", "title", value(item, "Kind", "kind", "row"));
+      type.textContent = rowTitle(item);
       first.appendChild(sequence);
       first.appendChild(type);
       if (activeView === "raw" && value(item, "PayloadByteLength", "payloadByteLength", null) !== null) {
@@ -144,6 +289,11 @@
         payload.className = "trajectory-event-payload";
         payload.textContent = "payload";
         first.appendChild(payload);
+      } else if (isVbaView()) {
+        var status = document.createElement("span");
+        status.className = "trajectory-event-payload";
+        status.textContent = value(item, "Status", "status", "");
+        first.appendChild(status);
       }
       var second = document.createElement("span");
       second.className = "trajectory-event-time";
@@ -161,8 +311,10 @@
     var matches = value(response, "TotalMatches", "totalMatches", events.length);
     nextCursor = value(response, "NextCursor", "nextCursor", null);
     var hasMore = !!value(response, "HasMore", "hasMore", false);
-    $("trajectoryStatus").textContent = "Совпадений: " + matches + " из " + total + " · загружено " + events.length +
-      (activeView === "raw" ? " · payload только по запросу" : " · проекция rebuildable из event stream");
+    var projectionNote = isVbaView()
+      ? " · rebuildable из VBA journal; CAS source только по запросу"
+      : (activeView === "raw" ? " · payload только по запросу" : " · rebuildable из event stream");
+    $("trajectoryStatus").textContent = "Совпадений: " + matches + " из " + total + " · загружено " + events.length + projectionNote;
     $("loadMoreTrajectoryButton").classList.toggle("hidden", !hasMore);
     $("trajectoryWorkspace").classList.toggle("hidden", events.length === 0);
     if (!append && events.length) {
@@ -176,39 +328,56 @@
       $("trajectoryEventTitle").textContent = activeView === "raw" ? "Событие не выбрано" : "Строка не выбрана";
       $("trajectoryEventMeta").textContent = "";
       $("trajectoryEventData").textContent = "";
-      $("trajectoryEventPayload").textContent = "";
-      $("loadTrajectoryPayloadButton").classList.add("hidden");
+      resetLazyDetail();
+      renderCorrelationActions({});
     }
   }
 
+  function applyCorrelation(payload) {
+    Object.keys(correlationFilter).forEach(function (key) { payload[key] = correlationFilter[key]; });
+    return payload;
+  }
+
   function queryPayload(chatId, cursor) {
-    return {
+    var view = $("trajectoryViewInput").value || "raw";
+    if (view === "vba-mutations") {
+      return applyCorrelation({
+        cursor: cursor || null,
+        pageSize: 100,
+        search: $("trajectorySearchInput").value.trim(),
+        kind: $("trajectoryVbaKindInput").value || null,
+        status: $("trajectoryVbaStatusInput").value || null
+      });
+    }
+    return applyCorrelation({
       chatId: chatId,
-      view: $("trajectoryViewInput").value || "raw",
+      view: view,
       cursor: cursor || null,
       pageSize: 100,
       search: $("trajectorySearchInput").value.trim(),
-      eventTypes: $("trajectoryViewInput").value === "raw" ? $("trajectoryTypeInput").value.split(",").map(function (item) { return item.trim(); }).filter(Boolean) : [],
-      visibility: $("trajectoryViewInput").value === "raw" ? ($("trajectoryVisibilityInput").value || null) : null
-    };
+      eventTypes: view === "raw" ? $("trajectoryTypeInput").value.split(",").map(function (item) { return item.trim(); }).filter(Boolean) : [],
+      visibility: view === "raw" ? ($("trajectoryVisibilityInput").value || null) : null
+    });
   }
 
   async function refreshTrajectory(append) {
     var button = $("refreshTrajectoryButton");
-    if (!state.activeChatId) {
+    var requestedView = $("trajectoryViewInput").value || "raw";
+    var vba = requestedView === "vba-mutations";
+    var chatId = trajectoryChatId || state.activeChatId;
+    if (!vba && !chatId) {
       $("trajectoryStatus").textContent = "Нет активного чата.";
       return;
     }
-    var chatId = state.activeChatId;
     try {
       button.disabled = true;
       $("loadMoreTrajectoryButton").disabled = true;
-      $("trajectoryStatus").textContent = "Читаю event stream…";
-      var response = await send("getChatTrajectory", queryPayload(chatId, append ? nextCursor : null));
-      if (state.activeChatId !== chatId) return;
+      $("trajectoryStatus").textContent = vba ? "Читаю VBA mutation journal…" : "Читаю event stream…";
+      var response = await send(vba ? "getVbaMutations" : "getChatTrajectory", queryPayload(chatId, append ? nextCursor : null));
+      if (!vba && (trajectoryChatId || state.activeChatId) !== chatId) return;
       renderEvents(response, !!append);
     } catch (error) {
-      $("trajectoryStatus").textContent = "Не удалось прочитать траекторию: " + error.message;
+      $("trajectoryStatus").textContent = "Не удалось прочитать диагностику: " + error.message;
       $("trajectoryWorkspace").classList.add("hidden");
     } finally {
       button.disabled = false;
@@ -217,14 +386,16 @@
   }
 
   async function loadPayload() {
-    if (activeView !== "raw" || !selected || !state.activeChatId) return;
+    if (activeView !== "raw" || !selected) return;
+    var chatId = trajectoryChatId || state.activeChatId;
+    if (!chatId) return;
     var button = $("loadTrajectoryPayloadButton");
     var target = $("trajectoryEventPayload");
     var selectedId = eventId(selected);
     try {
       button.disabled = true;
       button.textContent = "Загружаю…";
-      var response = await send("getChatEventPayload", { chatId: state.activeChatId, eventId: selectedId });
+      var response = await send("getChatEventPayload", { chatId: chatId, eventId: selectedId });
       if (!selected || eventId(selected) !== selectedId) return;
       var text = value(response, "Text", "text", "");
       target.textContent = prettyJson(text) +
@@ -240,10 +411,139 @@
     }
   }
 
+  function shortHash(hash) {
+    hash = String(hash || "");
+    return hash.length > 16 ? hash.substring(0, 16) + "…" : hash;
+  }
+
+  function stateLabel(exists, type, hash) {
+    if (exists === null || exists === undefined) return "unknown";
+    if (!exists) return "absent";
+    return (type || "component") + (hash ? " @ " + shortHash(hash) : "");
+  }
+
+  async function restoreVbaComponent(component, detail, button) {
+    var name = value(component, "ModuleName", "moduleName", "");
+    var backupId = value(component, "BackupId", "backupId", "");
+    if (!backupId || !name) return;
+    var prompt = "Восстановить «" + name + "» из backup " + backupId + "?\n\n" +
+      "Текущее состояние будет отдельно сохранено, а restore создаст новую journaled VBA mutation.";
+    if (!window.confirm(prompt)) return;
+    try {
+      button.disabled = true;
+      button.textContent = "Восстанавливаю…";
+      var response = await send("restoreVbaBackup", { backupId: backupId, moduleName: name });
+      var success = !!value(response, "Success", "success", false);
+      var message = value(response, "Message", "message", success ? "VBA backup restored." : "VBA restore failed.");
+      if (!success) throw new Error(message);
+      if (typeof log === "function") log(message, "success");
+      await refreshTrajectory(false);
+    } catch (error) {
+      if (typeof log === "function") log(error.detail || error.message, "error");
+      window.alert("Не удалось восстановить VBA: " + error.message);
+      button.disabled = false;
+      button.textContent = "Restore before";
+    }
+  }
+
+  function renderVbaMutationDetail(detail) {
+    var target = $("trajectoryVbaDiff");
+    target.replaceChildren();
+    var components = value(detail, "Components", "components", []) || [];
+    components.forEach(function (component) {
+      var card = document.createElement("section");
+      card.className = "trajectory-vba-component";
+      var head = document.createElement("div");
+      head.className = "trajectory-vba-component-head";
+      var title = document.createElement("strong");
+      title.textContent = value(component, "ModuleName", "moduleName", "component");
+      head.appendChild(title);
+      if (value(component, "CanRestore", "canRestore", false)) {
+        var restore = document.createElement("button");
+        restore.type = "button";
+        restore.className = "danger";
+        restore.textContent = "Restore before";
+        restore.addEventListener("click", function () { restoreVbaComponent(component, detail, restore); });
+        head.appendChild(restore);
+      }
+      var meta = document.createElement("div");
+      meta.className = "trajectory-vba-component-meta";
+      meta.textContent = [
+        "before=" + stateLabel(value(component, "BeforeExists", "beforeExists", false),
+          value(component, "BeforeComponentType", "beforeComponentType", ""), value(component, "BeforeCodeSha256", "beforeCodeSha256", "")),
+        "intended=" + stateLabel(value(component, "IntendedAfterExists", "intendedAfterExists", false),
+          value(component, "IntendedAfterComponentType", "intendedAfterComponentType", ""), value(component, "IntendedAfterCodeSha256", "intendedAfterCodeSha256", "")),
+        "actual=" + stateLabel(value(component, "ActualExists", "actualExists", null),
+          value(component, "ActualComponentType", "actualComponentType", ""), value(component, "ActualCodeSha256", "actualCodeSha256", "")),
+        value(component, "MatchesBefore", "matchesBefore", null) === true ? "actual matches before" : "",
+        value(component, "MatchesIntendedAfter", "matchesIntendedAfter", null) === true ? "actual matches intended" : "",
+        value(component, "ErrorCode", "errorCode", ""),
+        value(component, "Message", "message", "")
+      ].filter(Boolean).join(" · ");
+      var diff = document.createElement("div");
+      diff.className = "vba-diff";
+      var before = value(component, "BeforeExists", "beforeExists", false)
+        ? value(component, "BeforeCode", "beforeCode", "") : "";
+      var after = value(component, "IntendedAfterExists", "intendedAfterExists", false)
+        ? value(component, "IntendedAfterCode", "intendedAfterCode", "") : "";
+      head.title = "mutation " + value(detail, "MutationId", "mutationId", "");
+      card.appendChild(head);
+      card.appendChild(meta);
+      card.appendChild(diff);
+      target.appendChild(card);
+      window.RNAssistantVbaDiff.render(diff, window.RNAssistantVbaDiff.format(before, after));
+    });
+    if (!components.length) target.textContent = "Mutation не содержит компонентов.";
+    target.classList.remove("hidden");
+  }
+
+  async function loadVbaMutation() {
+    if (!isVbaView() || !selected) return;
+    var button = $("loadVbaMutationButton");
+    var selectedId = mutationId(selected);
+    try {
+      button.disabled = true;
+      button.textContent = "Проверяю CAS…";
+      var response = await send("getVbaMutationDetail", { mutationId: selectedId });
+      if (!selected || mutationId(selected) !== selectedId) return;
+      renderVbaMutationDetail(response);
+      button.textContent = "Before / after загружен";
+    } catch (error) {
+      var target = $("trajectoryVbaDiff");
+      target.textContent = "Не удалось прочитать CAS source: " + error.message;
+      target.classList.remove("hidden");
+      button.textContent = "Повторить";
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function clearCorrelation() {
+    correlationFilter = {};
+    trajectoryChatId = null;
+    nextCursor = null;
+    refreshTrajectory(false);
+  }
+
+  function updateViewControls() {
+    var view = $("trajectoryViewInput").value || "raw";
+    var raw = view === "raw";
+    var vba = view === "vba-mutations";
+    $("trajectoryTypeInput").classList.toggle("hidden", !raw);
+    $("trajectoryTypeInput").disabled = !raw;
+    $("trajectoryVisibilityInput").classList.toggle("hidden", !raw);
+    $("trajectoryVisibilityInput").disabled = !raw;
+    $("trajectoryVbaKindInput").classList.toggle("hidden", !vba);
+    $("trajectoryVbaKindInput").disabled = !vba;
+    $("trajectoryVbaStatusInput").classList.toggle("hidden", !vba);
+    $("trajectoryVbaStatusInput").disabled = !vba;
+  }
+
   window.bindTrajectoryActions = function () {
     var refresh = $("refreshTrajectoryButton");
     var more = $("loadMoreTrajectoryButton");
     var payload = $("loadTrajectoryPayloadButton");
+    var vbaDetail = $("loadVbaMutationButton");
     if (refresh) refresh.addEventListener("click", function () { refreshTrajectory(false); });
     if (more) more.addEventListener("click", function () { refreshTrajectory(true); });
     ["trajectorySearchInput", "trajectoryTypeInput"].forEach(function (id) {
@@ -253,14 +553,19 @@
       });
       $(id).addEventListener("keydown", function (event) { if (event.key === "Enter") refreshTrajectory(false); });
     });
-    $("trajectoryVisibilityInput").addEventListener("change", function () { refreshTrajectory(false); });
+    ["trajectoryVisibilityInput", "trajectoryVbaKindInput", "trajectoryVbaStatusInput"].forEach(function (id) {
+      $(id).addEventListener("change", function () { nextCursor = null; refreshTrajectory(false); });
+    });
     $("trajectoryViewInput").addEventListener("change", function () {
-      var raw = $("trajectoryViewInput").value === "raw";
-      $("trajectoryTypeInput").disabled = !raw;
-      $("trajectoryVisibilityInput").disabled = !raw;
+      correlationFilter = {};
+      trajectoryChatId = null;
       nextCursor = null;
+      updateViewControls();
       refreshTrajectory(false);
     });
+    $("clearTrajectoryCorrelationButton").addEventListener("click", clearCorrelation);
     if (payload) payload.addEventListener("click", loadPayload);
+    if (vbaDetail) vbaDetail.addEventListener("click", loadVbaMutation);
+    updateViewControls();
   };
 }());

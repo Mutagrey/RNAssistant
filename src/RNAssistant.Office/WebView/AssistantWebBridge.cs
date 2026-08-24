@@ -298,6 +298,13 @@ namespace RNAssistant.Office.WebView
                         var getVbaModule = Payload<VbaModulePayload>(payload);
                         responsePayload = _controller.GetVbaModule(getVbaModule.ModuleName);
                         break;
+                    case "getVbaMutations":
+                        responsePayload = _controller.GetVbaMutations(Payload<VbaMutationQueryPayload>(payload));
+                        break;
+                    case "getVbaMutationDetail":
+                        responsePayload = _controller.GetVbaMutationDetail(
+                            Payload<VbaMutationDetailPayload>(payload).MutationId);
+                        break;
                     case "saveVbaModule":
                         var saveVbaModule = Payload<VbaModulePayload>(payload);
                         responsePayload = _controller.SaveVbaModule(

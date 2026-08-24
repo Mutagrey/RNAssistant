@@ -41,5 +41,6 @@ This differs deliberately from HTML navigation. HTML undo/redo only changes the 
 ## Remaining work
 
 - CAS health/reachability and fail-closed garbage collection now include every VBA journal; invalid or incomplete journals block all deletion.
-- Diagnostics still needs paged VBA mutation queries and before/after diff views.
-- Diagnostics still needs package-level navigation and per-component before/intended/actual diff views.
+- Diagnostics now rebuilds one paged module/package history from the validated journal. Its cursor pins the journal sequence snapshot, every row retains its prepared/terminal event ids and sequences, and search never scans CAS bodies.
+- Per-component before/intended-after source is read and verified from CAS only when the operator opens a diff. Terminal actual existence/type/hash and before/intended match assessments remain metadata; live Office source is not silently substituted for durable evidence.
+- Restore is available only when a retained before backup exists. The UI requires an explicit confirmation and then uses the normal guarded restore executor, which records a new prepared/terminal mutation.

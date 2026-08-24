@@ -1001,6 +1001,110 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaMutationDiagnosticsPaginateAndHydrateDiffs()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var store = new VbaJournalStore(paths);
+                var module = store.PrepareMutation(new VbaMutationPreparation
+                {
+                    Operation = "write",
+                    Host = "Excel",
+                    DocumentKey = "doc",
+                    DocumentTitle = "Harness.xlsx",
+                    ModuleName = "Module1",
+                    ComponentType = "StdModule",
+                    BeforeExists = true,
+                    IntendedAfterExists = true,
+                    SessionId = "chat-module",
+                    RunId = "run-module",
+                    ToolCallId = "call-module"
+                }, "Sub BeforeModule()\nEnd Sub", "Sub AfterModule()\nEnd Sub");
+                store.CompleteMutation(
+                    "Excel", "doc", module.MutationId, VbaMutationStatuses.Committed, true,
+                    module.IntendedAfterCodeSha256, module.IntendedAfterComparableCodeSha256, null, "module committed");
+
+                var package = store.PreparePackageMutation(new VbaPackageMutationPreparation
+                {
+                    Operation = "install",
+                    PackageId = "diagnostics-package",
+                    PackageVersion = "1.0.0",
+                    RetainBackups = true,
+                    Host = "Excel",
+                    DocumentKey = "doc",
+                    DocumentTitle = "Harness.xlsx",
+                    SessionId = "chat-package",
+                    RunId = "run-package",
+                    ToolCallId = "call-package",
+                    Components = new List<VbaPackageMutationComponent>
+                    {
+                        new VbaPackageMutationComponent
+                        {
+                            ModuleName = "PackageModule",
+                            BeforeExists = true,
+                            BeforeComponentType = "StdModule",
+                            BeforeCode = "Sub PackageBefore()\nEnd Sub",
+                            IntendedAfterExists = true,
+                            IntendedAfterComponentType = "StdModule",
+                            IntendedAfterCode = "Sub PackageAfter()\nEnd Sub"
+                        }
+                    }
+                });
+                store.CompletePackageMutation(
+                    "Excel", "doc", package.MutationId, VbaMutationStatuses.Committed,
+                    new[]
+                    {
+                        new VbaPackageMutationComponentAssessment
+                        {
+                            ModuleName = "PackageModule",
+                            ActualExists = true,
+                            ActualComponentType = "StdModule",
+                            ActualCodeSha256 = package.Components[0].IntendedAfterCodeSha256,
+                            MatchesIntendedAfter = true
+                        }
+                    }, null, "package committed");
+
+                var firstPage = store.QueryMutations("Excel", "doc", new VbaMutationQueryRequest { PageSize = 1 });
+                AssertEqual(2, firstPage.TotalRows, "query projects module and package records");
+                AssertEqual(package.MutationId, firstPage.Rows.Single().MutationId, "query orders newest mutation first");
+                AssertTrue(firstPage.HasMore && !string.IsNullOrWhiteSpace(firstPage.NextCursor), "query exposes snapshot cursor");
+
+                store.PrepareMutation(new VbaMutationPreparation
+                {
+                    Operation = "delete",
+                    Host = "Excel",
+                    DocumentKey = "doc",
+                    ModuleName = "LaterModule",
+                    ComponentType = "StdModule",
+                    BeforeExists = true,
+                    IntendedAfterExists = false
+                }, "Sub Later()\nEnd Sub", null);
+                var secondPage = store.QueryMutations("Excel", "doc", new VbaMutationQueryRequest
+                {
+                    PageSize = 1,
+                    Cursor = firstPage.NextCursor
+                });
+                AssertEqual(2, secondPage.TotalRows, "cursor keeps the original journal snapshot");
+                AssertEqual(module.MutationId, secondPage.Rows.Single().MutationId, "older page is stable after append");
+
+                var filtered = store.QueryMutations("Excel", "doc", new VbaMutationQueryRequest
+                {
+                    Kind = VbaMutationKinds.Package,
+                    Search = "PackageModule",
+                    RunId = "run-package"
+                });
+                AssertEqual(1, filtered.TotalMatches, "package metadata and correlation are searchable");
+                AssertEqual(2, filtered.Rows[0].SourceEventSeqs.Count, "query row retains both source events");
+
+                var detail = store.GetMutationDetail("Excel", "doc", package.MutationId);
+                var component = detail.Components.Single();
+                AssertContains(component.BeforeCode, "PackageBefore", "detail lazily hydrates before source");
+                AssertContains(component.IntendedAfterCode, "PackageAfter", "detail lazily hydrates intended source");
+                AssertTrue(component.CanRestore && !string.IsNullOrWhiteSpace(component.BackupId), "retained package before state is restorable");
+                AssertEqual(true, component.MatchesIntendedAfter, "terminal component assessment is exposed");
+            });
+        }
+
         private static void VbaJournalReconcilesInterruptedMutations()
         {
             WithTempPaths(delegate(AppDataPaths paths)

@@ -28,7 +28,7 @@
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=media-routing-20260824-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=cas-health-20260825-1">
-  <link rel="stylesheet" href="css/app-trajectory.css?v=trajectory-views-20260825-1">
+  <link rel="stylesheet" href="css/app-trajectory.css?v=vba-recovery-20260825-1">
   <link rel="stylesheet" href="css/app-tools.css?v=skill-references-20260825-1">
   <link rel="stylesheet" href="css/app-vba.css?v=userform-20260824-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
@@ -826,17 +826,20 @@
               <section class="model-compatibility-panel trajectory-panel" aria-labelledby="trajectoryTitle">
                 <div class="model-compatibility-head">
                   <div>
-                    <h3 id="trajectoryTitle">Траектория чата</h3>
-                    <p>Канонический append-only журнал: запросы и ответы модели, сообщения, tools и версии артефактов.</p>
+                    <h3 id="trajectoryTitle">Траектория и recovery</h3>
+                    <p>Канонические chat events, версии артефактов и document-scoped VBA mutation journal.</p>
                   </div>
                 </div>
                 <div class="trajectory-querybar">
-                  <select id="trajectoryViewInput" aria-label="Представление траектории"><option value="raw">Raw events</option><option value="model-replay">Model replay</option><option value="tool-execution">Tool execution</option><option value="artifact-lineage">Artifact lineage</option><option value="confirmation-pauses">Confirmations</option><option value="failure-retries">Failures / retries</option><option value="turn-usage">Turn usage</option></select>
+                  <select id="trajectoryViewInput" aria-label="Представление траектории"><option value="raw">Raw events</option><option value="model-replay">Model replay</option><option value="tool-execution">Tool execution</option><option value="artifact-lineage">Artifact lineage</option><option value="confirmation-pauses">Confirmations</option><option value="failure-retries">Failures / retries</option><option value="turn-usage">Turn usage</option><option value="vba-mutations">VBA mutations</option></select>
                   <input id="trajectorySearchInput" maxlength="512" placeholder="Поиск по metadata и event data">
                   <input id="trajectoryTypeInput" maxlength="256" placeholder="Типы через запятую">
                   <select id="trajectoryVisibilityInput" aria-label="Состояние события"><option value="">Все состояния</option><option value="current">Current</option><option value="shadowed">Shadowed</option><option value="log-only">Log-only</option></select>
+                  <select class="hidden" id="trajectoryVbaKindInput" aria-label="Тип VBA mutation"><option value="">Module + package</option><option value="module">Module</option><option value="package">Package</option></select>
+                  <select class="hidden" id="trajectoryVbaStatusInput" aria-label="Статус VBA mutation"><option value="">Все статусы</option><option value="open">Open</option><option value="committed">Committed</option><option value="not_applied">Not applied</option><option value="rolled_back">Rolled back</option><option value="failed">Failed</option><option value="unknown">Unknown</option></select>
                   <button class="secondary" id="refreshTrajectoryButton" type="button">Найти</button>
                 </div>
+                <div class="trajectory-correlation-bar hidden" id="trajectoryCorrelationBar"><div class="trajectory-correlation-actions" id="trajectoryCorrelationActions"></div><button class="secondary hidden" id="clearTrajectoryCorrelationButton" type="button">Сбросить переход</button></div>
                 <div class="trajectory-status-row"><div class="trajectory-status" id="trajectoryStatus">Нажмите «Найти», чтобы прочитать текущий event stream.</div><button class="secondary hidden" id="loadMoreTrajectoryButton" type="button">Старше</button></div>
                 <div class="trajectory-workspace hidden" id="trajectoryWorkspace">
                   <div class="trajectory-events" id="trajectoryEvents" role="listbox" aria-label="События траектории"></div>
@@ -844,10 +847,12 @@
                     <div class="trajectory-detail-head">
                       <strong id="trajectoryEventTitle">Событие не выбрано</strong>
                       <button class="secondary hidden" id="loadTrajectoryPayloadButton" type="button">Показать payload</button>
+                      <button class="secondary hidden" id="loadVbaMutationButton" type="button">Показать before / after</button>
                     </div>
                     <div class="trajectory-meta" id="trajectoryEventMeta"></div>
                     <pre class="trajectory-json" id="trajectoryEventData"></pre>
                     <pre class="trajectory-json trajectory-payload hidden" id="trajectoryEventPayload"></pre>
+                    <div class="trajectory-vba-diff hidden" id="trajectoryVbaDiff"></div>
                   </div>
                 </div>
               </section>
@@ -903,7 +908,7 @@
   <script src="js/app-settings.js?v=screen-protection-20260824-1"></script>
   <script src="js/app-logs.js?v=log-filters-20260824-1"></script>
   <script src="js/app-diagnostics.js?v=cas-health-20260825-1"></script>
-  <script src="js/app-trajectory.js?v=trajectory-views-20260825-1"></script>
+  <script src="js/app-trajectory.js?v=vba-recovery-20260825-1"></script>
   <script src="js/app-prompts.js?v=library-editor-20260824-1"></script>
   <script src="js/app-model-data.js?v=media-routing-20260824-1"></script>
   <script src="js/app-model-picker.js?v=model-modules-20260823-2"></script>
@@ -920,7 +925,7 @@
   <script src="js/app-vba-diff.js?v=vba-modules-20260823-1"></script>
   <script src="js/app-vba-actions.js?v=userform-20260824-1"></script>
   <script src="js/app-vba-project.js?v=userform-20260824-1"></script>
-  <script src="js/app-vba.js?v=userform-20260824-1"></script>
+  <script src="js/app-vba.js?v=vba-recovery-20260825-1"></script>
   <script src="js/app-html-workspace-preview.js?v=html-data-20260824-1"></script>
   <script src="js/app-html-workspace-artifacts.js?v=workspace-modules-20260823-1"></script>
   <script src="js/app-html-workspace-model.js?v=html-recovery-20260825-1"></script>

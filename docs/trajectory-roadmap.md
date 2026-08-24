@@ -13,14 +13,13 @@
 ## Known gaps
 
 - Diagnostics now provides a repository-wide CAS health report and fail-closed orphan collector. Retention/pruning, re-keying, and redacted export lifecycles are still missing.
-- VBA package install/remove now has one CAS-backed multi-component transaction manifest; Diagnostics does not yet expose its component outcomes and diffs.
-- VBA recovery state is canonical, but Diagnostics does not yet expose paged mutation history or before/after diffs.
-- Correlated derived trajectory views exist, but Diagnostics still lacks convenient cross-navigation between their source events, artifact lineage, and VBA before/after state.
+- Diagnostics rebuilds paged module/package mutation rows from the validated VBA journal and lazily verifies CAS-backed before/intended source for per-component diffs and explicit restore.
+- Correlated trajectory rows expose direct navigation by run, turn, step, tool call, artifact/parent artifact and source-event range; VBA rows can jump to their originating chat session.
 - Prompt-size preflight may use learned linear token-estimation coefficients. Historical monetary cost is different: it remains `null` unless the provider usage saved with that response reports cost, and is never recomputed from current price tables.
 
 ## Next implementation order
 
-After HTML recovery, priority is: (1) Windows/Office smoke coverage for VBA packages and code-only UserForms, (2) recovery-oriented Diagnostics navigation and VBA diffs, (3) redacted export plus replay/eval fixtures, (4) retention policies and re-key/export lifecycle, and only then (5) persistence seams or an optional disposable SQLite query accelerator. Full Designer/FRX UserForms remain a separate later protocol decision.
+Current priority is: (1) Windows/Office smoke coverage for VBA packages and code-only UserForms, (2) redacted export plus replay/eval fixtures, (3) retention policies and re-key/export lifecycle, and only then (4) persistence seams or an optional disposable SQLite query accelerator. The Windows smoke remains external to this machine; the next locally implementable slice is export/replay. Full Designer/FRX UserForms remain a separate later protocol decision.
 
 ### P0 — deterministic recovery and storage health
 
@@ -48,7 +47,7 @@ After HTML recovery, priority is: (1) Windows/Office smoke coverage for VBA pack
 
 - [x] Introduce `ITrajectoryQuery`: cursor pagination, tokenized full-text search, and filters for sequence range, event type, run, turn, step, tool call, artifact, status, and `current` / `shadowed` / `log-only`. The event stream remains authoritative; the current projection is disposable and rebuilt in memory.
 - [x] Add derived views for model replay, tool execution, artifact lineage, confirmation pauses, failure/retry history, and per-turn timing/token/cost usage. Every projection row retains complete `sourceEventSeqs` and source event ids; cost is provider-reported rather than recomputed from mutable price tables.
-- [ ] Extend the paged Diagnostics view with correlation navigation, artifact lineage, and VBA before/after diff with an explicit restore action.
+- [x] Extend the paged Diagnostics view with correlation navigation, artifact lineage, and VBA before/intended-after per-component diff with an explicit restore action. VBA pagination uses a journal snapshot cursor; source bodies remain lazy CAS reads, and restore creates a new guarded/journaled mutation.
 - [ ] Add an export bundle containing selected event records, a manifest of referenced CAS payloads, and integrity hashes for offline trajectory analysis and regression fixtures.
 - [ ] Add the remaining persistence seams (`ISessionPersistence`, `IBlobStore`); `ITrajectoryQuery` is now explicit. Consider an optional SQLite query backend only for scale; it must preserve append-only/CAS semantics and must not become a second durable truth beside JSONL.
 

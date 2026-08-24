@@ -59,6 +59,34 @@ namespace RNAssistant.Office
             return _toolExecutor.Execute(command, new ToolDefinition[0], settings, false, true, session);
         }
 
+        public VbaMutationQueryResponse GetVbaMutations(VbaMutationQueryPayload request)
+        {
+            request = request ?? new VbaMutationQueryPayload();
+            var session = LoadSession(null);
+            var page = _vbaJournalStore.QueryMutations(session.Host, session.DocumentKey, request.ToQueryRequest());
+            return new VbaMutationQueryResponse
+            {
+                Host = session.Host,
+                DocumentKey = session.DocumentKey,
+                DocumentTitle = session.DocumentTitle,
+                View = "vba-mutations",
+                TotalEvents = page.TotalEvents,
+                TotalRows = page.TotalRows,
+                TotalMatches = page.TotalMatches,
+                Cursor = page.Cursor,
+                NextCursor = page.NextCursor,
+                HasMore = page.HasMore,
+                Rows = page.Rows.Select(VbaMutationRowDto.From).Where(item => item != null).ToList()
+            };
+        }
+
+        public VbaMutationDetailResponse GetVbaMutationDetail(string mutationId)
+        {
+            var session = LoadSession(null);
+            return VbaMutationDetailResponse.From(
+                _vbaJournalStore.GetMutationDetail(session.Host, session.DocumentKey, mutationId));
+        }
+
         public ToolResult SaveVbaModule(string moduleName, string code, string expectedCodeSha256 = null)
         {
             var settings = _settingsService.Load();

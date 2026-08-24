@@ -273,6 +273,15 @@ function saveVbaModule() {
 }
 
 function restoreVbaBackup() {
+  var backupId = $("vbaBackupSelect").value;
+  if (!backupId) return Promise.resolve(false);
+  var backup = (state.vba.backups || []).filter(function (item) {
+    return (item.BackupId || item.backupId || "") === backupId;
+  })[0] || {};
+  var moduleName = backup.ModuleName || backup.moduleName || $("vbaModuleSelect").value || "module";
+  if (!window.confirm("Восстановить «" + moduleName + "» из выбранной резервной копии?\n\nТекущее состояние будет сохранено как новая journaled VBA mutation.")) {
+    return Promise.resolve(false);
+  }
   return vbaActions.restoreBackup();
 }
 
