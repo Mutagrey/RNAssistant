@@ -644,6 +644,12 @@ namespace RNAssistant.Office.Contracts
         public string ModuleName { get; set; }
     }
 
+    public sealed class RunVbaMacroPayload
+    {
+        [JsonProperty("macroName")]
+        public string MacroName { get; set; }
+    }
+
     public sealed class SelectionContextPayload : ChatPayload
     {
         [JsonProperty("mode")]

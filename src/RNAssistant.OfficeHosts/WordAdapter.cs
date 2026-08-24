@@ -192,12 +192,7 @@ namespace RNAssistant.OfficeHosts
                 Tool("word.format_text", "Mutates document: Apply a named style or basic font formatting with one explicit kind selector.", "{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"style\",\"font\"],\"description\":\"Formatting operation.\"},\"style\":{\"type\":\"string\",\"description\":\"Named Word style when kind is style.\"},\"target\":{\"type\":\"string\",\"description\":\"Style target; font formatting always targets the selection.\",\"default\":\"selection\",\"enum\":[\"selection\",\"document\"]},\"bold\":{\"type\":\"boolean\",\"description\":\"Whether bold formatting is enabled for kind=font.\"},\"italic\":{\"type\":\"boolean\",\"description\":\"Whether italic formatting is enabled for kind=font.\"},\"underline\":{\"type\":\"boolean\",\"description\":\"Whether underline formatting is enabled for kind=font.\"},\"fontSize\":{\"type\":\"integer\",\"description\":\"Font size in points for kind=font.\",\"minimum\":1},\"fontName\":{\"type\":\"string\",\"description\":\"Installed font family name for kind=font.\"}},\"required\":[\"kind\"],\"additionalProperties\":false}", true, true, 1),
                 Tool("word.add_table", "Mutates document: Insert a table at selection, start, or end. Runtime infers dimensions from values when rows/columns are omitted.", "{\"type\":\"object\",\"properties\":{\"rows\":{\"type\":\"integer\",\"description\":\"Optional table row count; omit to infer it from values or use 2 for an empty table.\",\"minimum\":1},\"columns\":{\"type\":\"integer\",\"description\":\"Optional table column count; omit to infer it from values or use 2 for an empty table.\",\"minimum\":1},\"values\":{\"type\":\"array\",\"items\":{\"type\":\"array\",\"items\":{\"type\":[\"string\",\"number\",\"boolean\",\"null\"]}},\"description\":\"Optional two-dimensional row array; dimensions are inferred when omitted.\"},\"location\":{\"type\":\"string\",\"description\":\"Insertion target supported by the tool.\",\"default\":\"selection\",\"enum\":[\"selection\",\"start\",\"end\"]}},\"required\":[],\"additionalProperties\":false}", true, true, 2),
                 Tool("word.insert_page_break", "Mutates document: Insert a page break at the current cursor position.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}", true, true, 1),
-                Tool("word.add_comment", "Mutates document: Add a comment to the current selection.", "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Complete text to insert, replace, or assign.\"}},\"required\":[\"text\"],\"additionalProperties\":false}", true, true, 1),
-                Tool("word.vba_read_module", "Internal VBA backend read; use common.vba_read_module.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum number of text characters returned.\",\"default\":30000,\"minimum\":1,\"maximum\":1000000}},\"required\":[\"moduleName\"],\"additionalProperties\":false}", false, false),
-                Tool("word.vba_read_lines", "Internal VBA backend range read; the public facade is common.vba_read_module.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"startLine\":{\"type\":\"integer\",\"description\":\"One-based first line.\",\"default\":1,\"minimum\":1},\"lineCount\":{\"type\":\"integer\",\"description\":\"Maximum consecutive lines returned.\",\"default\":200,\"minimum\":1,\"maximum\":500}},\"required\":[\"moduleName\"],\"additionalProperties\":false}", false, false),
-                Tool("word.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code.\"},\"createIfMissing\":{\"type\":\"boolean\",\"description\":\"Whether a missing VBA standard module may be created.\",\"default\":true}},\"required\":[\"moduleName\",\"code\"],\"additionalProperties\":false}", true, false, 3),
-                Tool("word.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\",\"default\":\"RNAssistantModule\"},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code.\"}},\"required\":[\"code\"],\"additionalProperties\":false}", true, false, 3),
-                Tool("word.run_macro", "Mutates document: Run a Word VBA macro by name.", "{\"type\":\"object\",\"properties\":{\"macroName\":{\"type\":\"string\",\"description\":\"Exact public VBA macro name.\"}},\"required\":[\"macroName\"],\"additionalProperties\":false}", true, false, 3)
+                Tool("word.add_comment", "Mutates document: Add a comment to the current selection.", "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Complete text to insert, replace, or assign.\"}},\"required\":[\"text\"],\"additionalProperties\":false}", true, true, 1)
             };
         }
 
@@ -292,43 +287,16 @@ namespace RNAssistant.OfficeHosts
                         return ToolResult.Ok("Word context collected.", JsonConvert.SerializeObject(GetOfficeContext()));
                     case "word.read_text":
                         return ReadText(command);
-                    case "word.read_document":
-                        return ReadDocument(command);
-                    case "word.read_range":
-                        return ReadRange(command);
                     case "word.find_text":
                         return FindText(command);
                     case "word.inspect":
                         return InspectDocument(command);
-                    case "word.read_headings":
-                        return ReadHeadings(command);
-                    case "word.read_tables":
-                        return ReadTables(command);
-                    case "word.list_comments":
-                        return ListComments();
-                    case "word.document_stats":
-                        return DocumentStats();
-                    case "word.get_selection_text":
-                    case "word.read_selection":
-                        return ToolResult.Ok("Selection read.", JsonConvert.SerializeObject(new { text = SelectionText() }));
                     case "word.write_text":
                         return WriteText(command);
-                    case "word.insert_text":
-                        InsertText(ToolArgumentReader.String(command.Arguments, "text", string.Empty));
-                        return ToolResult.Ok("Text inserted.");
-                    case "word.insert_paragraph":
-                        return InsertParagraph(command);
-                    case "word.replace_selection":
-                        ResolveSelectionRange(RequireDocument()).Text = ToolArgumentReader.String(command.Arguments, "text", string.Empty);
-                        return ToolResult.Ok("Selection replaced.");
                     case "word.replace_text":
                         return ReplaceText(command);
                     case "word.format_text":
                         return FormatText(command);
-                    case "word.apply_style":
-                        return ApplyStyle(command);
-                    case "word.format_selection":
-                        return FormatSelection(command);
                     case "word.add_table":
                         return AddTable(command);
                     case "word.insert_page_break":
@@ -341,12 +309,8 @@ namespace RNAssistant.OfficeHosts
                         return ListVbaProjectComponents();
                     case "word.vba_read_module":
                         return ReadVbaModule(command);
-                    case "word.vba_read_lines":
-                        return ReadVbaLines(command);
                     case "word.vba_replace_module":
                         return ReplaceVbaModule(command);
-                    case "word.insert_vba_module":
-                        return InsertVbaModule(command);
                     case "word.run_macro":
                         return RunMacro(command);
                     case "word.vba_install_package_internal":
@@ -779,19 +743,18 @@ namespace RNAssistant.OfficeHosts
 
         private ToolResult ReadVbaModule(ToolCommand command)
         {
+            if (command.Arguments.ContainsKey("startLine") || command.Arguments.ContainsKey("lineCount"))
+            {
+                return VbaProjectSupport.ReadModuleLines(
+                    RequireDocument(),
+                    ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
+                    ToolArgumentReader.Int32(command.Arguments, "startLine", 1),
+                    ToolArgumentReader.Int32(command.Arguments, "lineCount", 200));
+            }
             return VbaProjectSupport.ReadModule(
                 RequireDocument(),
                 ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
                 ToolArgumentReader.Int32(command.Arguments, "maxChars", 30000));
-        }
-
-        private ToolResult ReadVbaLines(ToolCommand command)
-        {
-            return VbaProjectSupport.ReadModuleLines(
-                RequireDocument(),
-                ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
-                ToolArgumentReader.Int32(command.Arguments, "startLine", 1),
-                ToolArgumentReader.Int32(command.Arguments, "lineCount", 200));
         }
 
         private ToolResult ReplaceVbaModule(ToolCommand command)
@@ -801,20 +764,6 @@ namespace RNAssistant.OfficeHosts
                 ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
                 ToolArgumentReader.String(command.Arguments, "code", string.Empty),
                 ToolArgumentReader.Boolean(command.Arguments, "createIfMissing", true));
-        }
-
-        private ToolResult InsertVbaModule(ToolCommand command)
-        {
-            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", "RNAssistantModule");
-            var code = ToolArgumentReader.String(command.Arguments, "code", string.Empty);
-            try
-            {
-                return VbaProjectSupport.InsertModule(RequireDocument(), moduleName, code);
-            }
-            catch (Exception ex)
-            {
-                return ToolResult.Fail("VBA insert was blocked. Enable 'Trust access to the VBA project object model' or copy the code manually. " + ex.Message, JsonConvert.SerializeObject(new { moduleName = moduleName, code = code }), "vba_access_error", false);
-            }
         }
 
         private ToolResult RunMacro(ToolCommand command)

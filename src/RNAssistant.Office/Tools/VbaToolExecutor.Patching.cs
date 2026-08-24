@@ -16,13 +16,7 @@ namespace RNAssistant.Office.Tools
                 return new JArray();
             }
 
-            var token = JToken.Parse(patchJson);
-            if (token.Type == JTokenType.Array)
-            {
-                return (JArray)token;
-            }
-
-            return new JArray(token);
+            return JArray.Parse(patchJson);
         }
 
         private static ToolResult ApplyPatchOperation(string current, JObject operation, out string updated)
@@ -30,7 +24,7 @@ namespace RNAssistant.Office.Tools
             updated = current;
             var op = ((string)operation["op"] ?? string.Empty).Trim();
             var find = MatchLineEndings((string)operation["find"], current);
-            var text = MatchLineEndings((string)(operation["text"] ?? operation["replace"]) ?? string.Empty, current);
+            var text = MatchLineEndings((string)operation["text"] ?? string.Empty, current);
             switch (op.ToLowerInvariant())
             {
                 case "replace":
@@ -73,7 +67,7 @@ namespace RNAssistant.Office.Tools
                 case "replacelines":
                     return ReplaceLines(current, operation, text, out updated);
                 case "regexreplace":
-                    var pattern = (string)(operation["pattern"] ?? operation["find"]);
+                    var pattern = (string)operation["pattern"];
                     if (string.IsNullOrEmpty(pattern)) return ToolResult.Fail("regexReplace requires pattern.", null, "vba_patch_invalid", true);
                     try
                     {

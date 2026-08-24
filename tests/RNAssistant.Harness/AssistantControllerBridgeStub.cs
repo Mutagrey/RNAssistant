@@ -258,6 +258,12 @@ namespace RNAssistant.Office
         }
 
         public ToolResult RestoreVbaBackup(string backupId, string moduleName) { return ToolResult.Ok("restored"); }
+        public ToolResult RunVbaMacro(string macroName, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            LastModuleName = macroName;
+            return ToolResult.Ok("ran macro");
+        }
         public HtmlWorkspaceResponse GetHtmlWorkspace(string chatId = null) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
         public HtmlWorkspaceResponse SaveHtmlWorkspaceFile(string chatId, string path, string kind, string content, bool setActive) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(new HtmlWorkspace { ActiveFileId = path ?? string.Empty }) }; }
         public HtmlWorkspaceResponse SaveHtmlWorkspaceData(string chatId, string name, string json) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }

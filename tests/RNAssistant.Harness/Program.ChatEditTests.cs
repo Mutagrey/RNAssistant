@@ -394,7 +394,7 @@ namespace RNAssistant.Harness
                 Role = "assistant",
                 ProtocolMessage = true,
                 ToolCallId = "call_1",
-                ToolCalls = new List<LlmToolCall> { new LlmToolCall { Id = "call_1", Name = "excel.list_sheets" } }
+                ToolCalls = new List<LlmToolCall> { new LlmToolCall { Id = "call_1", Name = "excel.inspect" } }
             };
             var firstResult = new ChatMessage
             {
@@ -407,7 +407,7 @@ namespace RNAssistant.Harness
                 Role = "assistant",
                 ProtocolMessage = true,
                 ToolCallId = "call_1",
-                ToolCalls = new List<LlmToolCall> { new LlmToolCall { Id = "call_1", Name = "excel.list_sheets" } }
+                ToolCalls = new List<LlmToolCall> { new LlmToolCall { Id = "call_1", Name = "excel.inspect" } }
             };
             var secondActivity = new ChatMessage
             {
@@ -443,7 +443,7 @@ namespace RNAssistant.Harness
                 Role = "assistant",
                 ProtocolMessage = true,
                 ToolCallId = "call_1",
-                ToolCalls = new List<LlmToolCall> { new LlmToolCall { Id = "call_1", Name = "excel.list_sheets" } }
+                ToolCalls = new List<LlmToolCall> { new LlmToolCall { Id = "call_1", Name = "excel.inspect" } }
             };
             messages.Insert(messages.Count - 1, danglingCall);
             ChatHistoryEditService.ExcludeUnmatchedToolCalls(messages);
@@ -460,8 +460,8 @@ namespace RNAssistant.Harness
                 ProtocolMessage = true,
                 ToolCalls = new List<LlmToolCall>
                 {
-                    new LlmToolCall { Id = "multi_1", Name = "excel.list_sheets" },
-                    new LlmToolCall { Id = "multi_2", Name = "excel.list_sheets" }
+                    new LlmToolCall { Id = "multi_1", Name = "excel.inspect" },
+                    new LlmToolCall { Id = "multi_2", Name = "excel.inspect" }
                 }
             };
             var multiResult1 = new ChatMessage
@@ -484,8 +484,8 @@ namespace RNAssistant.Harness
                 ProtocolMessage = true,
                 ToolCalls = new List<LlmToolCall>
                 {
-                    new LlmToolCall { Id = "complete_1", Name = "excel.list_sheets" },
-                    new LlmToolCall { Id = "complete_2", Name = "excel.list_sheets" }
+                    new LlmToolCall { Id = "complete_1", Name = "excel.inspect" },
+                    new LlmToolCall { Id = "complete_2", Name = "excel.inspect" }
                 }
             };
             var completeResult1 = new ChatMessage { Role = "tool", ProtocolMessage = true, ToolCallId = "complete_1" };

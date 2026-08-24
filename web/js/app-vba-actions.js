@@ -98,12 +98,7 @@
     }
 
     async function runMacro() {
-      var toolId = options.getMacroToolId();
       var macroName = options.getMacroName();
-      if (!toolId) {
-        options.setMacroStatus("Текущее приложение не поддерживает запуск макросов.", "error");
-        return;
-      }
       if (!macroName) {
         options.setMacroStatus("Введите имя макроса.", "error");
         return;
@@ -111,13 +106,9 @@
 
       options.setMacroBusy(true);
       try {
-        var response = await options.send("runTool", {
-          toolId: toolId,
-          arguments: { macroName: macroName },
-          dryRun: false
-        });
+        var response = await options.send("runVbaMacro", { macroName: macroName });
         options.setMacroStatus(response.Message || response.message || "Макрос выполнен: " + macroName, "ok");
-        options.logToolResult("Запуск макроса", toolId, response);
+        options.logToolResult("Запуск макроса", "VBA", response);
       } catch (error) {
         options.setMacroStatus(error.detail || error.message, "error");
         options.log(error.detail || error.message, "error");

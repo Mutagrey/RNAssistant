@@ -237,11 +237,6 @@ namespace RNAssistant.Office
             }));
         }
 
-        public static ToolResult InsertModule(object documentObject, string moduleName, string code)
-        {
-            return CreateModule(documentObject, moduleName, "StdModule", code);
-        }
-
         public static ToolResult CreateModule(object documentObject, string moduleName, string componentType, string code)
         {
             if (!VbaToolManifestParser.ValidComponentName(moduleName)) return ToolResult.Fail("Invalid VBA module name; use 1-31 ASCII letters, numbers, or underscore and start with a letter.", null, "vba_module_name_invalid", false);

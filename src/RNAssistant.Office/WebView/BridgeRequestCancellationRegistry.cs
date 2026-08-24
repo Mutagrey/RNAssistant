@@ -10,6 +10,7 @@ namespace RNAssistant.Office.WebView
         {
             "sendChat",
             "runTool",
+            "runVbaMacro",
             "htmlFetch",
             "compactChatContext",
             "editMessage",

@@ -210,38 +210,15 @@ namespace RNAssistant.OfficeHosts
                         return ToolResult.Ok("Outlook context collected.", JsonConvert.SerializeObject(GetOfficeContext()));
                     case "outlook.read_mail":
                         return ReadMail(command);
-                    case "outlook.read_current_mail":
-                    case "outlook.read_selection":
-                        return ReadSelection(command);
-                    case "outlook.read_mail_by_entry_id":
-                        return ReadMailByEntryId(command);
                     case "outlook.search_mail":
                         return SearchMail(command);
-                    case "outlook.list_attachments":
-                        return ListAttachments(command);
                     case "outlook.create_draft":
                         return CreateDraft(command);
-                    case "outlook.create_mail_draft":
-                        return CreateMailDraft(command);
-                    case "outlook.create_reply_draft":
-                        return DraftReply(command);
-                    case "outlook.create_reply_all_draft":
-                        return DraftReplyAll(command);
-                    case "outlook.create_forward_draft":
-                        return DraftForward(command);
                     case "outlook.update_mail":
                         return UpdateMail(command);
-                    case "outlook.set_categories":
-                        return SetCategories(command);
-                    case "outlook.mark_as_read":
-                        return MarkAsRead();
                     case "outlook.collect_mail":
                         return CollectFolderMail(command,
                             string.Equals(ToolArgumentReader.String(command.Arguments, "groupBy", "none"), "month", StringComparison.OrdinalIgnoreCase));
-                    case "outlook.collect_folder_mail":
-                        return CollectFolderMail(command, false);
-                    case "outlook.collect_monthly_summary_data":
-                        return CollectFolderMail(command, true);
                     default:
                         return ToolResult.Fail("Unsupported Outlook tool: " + command.ToolId);
                 }

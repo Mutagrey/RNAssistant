@@ -120,14 +120,6 @@ function suggestedVbaMacroName() {
   return module && proc ? vbaModuleName(module) + "." + proc : "";
 }
 
-function vbaMacroToolId() {
-  var host = (state.host || "").toLowerCase();
-  if (host === "excel" || host === "word" || host === "powerpoint") {
-    return host + ".run_macro";
-  }
-  return "";
-}
-
 function setVbaMacroStatus(text, kind) {
   var node = $("vbaMacroStatus");
   if (!node) {
@@ -143,7 +135,7 @@ function updateVbaMacroRunState() {
   if (!button || !input) {
     return;
   }
-  var supported = !!vbaMacroToolId() && !state.bridgeUnavailable;
+  var supported = ["excel", "word", "powerpoint"].indexOf(String(state.host || "").toLowerCase()) >= 0 && !state.bridgeUnavailable;
   var macroName = input.value.trim() || input.getAttribute("data-suggested") || "";
   button.disabled = !supported || !macroName;
   input.disabled = state.bridgeUnavailable;
@@ -188,7 +180,6 @@ var vbaActions = window.RNAssistantVbaActions.create({
   selectModule: function (moduleName) { state.vba.selectedModule = moduleName; },
   markSaved: function () { state.vbaEditorDirty = false; },
   setStatus: function (text) { $("vbaStatus").textContent = text; },
-  getMacroToolId: vbaMacroToolId,
   getMacroName: function () {
     var input = $("vbaMacroInput");
     return (input.value || "").trim() || input.getAttribute("data-suggested") || "";

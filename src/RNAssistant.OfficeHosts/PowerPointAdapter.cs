@@ -209,12 +209,7 @@ namespace RNAssistant.OfficeHosts
                 Tool("powerpoint.replace_text", "Mutates document: Replace bounded literal or regex text in the current scope. A separate search is optional; runtime reads the scope immediately before mutation and verifies the result.", "{\"type\":\"object\",\"properties\":{\"find\":{\"type\":\"string\",\"description\":\"Literal or regular-expression text to find.\",\"minLength\":1},\"replace\":{\"type\":\"string\",\"description\":\"Replacement text; regex capture groups are allowed only in regex mode.\"},\"scope\":{\"type\":\"string\",\"description\":\"Search or operation scope supported by the tool.\",\"default\":\"deck\",\"enum\":[\"deck\",\"slide\"]},\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based target slide when scope is slide; 0 searches the deck.\",\"default\":0},\"includeNotes\":{\"type\":\"boolean\",\"description\":\"Whether speaker notes are included.\",\"default\":true},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"replaceAll\":{\"type\":\"boolean\",\"description\":\"Whether all matches in scope may be replaced.\",\"default\":true},\"maxReplacements\":{\"type\":\"integer\",\"description\":\"Safety limit for replacements.\",\"default\":500}},\"required\":[\"find\"],\"additionalProperties\":false}", true, true, 2, true),
                 Tool("powerpoint.add_object", "Mutates document: Add a text box, picture, or table to the active slide (or an explicit slide) with one kind selector. Table dimensions are inferred from values when omitted.", "{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"textBox\",\"picture\",\"table\"],\"description\":\"Object type to add.\"},\"slideIndex\":{\"type\":\"integer\",\"description\":\"Optional one-based slide index; runtime uses the active slide when omitted.\",\"minimum\":1},\"text\":{\"type\":\"string\",\"description\":\"Text for kind=textBox.\"},\"path\":{\"type\":\"string\",\"description\":\"Local image path for kind=picture.\"},\"rows\":{\"type\":\"integer\",\"description\":\"Optional table row count; omit to infer it from values or use 2 for an empty table.\",\"minimum\":1},\"columns\":{\"type\":\"integer\",\"description\":\"Optional table column count; omit to infer it from values or use 2 for an empty table.\",\"minimum\":1},\"values\":{\"type\":\"array\",\"items\":{\"type\":\"array\",\"items\":{\"type\":[\"string\",\"number\",\"boolean\",\"null\"]}},\"description\":\"Optional two-dimensional table values.\"},\"left\":{\"type\":\"integer\",\"description\":\"Optional horizontal position in points.\"},\"top\":{\"type\":\"integer\",\"description\":\"Optional vertical position in points.\"},\"width\":{\"type\":\"integer\",\"description\":\"Optional width in points; runtime chooses a kind-specific default.\"},\"height\":{\"type\":\"integer\",\"description\":\"Optional height in points; runtime chooses a kind-specific default.\"},\"fontSize\":{\"type\":\"integer\",\"description\":\"Optional font size for kind=textBox.\",\"minimum\":1}},\"required\":[\"kind\"],\"additionalProperties\":false}", true, true, 1),
                 Tool("powerpoint.duplicate_slide", "Mutates document: Duplicate one slide.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based slide index.\"}},\"required\":[\"slideIndex\"],\"additionalProperties\":false}", true, true, 1),
-                Tool("powerpoint.move_slide", "Mutates document: Move a slide to a new position.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based slide index.\"},\"toIndex\":{\"type\":\"integer\",\"description\":\"One-based destination slide index.\"}},\"required\":[\"slideIndex\",\"toIndex\"],\"additionalProperties\":false}", true, true, 2, true),
-                Tool("powerpoint.vba_read_module", "Internal VBA backend read; use common.vba_read_module.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum number of text characters returned.\",\"default\":30000,\"minimum\":1,\"maximum\":1000000}},\"required\":[\"moduleName\"],\"additionalProperties\":false}", false, false),
-                Tool("powerpoint.vba_read_lines", "Internal VBA backend range read; the public facade is common.vba_read_module.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"startLine\":{\"type\":\"integer\",\"description\":\"One-based first line.\",\"default\":1,\"minimum\":1},\"lineCount\":{\"type\":\"integer\",\"description\":\"Maximum consecutive lines returned.\",\"default\":200,\"minimum\":1,\"maximum\":500}},\"required\":[\"moduleName\"],\"additionalProperties\":false}", false, false),
-                Tool("powerpoint.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code.\"},\"createIfMissing\":{\"type\":\"boolean\",\"description\":\"Whether a missing VBA standard module may be created.\",\"default\":true}},\"required\":[\"moduleName\",\"code\"],\"additionalProperties\":false}", true, false, 3),
-                Tool("powerpoint.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\",\"default\":\"RNAssistantModule\"},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code.\"}},\"required\":[\"code\"],\"additionalProperties\":false}", true, false, 3),
-                Tool("powerpoint.run_macro", "Mutates document: Run a PowerPoint VBA macro by name.", "{\"type\":\"object\",\"properties\":{\"macroName\":{\"type\":\"string\",\"description\":\"Exact public VBA macro name.\"}},\"required\":[\"macroName\"],\"additionalProperties\":false}", true, false, 3)
+                Tool("powerpoint.move_slide", "Mutates document: Move a slide to a new position.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based slide index.\"},\"toIndex\":{\"type\":\"integer\",\"description\":\"One-based destination slide index.\"}},\"required\":[\"slideIndex\",\"toIndex\"],\"additionalProperties\":false}", true, true, 2, true)
             };
         }
 
@@ -353,38 +348,18 @@ namespace RNAssistant.OfficeHosts
                         return GetSelection();
                     case "powerpoint.read_slides":
                         return ReadSlidesOrSlide(command);
-                    case "powerpoint.read_slide":
-                        return ReadSlide(command);
-                    case "powerpoint.list_slides":
-                        return ListSlides();
-                    case "powerpoint.list_shapes":
-                        return ListShapes(command);
                     case "powerpoint.list_objects":
                         return ListObjects(command);
                     case "powerpoint.search_text":
                         return SearchText(command);
-                    case "powerpoint.read_speaker_notes":
-                        return ReadSpeakerNotes(command);
                     case "powerpoint.add_slide":
                         return AddSlide(command);
                     case "powerpoint.set_text":
                         return SetText(command);
-                    case "powerpoint.replace_selection_text":
-                        return ReplaceSelectionText(command);
-                    case "powerpoint.set_speaker_notes":
-                        return SetSpeakerNotes(command);
-                    case "powerpoint.add_text_box":
-                        return AddTextBox(command);
-                    case "powerpoint.set_shape_text":
-                        return SetShapeText(command);
                     case "powerpoint.replace_text":
                         return ReplaceText(command);
                     case "powerpoint.add_object":
                         return AddObject(command);
-                    case "powerpoint.add_picture":
-                        return AddPicture(command);
-                    case "powerpoint.add_table":
-                        return AddTable(command);
                     case "powerpoint.duplicate_slide":
                         return DuplicateSlide(command);
                     case "powerpoint.move_slide":
@@ -393,12 +368,8 @@ namespace RNAssistant.OfficeHosts
                         return ListVbaProjectComponents();
                     case "powerpoint.vba_read_module":
                         return ReadVbaModule(command);
-                    case "powerpoint.vba_read_lines":
-                        return ReadVbaLines(command);
                     case "powerpoint.vba_replace_module":
                         return ReplaceVbaModule(command);
-                    case "powerpoint.insert_vba_module":
-                        return InsertVbaModule(command);
                     case "powerpoint.run_macro":
                         return RunMacro(command);
                     case "powerpoint.vba_install_package_internal":
@@ -737,36 +708,10 @@ namespace RNAssistant.OfficeHosts
             return ToolResult.Ok("Slide added: " + title);
         }
 
-        private ToolResult ReplaceSelectionText(ToolCommand command)
-        {
-            var presentation = RequirePresentation();
-            var text = ToolArgumentReader.String(command.Arguments, "text", string.Empty);
-            var selection = TryGetSelection();
-            if (selection == null ||
-                selection.Type != PowerPoint.PpSelectionType.ppSelectionShapes ||
-                TryGetSelectedShapeCount(selection) <= 0)
-            {
-                return ToolResult.Fail("Select a text shape first.");
-            }
-
-            var shape = selection.ShapeRange[1];
-            if (!ShapeBelongsToPresentation(shape, presentation))
-            {
-                return ToolResult.Fail("Selected shape is not in the target presentation.");
-            }
-            if (shape.HasTextFrame != MsoTriState.msoTrue)
-            {
-                return ToolResult.Fail("Selected shape has no text frame.");
-            }
-
-            shape.TextFrame.TextRange.Text = text;
-            return ToolResult.Ok("Selected shape text replaced.");
-        }
-
         private ToolResult SetSpeakerNotes(ToolCommand command)
         {
             var slide = ResolveTargetSlide(command);
-            var notes = ToolArgumentReader.String(command.Arguments, "notes", string.Empty);
+            var notes = ToolArgumentReader.String(command.Arguments, "text", string.Empty);
             var shape = ResolveNotesTextShape(slide);
             if (shape == null)
             {
@@ -782,7 +727,6 @@ namespace RNAssistant.OfficeHosts
             var target = ToolArgumentReader.String(command.Arguments, "target", string.Empty);
             if (string.Equals(target, "notes", StringComparison.OrdinalIgnoreCase))
             {
-                command.Arguments["notes"] = ToolArgumentReader.String(command.Arguments, "text", string.Empty);
                 return SetSpeakerNotes(command);
             }
             if (string.Equals(target, "shape", StringComparison.OrdinalIgnoreCase)) return SetShapeText(command);
@@ -931,19 +875,18 @@ namespace RNAssistant.OfficeHosts
 
         private ToolResult ReadVbaModule(ToolCommand command)
         {
+            if (command.Arguments.ContainsKey("startLine") || command.Arguments.ContainsKey("lineCount"))
+            {
+                return VbaProjectSupport.ReadModuleLines(
+                    RequirePresentation(),
+                    ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
+                    ToolArgumentReader.Int32(command.Arguments, "startLine", 1),
+                    ToolArgumentReader.Int32(command.Arguments, "lineCount", 200));
+            }
             return VbaProjectSupport.ReadModule(
                 RequirePresentation(),
                 ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
                 ToolArgumentReader.Int32(command.Arguments, "maxChars", 30000));
-        }
-
-        private ToolResult ReadVbaLines(ToolCommand command)
-        {
-            return VbaProjectSupport.ReadModuleLines(
-                RequirePresentation(),
-                ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
-                ToolArgumentReader.Int32(command.Arguments, "startLine", 1),
-                ToolArgumentReader.Int32(command.Arguments, "lineCount", 200));
         }
 
         private ToolResult ReplaceVbaModule(ToolCommand command)
@@ -953,20 +896,6 @@ namespace RNAssistant.OfficeHosts
                 ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
                 ToolArgumentReader.String(command.Arguments, "code", string.Empty),
                 ToolArgumentReader.Boolean(command.Arguments, "createIfMissing", true));
-        }
-
-        private ToolResult InsertVbaModule(ToolCommand command)
-        {
-            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", "RNAssistantModule");
-            var code = ToolArgumentReader.String(command.Arguments, "code", string.Empty);
-            try
-            {
-                return VbaProjectSupport.InsertModule(RequirePresentation(), moduleName, code);
-            }
-            catch (Exception ex)
-            {
-                return ToolResult.Fail("VBA insert was blocked. Enable 'Trust access to the VBA project object model' or copy the code manually. " + ex.Message, JsonConvert.SerializeObject(new { moduleName = moduleName, code = code }), "vba_access_error", false);
-            }
         }
 
         private ToolResult RunMacro(ToolCommand command)

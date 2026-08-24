@@ -49,30 +49,35 @@ namespace RNAssistant.Harness
                 var tools = adapter.GetBuiltInTools().ToList();
                 var settings = new AppSettings { AutoConfirmToolActions = true };
 
-                var listed = executor.Execute(Command("excel.vba_list_modules"), tools, settings, false, false);
-                var read = executor.Execute(Command("excel.vba_read_module", "moduleName", "Module1"), tools, settings, false, false);
-                var searched = executor.Execute(Command("excel.vba_search_code", "query", "old(Value)", "mode", "regex", "matchCase", true), tools, settings, false, false);
+                var listed = executor.Execute(Command("common.vba_read_module"), tools, settings, false, false);
+                var read = executor.Execute(Command("common.vba_read_module", "moduleName", "Module1"), tools, settings, false, false);
+                var searched = executor.Execute(Command("common.vba_search_code", "query", "old(Value)", "mode", "regex", "matchCase", true), tools, settings, false, false);
                 AssertTrue(listed.Success, "VBA module list succeeds");
                 AssertTrue(!listed.DataJson.Contains("Option Explicit"), "VBA module list omits source code");
                 AssertContains(read.DataJson, "codeSha256", "VBA module read returns code hash");
                 AssertContains(searched.DataJson, "Module1", "VBA regex search returns module");
 
-                var limitedSearch = executor.Execute(Command("excel.vba_search_code", "query", "Sub", "maxResults", 1), tools, settings, false, false);
+                var limitedSearch = executor.Execute(Command("common.vba_search_code", "query", "Sub", "maxResults", 1), tools, settings, false, false);
                 var limitedData = JObject.Parse(limitedSearch.DataJson ?? "{}");
                 AssertEqual(4, (int)limitedData["matchCount"], "VBA truncated search counts all modules");
                 AssertEqual(true, (bool)limitedData["matchCountIsExact"], "VBA truncated count is exact");
                 AssertEqual(true, (bool)limitedData["truncated"], "VBA search result list is truncated");
 
-                var patch = "[{\"op\":\"regexReplace\",\"pattern\":\"old(Value)\",\"text\":\"new$1\",\"replaceAll\":true}]";
-                var patched = executor.Execute(Command("excel.vba_apply_patch", "moduleName", "Module1", "expectedCodeSha256", "model-value-is-ignored", "patch", patch), tools, settings, false, false);
+                var patch = new JArray(new JObject
+                {
+                    ["op"] = "regexReplace",
+                    ["pattern"] = "old(Value)",
+                    ["text"] = "new$1",
+                    ["replaceAll"] = true
+                });
+                var patched = executor.Execute(Command("common.vba_apply_patch", "moduleName", "Module1", "patch", patch), tools, settings, false, false);
                 AssertTrue(patched.Success, "VBA regex patch succeeds");
-                AssertTrue(!patched.DataJson.Contains("model-value-is-ignored"), "legacy model hash is removed and runtime snapshots state itself");
                 AssertContains(adapter.GetVbaModuleCode("Module1"), "newValue", "VBA regex patch applies captures");
 
-                var blockedDelete = executor.Execute(Command("excel.vba_delete_module", "moduleName", "ThisWorkbook", "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(adapter.GetVbaModuleCode("ThisWorkbook"))), tools, settings, false, false);
+                var blockedDelete = executor.Execute(Command("common.vba_delete_module", "moduleName", "ThisWorkbook"), tools, settings, false, false);
                 AssertEqual("vba_component_type_read_only", blockedDelete.ErrorCode, "document module delete blocked");
 
-                var deleted = executor.Execute(Command("excel.vba_delete_module", "moduleName", "Module1"), tools, settings, false, false);
+                var deleted = executor.Execute(Command("common.vba_delete_module", "moduleName", "Module1"), tools, settings, false, false);
                 AssertTrue(deleted.Success, "standard module delete succeeds");
             });
         }

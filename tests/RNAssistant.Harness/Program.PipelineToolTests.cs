@@ -54,7 +54,7 @@ namespace RNAssistant.Harness
                 AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "first tool");
                 AssertEqual("Report", adapter.Executed[0].Arguments["name"], "first arg");
                 AssertEqual("excel.write_range", adapter.Executed[1].ToolId, "second tool");
-                AssertEqual("table", adapter.Executed[1].Arguments["kind"], "legacy table mode normalized");
+                AssertEqual("table", adapter.Executed[1].Arguments["kind"], "table mode preserved");
                 AssertEqual("Report", adapter.Executed[1].Arguments["sheet"], "second arg");
             });
         }
@@ -81,7 +81,7 @@ namespace RNAssistant.Harness
                     Executor = "pipeline",
                     Enabled = true,
                     ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\",\"description\":\"Header text.\"}},\"required\":[\"header\"],\"additionalProperties\":false}",
-                    PipelineJson = "{\"steps\":[{\"id\":\"table\",\"toolId\":\"excel.write_table\",\"arguments\":{\"sheet\":\"Nested\",\"startAddress\":\"A1\",\"values\":[[\"{{args.header}}\"]]}}]}"
+                    PipelineJson = "{\"steps\":[{\"id\":\"table\",\"toolId\":\"excel.write_range\",\"arguments\":{\"kind\":\"table\",\"sheet\":\"Nested\",\"address\":\"A1\",\"values\":[[\"{{args.header}}\"]]}}]}"
                 };
                 var nestedTools = adapter.GetBuiltInTools().Concat(new[] { nested }).ToList();
                 var nestedResult = executor.Execute(Command(nested.Id, "header", "Revenue"), nestedTools, new AppSettings { AutoConfirmToolActions = true }, false, false);
@@ -143,8 +143,8 @@ namespace RNAssistant.Harness
             {
                 var pipeline = CustomTool("Excel", "excel.duplicate_steps");
                 pipeline.PipelineJson = "{\"steps\":[" +
-                    "{\"id\":\"read\",\"toolId\":\"excel.list_sheets\"}," +
-                    "{\"id\":\"read\",\"toolId\":\"excel.list_sheets\"}]}";
+                    "{\"id\":\"read\",\"toolId\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}," +
+                    "{\"id\":\"read\",\"toolId\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}";
 
                 var validation = executor.ValidateToolDefinition(pipeline);
                 var execution = executor.Execute(

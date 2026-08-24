@@ -291,6 +291,11 @@ namespace RNAssistant.Office.WebView
                         var restoreVba = Payload<RestoreVbaBackupPayload>(payload);
                         responsePayload = _controller.RestoreVbaBackup(restoreVba.BackupId, restoreVba.ModuleName);
                         break;
+                    case "runVbaMacro":
+                        responsePayload = _controller.RunVbaMacro(
+                            Payload<RunVbaMacroPayload>(payload).MacroName,
+                            cancellationToken);
+                        break;
                     case "getHtmlWorkspace":
                         responsePayload = _controller.GetHtmlWorkspace(Payload<ChatPayload>(payload).ChatId);
                         break;

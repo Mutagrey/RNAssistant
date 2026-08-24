@@ -707,7 +707,7 @@ namespace RNAssistant.Harness
                     ToolCallId = "safe-call",
                     ToolCalls = new List<LlmToolCall>
                     {
-                        new LlmToolCall { Id = "safe-call", Name = "excel.list_sheets" }
+                        new LlmToolCall { Id = "safe-call", Name = "excel.inspect" }
                     }
                 });
                 session.Messages.Add(new ChatMessage

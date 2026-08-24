@@ -50,7 +50,6 @@ namespace RNAssistant.Office.Services
                     !result.ContainsKey(tool.Id) &&
                     !_toolExecutor.IsProtectedToolId(tool.Id))
                 {
-                    _toolExecutor.CanonicalizePipeline(tool);
                     if (string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
                     {
                         tool.Scope = "global";

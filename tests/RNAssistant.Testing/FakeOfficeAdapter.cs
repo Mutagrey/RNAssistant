@@ -320,6 +320,33 @@ namespace RNAssistant.Harness
                     return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
                 }
 
+                if (command.Arguments.ContainsKey("startLine") || command.Arguments.ContainsKey("lineCount"))
+                {
+                    var lines = (module.Code ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+                    var totalLineCount = string.IsNullOrEmpty(module.Code) ? 0 : lines.Length;
+                    var startLine = Math.Max(1, ArgumentInt(command, "startLine", 1));
+                    var requested = Math.Max(1, Math.Min(500, ArgumentInt(command, "lineCount", 200)));
+                    if (totalLineCount > 0 && startLine > totalLineCount)
+                    {
+                        return ToolResult.Fail("VBA startLine is outside the module.", null, "vba_line_range_invalid", true);
+                    }
+                    var returned = totalLineCount == 0 ? 0 : Math.Min(requested, totalLineCount - startLine + 1);
+                    var code = returned == 0 ? string.Empty : string.Join("\n", lines.Skip(startLine - 1).Take(returned).ToArray());
+                    return ToolResult.Ok("read " + command.ToolId, JsonConvert.SerializeObject(new
+                    {
+                        name = module.Name,
+                        type = module.Type,
+                        startLine = totalLineCount == 0 ? 1 : startLine,
+                        endLine = returned == 0 ? 0 : startLine + returned - 1,
+                        returnedLineCount = returned,
+                        totalLineCount = totalLineCount,
+                        code = code,
+                        codeSha256 = VbaToolManifestParser.LiveCodeSha256(module.Code),
+                        hasMoreBefore = totalLineCount > 0 && startLine > 1,
+                        hasMoreAfter = totalLineCount > 0 && startLine + returned - 1 < totalLineCount
+                    }));
+                }
+
                 var maxChars = Math.Max(1, Math.Min(1000000, ArgumentInt(command, "maxChars", 30000)));
                 var returnedCode = module.Code.Length > maxChars ? module.Code.Substring(0, maxChars) + "\n...[truncated]" : module.Code;
                 return ToolResult.Ok("read " + command.ToolId, JsonConvert.SerializeObject(new
@@ -333,39 +360,6 @@ namespace RNAssistant.Harness
                 }));
             }
 
-            if ((command.ToolId ?? string.Empty).EndsWith(".vba_read_lines", StringComparison.OrdinalIgnoreCase))
-            {
-                var moduleName = Argument(command, "moduleName", "Module1");
-                FakeVbaModule module;
-                if (!_vbaModules.TryGetValue(moduleName, out module))
-                {
-                    return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
-                }
-                var lines = (module.Code ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
-                var totalLineCount = string.IsNullOrEmpty(module.Code) ? 0 : lines.Length;
-                var startLine = Math.Max(1, ArgumentInt(command, "startLine", 1));
-                var requested = Math.Max(1, Math.Min(500, ArgumentInt(command, "lineCount", 200)));
-                if (totalLineCount > 0 && startLine > totalLineCount)
-                {
-                    return ToolResult.Fail("VBA startLine is outside the module.", null, "vba_line_range_invalid", true);
-                }
-                var returned = totalLineCount == 0 ? 0 : Math.Min(requested, totalLineCount - startLine + 1);
-                var code = returned == 0 ? string.Empty : string.Join("\n", lines.Skip(startLine - 1).Take(returned).ToArray());
-                return ToolResult.Ok("read " + command.ToolId, JsonConvert.SerializeObject(new
-                {
-                    name = module.Name,
-                    type = module.Type,
-                    startLine = totalLineCount == 0 ? 1 : startLine,
-                    endLine = returned == 0 ? 0 : startLine + returned - 1,
-                    returnedLineCount = returned,
-                    totalLineCount = totalLineCount,
-                    code = code,
-                    codeSha256 = VbaToolManifestParser.LiveCodeSha256(module.Code),
-                    hasMoreBefore = totalLineCount > 0 && startLine > 1,
-                    hasMoreAfter = totalLineCount > 0 && startLine + returned - 1 < totalLineCount
-                }));
-            }
-
             if ((command.ToolId ?? string.Empty).EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase))
             {
                 var moduleName = Argument(command, "moduleName", "Module1");
@@ -374,12 +368,6 @@ namespace RNAssistant.Harness
                 var componentType = _vbaModules.TryGetValue(moduleName, out existing) ? existing.Type : VbaModuleType;
                 SetVbaModule(moduleName, VbaWriteTransform == null ? code : VbaWriteTransform(code), componentType);
                 return ToolResult.Ok("replaced " + command.ToolId);
-            }
-
-            if ((command.ToolId ?? string.Empty).EndsWith(".insert_vba_module", StringComparison.OrdinalIgnoreCase))
-            {
-                SetVbaModule(Argument(command, "moduleName", "Module1"), Argument(command, "code", string.Empty), VbaModuleType);
-                return ToolResult.Ok("inserted " + command.ToolId);
             }
 
             if ((command.ToolId ?? string.Empty).EndsWith(".run_macro", StringComparison.OrdinalIgnoreCase))
@@ -505,11 +493,10 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("added sheet " + name, JsonConvert.SerializeObject(new { sheet = name }));
             }
 
-            if (string.Equals(command.ToolId, "excel.write_table", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "excel.write_range", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, "excel.write_range", StringComparison.OrdinalIgnoreCase))
             {
                 var sheetName = Argument(command, "sheet", "Sheet1");
-                var startAddress = Argument(command, "startAddress", Argument(command, "address", "A1"));
+                var startAddress = Argument(command, "address", "A1");
                 var kind = Argument(command, "kind", command.Arguments.ContainsKey("values") ? "table" : "value");
                 object raw = string.Equals(kind, "formula", StringComparison.OrdinalIgnoreCase)
                     ? (command.Arguments.ContainsKey("formula") ? command.Arguments["formula"] : null)
@@ -524,7 +511,7 @@ namespace RNAssistant.Harness
             if (string.Equals(command.ToolId, "excel.read_range", StringComparison.OrdinalIgnoreCase))
             {
                 var sheetName = Argument(command, "sheet", "Sheet1");
-                var range = Argument(command, "range", Argument(command, "address", "A1:B10"));
+                var range = Argument(command, "address", "A1:B10");
                 var values = ReadRange(sheetName, range);
                 if (string.Equals(Argument(command, "content", "values"), "profile", StringComparison.OrdinalIgnoreCase))
                 {
@@ -533,13 +520,6 @@ namespace RNAssistant.Harness
                 return string.Equals(Argument(command, "content", "values"), "formulas", StringComparison.OrdinalIgnoreCase)
                     ? ToolResult.Ok("read formulas " + sheetName + "!" + range, JsonConvert.SerializeObject(new { sheet = sheetName, range = range, formulas = values }))
                     : ToolResult.Ok("read range " + sheetName + "!" + range, JsonConvert.SerializeObject(new { sheet = sheetName, range = range, values = values }));
-            }
-
-            if (string.Equals(command.ToolId, "excel.read_formula_range", StringComparison.OrdinalIgnoreCase))
-            {
-                var sheetName = Argument(command, "sheet", "Sheet1");
-                var range = Argument(command, "address", "A1:B10");
-                return ToolResult.Ok("read formulas " + sheetName + "!" + range, JsonConvert.SerializeObject(new { sheet = sheetName, range = range, formulas = ReadRange(sheetName, range) }));
             }
 
             if (string.Equals(command.ToolId, "excel.find_cells", StringComparison.OrdinalIgnoreCase))
@@ -609,31 +589,6 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("added chart " + created.Title, JsonConvert.SerializeObject(created));
             }
 
-            if (string.Equals(command.ToolId, "excel.add_chart", StringComparison.OrdinalIgnoreCase))
-            {
-                var sheetName = Argument(command, "sheet", "Sheet1");
-                var sheet = EnsureSheet(sheetName);
-                var chart = new FakeChart
-                {
-                    Name = Argument(command, "chartName", "Chart " + (sheet.Charts.Count + 1)),
-                    SourceRange = Argument(command, "sourceRange", string.Empty),
-                    ChartType = Argument(command, "chartType", string.Empty),
-                    Title = Argument(command, "title", string.Empty)
-                };
-                sheet.Charts.Add(chart);
-                return ToolResult.Ok("added chart " + chart.Title, JsonConvert.SerializeObject(chart));
-            }
-
-            if (string.Equals(command.ToolId, "excel.list_charts", StringComparison.OrdinalIgnoreCase))
-            {
-                var sheetFilter = Argument(command, "sheet", string.Empty);
-                var charts = _sheets
-                    .Where(pair => string.IsNullOrWhiteSpace(sheetFilter) || string.Equals(pair.Key, sheetFilter, StringComparison.OrdinalIgnoreCase))
-                    .SelectMany(pair => pair.Value.Charts.Select(c => new { sheet = pair.Key, name = c.Name, title = c.Title, sourceRange = c.SourceRange, chartType = c.ChartType }))
-                    .ToArray();
-                return ToolResult.Ok("listed " + charts.Length + " chart(s)", JsonConvert.SerializeObject(charts));
-            }
-
             if (string.Equals(command.ToolId, "excel.inspect", StringComparison.OrdinalIgnoreCase))
             {
                 var kind = Argument(command, "kind", "workbook");
@@ -668,40 +623,6 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("workbook summary", BuildWorkbookSummary());
             }
 
-            if (string.Equals(command.ToolId, "excel.get_chart", StringComparison.OrdinalIgnoreCase))
-            {
-                FakeSheet chartSheet;
-                FakeChart chart;
-                if (!TryFindChart(Argument(command, "sheet", string.Empty), Argument(command, "chartName", string.Empty), out chartSheet, out chart))
-                {
-                    return ToolResult.Fail("Chart not found: " + Argument(command, "chartName", string.Empty));
-                }
-                return ToolResult.Ok("read chart " + chart.Name, JsonConvert.SerializeObject(new { sheet = chartSheet.Name, name = chart.Name, title = chart.Title, sourceRange = chart.SourceRange, chartType = chart.ChartType }));
-            }
-
-            if (string.Equals(command.ToolId, "excel.update_chart", StringComparison.OrdinalIgnoreCase))
-            {
-                FakeSheet chartSheet;
-                FakeChart chart;
-                if (!TryFindChart(Argument(command, "sheet", string.Empty), Argument(command, "chartName", string.Empty), out chartSheet, out chart))
-                {
-                    return ToolResult.Fail("Chart not found: " + Argument(command, "chartName", string.Empty));
-                }
-                if (command.Arguments.ContainsKey("sourceRange"))
-                {
-                    chart.SourceRange = Argument(command, "sourceRange", chart.SourceRange);
-                }
-                if (command.Arguments.ContainsKey("chartType"))
-                {
-                    chart.ChartType = Argument(command, "chartType", chart.ChartType);
-                }
-                if (command.Arguments.ContainsKey("title"))
-                {
-                    chart.Title = Argument(command, "title", chart.Title);
-                }
-                return ToolResult.Ok("updated chart " + chart.Name, JsonConvert.SerializeObject(new { sheet = chartSheet.Name, name = chart.Name, title = chart.Title, sourceRange = chart.SourceRange, chartType = chart.ChartType }));
-            }
-
             if (string.Equals(command.ToolId, "excel.delete_chart", StringComparison.OrdinalIgnoreCase))
             {
                 FakeSheet chartSheet;
@@ -723,36 +644,9 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("added table " + name, JsonConvert.SerializeObject(new { sheet = sheetName, name = name, range = Argument(command, "sourceRange", "A1:B2") }));
             }
 
-            if (string.Equals(command.ToolId, "excel.list_tables", StringComparison.OrdinalIgnoreCase))
-            {
-                var tables = _sheets.SelectMany(pair => pair.Value.Tables.Select(t => new { sheet = pair.Key, name = t })).ToArray();
-                return ToolResult.Ok("listed " + tables.Length + " table(s)", JsonConvert.SerializeObject(tables));
-            }
-
-            if (string.Equals(command.ToolId, "excel.list_names", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "excel.list_shapes", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "excel.create_chat_chart", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, "excel.create_chat_chart", StringComparison.OrdinalIgnoreCase))
             {
                 return ToolResult.Ok("listed " + command.ToolId, "[]");
-            }
-
-            if (string.Equals(command.ToolId, "excel.list_sheets", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Ok("listed " + _sheets.Count + " sheet(s)", JsonConvert.SerializeObject(_sheets.Keys.ToArray()));
-            }
-
-            if (string.Equals(command.ToolId, "excel.workbook_summary", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "excel.profile_range", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Ok("workbook summary", BuildWorkbookSummary());
-            }
-
-            if (string.Equals(command.ToolId, "excel.set_formula", StringComparison.OrdinalIgnoreCase))
-            {
-                var sheetName = Argument(command, "sheet", "Sheet1");
-                var address = Argument(command, "address", "A1");
-                WriteMatrix(sheetName, address, new List<List<string>> { new List<string> { Argument(command, "formula", string.Empty) } });
-                return ToolResult.Ok("set formula " + sheetName + "!" + address);
             }
 
             if (string.Equals(command.ToolId, "excel.rename_sheet", StringComparison.OrdinalIgnoreCase))
@@ -783,21 +677,12 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("applied " + command.ToolId);
             }
 
-            if (string.Equals(command.ToolId, "excel.autofit", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Ok("autofit " + Argument(command, "sheet", "Sheet1"));
-            }
-
             return null;
         }
 
         private ToolResult ExecuteWordTool(ToolCommand command)
         {
-            if (string.Equals(command.ToolId, "word.read_text", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "word.read_document", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "word.read_selection", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "word.get_selection_text", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "word.read_range", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, "word.read_text", StringComparison.OrdinalIgnoreCase))
             {
                 return ToolResult.Ok("read Word text", JsonConvert.SerializeObject(new { text = _wordText, comments = _wordComments.ToArray() }));
             }
@@ -809,11 +694,7 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("found Word text", JsonConvert.SerializeObject(index < 0 ? new object[0] : new[] { new { start = index, end = index + query.Length } }));
             }
 
-            if (string.Equals(command.ToolId, "word.inspect", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "word.read_headings", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "word.read_tables", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "word.list_comments", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "word.document_stats", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, "word.inspect", StringComparison.OrdinalIgnoreCase))
             {
                 return ToolResult.Ok("read Word metadata", JsonConvert.SerializeObject(new { text = _wordText, comments = _wordComments.ToArray() }));
             }
@@ -827,25 +708,6 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("wrote Word text", JsonConvert.SerializeObject(new { text = _wordText }));
             }
 
-            if (string.Equals(command.ToolId, "word.insert_text", StringComparison.OrdinalIgnoreCase))
-            {
-                var text = Argument(command, "text", string.Empty);
-                _wordText += text;
-                return ToolResult.Ok("inserted Word text", JsonConvert.SerializeObject(new { text = _wordText }));
-            }
-
-            if (string.Equals(command.ToolId, "word.insert_paragraph", StringComparison.OrdinalIgnoreCase))
-            {
-                _wordText += Environment.NewLine + Argument(command, "text", string.Empty);
-                return ToolResult.Ok("inserted Word paragraph", JsonConvert.SerializeObject(new { text = _wordText }));
-            }
-
-            if (string.Equals(command.ToolId, "word.replace_selection", StringComparison.OrdinalIgnoreCase))
-            {
-                _wordText = Argument(command, "text", string.Empty);
-                return ToolResult.Ok("replaced Word selection", JsonConvert.SerializeObject(new { text = _wordText }));
-            }
-
             if (string.Equals(command.ToolId, "word.replace_text", StringComparison.OrdinalIgnoreCase))
             {
                 _wordText = _wordText.Replace(Argument(command, "find", string.Empty), Argument(command, "replace", string.Empty));
@@ -853,8 +715,6 @@ namespace RNAssistant.Harness
             }
 
             if (string.Equals(command.ToolId, "word.format_text", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "word.apply_style", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "word.format_selection", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(command.ToolId, "word.add_table", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(command.ToolId, "word.insert_page_break", StringComparison.OrdinalIgnoreCase))
             {
@@ -875,11 +735,7 @@ namespace RNAssistant.Harness
         {
             if (string.Equals(command.ToolId, "powerpoint.get_selection", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(command.ToolId, "powerpoint.read_slides", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "powerpoint.list_objects", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "powerpoint.read_slide", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "powerpoint.list_slides", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "powerpoint.list_shapes", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "powerpoint.read_speaker_notes", StringComparison.OrdinalIgnoreCase))
+                string.Equals(command.ToolId, "powerpoint.list_objects", StringComparison.OrdinalIgnoreCase))
             {
                 return ToolResult.Ok("read slides", JsonConvert.SerializeObject(_slides.Select(s => new { title = s.Title, body = s.Body, notes = s.Notes }).ToArray()));
             }
@@ -900,17 +756,6 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("added slide " + slide.Title, JsonConvert.SerializeObject(slide));
             }
 
-            if (string.Equals(command.ToolId, "powerpoint.replace_selection_text", StringComparison.OrdinalIgnoreCase))
-            {
-                if (_slides.Count == 0)
-                {
-                    _slides.Add(new FakeSlide());
-                }
-
-                _slides[_slides.Count - 1].Body = Argument(command, "text", string.Empty);
-                return ToolResult.Ok("replaced slide selection", JsonConvert.SerializeObject(_slides[_slides.Count - 1]));
-            }
-
             if (string.Equals(command.ToolId, "powerpoint.set_text", StringComparison.OrdinalIgnoreCase))
             {
                 var slide = LastOrNewSlide();
@@ -919,21 +764,6 @@ namespace RNAssistant.Harness
                     slide.Notes = Argument(command, "text", string.Empty);
                     return ToolResult.Ok("set notes", JsonConvert.SerializeObject(slide));
                 }
-                slide.Body = Argument(command, "text", slide.Body ?? string.Empty);
-                return ToolResult.Ok("set slide shape text", JsonConvert.SerializeObject(slide));
-            }
-
-            if (string.Equals(command.ToolId, "powerpoint.set_speaker_notes", StringComparison.OrdinalIgnoreCase))
-            {
-                var slide = LastOrNewSlide();
-                slide.Notes = Argument(command, "notes", string.Empty);
-                return ToolResult.Ok("set notes", JsonConvert.SerializeObject(slide));
-            }
-
-            if (string.Equals(command.ToolId, "powerpoint.add_text_box", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "powerpoint.set_shape_text", StringComparison.OrdinalIgnoreCase))
-            {
-                var slide = LastOrNewSlide();
                 slide.Body = Argument(command, "text", slide.Body ?? string.Empty);
                 return ToolResult.Ok("set slide shape text", JsonConvert.SerializeObject(slide));
             }
@@ -951,9 +781,7 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("replaced slide text");
             }
 
-            if (string.Equals(command.ToolId, "powerpoint.add_object", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "powerpoint.add_picture", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "powerpoint.add_table", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, "powerpoint.add_object", StringComparison.OrdinalIgnoreCase))
             {
                 return ToolResult.Ok("added slide object", JsonConvert.SerializeObject(new { slideCount = _slides.Count }));
             }
@@ -975,42 +803,30 @@ namespace RNAssistant.Harness
 
         private ToolResult ExecuteOutlookTool(ToolCommand command)
         {
-            if (string.Equals(command.ToolId, "outlook.read_mail", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "outlook.read_selection", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "outlook.read_current_mail", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "outlook.read_mail_by_entry_id", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, "outlook.read_mail", StringComparison.OrdinalIgnoreCase))
             {
                 return string.Equals(Argument(command, "content", "message"), "attachments", StringComparison.OrdinalIgnoreCase)
                     ? ToolResult.Ok("read Outlook attachments", "[]")
                     : ToolResult.Ok("read selected mail", JsonConvert.SerializeObject(new { text = _outlookSelection }));
             }
 
-            if (string.Equals(command.ToolId, "outlook.search_mail", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "outlook.list_attachments", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, "outlook.search_mail", StringComparison.OrdinalIgnoreCase))
             {
                 return ToolResult.Ok("read Outlook metadata", JsonConvert.SerializeObject(new { selection = _outlookSelection }));
             }
 
-            if (string.Equals(command.ToolId, "outlook.create_draft", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "outlook.create_reply_draft", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "outlook.create_reply_all_draft", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "outlook.create_forward_draft", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "outlook.create_mail_draft", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, "outlook.create_draft", StringComparison.OrdinalIgnoreCase))
             {
                 _outlookDraft = Argument(command, "body", string.Empty);
                 return ToolResult.Ok("drafted reply", JsonConvert.SerializeObject(new { body = _outlookDraft }));
             }
 
-            if (string.Equals(command.ToolId, "outlook.update_mail", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "outlook.set_categories", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "outlook.mark_as_read", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, "outlook.update_mail", StringComparison.OrdinalIgnoreCase))
             {
                 return ToolResult.Ok("updated Outlook mail");
             }
 
-            if (string.Equals(command.ToolId, "outlook.collect_mail", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "outlook.collect_folder_mail", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "outlook.collect_monthly_summary_data", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, "outlook.collect_mail", StringComparison.OrdinalIgnoreCase))
             {
                 return ToolResult.Ok("collected Outlook data", JsonConvert.SerializeObject(new { selection = _outlookSelection }));
             }
@@ -1293,12 +1109,7 @@ namespace RNAssistant.Harness
                 BuiltIn("Excel", "excel.rename_sheet", true, true, true),
                 BuiltIn("Excel", "excel.clear_range", true, true, true, 3),
                 BuiltIn("Excel", "excel.sort_range", true, true, true),
-                BuiltIn("Excel", "excel.filter_range", true, true, true),
-                BuiltIn("Excel", "excel.vba_read_module", false, false, false),
-                BuiltIn("Excel", "excel.vba_read_lines", false, false, false),
-                BuiltIn("Excel", "excel.vba_replace_module", false, true, false, 3),
-                BuiltIn("Excel", "excel.insert_vba_module", false, true, false, 3),
-                BuiltIn("Excel", "excel.run_macro", false, true, false, 3)
+                BuiltIn("Excel", "excel.filter_range", true, true, true)
             };
         }
 
@@ -1315,12 +1126,7 @@ namespace RNAssistant.Harness
                 BuiltIn("Word", "word.format_text", false, true, true, 1),
                 BuiltIn("Word", "word.add_table", false, true, true),
                 BuiltIn("Word", "word.insert_page_break", false, true, true, 1),
-                BuiltIn("Word", "word.add_comment", false, true, true, 1),
-                BuiltIn("Word", "word.vba_read_module", false, false, false),
-                BuiltIn("Word", "word.vba_read_lines", false, false, false),
-                BuiltIn("Word", "word.vba_replace_module", false, true, false, 3),
-                BuiltIn("Word", "word.insert_vba_module", false, true, false, 3),
-                BuiltIn("Word", "word.run_macro", false, true, false, 3)
+                BuiltIn("Word", "word.add_comment", false, true, true, 1)
             };
         }
 
@@ -1338,12 +1144,7 @@ namespace RNAssistant.Harness
                 BuiltIn("PowerPoint", "powerpoint.replace_text", true, true, true),
                 BuiltIn("PowerPoint", "powerpoint.add_object", false, true, true, 1),
                 BuiltIn("PowerPoint", "powerpoint.duplicate_slide", false, true, true, 1),
-                BuiltIn("PowerPoint", "powerpoint.move_slide", true, true, true),
-                BuiltIn("PowerPoint", "powerpoint.vba_read_module", false, false, false),
-                BuiltIn("PowerPoint", "powerpoint.vba_read_lines", false, false, false),
-                BuiltIn("PowerPoint", "powerpoint.vba_replace_module", false, true, false, 3),
-                BuiltIn("PowerPoint", "powerpoint.insert_vba_module", false, true, false, 3),
-                BuiltIn("PowerPoint", "powerpoint.run_macro", false, true, false, 3)
+                BuiltIn("PowerPoint", "powerpoint.move_slide", true, true, true)
             };
         }
 
@@ -1421,29 +1222,17 @@ namespace RNAssistant.Harness
                 case "excel.inspect":
                     return "kind sheet chartName";
                 case "excel.read_range":
-                    return "sheet address range content";
-                case "excel.read_formula_range":
-                case "excel.profile_range":
-                case "excel.autofit":
-                    return "sheet address range";
+                    return "sheet address content";
                 case "excel.find_cells":
                     return "sheet address scope query mode matchCase wholeWord lookIn maxResults contextChars";
                 case "excel.replace_cells":
                     return "sheet address scope find replace mode matchCase wholeWord lookIn replaceAll maxReplacements";
                 case "excel.create_chat_chart":
                     return "sheet address chartType title";
-                case "excel.list_charts":
-                case "excel.list_tables":
-                case "excel.list_shapes":
-                    return "sheet";
                 case "excel.delete_chart":
                     return "sheet chartName";
                 case "excel.write_range":
                     return "kind sheet address value formula values";
-                case "excel.write_table":
-                    return "sheet startAddress values sourceMessage sourceSuccess";
-                case "excel.set_formula":
-                    return "sheet address formula";
                 case "excel.add_table":
                     return "sheet sourceRange name hasHeaders style";
                 case "excel.upsert_chart":
@@ -1460,16 +1249,6 @@ namespace RNAssistant.Harness
                     return "sheet address keyColumn descending hasHeaders";
                 case "excel.filter_range":
                     return "sheet address field criteria";
-                case "excel.vba_read_module":
-                    return "moduleName maxChars";
-                case "excel.vba_read_lines":
-                    return "moduleName startLine lineCount";
-                case "excel.vba_replace_module":
-                    return "moduleName code createIfMissing";
-                case "excel.insert_vba_module":
-                    return "moduleName code";
-                case "excel.run_macro":
-                    return "macroName";
                 default:
                     return string.Empty;
             }

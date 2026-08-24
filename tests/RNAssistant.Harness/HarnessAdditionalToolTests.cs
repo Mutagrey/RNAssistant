@@ -72,7 +72,7 @@ namespace RNAssistant.Harness
                 var pipeline = CustomTool("Excel", "excel.read_then_create_skill");
                 pipeline.PipelineJson = "{\"steps\":[" +
                     "{\"toolId\":\"excel.read_range\",\"arguments\":{\"address\":\"A1\"}}," +
-                    "{\"toolId\":\"common.skills_create\",\"arguments\":{\"id\":\"common.saved\",\"description\":\"Saved test skill.\",\"bodyMarkdown\":\"test\"}}" +
+                    "{\"toolId\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.saved\",\"description\":\"Saved test skill.\",\"bodyMarkdown\":\"test\"}}" +
                     "]}";
 
                 var result = executor.Execute(
@@ -178,7 +178,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void CompactToolCatalogKeepsLegacyAliasesRunnable()
+        private static void CompactToolCatalogRejectsRemovedAliases()
         {
             var expectedHostCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
             {
@@ -193,139 +193,39 @@ namespace RNAssistant.Harness
                 AssertEqual(pair.Value, runnable.Count, pair.Key + " compact runnable tool count");
             }
 
+            var removedByHost = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "Excel", new[] { "excel.list_sheets", "excel.write_table", "excel.add_chart" } },
+                { "Word", new[] { "word.read_document", "word.insert_text", "word.apply_style" } },
+                { "PowerPoint", new[] { "powerpoint.list_slides", "powerpoint.set_shape_text", "powerpoint.add_picture" } },
+                { "Outlook", new[] { "outlook.read_current_mail", "outlook.create_mail_draft", "outlook.mark_as_read" } }
+            };
+            foreach (var pair in removedByHost)
+            {
+                WithTempExecutor(FakeOfficeAdapter.ForHost(pair.Key), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+                {
+                    var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                    foreach (var id in pair.Value)
+                    {
+                        var result = executor.Execute(new ToolCommand { ToolId = id }, tools, new AppSettings(), false, false);
+                        AssertEqual("unknown_tool", result.ErrorCode, id + " is removed");
+                    }
+                });
+            }
+
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
-                var listCharts = executor.Execute(Command("excel.list_charts", "sheet", "Data"), tools, new AppSettings(), false, false);
-                AssertTrue(listCharts.Success, "legacy Excel list alias executes");
-                AssertEqual("excel.inspect", adapter.Executed.Last().ToolId, "Excel list alias canonical id");
-                AssertEqual("charts", adapter.Executed.Last().Arguments["kind"], "Excel list alias selector");
+                foreach (var id in new[] { "common.skills_list", "common.tools_create", "common.prompts_read_defaults", "common.html_workspace_upsert_file" })
+                {
+                    var result = executor.Execute(new ToolCommand { ToolId = id }, tools, new AppSettings(), false, false);
+                    AssertEqual("unknown_tool", result.ErrorCode, id + " is removed");
+                }
 
-                var formulas = executor.Execute(Command("excel.read_formula_range", "sheet", "Data", "address", "A1:B2"), tools, new AppSettings(), false, false);
-                AssertTrue(formulas.Success, "legacy Excel formula alias executes");
-                AssertEqual("formulas", adapter.Executed.Last().Arguments["content"], "Excel formula selector");
-
-                AssertTrue(executor.Execute(Command("excel.profile_range", "sheet", "Data", "address", "A1:B2"), tools, new AppSettings(), false, false).Success,
-                    "legacy Excel profile alias executes");
-                AssertEqual("profile", adapter.Executed.Last().Arguments["content"], "Excel profile selector");
-
-                var table = executor.Execute(Command("excel.write_table", "sheet", "Report", "startAddress", "B2", "values", new JArray(new JArray("A"))), tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
-                AssertTrue(table.Success, "legacy Excel table alias executes");
-                AssertEqual("excel.write_range", adapter.Executed.Last().ToolId, "Excel table alias canonical id");
-                AssertEqual("table", adapter.Executed.Last().Arguments["kind"], "Excel table selector");
-                AssertEqual("B2", adapter.Executed.Last().Arguments["address"], "Excel table address normalized");
-
-                var nullableWrite = Command("excel.write_range", "sheet", "Report", "values", new JArray(new JArray("B")));
-                nullableWrite.Arguments["kind"] = null;
-                nullableWrite.Arguments["formula"] = null;
-                AssertTrue(executor.Execute(nullableWrite, tools, new AppSettings(), false, false).Success,
-                    "Excel write inference ignores strict-schema nulls");
-                AssertEqual("table", adapter.Executed.Last().Arguments["kind"], "Excel write kind inferred from non-null payload");
-
-                AssertTrue(executor.Execute(Command("excel.add_chart", "sheet", "Data", "chartName", "Legacy Chart"), tools, new AppSettings(), false, false).Success,
-                    "legacy Excel chart create alias executes");
-                AssertEqual("excel.upsert_chart", adapter.Executed.Last().ToolId, "Excel chart canonical id");
-                AssertEqual("createOnly", adapter.Executed.Last().Arguments["mode"], "Excel chart create policy");
-
-                AssertTrue(executor.Execute(Command("excel.autofit", "sheet", "Data"), tools, new AppSettings(), false, false).Success,
-                    "legacy Excel autofit alias executes");
-                AssertEqual("excel.format_range", adapter.Executed.Last().ToolId, "Excel format canonical id");
-                AssertEqual("both", adapter.Executed.Last().Arguments["autoFit"], "Excel autofit selector");
-
-                AssertTrue(executor.Execute(new ToolCommand { ToolId = "common.skills_list" }, tools, new AppSettings(), false, false).Success,
-                    "legacy skills list alias executes");
-                AssertTrue(executor.Execute(new ToolCommand { ToolId = "common.tools_list" }, tools, new AppSettings(), false, false).Success,
-                    "legacy tools list alias executes");
-                var prompts = executor.Execute(new ToolCommand { ToolId = "common.prompts_read_defaults" }, tools, new AppSettings(), false, false);
-                AssertTrue(prompts.Success && prompts.DataJson.IndexOf("\"defaults\"", StringComparison.Ordinal) >= 0,
-                    "legacy prompt defaults alias executes");
-
-                var legacyPipeline = CustomTool("Excel", "excel.legacy_catalog_pipeline");
-                legacyPipeline.PipelineJson = "{\"steps\":[{\"id\":\"objects\",\"toolId\":\"excel.list_shapes\",\"arguments\":{}}]}";
-                var prepared = AgentRunService.PrepareToolsForRun(adapter.GetBuiltInTools().Concat(new[] { legacyPipeline }));
-                var preparedPipeline = prepared.Single(item => item.Id == legacyPipeline.Id);
-                AssertContains(preparedPipeline.PipelineJson, "excel.inspect", "legacy pipeline id canonicalized before safety");
-                AssertContains(preparedPipeline.PipelineJson, "\"kind\":\"shapes\"", "legacy pipeline selector injected");
-
-                var controllerRunnable = AgentRunService.PrepareToolsForRun(executor.GetControllerTools());
-                AssertEqual(27, controllerRunnable.Count, "compact common runnable tool count");
-                AssertTrue(controllerRunnable.All(item => item.Id != "common.skills_list" &&
-                    item.Id != "common.skills_create" &&
-                    item.Id != "common.skills_update" &&
-                    item.Id != "common.tools_list" &&
-                    item.Id != "common.tools_create" &&
-                    item.Id != "common.tools_update" &&
-                    item.Id != "common.prompts_read_defaults" &&
-                    item.Id != "common.html_workspace_upsert_file" &&
-                    item.Id != "common.vba_list_modules"), "legacy common ids stay out of model catalog");
-                AssertTrue(controllerRunnable.Any(item => item.Id == "common.skills_upsert") &&
-                    controllerRunnable.Any(item => item.Id == "common.tools_upsert"), "common authoring upserts stay visible");
-            });
-
-            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                var tools = adapter.GetBuiltInTools().ToList();
-                AssertTrue(executor.Execute(new ToolCommand { ToolId = "word.read_selection" }, tools, new AppSettings(), false, false).Success,
-                    "legacy Word read alias executes");
-                AssertEqual("selection", adapter.Executed.Last().Arguments["source"], "Word read selector");
-                AssertTrue(executor.Execute(Command("word.insert_paragraph", "text", "Legacy"), tools, new AppSettings { AutoConfirmToolActions = true }, false, false).Success,
-                    "legacy Word write alias executes");
-                AssertEqual("paragraph", adapter.Executed.Last().Arguments["mode"], "Word write selector");
-                AssertTrue(executor.Execute(Command("word.apply_style", "style", "Heading 1"), tools, new AppSettings(), false, false).Success,
-                    "legacy Word style alias executes");
-                AssertEqual("word.format_text", adapter.Executed.Last().ToolId, "Word format canonical id");
-                AssertEqual("style", adapter.Executed.Last().Arguments["kind"], "Word format selector");
-            });
-
-            WithTempExecutor(FakeOfficeAdapter.ForHost("PowerPoint"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                var tools = adapter.GetBuiltInTools().ToList();
-                AssertTrue(executor.Execute(Command("powerpoint.list_shapes", "slideIndex", 1), tools, new AppSettings(), false, false).Success,
-                    "legacy PowerPoint list alias executes");
-                AssertEqual("shapes", adapter.Executed.Last().Arguments["kind"], "PowerPoint list selector");
-                AssertTrue(executor.Execute(new ToolCommand { ToolId = "powerpoint.list_shapes" }, tools, new AppSettings(), false, false).Success,
-                    "legacy PowerPoint list default executes");
-                AssertEqual(1L, Convert.ToInt64(adapter.Executed.Last().Arguments["slideIndex"]), "legacy PowerPoint slide default preserved");
-                AssertTrue(executor.Execute(Command("powerpoint.read_speaker_notes", "slideIndex", 0), tools, new AppSettings(), false, false).Success,
-                    "legacy PowerPoint notes alias executes");
-                AssertEqual("powerpoint.read_slides", adapter.Executed.Last().ToolId, "PowerPoint notes canonical id");
-                AssertEqual("notes", adapter.Executed.Last().Arguments["content"], "PowerPoint notes selector");
-                AssertTrue(!adapter.Executed.Last().Arguments.ContainsKey("slideIndex"), "legacy all-notes sentinel removed");
-                AssertTrue(executor.Execute(Command("powerpoint.replace_selection_text", "text", "Legacy"), tools, new AppSettings { AutoConfirmToolActions = true }, false, false).Success,
-                    "legacy PowerPoint selection alias executes");
-                AssertEqual("powerpoint.set_text", adapter.Executed.Last().ToolId, "PowerPoint write alias canonical id");
-                AssertEqual("shape", adapter.Executed.Last().Arguments["target"], "PowerPoint text target selector");
-                AssertTrue(executor.Execute(Command("powerpoint.add_picture", "path", "image.png"), tools, new AppSettings(), false, false).Success,
-                    "legacy PowerPoint object alias executes");
-                AssertEqual("powerpoint.add_object", adapter.Executed.Last().ToolId, "PowerPoint object canonical id");
-                AssertEqual("picture", adapter.Executed.Last().Arguments["kind"], "PowerPoint object selector");
-                AssertEqual(1L, Convert.ToInt64(adapter.Executed.Last().Arguments["slideIndex"]), "legacy PowerPoint object slide default preserved");
-                AssertTrue(executor.Execute(Command("powerpoint.add_text_box", "text", "Legacy", "fontSize", 0), tools, new AppSettings(), false, false).Success,
-                    "legacy PowerPoint zero font default remains compatible");
-                AssertTrue(!adapter.Executed.Last().Arguments.ContainsKey("fontSize"), "legacy zero font default is omitted for the compact schema");
-                var inferredObject = Command("powerpoint.add_object", "text", "Inferred");
-                inferredObject.Arguments["kind"] = null;
-                inferredObject.Arguments["path"] = null;
-                AssertTrue(executor.Execute(inferredObject, tools, new AppSettings(), false, false).Success,
-                    "PowerPoint object inference ignores strict-schema nulls");
-                AssertEqual("textBox", adapter.Executed.Last().Arguments["kind"], "PowerPoint object inferred from text");
-            });
-
-            WithTempExecutor(FakeOfficeAdapter.ForHost("Outlook"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                var tools = adapter.GetBuiltInTools().ToList();
-                AssertTrue(executor.Execute(new ToolCommand { ToolId = "outlook.read_current_mail" }, tools, new AppSettings(), false, false).Success,
-                    "legacy Outlook read alias executes");
-                AssertTrue(executor.Execute(Command("outlook.create_reply_all_draft", "body", "Legacy"), tools, new AppSettings { AutoConfirmToolActions = true }, false, false).Success,
-                    "legacy Outlook draft alias executes");
-                AssertEqual("replyAll", adapter.Executed.Last().Arguments["kind"], "Outlook draft selector");
-                AssertTrue(executor.Execute(new ToolCommand { ToolId = "outlook.list_attachments" }, tools, new AppSettings(), false, false).Success,
-                    "legacy Outlook attachments alias executes");
-                AssertEqual("attachments", adapter.Executed.Last().Arguments["content"], "Outlook read selector");
-                AssertTrue(executor.Execute(new ToolCommand { ToolId = "outlook.mark_as_read" }, tools, new AppSettings(), false, false).Success,
-                    "legacy Outlook update alias executes");
-                AssertEqual("outlook.update_mail", adapter.Executed.Last().ToolId, "Outlook update canonical id");
-                AssertEqual("markRead", adapter.Executed.Last().Arguments["kind"], "Outlook update selector");
+                var removedPipeline = CustomTool("Excel", "excel.removed_id_pipeline");
+                removedPipeline.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.list_shapes\",\"arguments\":{}}]}";
+                var prepared = AgentRunService.PrepareToolsForRun(adapter.GetBuiltInTools().Concat(new[] { removedPipeline }));
+                AssertTrue(prepared.All(item => item.Id != removedPipeline.Id), "pipeline with removed id stays invalid");
             });
         }
 
@@ -352,9 +252,9 @@ namespace RNAssistant.Harness
                 AssertTrue(drySession.HtmlWorkspace.DataSources == null, "html dry run does not normalize data in place");
                 AssertEqual(default(DateTime), drySession.HtmlWorkspace.UpdatedUtc, "html dry run keeps timestamp");
 
-                var fileCommand = new ToolCommand { ToolId = "common.html_workspace_upsert_file" };
-                fileCommand.Arguments["path"] = "index.html";
-                fileCommand.Arguments["kind"] = "html";
+                var fileCommand = new ToolCommand { ToolId = "common.html_workspace_upsert" };
+                fileCommand.Arguments["resourceType"] = "file";
+                fileCommand.Arguments["name"] = "index.html";
                 fileCommand.Arguments["content"] = "<h1>Report</h1>";
                 fileCommand.Arguments["setActive"] = true;
 
@@ -373,9 +273,10 @@ namespace RNAssistant.Harness
                 AssertEqual(2, session.HtmlWorkspace.Files.Count, "html file and script count");
                 AssertEqual("script", session.HtmlWorkspace.Files[1].Kind, "script kind normalized");
 
-                var dataCommand = new ToolCommand { ToolId = "common.html_workspace_upsert_data" };
+                var dataCommand = new ToolCommand { ToolId = "common.html_workspace_upsert" };
+                dataCommand.Arguments["resourceType"] = "data";
                 dataCommand.Arguments["name"] = "rows";
-                dataCommand.Arguments["json"] = "{\"items\":[1,2]}";
+                dataCommand.Arguments["content"] = "{\"items\":[1,2]}";
                 var dataResult = executor.Execute(dataCommand, tools, new AppSettings(), false, false, session);
                 AssertTrue(dataResult.Success, "html workspace data save succeeds");
                 AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "html data count");
@@ -383,26 +284,27 @@ namespace RNAssistant.Harness
                 var readResult = executor.Execute(new ToolCommand
                 {
                     ToolId = "common.html_workspace_read",
-                    Arguments = { ["dataName"] = "rows" }
+                    Arguments = { ["resourceType"] = "data", ["name"] = "rows" }
                 }, tools, new AppSettings(), false, false, session);
                 AssertTrue(readResult.Success, "html workspace read succeeds");
                 AssertContains(readResult.DataJson, "rnassistant.htmlWorkspace", "workspace result type");
                 AssertContains(readResult.DataJson, "items", "workspace data included");
 
-                var ambiguousRead = new ToolCommand { ToolId = "common.html_workspace_read" };
-                ambiguousRead.Arguments["path"] = "index.html";
-                ambiguousRead.Arguments["dataName"] = "rows";
-                var ambiguousResult = executor.Execute(ambiguousRead, tools, new AppSettings(), false, false, session);
-                AssertTrue(!ambiguousResult.Success, "legacy HTML read rejects conflicting selectors");
-                AssertContains(ambiguousResult.Message, "either path or dataName", "legacy HTML selector diagnostic");
+                var incompleteRead = new ToolCommand { ToolId = "common.html_workspace_read" };
+                incompleteRead.Arguments["name"] = "rows";
+                var incompleteResult = executor.Execute(incompleteRead, tools, new AppSettings(), false, false, session);
+                AssertTrue(!incompleteResult.Success, "HTML read rejects incomplete selector");
+                AssertContains(incompleteResult.Message, "resourceType is required", "HTML selector diagnostic");
 
-                var deleteScript = new ToolCommand { ToolId = "common.html_workspace_delete_file" };
-                deleteScript.Arguments["path"] = "app.js";
+                var deleteScript = new ToolCommand { ToolId = "common.html_workspace_delete" };
+                deleteScript.Arguments["resourceType"] = "file";
+                deleteScript.Arguments["name"] = "app.js";
                 var deleteScriptResult = executor.Execute(deleteScript, tools, new AppSettings(), false, false, session);
                 AssertTrue(deleteScriptResult.Success, "html workspace file delete succeeds");
                 AssertEqual(1, session.HtmlWorkspace.Files.Count, "html script deleted");
 
-                var deleteData = new ToolCommand { ToolId = "common.html_workspace_delete_data" };
+                var deleteData = new ToolCommand { ToolId = "common.html_workspace_delete" };
+                deleteData.Arguments["resourceType"] = "data";
                 deleteData.Arguments["name"] = "rows";
                 var deleteDataResult = executor.Execute(deleteData, tools, new AppSettings(), false, false, session);
                 AssertTrue(deleteDataResult.Success, "html workspace data delete succeeds");
@@ -452,16 +354,17 @@ namespace RNAssistant.Harness
                 AssertTrue(freezeResult.Success, "bound HTML data can be frozen");
                 AssertTrue(boundSession.HtmlWorkspace.DataSources[0].Binding == null, "freeze keeps JSON and removes binding");
 
-                var invalidData = new ToolCommand { ToolId = "common.html_workspace_upsert_data" };
+                var invalidData = new ToolCommand { ToolId = "common.html_workspace_upsert" };
+                invalidData.Arguments["resourceType"] = "data";
                 invalidData.Arguments["name"] = "bad";
-                invalidData.Arguments["json"] = "{ bad";
+                invalidData.Arguments["content"] = "{ bad";
                 var invalidResult = executor.Execute(invalidData, tools, new AppSettings(), false, false, session);
                 AssertTrue(!invalidResult.Success, "invalid html data fails");
                 AssertContains(invalidResult.Message, "Invalid HTML workspace JSON", "invalid html data message");
 
                 HtmlArtifactToolExecutor.UpsertFile(session, "styles.css", "css", "body{}", false);
                 var cssActive = new ToolCommand { ToolId = "common.html_workspace_set_active" };
-                cssActive.Arguments["path"] = "styles.css";
+                cssActive.Arguments["name"] = "styles.css";
                 var cssActiveResult = executor.Execute(cssActive, tools, new AppSettings(), false, false, session);
                 AssertTrue(!cssActiveResult.Success, "non-html file cannot become active preview");
 
@@ -472,7 +375,7 @@ namespace RNAssistant.Harness
                 var failedHistoryCount = failedSession.HtmlWorkspace.History.Count;
                 var failedRedoCount = failedSession.HtmlWorkspace.RedoHistory.Count;
                 var missingActive = new ToolCommand { ToolId = "common.html_workspace_set_active" };
-                missingActive.Arguments["path"] = "missing.html";
+                missingActive.Arguments["name"] = "missing.html";
                 var missingResult = executor.Execute(missingActive, tools, new AppSettings(), false, false, failedSession);
                 AssertTrue(!missingResult.Success, "missing active HTML file fails");
                 AssertEqual(failedHistoryCount, failedSession.HtmlWorkspace.History.Count, "failed set-active preserves history");
@@ -480,8 +383,9 @@ namespace RNAssistant.Harness
                 var missingDryRun = executor.Execute(missingActive, tools, new AppSettings(), true, false, failedSession);
                 AssertTrue(!missingDryRun.Success, "set-active dry run validates file existence");
 
-                var absolutePath = new ToolCommand { ToolId = "common.html_workspace_upsert_file" };
-                absolutePath.Arguments["path"] = "/index.html";
+                var absolutePath = new ToolCommand { ToolId = "common.html_workspace_upsert" };
+                absolutePath.Arguments["resourceType"] = "file";
+                absolutePath.Arguments["name"] = "/index.html";
                 absolutePath.Arguments["content"] = "<h1>Absolute</h1>";
                 var absoluteResult = executor.Execute(absolutePath, tools, new AppSettings(), true, false, failedSession);
                 AssertTrue(!absoluteResult.Success, "absolute workspace path rejected");
@@ -618,7 +522,7 @@ namespace RNAssistant.Harness
                 command.Arguments["description"] = "Validated pipeline.";
                 command.Arguments["parameters"] = JObject.Parse(EmptyFormalToolSchema);
                 command.Arguments["executor"] = "pipeline";
-                command.Arguments["pipeline"] = JObject.Parse("{\"version\":1,\"steps\":[{\"toolId\":\"excel.list_sheets\",\"arguments\":{}}]}");
+                command.Arguments["pipeline"] = JObject.Parse("{\"version\":1,\"steps\":[{\"toolId\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}");
 
                 var result = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings(), false, false);
 

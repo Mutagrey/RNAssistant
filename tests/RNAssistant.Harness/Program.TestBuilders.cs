@@ -90,7 +90,7 @@ namespace RNAssistant.Harness
                     PipelineJson = "{" +
                         "\"steps\":[" +
                         "{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}," +
-                        "{\"id\":\"table\",\"toolId\":\"excel.write_table\",\"arguments\":{\"sheet\":\"{{args.sheet}}\",\"startAddress\":\"A1\",\"values\":\"[[\\\"Month\\\",\\\"Sales\\\"]]\"}}" +
+                        "{\"id\":\"table\",\"toolId\":\"excel.write_range\",\"arguments\":{\"kind\":\"table\",\"sheet\":\"{{args.sheet}}\",\"address\":\"A1\",\"values\":\"[[\\\"Month\\\",\\\"Sales\\\"]]\"}}" +
                         "]}"
                 }
             };
@@ -111,7 +111,7 @@ namespace RNAssistant.Harness
                     PipelineJson = "{" +
                         "\"steps\":[" +
                         "{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}," +
-                        "{\"id\":\"table\",\"toolId\":\"excel.write_table\",\"arguments\":{\"sheet\":\"Report\",\"startAddress\":\"A1\",\"values\":[[\"{{steps.sheet.message}}\",\"{{steps.sheet.success}}\"]]}}" +
+                        "{\"id\":\"table\",\"toolId\":\"excel.write_range\",\"arguments\":{\"kind\":\"table\",\"sheet\":\"Report\",\"address\":\"A1\",\"values\":[[\"{{steps.sheet.message}}\",\"{{steps.sheet.success}}\"]]}}" +
                         "]}"
                 }
             };
@@ -132,7 +132,7 @@ namespace RNAssistant.Harness
                     PipelineJson = "{" +
                         "\"steps\":[" +
                         "{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}," +
-                        "{\"id\":\"table\",\"toolId\":\"excel.write_table\",\"arguments\":{\"sheet\":\"{{args.sheet}}\",\"startAddress\":\"A1\"}}," +
+                        "{\"id\":\"table\",\"toolId\":\"excel.write_range\",\"arguments\":{\"kind\":\"table\",\"sheet\":\"{{args.sheet}}\",\"address\":\"A1\"}}," +
                         "{\"id\":\"chart\",\"toolId\":\"excel.upsert_chart\",\"arguments\":{\"sheet\":\"{{args.sheet}}\",\"sourceRange\":\"A1:B2\",\"chartType\":\"column\",\"title\":\"Report\"}}" +
                         "]}"
                 }

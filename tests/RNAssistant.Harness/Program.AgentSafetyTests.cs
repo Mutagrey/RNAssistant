@@ -113,7 +113,7 @@ namespace RNAssistant.Harness
                 AssertEqual(3, ((JObject)literalReplace["properties"]).Properties().Count(),
                     "literal replace exposes only op, find, and text");
                 AssertTrue(literalReplace.SelectToken("properties.replace") == null,
-                    "legacy replacement alias is hidden from the strict model schema");
+                    "removed replacement field is absent from the strict model schema");
                 var regexReplace = patchVariants.OfType<JObject>().Single(item =>
                     string.Equals((string)item.SelectToken("properties.op.enum[0]"), "regexReplace", StringComparison.Ordinal));
                 var optionalMatchCaseType = regexReplace.SelectToken("properties.matchCase.type") as JArray;

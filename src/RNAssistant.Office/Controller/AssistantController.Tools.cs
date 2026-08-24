@@ -98,13 +98,12 @@ namespace RNAssistant.Office
 
         private static bool IsSessionArtifactTool(string toolId)
         {
-            var canonicalToolId = BuiltInToolAliases.Canonicalize(toolId);
-            return string.Equals(canonicalToolId, HtmlArtifactToolExecutor.UpsertToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(canonicalToolId, HtmlArtifactToolExecutor.DeleteToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(canonicalToolId, HtmlArtifactToolExecutor.SetActiveToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(canonicalToolId, HtmlArtifactToolExecutor.BindDataToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(canonicalToolId, HtmlArtifactToolExecutor.RefreshDataToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(canonicalToolId, HtmlArtifactToolExecutor.FreezeDataToolId, StringComparison.OrdinalIgnoreCase) ||
+            return string.Equals(toolId, HtmlArtifactToolExecutor.UpsertToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, HtmlArtifactToolExecutor.DeleteToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, HtmlArtifactToolExecutor.SetActiveToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, HtmlArtifactToolExecutor.BindDataToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, HtmlArtifactToolExecutor.RefreshDataToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, HtmlArtifactToolExecutor.FreezeDataToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, PlanToolExecutor.CreateToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, PlanToolExecutor.UpdateToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, PlanToolExecutor.DeleteToolId, StringComparison.OrdinalIgnoreCase);

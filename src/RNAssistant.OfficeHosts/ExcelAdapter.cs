@@ -220,12 +220,7 @@ namespace RNAssistant.OfficeHosts
                 Tool("excel.rename_sheet", "Mutates document: Rename a worksheet.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"newName\":{\"type\":\"string\",\"description\":\"New exact name.\"}},\"required\":[\"newName\"],\"additionalProperties\":false}", true, true, 2, true),
                 Tool("excel.clear_range", "Mutates document: Clear cell values, formats, or both in a range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address.\"},\"clearWhat\":{\"type\":\"string\",\"description\":\"Content to clear: values, formats, or all.\",\"default\":\"values\",\"enum\":[\"values\",\"formats\",\"all\"]}},\"required\":[\"address\"],\"additionalProperties\":false}", true, true, 3, true),
                 Tool("excel.sort_range", "Mutates document: Sort rows in a range by one key column.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address.\"},\"keyColumn\":{\"type\":\"integer\",\"description\":\"One-based sort-key column index within the range.\",\"default\":1},\"descending\":{\"type\":\"boolean\",\"description\":\"Whether to sort in descending order.\",\"default\":false},\"hasHeaders\":{\"type\":\"boolean\",\"description\":\"Whether the first row contains headers.\",\"default\":true}},\"required\":[\"address\"],\"additionalProperties\":false}", true, true, 2, true),
-                Tool("excel.filter_range", "Mutates document: Apply AutoFilter criteria to a range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address.\"},\"field\":{\"type\":\"integer\",\"description\":\"One-based column index within the filter range.\",\"default\":1},\"criteria\":{\"type\":\"string\",\"description\":\"AutoFilter criterion understood by Excel.\"}},\"required\":[\"address\"],\"additionalProperties\":false}", true, true, 2, true),
-                Tool("excel.vba_read_module", "Internal VBA backend read; use common.vba_read_module.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum number of text characters returned.\",\"default\":30000,\"minimum\":1,\"maximum\":1000000}},\"required\":[\"moduleName\"],\"additionalProperties\":false}", false, false),
-                Tool("excel.vba_read_lines", "Internal VBA backend range read; the public facade is common.vba_read_module.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"startLine\":{\"type\":\"integer\",\"description\":\"One-based first line.\",\"default\":1,\"minimum\":1},\"lineCount\":{\"type\":\"integer\",\"description\":\"Maximum consecutive lines returned.\",\"default\":200,\"minimum\":1,\"maximum\":500}},\"required\":[\"moduleName\"],\"additionalProperties\":false}", false, false),
-                Tool("excel.vba_replace_module", "Mutates document: Replace a VBA module source code and create a rollback backup.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\"},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code.\"},\"createIfMissing\":{\"type\":\"boolean\",\"description\":\"Whether a missing VBA standard module may be created.\",\"default\":true}},\"required\":[\"moduleName\",\"code\"],\"additionalProperties\":false}", true, false, 3),
-                Tool("excel.insert_vba_module", "Mutates document: Insert a VBA module or return copyable code if trust access is blocked.", "{\"type\":\"object\",\"properties\":{\"moduleName\":{\"type\":\"string\",\"description\":\"Exact VBA component name.\",\"default\":\"RNAssistantModule\"},\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source code.\"}},\"required\":[\"code\"],\"additionalProperties\":false}", true, false, 3),
-                Tool("excel.run_macro", "Mutates document: Run an Excel VBA macro by name.", "{\"type\":\"object\",\"properties\":{\"macroName\":{\"type\":\"string\",\"description\":\"Exact public VBA macro name.\"}},\"required\":[\"macroName\"],\"additionalProperties\":false}", true, false, 3)
+                Tool("excel.filter_range", "Mutates document: Apply AutoFilter criteria to a range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address.\"},\"field\":{\"type\":\"integer\",\"description\":\"One-based column index within the filter range.\",\"default\":1},\"criteria\":{\"type\":\"string\",\"description\":\"AutoFilter criterion understood by Excel.\"}},\"required\":[\"address\"],\"additionalProperties\":false}", true, true, 2, true)
             };
         }
 
@@ -342,52 +337,24 @@ namespace RNAssistant.OfficeHosts
                         return GetSelectionTool();
                     case "excel.inspect":
                         return InspectWorkbook(command);
-                    case "excel.workbook_summary":
-                        return WorkbookSummary();
-                    case "excel.list_sheets":
-                        return ListSheets();
                     case "excel.read_range":
                         return ReadRangeByContent(command);
-                    case "excel.read_formula_range":
-                        return ReadFormulaRange(command);
-                    case "excel.profile_range":
-                        return ProfileRange(command);
                     case "excel.find_cells":
                         return FindCells(command);
                     case "excel.replace_cells":
                         return ReplaceCells(command);
                     case "excel.create_chat_chart":
                         return CreateChatChart(command);
-                    case "excel.list_charts":
-                        return ListCharts(command);
-                    case "excel.get_chart":
-                        return GetChart(command);
-                    case "excel.list_tables":
-                        return ListTables(command);
-                    case "excel.list_names":
-                        return ListNames();
-                    case "excel.list_shapes":
-                        return ListShapes(command);
                     case "excel.write_range":
                         return WriteRangeByKind(command);
-                    case "excel.write_table":
-                        return WriteTable(command);
-                    case "excel.set_formula":
-                        return SetFormula(command);
                     case "excel.add_table":
                         return AddTable(command);
                     case "excel.upsert_chart":
                         return UpsertChart(command);
-                    case "excel.add_chart":
-                        return AddChart(command);
-                    case "excel.update_chart":
-                        return UpdateChart(command);
                     case "excel.delete_chart":
                         return DeleteChart(command);
                     case "excel.format_range":
                         return FormatRange(command);
-                    case "excel.autofit":
-                        return Autofit(command);
                     case "excel.add_sheet":
                         return AddSheet(command);
                     case "excel.rename_sheet":
@@ -402,12 +369,8 @@ namespace RNAssistant.OfficeHosts
                         return ListVbaProjectComponents();
                     case "excel.vba_read_module":
                         return ReadVbaModule(command);
-                    case "excel.vba_read_lines":
-                        return ReadVbaLines(command);
                     case "excel.vba_replace_module":
                         return ReplaceVbaModule(command);
-                    case "excel.insert_vba_module":
-                        return InsertVbaModule(command);
                     case "excel.run_macro":
                         return RunMacro(command);
                     case "excel.vba_install_package_internal":
@@ -958,10 +921,6 @@ namespace RNAssistant.OfficeHosts
             if (kind == "table")
             {
                 if (!command.Arguments.ContainsKey("values")) return ToolResult.Fail("values is required when kind is table.");
-                if (!command.Arguments.ContainsKey("startAddress"))
-                {
-                    command.Arguments["startAddress"] = ToolArgumentReader.String(command.Arguments, "address", "A1");
-                }
                 return WriteTable(command);
             }
             return kind == "value"
@@ -972,7 +931,7 @@ namespace RNAssistant.OfficeHosts
         private ToolResult WriteTable(ToolCommand command)
         {
             var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
-            var startAddress = ToolArgumentReader.String(command.Arguments, "startAddress", "A1");
+            var startAddress = ToolArgumentReader.String(command.Arguments, "address", "A1");
             var valuesJson = ToolArgumentReader.String(command.Arguments, "values", "[]");
             var values = JArray.Parse(valuesJson);
             if (values.Count == 0)
@@ -1237,16 +1196,6 @@ namespace RNAssistant.OfficeHosts
             return ToolResult.Ok("Range formatted: " + sheet.Name + "!" + range.Address[false, false]);
         }
 
-        private ToolResult Autofit(ToolCommand command)
-        {
-            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
-            var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
-            var range = string.IsNullOrWhiteSpace(address) ? sheet.UsedRange : sheet.Range[address];
-            range.Columns.AutoFit();
-            range.Rows.AutoFit();
-            return ToolResult.Ok("Autofit applied to " + sheet.Name + "!" + range.Address[false, false], JsonConvert.SerializeObject(new { sheet = sheet.Name, range = range.Address[false, false] }));
-        }
-
         private ToolResult AddSheet(ToolCommand command)
         {
             var workbook = RequireWorkbook();
@@ -1388,17 +1337,16 @@ namespace RNAssistant.OfficeHosts
         {
             var workbook = RequireWorkbook();
             var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
+            if (command.Arguments.ContainsKey("startLine") || command.Arguments.ContainsKey("lineCount"))
+            {
+                return VbaProjectSupport.ReadModuleLines(
+                    workbook,
+                    moduleName,
+                    ToolArgumentReader.Int32(command.Arguments, "startLine", 1),
+                    ToolArgumentReader.Int32(command.Arguments, "lineCount", 200));
+            }
             var maxChars = ToolArgumentReader.Int32(command.Arguments, "maxChars", 30000);
             return VbaProjectSupport.ReadModule(workbook, moduleName, maxChars);
-        }
-
-        private ToolResult ReadVbaLines(ToolCommand command)
-        {
-            return VbaProjectSupport.ReadModuleLines(
-                RequireWorkbook(),
-                ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
-                ToolArgumentReader.Int32(command.Arguments, "startLine", 1),
-                ToolArgumentReader.Int32(command.Arguments, "lineCount", 200));
         }
 
         private ToolResult ReplaceVbaModule(ToolCommand command)
@@ -1408,26 +1356,6 @@ namespace RNAssistant.OfficeHosts
             var code = ToolArgumentReader.String(command.Arguments, "code", string.Empty);
             var createIfMissing = ToolArgumentReader.Boolean(command.Arguments, "createIfMissing", true);
             return VbaProjectSupport.ReplaceModule(workbook, moduleName, code, createIfMissing);
-        }
-
-        private ToolResult InsertVbaModule(ToolCommand command)
-        {
-            var workbook = RequireWorkbook();
-            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", "RNAssistantModule");
-            var code = ToolArgumentReader.String(command.Arguments, "code", string.Empty);
-            if (string.IsNullOrWhiteSpace(code))
-            {
-                return ToolResult.Fail("No VBA code provided.");
-            }
-
-            try
-            {
-                return VbaProjectSupport.InsertModule(workbook, moduleName, code);
-            }
-            catch (Exception ex)
-            {
-                return ToolResult.Fail("VBA insert was blocked. Enable 'Trust access to the VBA project object model' or copy the code manually. " + ex.Message, JsonConvert.SerializeObject(new { moduleName = moduleName, code = code }), "vba_access_error", false);
-            }
         }
 
         private ToolResult RunMacro(ToolCommand command)

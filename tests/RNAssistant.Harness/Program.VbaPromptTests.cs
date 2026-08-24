@@ -22,7 +22,7 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static void VbaReplaceTextBacksUpModule()
+        private static void VbaApplyPatchBacksUpModule()
         {
             WithTempPaths(delegate(AppDataPaths paths)
             {
@@ -31,10 +31,15 @@ namespace RNAssistant.Harness
                 var backupStore = new VbaBackupStore(paths);
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var session = NewSession(adapter);
-                var command = new ToolCommand { ToolId = executor.VbaToolId("vba_replace_text") };
-                command.Arguments["moduleName"] = "Module1";
-                command.Arguments["find"] = "\"old\"";
-                command.Arguments["replace"] = "\"new\"";
+                var command = Command(
+                    "common.vba_apply_patch",
+                    "moduleName", "Module1",
+                    "patch", new JArray(new JObject
+                    {
+                        ["op"] = "replace",
+                        ["find"] = "\"old\"",
+                        ["text"] = "\"new\""
+                    }));
 
                 var blocked = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = false }, false, false, session);
                 AssertTrue(!blocked.Success, "vba replace blocked");
@@ -68,7 +73,15 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
 
-                var command = Command("common.vba_replace_text", "moduleName", "Module1", "find", "\"old\"", "replace", "\"new\"");
+                var command = Command(
+                    "common.vba_apply_patch",
+                    "moduleName", "Module1",
+                    "patch", new JArray(new JObject
+                    {
+                        ["op"] = "replace",
+                        ["find"] = "\"old\"",
+                        ["text"] = "\"new\""
+                    }));
                 var waiting = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = false }, false, false, session);
                 AssertEqual("waiting_confirmation", waiting.Status, "mutation waits for confirmation");
 
@@ -90,10 +103,11 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var command = Command(
-                    "common.vba_create_module",
+                    "common.vba_write_module",
                     "moduleName", "CreatedDuringConfirmation",
                     "componentType", "StdModule",
-                    "code", "Sub Requested()\nEnd Sub");
+                    "code", "Sub Requested()\nEnd Sub",
+                    "mode", "createOnly");
                 var waiting = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = false }, false, false, session);
                 AssertEqual("waiting_confirmation", waiting.Status, "create waits for confirmation");
 
@@ -154,7 +168,7 @@ namespace RNAssistant.Harness
                 AssertTrue(repeated.Success, "same invalid name deterministically updates the normalized module");
                 AssertEqual(false, (bool)JObject.Parse(repeated.DataJson ?? "{}")["created"], "repeated write is an update, not a duplicate create");
                 AssertContains(adapter.GetVbaModuleCode(actualName), "As String", "normalized module is updated in place");
-                var listed = executor.Execute(Command("common.vba_list_modules"), tools, new AppSettings(), false, false);
+                var listed = executor.Execute(Command("common.vba_read_module"), tools, new AppSettings(), false, false);
                 AssertEqual(1, (JObject.Parse(listed.DataJson)["modules"] as JArray).OfType<JObject>()
                     .Count(item => string.Equals((string)item["name"], actualName, StringComparison.OrdinalIgnoreCase)),
                     "normalization remains idempotent");
@@ -299,18 +313,13 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var command = new ToolCommand { ToolId = executor.VbaToolId("vba_apply_patch") };
                 command.Arguments["moduleName"] = "Module2";
-                command.Arguments["expectedCodeSha256"] = VbaToolManifestParser.LiveCodeSha256(adapter.GetVbaModuleCode("Module2"));
                 command.Arguments["patch"] = new JArray
                 {
                     new JObject
                     {
                         ["op"] = "replace",
                         ["find"] = "\"old\"",
-                        ["text"] = "\"new\"",
-                        ["pattern"] = null,
-                        ["replace"] = null,
-                        ["startLine"] = null,
-                        ["deleteCount"] = null
+                        ["text"] = "\"new\""
                     },
                     new JObject
                     {
@@ -334,16 +343,14 @@ namespace RNAssistant.Harness
 
                 var malformed = new ToolCommand { ToolId = executor.VbaToolId("vba_apply_patch") };
                 malformed.Arguments["moduleName"] = "Module2";
-                malformed.Arguments["expectedCodeSha256"] = VbaToolManifestParser.LiveCodeSha256(adapter.GetVbaModuleCode("Module2"));
                 malformed.Arguments["patch"] = "[{\"op\":\"replace\"}}trailing";
                 var malformedResult = executor.Execute(malformed, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(!malformedResult.Success, "malformed patch rejected");
                 AssertContains(malformedResult.Message, "$.patch must be a native JSON array", "malformed patch diagnostic");
 
                 var emptyAnchor = Command(
-                    "excel.vba_apply_patch",
+                    "common.vba_apply_patch",
                     "moduleName", "Module2",
-                    "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(adapter.GetVbaModuleCode("Module2")),
                     "patch", new JArray(new JObject { ["op"] = "insertBefore", ["find"] = string.Empty, ["text"] = "Debug.Print 1" }));
                 var emptyAnchorResult = executor.Execute(emptyAnchor, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(!emptyAnchorResult.Success, "empty insertion anchor rejected");
@@ -351,7 +358,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void VbaBackupFailureBlocksReplacement()
+        private static void VbaInvalidStateBlocksWrite()
         {
             WithTempPaths(delegate(AppDataPaths paths)
             {
@@ -359,19 +366,18 @@ namespace RNAssistant.Harness
                 adapter.VbaModuleCode = "Sub Original()\nEnd Sub";
                 adapter.QueueResult("excel.vba_read_module", ToolResult.Ok("malformed read", "{}"));
                 var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths));
-                var command = Command("excel.vba_replace_module", "moduleName", "Module1", "code", "Sub Changed()\nEnd Sub", "createIfMissing", false);
+                var command = Command("common.vba_write_module", "moduleName", "Module1", "code", "Sub Changed()\nEnd Sub", "mode", "updateOnly");
 
-                var result = executor.Execute(command, adapter.GetBuiltInTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
+                var result = executor.Execute(command, adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
 
-                AssertTrue(!result.Success, "replacement blocked");
-                AssertEqual("vba_backup_failed", result.ErrorCode, "backup failure code");
-                AssertEqual(false, result.Retryable, "backup failure retryable");
+                AssertTrue(!result.Success, "write blocked");
+                AssertEqual("vba_read_invalid", result.ErrorCode, "invalid live state blocks write");
                 AssertEqual("Sub Original()\nEnd Sub", adapter.VbaModuleCode, "module unchanged");
                 AssertEqual(1, adapter.Executed.Count, "only backup read executed");
 
                 adapter.Executed.Clear();
-                var create = Command("excel.vba_replace_module", "moduleName", "NewModule", "code", "Sub NewMacro()\nEnd Sub", "createIfMissing", true);
-                var created = executor.Execute(create, adapter.GetBuiltInTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
+                var create = Command("common.vba_write_module", "moduleName", "NewModule", "code", "Sub NewMacro()\nEnd Sub", "mode", "createOnly");
+                var created = executor.Execute(create, adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(created.Success, "missing module can be created");
                 AssertContains(adapter.GetVbaModuleCode("NewModule"), "NewMacro", "new module code");
             });
@@ -385,8 +391,13 @@ namespace RNAssistant.Harness
                 var command = Command(
                     executor.VbaToolId("vba_apply_patch"),
                     "moduleName", "Module1",
-                    "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode),
-                    "patch", "[{\"op\":\"replaceLines\",\"startLine\":2,\"deleteCount\":5,\"text\":\"End Sub\"}]");
+                    "patch", new JArray(new JObject
+                    {
+                        ["op"] = "replaceLines",
+                        ["startLine"] = 2,
+                        ["deleteCount"] = 5,
+                        ["text"] = "End Sub"
+                    }));
 
                 var result = executor.Execute(command, adapter.GetBuiltInTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
 
@@ -449,9 +460,8 @@ namespace RNAssistant.Harness
                     }
                 };
                 var command = Command(
-                    "excel.vba_apply_patch",
+                    "common.vba_apply_patch",
                     "moduleName", "Module1",
-                    "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode),
                     "patch", patch);
 
                 var result = executor.Execute(
@@ -511,21 +521,23 @@ namespace RNAssistant.Harness
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var settings = new AppSettings { AutoConfirmToolActions = true };
                 var publicCreate = executor.Execute(
-                    Command("excel.vba_create_module", "moduleName", "UserForm2", "componentType", "MSForm", "code", "Option Explicit\n"),
+                    Command("common.vba_write_module", "moduleName", "UserForm2", "componentType", "MSForm", "code", "Option Explicit\n", "mode", "createOnly"),
                     tools,
                     settings,
                     false,
                     false);
                 AssertTrue(publicCreate.Success, "public UserForm create succeeds");
 
-                var code = adapter.GetVbaModuleCode("UserForm2");
                 var publicEdit = executor.Execute(
                     Command(
-                        "excel.vba_replace_text",
+                        "common.vba_apply_patch",
                         "moduleName", "UserForm2",
-                        "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(code),
-                        "find", "Option Explicit",
-                        "replace", "Option Explicit\nPrivate Sub UserForm_Activate()\nEnd Sub"),
+                        "patch", new JArray(new JObject
+                        {
+                            ["op"] = "replace",
+                            ["find"] = "Option Explicit",
+                            ["text"] = "Option Explicit\nPrivate Sub UserForm_Activate()\nEnd Sub"
+                        })),
                     tools,
                     settings,
                     false,
@@ -562,13 +574,13 @@ namespace RNAssistant.Harness
                 AssertEqual("one\ntwo", (string)JObject.Parse(firstTwo.DataJson)["code"],
                     "lineCount alone selects a bounded range from line one");
 
-                var legacy = executor.Execute(
+                var removed = executor.Execute(
                     Command("excel.vba_read_lines", "moduleName", "Module1", "startLine", 3, "lineCount", 1),
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
                     new AppSettings(),
                     false,
                     false);
-                AssertEqual("three", (string)JObject.Parse(legacy.DataJson)["code"], "legacy range-read id remains compatible");
+                AssertEqual("unknown_tool", removed.ErrorCode, "removed range-read id is rejected");
 
                 adapter.VbaModuleCode = string.Join("\n", Enumerable.Range(1, 250).Select(index => "line" + index).ToArray());
                 var wholeCommand = Command("common.vba_read_module", "moduleName", "Module1");
@@ -593,10 +605,14 @@ namespace RNAssistant.Harness
                 adapter.VbaModuleCode = "Sub One()\nEnd Sub\nSub Two()\nEnd Sub";
                 var result = executor.Execute(
                     Command(
-                        "excel.vba_apply_patch",
+                        "common.vba_apply_patch",
                         "moduleName", "Module1",
-                        "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode),
-                        "patch", "[{\"op\":\"insertBefore\",\"find\":\"End Sub\",\"text\":\"Debug.Print 1\\n\"}]"),
+                        "patch", new JArray(new JObject
+                        {
+                            ["op"] = "insertBefore",
+                            ["find"] = "End Sub",
+                            ["text"] = "Debug.Print 1\n"
+                        })),
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
                     new AppSettings { AutoConfirmToolActions = false },
                     false,
@@ -617,10 +633,15 @@ namespace RNAssistant.Harness
                 adapter.VbaModuleCode = "A\nB\nC";
                 var result = executor.Execute(
                     Command(
-                        "excel.vba_apply_patch",
+                        "common.vba_apply_patch",
                         "moduleName", "Module1",
-                        "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode),
-                        "patch", "[{\"op\":\"replaceLines\",\"startLine\":2,\"deleteCount\":1,\"text\":\"X\\n\"}]"),
+                        "patch", new JArray(new JObject
+                        {
+                            ["op"] = "replaceLines",
+                            ["startLine"] = 2,
+                            ["deleteCount"] = 1,
+                            ["text"] = "X\n"
+                        })),
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
@@ -750,11 +771,14 @@ namespace RNAssistant.Harness
                 var backupStore = new VbaBackupStore(paths);
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var command = Command(
-                    executor.VbaToolId("vba_replace_text"),
+                    executor.VbaToolId("vba_apply_patch"),
                     "moduleName", "Module1",
-                    "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode),
-                    "find", "\"old\"",
-                    "replace", "\"new\"");
+                    "patch", new JArray(new JObject
+                    {
+                        ["op"] = "replace",
+                        ["find"] = "\"old\"",
+                        ["text"] = "\"new\""
+                    }));
 
                 var result = executor.Execute(command, adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
                     new AppSettings { AutoConfirmToolActions = true }, false, false);
@@ -778,8 +802,7 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, new VbaBackupStore(paths), new SkillStore(paths));
                 var command = Command(
                     executor.VbaToolId("vba_delete_module"),
-                    "moduleName", "Module1",
-                    "expectedCodeSha256", VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode));
+                    "moduleName", "Module1");
 
                 var result = executor.Execute(command, adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
                     new AppSettings { AutoConfirmToolActions = true }, false, false);
@@ -835,7 +858,7 @@ namespace RNAssistant.Harness
                     false,
                     false);
                 AssertTrue(classRestore.Success, "missing class module restore result");
-                var modules = executor.Execute(Command(executor.VbaToolId("vba_list_modules")), tools, new AppSettings(), false, false);
+                var modules = executor.Execute(Command(executor.VbaToolId("vba_read_module")), tools, new AppSettings(), false, false);
                 var restoredClass = (JObject.Parse(modules.DataJson ?? "{}")["modules"] as JArray ?? new JArray())
                     .OfType<JObject>()
                     .First(item => string.Equals((string)item["name"], "RestoredClass", StringComparison.OrdinalIgnoreCase));

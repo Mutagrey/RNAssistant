@@ -39,30 +39,30 @@ namespace RNAssistant.Harness
         {
             var tools = new[]
             {
-                new ToolDefinition { Id = "excel.list_sheets" },
-                new ToolDefinition { Id = "excel.list_charts" }
+                new ToolDefinition { Id = "excel.inspect" },
+                new ToolDefinition { Id = "excel.read_range" }
             };
             var parsed = new AgentResponseParser().Parse(
                 "{\"message\":\"Inspecting.\",\"tool_calls\":[" +
-                "{\"id\":\"call_sheets\",\"name\":\"excel.list_sheets\",\"arguments\":{}}," +
-                "{\"id\":\"call_charts\",\"name\":\"excel.list_charts\",\"arguments\":{}}]}",
+                "{\"id\":\"call_sheets\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}," +
+                "{\"id\":\"call_range\",\"name\":\"excel.read_range\",\"arguments\":{}}]}",
                 tools);
             AssertTrue(parsed.Success, "multiple tool calls parse");
             AssertEqual(2, parsed.Response.ToolCalls.Count, "both tools parsed");
-            AssertEqual("call_charts", parsed.Response.ToolCalls[1].Id, "call order preserved");
+            AssertEqual("call_range", parsed.Response.ToolCalls[1].Id, "call order preserved");
         }
 
         private static void SimpleAgentRejectsBatchedConfirmationCalls()
         {
             var tool = new ToolDefinition
             {
-                Id = "excel.vba_apply_patch",
+                Id = "common.vba_apply_patch",
                 RequiresConfirmation = true
             };
             var parsed = new AgentResponseParser().Parse(
                 "{\"message\":\"Applying patches.\",\"tool_calls\":[" +
-                "{\"id\":\"call_patch_1\",\"name\":\"excel.vba_apply_patch\",\"arguments\":{}}," +
-                "{\"id\":\"call_patch_2\",\"name\":\"excel.vba_apply_patch\",\"arguments\":{}}]}",
+                "{\"id\":\"call_patch_1\",\"name\":\"common.vba_apply_patch\",\"arguments\":{}}," +
+                "{\"id\":\"call_patch_2\",\"name\":\"common.vba_apply_patch\",\"arguments\":{}}]}",
                 new[] { tool });
 
             AssertTrue(!parsed.Success, "confirmation calls cannot be batched");
@@ -73,8 +73,8 @@ namespace RNAssistant.Harness
         private static void SimpleAgentRejectsToolCallWithoutMessage()
         {
             var parsed = new AgentResponseParser().Parse(
-                "{\"message\":\"\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.list_sheets\",\"arguments\":{}}]}",
-                new[] { new ToolDefinition { Id = "excel.list_sheets" } });
+                "{\"message\":\"\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                new[] { new ToolDefinition { Id = "excel.inspect" } });
             AssertTrue(!parsed.Success, "tool step without visible message is rejected");
             AssertContains(parsed.Error, "non-empty message", "missing step message diagnostic");
         }
@@ -83,23 +83,23 @@ namespace RNAssistant.Harness
         {
             var parsed = new AgentResponseParser().Parse(
                 "{\"message\":\"Inspecting.\",\"tool_calls\":[" +
-                "{\"id\":\"call_same\",\"name\":\"excel.list_sheets\",\"arguments\":{}}," +
-                "{\"id\":\"call_same\",\"name\":\"excel.list_sheets\",\"arguments\":{}}]}",
-                new[] { new ToolDefinition { Id = "excel.list_sheets" } });
+                "{\"id\":\"call_same\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}," +
+                "{\"id\":\"call_same\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                new[] { new ToolDefinition { Id = "excel.inspect" } });
             AssertTrue(!parsed.Success, "duplicate call ids rejected");
             AssertContains(parsed.Error, "unique", "duplicate id diagnostic");
 
             var reused = new AgentResponseParser().Parse(
-                "{\"message\":\"Inspecting.\",\"tool_calls\":[{\"id\":\"call_same\",\"name\":\"excel.list_sheets\",\"arguments\":{}}]}",
-                new[] { new ToolDefinition { Id = "excel.list_sheets" } });
+                "{\"message\":\"Inspecting.\",\"tool_calls\":[{\"id\":\"call_same\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                new[] { new ToolDefinition { Id = "excel.inspect" } });
             AssertTrue(reused.Success, "call ids may be reused in a later response");
         }
 
         private static void SimpleAgentRequiresExactToolNames()
         {
             var parsed = new AgentResponseParser().Parse(
-                "{\"message\":\"Working.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"Excel.List_Sheets\",\"arguments\":{}}]}",
-                new[] { new ToolDefinition { Id = "excel.list_sheets" } });
+                "{\"message\":\"Working.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"Excel.Inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                new[] { new ToolDefinition { Id = "excel.inspect" } });
             AssertTrue(!parsed.Success, "case aliases are rejected");
             AssertContains(parsed.Error, "Unknown tool", "exact name diagnostic");
         }
@@ -379,7 +379,7 @@ namespace RNAssistant.Harness
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Читаю листы.\",\"tool_calls\":[{\"id\":\"call_sheets\",\"name\":\"excel.list_sheets\",\"arguments\":{}}]}",
+                    "{\"message\":\"Читаю листы.\",\"tool_calls\":[{\"id\":\"call_sheets\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
                     "{\"message\":\"Готово.\",\"tool_calls\":[]}"
                 });
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>

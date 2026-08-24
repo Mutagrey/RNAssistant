@@ -54,9 +54,8 @@ namespace RNAssistant.Office.Tools
         internal bool IsInternalToolId(string id)
         {
             return !string.IsNullOrWhiteSpace(id) &&
-                (string.Equals(id, BackendToolId("vba_install_package_internal"), StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(id, BackendToolId("vba_remove_package_internal"), StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(id, BackendToolId("vba_list_project_components_internal"), StringComparison.OrdinalIgnoreCase));
+                (id.StartsWith(BackendToolId("vba_"), StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(id, BackendToolId("run_macro"), StringComparison.OrdinalIgnoreCase));
         }
 
         public ToolResult ExecuteControllerTool(ToolCommand command, bool dryRun, ChatSession session, CancellationToken cancellationToken)
@@ -120,42 +119,6 @@ namespace RNAssistant.Office.Tools
                 }));
         }
 
-        public void NormalizeLegacyArguments(ToolCommand command, string requestedToolId)
-        {
-            if (command == null || command.Arguments == null) return;
-            if (IsPublicMutation(command.ToolId)) command.Arguments.Remove("expectedCodeSha256");
-            if (string.Equals(command.ToolId, ToolId("vba_apply_patch"), StringComparison.OrdinalIgnoreCase) &&
-                !command.Arguments.ContainsKey("patch") && command.Arguments.ContainsKey("find"))
-            {
-                var operation = new JObject
-                {
-                    ["op"] = ToolArgumentReader.Boolean(command.Arguments, "replaceAll", false) ? "replaceAll" : "replace",
-                    ["find"] = ToolArgumentReader.String(command.Arguments, "find", string.Empty),
-                    ["text"] = ToolArgumentReader.String(command.Arguments, "replace", string.Empty)
-                };
-                command.Arguments.Remove("find");
-                command.Arguments.Remove("replace");
-                command.Arguments.Remove("replaceAll");
-                command.Arguments["patch"] = new JArray(operation);
-            }
-            if (string.Equals(command.ToolId, ToolId("vba_apply_patch"), StringComparison.OrdinalIgnoreCase))
-            {
-                NormalizePatchArguments(command);
-            }
-            if (VbaPublicToolIds.IsLegacyReadLines(requestedToolId) &&
-                string.Equals(command.ToolId, ToolId("vba_read_module"), StringComparison.OrdinalIgnoreCase))
-            {
-                if (!command.Arguments.ContainsKey("startLine")) command.Arguments["startLine"] = 1;
-                if (!command.Arguments.ContainsKey("lineCount")) command.Arguments["lineCount"] = 200;
-            }
-            if (VbaPublicToolIds.IsLegacyCreate(requestedToolId) &&
-                string.Equals(command.ToolId, ToolId("vba_write_module"), StringComparison.OrdinalIgnoreCase) &&
-                !command.Arguments.ContainsKey("mode"))
-            {
-                command.Arguments["mode"] = "createOnly";
-            }
-        }
-
         public ToolResult PrepareControllerTool(ToolCommand command, ChatSession session)
         {
             if (command == null || !string.IsNullOrWhiteSpace(command.RuntimeGuardJson)) return null;
@@ -198,42 +161,16 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        public ToolResult PrepareBackupBeforeReplace(ToolCommand command, ChatSession session)
+        public ToolResult RunMacro(string macroName)
         {
-            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
-            if (string.IsNullOrWhiteSpace(moduleName))
+            if (string.IsNullOrWhiteSpace(macroName))
             {
-                return ToolResult.Fail("moduleName is required.", null, "vba_module_name_required", true);
+                return ToolResult.Fail("macroName is required.", null, "vba_macro_name_required", true);
             }
-
-            VbaModuleState existing;
-            ToolResult readError;
-            if (!TryReadVbaModule(moduleName, 1000000, out existing, out readError))
-            {
-                if (ToolArgumentReader.Boolean(command.Arguments, "createIfMissing", true) && IsModuleNotFound(readError))
-                {
-                    return null;
-                }
-
-                return ToolResult.Fail(
-                    "VBA replacement was blocked because a rollback backup could not be created. " +
-                    (readError == null ? string.Empty : readError.Message),
-                    readError == null ? null : readError.DataJson,
-                    "vba_backup_failed",
-                    false);
-            }
-
-            var guardError = ValidateExistingModuleGuard(command, session, moduleName, existing);
-            if (guardError != null)
-            {
-                return guardError;
-            }
-            ToolResult backupError;
-            if (!TrySaveBackup(moduleName, existing, "replacement", out backupError))
-            {
-                return backupError;
-            }
-            return null;
+            var command = new ToolCommand { ToolId = BackendToolId("run_macro") };
+            command.Arguments["macroName"] = macroName.Trim();
+            return _adapter.ExecuteTool(command) ??
+                ToolResult.Fail("VBA macro returned no result.", null, "vba_macro_missing_result", true);
         }
 
         private ToolResult ReadModule(ToolCommand command, ChatSession session)
@@ -258,7 +195,7 @@ namespace RNAssistant.Office.Tools
         {
             var read = new ToolCommand
             {
-                ToolId = BackendToolId(exactLines ? "vba_read_lines" : "vba_read_module")
+                ToolId = BackendToolId("vba_read_module")
             };
             read.Arguments["moduleName"] = moduleName;
             if (exactLines)
@@ -646,7 +583,7 @@ namespace RNAssistant.Office.Tools
                     return result;
                 }
 
-                summary.Add(new { op = (string)(operation["op"] ?? operation["type"]), message = result.Message });
+                summary.Add(new { op = (string)operation["op"], message = result.Message });
             }
             if (summary.Count != operations.Count)
             {
@@ -1459,40 +1396,6 @@ namespace RNAssistant.Office.Tools
             };
         }
 
-        private static void NormalizePatchArguments(ToolCommand command)
-        {
-            object raw;
-            if (command == null || command.Arguments == null || !command.Arguments.TryGetValue("patch", out raw) || raw == null) return;
-            JToken patch;
-            try
-            {
-                var token = raw as JToken;
-                patch = token != null
-                    ? token.DeepClone()
-                    : raw is string ? JToken.Parse((string)raw) : JToken.FromObject(raw);
-            }
-            catch (JsonException)
-            {
-                return;
-            }
-            var operations = patch as JArray;
-            if (operations == null) return;
-            foreach (var operation in operations.OfType<JObject>())
-            {
-                foreach (var property in operation.Properties().Where(item =>
-                    item.Value.Type == JTokenType.Null || item.Value.Type == JTokenType.Undefined).ToList())
-                {
-                    property.Remove();
-                }
-                if (operation["text"] == null && operation["replace"] != null)
-                {
-                    operation["text"] = operation["replace"];
-                }
-                operation.Remove("replace");
-            }
-            command.Arguments["patch"] = operations;
-        }
-
         private sealed class VbaModuleState
         {
             public string Name { get; set; }
@@ -1517,33 +1420,4 @@ namespace RNAssistant.Office.Tools
 
     }
 
-    internal static class VbaPublicToolIds
-    {
-        public static bool IsLegacyReadLines(string id)
-        {
-            return !string.IsNullOrWhiteSpace(id) && id.EndsWith(".vba_read_lines", StringComparison.OrdinalIgnoreCase);
-        }
-
-        public static bool IsLegacyCreate(string id)
-        {
-            return !string.IsNullOrWhiteSpace(id) && id.EndsWith(".vba_create_module", StringComparison.OrdinalIgnoreCase);
-        }
-
-        public static string Canonicalize(string id)
-        {
-            if (string.Equals(id, "common.vba_list_modules", StringComparison.OrdinalIgnoreCase)) return "common.vba_read_module";
-            if (string.Equals(id, "common.vba_read_lines", StringComparison.OrdinalIgnoreCase)) return "common.vba_read_module";
-            if (string.Equals(id, "common.vba_replace_text", StringComparison.OrdinalIgnoreCase)) return "common.vba_apply_patch";
-            if (string.Equals(id, "common.vba_create_module", StringComparison.OrdinalIgnoreCase)) return "common.vba_write_module";
-            return id;
-        }
-
-        public static IEnumerable<KeyValuePair<string, string>> LegacyAliases()
-        {
-            yield return new KeyValuePair<string, string>("common.vba_list_modules", "common.vba_read_module");
-            yield return new KeyValuePair<string, string>("common.vba_read_lines", "common.vba_read_module");
-            yield return new KeyValuePair<string, string>("common.vba_replace_text", "common.vba_apply_patch");
-            yield return new KeyValuePair<string, string>("common.vba_create_module", "common.vba_write_module");
-        }
-    }
 }

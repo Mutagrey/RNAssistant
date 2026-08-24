@@ -113,7 +113,7 @@ namespace RNAssistant.Harness
                     ExecutionStatus = "partial_failure",
                     ErrorCode = "pipeline_partial_failure",
                     Retryable = false,
-                    ToolId = "excel.write_table",
+                    ToolId = "excel.write_range",
                     RuntimeGuardJson = "{\"version\":1}",
                     Children = new List<ChatActivity>
                     {
@@ -648,6 +648,14 @@ namespace RNAssistant.Harness
                 .GetResult();
             AssertTrue(JObject.Parse(deleteResponseJson)["ok"].Value<bool>(), "VBA delete bridge response ok");
             AssertEqual("Module3", controller.LastModuleName, "delete module name");
+
+            var runResponseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"b5-run\",\"type\":\"runVbaMacro\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"macroName\":\"Module1.Main\"}}")
+                .GetAwaiter()
+                .GetResult();
+            AssertTrue(JObject.Parse(runResponseJson)["ok"].Value<bool>(), "VBA run bridge response ok");
+            AssertEqual("Module1.Main", controller.LastModuleName, "run macro name");
         }
 
         private static void BridgeReportsModelConnectionDiagnostics()

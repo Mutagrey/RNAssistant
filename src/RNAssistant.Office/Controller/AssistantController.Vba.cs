@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
 
@@ -62,10 +63,10 @@ namespace RNAssistant.Office
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-            var command = new ToolCommand { ToolId = _toolExecutor.VbaBackendToolId("vba_replace_module") };
+            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_write_module") };
             command.Arguments["moduleName"] = moduleName;
             command.Arguments["code"] = code;
-            command.Arguments["createIfMissing"] = "false";
+            command.Arguments["mode"] = "updateOnly";
             return WithReservedSession(LoadSession(null), session =>
             {
                 _toolExecutor.ObserveVbaHash(session, moduleName, expectedCodeSha256);
@@ -73,6 +74,12 @@ namespace RNAssistant.Office
                 _toolCatalog.InvalidateDocumentVbaTools();
                 return result;
             });
+        }
+
+        public ToolResult RunVbaMacro(string macroName, CancellationToken cancellationToken)
+        {
+            return WithReservedSession(LoadSession(null), session =>
+                _toolExecutor.RunVbaMacro(macroName, session, cancellationToken));
         }
 
         public ToolResult CreateVbaModule(string moduleName, string componentType, string code)
