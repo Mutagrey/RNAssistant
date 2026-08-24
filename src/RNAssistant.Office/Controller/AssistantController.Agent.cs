@@ -59,9 +59,13 @@ namespace RNAssistant.Office
                 SetToolCallReplay(session, pending.Command.ToolCallId, false, runId);
                 RemovePendingAgentTool(pendingId);
 
+                var turnId = session.LastRun == null || string.IsNullOrWhiteSpace(session.LastRun.TurnId)
+                    ? (session.LastRun == null ? runId : session.LastRun.RunId)
+                    : session.LastRun.TurnId;
                 session.LastRun = new ChatRunRecord
                 {
                     RunId = runId,
+                    TurnId = turnId,
                     RuntimeId = _runtimeId,
                     Status = "running",
                     Phase = "executing",

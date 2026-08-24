@@ -130,6 +130,8 @@ namespace RNAssistant.Core.Storage
             if (session == null) throw new ArgumentNullException("session");
             if (string.IsNullOrWhiteSpace(type)) throw new ArgumentException("Event type is required.", "type");
 
+            var dataToken = data == null ? null : JToken.FromObject(data);
+            var correlatedStepId = ResolveStepId(stepId, dataToken);
             ChatBlobReference payload = null;
             if (payloadText != null)
             {
@@ -145,10 +147,64 @@ namespace RNAssistant.Core.Storage
                     {
                         throw new ChatConcurrencyException("The chat must be persisted before trace events can be appended.");
                     }
-                    var appended = AppendEvent(path, session.Id, session.Revision, type,
-                        data == null ? null : JToken.FromObject(data), payload, runId, turnId, stepId);
-                    session.Revision = appended.Sequence;
+                    var revision = session.Revision;
+                    if (string.Equals(type, SessionEventTypes.LlmRequest, StringComparison.Ordinal))
+                    {
+                        var started = AppendEvent(path, session.Id, revision, SessionEventTypes.StepStarted,
+                            BuildStepLifecycleData(dataToken, "running", false, null), null,
+                            runId, turnId, correlatedStepId);
+                        revision = started.Sequence;
+                        session.Revision = revision;
+                    }
+
+                    var appended = AppendEvent(path, session.Id, revision, type,
+                        dataToken, payload, runId, turnId, correlatedStepId);
+                    revision = appended.Sequence;
+                    session.Revision = revision;
+
+                    if (string.Equals(type, SessionEventTypes.LlmResponse, StringComparison.Ordinal) ||
+                        string.Equals(type, SessionEventTypes.LlmFailure, StringComparison.Ordinal))
+                    {
+                        var status = StepTerminalStatus(type, dataToken);
+                        var ended = AppendEvent(path, session.Id, revision, SessionEventTypes.StepEnded,
+                            BuildStepLifecycleData(dataToken, status, false, appended.EventId), null,
+                            runId, turnId, correlatedStepId);
+                        session.Revision = ended.Sequence;
+                    }
                     return appended;
+                }
+            }
+        }
+
+        public int CloseOpenSteps(ChatSession session, string runId, string status, string error)
+        {
+            if (session == null || string.IsNullOrWhiteSpace(runId)) return 0;
+            lock (PersistenceSync)
+            {
+                var path = GetSessionPath(session.Host, session.DocumentKey, session.Id);
+                using (AcquireDocumentLock(session.Host, session.DocumentKey))
+                {
+                    var log = ReadEventLog(path);
+                    var actualRevision = log == null || log.Events.Count == 0
+                        ? 0
+                        : log.Events[log.Events.Count - 1].Sequence;
+                    if (actualRevision != session.Revision)
+                    {
+                        throw new ChatConcurrencyException("Chat was changed by another RNAssistant instance. Reload the chat before saving again.");
+                    }
+                    var open = OpenStepIds(log == null ? null : log.Events, runId);
+                    foreach (var stepId in open)
+                    {
+                        var ended = AppendEvent(path, session.Id, session.Revision, SessionEventTypes.StepEnded,
+                            new JObject
+                            {
+                                ["Status"] = string.IsNullOrWhiteSpace(status) ? "interrupted" : status,
+                                ["Synthetic"] = true,
+                                ["Error"] = string.IsNullOrWhiteSpace(error) ? JValue.CreateNull() : new JValue(error)
+                            }, null, runId, TurnIdForRun(log == null ? null : log.Events, runId), stepId);
+                        session.Revision = ended.Sequence;
+                    }
+                    return open.Count;
                 }
             }
         }
@@ -479,6 +535,7 @@ namespace RNAssistant.Core.Storage
 
             var previousRevision = session.Revision;
             var previousUpdatedUtc = session.UpdatedUtc;
+            var durableRevision = previousRevision;
             session.UpdatedUtc = DateTime.UtcNow;
             try
             {
@@ -489,24 +546,39 @@ namespace RNAssistant.Core.Storage
                         ? SessionEventTypes.SessionCreated
                         : SessionEventTypes.SessionForked;
                     appended = AppendEvent(path, session.Id, 0, initialType,
-                        ToProjectionToken(session), null, CurrentRunId(session), CurrentRunId(session), null);
+                        ToProjectionToken(session), null, CurrentRunId(session), CurrentTurnId(session), null);
                 }
                 else
                 {
                     var operations = BuildOperations(stored, session);
+                    var correlationRunId = CurrentRunId(session) ?? CurrentRunId(stored);
+                    var correlationTurnId = CurrentTurnId(session) ?? CurrentTurnId(stored);
                     appended = AppendEvent(path, session.Id, storedRevision, SessionEventTypes.SessionCommit,
                         new JObject { ["Operations"] = JArray.FromObject(operations) }, null,
-                        CurrentRunId(session), CurrentRunId(session), null);
+                        correlationRunId, correlationTurnId, null);
                 }
-                session.Revision = appended.Sequence;
+                durableRevision = appended.Sequence;
+                session.Revision = durableRevision;
+                appended = AppendTurnLifecycleEvents(path, session.Id, appended,
+                    stored == null ? null : stored.LastRun, session.LastRun);
+                durableRevision = appended.Sequence;
+                session.Revision = durableRevision;
                 RebuildHtmlWorkspaceProjection(session);
                 RebuildContextCheckpointProjection(session);
                 RebuildChartActivityProjection(session);
             }
             catch
             {
-                session.Revision = previousRevision;
-                session.UpdatedUtc = previousUpdatedUtc;
+                try
+                {
+                    if (File.Exists(path)) durableRevision = ReadRevision(path);
+                }
+                catch
+                {
+                    // Keep the last revision that this writer knows was made durable.
+                }
+                session.Revision = durableRevision;
+                if (durableRevision == previousRevision) session.UpdatedUtc = previousUpdatedUtc;
                 throw;
             }
         }
@@ -1345,6 +1417,196 @@ namespace RNAssistant.Core.Storage
         private static string CurrentRunId(ChatSession session)
         {
             return session == null || session.LastRun == null ? null : session.LastRun.RunId;
+        }
+
+        private static string CurrentTurnId(ChatSession session)
+        {
+            return session == null || session.LastRun == null
+                ? null
+                : RunTurnId(session.LastRun);
+        }
+
+        private SessionEvent AppendTurnLifecycleEvents(
+            string path,
+            string sessionId,
+            SessionEvent tail,
+            ChatRunRecord before,
+            ChatRunRecord after)
+        {
+            var beforeTurnId = RunTurnId(before);
+            var afterTurnId = RunTurnId(after);
+            if (string.IsNullOrWhiteSpace(beforeTurnId) && string.IsNullOrWhiteSpace(afterTurnId)) return tail;
+
+            if (string.IsNullOrWhiteSpace(beforeTurnId))
+            {
+                tail = AppendTurnStarted(path, sessionId, tail, after);
+                if (IsTerminalRunStatus(after == null ? null : after.Status))
+                {
+                    tail = AppendTurnEnded(path, sessionId, tail, after, after.Status);
+                }
+                return tail;
+            }
+
+            if (string.IsNullOrWhiteSpace(afterTurnId))
+            {
+                if (IsTerminalRunStatus(before == null ? null : before.Status)) return tail;
+                var status = string.Equals(before == null ? null : before.Status, "waiting_confirmation", StringComparison.OrdinalIgnoreCase)
+                    ? "cancelled"
+                    : "completed";
+                return AppendTurnEnded(path, sessionId, tail, before, status);
+            }
+
+            if (!string.Equals(beforeTurnId, afterTurnId, StringComparison.OrdinalIgnoreCase))
+            {
+                if (!IsTerminalRunStatus(before == null ? null : before.Status))
+                {
+                    tail = AppendTurnEnded(path, sessionId, tail, before, "superseded");
+                }
+                tail = AppendTurnStarted(path, sessionId, tail, after);
+                if (IsTerminalRunStatus(after == null ? null : after.Status))
+                {
+                    tail = AppendTurnEnded(path, sessionId, tail, after, after.Status);
+                }
+                return tail;
+            }
+
+            if (!IsTerminalRunStatus(before == null ? null : before.Status) &&
+                IsTerminalRunStatus(after == null ? null : after.Status))
+            {
+                tail = AppendTurnEnded(path, sessionId, tail, after, after.Status);
+            }
+            return tail;
+        }
+
+        private SessionEvent AppendTurnStarted(string path, string sessionId, SessionEvent tail, ChatRunRecord run)
+        {
+            var turnId = RunTurnId(run);
+            return AppendEvent(path, sessionId, tail.Sequence, SessionEventTypes.TurnStarted,
+                BuildTurnLifecycleData(run, "running"), null,
+                run == null ? null : run.RunId, turnId, null);
+        }
+
+        private SessionEvent AppendTurnEnded(
+            string path,
+            string sessionId,
+            SessionEvent tail,
+            ChatRunRecord run,
+            string status)
+        {
+            var turnId = RunTurnId(run);
+            return AppendEvent(path, sessionId, tail.Sequence, SessionEventTypes.TurnEnded,
+                BuildTurnLifecycleData(run, string.IsNullOrWhiteSpace(status) ? "completed" : status), null,
+                run == null ? null : run.RunId, turnId, null);
+        }
+
+        private static JObject BuildTurnLifecycleData(ChatRunRecord run, string status)
+        {
+            return new JObject
+            {
+                ["RunId"] = run == null || string.IsNullOrWhiteSpace(run.RunId) ? JValue.CreateNull() : new JValue(run.RunId),
+                ["TurnId"] = string.IsNullOrWhiteSpace(RunTurnId(run)) ? JValue.CreateNull() : new JValue(RunTurnId(run)),
+                ["Status"] = status ?? string.Empty,
+                ["Phase"] = run == null || string.IsNullOrWhiteSpace(run.Phase) ? JValue.CreateNull() : new JValue(run.Phase),
+                ["StartedUtc"] = run == null || run.StartedUtc == default(DateTime)
+                    ? JValue.CreateNull()
+                    : new JValue(run.StartedUtc.ToUniversalTime())
+            };
+        }
+
+        private static bool IsTerminalRunStatus(string status)
+        {
+            return string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(status, "cancelled", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(status, "interrupted", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(status, "superseded", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string RunTurnId(ChatRunRecord run)
+        {
+            if (run == null) return null;
+            return string.IsNullOrWhiteSpace(run.TurnId) ? run.RunId : run.TurnId;
+        }
+
+        private static string ResolveStepId(string stepId, JToken data)
+        {
+            if (!string.IsNullOrWhiteSpace(stepId)) return stepId;
+            var source = data as JObject;
+            return source == null ? null : (string)(source["RequestId"] ?? source["requestId"]);
+        }
+
+        private static JObject BuildStepLifecycleData(
+            JToken data,
+            string status,
+            bool synthetic,
+            string sourceEventId)
+        {
+            var source = data as JObject;
+            return new JObject
+            {
+                ["RequestId"] = JsonString(source, "RequestId", "requestId"),
+                ["Purpose"] = JsonString(source, "Purpose", "purpose"),
+                ["Model"] = JsonString(source, "Model", "model"),
+                ["ResponseFormat"] = JsonString(source, "ResponseFormat", "responseFormat"),
+                ["Status"] = status ?? string.Empty,
+                ["Synthetic"] = synthetic,
+                ["FailureKind"] = JsonString(source, "FailureKind", "failureKind"),
+                ["Error"] = JsonString(source, "Error", "error"),
+                ["SourceEventId"] = string.IsNullOrWhiteSpace(sourceEventId)
+                    ? JValue.CreateNull()
+                    : new JValue(sourceEventId)
+            };
+        }
+
+        private static string StepTerminalStatus(string eventType, JToken data)
+        {
+            if (string.Equals(eventType, SessionEventTypes.LlmResponse, StringComparison.Ordinal)) return "completed";
+            var source = data as JObject;
+            var failureKind = source == null ? null : (string)(source["FailureKind"] ?? source["failureKind"]);
+            return !string.IsNullOrWhiteSpace(failureKind) &&
+                (failureKind.IndexOf("cancel", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 failureKind.IndexOf("OperationCanceled", StringComparison.OrdinalIgnoreCase) >= 0)
+                    ? "cancelled"
+                    : "failed";
+        }
+
+        private static JToken JsonString(JObject source, string primary, string alternate)
+        {
+            if (source == null) return JValue.CreateNull();
+            var value = source[primary] ?? source[alternate];
+            return value == null || value.Type == JTokenType.Null
+                ? JValue.CreateNull()
+                : new JValue((string)value);
+        }
+
+        private static List<string> OpenStepIds(IEnumerable<SessionEvent> events, string runId)
+        {
+            var open = new List<string>();
+            foreach (var sessionEvent in events ?? new List<SessionEvent>())
+            {
+                if (sessionEvent == null ||
+                    !string.Equals(sessionEvent.RunId, runId, StringComparison.OrdinalIgnoreCase) ||
+                    string.IsNullOrWhiteSpace(sessionEvent.StepId)) continue;
+                if (string.Equals(sessionEvent.Type, SessionEventTypes.StepStarted, StringComparison.Ordinal))
+                {
+                    if (!open.Contains(sessionEvent.StepId, StringComparer.OrdinalIgnoreCase)) open.Add(sessionEvent.StepId);
+                }
+                else if (string.Equals(sessionEvent.Type, SessionEventTypes.StepEnded, StringComparison.Ordinal))
+                {
+                    open.RemoveAll(value => string.Equals(value, sessionEvent.StepId, StringComparison.OrdinalIgnoreCase));
+                }
+            }
+            return open;
+        }
+
+        private static string TurnIdForRun(IEnumerable<SessionEvent> events, string runId)
+        {
+            return (events ?? new List<SessionEvent>())
+                .Where(item => item != null &&
+                    string.Equals(item.RunId, runId, StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(item.TurnId))
+                .Select(item => item.TurnId)
+                .LastOrDefault() ?? runId;
         }
 
         private static void NormalizeSession(ChatSession session, string host, string documentKey, string documentTitle)

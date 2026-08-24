@@ -92,6 +92,10 @@ namespace RNAssistant.Core.Llm
         public int? StatusCode { get; set; }
         public string FailureKind { get; set; }
         public string Error { get; set; }
+        public int? ChunkIndex { get; set; }
+        public int? ChunkCount { get; set; }
+        public bool? Completed { get; set; }
+        public string ChunkEncoding { get; set; }
         [JsonIgnore]
         public string PayloadJson { get; set; }
         [JsonIgnore]

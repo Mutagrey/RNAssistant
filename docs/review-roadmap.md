@@ -19,7 +19,7 @@ The remaining runtime responsibilities are intentionally small:
 - schema and safety validation at execution time;
 - confirmation and resource limits;
 - local execution and result serialization;
-- canonical event persistence, replay projections, and optional context compaction.
+- canonical event persistence with explicit turn/step/stream boundaries, replay projections, and optional context compaction.
 
 Future changes should prefer extending the editable prompt, skill text, native-like tool descriptions, or tool-result JSON. Add a new runtime state machine only when a local safety or consistency invariant cannot be expressed or enforced at the tool boundary.
 

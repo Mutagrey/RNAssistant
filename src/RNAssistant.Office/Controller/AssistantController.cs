@@ -157,10 +157,15 @@ namespace RNAssistant.Office
                     ? SessionEventTypes.LlmRequest
                     : string.Equals(record.Type, "response", StringComparison.OrdinalIgnoreCase)
                         ? SessionEventTypes.LlmResponse
-                        : string.Equals(record.Type, "rejected", StringComparison.OrdinalIgnoreCase)
-                            ? SessionEventTypes.AgentResponseRejected
-                            : SessionEventTypes.LlmFailure;
+                        : string.Equals(record.Type, "chunk", StringComparison.OrdinalIgnoreCase)
+                            ? SessionEventTypes.AssistantChunk
+                            : string.Equals(record.Type, "rejected", StringComparison.OrdinalIgnoreCase)
+                                ? SessionEventTypes.AgentResponseRejected
+                                : SessionEventTypes.LlmFailure;
                 var runId = session.LastRun == null ? null : session.LastRun.RunId;
+                var turnId = session.LastRun == null || string.IsNullOrWhiteSpace(session.LastRun.TurnId)
+                    ? runId
+                    : session.LastRun.TurnId;
                 _chatStore.AppendTrace(
                     session,
                     type,
@@ -176,12 +181,16 @@ namespace RNAssistant.Office
                         record.EstimatedPromptTokens,
                         record.StatusCode,
                         record.FailureKind,
-                        record.Error
+                        record.Error,
+                        record.ChunkIndex,
+                        record.ChunkCount,
+                        record.Completed,
+                        record.ChunkEncoding
                     },
                     record.PayloadJson,
                     record.PayloadContentType,
                     runId,
-                    runId,
+                    turnId,
                     record.RequestId);
             };
             options.TraceSinkConfigured = true;
@@ -611,6 +620,7 @@ namespace RNAssistant.Office
                 session.LastRun = new ChatRunRecord
                 {
                     RunId = runId,
+                    TurnId = runId,
                     RuntimeId = _runtimeId,
                     Status = "running",
                     Phase = "starting",

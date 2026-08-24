@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -145,15 +146,127 @@ namespace RNAssistant.Harness
                     new { requestId = "request-1", purpose = "agent", model = "test" },
                     requestBody, "application/json", "run-1", "run-1", null);
 
-                AssertEqual(2L, trace.Sequence, "trace advances canonical sequence");
+                AssertEqual(3L, trace.Sequence, "request follows first-class step start");
                 AssertEqual(requestBody, store.ReadEventPayload(trace), "exact request payload roundtrip");
+                var responseBody = "{\"choices\":[{\"message\":{\"content\":\"done\"}}]}";
+                var response = store.AppendTrace(session, SessionEventTypes.LlmResponse,
+                    new { requestId = "request-1", purpose = "agent", model = "test", statusCode = 200 },
+                    responseBody, "application/json", "run-1", "run-1", "request-1");
+                AssertEqual(4L, response.Sequence, "response precedes first-class step end");
                 session.Title = "Saved after trace";
                 store.Save(session);
                 AssertEqual("Saved after trace", store.Load(session.Id).Title, "state commit follows trace revision");
-                AssertEqual(SessionEventTypes.LlmRequest,
-                    store.ReadEvents(session.Host, session.DocumentKey, session.Id)[1].Type,
-                    "trace and state use same stream");
+                var events = store.ReadEvents(session.Host, session.DocumentKey, session.Id);
+                AssertEqual(SessionEventTypes.StepStarted, events[1].Type, "step start shares session stream");
+                AssertEqual(SessionEventTypes.LlmRequest, events[2].Type, "request shares session stream");
+                AssertEqual(SessionEventTypes.LlmResponse, events[3].Type, "response shares session stream");
+                AssertEqual(SessionEventTypes.StepEnded, events[4].Type, "step end shares session stream");
+                AssertEqual("request-1", events[4].StepId, "step correlation survives terminal event");
             });
+        }
+
+        private static void TurnLifecycleIsFirstClass()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.CreateTransient("Word", "turn-doc", "Turn.docx", "Turn");
+                session.LastRun = new ChatRunRecord
+                {
+                    RunId = "run-1",
+                    TurnId = "turn-1",
+                    Status = "running",
+                    Phase = "starting",
+                    StartedUtc = DateTime.UtcNow
+                };
+                store.Save(session);
+
+                var events = store.ReadEvents(session.Host, session.DocumentKey, session.Id);
+                AssertEqual(SessionEventTypes.SessionCreated, events[0].Type, "session seed precedes turn");
+                AssertEqual(SessionEventTypes.TurnStarted, events[1].Type, "turn start is first-class");
+                AssertEqual("turn-1", events[1].TurnId, "turn id is independent from run id");
+
+                session.LastRun = new ChatRunRecord
+                {
+                    RunId = "run-2",
+                    TurnId = "turn-1",
+                    Status = "running",
+                    Phase = "executing",
+                    StartedUtc = session.LastRun.StartedUtc
+                };
+                store.Save(session);
+                events = store.ReadEvents(session.Host, session.DocumentKey, session.Id);
+                AssertEqual(1, events.Count(item => item.Type == SessionEventTypes.TurnStarted),
+                    "confirmation continuation does not open another logical turn");
+                AssertEqual(0, events.Count(item => item.Type == SessionEventTypes.TurnEnded),
+                    "confirmation continuation keeps logical turn open");
+
+                session.LastRun.Status = "failed";
+                session.LastRun.Phase = "failed";
+                store.Save(session);
+                events = store.ReadEvents(session.Host, session.DocumentKey, session.Id);
+                AssertEqual(SessionEventTypes.TurnEnded, events.Last().Type, "terminal run closes turn");
+                AssertEqual("failed", (string)events.Last().Data["Status"], "turn terminal status recorded");
+                AssertEqual("run-2", events.Last().RunId, "turn end records the final continuation run");
+                AssertEqual(events.Last().Sequence, session.Revision, "turn event advances canonical revision");
+            });
+        }
+
+        private static void InterruptedStepGetsSyntheticEnd()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.CreateTransient("Excel", "open-step", "Open.xlsx", "Open step");
+                session.LastRun = new ChatRunRecord
+                {
+                    RunId = "run-open",
+                    TurnId = "turn-open",
+                    Status = "running",
+                    StartedUtc = DateTime.UtcNow
+                };
+                store.Save(session);
+                store.AppendTrace(session, SessionEventTypes.LlmRequest,
+                    new { requestId = "request-open", purpose = "agent" },
+                    "{\"model\":\"test\"}", "application/json",
+                    "run-open", "turn-open", "request-open");
+
+                AssertEqual(1, store.CloseOpenSteps(session, "run-open", "interrupted", "runtime stopped"),
+                    "one open model step is closed");
+                AssertEqual(0, store.CloseOpenSteps(session, "run-open", "interrupted", "runtime stopped"),
+                    "synthetic close is idempotent");
+                var ended = store.ReadEvents(session.Host, session.DocumentKey, session.Id).Last();
+                AssertEqual(SessionEventTypes.StepEnded, ended.Type, "synthetic step end is durable");
+                AssertTrue((bool)ended.Data["Synthetic"], "synthetic marker is explicit");
+                AssertEqual("request-open", ended.StepId, "open step correlation preserved");
+            });
+        }
+
+        private static void StreamingFramesAreBufferedAsExactChunks()
+        {
+            var records = new List<LlmTraceRecord>();
+            var options = new LlmRequestOptions
+            {
+                TracePurpose = "harness",
+                TraceSink = records.Add
+            };
+            var buffer = new LlmStreamTraceBuffer(
+                options, "request-stream", "https://example.invalid/v1/chat/completions",
+                "test-model", LlmResponseFormats.Text, 2, 42, 1024 * 1024);
+            var first = "{\"choices\":[{\"delta\":{\"content\":\"one\"}}]}";
+            var second = "{\"choices\":[{\"delta\":{\"content\":\"two\"}}]}";
+            buffer.Add(first);
+            buffer.Add(second);
+            buffer.Flush(true);
+
+            AssertEqual(1, records.Count, "small stream frames flush as one bounded event");
+            AssertEqual("chunk", records[0].Type, "stream trace type");
+            AssertEqual(0, records[0].ChunkIndex.Value, "chunk starts at first provider frame");
+            AssertEqual(2, records[0].ChunkCount.Value, "chunk records provider frame count");
+            AssertTrue(records[0].Completed.Value, "final chunk marks completed buffer");
+            var payload = JArray.Parse(records[0].PayloadJson);
+            AssertEqual(first, (string)payload[0], "first provider frame remains exact");
+            AssertEqual(second, (string)payload[1], "second provider frame remains exact");
         }
 
         private static async Task ModelRequestTracePrecedesDispatch()

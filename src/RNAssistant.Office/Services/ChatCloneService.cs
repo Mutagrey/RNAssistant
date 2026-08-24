@@ -111,6 +111,7 @@ namespace RNAssistant.Office.Services
             return run == null ? null : new ChatRunRecord
             {
                 RunId = run.RunId,
+                TurnId = run.TurnId,
                 RuntimeId = run.RuntimeId,
                 Status = run.Status,
                 Phase = run.Phase,

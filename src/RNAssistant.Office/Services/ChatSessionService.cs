@@ -92,6 +92,11 @@ namespace RNAssistant.Office.Services
                     }
 
                     var effectMayBeUnknown = _chatStore.HasOpenToolExecution(session, run.RunId);
+                    _chatStore.CloseOpenSteps(
+                        session,
+                        run.RunId,
+                        "interrupted",
+                        "Runtime stopped before the model step reached a terminal event.");
                     MarkInterruptedActivities(session, run, effectMayBeUnknown);
                     if (effectMayBeUnknown)
                     {

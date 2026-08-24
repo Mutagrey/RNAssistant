@@ -52,6 +52,7 @@ RNAssistant - локальный VSTO/WebView2 ассистент для Office,
 
 - Единственный durable source of truth чата — append-only typed `*.events.jsonl`; `ChatSession`, model history, headers и UI state являются replayable projections. Mutable chat snapshots, summary indexes и отдельные HTML body stores запрещены.
 - Финальный model request после materialization prompt/tools/attachments/schema должен быть записан до network dispatch. Model response/failure, tool boundaries и artifact revisions пишутся в тот же session stream; API key и auth headers туда не попадают.
+- Логический пользовательский turn и каждый model step имеют first-class start/end events. `TurnId` сохраняется через confirmation continuation, streaming provider frames пишутся bounded batches как `assistant.chunk`, а startup recovery синтетически закрывает незавершённый model step.
 - Неизменяемые model payloads, artifact bodies и committed attachments хранятся в общем SHA-256 CAS `chat-blobs`; event stream хранит только проверяемые ссылки. HTML navigation, chart payload и compaction checkpoints выводятся из versioned artifacts, а не хранятся параллельно.
 - Контекст принадлежит активному chat session, не глобальному документу.
 - Неподдерживаемые chat/context files не мигрируются. Runtime пропускает их и создает новый session/context.

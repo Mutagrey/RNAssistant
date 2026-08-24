@@ -33,10 +33,14 @@
     var hash = value(item, "Hash", "hash", "");
     var previousHash = value(item, "PreviousHash", "previousHash", "");
     var runId = value(item, "RunId", "runId", "");
+    var turnId = value(item, "TurnId", "turnId", "");
+    var stepId = value(item, "StepId", "stepId", "");
     var payloadSize = value(item, "PayloadByteLength", "payloadByteLength", null);
     $("trajectoryEventTitle").textContent = "#" + sequence + "  " + type;
     $("trajectoryEventMeta").textContent = [
       runId ? "run=" + runId : "",
+      turnId ? "turn=" + turnId : "",
+      stepId ? "step=" + stepId : "",
       previousHash ? "prev=" + previousHash : "root",
       hash ? "hash=" + hash : "",
       payloadSize === null ? "" : "payload=" + bytesLabel(payloadSize)

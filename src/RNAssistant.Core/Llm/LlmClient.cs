@@ -80,6 +80,7 @@ namespace RNAssistant.Core.Llm
             var traceMessageCount = 0;
             int? traceEstimatedPromptTokens = null;
             string failurePayload = null;
+            LlmStreamTraceBuffer streamTrace = null;
             try
             {
                 var apiKey = _apiKeyProvider == null ? null : _apiKeyProvider();
@@ -126,6 +127,17 @@ namespace RNAssistant.Core.Llm
                     PayloadContentType = "application/json"
                 });
                 requestTraceRecorded = true;
+                if (settings.StreamResponses && requestOptions.TraceSink != null)
+                {
+                    streamTrace = new LlmStreamTraceBuffer(
+                        requestOptions,
+                        requestDiagnostics.RequestId,
+                        traceEndpoint,
+                        settings.Model,
+                        requestOptions.ResponseFormat,
+                        traceMessageCount,
+                        traceEstimatedPromptTokens);
+                }
                 var trafficId = settings.DebugModelTraffic ? requestDiagnostics.RequestId : null;
                 if (settings.DebugModelTraffic)
                 {
@@ -197,13 +209,20 @@ namespace RNAssistant.Core.Llm
                                 using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
                                 {
                                     Action<string> rawResponseLog = null;
-                                    if (settings.DebugModelTraffic)
+                                    if (settings.DebugModelTraffic || streamTrace != null)
                                     {
-                                        rawResponseLog = rawJson => LogModelJson(
-                                            settings,
-                                            trafficId,
-                                            "RESPONSE HTTP " + (int)response.StatusCode + " SSE CHUNK",
-                                            rawJson);
+                                        rawResponseLog = rawJson =>
+                                        {
+                                            if (settings.DebugModelTraffic)
+                                            {
+                                                LogModelJson(
+                                                    settings,
+                                                    trafficId,
+                                                    "RESPONSE HTTP " + (int)response.StatusCode + " SSE CHUNK",
+                                                    rawJson);
+                                            }
+                                            if (streamTrace != null) streamTrace.Add(rawJson);
+                                        };
                                     }
                                     var streamed = await LlmResponseParser.ReadStreamingOrJsonResponseAsync(
                                         stream,
@@ -211,6 +230,7 @@ namespace RNAssistant.Core.Llm
                                         requestCancellation.Token,
                                         rawResponseLog,
                                         requestDiagnostics.FirstChunk).ConfigureAwait(false);
+                                    if (streamTrace != null) streamTrace.Flush(true);
                                     AttachPromptEstimate(
                                         streamed,
                                         baseEstimatedRequestTokens,
@@ -284,6 +304,7 @@ namespace RNAssistant.Core.Llm
             }
             catch (Exception ex)
             {
+                if (streamTrace != null) streamTrace.Flush(false);
                 requestDiagnostics.Failed(ex);
                 if (requestTraceRecorded && !terminalTraceRecorded)
                 {
@@ -719,5 +740,97 @@ namespace RNAssistant.Core.Llm
             }
         }
 
+    }
+
+    internal sealed class LlmStreamTraceBuffer
+    {
+        private const int DefaultMaxBufferedChars = 64 * 1024;
+        private static readonly TimeSpan DefaultMaxBufferAge = TimeSpan.FromSeconds(1);
+        private readonly LlmRequestOptions _options;
+        private readonly string _requestId;
+        private readonly string _endpoint;
+        private readonly string _model;
+        private readonly string _responseFormat;
+        private readonly int _messageCount;
+        private readonly int? _estimatedPromptTokens;
+        private readonly int _maxBufferedChars;
+        private readonly List<string> _frames = new List<string>();
+        private DateTime _bufferStartedUtc;
+        private int _bufferedChars;
+        private int _nextChunkIndex;
+        private bool _completed;
+
+        internal LlmStreamTraceBuffer(
+            LlmRequestOptions options,
+            string requestId,
+            string endpoint,
+            string model,
+            string responseFormat,
+            int messageCount,
+            int? estimatedPromptTokens,
+            int maxBufferedChars = DefaultMaxBufferedChars)
+        {
+            _options = options;
+            _requestId = requestId;
+            _endpoint = endpoint;
+            _model = model;
+            _responseFormat = responseFormat;
+            _messageCount = messageCount;
+            _estimatedPromptTokens = estimatedPromptTokens;
+            _maxBufferedChars = Math.Max(1, maxBufferedChars);
+        }
+
+        internal void Add(string rawJson)
+        {
+            if (_completed) throw new InvalidOperationException("Cannot append a model chunk after stream completion.");
+            if (rawJson == null) return;
+            if (_frames.Count == 0) _bufferStartedUtc = DateTime.UtcNow;
+            _frames.Add(rawJson);
+            _bufferedChars += rawJson.Length;
+            if (_bufferedChars >= _maxBufferedChars || DateTime.UtcNow - _bufferStartedUtc >= DefaultMaxBufferAge)
+            {
+                Flush(false);
+            }
+        }
+
+        internal void Flush(bool completed)
+        {
+            if (_completed) return;
+            if (_frames.Count == 0)
+            {
+                if (completed) _completed = true;
+                return;
+            }
+
+            var count = _frames.Count;
+            var payload = JsonConvert.SerializeObject(_frames, Formatting.None);
+            var sink = _options == null ? null : _options.TraceSink;
+            if (sink != null)
+            {
+                sink(new LlmTraceRecord
+                {
+                    Type = "chunk",
+                    RequestId = _requestId,
+                    Purpose = _options.TracePurpose,
+                    Endpoint = _endpoint,
+                    Model = _model,
+                    ResponseFormat = _responseFormat,
+                    MessageCount = _messageCount,
+                    EstimatedPromptTokens = _estimatedPromptTokens,
+                    ChunkIndex = _nextChunkIndex,
+                    ChunkCount = count,
+                    Completed = completed,
+                    ChunkEncoding = "openai-sse-data-json-array",
+                    PayloadJson = payload,
+                    PayloadContentType = "application/json"
+                });
+            }
+
+            _nextChunkIndex += count;
+            _frames.Clear();
+            _bufferedChars = 0;
+            _bufferStartedUtc = default(DateTime);
+            if (completed) _completed = true;
+        }
     }
 }

@@ -8,6 +8,11 @@ namespace RNAssistant.Core.Models
         public const string SessionCreated = "session.created";
         public const string SessionForked = "session.forked";
         public const string SessionCommit = "session.commit";
+        public const string TurnStarted = "turn.started";
+        public const string TurnEnded = "turn.ended";
+        public const string StepStarted = "step.started";
+        public const string StepEnded = "step.ended";
+        public const string AssistantChunk = "assistant.chunk";
         public const string LlmRequest = "llm.request";
         public const string LlmResponse = "llm.response";
         public const string LlmFailure = "llm.failure";

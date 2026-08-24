@@ -22,6 +22,10 @@ namespace RNAssistant.Core.Services
                 session.CreatedUtc = session.UpdatedUtc == default(DateTime) ? DateTime.UtcNow : session.UpdatedUtc;
             }
             if (session.UpdatedUtc == default(DateTime)) session.UpdatedUtc = session.CreatedUtc;
+            if (session.LastRun != null && string.IsNullOrWhiteSpace(session.LastRun.TurnId))
+            {
+                session.LastRun.TurnId = session.LastRun.RunId;
+            }
 
             NormalizeMessages(session);
             NormalizeContext(session);

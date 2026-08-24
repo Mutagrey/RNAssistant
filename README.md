@@ -188,7 +188,7 @@ Runtime data is stored under:
 Settings has `Clear Chats/Data` for development resets. It clears event streams, CAS blobs, attachment staging, chat context, VBA backups and WebView user data, while keeping settings, saved API key and custom tools and skills.
 The reset is rejected while any RNAssistant window owns an active chat operation.
 
-Diagnostics shows passive timing for real model requests (local preparation, HTTP headers, first response data and total duration), offers one manual short model check, and exposes the current chat trajectory. The trajectory lists the last 500 canonical events; large recorded payloads remain in local CAS and are loaded as bounded previews only on demand. Diagnostics does not poll the endpoint in the background.
+Diagnostics shows passive timing for real model requests (local preparation, HTTP headers, first response data and total duration), offers one manual short model check, and exposes the current chat trajectory. The trajectory lists the last 500 canonical events with run/turn/step correlation. Large request, response, and bounded streaming-frame payloads remain in local CAS and are loaded as previews only on demand. Diagnostics does not poll the endpoint in the background.
 
 For an explicit factory reset, close all Office/RNAssistant processes and run `reset-local-data.cmd`. It validates and deletes only `%AppData%\RNAssistant`; pass `-Force` to skip the typed confirmation. This also removes settings, the DPAPI API key, custom tools/skills and runtime logs. It does not modify document-local VBA modules or RNAssistant properties already saved inside Office documents.
 

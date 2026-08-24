@@ -189,6 +189,7 @@ namespace RNAssistant.Core.Models
     public sealed class ChatRunRecord
     {
         public string RunId { get; set; }
+        public string TurnId { get; set; }
         public string RuntimeId { get; set; }
         public string Status { get; set; }
         public string Phase { get; set; }
