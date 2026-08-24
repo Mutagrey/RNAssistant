@@ -9,6 +9,7 @@ using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Storage
 {
@@ -184,10 +185,141 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        public VbaPackageMutationPreparation PreparePackageMutation(VbaPackageMutationPreparation preparation)
+        {
+            if (preparation == null) throw new ArgumentNullException("preparation");
+            if (string.IsNullOrWhiteSpace(preparation.Host) || string.IsNullOrWhiteSpace(preparation.DocumentKey) ||
+                string.IsNullOrWhiteSpace(preparation.PackageId) || string.IsNullOrWhiteSpace(preparation.Operation) ||
+                preparation.Components == null || preparation.Components.Count == 0)
+            {
+                throw new VbaJournalException("VBA package mutation identity, components, and operation are required.");
+            }
+            var duplicate = preparation.Components
+                .Where(item => item != null && !string.IsNullOrWhiteSpace(item.ModuleName))
+                .GroupBy(item => item.ModuleName, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(group => group.Count() > 1);
+            if (preparation.Components.Any(item => item == null || string.IsNullOrWhiteSpace(item.ModuleName) ||
+                item.BeforeExists && string.IsNullOrWhiteSpace(item.BeforeComponentType) ||
+                item.IntendedAfterExists && string.IsNullOrWhiteSpace(item.IntendedAfterComponentType)) || duplicate != null)
+            {
+                throw new VbaJournalException("VBA package mutation components must have unique names and explicit types.");
+            }
+
+            preparation.MutationId = NewId("package_mutation");
+            preparation.CreatedUtc = preparation.CreatedUtc == default(DateTime)
+                ? DateTime.UtcNow
+                : preparation.CreatedUtc.ToUniversalTime();
+            foreach (var component in preparation.Components)
+            {
+                if (component.BeforeExists)
+                {
+                    component.BeforeCodeReference = _blobs.StoreText(component.BeforeCode ?? string.Empty, "text/x-vba; charset=utf-8");
+                    component.BeforeCodeSha256 = VbaToolManifestParser.CodeSha256(component.BeforeCode);
+                    component.BackupId = preparation.RetainBackups
+                        ? string.IsNullOrWhiteSpace(component.BackupId) ? NewId("backup") : component.BackupId
+                        : null;
+                }
+                else
+                {
+                    component.BeforeComponentType = null;
+                    component.BeforeCodeReference = null;
+                    component.BeforeCodeSha256 = null;
+                    component.BackupId = null;
+                }
+                if (component.IntendedAfterExists)
+                {
+                    component.IntendedAfterCodeReference = _blobs.StoreText(component.IntendedAfterCode ?? string.Empty, "text/x-vba; charset=utf-8");
+                    component.IntendedAfterCodeSha256 = VbaToolManifestParser.CodeSha256(component.IntendedAfterCode);
+                }
+                else
+                {
+                    component.IntendedAfterComponentType = null;
+                    component.IntendedAfterCodeReference = null;
+                    component.IntendedAfterCodeSha256 = null;
+                }
+            }
+
+            Append(
+                preparation.Host,
+                preparation.DocumentKey,
+                VbaJournalEventTypes.PackageMutationPrepared,
+                preparation.MutationId,
+                preparation.RunId,
+                preparation.TurnId,
+                preparation.StepId,
+                preparation.ToolCallId,
+                JObject.FromObject(preparation));
+            return preparation;
+        }
+
+        public VbaPackageMutationTerminal CompletePackageMutation(
+            string host,
+            string documentKey,
+            string mutationId,
+            string status,
+            IEnumerable<VbaPackageMutationComponentAssessment> components,
+            string errorCode,
+            string message)
+        {
+            if (!VbaMutationStatuses.IsTerminal(status))
+            {
+                throw new ArgumentException("Unsupported VBA package mutation terminal status: " + status, "status");
+            }
+            lock (PersistenceSync)
+            {
+                using (AcquireLock(host, documentKey))
+                {
+                    var path = JournalPath(host, documentKey);
+                    var log = ReadEventLog(path, host, documentKey);
+                    var records = ProjectPackageMutations(log == null ? null : log.Events);
+                    var record = records.FirstOrDefault(item => item.Prepared != null &&
+                        string.Equals(item.Prepared.MutationId, mutationId, StringComparison.OrdinalIgnoreCase));
+                    if (record == null)
+                    {
+                        throw new VbaJournalException("VBA package mutation preparation was not found: " + mutationId + ".");
+                    }
+                    if (record.Terminal != null) return record.Terminal;
+                    var componentAssessments = (components ?? new VbaPackageMutationComponentAssessment[0]).ToList();
+                    if (componentAssessments.Count != record.Prepared.Components.Count ||
+                        componentAssessments.Any(item => item == null || string.IsNullOrWhiteSpace(item.ModuleName)) ||
+                        componentAssessments.GroupBy(item => item.ModuleName, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1) ||
+                        componentAssessments.Any(item => !record.Prepared.Components.Any(component =>
+                            string.Equals(component.ModuleName, item.ModuleName, StringComparison.OrdinalIgnoreCase))))
+                    {
+                        throw new VbaJournalException("VBA package mutation terminal must assess every prepared component exactly once.");
+                    }
+
+                    var terminal = new VbaPackageMutationTerminal
+                    {
+                        MutationId = mutationId,
+                        Status = status,
+                        Components = componentAssessments,
+                        ErrorCode = errorCode,
+                        Message = message,
+                        CreatedUtc = DateTime.UtcNow
+                    };
+                    AppendLocked(
+                        path,
+                        host,
+                        documentKey,
+                        log,
+                        VbaJournalEventTypes.PackageMutationTerminal,
+                        mutationId,
+                        record.Prepared.RunId,
+                        record.Prepared.TurnId,
+                        record.Prepared.StepId,
+                        record.Prepared.ToolCallId,
+                        JObject.FromObject(terminal));
+                    return terminal;
+                }
+            }
+        }
+
         public List<VbaModuleBackup> List(string host, string documentKey)
         {
             var events = ReadEvents(host, documentKey);
             ProjectMutations(events);
+            ProjectPackageMutations(events);
             var backups = new Dictionary<string, VbaModuleBackup>(StringComparer.OrdinalIgnoreCase);
             foreach (var journalEvent in events)
             {
@@ -221,6 +353,34 @@ namespace RNAssistant.Core.Storage
                     CreatedUtc = prepared.CreatedUtc
                 });
             }
+            foreach (var packageEvent in events.Where(item =>
+                string.Equals(item.Type, VbaJournalEventTypes.PackageMutationPrepared, StringComparison.Ordinal)))
+            {
+                var prepared = packageEvent.Data == null
+                    ? null
+                    : packageEvent.Data.ToObject<VbaPackageMutationPreparation>();
+                foreach (var component in prepared == null
+                    ? new List<VbaPackageMutationComponent>()
+                    : prepared.Components ?? new List<VbaPackageMutationComponent>())
+                {
+                    if (component == null || !component.BeforeExists || component.BeforeCodeReference == null ||
+                        string.IsNullOrWhiteSpace(component.BackupId)) continue;
+                    AddBackup(backups, new VbaModuleBackup
+                    {
+                        BackupId = component.BackupId,
+                        MutationId = prepared.MutationId,
+                        Host = prepared.Host,
+                        DocumentKey = prepared.DocumentKey,
+                        DocumentTitle = prepared.DocumentTitle,
+                        ModuleName = component.ModuleName,
+                        ComponentType = component.BeforeComponentType,
+                        CodeSha256 = component.BeforeCodeSha256,
+                        CodeByteLength = component.BeforeCodeReference.ByteLength,
+                        CodeReference = component.BeforeCodeReference,
+                        CreatedUtc = prepared.CreatedUtc
+                    });
+                }
+            }
             return backups.Values.OrderByDescending(item => item.CreatedUtc).ToList();
         }
 
@@ -247,6 +407,18 @@ namespace RNAssistant.Core.Storage
         public IReadOnlyList<VbaMutationRecord> ListOpenMutations(string host, string documentKey)
         {
             return ListMutations(host, documentKey)
+                .Where(item => item.Prepared != null && item.Terminal == null)
+                .ToList();
+        }
+
+        public IReadOnlyList<VbaPackageMutationRecord> ListPackageMutations(string host, string documentKey)
+        {
+            return ProjectPackageMutations(ReadEvents(host, documentKey));
+        }
+
+        public IReadOnlyList<VbaPackageMutationRecord> ListOpenPackageMutations(string host, string documentKey)
+        {
+            return ListPackageMutations(host, documentKey)
                 .Where(item => item.Prepared != null && item.Terminal == null)
                 .ToList();
         }
@@ -319,6 +491,7 @@ namespace RNAssistant.Core.Storage
                             }
 
                             ProjectMutations(log.Events);
+                            ProjectPackageMutations(log.Events);
                             foreach (var backupEvent in log.Events.Where(item =>
                                 string.Equals(item.Type, VbaJournalEventTypes.BackupCreated, StringComparison.Ordinal)))
                             {
@@ -476,7 +649,9 @@ namespace RNAssistant.Core.Storage
                 string.IsNullOrWhiteSpace(journalEvent.EventId) || string.IsNullOrWhiteSpace(journalEvent.Type) ||
                 !ValidType(journalEvent.Type) || !ValidHashAlgorithm(journalEvent.HashAlgorithm) ||
                 ((string.Equals(journalEvent.Type, VbaJournalEventTypes.MutationPrepared, StringComparison.Ordinal) ||
-                  string.Equals(journalEvent.Type, VbaJournalEventTypes.MutationTerminal, StringComparison.Ordinal)) &&
+                  string.Equals(journalEvent.Type, VbaJournalEventTypes.MutationTerminal, StringComparison.Ordinal) ||
+                  string.Equals(journalEvent.Type, VbaJournalEventTypes.PackageMutationPrepared, StringComparison.Ordinal) ||
+                  string.Equals(journalEvent.Type, VbaJournalEventTypes.PackageMutationTerminal, StringComparison.Ordinal)) &&
                     string.IsNullOrWhiteSpace(journalEvent.MutationId)) ||
                 !string.IsNullOrWhiteSpace(journalEvent.EncryptedData) && journalEvent.Data != null ||
                 !ProtectionMatches(journalEvent, protector) ||
@@ -533,6 +708,50 @@ namespace RNAssistant.Core.Storage
             return records;
         }
 
+        private static IReadOnlyList<VbaPackageMutationRecord> ProjectPackageMutations(IEnumerable<VbaJournalEvent> events)
+        {
+            var records = new List<VbaPackageMutationRecord>();
+            var byId = new Dictionary<string, VbaPackageMutationRecord>(StringComparer.OrdinalIgnoreCase);
+            foreach (var journalEvent in events ?? new List<VbaJournalEvent>())
+            {
+                if (journalEvent.Data == null) continue;
+                if (string.Equals(journalEvent.Type, VbaJournalEventTypes.PackageMutationPrepared, StringComparison.Ordinal))
+                {
+                    var prepared = journalEvent.Data.ToObject<VbaPackageMutationPreparation>();
+                    if (!ValidPackagePreparation(journalEvent, prepared) || byId.ContainsKey(prepared.MutationId))
+                    {
+                        throw new VbaJournalException("The VBA mutation journal contains an invalid package preparation.");
+                    }
+                    var record = new VbaPackageMutationRecord { Prepared = prepared };
+                    byId.Add(prepared.MutationId, record);
+                    records.Add(record);
+                }
+                else if (string.Equals(journalEvent.Type, VbaJournalEventTypes.PackageMutationTerminal, StringComparison.Ordinal))
+                {
+                    var terminal = journalEvent.Data.ToObject<VbaPackageMutationTerminal>();
+                    VbaPackageMutationRecord record;
+                    if (terminal == null || string.IsNullOrWhiteSpace(terminal.MutationId) ||
+                        !string.Equals(journalEvent.MutationId, terminal.MutationId, StringComparison.OrdinalIgnoreCase) ||
+                        !VbaMutationStatuses.IsTerminal(terminal.Status) || terminal.Components == null ||
+                        !byId.TryGetValue(terminal.MutationId, out record) || record.Terminal != null)
+                    {
+                        throw new VbaJournalException("The VBA mutation journal contains an invalid package terminal record.");
+                    }
+                    if (!SameCorrelation(journalEvent, record.Prepared) ||
+                        terminal.Components.Count != record.Prepared.Components.Count ||
+                        terminal.Components.Any(item => item == null || string.IsNullOrWhiteSpace(item.ModuleName)) ||
+                        terminal.Components.GroupBy(item => item.ModuleName, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1) ||
+                        terminal.Components.Any(item => !record.Prepared.Components.Any(component =>
+                            string.Equals(component.ModuleName, item.ModuleName, StringComparison.OrdinalIgnoreCase))))
+                    {
+                        throw new VbaJournalException("The VBA mutation journal package terminal correlation is invalid.");
+                    }
+                    record.Terminal = terminal;
+                }
+            }
+            return records;
+        }
+
         private static void AddBackup(IDictionary<string, VbaModuleBackup> backups, VbaModuleBackup backup)
         {
             if (backup == null || string.IsNullOrWhiteSpace(backup.BackupId) || backup.CodeReference == null) return;
@@ -569,6 +788,37 @@ namespace RNAssistant.Core.Storage
                 string.Equals(prepared.IntendedAfterCodeSha256, prepared.IntendedAfterCodeReference.Sha256, StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool ValidPackagePreparation(VbaJournalEvent journalEvent, VbaPackageMutationPreparation prepared)
+        {
+            if (journalEvent == null || prepared == null || string.IsNullOrWhiteSpace(prepared.MutationId) ||
+                string.IsNullOrWhiteSpace(prepared.Operation) || string.IsNullOrWhiteSpace(prepared.PackageId) ||
+                prepared.Components == null || prepared.Components.Count == 0 ||
+                !string.Equals(journalEvent.MutationId, prepared.MutationId, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(journalEvent.Host, prepared.Host, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(journalEvent.DocumentKey, prepared.DocumentKey, StringComparison.OrdinalIgnoreCase) ||
+                !SameCorrelation(journalEvent, prepared)) return false;
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var component in prepared.Components)
+            {
+                if (component == null || string.IsNullOrWhiteSpace(component.ModuleName) ||
+                    component.BeforeExists && string.IsNullOrWhiteSpace(component.BeforeComponentType) ||
+                    !component.BeforeExists && !string.IsNullOrWhiteSpace(component.BeforeComponentType) ||
+                    component.IntendedAfterExists && string.IsNullOrWhiteSpace(component.IntendedAfterComponentType) ||
+                    !component.IntendedAfterExists && !string.IsNullOrWhiteSpace(component.IntendedAfterComponentType) ||
+                    !names.Add(component.ModuleName) ||
+                    component.BeforeExists != (component.BeforeCodeReference != null) ||
+                    component.IntendedAfterExists != (component.IntendedAfterCodeReference != null) ||
+                    prepared.RetainBackups && component.BeforeExists != !string.IsNullOrWhiteSpace(component.BackupId) ||
+                    !prepared.RetainBackups && !string.IsNullOrWhiteSpace(component.BackupId) ||
+                    component.BeforeExists && (!ValidReference(component.BeforeCodeReference) || !ValidSha256(component.BeforeCodeSha256)) ||
+                    component.IntendedAfterExists && (!ValidReference(component.IntendedAfterCodeReference) || !ValidSha256(component.IntendedAfterCodeSha256)))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         private static bool SameCorrelation(VbaJournalEvent journalEvent, VbaMutationPreparation prepared)
         {
             return journalEvent != null && prepared != null &&
@@ -576,6 +826,28 @@ namespace RNAssistant.Core.Storage
                 string.Equals(journalEvent.TurnId ?? string.Empty, prepared.TurnId ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(journalEvent.StepId ?? string.Empty, prepared.StepId ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(journalEvent.ToolCallId ?? string.Empty, prepared.ToolCallId ?? string.Empty, StringComparison.Ordinal);
+        }
+
+        private static bool SameCorrelation(VbaJournalEvent journalEvent, VbaPackageMutationPreparation prepared)
+        {
+            return journalEvent != null && prepared != null &&
+                string.Equals(journalEvent.RunId ?? string.Empty, prepared.RunId ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(journalEvent.TurnId ?? string.Empty, prepared.TurnId ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(journalEvent.StepId ?? string.Empty, prepared.StepId ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(journalEvent.ToolCallId ?? string.Empty, prepared.ToolCallId ?? string.Empty, StringComparison.Ordinal);
+        }
+
+        private static bool ValidSha256(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Length != 64) return false;
+            for (var index = 0; index < value.Length; index++)
+            {
+                var character = value[index];
+                if (!((character >= '0' && character <= '9') ||
+                    (character >= 'a' && character <= 'f') ||
+                    (character >= 'A' && character <= 'F'))) return false;
+            }
+            return true;
         }
 
         private static bool ValidReference(ChatBlobReference reference)
@@ -733,7 +1005,9 @@ namespace RNAssistant.Core.Storage
         {
             return string.Equals(value, VbaJournalEventTypes.BackupCreated, StringComparison.Ordinal) ||
                 string.Equals(value, VbaJournalEventTypes.MutationPrepared, StringComparison.Ordinal) ||
-                string.Equals(value, VbaJournalEventTypes.MutationTerminal, StringComparison.Ordinal);
+                string.Equals(value, VbaJournalEventTypes.MutationTerminal, StringComparison.Ordinal) ||
+                string.Equals(value, VbaJournalEventTypes.PackageMutationPrepared, StringComparison.Ordinal) ||
+                string.Equals(value, VbaJournalEventTypes.PackageMutationTerminal, StringComparison.Ordinal);
         }
 
         private static bool ValidHashAlgorithm(string value)

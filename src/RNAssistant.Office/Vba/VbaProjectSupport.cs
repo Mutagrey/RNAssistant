@@ -49,6 +49,7 @@ namespace RNAssistant.Office
                     name = (string)component.Name,
                     type = ComponentTypeName(type),
                     lineCount = lineCount,
+                    codeOnlyUserForm = type == MsFormType ? (bool?)IsCodeOnlyUserForm(component) : null,
                     hasToolManifest = type == StdModuleType && ContainsText(codeModule, "<RNAssistantTool>", lineCount)
                 });
             }
@@ -90,12 +91,14 @@ namespace RNAssistant.Office
                 return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
             }
 
+            var componentType = (int)component.Type;
             var fullCode = ReadComponentCode(component);
             var code = Trim(fullCode, Math.Max(1, Math.Min(1000000, maxChars)));
             return ToolResult.Ok("VBA module read: " + component.Name, JsonConvert.SerializeObject(new
             {
                 name = (string)component.Name,
-                type = ComponentTypeName((int)component.Type),
+                type = ComponentTypeName(componentType),
+                codeOnlyUserForm = componentType == MsFormType ? (bool?)IsCodeOnlyUserForm(component) : null,
                 lineCount = (int)component.CodeModule.CountOfLines,
                 code = code,
                 codeSha256 = VbaToolManifestParser.LiveCodeSha256(fullCode),
@@ -353,9 +356,11 @@ namespace RNAssistant.Office
             }).ToList();
             if (components.Count == 0) return ToolResult.Fail("VBA package has no components.", null, "vba_package_empty", false);
             if (components.Any(component => !VbaToolManifestParser.ValidComponentName(component.Name) ||
-                (!string.Equals(component.Type, "StdModule", StringComparison.OrdinalIgnoreCase) && !string.Equals(component.Type, "ClassModule", StringComparison.OrdinalIgnoreCase))))
+                (!string.Equals(component.Type, "StdModule", StringComparison.OrdinalIgnoreCase) &&
+                 !string.Equals(component.Type, "ClassModule", StringComparison.OrdinalIgnoreCase) &&
+                 !string.Equals(component.Type, "MSForm", StringComparison.OrdinalIgnoreCase))))
             {
-                return ToolResult.Fail("VBA package supports only valid StdModule and ClassModule components.", null, "vba_component_invalid", false);
+                return ToolResult.Fail("VBA package supports only valid StdModule, ClassModule, and code-only MSForm components.", null, "vba_component_invalid", false);
             }
             var duplicate = components.GroupBy(component => component.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault(group => group.Count() > 1);
             if (duplicate != null)
@@ -369,18 +374,62 @@ namespace RNAssistant.Office
                 {
                     return ToolResult.Fail(component.Name + ": " + validationError, null, "vba_code_invalid", true);
                 }
+                if (string.Equals(component.Type, "MSForm", StringComparison.OrdinalIgnoreCase) &&
+                    VbaToolManifestParser.ContainsUserFormDesignerExport(component.Code))
+                {
+                    return ToolResult.Fail(
+                        "VBA package MSForm must contain code-behind only, not exported Designer/FRX metadata: " + component.Name,
+                        null,
+                        "vba_userform_designer_unsupported",
+                        false);
+                }
             }
 
             dynamic vbProject = GetVbaProject(documentObject);
+            var ownerMarker = PackageOwnerMarker(marker);
+            foreach (var component in components)
+            {
+                dynamic existing = FindComponent(vbProject, component.Name);
+                if (existing == null) continue;
+                var existingIsForm = (int)existing.Type == MsFormType;
+                var intendedIsForm = string.Equals(component.Type, "MSForm", StringComparison.OrdinalIgnoreCase);
+                if (existingIsForm != intendedIsForm || existingIsForm &&
+                    (!IsCodeOnlyUserForm(existing) || string.IsNullOrWhiteSpace(ownerMarker) ||
+                     ReadComponentCode(existing).IndexOf(ownerMarker, StringComparison.OrdinalIgnoreCase) < 0))
+                {
+                    return ToolResult.Fail(
+                        "VBA package cannot replace UserForm state unless the existing component is an owned blank code-only MSForm: " + component.Name,
+                        null,
+                        "vba_userform_designer_unsupported",
+                        false);
+                }
+            }
             var tempDirectory = Path.Combine(Path.GetTempPath(), "RNAssistant-Vba-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDirectory);
             var backups = new List<string>();
             var installedNames = new List<string>();
+            var replacedForms = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             try
             {
                 foreach (var component in components)
                 {
                     dynamic existing = FindComponent(vbProject, component.Name);
+                    if (string.Equals(component.Type, "MSForm", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (existing == null)
+                        {
+                            existing = vbProject.VBComponents.Add(MsFormType);
+                            installedNames.Add((string)existing.Name);
+                            existing.Name = component.Name;
+                            installedNames[installedNames.Count - 1] = component.Name;
+                        }
+                        else
+                        {
+                            replacedForms[component.Name] = ReadComponentCode(existing);
+                        }
+                        ReplaceCode(existing.CodeModule, PrepareCodeOnlyFormSource(component, marker));
+                        continue;
+                    }
                     if (existing != null)
                     {
                         var backupPath = Path.Combine(tempDirectory, "backup_" + component.Name + ComponentExtension((int)existing.Type));
@@ -407,6 +456,13 @@ namespace RNAssistant.Office
                     {
                         throw new InvalidOperationException("VBA package verification could not find component: " + component.Name);
                     }
+                    var expectedType = string.Equals(component.Type, "ClassModule", StringComparison.OrdinalIgnoreCase)
+                        ? ClassModuleType
+                        : string.Equals(component.Type, "MSForm", StringComparison.OrdinalIgnoreCase) ? MsFormType : StdModuleType;
+                    if ((int)installed.Type != expectedType || expectedType == MsFormType && !IsCodeOnlyUserForm(installed))
+                    {
+                        throw new InvalidOperationException("VBA package verification found an unexpected component type or Designer state: " + component.Name);
+                    }
                     VerifyComponentPackageCode(installed, component.Code, "VBA package installation");
                 }
                 return ToolResult.Ok("VBA package installed.", JsonConvert.SerializeObject(new
@@ -428,6 +484,16 @@ namespace RNAssistant.Office
                     {
                         dynamic installed = FindComponent(vbProject, name);
                         if (installed != null) vbProject.VBComponents.Remove(installed);
+                    }
+                    foreach (var replaced in replacedForms)
+                    {
+                        dynamic form = FindComponent(vbProject, replaced.Key);
+                        if (form == null)
+                        {
+                            form = vbProject.VBComponents.Add(MsFormType);
+                            form.Name = replaced.Key;
+                        }
+                        ReplaceCode(form.CodeModule, replaced.Value);
                     }
                     foreach (var backup in backups) vbProject.VBComponents.Import(backup);
                 }
@@ -455,6 +521,14 @@ namespace RNAssistant.Office
             {
                 dynamic component = FindComponent(vbProject, property.Name);
                 if (component == null) continue;
+                if ((int)component.Type == MsFormType && !IsCodeOnlyUserForm(component))
+                {
+                    return ToolResult.Fail(
+                        "VBA package cannot remove a UserForm with Designer controls or unverified Designer state: " + property.Name,
+                        null,
+                        "vba_userform_designer_unsupported",
+                        false);
+                }
                 var code = ReadComponentCode(component);
                 if (string.IsNullOrWhiteSpace(expectedMarker) || code.IndexOf(expectedMarker, StringComparison.OrdinalIgnoreCase) < 0)
                 {
@@ -469,6 +543,7 @@ namespace RNAssistant.Office
             var tempDirectory = Path.Combine(Path.GetTempPath(), "RNAssistant-Vba-Remove-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDirectory);
             var backups = new List<string>();
+            var formBackups = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var removed = new List<string>();
             try
             {
@@ -476,6 +551,11 @@ namespace RNAssistant.Office
                 {
                     dynamic component = FindComponent(vbProject, property.Name);
                     if (component == null) continue;
+                    if ((int)component.Type == MsFormType)
+                    {
+                        formBackups[property.Name] = ReadComponentCode(component);
+                        continue;
+                    }
                     var backupPath = Path.Combine(tempDirectory, "backup_" + property.Name + ComponentExtension((int)component.Type));
                     component.Export(backupPath);
                     backups.Add(backupPath);
@@ -506,6 +586,13 @@ namespace RNAssistant.Office
                         var name = Path.GetFileNameWithoutExtension(backup).Substring("backup_".Length);
                         if (FindComponent(vbProject, name) == null) vbProject.VBComponents.Import(backup);
                     }
+                    foreach (var formBackup in formBackups)
+                    {
+                        if (FindComponent(vbProject, formBackup.Key) != null) continue;
+                        dynamic form = vbProject.VBComponents.Add(MsFormType);
+                        form.Name = formBackup.Key;
+                        ReplaceCode(form.CodeModule, formBackup.Value);
+                    }
                 }
                 catch (Exception rollback) { rollbackError = rollback; }
                 return ToolResult.Fail(
@@ -535,6 +622,21 @@ namespace RNAssistant.Office
             }
             if (code.StartsWith("Attribute VB_Name", StringComparison.OrdinalIgnoreCase)) return InsertMarkerAfterAttributes(code, markerLine);
             return "Attribute VB_Name = \"" + component.Name + "\"\r\n" + markerLine + code;
+        }
+
+        private static string PrepareCodeOnlyFormSource(VbaToolComponent component, string marker)
+        {
+            var code = VbaToolManifestParser.NormalizeCode(component == null ? null : component.Code);
+            var markerLine = string.IsNullOrWhiteSpace(marker) ? string.Empty : "' " + marker.Trim() + "\r\n";
+            return markerLine + code;
+        }
+
+        private static string PackageOwnerMarker(string marker)
+        {
+            marker = (marker ?? string.Empty).Trim();
+            var end = marker.IndexOf("; version=", StringComparison.OrdinalIgnoreCase);
+            if (end < 0) end = marker.IndexOf("; hash=", StringComparison.OrdinalIgnoreCase);
+            return end < 0 ? marker : marker.Substring(0, end + 1);
         }
 
         private static void VerifyComponentLiveCode(object componentObject, string expectedCode, string operation)
@@ -614,6 +716,23 @@ namespace RNAssistant.Office
         {
             dynamic module = component.CodeModule;
             return (int)module.CountOfLines <= 0 ? string.Empty : (string)module.Lines[1, (int)module.CountOfLines];
+        }
+
+        private static bool IsCodeOnlyUserForm(dynamic component)
+        {
+            if (component == null || (int)component.Type != MsFormType) return false;
+            try
+            {
+                dynamic designer = component.Designer;
+                if (designer == null || (int)designer.Controls.Count != 0) return false;
+                object picture = designer.Picture;
+                object mouseIcon = designer.MouseIcon;
+                return picture == null && mouseIcon == null;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static void ReplaceCode(dynamic module, string code)

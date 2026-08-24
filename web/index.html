@@ -314,8 +314,8 @@
                   <div class="editor-inline-error" id="toolPipelineError" role="alert"></div>
                 </div>
                 <div class="vba-package-editor hidden" id="vbaToolEditor">
-                  <div class="component-toolbar"><label>Компонент<select id="toolComponentSelect"></select></label><button class="secondary" id="addToolModuleButton" type="button">+ Module</button><button class="secondary" id="addToolClassButton" type="button">+ Class</button><button class="secondary danger-soft" id="deleteToolComponentButton" type="button">Удалить</button></div>
-                  <div class="form-grid"><label>Имя компонента<input id="toolComponentNameInput" maxlength="40" placeholder="RNA_MyTool"></label><label>Тип<select id="toolComponentTypeInput"><option value="StdModule">Standard module</option><option value="ClassModule">Class module</option></select></label><label class="wide">VBA source<textarea id="toolCodeInput" rows="14" spellcheck="false" placeholder="Option Explicit"></textarea></label></div>
+                  <div class="component-toolbar"><label>Компонент<select id="toolComponentSelect"></select></label><button class="secondary" id="addToolModuleButton" type="button">+ Module</button><button class="secondary" id="addToolClassButton" type="button">+ Class</button><button class="secondary" id="addToolFormButton" type="button">+ UserForm</button><button class="secondary danger-soft" id="deleteToolComponentButton" type="button">Удалить</button></div>
+                  <div class="form-grid"><label>Имя компонента<input id="toolComponentNameInput" maxlength="40" placeholder="RNA_MyTool"></label><label>Тип<select id="toolComponentTypeInput"><option value="StdModule">Standard module</option><option value="ClassModule">Class module</option><option value="MSForm">Code-only UserForm</option></select></label><label class="wide">VBA source<textarea id="toolCodeInput" rows="14" spellcheck="false" placeholder="Option Explicit"></textarea></label></div>
                 </div>
               </div>
               <div class="tool-editor-page hidden" data-tool-page-view="test">
@@ -896,7 +896,7 @@
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
   <script src="js/app-tools-structured.js?v=tools-modules-20260823-1"></script>
   <script src="js/app-tools-actions.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-tools.js?v=library-editor-20260824-1"></script>
+  <script src="js/app-tools.js?v=userform-package-20260825-1"></script>
   <script src="js/app-skills.js?v=library-editor-20260824-1"></script>
   <script src="js/app-vba-diff.js?v=vba-modules-20260823-1"></script>
   <script src="js/app-vba-actions.js?v=userform-20260824-1"></script>

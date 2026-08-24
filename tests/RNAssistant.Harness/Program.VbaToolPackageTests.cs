@@ -6,6 +6,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
@@ -138,6 +139,195 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaPackageJournalRecordsAtomicTransactions()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                adapter.SetDocumentTitle("Harness.xlsm");
+                var journal = new VbaJournalStore(paths);
+                var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
+                var tool = BuildVbaPackageToolForTest();
+                var session = NewSession(adapter);
+                session.LastRun = new ChatRunRecord { RunId = "run-package", TurnId = "turn-package" };
+
+                var installed = executor.InstallVbaTool(tool, false, session);
+
+                AssertTrue(installed.Success, "journaled package install succeeds");
+                var installData = JObject.Parse(installed.DataJson);
+                AssertTrue((bool)installData["packageJournaled"], "package install result exposes journal boundary");
+                AssertEqual("committed", (string)installData["packageJournalStatus"], "package install journal status");
+                var records = journal.ListPackageMutations("Excel", "doc");
+                AssertEqual(1, records.Count, "one transaction records the complete install");
+                AssertEqual(2, records[0].Prepared.Components.Count, "install transaction contains every component");
+                AssertEqual("run-package", records[0].Prepared.RunId, "package transaction keeps run correlation");
+                AssertEqual("turn-package", records[0].Prepared.TurnId, "package transaction keeps turn correlation");
+                AssertEqual("committed", records[0].Terminal.Status, "install terminal is committed");
+                AssertTrue(records[0].Terminal.Components.All(component => component.MatchesIntendedAfter), "every installed component is verified");
+
+                var removed = executor.RemoveVbaTool(tool, session);
+
+                AssertTrue(removed.Success, "journaled package removal succeeds");
+                records = journal.ListPackageMutations("Excel", "doc");
+                AssertEqual(2, records.Count, "install and removal are separate atomic transactions");
+                AssertEqual("package_remove", records[1].Prepared.Operation, "second transaction is removal");
+                AssertTrue(records[1].Prepared.RetainBackups, "persistent package removal retains rollback sources");
+                AssertTrue(records[1].Prepared.Components.All(component => component.BeforeCodeReference != null), "removal snapshots every component in CAS");
+                AssertTrue(records[1].Terminal.Components.All(component => component.MatchesIntendedAfter), "every removed component is verified absent");
+                AssertEqual(2, journal.List("Excel", "doc").Count, "package removal exposes one backup per prior component");
+                var casHealth = CasService(paths, new ChatStore(paths), journal, () => StorageProtector.None).Audit();
+                AssertTrue(casHealth.ReachabilityComplete, "CAS scanner validates package transaction records");
+                AssertEqual(0, casHealth.OrphanBlobCount, "package before/intended sources remain reachable from the journal");
+
+                var journalPath = Directory.GetFiles(paths.VbaJournalDirectory, "mutations.events.jsonl", SearchOption.AllDirectories).Single();
+                var journalText = File.ReadAllText(journalPath);
+                AssertTrue(!journalText.Contains("Public Function Echo"), "package source bodies are referenced through CAS, not embedded in JSONL");
+                AssertEqual(2, journal.ReadEvents("Excel", "doc").Count(item =>
+                    string.Equals(item.Type, VbaJournalEventTypes.PackageMutationPrepared, StringComparison.Ordinal)),
+                    "one preparation event per package operation");
+            });
+        }
+
+        private static void VbaPackageJournalReconcilesInterruptedTransaction()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var journal = new VbaJournalStore(paths);
+                var tool = BuildVbaPackageToolForTest();
+                var prepared = journal.PreparePackageMutation(new VbaPackageMutationPreparation
+                {
+                    Operation = "package_install",
+                    PackageId = tool.Id,
+                    PackageVersion = tool.PackageVersion,
+                    Host = "Excel",
+                    DocumentKey = "doc",
+                    RuntimeDocumentKey = adapter.RuntimeDocumentKey,
+                    DocumentTitle = adapter.DocumentTitle,
+                    Components = tool.Components.Select(component => new VbaPackageMutationComponent
+                    {
+                        ModuleName = component.Name,
+                        BeforeExists = false,
+                        IntendedAfterExists = true,
+                        IntendedAfterComponentType = component.Type,
+                        IntendedAfterCode = component.Code
+                    }).ToList()
+                });
+                adapter.SetVbaModule(
+                    tool.Components[0].Name,
+                    "' RNAssistantPackage: id=" + tool.Id + ";\n" + tool.Components[0].Code,
+                    tool.Components[0].Type);
+                var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
+
+                var read = executor.Execute(
+                    Command("common.vba_read_module", "moduleName", tool.Components[0].Name),
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    new AppSettings(),
+                    false,
+                    false);
+
+                AssertTrue(read.Success, "safe VBA access continues after package reconciliation");
+                var record = journal.ListPackageMutations("Excel", "doc").Single(item =>
+                    string.Equals(item.Prepared.MutationId, prepared.MutationId, StringComparison.OrdinalIgnoreCase));
+                AssertEqual("unknown", record.Terminal.Status, "mixed interrupted package state is never auto-replayed");
+                AssertTrue(record.Terminal.Components.Single(item => item.ModuleName == tool.Components[0].Name).MatchesIntendedAfter,
+                    "written component is recognized as intended");
+                AssertTrue(record.Terminal.Components.Single(item => item.ModuleName == tool.Components[1].Name).MatchesBefore,
+                    "missing component is recognized as before state");
+                AssertEqual(string.Empty, adapter.GetVbaModuleCode(tool.Components[1].Name), "reconciliation does not create the missing component");
+            });
+        }
+
+        private static void VbaCodeOnlyUserFormPackageRoundTrips()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var tool = BuildVbaUserFormPackageForTest();
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                adapter.SetDocumentTitle("Harness.xlsm");
+                var journal = new VbaJournalStore(paths);
+                var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths), new ToolStore(paths));
+
+                AssertTrue(executor.ValidateToolDefinition(tool).Success, "code-only MSForm package validates");
+                var saved = new ToolStore(paths).SaveOne(tool);
+                AssertTrue(File.Exists(Path.Combine(saved.StoragePath, "src", "RNA_FormTool.bas")), "UserForm package entry uses .bas");
+                AssertTrue(File.Exists(Path.Combine(saved.StoragePath, "src", "RNA_FormToolForm.form.vba")), "code-only form uses explicit .form.vba source");
+                AssertTrue(!File.Exists(Path.Combine(saved.StoragePath, "src", "RNA_FormToolForm.frm")), "Designer .frm is never persisted");
+                AssertEqual("MSForm", saved.Components.Single(component => component.Name == "RNA_FormToolForm").Type, "MSForm type roundtrips");
+
+                var installed = executor.InstallVbaTool(saved, false);
+                AssertTrue(installed.Success, "code-only UserForm package installs");
+                AssertEqual("installed", executor.GetVbaInstallationStatus(saved), "code-only package read-back includes type/profile");
+                AssertContains(adapter.GetVbaModuleCode("RNA_FormToolForm"), "Controls.Add", "installed form keeps code-only builder");
+                AssertEqual("MSForm", journal.ListPackageMutations("Excel", "doc").Single().Prepared.Components
+                    .Single(component => component.ModuleName == "RNA_FormToolForm").IntendedAfterComponentType,
+                    "package journal records MSForm intent");
+                AssertTrue(executor.RemoveVbaTool(saved).Success, "owned code-only UserForm package uninstalls");
+
+                var designerExport = BuildVbaUserFormPackageForTest();
+                designerExport.Components[1].Code =
+                    "VERSION 5.00\nBegin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} RNA_FormToolForm\n" +
+                    "   OleObjectBlob = \"RNA_FormToolForm.frx\":0000\nEnd";
+                var rejected = executor.ValidateToolDefinition(designerExport);
+                AssertEqual("vba_userform_designer_unsupported", rejected.ErrorCode, "exported Designer source is rejected before save/install");
+            });
+        }
+
+        private static void VbaCodeOnlyUserFormPackageComLifecycle()
+        {
+            var document = new FakeVbaDocumentObject();
+            var formCode =
+                "Option Explicit\nPrivate WithEvents btnOK As MSForms.CommandButton\n" +
+                "Private Sub UserForm_Initialize()\nSet btnOK = Me.Controls.Add(\"Forms.CommandButton.1\", \"btnOK\", True)\nEnd Sub";
+            var componentsJson = new JArray(new JObject
+            {
+                ["name"] = "RNA_FormToolForm",
+                ["type"] = "MSForm",
+                ["code"] = formCode
+            }).ToString();
+            var marker = "RNAssistantPackage: id=excel.form_tool; version=1.0.0; hash=test";
+
+            var installed = VbaProjectSupport.InstallPackage(document, componentsJson, marker);
+
+            AssertTrue(installed.Success, "COM package creates blank MSForm without .frm import");
+            var form = document.VBProject.VBComponents.Cast<FakeVbaComponent>().Single(component => component.Name == "RNA_FormToolForm");
+            AssertEqual(3, form.Type, "COM package component type is MSForm");
+            AssertEqual(0, form.Designer.Controls.Count, "created package form has blank Designer");
+            AssertContains(form.CodeModule.Code, "RNAssistantPackage: id=excel.form_tool;", "created form has ownership marker");
+            AssertContains(form.CodeModule.Code, "Controls.Add", "created form has runtime control source");
+
+            var updatedCode = formCode.Replace("btnOK", "btnApply");
+            var updatedJson = new JArray(new JObject
+            {
+                ["name"] = "RNA_FormToolForm",
+                ["type"] = "MSForm",
+                ["code"] = updatedCode
+            }).ToString();
+            AssertTrue(VbaProjectSupport.InstallPackage(document, updatedJson, marker).Success, "owned blank MSForm updates in place");
+            AssertContains(form.CodeModule.Code, "btnApply", "MSForm code-behind update applied");
+
+            form.Designer.Controls.Count = 1;
+            var blocked = VbaProjectSupport.InstallPackage(document, componentsJson, marker);
+            AssertEqual("vba_userform_designer_unsupported", blocked.ErrorCode, "Designer controls block package overwrite");
+            AssertContains(form.CodeModule.Code, "btnApply", "blocked overwrite preserves live form source");
+            form.Designer.Controls.Count = 0;
+            form.Designer.Picture = new object();
+            AssertEqual(
+                "vba_userform_designer_unsupported",
+                VbaProjectSupport.InstallPackage(document, componentsJson, marker).ErrorCode,
+                "Designer binary assets block package overwrite");
+            form.Designer.Picture = null;
+
+            var expected = new JObject
+            {
+                ["RNA_FormToolForm"] = VbaToolManifestParser.CodeSha256(updatedCode)
+            }.ToString();
+            var removed = VbaProjectSupport.RemovePackage(document, expected, "RNAssistantPackage: id=excel.form_tool;");
+            AssertTrue(removed.Success, "owned blank MSForm can be removed internally by package lifecycle");
+            AssertTrue(!document.VBProject.VBComponents.Cast<FakeVbaComponent>().Any(component => component.Name == "RNA_FormToolForm"),
+                "package form is absent after verified removal");
+        }
+
         private static void VbaDocumentToolsAreDiscoveredAndRunnable()
         {
             WithTempPaths(delegate(AppDataPaths paths)
@@ -249,6 +439,52 @@ namespace RNAssistant.Harness
                 {
                     new VbaToolComponent { Name = "RNA_Echo", Type = "StdModule", FileName = "RNA_Echo.bas", Code = entryCode },
                     new VbaToolComponent { Name = "RNA_EchoService", Type = "ClassModule", FileName = "RNA_EchoService.cls", Code = classCode }
+                }
+            };
+        }
+
+        private static ToolDefinition BuildVbaUserFormPackageForTest()
+        {
+            var entryCode =
+                "Option Explicit\n" +
+                "' <RNAssistantTool>\n" +
+                "' {\"protocolVersion\":1,\"id\":\"excel.form_tool\",\"name\":\"Form Tool\",\"description\":\"Show a code-only form.\",\"host\":\"Excel\",\"packageVersion\":\"1.0.0\",\"entryPoint\":\"ShowForm\",\"components\":[\"RNA_FormTool\",\"RNA_FormToolForm\"],\"argumentOrder\":[],\"parameters\":{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false},\"mutatesDocument\":true,\"agentCanRun\":false,\"requiresConfirmation\":true}\n" +
+                "' </RNAssistantTool>\n" +
+                "Public Function ShowForm() As String\n" +
+                "    RNA_FormToolForm.Show\n" +
+                "    ShowForm = \"shown\"\n" +
+                "End Function";
+            var formCode =
+                "Option Explicit\n" +
+                "Private WithEvents btnOK As MSForms.CommandButton\n" +
+                "Private Sub UserForm_Initialize()\n" +
+                "    Me.Caption = \"Parameters\"\n" +
+                "    Set btnOK = Me.Controls.Add(\"Forms.CommandButton.1\", \"btnOK\", True)\n" +
+                "End Sub\n" +
+                "Private Sub btnOK_Click()\n" +
+                "    Unload Me\n" +
+                "End Sub";
+            return new ToolDefinition
+            {
+                Id = "excel.form_tool",
+                Host = "Excel",
+                Name = "Form Tool",
+                Description = "Show a code-only form.",
+                ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}",
+                Executor = "vba",
+                Code = entryCode,
+                Enabled = true,
+                BuiltIn = false,
+                MutatesDocument = true,
+                RequiresConfirmation = true,
+                AgentCanRun = false,
+                RiskLevel = 3,
+                PackageVersion = "1.0.0",
+                EntryPoint = "ShowForm",
+                Components = new List<VbaToolComponent>
+                {
+                    new VbaToolComponent { Name = "RNA_FormTool", Type = "StdModule", Code = entryCode },
+                    new VbaToolComponent { Name = "RNA_FormToolForm", Type = "MSForm", Code = formCode }
                 }
             };
         }

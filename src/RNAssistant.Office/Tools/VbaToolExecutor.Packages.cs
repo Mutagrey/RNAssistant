@@ -10,8 +10,10 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed partial class VbaToolExecutor
     {
-        public ToolResult ExecuteCustomTool(ToolDefinition tool, ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)
+        public ToolResult ExecuteCustomTool(ToolDefinition tool, ToolCommand command, AppSettings settings, bool dryRun, bool manualRun, ChatSession session)
         {
+            var reconciliationError = ReconcilePendingMutations();
+            if (reconciliationError != null) return reconciliationError;
             ToolDefinition package;
             ToolResult validationError;
             if (!TryPreparePackage(tool, out package, out validationError)) return validationError;
@@ -51,7 +53,7 @@ namespace RNAssistant.Office.Tools
             ToolResult installResult = null;
             if (probe.Status == "not_installed")
             {
-                installResult = InstallCustomTool(package, true, false);
+                installResult = InstallCustomTool(package, true, false, session, command);
                 if (!installResult.Success) return installResult;
                 sessionInstalled = true;
             }
@@ -72,7 +74,7 @@ namespace RNAssistant.Office.Tools
             }
             finally
             {
-                if (sessionInstalled) cleanupResult = RemoveCustomTool(package, true);
+                if (sessionInstalled) cleanupResult = RemoveCustomTool(package, true, session, command);
             }
 
             var output = ExtractMacroOutput(runResult);
@@ -95,8 +97,10 @@ namespace RNAssistant.Office.Tools
             return ToolResult.Ok(output, dataJson);
         }
 
-        public ToolResult InstallCustomTool(ToolDefinition tool, bool sessionOnly, bool dryRun)
+        public ToolResult InstallCustomTool(ToolDefinition tool, bool sessionOnly, bool dryRun, ChatSession session = null, ToolCommand command = null)
         {
+            var reconciliationError = ReconcilePendingMutations();
+            if (reconciliationError != null) return reconciliationError;
             ToolDefinition package;
             ToolResult validationError;
             if (!TryPreparePackage(tool, out package, out validationError)) return validationError;
@@ -110,24 +114,17 @@ namespace RNAssistant.Office.Tools
                     false);
             }
 
-            if (!sessionOnly)
+            VbaPackageMutationPreparation prepared;
+            ToolResult journalError;
+            if (!TryPrepareJournaledPackageMutation(package, command, session, "package_install", sessionOnly, true, out prepared, out journalError))
             {
-                foreach (var component in package.Components)
-                {
-                    VbaModuleState existing;
-                    ToolResult readError;
-                    if (TryReadVbaModule(component.Name, 1000000, out existing, out readError))
-                    {
-                        ToolResult backupError;
-                        if (!TrySaveBackup(component.Name, existing, "package installation", out backupError)) return backupError;
-                    }
-                    else if (!IsModuleNotFound(readError))
-                    {
-                        return ToolResult.Fail("VBA package installation was blocked because component state could not be read: " + component.Name, readError == null ? null : readError.DataJson, "vba_package_probe_failed", false);
-                    }
-                }
+                return journalError;
             }
+            return ExecuteJournaledPackageMutation(prepared, () => InstallPackageCore(package, sessionOnly));
+        }
 
+        private ToolResult InstallPackageCore(ToolDefinition package, bool sessionOnly)
+        {
             var install = new ToolCommand { ToolId = BackendToolId("vba_install_package_internal") };
             install.Arguments["componentsJson"] = JsonConvert.SerializeObject(package.Components.Select(component => new { name = component.Name, type = component.Type, code = component.Code }).ToArray());
             install.Arguments["marker"] = (sessionOnly ? "RNAssistantSession: " : "RNAssistantPackage: ") +
@@ -143,7 +140,7 @@ namespace RNAssistant.Office.Tools
                 ToolResult cleanup = null;
                 if (sessionOnly)
                 {
-                    try { cleanup = RemoveCustomTool(package, true); }
+                    try { cleanup = RemovePackageCore(package, true); }
                     catch (Exception ex)
                     {
                         cleanup = ToolResult.Fail(
@@ -166,11 +163,24 @@ namespace RNAssistant.Office.Tools
             return ToolResult.Ok(installed.Message, installed.DataJson ?? PackageData(package));
         }
 
-        public ToolResult RemoveCustomTool(ToolDefinition tool, bool sessionOnly = false)
+        public ToolResult RemoveCustomTool(ToolDefinition tool, bool sessionOnly = false, ChatSession session = null, ToolCommand command = null)
         {
+            var reconciliationError = ReconcilePendingMutations();
+            if (reconciliationError != null) return reconciliationError;
             ToolDefinition package;
             ToolResult validationError;
             if (!TryPreparePackage(tool, out package, out validationError)) return validationError;
+            VbaPackageMutationPreparation prepared;
+            ToolResult journalError;
+            if (!TryPrepareJournaledPackageMutation(package, command, session, "package_remove", sessionOnly, false, out prepared, out journalError))
+            {
+                return journalError;
+            }
+            return ExecuteJournaledPackageMutation(prepared, () => RemovePackageCore(package, sessionOnly));
+        }
+
+        private ToolResult RemovePackageCore(ToolDefinition package, bool sessionOnly)
+        {
             var expected = new JObject();
             foreach (var component in package.Components) expected[component.Name] = VbaToolManifestParser.CodeSha256(component.Code);
             var remove = new ToolCommand { ToolId = BackendToolId("vba_remove_package_internal") };
@@ -251,9 +261,22 @@ namespace RNAssistant.Office.Tools
                     ? "StdModule"
                     : component == null ? string.Empty : component.Type;
                 if (string.IsNullOrWhiteSpace(code) ||
-                    (!string.Equals(type, "StdModule", StringComparison.OrdinalIgnoreCase) && !string.Equals(type, "ClassModule", StringComparison.OrdinalIgnoreCase)))
+                    (!string.Equals(type, "StdModule", StringComparison.OrdinalIgnoreCase) &&
+                     !string.Equals(type, "ClassModule", StringComparison.OrdinalIgnoreCase) &&
+                     !string.Equals(type, "MSForm", StringComparison.OrdinalIgnoreCase)))
                 {
                     error = ToolResult.Fail("VBA package source/type is missing for component: " + declared.Name, null, "vba_component_missing", false);
+                    package = null;
+                    return false;
+                }
+                if (string.Equals(type, "MSForm", StringComparison.OrdinalIgnoreCase) &&
+                    VbaToolManifestParser.ContainsUserFormDesignerExport(code))
+                {
+                    error = ToolResult.Fail(
+                        "VBA package MSForm must contain code-behind only, not exported Designer/FRX metadata: " + declared.Name,
+                        null,
+                        "vba_userform_designer_unsupported",
+                        false);
                     package = null;
                     return false;
                 }
@@ -301,7 +324,8 @@ namespace RNAssistant.Office.Tools
                 var expected = VbaToolManifestParser.CodeSha256(component.Code);
                 var actual = VbaToolManifestParser.CodeSha256(current.Code);
                 var equals = string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(component.Type, current.ComponentType, StringComparison.OrdinalIgnoreCase);
+                    string.Equals(component.Type, current.ComponentType, StringComparison.OrdinalIgnoreCase) &&
+                    (!string.Equals(component.Type, "MSForm", StringComparison.OrdinalIgnoreCase) || current.CodeOnlyUserForm == true);
                 if (equals) matching++;
                 details.Add(new
                 {

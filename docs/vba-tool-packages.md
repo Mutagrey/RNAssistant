@@ -12,10 +12,11 @@ tools/excel/excel.echo_vba/
   src/
     RNA_Echo.bas
     RNA_EchoService.cls
+    RNA_EchoForm.form.vba
   README.md
 ```
 
-`tool.json` хранит metadata и component list, а исходники живут отдельными `.bas`/`.cls` файлами. Поддерживаются только standard modules и class modules. UserForms/FRX, document modules и другие host-owned components в v1 не поддерживаются.
+`tool.json` хранит metadata и component list, а исходники живут отдельными `.bas`/`.cls`/`.form.vba` файлами. Package protocol v1 поддерживает standard modules, class modules и пустые code-only `MSForm`. `.form.vba` содержит только code-behind; exported `.frm`, `.frx`, document modules и другие host-owned components не поддерживаются.
 
 RNAssistant также читает VBA project активного документа через Office object model. Валидный manifest превращает такой код в tool со scope `document`; он доступен только этому документу и не копируется в глобальную библиотеку автоматически.
 
@@ -65,6 +66,7 @@ End Function
 
 - `protocolVersion` равен `1`; `host` — `Excel`, `Word` или `PowerPoint`.
 - `components` содержит уникальные имена и первым указывает entry module.
+- Entry component всегда `StdModule`. Supporting components могут быть `StdModule`, `ClassModule` или code-only `MSForm`; тип и source хранятся в `tool.json`/`src`, а manifest сохраняет стабильный ordered name list.
 - Имена VBA components начинаются с латинской буквы, содержат только буквы/цифры/underscore и не длиннее VBE-лимита 31 символ; entry point использует тот же алфавит и проектный лимит 40 символов.
 - `parameters` — strict object JSON Schema с `required`, `additionalProperties:false`, явным типом и полезным `description` каждого параметра; `argumentOrder` в точности совпадает с его properties и с сигнатурой функции.
 - Каждый параметр объявлен `ByVal` и имеет тип `String`, `Long`, `Double` или `Boolean`. JSON `integer` соответствует VBA `Long`.
@@ -86,15 +88,15 @@ End Function
 - Run существующего document-local tool вызывает его напрямую.
 - Если глобальный package отсутствует в VBA project, обычный Run временно импортирует его components, вызывает entry function позиционными typed arguments и удаляет временные components в `finally` даже после ошибки.
 - Явный Install делает package постоянным только в macro-enabled документах (`.xlsm/.xlam`, `.docm/.dotm`, `.pptm/.ppam`). Временный install через UI/API запрещён: им управляет runtime.
-- Перед постоянной перезаписью создаются VBA backups. Components получают ownership marker с id/version/hash.
-- Uninstall удаляет только owned и не изменённые components. Чужой код, частичный package или hash drift удалять автоматически нельзя.
+- До COM dispatch install/remove пишет один package transaction manifest со всеми CAS-backed before/intended component states. Persistent operations проецируют rollback backups; components получают ownership marker с id/version/hash.
+- Uninstall удаляет только owned и не изменённые components. Existing `MSForm` дополнительно должен быть проверен как blank code-only Designer state. Чужой код, Designer controls, type collision, частичный package или hash drift удалять/перезаписывать автоматически нельзя.
 - Временный запуск не сохраняет книгу сам. Постоянный install изменяет VBA project, но сохранение документа остаётся отдельным действием Office/пользователя.
 - Optimistic concurrency остаётся строгой, но hash не является model-facing аргументом. Каждый public mutation сам читает точное live state, привязывает внутренний guard к chat, document identity и module, сохраняет его через confirmation и повторно сверяет непосредственно перед mutation. Предварительный public read/search не является разрешением и не обязателен. После write/patch/restore выполняется повторное чтение: допустимы только несемантические преобразования VBE (регистр и пробелы вне строк/комментариев, CRLF и финальные пустые строки); фактический read-back hash возвращается в результате. `CodeModule.CountOfLines` не сравнивается с числом строк входной строки, потому что VBIDE может учитывать служебную финальную строку. Семантическое расхождение не возвращается как success, а сохранённый backup остаётся доступен для rollback. Package install/remove использует отдельный package hash, который игнорирует export headers и ownership markers.
 - `expectedCodeSha256` остаётся только во внутреннем typed bridge вызове ручного Save из VBA editor: UI получает его из ранее загруженного модуля и не просит модель вычислять или копировать hash. Delete bridge больше не делает отдельный read/hash round-trip и использует тот же внутренний runtime guard, что public delete tool.
 
 ## Discovery и безопасность
 
-Discovery читает VBProject активного документа, находит manifest в standard modules, затем разрешает объявленные `.bas`/`.cls` components. Дубликаты, отсутствующие зависимости, неподдерживаемые типы, неверная сигнатура и несоответствие schema делают tool недоступным.
+Discovery читает VBProject активного документа, находит manifest в standard modules, затем разрешает объявленные `.bas`/`.cls`/code-only `MSForm` components. Дубликаты, отсутствующие зависимости, Designer state у `MSForm`, неподдерживаемые типы, неверная сигнатура и несоответствие schema делают tool недоступным.
 
 Для чтения/import/remove VBProject в Trust Center должен быть включён `Trust access to the VBA project object model`. Новосозданный mutating tool по умолчанию должен иметь `agentCanRun:false` и `requiresConfirmation:true`. Не храните в исходниках секреты, credentials, machine-specific paths и скрытый network/shell запуск.
 
@@ -108,10 +110,10 @@ Discovery читает VBProject активного документа, нахо
 
 Whole-module запись удаляет текущие строки и вставляет канонический CRLF source через `CodeModule.InsertLines(1, ...)`, затем немедленно читает модуль обратно. BOM, NUL/другие control characters и Unicode line separators отклоняются до удаления исходного кода.
 
-Whole-source upsert может создавать `StdModule`, `ClassModule` и пустой `MSForm` (UserForm). Для UserForm RNAssistant читает и изменяет только code-behind через `CodeModule`: visual Designer, controls, layout, properties и бинарные `.frx` assets не входят в этот protocol и не попадают в code backup. Удалять можно только `StdModule` и `ClassModule`; document modules и UserForms не удаляются через RNAssistant. Public VBA mutations доступны Agent, но требуют подтверждения при выключенном auto-confirm: backup восстанавливает source, но не является security boundary для исполняемого или auto-run VBA. Низкоуровневые whole-module replacement/insert/run_macro tools в Agent catalog не входят.
+Whole-source upsert может создавать `StdModule`, `ClassModule` и пустой `MSForm` (UserForm). Для `CodeOnly UserForm` RNAssistant читает и изменяет code-behind через `CodeModule`; source может детерминированно создавать runtime controls через `Controls.Add`, задавать layout/runtime properties и подключать события через typed `WithEvents` или удерживаемые event-sink classes. Designer-time controls/properties и бинарные `.frx` assets не входят в protocol и не попадают в code backup. После edit/restore уже загруженный form instance нужно `Unload` и создать заново; source rollback не отменяет уже выполненные обработчиком изменения Office document. Удалять можно только `StdModule` и `ClassModule`; document modules и UserForms не удаляются через public facade. Public VBA mutations доступны Agent, но требуют подтверждения при выключенном auto-confirm: backup восстанавливает source, но не является security boundary для исполняемого или auto-run VBA. Низкоуровневые whole-module replacement/insert/run_macro tools в Agent catalog не входят. Полный профиль описан в [vba-userforms.md](vba-userforms.md).
 
-Правила генерации и редактирования также встроены как skills `common.vba_tool_authoring` и `common.vba_code_editing`, чтобы модель получала их только при релевантном сценарии.
+Правила генерации и редактирования также встроены как skills `common.vba_tool_authoring`, `common.vba_code_editing` и `common.vba_userform_authoring`, чтобы модель получала их только при релевантном сценарии.
 
 ## Обязательная проверка на Windows
 
-Изменения COM/VBA lifecycle нельзя полноценно проверить на macOS. Перед merge нужны Windows x64 + Office x64 + VS 2022 smoke tests для Excel, Word и PowerPoint: одинаковый компактный `common.vba_*` catalog без host backend ids, whole/range `vba_read_module`, upsert create/update и нормализация имени, удалённые VBA ids возвращают unknown-tool, LF/CRLF/final newline и граничные blank lines, кириллица, mutation → confirmation → external edit stale rejection без public pre-read, create-only race, exact backup restore, UI save с автоматически переданным snapshot, patch/clear/rollback, создание пустого MSForm и редактирование его code-behind без изменения Designer, Office busy/modal state, discovery, typed `Application.Run`, cleanup после успеха/ошибки, permanent install/uninstall, Trust Access off и macro-free document.
+Изменения COM/VBA lifecycle нельзя полноценно проверить на macOS. Перед merge нужны Windows x64 + Office x64 + VS 2022 smoke tests для Excel, Word и PowerPoint: одинаковый компактный `common.vba_*` catalog без host backend ids, whole/range `vba_read_module`, upsert create/update и нормализация имени, удалённые VBA ids возвращают unknown-tool, LF/CRLF/final newline и граничные blank lines, кириллица, mutation → confirmation → external edit stale rejection без public pre-read, create-only race, exact backup restore, UI save с автоматически переданным snapshot, patch/clear/rollback, создание пустого MSForm и редактирование его code-behind без изменения Designer, runtime `Controls.Add` и events, code-only package install/update/uninstall, Designer collision rejection, interrupted package reconciliation, Office busy/modal state, discovery, typed `Application.Run`, cleanup после успеха/ошибки, Trust Access off и macro-free document.

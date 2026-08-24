@@ -43,7 +43,12 @@ namespace RNAssistant.Harness
 
         public FakeVbaComponent Seed(string name, string code)
         {
-            var component = new FakeVbaComponent(name, 1, code);
+            return Seed(name, code, 1);
+        }
+
+        public FakeVbaComponent Seed(string name, string code, int type)
+        {
+            var component = new FakeVbaComponent(name, type, code);
             _items.Add(component);
             return component;
         }
@@ -66,11 +71,30 @@ namespace RNAssistant.Harness
             Name = name;
             Type = type;
             CodeModule = new FakeVbaCodeModule(code);
+            Designer = new FakeVbaDesigner();
         }
 
         public string Name { get; set; }
         public int Type { get; private set; }
         public FakeVbaCodeModule CodeModule { get; private set; }
+        public FakeVbaDesigner Designer { get; private set; }
+    }
+
+    internal sealed class FakeVbaDesigner
+    {
+        public FakeVbaDesigner()
+        {
+            Controls = new FakeVbaDesignerControls();
+        }
+
+        public FakeVbaDesignerControls Controls { get; private set; }
+        public object Picture { get; set; }
+        public object MouseIcon { get; set; }
+    }
+
+    internal sealed class FakeVbaDesignerControls
+    {
+        public int Count { get; set; }
     }
 
     internal sealed class FakeVbaCodeModule

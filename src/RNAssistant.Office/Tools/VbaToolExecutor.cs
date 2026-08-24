@@ -737,6 +737,7 @@ namespace RNAssistant.Office.Tools
                     Name = (string)data["name"] ?? moduleName,
                     Code = (string)data["code"] ?? string.Empty,
                     ComponentType = (string)data["type"] ?? string.Empty,
+                    CodeOnlyUserForm = (bool?)data["codeOnlyUserForm"],
                     Truncated = (bool?)data["truncated"] ?? false,
                     LineCount = (int?)data["lineCount"] ?? VbaToolManifestParser.LiveCodeLineCount((string)data["code"] ?? string.Empty)
                 };
@@ -1487,6 +1488,7 @@ namespace RNAssistant.Office.Tools
             public string Name { get; set; }
             public string Code { get; set; }
             public string ComponentType { get; set; }
+            public bool? CodeOnlyUserForm { get; set; }
             public bool Truncated { get; set; }
             public int LineCount { get; set; }
         }

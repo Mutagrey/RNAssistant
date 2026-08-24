@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -9,6 +10,8 @@ namespace RNAssistant.Core.Models
         public const string BackupCreated = "backup.created";
         public const string MutationPrepared = "mutation.prepared";
         public const string MutationTerminal = "mutation.terminal";
+        public const string PackageMutationPrepared = "package.mutation.prepared";
+        public const string PackageMutationTerminal = "package.mutation.terminal";
     }
 
     public static class VbaMutationStatuses
@@ -114,6 +117,85 @@ namespace RNAssistant.Core.Models
     {
         public VbaMutationPreparation Prepared { get; set; }
         public VbaMutationTerminal Terminal { get; set; }
+    }
+
+    public sealed class VbaPackageMutationComponent
+    {
+        public string ModuleName { get; set; }
+        public bool BeforeExists { get; set; }
+        public string BeforeComponentType { get; set; }
+        public string BeforeCodeSha256 { get; set; }
+        public ChatBlobReference BeforeCodeReference { get; set; }
+        public string BackupId { get; set; }
+        public bool IntendedAfterExists { get; set; }
+        public string IntendedAfterComponentType { get; set; }
+        public string IntendedAfterCodeSha256 { get; set; }
+        public ChatBlobReference IntendedAfterCodeReference { get; set; }
+
+        [JsonIgnore]
+        public string BeforeCode { get; set; }
+
+        [JsonIgnore]
+        public string IntendedAfterCode { get; set; }
+    }
+
+    public sealed class VbaPackageMutationPreparation
+    {
+        public string MutationId { get; set; }
+        public string Operation { get; set; }
+        public string PackageId { get; set; }
+        public string PackageVersion { get; set; }
+        public bool SessionOnly { get; set; }
+        public bool RetainBackups { get; set; }
+        public string Host { get; set; }
+        public string DocumentKey { get; set; }
+        public string RuntimeDocumentKey { get; set; }
+        public string DocumentTitle { get; set; }
+        public List<VbaPackageMutationComponent> Components { get; set; }
+        public string SessionId { get; set; }
+        public string RunId { get; set; }
+        public string TurnId { get; set; }
+        public string StepId { get; set; }
+        public string ToolCallId { get; set; }
+        public DateTime CreatedUtc { get; set; }
+
+        public VbaPackageMutationPreparation()
+        {
+            Components = new List<VbaPackageMutationComponent>();
+        }
+    }
+
+    public sealed class VbaPackageMutationComponentAssessment
+    {
+        public string ModuleName { get; set; }
+        public bool? ActualExists { get; set; }
+        public string ActualComponentType { get; set; }
+        public string ActualCodeSha256 { get; set; }
+        public bool MatchesBefore { get; set; }
+        public bool MatchesIntendedAfter { get; set; }
+        public string ErrorCode { get; set; }
+        public string Message { get; set; }
+    }
+
+    public sealed class VbaPackageMutationTerminal
+    {
+        public string MutationId { get; set; }
+        public string Status { get; set; }
+        public List<VbaPackageMutationComponentAssessment> Components { get; set; }
+        public string ErrorCode { get; set; }
+        public string Message { get; set; }
+        public DateTime CreatedUtc { get; set; }
+
+        public VbaPackageMutationTerminal()
+        {
+            Components = new List<VbaPackageMutationComponentAssessment>();
+        }
+    }
+
+    public sealed class VbaPackageMutationRecord
+    {
+        public VbaPackageMutationPreparation Prepared { get; set; }
+        public VbaPackageMutationTerminal Terminal { get; set; }
     }
 
     public sealed class VbaModuleBackup

@@ -549,6 +549,30 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaCodeOnlyUserFormSkillIsExplicit()
+        {
+            var skills = BuiltInSkillProvider.GetSkills(FakeOfficeAdapter.ForHost("Excel"));
+            var userForm = skills.Single(skill => string.Equals(
+                skill.Id,
+                "common.vba_userform_authoring",
+                StringComparison.OrdinalIgnoreCase));
+            AssertTrue(userForm.BuiltIn && userForm.Enabled, "code-only UserForm skill is available");
+            AssertContains(userForm.Description, "entirely from source code", "catalog triggers for code-only authoring");
+            AssertContains(userForm.BodyMarkdown, "Me.Controls.Add", "skill creates controls from source");
+            AssertContains(userForm.BodyMarkdown, "Private WithEvents", "skill explains fixed control events");
+            AssertContains(userForm.BodyMarkdown, "form-level Collection", "skill retains dynamic event sinks");
+            AssertContains(userForm.BodyMarkdown, "unload an already loaded form", "skill rebuilds live instances after edits");
+            AssertContains(userForm.BodyMarkdown, "Designer-time controls/properties and FRX assets are unsupported", "skill excludes designer state precisely");
+            AssertContains(userForm.BodyMarkdown, ".form.vba", "skill documents code-only package storage");
+            AssertContains(userForm.BodyMarkdown, "one journaled component transaction", "skill documents atomic package lifecycle");
+
+            var editing = skills.Single(skill => string.Equals(
+                skill.Id,
+                "common.vba_code_editing",
+                StringComparison.OrdinalIgnoreCase));
+            AssertContains(editing.BodyMarkdown, "Code-only runtime controls created from source are supported", "general VBA editing points to the focused profile");
+        }
+
         private static void VbaReadLinesReturnsExactRange()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

@@ -305,6 +305,7 @@ namespace RNAssistant.Harness
                         name = module.Name,
                         type = module.Type,
                         lineCount = LineCount(module.Code) + VbaReportedLineCountOffset,
+                        codeOnlyUserForm = string.Equals(module.Type, "MSForm", StringComparison.OrdinalIgnoreCase) ? (bool?)true : null,
                         hasToolManifest = string.Equals(module.Type, "StdModule", StringComparison.OrdinalIgnoreCase) &&
                             (module.Code ?? string.Empty).IndexOf("<RNAssistantTool>", StringComparison.Ordinal) >= 0
                     }).ToArray()
@@ -354,6 +355,7 @@ namespace RNAssistant.Harness
                     name = module.Name,
                     code = returnedCode,
                     type = module.Type,
+                    codeOnlyUserForm = string.Equals(module.Type, "MSForm", StringComparison.OrdinalIgnoreCase) ? (bool?)true : null,
                     lineCount = LineCount(module.Code) + VbaReportedLineCountOffset,
                     codeSha256 = VbaToolManifestParser.LiveCodeSha256(module.Code),
                     truncated = !string.Equals(returnedCode, module.Code, StringComparison.Ordinal)

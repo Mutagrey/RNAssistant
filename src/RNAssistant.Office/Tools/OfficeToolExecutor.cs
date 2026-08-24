@@ -216,14 +216,14 @@ namespace RNAssistant.Office.Tools
         {
             if (dryRun)
             {
-                return ExecuteForExpectedDocument(session, true, () => _vbaExecutor.InstallCustomTool(tool, false, true));
+                return ExecuteForExpectedDocument(session, true, () => _vbaExecutor.InstallCustomTool(tool, false, true, session));
             }
             return ExecuteDirectMutation(
                 session,
                 false,
                 true,
                 cancellationToken,
-                () => _vbaExecutor.InstallCustomTool(tool, false, false));
+                () => _vbaExecutor.InstallCustomTool(tool, false, false, session));
         }
 
         public ToolResult RemoveVbaTool(
@@ -236,7 +236,7 @@ namespace RNAssistant.Office.Tools
                 false,
                 true,
                 cancellationToken,
-                () => _vbaExecutor.RemoveCustomTool(tool));
+                () => _vbaExecutor.RemoveCustomTool(tool, false, session));
         }
 
         public string GetVbaInstallationStatus(ToolDefinition tool)
@@ -467,7 +467,7 @@ namespace RNAssistant.Office.Tools
             if (customTool != null && string.Equals(customTool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                return _vbaExecutor.ExecuteCustomTool(customTool, command, context.Settings, dryRun, manualRun);
+                return _vbaExecutor.ExecuteCustomTool(customTool, command, context.Settings, dryRun, manualRun, context.Session);
             }
 
             if (customTool != null)

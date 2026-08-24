@@ -227,13 +227,17 @@ namespace RNAssistant.Office.Services
             {
                 var module = ReadDocumentModule(modules, declared.Name);
                 var type = module == null ? string.Empty : (string)module["type"] ?? string.Empty;
-                var supported = string.Equals(type, "StdModule", StringComparison.OrdinalIgnoreCase) || string.Equals(type, "ClassModule", StringComparison.OrdinalIgnoreCase);
+                var supported = string.Equals(type, "StdModule", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(type, "ClassModule", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(type, "MSForm", StringComparison.OrdinalIgnoreCase) && (bool?)module["codeOnlyUserForm"] == true;
                 var code = supported ? (string)module["code"] ?? string.Empty : string.Empty;
                 result.Add(new VbaToolComponent
                 {
                     Name = declared.Name,
                     Type = type,
-                    FileName = declared.Name + (string.Equals(type, "ClassModule", StringComparison.OrdinalIgnoreCase) ? ".cls" : ".bas"),
+                    FileName = declared.Name + (string.Equals(type, "ClassModule", StringComparison.OrdinalIgnoreCase)
+                        ? ".cls"
+                        : string.Equals(type, "MSForm", StringComparison.OrdinalIgnoreCase) ? ".form.vba" : ".bas"),
                     Code = code,
                     CodeSha256 = string.IsNullOrWhiteSpace(code) ? string.Empty : VbaToolManifestParser.CodeSha256(code)
                 });
@@ -276,6 +280,7 @@ namespace RNAssistant.Office.Services
             {
                 VbaToolComponent current;
                 if (!documentComponents.TryGetValue(component.Name, out current) ||
+                    !string.Equals(component.Type, current.Type, StringComparison.OrdinalIgnoreCase) ||
                     !string.Equals(VbaToolManifestParser.CodeSha256(component.Code), VbaToolManifestParser.CodeSha256(current.Code), StringComparison.OrdinalIgnoreCase)) return false;
             }
             return (global.Components ?? new List<VbaToolComponent>()).Count == documentComponents.Count;

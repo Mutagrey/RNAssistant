@@ -173,6 +173,15 @@ namespace RNAssistant.Core.Tools
             return !string.IsNullOrWhiteSpace(value) && ComponentNamePattern.IsMatch(value);
         }
 
+        public static bool ContainsUserFormDesignerExport(string code)
+        {
+            var normalized = (code ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
+            return Regex.IsMatch(normalized, "(?im)^\\s*VERSION\\s+5\\.00\\b") ||
+                Regex.IsMatch(normalized, "(?im)^\\s*Begin\\s+(?:\\{|VB\\.|MSForms\\.)") ||
+                Regex.IsMatch(normalized, "(?im)^\\s*OleObjectBlob\\s*=") ||
+                Regex.IsMatch(normalized, "(?im)^\\s*Attribute\\s+VB_Base\\s*=");
+        }
+
         public static string CodeSha256(string code)
         {
             var normalized = NormalizeCode(code);

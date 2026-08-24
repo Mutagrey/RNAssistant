@@ -333,7 +333,7 @@ namespace RNAssistant.Office.Tools
                 ["components"] = new JObject
                 {
                     ["type"] = "array",
-                    ["description"] = "Ordered VBA package source components; the first component is the StdModule containing the manifest and entry function.",
+                    ["description"] = "Ordered VBA package source components; the first component is the StdModule containing the manifest and entry function. MSForm means a blank code-only UserForm, never an exported Designer form.",
                     ["maxItems"] = 50,
                     ["items"] = new JObject
                     {
@@ -341,8 +341,8 @@ namespace RNAssistant.Office.Tools
                         ["properties"] = new JObject
                         {
                             ["name"] = Property("string", "Exact VBA component name."),
-                            ["type"] = EnumProperty("VBA component type.", "StdModule", "ClassModule"),
-                            ["fileName"] = Property("string", "Optional source file name ending in .bas or .cls."),
+                            ["type"] = EnumProperty("VBA component type.", "StdModule", "ClassModule", "MSForm"),
+                            ["fileName"] = Property("string", "Optional display source name; storage derives .bas, .cls, or .form.vba from the component type."),
                             ["code"] = BoundedStringProperty("Complete VBA source code for this component.", 1000000)
                         },
                         ["required"] = new JArray("name", "type", "code"),
@@ -634,10 +634,22 @@ namespace RNAssistant.Office.Tools
                 var invalid = components.FirstOrDefault(component =>
                     !VbaToolManifestParser.ValidComponentName(component.Name) ||
                     (!string.Equals(component.Type, "StdModule", StringComparison.OrdinalIgnoreCase) &&
-                     !string.Equals(component.Type, "ClassModule", StringComparison.OrdinalIgnoreCase)));
+                     !string.Equals(component.Type, "ClassModule", StringComparison.OrdinalIgnoreCase) &&
+                     !string.Equals(component.Type, "MSForm", StringComparison.OrdinalIgnoreCase)));
                 if (invalid != null)
                 {
                     return ToolResult.Fail("VBA package component name/type is invalid: " + (invalid.Name ?? string.Empty), null, "vba_component_invalid", false);
+                }
+                var designerExport = components.FirstOrDefault(component =>
+                    string.Equals(component.Type, "MSForm", StringComparison.OrdinalIgnoreCase) &&
+                    VbaToolManifestParser.ContainsUserFormDesignerExport(component.Code));
+                if (designerExport != null)
+                {
+                    return ToolResult.Fail(
+                        "VBA package MSForm must contain code-behind only, not exported Designer/FRX metadata: " + designerExport.Name,
+                        null,
+                        "vba_userform_designer_unsupported",
+                        false);
                 }
                 var unexpected = components.FirstOrDefault(component => !declared.Contains(component.Name));
                 if (unexpected != null)

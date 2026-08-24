@@ -292,7 +292,8 @@ namespace RNAssistant.Core.Storage
                 {
                     var extension = Path.GetExtension(existing);
                     if ((string.Equals(extension, ".bas", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(extension, ".cls", StringComparison.OrdinalIgnoreCase)) &&
+                         string.Equals(extension, ".cls", StringComparison.OrdinalIgnoreCase) ||
+                         existing.EndsWith(".form.vba", StringComparison.OrdinalIgnoreCase)) &&
                         !expectedFiles.Contains(Path.GetFileName(existing)))
                     {
                         File.Delete(existing);
@@ -305,7 +306,10 @@ namespace RNAssistant.Core.Storage
 
         private static string SourceFileName(VbaToolComponent component)
         {
-            var extension = string.Equals(component == null ? null : component.Type, "ClassModule", StringComparison.OrdinalIgnoreCase) ? ".cls" : ".bas";
+            var type = component == null ? null : component.Type;
+            var extension = string.Equals(type, "ClassModule", StringComparison.OrdinalIgnoreCase)
+                ? ".cls"
+                : string.Equals(type, "MSForm", StringComparison.OrdinalIgnoreCase) ? ".form.vba" : ".bas";
             return (component == null ? "Module1" : component.Name) + extension;
         }
 

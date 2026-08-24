@@ -61,6 +61,10 @@ function selectedToolComponent(tool) {
   return components[index] || null;
 }
 
+function vbaComponentFileName(name, type) {
+  return name + (type === "ClassModule" ? ".cls" : type === "MSForm" ? ".form.vba" : ".bas");
+}
+
 function syncSelectedToolComponentFromEditor(tool) {
   if (!tool || String(tool.Executor || "").toLowerCase() !== "vba") {
     return;
@@ -71,7 +75,7 @@ function syncSelectedToolComponentFromEditor(tool) {
   }
   component.Name = $("toolComponentNameInput").value.trim();
   component.Type = $("toolComponentTypeInput").value;
-  component.FileName = component.Name + (component.Type === "ClassModule" ? ".cls" : ".bas");
+  component.FileName = vbaComponentFileName(component.Name, component.Type);
   component.Code = typeof getCodeEditorValue === "function" ? getCodeEditorValue("toolCodeInput") : $("toolCodeInput").value;
   var entry = toolComponents(tool).filter(function (item) {
     return item && String(item.Type || "").toLowerCase() === "stdmodule" && String(item.Code || "").indexOf("<RNAssistantTool>") >= 0;
@@ -138,7 +142,7 @@ function renderToolEditor() {
   });
   $("toolComponentSelect").value = String(state.selectedToolComponentIndex || 0);
   $("toolComponentNameInput").value = component ? (component.Name || "") : "";
-  $("toolComponentTypeInput").value = component && component.Type === "ClassModule" ? "ClassModule" : "StdModule";
+  $("toolComponentTypeInput").value = component && (component.Type === "ClassModule" || component.Type === "MSForm") ? component.Type : "StdModule";
   $("toolCodeInput").value = component ? (component.Code || "") : (skill ? (skill.Code || "") : "");
   $("toolReadmeInput").value = skill ? (skill.Readme || "") : "";
   $("toolPackageMeta").textContent = skill ? [
@@ -190,7 +194,7 @@ function renderToolEditor() {
     setCodeEditorReadOnly("toolReadmeInput", disabled || readOnly);
   }
 
-  ["toolComponentSelect", "toolComponentNameInput", "toolComponentTypeInput", "addToolModuleButton", "addToolClassButton", "deleteToolComponentButton"].forEach(function (id) {
+  ["toolComponentSelect", "toolComponentNameInput", "toolComponentTypeInput", "addToolModuleButton", "addToolClassButton", "addToolFormButton", "deleteToolComponentButton"].forEach(function (id) {
     $(id).disabled = disabled || readOnly || !isVba;
   });
 
@@ -341,7 +345,7 @@ function addVbaComponent(type) {
     return;
   }
   var components = toolComponents(tool);
-  var suffix = type === "ClassModule" ? "Service" : "Module";
+  var suffix = type === "ClassModule" ? "Service" : type === "MSForm" ? "Form" : "Module";
   var base = inferredVbaComponentName(tool).slice(0, Math.max(1, 39 - suffix.length));
   var name = (base + "_" + suffix).slice(0, 40);
   var serial = 2;
@@ -349,7 +353,7 @@ function addVbaComponent(type) {
     name = (base.slice(0, Math.max(1, 38 - String(serial).length)) + "_" + serial).slice(0, 40);
     serial += 1;
   }
-  components.push({ Name: name, Type: type, FileName: name + (type === "ClassModule" ? ".cls" : ".bas"), Code: "Option Explicit\n" });
+  components.push({ Name: name, Type: type, FileName: vbaComponentFileName(name, type), Code: "Option Explicit\n" });
   state.selectedToolComponentIndex = components.length - 1;
   renderToolEditor();
 }
@@ -366,6 +370,7 @@ function bindToolActions() {
   });
   $("addToolModuleButton").addEventListener("click", function () { addVbaComponent("StdModule"); });
   $("addToolClassButton").addEventListener("click", function () { addVbaComponent("ClassModule"); });
+  $("addToolFormButton").addEventListener("click", function () { addVbaComponent("MSForm"); });
   $("deleteToolComponentButton").addEventListener("click", function () {
     syncSelectedToolFromEditor();
     var tool = state.tools[state.selectedToolIndex];
