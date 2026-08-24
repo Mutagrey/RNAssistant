@@ -139,6 +139,9 @@ function applyChatState(response) {
   if (typeof renderHtmlWorkspace === "function") {
     renderHtmlWorkspace();
   }
+  if (typeof syncPromptContextInspectorState === "function") {
+    syncPromptContextInspectorState();
+  }
 }
 
 function applyChatCatalogState(response) {
@@ -477,7 +480,7 @@ function renderContextMeter() {
   meter.style.setProperty("--context-meter-color", level === "danger" ? "var(--danger)" : (level === "warn" ? "#b7791f" : "var(--success)"));
   value.textContent = percent + "%";
   detail.textContent = compactDetail;
-  meter.title = "Контекст: " + percent + "%\n" + detailText;
+  meter.title = "Контекст: " + percent + "%\n" + detailText + "\nНажмите, чтобы увидеть состав.";
   meter.setAttribute("aria-label", meter.title);
 }
 

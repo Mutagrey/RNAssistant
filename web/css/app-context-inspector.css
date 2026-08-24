@@ -1,0 +1,428 @@
+.chat-main {
+  position: relative;
+}
+
+button.context-meter {
+  appearance: none;
+  cursor: pointer;
+}
+
+.context-meter svg {
+  width: 12px;
+  height: 12px;
+  color: var(--muted);
+}
+
+.context-meter:hover,
+.context-meter[aria-expanded="true"] {
+  border-color: var(--button-accent-border);
+  background: var(--button-accent-bg);
+}
+
+.context-meter:disabled {
+  cursor: default;
+}
+
+.prompt-context-inspector {
+  position: absolute;
+  z-index: 40;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  width: min(430px, calc(100% - 20px));
+  min-width: 320px;
+  min-height: 0;
+  flex-direction: column;
+  border-left: 1px solid var(--line-strong);
+  background: var(--panel);
+  box-shadow: -12px 0 30px rgba(16, 24, 39, .16);
+}
+
+.prompt-context-inspector-head {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 48px;
+  padding: 8px 10px 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.prompt-context-inspector-heading {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.prompt-context-inspector-heading strong {
+  font-size: 13px;
+  font-weight: var(--title-font-weight);
+}
+
+.prompt-context-inspector-heading span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-context-inspector-head-actions {
+  display: flex;
+  gap: 3px;
+  margin-left: auto;
+}
+
+.prompt-context-inspector-head-actions .icon-button {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.prompt-context-inspector-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.prompt-context-inspector-state {
+  padding: 24px 14px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.prompt-context-inspector-error {
+  color: var(--danger);
+}
+
+.prompt-context-inspector-body {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.prompt-context-inspector-notice {
+  padding: 8px 9px;
+  border-left: 3px solid var(--accent);
+  background: var(--secondary-bg);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.prompt-context-inspector-notice.is-over-budget {
+  border-left-color: var(--danger);
+  color: var(--danger);
+}
+
+.prompt-context-budget {
+  display: grid;
+  gap: 6px;
+}
+
+.prompt-context-budget-head {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.prompt-context-budget-head strong {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--title-font-weight);
+}
+
+.prompt-context-budget-head span {
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--title-font-weight);
+}
+
+.prompt-context-budget-track,
+.prompt-context-section-track {
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.prompt-context-budget-track {
+  height: 7px;
+}
+
+.prompt-context-budget-track > i {
+  display: block;
+  width: var(--prompt-context-percent, 0%);
+  height: 100%;
+  background: var(--success);
+  transition: width .16s ease;
+}
+
+.prompt-context-budget-track[data-level="warn"] > i {
+  background: #b7791f;
+}
+
+.prompt-context-budget-track[data-level="danger"] > i {
+  background: var(--danger);
+}
+
+.prompt-context-budget-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--line);
+  gap: 1px;
+}
+
+.prompt-context-budget-grid > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding: 6px;
+  background: var(--secondary-bg);
+}
+
+.prompt-context-budget-grid span {
+  color: var(--muted);
+  font-size: 9.5px;
+}
+
+.prompt-context-budget-grid strong {
+  overflow: hidden;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--label-font-weight);
+  text-overflow: ellipsis;
+}
+
+.prompt-context-last-usage {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.prompt-context-section-heading {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.prompt-context-section-heading strong {
+  font-size: 12px;
+  font-weight: var(--title-font-weight);
+}
+
+.prompt-context-section-heading span {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.prompt-context-sections {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--line);
+  gap: 1px;
+}
+
+.prompt-context-section {
+  min-width: 0;
+  background: var(--panel);
+}
+
+.prompt-context-section > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 10px;
+  align-items: center;
+  padding: 8px 9px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.prompt-context-section > summary::-webkit-details-marker,
+.prompt-context-item > summary::-webkit-details-marker {
+  display: none;
+}
+
+.prompt-context-section-title {
+  overflow: hidden;
+  font-size: 11.5px;
+  font-weight: var(--label-font-weight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-context-section-meta {
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.prompt-context-section-detail {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-context-section-track {
+  grid-column: 1 / -1;
+  height: 3px;
+}
+
+.prompt-context-section-track > i {
+  display: block;
+  width: var(--prompt-context-section-percent, 0%);
+  height: 100%;
+  background: var(--accent);
+}
+
+.prompt-context-section.is-excluded .prompt-context-section-track {
+  display: none;
+}
+
+.prompt-context-section.is-excluded .prompt-context-section-title,
+.prompt-context-section.is-excluded .prompt-context-section-meta {
+  color: var(--muted);
+}
+
+.prompt-context-items {
+  display: grid;
+  padding: 0 9px 8px;
+}
+
+.prompt-context-item {
+  min-width: 0;
+  border-top: 1px solid var(--line);
+}
+
+.prompt-context-item > summary,
+.prompt-context-item-static {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  padding: 7px 0;
+  list-style: none;
+}
+
+.prompt-context-item > summary {
+  cursor: pointer;
+}
+
+.prompt-context-item-title {
+  overflow: hidden;
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-context-item-value {
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.prompt-context-item-subtitle,
+.prompt-context-item-reason {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-context-item-reason {
+  color: var(--danger);
+}
+
+.prompt-context-item pre,
+.prompt-context-raw pre {
+  max-height: 260px;
+  margin: 0 0 8px;
+  overflow: auto;
+  border: 1px solid var(--code-border);
+  border-radius: 5px;
+  padding: 8px;
+  background: var(--code);
+  color: var(--code-text);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 10px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.prompt-context-raw {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.prompt-context-raw > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.prompt-context-raw pre {
+  max-height: 420px;
+  margin-top: 8px;
+}
+
+.prompt-context-inspector-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.prompt-context-inspector-actions button {
+  min-height: 27px;
+  padding: 0 8px;
+  font-size: 10.5px;
+}
+
+html[data-theme="dark"] .prompt-context-inspector {
+  box-shadow: -12px 0 30px rgba(0, 0, 0, .38);
+}
+
+html[data-theme="dark"] .context-meter:hover,
+html[data-theme="dark"] .context-meter[aria-expanded="true"] {
+  border-color: #50698f;
+  background: #263954;
+}
+
+html[data-theme="dark"] .prompt-context-budget-track[data-level="warn"] > i {
+  background: #d69e4b;
+}
+
+@media (max-width: 620px) {
+  .prompt-context-inspector {
+    width: 100%;
+    min-width: 0;
+    border-left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prompt-context-budget-track > i {
+    transition: none;
+  }
+}

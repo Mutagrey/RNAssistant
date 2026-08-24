@@ -19,7 +19,8 @@ namespace RNAssistant.Office.Services
             AppSettings settings,
             ChatSession session,
             IReadOnlyList<ChatAttachment> attachments,
-            bool replayCurrentUserInHistory = false)
+            bool replayCurrentUserInHistory = false,
+            int historyBudgetTokens = 0)
         {
             settings = settings ?? new AppSettings();
             var instruction = string.IsNullOrWhiteSpace(settings.SystemPrompt)
@@ -52,7 +53,7 @@ namespace RNAssistant.Office.Services
                     messages.Count,
                     session,
                     settings,
-                    0,
+                    historyBudgetTokens,
                     true,
                     false);
                 return messages;
@@ -73,7 +74,12 @@ namespace RNAssistant.Office.Services
             };
             var currentIndex = messages.Count;
             messages.Add(current);
-            new PromptBudgetComposer().AddConversationHistory(messages, currentIndex, session, settings);
+            new PromptBudgetComposer().AddConversationHistory(
+                messages,
+                currentIndex,
+                session,
+                settings,
+                historyBudgetTokens);
             return messages;
         }
 

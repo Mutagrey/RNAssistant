@@ -589,6 +589,23 @@ namespace RNAssistant.Harness
             AssertEqual("Body", controller.LastContextText, "context text");
         }
 
+        private static void BridgeUsesTypedPromptContextInspectorPayload()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
+            var responseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"context-inspect\",\"type\":\"inspectPromptContext\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-context\",\"text\":\"draft\",\"attachmentIds\":[\"file-1\"],\"includeRaw\":true}}")
+                .GetAwaiter()
+                .GetResult();
+
+            var response = JObject.Parse(responseJson);
+            AssertTrue(response["ok"].Value<bool>(), "prompt context inspector response ok");
+            AssertEqual("chat-context", response["payload"]["chatId"].Value<string>(), "inspector chat id");
+            AssertEqual("{}", response["payload"]["rawRequestJson"].Value<string>(), "raw flag reaches typed payload");
+        }
+
         private static void BridgeUsesTypedVbaPayload()
         {
             var controller = new AssistantController();

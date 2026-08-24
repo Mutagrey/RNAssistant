@@ -79,6 +79,8 @@ namespace RNAssistant.Harness
                 Test("chat: prompt save preserves global model", PromptSavePreservesGlobalModel),
                 Test("context: compaction uses one summary field", SimpleCompactionUsesOneSummaryField),
                 Test("context: compaction preserves tool protocol pairs", CompactionPreservesToolProtocolPairs),
+                Test("context inspector: builds agent snapshot", PromptContextInspectorBuildsAgentSnapshot),
+                Test("context inspector: raw JSON is opt-in", PromptContextInspectorRawJsonIsOptIn),
 
                 Test("desktop target: parses json descriptor", ParsesOfficeTargetJsonDescriptor),
                 Test("desktop target: parses base64 descriptor", ParsesOfficeTargetBase64Descriptor),
@@ -219,6 +221,7 @@ namespace RNAssistant.Harness
                 Test("bridge: typed document", BridgeUsesTypedDocumentPayload),
                 Test("bridge: typed tools and skills", BridgeUsesTypedToolAndSkillPayloads),
                 Test("bridge: typed context", BridgeUsesTypedContextPayload),
+                Test("bridge: typed prompt context inspector", BridgeUsesTypedPromptContextInspectorPayload),
                 Test("bridge: typed vba", BridgeUsesTypedVbaPayload),
                 Test("bridge: typed html delete", BridgeUsesTypedHtmlWorkspaceDeletePayloads),
                 Test("bridge: typed html network", BridgeUsesTypedHtmlNetworkPayloads),

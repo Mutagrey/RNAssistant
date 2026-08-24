@@ -211,6 +211,25 @@ namespace RNAssistant.Office
             return Task.FromResult(ChatState(pendingId, chatId));
         }
         public ChatStateResponse CancelAgentTool(string pendingId, string chatId = null) { return ChatState(pendingId, chatId); }
+        public PromptContextInspectorResponse InspectPromptContext(string chatId, string text, IReadOnlyList<string> attachmentIds, bool includeRaw)
+        {
+            return new PromptContextInspectorResponse
+            {
+                ChatId = chatId,
+                Mode = "agent",
+                Model = "test-model",
+                UsedTokens = 10,
+                InputLimitTokens = 100,
+                ContextWindowTokens = 128,
+                ReservedOutputTokens = 20,
+                SafetyTokens = 8,
+                RemainingInputTokens = 90,
+                Percent = 10,
+                Estimated = true,
+                Sections = new PromptContextSectionDto[0],
+                RawRequestJson = includeRaw ? "{}" : null
+            };
+        }
         public VbaProjectResponse GetVbaProject() { return new VbaProjectResponse { Result = ToolResult.Ok("ok") }; }
         public ToolResult GetVbaModule(string moduleName) { LastModuleName = moduleName; return ToolResult.Ok("read"); }
 

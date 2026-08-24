@@ -32,6 +32,7 @@
   <link rel="stylesheet" href="css/app-prompts.css?v=library-ui-20260821-1">
   <link rel="stylesheet" href="css/app-vba.css?v=library-ui-20260821-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
+  <link rel="stylesheet" href="css/app-context-inspector.css?v=context-inspector-20260824-1">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260702-2">
   <link rel="stylesheet" href="css/app-artifacts.css?v=ui-simplify-20260821-3">
@@ -156,10 +157,11 @@
                   <span class="model-capability-indicator" id="modelCapabilityIndicator" title="Мультимодальность модели" aria-label="Мультимодальность модели"></span>
                 </div>
               </details>
-              <div class="context-meter" id="contextMeter" title="Использование контекста" aria-label="Использование контекста">
+              <button class="context-meter" id="contextMeter" type="button" title="Открыть состав контекста" aria-label="Открыть состав контекста" aria-expanded="false" aria-controls="promptContextInspector">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4-8 4-8-4 8-4Z"/><path d="m20 12-8 4-8-4"/><path d="m20 17-8 4-8-4"/></svg>
                 <strong id="contextMeterValue">0%</strong>
                 <em id="contextMeterDetail">0 / 0</em>
-              </div>
+              </button>
             </div>
             <div class="composer-actions">
               <details class="composer-picker composer-mode-picker" id="chatModePicker">
@@ -199,6 +201,59 @@
             </div>
           </div>
         </form>
+        <aside class="prompt-context-inspector hidden" id="promptContextInspector" aria-hidden="true" aria-label="Состав контекста запроса">
+          <div class="prompt-context-inspector-head">
+            <div class="prompt-context-inspector-heading">
+              <strong>Контекст запроса</strong>
+              <span id="promptContextInspectorSubtitle">Снимок по запросу</span>
+            </div>
+            <div class="prompt-context-inspector-head-actions">
+              <button type="button" class="icon-button" id="refreshPromptContextInspectorButton" title="Обновить снимок" aria-label="Обновить снимок">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0 2 5"/><path d="M20 4v7h-7"/></svg>
+              </button>
+              <button type="button" class="icon-button" id="closePromptContextInspectorButton" title="Закрыть" aria-label="Закрыть">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="prompt-context-inspector-scroll">
+            <div class="prompt-context-inspector-state" id="promptContextInspectorLoading" role="status">Собираю снимок контекста…</div>
+            <div class="prompt-context-inspector-state prompt-context-inspector-error hidden" id="promptContextInspectorError" role="alert"></div>
+            <div class="prompt-context-inspector-body hidden" id="promptContextInspectorBody">
+              <div class="prompt-context-inspector-notice" id="promptContextInspectorNotice"></div>
+              <section class="prompt-context-budget" aria-label="Лимит контекста">
+                <div class="prompt-context-budget-head">
+                  <strong id="promptContextInspectorUsage">0 / 0 токенов</strong>
+                  <span id="promptContextInspectorPercent">0%</span>
+                </div>
+                <div class="prompt-context-budget-track" id="promptContextInspectorTrack" role="progressbar" aria-label="Использование входного контекста" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                  <i id="promptContextInspectorFill"></i>
+                </div>
+                <div class="prompt-context-budget-grid">
+                  <div><span>Окно</span><strong id="promptContextInspectorWindow">0</strong></div>
+                  <div><span>Ответ</span><strong id="promptContextInspectorOutput">0</strong></div>
+                  <div><span>Safety</span><strong id="promptContextInspectorSafety">0</strong></div>
+                  <div><span>Осталось</span><strong id="promptContextInspectorRemaining">0</strong></div>
+                </div>
+                <div class="prompt-context-last-usage hidden" id="promptContextInspectorLastUsage"></div>
+              </section>
+              <div class="prompt-context-section-heading">
+                <strong>Состав</strong>
+                <span>по вкладу в токены</span>
+              </div>
+              <div class="prompt-context-sections" id="promptContextInspectorSections"></div>
+              <details class="prompt-context-raw hidden" id="promptContextInspectorRaw">
+                <summary>Структура запроса JSON</summary>
+                <pre id="promptContextInspectorRawText"></pre>
+              </details>
+            </div>
+          </div>
+          <div class="prompt-context-inspector-actions">
+            <button type="button" class="secondary" id="loadPromptContextRawButton">Показать JSON</button>
+            <button type="button" class="secondary" id="managePromptContextButton">Ручной контекст</button>
+            <button type="button" class="secondary" id="openPromptContextArtifactsButton">Артефакты</button>
+          </div>
+        </aside>
           </div>
         </div>
       </section>
@@ -726,6 +781,7 @@
   <script src="js/app-html-workspace-actions.js?v=log-filters-20260824-1"></script>
   <script src="js/app-html-workspace.js?v=workspace-modules-20260823-5"></script>
   <script src="js/app-context.js?v=log-filters-20260824-1"></script>
+  <script src="js/app-context-inspector.js?v=context-inspector-20260824-1"></script>
   <script src="js/app-agent-data.js?v=agent-ui-20260821-2"></script>
   <script src="js/app-agent-model.js?v=agent-ui-20260821-3"></script>
   <script src="js/app-chart-artifacts.js?v=log-filters-20260824-1"></script>

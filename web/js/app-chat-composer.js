@@ -149,6 +149,9 @@ function renderSendControls() {
   if (typeof renderHtmlModeToggle === "function") {
     renderHtmlModeToggle();
   }
+  if (typeof renderPromptContextInspectorAvailability === "function") {
+    renderPromptContextInspectorAvailability();
+  }
   updateComposerInputState();
 }
 

@@ -329,6 +329,14 @@ namespace RNAssistant.Office.WebView
                     case "getContext":
                         responsePayload = _controller.GetContext(Payload<ChatPayload>(payload).ChatId);
                         break;
+                    case "inspectPromptContext":
+                        var inspectContext = Payload<PromptContextInspectorPayload>(payload);
+                        responsePayload = _controller.InspectPromptContext(
+                            inspectContext.ChatId,
+                            inspectContext.Text,
+                            inspectContext.AttachmentIds,
+                            inspectContext.IncludeRaw);
+                        break;
                     case "addSelectionContext":
                         var selectionContext = Payload<SelectionContextPayload>(payload);
                         responsePayload = _controller.AddSelectionContextFromBridge(selectionContext.Mode, selectionContext.ChatId);

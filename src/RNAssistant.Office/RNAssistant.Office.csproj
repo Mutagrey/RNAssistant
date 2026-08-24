@@ -66,6 +66,7 @@
     <Compile Include="Controller\AssistantController.Agent.cs" />
     <Compile Include="Controller\AssistantController.Chats.cs" />
     <Compile Include="Controller\AssistantController.Context.cs" />
+    <Compile Include="Controller\AssistantController.ContextInspector.cs" />
     <Compile Include="Controller\AssistantController.Diagnostics.cs" />
     <Compile Include="Controller\AssistantController.HtmlWorkspace.cs" />
     <Compile Include="Controller\AssistantController.Lifecycle.cs" />
@@ -96,6 +97,7 @@
     <Compile Include="Services\ContextCompactionService.cs" />
     <Compile Include="Services\PlainChatService.cs" />
     <Compile Include="Services\PromptBudgetComposer.cs" />
+    <Compile Include="Services\PromptContextInspectorService.cs" />
     <Compile Include="Services\AttachmentImageService.cs" />
     <Compile Include="Services\ModelAttachmentService.cs" />
     <Compile Include="Services\ModelCapabilityService.cs" />

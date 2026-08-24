@@ -205,6 +205,144 @@ namespace RNAssistant.Office.Contracts
         public string ChatId { get; set; }
     }
 
+    public sealed class PromptContextInspectorPayload : ChatPayload
+    {
+        [JsonProperty("text")]
+        public string Text { get; set; }
+
+        [JsonProperty("attachmentIds")]
+        public IReadOnlyList<string> AttachmentIds { get; set; }
+
+        [JsonProperty("includeRaw")]
+        public bool IncludeRaw { get; set; }
+    }
+
+    public sealed class PromptContextInspectorResponse
+    {
+        [JsonProperty("chatId")]
+        public string ChatId { get; set; }
+
+        [JsonProperty("sessionRevision")]
+        public long SessionRevision { get; set; }
+
+        [JsonProperty("mode")]
+        public string Mode { get; set; }
+
+        [JsonProperty("model")]
+        public string Model { get; set; }
+
+        [JsonProperty("usedTokens")]
+        public int UsedTokens { get; set; }
+
+        [JsonProperty("inputLimitTokens")]
+        public int InputLimitTokens { get; set; }
+
+        [JsonProperty("contextWindowTokens")]
+        public int ContextWindowTokens { get; set; }
+
+        [JsonProperty("reservedOutputTokens")]
+        public int ReservedOutputTokens { get; set; }
+
+        [JsonProperty("safetyTokens")]
+        public int SafetyTokens { get; set; }
+
+        [JsonProperty("remainingInputTokens")]
+        public int RemainingInputTokens { get; set; }
+
+        [JsonProperty("percent")]
+        public int Percent { get; set; }
+
+        [JsonProperty("messageCount")]
+        public int MessageCount { get; set; }
+
+        [JsonProperty("overBudget")]
+        public bool OverBudget { get; set; }
+
+        [JsonProperty("estimated")]
+        public bool Estimated { get; set; }
+
+        [JsonProperty("lastPromptTokens")]
+        public int? LastPromptTokens { get; set; }
+
+        [JsonProperty("lastPromptUtc")]
+        public System.DateTime? LastPromptUtc { get; set; }
+
+        [JsonProperty("lastRunId")]
+        public string LastRunId { get; set; }
+
+        [JsonProperty("notice")]
+        public string Notice { get; set; }
+
+        [JsonProperty("sections")]
+        public IReadOnlyList<PromptContextSectionDto> Sections { get; set; }
+
+        [JsonProperty("rawRequestJson")]
+        public string RawRequestJson { get; set; }
+
+        [JsonProperty("rawTruncated")]
+        public bool RawTruncated { get; set; }
+
+        [JsonProperty("generatedUtc")]
+        public System.DateTime GeneratedUtc { get; set; }
+    }
+
+    public sealed class PromptContextSectionDto
+    {
+        [JsonProperty("id")]
+        public string Id { get; set; }
+
+        [JsonProperty("title")]
+        public string Title { get; set; }
+
+        [JsonProperty("tokens")]
+        public int Tokens { get; set; }
+
+        [JsonProperty("count")]
+        public int Count { get; set; }
+
+        [JsonProperty("detail")]
+        public string Detail { get; set; }
+
+        [JsonProperty("included")]
+        public bool Included { get; set; }
+
+        [JsonProperty("items")]
+        public IReadOnlyList<PromptContextItemDto> Items { get; set; }
+    }
+
+    public sealed class PromptContextItemDto
+    {
+        [JsonProperty("id")]
+        public string Id { get; set; }
+
+        [JsonProperty("kind")]
+        public string Kind { get; set; }
+
+        [JsonProperty("title")]
+        public string Title { get; set; }
+
+        [JsonProperty("subtitle")]
+        public string Subtitle { get; set; }
+
+        [JsonProperty("tokens")]
+        public int Tokens { get; set; }
+
+        [JsonProperty("characters")]
+        public int Characters { get; set; }
+
+        [JsonProperty("sizeBytes")]
+        public long SizeBytes { get; set; }
+
+        [JsonProperty("preview")]
+        public string Preview { get; set; }
+
+        [JsonProperty("reference")]
+        public string Reference { get; set; }
+
+        [JsonProperty("reason")]
+        public string Reason { get; set; }
+    }
+
     public sealed class DocumentPayload
     {
         [JsonProperty("host")]

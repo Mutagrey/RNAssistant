@@ -14,7 +14,8 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             DocumentContext context,
             AppSettings settings,
-            IReadOnlyList<ChatAttachment> attachments)
+            IReadOnlyList<ChatAttachment> attachments,
+            int historyBudgetTokens = 0)
         {
             settings = settings ?? new AppSettings();
             var messages = new List<ChatMessage>();
@@ -50,7 +51,7 @@ namespace RNAssistant.Office.Services
                 messages.Count - 1,
                 session,
                 settings,
-                0,
+                historyBudgetTokens,
                 false);
             return messages;
         }

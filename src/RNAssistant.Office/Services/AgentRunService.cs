@@ -166,7 +166,7 @@ namespace RNAssistant.Office.Services
                 iterationsUsed += 1;
                 UpdateRunCursor(session, iterationsUsed, toolSteps, "running", "thinking");
                 Report(progress, "thinking", "Агент выбирает следующий шаг...", null);
-                var options = BuildAgentRequestOptions(responseMode, availableTools, session, runCache);
+                var options = BuildRequestOptions(responseMode, availableTools, session, runCache);
                 string budgetError;
                 if (!TryValidatePromptBudget(messages, settings, options, out budgetError))
                 {
@@ -184,7 +184,7 @@ namespace RNAssistant.Office.Services
                     settings.FallbackToJsonObject)
                 {
                     responseMode = AgentResponseModes.JsonObject;
-                    options = BuildAgentRequestOptions(responseMode, availableTools, session, runCache);
+                    options = BuildRequestOptions(responseMode, availableTools, session, runCache);
                     Report(progress, "thinking", "Endpoint не поддерживает json_schema; продолжаю с json_object.", null);
                     if (!TryValidatePromptBudget(messages, settings, options, out budgetError))
                     {
@@ -348,7 +348,7 @@ namespace RNAssistant.Office.Services
             return Result(limitText, results, contextUsage, false);
         }
 
-        private static LlmRequestOptions BuildAgentRequestOptions(
+        internal static LlmRequestOptions BuildRequestOptions(
             string responseMode,
             IReadOnlyList<ToolDefinition> tools,
             ChatSession session,
