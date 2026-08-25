@@ -99,6 +99,7 @@
     <Compile Include="Services\PromptBudgetComposer.cs" />
     <Compile Include="Services\PromptContextInspectorService.cs" />
     <Compile Include="Services\AttachmentImageService.cs" />
+    <Compile Include="Services\AttachmentAnalysisService.cs" />
     <Compile Include="Services\AttachmentModelRoutingService.cs" />
     <Compile Include="Services\ModelAttachmentService.cs" />
     <Compile Include="Services\ModelCapabilityService.cs" />

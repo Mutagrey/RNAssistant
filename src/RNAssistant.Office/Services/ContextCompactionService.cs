@@ -321,7 +321,9 @@ namespace RNAssistant.Office.Services
             {
                 if (message == null) continue;
                 builder.Append('[').Append(message.Role ?? "unknown").Append("] ");
-                builder.Append(message.Content ?? string.Empty);
+                builder.Append(AttachmentAnalysisService.AppendHistoricalContext(
+                    message.Content,
+                    message.AttachmentAnalysis));
                 var toolCalls = (message.ToolCalls ?? new List<LlmToolCall>())
                     .Where(call => call != null)
                     .Select(call => new

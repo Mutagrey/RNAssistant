@@ -121,7 +121,9 @@ namespace RNAssistant.Office.Services
             return new ChatMessage
             {
                 Role = source == null ? string.Empty : source.Role,
-                Content = AppendHistoricalReferences(source, sourceAttachments),
+                Content = AttachmentAnalysisService.AppendHistoricalContext(
+                    AppendHistoricalReferences(source, sourceAttachments),
+                    source == null ? null : source.AttachmentAnalysis),
                 ProtocolMessage = source != null && source.ProtocolMessage,
                 ToolCallId = source == null ? null : source.ToolCallId,
                 ToolName = source == null ? null : source.ToolName,

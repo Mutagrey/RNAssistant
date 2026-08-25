@@ -38,6 +38,7 @@ namespace RNAssistant.Office
         private readonly AgentRunService _agentRunService;
         private readonly PlainChatService _plainChatService;
         private readonly ContextCompactionService _contextCompactionService;
+        private readonly AttachmentAnalysisService _attachmentAnalysisService;
         private readonly ContextService _contextService;
         private readonly LlmClient _llmClient;
         private readonly LlmCompletionDelegate _llmCompletion;
@@ -152,6 +153,7 @@ namespace RNAssistant.Office
                 return result;
             };
             _llmCompletion = completion;
+            _attachmentAnalysisService = new AttachmentAnalysisService(completion);
             _contextCompactionService = new ContextCompactionService(
                 completion,
                 (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars));
@@ -690,6 +692,18 @@ namespace RNAssistant.Office
                     {
                         ReportProgress(runProgress, "routing", attachmentRouting.ProgressMessage);
                     }
+                    var turnUserMessage = appendedUserMessage ?? (session.Messages ?? new List<ChatMessage>())
+                        .LastOrDefault(message => message != null && !message.ProtocolMessage &&
+                            string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase));
+                    var attachmentAnalysis = await _attachmentAnalysisService.EnsureAsync(
+                        text,
+                        session,
+                        turnUserMessage,
+                        attachmentRouting,
+                        runProgress,
+                        runCancellation.Token).ConfigureAwait(false);
+                    var primaryText = AttachmentAnalysisService.BuildPrimaryRequest(text, attachmentAnalysis);
+                    var primaryAttachments = attachmentRouting.PrimaryAttachments ?? new ChatAttachment[0];
                     try
                     {
                         await _contextCompactionService.EnsureWithinBudgetAsync(
@@ -722,11 +736,11 @@ namespace RNAssistant.Office
                     if (executionMode == ChatModes.Chat)
                     {
                         completion = await _plainChatService.ExecuteAsync(
-                            text,
+                            primaryText,
                             session,
                             documentContext,
                             settings,
-                            attachments,
+                            primaryAttachments,
                             runProgress,
                             runCancellation.Token,
                             false).ConfigureAwait(false);
@@ -738,12 +752,12 @@ namespace RNAssistant.Office
                         try
                         {
                             completion = await _agentRunService.ExecuteAsync(
-                                text,
+                                primaryText,
                                 session,
                                 documentContext,
                                 settings,
                                 tools,
-                                attachments,
+                                primaryAttachments,
                                 runProgress,
                                 RegisterPendingAgentTool,
                                 skills,

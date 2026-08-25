@@ -224,6 +224,7 @@ namespace RNAssistant.Office.Services
                 Attachments = message.Attachments == null
                     ? new List<ChatAttachment>()
                     : message.Attachments.Select(CloneAttachment).ToList(),
+                AttachmentAnalysis = CloneAttachmentAnalysis(message.AttachmentAnalysis),
                 ArtifactIds = message.ArtifactIds == null ? new List<string>() : new List<string>(message.ArtifactIds),
                 HtmlWorkspaceCheckpointId = message.HtmlWorkspaceCheckpointId,
                 Activity = CloneActivity(message.Activity),
@@ -237,6 +238,22 @@ namespace RNAssistant.Office.Services
                 RunId = message.RunId,
                 Sequence = message.Sequence,
                 CreatedUtc = message.CreatedUtc
+            };
+        }
+
+        private static AttachmentAnalysisContext CloneAttachmentAnalysis(AttachmentAnalysisContext analysis)
+        {
+            if (analysis == null) return null;
+            return new AttachmentAnalysisContext
+            {
+                PromptVersion = analysis.PromptVersion,
+                SourceFingerprint = analysis.SourceFingerprint,
+                Content = analysis.Content,
+                Models = analysis.Models == null ? new List<string>() : new List<string>(analysis.Models),
+                AttachmentIds = analysis.AttachmentIds == null
+                    ? new List<string>()
+                    : new List<string>(analysis.AttachmentIds),
+                CreatedUtc = analysis.CreatedUtc
             };
         }
 

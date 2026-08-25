@@ -27,7 +27,7 @@ Settings → Agent → «Запустить тест» checks three exact sentin
 - Custom request headers except unsafe transport headers.
 - Debug traffic logging without authorization/header values. Message bodies may contain document data, so logging is disabled by default.
 
-Image, scanned-PDF, and audio attachments use request-scoped model routing. RNAssistant selects the first compatible model from Settings → Model → «Маршрутизация вложений» without changing the chat's stored model; a later text-only turn returns to that chat model. If no configured model declares all required media capabilities, the request fails before the endpoint call. Endpoint/network failover is not performed.
+The chat model consumes every media modality it declares directly in the normal primary request, without an auxiliary call. Only missing image/scanned-PDF or audio capabilities use isolated request-scoped helper passes. Each helper receives a fixed media-analysis instruction, the current user request, and attachments for its modality; chat history, Office context, tools, and skills are not sent. Its bounded evidence is persisted with the user message and replaces that raw media in the primary prompt. Vision and Audio route independently, so mixed media does not require one helper supporting both. Settings → Model exposes the helper-output and primary-evidence token caps. `0` selects automatic limits (1024 per helper batch; up to 20% of primary input, maximum 2048), while a positive number supplies a custom cap. These controls do not apply when a multimodal chat model receives media directly. A missing required capability fails before the primary call. Endpoint/network failover is not performed.
 
 ## Failure behavior
 

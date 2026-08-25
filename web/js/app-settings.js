@@ -9,6 +9,8 @@ var modelSettingsDefaults = {
   temperature: 0.2,
   topP: 1,
   contextWindowOverrideTokens: 0,
+  attachmentHelperMaxTokens: 0,
+  attachmentEvidenceMaxTokens: 0,
   tokenEstimateMultiplier: 1,
   autoCalibrateTokenEstimate: true,
   streamResponses: true
@@ -202,6 +204,8 @@ function renderSettings() {
     input.checked = input.value === uiTheme;
   });
   $("contextLimitInput").value = compatibilityValue(s, "ContextWindowOverrideTokens", "contextWindowOverrideTokens", modelSettingsDefaults.contextWindowOverrideTokens);
+  $("attachmentHelperMaxTokensInput").value = compatibilityValue(s, "AttachmentHelperMaxTokens", "attachmentHelperMaxTokens", modelSettingsDefaults.attachmentHelperMaxTokens);
+  $("attachmentEvidenceMaxTokensInput").value = compatibilityValue(s, "AttachmentEvidenceMaxTokens", "attachmentEvidenceMaxTokens", modelSettingsDefaults.attachmentEvidenceMaxTokens);
   $("tokenEstimateMultiplierInput").value = compatibilityValue(s, "TokenEstimateMultiplier", "tokenEstimateMultiplier", modelSettingsDefaults.tokenEstimateMultiplier);
   $("autoCalibrateTokenEstimateInput").checked = compatibilityValue(s, "AutoCalibrateTokenEstimate", "autoCalibrateTokenEstimate", modelSettingsDefaults.autoCalibrateTokenEstimate) !== false;
   renderTokenEstimateCalibrationStatus(s);
@@ -270,6 +274,8 @@ function readSettings() {
     UiFontScale: clampUiFontScale(Number($("uiFontScaleInput").value || 100) / 100),
     UiTheme: normalizeUiTheme((document.querySelector('input[name="uiTheme"]:checked') || {}).value),
     ContextWindowOverrideTokens: Number($("contextLimitInput").value || 0),
+    AttachmentHelperMaxTokens: Math.max(0, Math.floor(Number($("attachmentHelperMaxTokensInput").value || 0))),
+    AttachmentEvidenceMaxTokens: Math.max(0, Math.floor(Number($("attachmentEvidenceMaxTokensInput").value || 0))),
     TokenEstimateMultiplier: Number($("tokenEstimateMultiplierInput").value || modelSettingsDefaults.tokenEstimateMultiplier),
     AutoCalibrateTokenEstimate: $("autoCalibrateTokenEstimateInput").checked,
     TokenEstimateCalibrations: compatibilityValue(state.settings, "TokenEstimateCalibrations", "tokenEstimateCalibrations", {}) || {},
@@ -347,6 +353,8 @@ function resetModelSettingsToDefaults() {
   $("temperatureInput").value = modelSettingsDefaults.temperature;
   $("topPInput").value = modelSettingsDefaults.topP;
   $("contextLimitInput").value = modelSettingsDefaults.contextWindowOverrideTokens;
+  $("attachmentHelperMaxTokensInput").value = modelSettingsDefaults.attachmentHelperMaxTokens;
+  $("attachmentEvidenceMaxTokensInput").value = modelSettingsDefaults.attachmentEvidenceMaxTokens;
   $("tokenEstimateMultiplierInput").value = modelSettingsDefaults.tokenEstimateMultiplier;
   $("autoCalibrateTokenEstimateInput").checked = modelSettingsDefaults.autoCalibrateTokenEstimate;
   settings.TokenEstimateCalibrations = {};

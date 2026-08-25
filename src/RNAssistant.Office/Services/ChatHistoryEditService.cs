@@ -236,6 +236,7 @@ namespace RNAssistant.Office.Services
             }
 
             message.Content = text ?? string.Empty;
+            message.AttachmentAnalysis = null;
             message.ExcludeFromModelContext = false;
             message.Activity = null;
             message.PromptTokens = null;

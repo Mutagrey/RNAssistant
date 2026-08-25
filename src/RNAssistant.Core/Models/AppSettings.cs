@@ -179,6 +179,8 @@ namespace RNAssistant.Core.Models
         public const int DefaultMaxAgentFormatRetries = 10;
         public const int MaximumAgentFormatRetries = 20;
         public const int DefaultMaxAgentToolSteps = 4096;
+        public const int DefaultAttachmentHelperMaxTokens = 0;
+        public const int DefaultAttachmentEvidenceMaxTokens = 0;
         public const double DefaultTokenEstimateMultiplier = 1.0;
         public const double MinimumTokenEstimateMultiplier = 0.25;
         public const double MaximumTokenEstimateMultiplier = 4.0;
@@ -223,6 +225,8 @@ namespace RNAssistant.Core.Models
         public Dictionary<string, bool?> ModelAudioSupportOverrides { get; set; }
         public Dictionary<string, ModelCapabilitySettings> ModelCapabilities { get; set; }
         public List<string> AttachmentModelPriority { get; set; }
+        public int AttachmentHelperMaxTokens { get; set; }
+        public int AttachmentEvidenceMaxTokens { get; set; }
         public Dictionary<string, TokenEstimateCalibrationSettings> TokenEstimateCalibrations { get; set; }
         public List<string> HtmlNetworkAllowedOrigins { get; set; }
 
@@ -318,6 +322,8 @@ namespace RNAssistant.Core.Models
             ModelAudioSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
             ModelCapabilities = new Dictionary<string, ModelCapabilitySettings>(StringComparer.OrdinalIgnoreCase);
             AttachmentModelPriority = new List<string>();
+            AttachmentHelperMaxTokens = DefaultAttachmentHelperMaxTokens;
+            AttachmentEvidenceMaxTokens = DefaultAttachmentEvidenceMaxTokens;
             TokenEstimateCalibrations = new Dictionary<string, TokenEstimateCalibrationSettings>(StringComparer.OrdinalIgnoreCase);
             HtmlNetworkAllowedOrigins = new List<string>();
         }

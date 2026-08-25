@@ -78,6 +78,7 @@ namespace RNAssistant.Core.Models
         public string ToolResultRole { get; set; }
         public List<RNAssistant.Core.Llm.LlmToolCall> ToolCalls { get; set; }
         public List<ChatAttachment> Attachments { get; set; }
+        public AttachmentAnalysisContext AttachmentAnalysis { get; set; }
         public List<string> ArtifactIds { get; set; }
         public string HtmlWorkspaceCheckpointId { get; set; }
         public ChatActivity Activity { get; set; }
@@ -99,6 +100,26 @@ namespace RNAssistant.Core.Models
             Attachments = new List<ChatAttachment>();
             ToolCalls = new List<RNAssistant.Core.Llm.LlmToolCall>();
             ArtifactIds = new List<string>();
+        }
+    }
+
+    public sealed class AttachmentAnalysisContext
+    {
+        public const int CurrentPromptVersion = 1;
+
+        public int PromptVersion { get; set; }
+        public string SourceFingerprint { get; set; }
+        public string Content { get; set; }
+        public List<string> Models { get; set; }
+        public List<string> AttachmentIds { get; set; }
+        public DateTime CreatedUtc { get; set; }
+
+        public AttachmentAnalysisContext()
+        {
+            PromptVersion = CurrentPromptVersion;
+            Models = new List<string>();
+            AttachmentIds = new List<string>();
+            CreatedUtc = DateTime.UtcNow;
         }
     }
 

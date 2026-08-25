@@ -621,11 +621,13 @@
                   <div class="model-capability-heading">
                     <div>
                       <h3 id="attachmentModelPriorityTitle">Маршрутизация вложений</h3>
-                      <p>Для изображений, сканов и аудио выбирается первая совместимая модель сверху вниз. Модель чата при этом не меняется.</p>
+                      <p>Если модель чата сама поддерживает Vision/Audio, она получает media напрямую одним запросом. Для недостающих модальностей helper видит только текущий запрос и файлы.</p>
                     </div>
                   </div>
                   <div class="attachment-model-priority" id="attachmentModelPriorityList"></div>
                 </section>
+                <label><span>Ответ media-helper, токены (0 = авто)</span><input id="attachmentHelperMaxTokensInput" type="number" min="0" step="1"><small>Авто: до 1024 токенов на каждый пакет вложений. Для прямого мультимодального запроса helper не вызывается.</small></label>
+                <label><span>Media-контекст основной модели, токены (0 = авто)</span><input id="attachmentEvidenceMaxTokensInput" type="number" min="0" step="1"><small>Авто: до 20% входного бюджета, но не более 2048 токенов. Положительное значение задаёт собственный предел.</small></label>
                 <label><span>Макс. токены ответа</span><input id="maxTokensInput" type="number" min="1"></label>
                 <label><span>Таймаут запроса, сек</span><input id="requestTimeoutInput" type="number" min="30"></label>
                 <label><span>Temperature</span><input id="temperatureInput" type="number" min="0" max="2" step="0.1"></label>
@@ -911,7 +913,7 @@
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js?v=library-editor-20260824-1"></script>
   <script src="js/app-markdown.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-settings.js?v=screen-protection-20260824-1"></script>
+  <script src="js/app-settings.js?v=attachment-limits-20260825-1"></script>
   <script src="js/app-logs.js?v=log-filters-20260824-1"></script>
   <script src="js/app-diagnostics.js?v=cas-health-20260825-1"></script>
   <script src="js/app-trajectory.js?v=trajectory-export-20260825-1"></script>

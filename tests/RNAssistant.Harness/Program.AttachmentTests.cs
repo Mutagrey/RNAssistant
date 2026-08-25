@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
@@ -88,7 +90,9 @@ namespace RNAssistant.Harness
                 session,
                 new[] { new ChatAttachment { Kind = "image", FileName = "clipboard.png" } });
             AssertEqual("vision-first", routed.SelectedModel, "priority vision model");
-            AssertEqual("vision-first", routed.Settings.Model, "request copy model");
+            AssertEqual("text-only", routed.Settings.Model, "primary request keeps chat model");
+            AssertEqual("vision-first", routed.Routes[0].Model, "helper route model");
+            AssertEqual(0, routed.PrimaryAttachments.Count, "primary request excludes analyzed image");
             AssertEqual("text-only", session.Model, "session model unchanged");
             AssertEqual("global-text", settings.Model, "stored settings unchanged");
             routed.Settings.ModelCapabilities["text-only"].SupportsImages = true;
@@ -115,6 +119,7 @@ namespace RNAssistant.Harness
                 new ChatAttachment { Kind = "pdf", PageCount = 1, PageTextLengths = new List<int> { 100 } }
             });
             AssertEqual("text-only", textPdf.SelectedModel, "text pdf stays on base model");
+            AssertEqual(1, textPdf.PrimaryAttachments.Count, "text pdf stays in primary request");
 
             var scanPdf = AttachmentModelRoutingService.Select(settings, session, new[]
             {
@@ -133,23 +138,242 @@ namespace RNAssistant.Harness
                 new ChatAttachment { Kind = "image" },
                 new ChatAttachment { Kind = "audio" }
             });
-            AssertEqual("both", mixed.SelectedModel, "mixed request requires both capabilities");
+            AssertEqual("vision + audio", mixed.SelectedModel, "mixed media uses independent helpers");
+            AssertEqual(2, mixed.Routes.Count, "mixed media creates two helper routes");
+            AssertEqual(0, mixed.PrimaryAttachments.Count, "mixed media is excluded from primary request");
 
             settings.AttachmentModelPriority.Remove("both");
-            var rejected = false;
-            try
+            var specialized = AttachmentModelRoutingService.Select(settings, session, new[]
             {
-                AttachmentModelRoutingService.Select(settings, session, new[]
+                new ChatAttachment { Kind = "image" },
+                new ChatAttachment { Kind = "audio" }
+            });
+            AssertEqual(2, specialized.Routes.Count, "separate helpers do not require a combined model");
+        }
+
+        private static async Task AttachmentAnalysisIsolatesMedia()
+        {
+            var settings = new AppSettings
+            {
+                Model = "primary",
+                MaxTokens = 3000,
+                AttachmentHelperMaxTokens = 123,
+                AttachmentEvidenceMaxTokens = 64
+            };
+            settings.ModelCapabilities["primary"] = new ModelCapabilitySettings
+            {
+                SupportsImages = false,
+                SupportsAudio = false,
+                MaxContextTokens = 32768
+            };
+            settings.ModelCapabilities["vision"] = new ModelCapabilitySettings
+            {
+                SupportsImages = true,
+                SupportsAudio = false,
+                MaxContextTokens = 16384,
+                MaxImagesPerPrompt = 2
+            };
+            settings.AttachmentModelPriority.Add("vision");
+            var attachment = new ChatAttachment
+            {
+                Id = "image_1",
+                Kind = "image",
+                FileName = "chart.png",
+                ContentType = "image/png",
+                Size = 10,
+                ContentSha256 = new string('a', 64),
+                ContentByteLength = 10
+            };
+            var session = new ChatSession { Model = "primary" };
+            session.Messages.Add(new ChatMessage { Role = "assistant", Content = "HISTORY_MUST_NOT_REACH_VISION" });
+            var sourceMessage = new ChatMessage
+            {
+                Role = "user",
+                Content = "What trend is visible?",
+                Attachments = new List<ChatAttachment> { attachment }
+            };
+            session.Messages.Add(sourceMessage);
+            var routing = AttachmentModelRoutingService.Select(settings, session, sourceMessage.Attachments);
+            var calls = 0;
+            AppSettings helperSettings = null;
+            List<ChatMessage> helperMessages = null;
+            var service = new AttachmentAnalysisService((requestSettings, messages, options, stream, cancellationToken) =>
+            {
+                calls += 1;
+                helperSettings = requestSettings;
+                helperMessages = messages.ToList();
+                return Task.FromResult(new LlmCompletionResult
                 {
-                    new ChatAttachment { Kind = "image" },
-                    new ChatAttachment { Kind = "audio" }
+                    Content = "Summary\nThe chart rises from left to right.\n" + new string('x', 2000)
                 });
-            }
-            catch (InvalidOperationException ex)
+            });
+
+            var analysis = await service.EnsureAsync(
+                sourceMessage.Content,
+                session,
+                sourceMessage,
+                routing,
+                null,
+                CancellationToken.None);
+
+            AssertEqual("vision", helperSettings.Model, "helper uses vision model");
+            AssertEqual(123, helperSettings.MaxTokens, "helper output limit comes from settings");
+            AssertEqual(2, helperMessages.Count, "helper receives only instruction and current request");
+            AssertTrue(helperMessages.All(message =>
+                (message.Content ?? string.Empty).IndexOf("HISTORY_MUST_NOT_REACH_VISION", StringComparison.Ordinal) < 0),
+                "helper excludes conversation history");
+            AssertEqual(1, helperMessages[1].Attachments.Count, "helper receives current image");
+            AssertContains(analysis.Content, "rises from left to right", "analysis stores bounded evidence");
+            AssertTrue(
+                ModelContextBudget.EstimateTextTokens(analysis.Content, settings) <= 64,
+                "primary evidence obeys configured limit");
+            AssertContains(
+                AttachmentAnalysisService.BuildPrimaryRequest(sourceMessage.Content, analysis),
+                "AUXILIARY_ATTACHMENT_EVIDENCE",
+                "primary request receives helper evidence");
+
+            var mediaRead = false;
+            var primaryPayload = new LlmMessageBuilder(delegate
             {
-                rejected = ex.Message.IndexOf("Vision и Audio", StringComparison.OrdinalIgnoreCase) >= 0;
-            }
-            AssertTrue(rejected, "mixed request rejected without combined model");
+                mediaRead = true;
+                return new byte[] { 1 };
+            }).Build(new[] { sourceMessage }, routing.Settings).Messages;
+            var primaryJson = JsonConvert.SerializeObject(primaryPayload);
+            AssertTrue(!mediaRead, "primary payload does not read analyzed media bytes");
+            AssertTrue(primaryJson.IndexOf("image_url", StringComparison.Ordinal) < 0,
+                "primary payload excludes raw image");
+            AssertContains(primaryJson, "AUXILIARY_ATTACHMENT_EVIDENCE", "primary payload contains evidence");
+
+            await service.EnsureAsync(
+                sourceMessage.Content,
+                session,
+                sourceMessage,
+                routing,
+                null,
+                CancellationToken.None);
+            AssertEqual(1, calls, "confirmation continuation reuses persisted analysis");
+        }
+
+        private static void AttachmentAnalysisLimitsAreConfigurable()
+        {
+            var settings = new AppSettings { Model = "primary", MaxTokens = 3000 };
+            settings.ModelCapabilities["primary"] = new ModelCapabilitySettings { MaxContextTokens = 32768 };
+            settings.ModelCapabilities["vision"] = new ModelCapabilitySettings { MaxOutputTokens = 128 };
+
+            AssertEqual(0, settings.AttachmentHelperMaxTokens, "helper default uses auto mode");
+            AssertEqual(0, settings.AttachmentEvidenceMaxTokens, "evidence default uses auto mode");
+            AssertEqual(128, AttachmentAnalysisService.ResolveHelperMaxTokens(settings, "vision"),
+                "automatic helper limit respects model output capability");
+            var expectedAutoEvidence = Math.Max(
+                256,
+                Math.Min(2048, ModelContextBudget.InputBudgetTokens(settings) / 5));
+            AssertEqual(expectedAutoEvidence, AttachmentAnalysisService.ResolveEvidenceMaxTokens(settings),
+                "automatic evidence limit keeps the safe context share");
+
+            settings.AttachmentHelperMaxTokens = 80;
+            settings.AttachmentEvidenceMaxTokens = 96;
+            AssertEqual(80, AttachmentAnalysisService.ResolveHelperMaxTokens(settings, "vision"),
+                "custom helper limit is used");
+            AssertEqual(96, AttachmentAnalysisService.ResolveEvidenceMaxTokens(settings),
+                "custom evidence limit is used");
+
+            settings.AttachmentEvidenceMaxTokens = int.MaxValue;
+            AssertEqual(ModelContextBudget.InputBudgetTokens(settings),
+                AttachmentAnalysisService.ResolveEvidenceMaxTokens(settings),
+                "custom evidence cannot exceed the primary input budget");
+        }
+
+        private static async Task MultimodalPrimaryBypassesHelper()
+        {
+            var settings = new AppSettings { Model = "omni" };
+            settings.ModelCapabilities["omni"] = new ModelCapabilitySettings
+            {
+                SupportsImages = true,
+                SupportsAudio = true,
+                MaxContextTokens = 32768,
+                MaxImagesPerPrompt = 5
+            };
+            settings.ModelCapabilities["vision-helper"] = new ModelCapabilitySettings
+            {
+                SupportsImages = true,
+                SupportsAudio = false
+            };
+            settings.AttachmentModelPriority.AddRange(new[] { "vision-helper", "omni" });
+            var image = new ChatAttachment
+            {
+                Id = "direct_image",
+                Kind = "image",
+                FileName = "direct.png",
+                ContentType = "image/png",
+                Size = 4
+            };
+            var audio = new ChatAttachment
+            {
+                Id = "direct_audio",
+                Kind = "audio",
+                FileName = "direct.wav",
+                ContentType = "audio/wav",
+                Size = 4
+            };
+            var session = new ChatSession { Model = "omni" };
+            session.Messages.Add(new ChatMessage { Role = "assistant", Content = "NORMAL_HISTORY" });
+            var sourceMessage = new ChatMessage
+            {
+                Role = "user",
+                Content = "Analyze both files",
+                Attachments = new List<ChatAttachment> { image, audio }
+            };
+            session.Messages.Add(sourceMessage);
+            var routing = AttachmentModelRoutingService.Select(settings, session, sourceMessage.Attachments);
+
+            AssertEqual("omni", routing.Settings.Model, "primary stays on multimodal model");
+            AssertEqual(0, routing.Routes.Count, "multimodal primary needs no helper route");
+            AssertTrue(!routing.NeedsHelperAnalysis, "helper pass is disabled");
+            AssertEqual(2, routing.PrimaryAttachments.Count, "raw current media stays in primary request");
+
+            var helperCalls = 0;
+            var service = new AttachmentAnalysisService((requestSettings, messages, options, stream, cancellationToken) =>
+            {
+                helperCalls += 1;
+                return Task.FromResult(new LlmCompletionResult { Content = "unexpected" });
+            });
+            var analysis = await service.EnsureAsync(
+                sourceMessage.Content,
+                session,
+                sourceMessage,
+                routing,
+                null,
+                CancellationToken.None);
+            AssertTrue(analysis == null, "no auxiliary evidence is created");
+            AssertEqual(0, helperCalls, "no duplicate model call");
+
+            var prompt = new ChatContextWindowBuilder().BuildPlainMessages(
+                sourceMessage.Content,
+                session,
+                null,
+                routing.Settings,
+                routing.PrimaryAttachments);
+            AssertTrue(prompt.Any(message =>
+                (message.Content ?? string.Empty).IndexOf("NORMAL_HISTORY", StringComparison.Ordinal) >= 0),
+                "normal conversation history remains in primary context");
+            var payload = new LlmMessageBuilder(delegate { return new byte[] { 1, 2, 3, 4 }; })
+                .Build(prompt, routing.Settings).Messages;
+            var json = JsonConvert.SerializeObject(payload);
+            AssertContains(json, "\"type\":\"image_url\"", "multimodal primary receives image");
+            AssertContains(json, "\"type\":\"input_audio\"", "multimodal primary receives audio");
+
+            settings.ModelCapabilities["omni"].SupportsAudio = false;
+            settings.ModelCapabilities["audio-helper"] = new ModelCapabilitySettings
+            {
+                SupportsImages = false,
+                SupportsAudio = true
+            };
+            settings.AttachmentModelPriority.Insert(0, "audio-helper");
+            var hybrid = AttachmentModelRoutingService.Select(settings, session, sourceMessage.Attachments);
+            AssertEqual(1, hybrid.Routes.Count, "only the missing modality uses a helper");
+            AssertEqual("audio", hybrid.Routes[0].Modality, "audio is routed to helper");
+            AssertEqual(1, hybrid.PrimaryAttachments.Count, "supported image remains in primary request");
+            AssertEqual(image.Id, hybrid.PrimaryAttachments[0].Id, "primary keeps the directly supported media");
         }
 
         private static void AttachmentAudioImportAndApiPayload()

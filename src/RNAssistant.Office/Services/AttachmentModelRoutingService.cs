@@ -6,6 +6,18 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Services
 {
+    internal sealed class AttachmentModelRoute
+    {
+        public string Model { get; set; }
+        public string Modality { get; set; }
+        public IReadOnlyList<ChatAttachment> Attachments { get; set; }
+
+        public AttachmentModelRoute()
+        {
+            Attachments = new ChatAttachment[0];
+        }
+    }
+
     internal sealed class AttachmentModelRoutingDecision
     {
         public AppSettings Settings { get; set; }
@@ -13,20 +25,37 @@ namespace RNAssistant.Office.Services
         public string SelectedModel { get; set; }
         public bool RequiresImages { get; set; }
         public bool RequiresAudio { get; set; }
+        public IReadOnlyList<AttachmentModelRoute> Routes { get; set; }
+        public IReadOnlyList<ChatAttachment> PrimaryAttachments { get; set; }
+
+        public AttachmentModelRoutingDecision()
+        {
+            Routes = new AttachmentModelRoute[0];
+            PrimaryAttachments = new ChatAttachment[0];
+        }
 
         public bool HasMedia
         {
             get { return RequiresImages || RequiresAudio; }
         }
 
+        public bool NeedsHelperAnalysis
+        {
+            get { return (Routes ?? new AttachmentModelRoute[0]).Any(route => route != null); }
+        }
+
         public string ProgressMessage
         {
             get
             {
-                var modalities = new List<string>();
-                if (RequiresImages) modalities.Add("Vision");
-                if (RequiresAudio) modalities.Add("Audio");
-                return string.Join(" + ", modalities.ToArray()) + " → " + SelectedModel;
+                var routes = (Routes ?? new AttachmentModelRoute[0])
+                    .Where(route => route != null)
+                    .Select(route =>
+                        (string.Equals(route.Modality, "vision", StringComparison.OrdinalIgnoreCase) ? "Vision" : "Audio") +
+                        " → " + route.Model)
+                    .ToList();
+                routes.Add("основная → " + BaseModel);
+                return string.Join("; ", routes.ToArray());
             }
         }
     }
@@ -46,66 +75,69 @@ namespace RNAssistant.Office.Services
                 : session.Model.Trim();
             settings.Model = baseModel;
 
-            var requiresImages = (attachments ?? new ChatAttachment[0]).Any(RequiresVision);
-            var requiresAudio = (attachments ?? new ChatAttachment[0]).Any(attachment =>
-                attachment != null && string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase));
-            var decision = new AttachmentModelRoutingDecision
+            var allAttachments = (attachments ?? new ChatAttachment[0])
+                .Where(attachment => attachment != null)
+                .ToList();
+            var visionAttachments = allAttachments.Where(RequiresVision).ToList();
+            var audioAttachments = allAttachments.Where(attachment =>
+                string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase)).ToList();
+            var routes = new List<AttachmentModelRoute>();
+            if (visionAttachments.Count > 0)
             {
-                Settings = settings,
-                BaseModel = baseModel,
-                SelectedModel = baseModel,
-                RequiresImages = requiresImages,
-                RequiresAudio = requiresAudio
-            };
-            if (!decision.HasMedia)
+                var visionModel = SelectModel(settings, baseModel, "Vision", model =>
+                    ModelContextBudget.ImageSupport(settings, model) == true);
+                if (!string.Equals(visionModel, baseModel, StringComparison.OrdinalIgnoreCase))
+                {
+                    routes.Add(new AttachmentModelRoute
+                    {
+                        Model = visionModel,
+                        Modality = "vision",
+                        Attachments = visionAttachments
+                    });
+                }
+            }
+            if (audioAttachments.Count > 0)
             {
-                return decision;
+                var audioModel = SelectModel(settings, baseModel, "Audio", model =>
+                    ModelContextBudget.AudioSupport(settings, model) == true);
+                if (!string.Equals(audioModel, baseModel, StringComparison.OrdinalIgnoreCase))
+                {
+                    routes.Add(new AttachmentModelRoute
+                    {
+                        Model = audioModel,
+                        Modality = "audio",
+                        Attachments = audioAttachments
+                    });
+                }
             }
 
-            var priority = (settings.AttachmentModelPriority ?? new List<string>())
-                .Where(value => !string.IsNullOrWhiteSpace(value))
-                .Select(value => value.Trim())
+            var routedIds = new HashSet<string>(
+                routes.SelectMany(route => route.Attachments ?? new ChatAttachment[0])
+                    .Select(AttachmentIdentity),
+                StringComparer.OrdinalIgnoreCase);
+            var selectedModels = routes
+                .Select(route => route.Model)
+                .Where(model => !string.IsNullOrWhiteSpace(model))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            var selected = priority.FirstOrDefault(model =>
-                Supports(settings, model, requiresImages, requiresAudio));
-            if (string.IsNullOrWhiteSpace(selected) && priority.Count == 0 &&
-                Supports(settings, baseModel, requiresImages, requiresAudio))
+            return new AttachmentModelRoutingDecision
             {
-                selected = baseModel;
-            }
-            if (string.IsNullOrWhiteSpace(selected) && priority.Count == 0)
-            {
-                var candidates = KnownModels(settings)
-                    .Where(model => Supports(settings, model, requiresImages, requiresAudio))
-                    .ToList();
-                if (candidates.Count == 1)
-                {
-                    selected = candidates[0];
-                }
-                else if (candidates.Count > 1)
-                {
-                    throw new InvalidOperationException(
-                        "Для вложения подходят несколько моделей. Настройте их приоритет в разделе «Модель».");
-                }
-            }
-
-            if (string.IsNullOrWhiteSpace(selected))
-            {
-                var required = requiresImages && requiresAudio
-                    ? "Vision и Audio"
-                    : (requiresImages ? "Vision" : "Audio");
-                throw new InvalidOperationException(
-                    "Не настроена модель с поддержкой " + required +
-                    ". Проверьте возможности моделей и порядок маршрутизации.");
-            }
-
-            decision.SelectedModel = selected;
-            settings.Model = selected;
-            return decision;
+                // The primary turn always keeps the chat model. Media models are helpers only.
+                Settings = settings,
+                BaseModel = baseModel,
+                SelectedModel = selectedModels.Count == 0
+                    ? baseModel
+                    : string.Join(" + ", selectedModels.ToArray()),
+                RequiresImages = visionAttachments.Count > 0,
+                RequiresAudio = audioAttachments.Count > 0,
+                Routes = routes,
+                PrimaryAttachments = allAttachments
+                    .Where(attachment => !routedIds.Contains(AttachmentIdentity(attachment)))
+                    .ToList()
+            };
         }
 
-        private static bool RequiresVision(ChatAttachment attachment)
+        internal static bool RequiresVision(ChatAttachment attachment)
         {
             if (attachment == null) return false;
             if (string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase)) return true;
@@ -116,15 +148,50 @@ namespace RNAssistant.Office.Services
                 attachment.PageTextLengths.Any(length => length < UsablePdfPageTextLength);
         }
 
-        private static bool Supports(
-            AppSettings settings,
-            string model,
-            bool requiresImages,
-            bool requiresAudio)
+        internal static string AttachmentIdentity(ChatAttachment attachment)
         {
-            return !string.IsNullOrWhiteSpace(model) &&
-                (!requiresImages || ModelContextBudget.ImageSupport(settings, model) == true) &&
-                (!requiresAudio || ModelContextBudget.AudioSupport(settings, model) == true);
+            if (attachment == null) return string.Empty;
+            if (!string.IsNullOrWhiteSpace(attachment.Id)) return "id:" + attachment.Id;
+            if (!string.IsNullOrWhiteSpace(attachment.ContentSha256)) return "sha256:" + attachment.ContentSha256;
+            return "file:" + (attachment.FileName ?? string.Empty) + "|" + attachment.Size;
+        }
+
+        private static string SelectModel(
+            AppSettings settings,
+            string baseModel,
+            string requiredCapability,
+            Func<string, bool> supports)
+        {
+            if (!string.IsNullOrWhiteSpace(baseModel) && supports(baseModel))
+            {
+                return baseModel;
+            }
+            var priority = (settings.AttachmentModelPriority ?? new List<string>())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var selected = priority.FirstOrDefault(supports);
+            if (string.IsNullOrWhiteSpace(selected) && priority.Count == 0)
+            {
+                var candidates = KnownModels(settings).Where(supports).ToList();
+                if (candidates.Count == 1)
+                {
+                    selected = candidates[0];
+                }
+                else if (candidates.Count > 1)
+                {
+                    throw new InvalidOperationException(
+                        "Для вложения подходят несколько моделей. Настройте их приоритет в разделе «Модель».");
+                }
+            }
+            if (string.IsNullOrWhiteSpace(selected))
+            {
+                throw new InvalidOperationException(
+                    "Не настроена модель с поддержкой " + requiredCapability +
+                    ". Проверьте возможности моделей и порядок маршрутизации.");
+            }
+            return selected;
         }
 
         private static IEnumerable<string> KnownModels(AppSettings settings)

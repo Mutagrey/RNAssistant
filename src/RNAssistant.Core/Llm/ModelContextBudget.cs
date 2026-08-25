@@ -219,6 +219,7 @@ namespace RNAssistant.Core.Llm
             var source = (messages ?? new ChatMessage[0]).ToList();
             var hasMedia = source.Any(message => message != null &&
                 (message.Attachments ?? new List<ChatAttachment>()).Any(attachment => attachment != null &&
+                    !IsAnalyzedAttachment(message, attachment) &&
                     (string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) ||
                      string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase))));
             if (!hasMedia)
@@ -258,6 +259,10 @@ namespace RNAssistant.Core.Llm
         {
             if (message == null || message.ExcludeFromModelContext) return 0;
             var total = 4 + EstimateTextTokens(message.Role, settings, model) + EstimateTextTokens(message.Content, settings, model);
+            if (message.AttachmentAnalysis != null)
+            {
+                total += EstimateTextTokens(message.AttachmentAnalysis.Content, settings, model);
+            }
             if (message.ToolCalls != null && message.ToolCalls.Count > 0)
             {
                 total += 8;
@@ -273,9 +278,10 @@ namespace RNAssistant.Core.Llm
             foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
             {
                 if (attachment == null) continue;
-                if (string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase)) total += EstimatedImageTokens;
-                if (string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase)) total += EstimateAudioTokens(attachment.Size);
-                if (includeExtractedAttachments)
+                var analyzed = IsAnalyzedAttachment(message, attachment);
+                if (!analyzed && string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase)) total += EstimatedImageTokens;
+                if (!analyzed && string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase)) total += EstimateAudioTokens(attachment.Size);
+                if (includeExtractedAttachments && !analyzed)
                 {
                     total += EstimateCharacterCountTokens(
                         Math.Max(attachment.ExtractedCharCount, (attachment.ExtractedText ?? string.Empty).Length),
@@ -284,6 +290,14 @@ namespace RNAssistant.Core.Llm
                 }
             }
             return total;
+        }
+
+        private static bool IsAnalyzedAttachment(ChatMessage message, ChatAttachment attachment)
+        {
+            return message != null && attachment != null && !string.IsNullOrWhiteSpace(attachment.Id) &&
+                message.AttachmentAnalysis != null &&
+                (message.AttachmentAnalysis.AttachmentIds ?? new List<string>())
+                    .Contains(attachment.Id, StringComparer.OrdinalIgnoreCase);
         }
 
         public static int EstimateRequestOptionsTokens(LlmRequestOptions options)

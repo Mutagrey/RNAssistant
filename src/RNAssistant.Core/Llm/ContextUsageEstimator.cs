@@ -35,14 +35,19 @@ namespace RNAssistant.Core.Llm
                     }
 
                     usedChars += (message.Content ?? string.Empty).Length;
+                    usedChars += message.AttachmentAnalysis == null
+                        ? 0
+                        : (message.AttachmentAnalysis.Content ?? string.Empty).Length;
                     estimatedTokens += ModelContextBudget.EstimateMessageTokens(message, settings, null, false);
                     baseEstimatedTokens += ModelContextBudget.EstimateMessageTokens(message, null, null, false);
                     foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
                     {
                         if (attachment == null) continue;
+                        var analyzed = IsAnalyzedAttachment(message, attachment);
                         hasMedia = hasMedia ||
-                            string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase);
+                            !analyzed && (string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase));
+                        if (analyzed) continue;
                         usedChars += attachment.ExtractedCharCount > 0
                             ? attachment.ExtractedCharCount
                             : (attachment.ExtractedText ?? string.Empty).Length;
@@ -106,6 +111,9 @@ namespace RNAssistant.Core.Llm
                     }
 
                     usedChars += (message.Content ?? string.Empty).Length;
+                    usedChars += message.AttachmentAnalysis == null
+                        ? 0
+                        : (message.AttachmentAnalysis.Content ?? string.Empty).Length;
                     usedTokens += ModelContextBudget.EstimateMessageTokens(message, settings, null, false);
                     baseTokens += ModelContextBudget.EstimateMessageTokens(message, null, null, false);
                     foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
@@ -114,9 +122,11 @@ namespace RNAssistant.Core.Llm
                         {
                             continue;
                         }
+                        var analyzed = IsAnalyzedAttachment(message, attachment);
                         hasMedia = hasMedia ||
-                            string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase);
+                            !analyzed && (string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase));
+                        if (analyzed) continue;
                         var extractedChars = Math.Max(
                             attachment.ExtractedCharCount,
                             (attachment.ExtractedText ?? string.Empty).Length);
@@ -155,6 +165,14 @@ namespace RNAssistant.Core.Llm
                 ? TokenEstimateCalibration.AddPromptIntercept(settings, usedTokens)
                 : TokenEstimateCalibration.PredictPromptTokens(settings, baseTokens);
             return Usage(usedChars, usedTokens, limit, count, false, settings);
+        }
+
+        private static bool IsAnalyzedAttachment(ChatMessage message, ChatAttachment attachment)
+        {
+            return message != null && attachment != null && !string.IsNullOrWhiteSpace(attachment.Id) &&
+                message.AttachmentAnalysis != null &&
+                (message.AttachmentAnalysis.AttachmentIds ?? new List<string>())
+                    .Contains(attachment.Id, StringComparer.OrdinalIgnoreCase);
         }
 
         private static object Usage(int usedChars, int usedTokens, int limitTokens, int count, bool actual, AppSettings settings)

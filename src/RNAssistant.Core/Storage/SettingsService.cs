@@ -132,6 +132,8 @@ namespace RNAssistant.Core.Storage
                 settings.ModelCapabilities = new Dictionary<string, ModelCapabilitySettings>(StringComparer.OrdinalIgnoreCase);
             }
             settings.AttachmentModelPriority = NormalizeAttachmentModelPriority(settings);
+            settings.AttachmentHelperMaxTokens = Math.Max(0, settings.AttachmentHelperMaxTokens);
+            settings.AttachmentEvidenceMaxTokens = Math.Max(0, settings.AttachmentEvidenceMaxTokens);
             if (settings.TokenEstimateCalibrations == null)
             {
                 settings.TokenEstimateCalibrations = new Dictionary<string, TokenEstimateCalibrationSettings>(StringComparer.OrdinalIgnoreCase);

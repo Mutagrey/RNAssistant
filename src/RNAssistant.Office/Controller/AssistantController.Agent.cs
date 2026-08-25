@@ -153,6 +153,17 @@ namespace RNAssistant.Office
                     {
                         ReportProgress(runProgress, "routing", attachmentRouting.ProgressMessage);
                     }
+                    var latestUserMessage = (session.Messages ?? new List<ChatMessage>())
+                        .LastOrDefault(message => message != null && !message.ProtocolMessage &&
+                            string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase));
+                    await _attachmentAnalysisService.EnsureAsync(
+                        latestUserMessage == null ? string.Empty : latestUserMessage.Content,
+                        session,
+                        latestUserMessage,
+                        attachmentRouting,
+                        runProgress,
+                        runCancellation.Token).ConfigureAwait(false);
+                    continuationAttachments = attachmentRouting.PrimaryAttachments ?? new ChatAttachment[0];
                     var completion = await _agentRunService.ContinueAfterToolAsync(
                         CloneCommand(pending.Command),
                         result,
