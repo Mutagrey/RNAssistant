@@ -299,6 +299,69 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void HeaderReducerReplaysAppendedSuffix()
+        {
+            WithTempPaths(paths =>
+            {
+                var writer = new ChatStore(paths);
+                var session = writer.Create("Word", "header-reducer", "Header.docx", "Initial");
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "visible" });
+                session.Messages.Add(new ChatMessage
+                {
+                    Role = "assistant",
+                    Content = "protocol",
+                    ProtocolMessage = true
+                });
+                session.LastRun = new ChatRunRecord
+                {
+                    RunId = "run-header",
+                    RuntimeId = "runtime-header",
+                    Status = "completed",
+                    Phase = "final",
+                    StartedUtc = DateTime.UtcNow.AddMinutes(-1)
+                };
+                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "<h1>header</h1>", true);
+                writer.Save(session);
+                session.Artifacts.Single(item => item.Id == session.ActiveHtmlArtifactId).MetadataJson = "{}";
+                writer.Save(session);
+
+                var reader = new ChatStore(paths);
+                var header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
+                AssertEqual("Initial", header.Title, "minimal reducer retains session metadata");
+                AssertEqual(1, header.MessageCount, "minimal reducer excludes protocol messages");
+                AssertEqual("runtime-header", header.RunRuntimeId, "minimal reducer retains run header fields");
+                AssertEqual(1, header.HtmlFileCount, "invalid legacy metadata falls back to the active CAS body");
+                AssertEqual(1L, reader.HeaderFullReplayCount, "cold header read validates the complete stream once");
+                AssertEqual(0L, reader.ProjectionFullReplayCount, "header read does not build a full projection");
+
+                header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
+                AssertEqual(1L, reader.HeaderFullReplayCount, "unchanged header uses its byte-offset cache");
+
+                session.Title = "Appended";
+                session.Messages.RemoveAt(0);
+                session.Messages.Single().ProtocolMessage = false;
+                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "second visible" });
+                session.Messages.Reverse();
+                HtmlArtifactToolExecutor.UpsertDataSource(session, "rows", "{\"rows\":[1]}");
+                writer.Save(session);
+
+                header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
+                AssertEqual("Appended", header.Title, "suffix replay applies metadata operations");
+                AssertEqual(2, header.MessageCount, "suffix replay applies message upsert/remove/reorder operations");
+                AssertEqual(1, header.HtmlDataSourceCount, "suffix replay follows a new active HTML artifact");
+                AssertEqual(session.Revision, header.Revision, "header revision follows the validated stream tail");
+                AssertEqual(1L, reader.HeaderFullReplayCount, "append-only growth does not rescan the prefix");
+                AssertEqual(1L, reader.HeaderIncrementalReplayCount, "one appended header suffix was replayed");
+                AssertEqual(0L, reader.ProjectionFullReplayCount, "suffix header replay remains projection-free");
+
+                writer.AppendTrace(session, SessionEventTypes.AssistantChunk,
+                    new { chunkCount = 1 }, null, null, "run-header", "turn-header", "step-header");
+                header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
+                AssertEqual(session.Revision, header.Revision, "trace-only suffix advances the header revision");
+                AssertEqual(2L, reader.HeaderIncrementalReplayCount, "trace-only suffix also uses byte offsets");
+            });
+        }
+
         private static void TrajectoryQueryPaginatesAndFilters()
         {
             var events = new List<SessionEvent>

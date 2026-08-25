@@ -110,6 +110,7 @@ namespace RNAssistant.Harness
                 Test("storage: event log is canonical", SessionEventLogIsCanonical),
                 Test("storage: natural list changes omit reorder", NaturalListChangesOmitReorder),
                 Test("storage: headers use artifact metadata", ChatHeadersUseArtifactMetadata),
+                Test("storage: header reducer replays appended suffix", HeaderReducerReplaysAppendedSuffix),
                 Test("storage: trajectory query paginates and filters", TrajectoryQueryPaginatesAndFilters),
                 Test("storage: trajectory derived views retain sources and usage", TrajectoryDerivedViewsRetainSourcesAndUsage),
                 Test("storage: trajectory export redacts and verifies bundle", TrajectoryExportRedactsAndVerifiesBundle),

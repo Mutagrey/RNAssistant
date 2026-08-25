@@ -34,6 +34,9 @@ namespace RNAssistant.Core.Storage
         private const int MaxProjectionCacheEntries = 16;
         private const long MaxProjectionCacheCharacters = 4L * 1024 * 1024;
         private const long MaxProjectionCacheTotalCharacters = 16L * 1024 * 1024;
+        private const int MaxHeaderCacheEntries = 64;
+        private const long MaxHeaderCacheCharacters = 512L * 1024;
+        private const long MaxHeaderCacheTotalCharacters = 4L * 1024 * 1024;
         private static readonly object PersistenceSync = new object();
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false);
         private static readonly JsonSerializerSettings ProjectionJsonSettings = new JsonSerializerSettings
@@ -55,10 +58,17 @@ namespace RNAssistant.Core.Storage
         private readonly object _projectionCacheSync = new object();
         private readonly Dictionary<string, ProjectionCacheEntry> _projectionCache =
             new Dictionary<string, ProjectionCacheEntry>(StringComparer.OrdinalIgnoreCase);
+        private readonly object _headerCacheSync = new object();
+        private readonly Dictionary<string, HeaderCacheEntry> _headerCache =
+            new Dictionary<string, HeaderCacheEntry>(StringComparer.OrdinalIgnoreCase);
         private long _projectionCacheClock;
         private long _projectionCacheCharacters;
         private long _projectionFullReplayCount;
         private long _projectionIncrementalReplayCount;
+        private long _headerCacheClock;
+        private long _headerCacheCharacters;
+        private long _headerFullReplayCount;
+        private long _headerIncrementalReplayCount;
         private long _artifactCasExternalizationCount;
 
         internal long ProjectionFullReplayCount
@@ -69,6 +79,16 @@ namespace RNAssistant.Core.Storage
         internal long ProjectionIncrementalReplayCount
         {
             get { return Interlocked.Read(ref _projectionIncrementalReplayCount); }
+        }
+
+        internal long HeaderFullReplayCount
+        {
+            get { return Interlocked.Read(ref _headerFullReplayCount); }
+        }
+
+        internal long HeaderIncrementalReplayCount
+        {
+            get { return Interlocked.Read(ref _headerIncrementalReplayCount); }
         }
 
         internal long ArtifactCasExternalizationCount
@@ -526,6 +546,7 @@ namespace RNAssistant.Core.Storage
                             Directory.CreateDirectory(Path.GetDirectoryName(newPath));
                             File.Move(oldPath, newPath);
                             MoveProjectionCache(oldPath, newPath);
+                            MoveHeaderCache(oldPath, newPath);
                         }
                     }
                 }
@@ -593,6 +614,7 @@ namespace RNAssistant.Core.Storage
                     if (!File.Exists(path)) return false;
                     File.Delete(path);
                     RemoveProjectionCache(path);
+                    RemoveHeaderCache(path);
                 }
             }
             if (string.Equals(LoadActiveSessionId(host, documentKey), sessionId, StringComparison.OrdinalIgnoreCase))
@@ -613,6 +635,7 @@ namespace RNAssistant.Core.Storage
                     if (!Directory.Exists(directory)) return false;
                     Directory.Delete(directory, true);
                     ClearProjectionCache();
+                    ClearHeaderCache();
                 }
             }
             return true;
@@ -933,75 +956,20 @@ namespace RNAssistant.Core.Storage
         {
             try
             {
-                EventLogReadResult ignored;
-                var session = ReadProjectedSession(path, false, false, out ignored);
-                if (session == null) return null;
-                NormalizeSession(
-                    session,
-                    host ?? session.Host,
-                    documentKey ?? session.DocumentKey,
-                    documentTitle ?? session.DocumentTitle);
-
-                int fileCount;
-                int dataSourceCount;
-                if (!TryReadWorkspaceCounts(session, out fileCount, out dataSourceCount))
-                {
-                    session = ReadProjectedSession(path, false, true, out ignored);
-                    if (session == null) return null;
-                    NormalizeSession(
-                        session,
-                        host ?? session.Host,
-                        documentKey ?? session.DocumentKey,
-                        documentTitle ?? session.DocumentTitle);
-                    var workspace = session.HtmlWorkspace;
-                    fileCount = workspace == null || workspace.Files == null ? 0 : workspace.Files.Count;
-                    dataSourceCount = workspace == null || workspace.DataSources == null ? 0 : workspace.DataSources.Count;
-                }
-                return ChatSessionHeaderFactory.Create(session, fileCount, dataSourceCount);
+                var result = ReadHeader(path);
+                return result == null || result.Tail == null || result.Reducer == null
+                    ? null
+                    : result.Reducer.CreateHeader(
+                        _blobs,
+                        result.Tail.Sequence,
+                        host,
+                        documentKey,
+                        documentTitle);
             }
             catch (IOException) { return null; }
             catch (UnauthorizedAccessException) { return null; }
             catch (JsonException) { return null; }
             catch (ChatConcurrencyException) { return null; }
-        }
-
-        private static bool TryReadWorkspaceCounts(ChatSession session, out int fileCount, out int dataSourceCount)
-        {
-            fileCount = 0;
-            dataSourceCount = 0;
-            if (session == null || string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId)) return true;
-            var artifact = FindHtmlArtifact(session, session.ActiveHtmlArtifactId);
-            if (artifact == null) return true;
-            if (string.IsNullOrWhiteSpace(artifact.MetadataJson)) return false;
-            try
-            {
-                var metadata = JObject.Parse(artifact.MetadataJson);
-                var files = (int?)metadata["fileCount"];
-                var dataSources = (int?)metadata["dataSourceCount"];
-                if (!files.HasValue || !dataSources.HasValue || files.Value < 0 || dataSources.Value < 0)
-                {
-                    return false;
-                }
-                fileCount = files.Value;
-                dataSourceCount = dataSources.Value;
-                return true;
-            }
-            catch (JsonException)
-            {
-                return false;
-            }
-            catch (FormatException)
-            {
-                return false;
-            }
-            catch (OverflowException)
-            {
-                return false;
-            }
-            catch (InvalidCastException)
-            {
-                return false;
-            }
         }
 
         private ChatSession Project(EventLogReadResult log, bool hydrateActiveArtifacts)
@@ -1803,6 +1771,260 @@ namespace RNAssistant.Core.Storage
                 throw new ChatConcurrencyException("The chat event log contains invalid UTF-8.");
             }
             return result;
+        }
+
+        private HeaderReadResult ReadHeader(string path)
+        {
+            HeaderReadResult cached;
+            if (TryReadHeaderCache(path, out cached)) return cached;
+
+            var result = ReadHeaderLog(path, 0, null, new ChatHeaderReducer());
+            if (result != null && result.Tail != null)
+            {
+                Interlocked.Increment(ref _headerFullReplayCount);
+                if (CanCacheHeader(result)) StoreHeaderCache(path, result);
+            }
+            return result;
+        }
+
+        private HeaderReadResult ReadHeaderLog(
+            string path,
+            long startByteOffset,
+            SessionEvent previousEvent,
+            ChatHeaderReducer reducer)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
+            var result = new HeaderReadResult
+            {
+                Reducer = reducer ?? new ChatHeaderReducer(),
+                Tail = previousEvent,
+                TailNextByteOffset = startByteOffset
+            };
+            var protector = Protection();
+            var before = CaptureStorageFileState(path);
+            try
+            {
+                using (var reader = new JsonlByteReader(path, startByteOffset))
+                {
+                    result.ByteLength = reader.Length;
+                    JsonlByteLine line;
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        if (string.IsNullOrWhiteSpace(line.Text))
+                        {
+                            if (!line.Terminated) result.HasIncompleteTail = true;
+                            continue;
+                        }
+                        SessionEvent sessionEvent;
+                        try
+                        {
+                            sessionEvent = JsonConvert.DeserializeObject<SessionEvent>(line.Text);
+                        }
+                        catch (JsonException)
+                        {
+                            if (!line.Terminated && line.NextOffset == reader.Length)
+                            {
+                                result.HasIncompleteTail = true;
+                                break;
+                            }
+                            throw new ChatConcurrencyException("The chat event log contains an invalid record.");
+                        }
+                        ValidateEvent(previousEvent, sessionEvent, protector);
+                        HydrateEventData(sessionEvent, protector);
+                        sessionEvent.StorageByteOffset = line.Offset;
+                        result.Reducer.Apply(sessionEvent);
+                        result.Tail = sessionEvent;
+                        result.TailNextByteOffset = line.NextOffset;
+                        previousEvent = sessionEvent;
+                        if (!line.Terminated)
+                        {
+                            result.HasIncompleteTail = true;
+                            break;
+                        }
+                    }
+                }
+                var after = CaptureStorageFileState(path);
+                result.IsStableSnapshot = before != null && after != null &&
+                    before.ByteLength == result.ByteLength && after.ByteLength == result.ByteLength &&
+                    before.LastWriteUtcTicks == after.LastWriteUtcTicks;
+                result.LastWriteUtcTicks = result.IsStableSnapshot ? after.LastWriteUtcTicks : 0;
+            }
+            catch (DecoderFallbackException)
+            {
+                throw new ChatConcurrencyException("The chat event log contains invalid UTF-8.");
+            }
+            return result;
+        }
+
+        private static bool CanCacheHeader(HeaderReadResult result)
+        {
+            return result != null && result.Reducer != null && result.Reducer.IsValid &&
+                result.Tail != null && !result.HasIncompleteTail && result.IsStableSnapshot &&
+                result.TailNextByteOffset == result.ByteLength;
+        }
+
+        private bool TryReadHeaderCache(string path, out HeaderReadResult result)
+        {
+            result = null;
+            HeaderCacheEntry cached;
+            if (!TryGetHeaderCache(path, out cached)) return false;
+
+            var current = CaptureStorageFileState(path);
+            if (current == null || current.ByteLength < cached.ByteLength ||
+                current.ByteLength == cached.ByteLength && current.LastWriteUtcTicks != cached.LastWriteUtcTicks)
+            {
+                RemoveHeaderCache(path);
+                return false;
+            }
+
+            var boundary = ReadValidatedEventAtOffset(
+                path,
+                cached.SessionId,
+                cached.Sequence,
+                cached.HeadHash,
+                cached.TailByteOffset,
+                cached.ByteLength,
+                current.ByteLength);
+            if (boundary == null)
+            {
+                RemoveHeaderCache(path);
+                return false;
+            }
+
+            if (current.ByteLength == cached.ByteLength)
+            {
+                result = new HeaderReadResult
+                {
+                    Reducer = cached.Reducer,
+                    Tail = boundary,
+                    ByteLength = cached.ByteLength,
+                    LastWriteUtcTicks = cached.LastWriteUtcTicks,
+                    TailNextByteOffset = cached.ByteLength,
+                    IsStableSnapshot = true
+                };
+                return true;
+            }
+
+            HeaderReadResult suffix;
+            try
+            {
+                suffix = ReadHeaderLog(path, cached.ByteLength, boundary, cached.Reducer.Clone());
+            }
+            catch
+            {
+                RemoveHeaderCache(path);
+                throw;
+            }
+            if (suffix == null)
+            {
+                RemoveHeaderCache(path);
+                return false;
+            }
+
+            if (CanCacheHeader(suffix))
+            {
+                StoreHeaderCache(path, suffix);
+                Interlocked.Increment(ref _headerIncrementalReplayCount);
+            }
+            else
+            {
+                RemoveHeaderCache(path);
+            }
+            result = suffix;
+            return true;
+        }
+
+        private bool TryGetHeaderCache(string path, out HeaderCacheEntry entry)
+        {
+            entry = null;
+            var key = ProjectionCacheKey(path);
+            lock (_headerCacheSync)
+            {
+                if (!_headerCache.TryGetValue(key, out entry)) return false;
+                entry.LastAccess = ++_headerCacheClock;
+                return true;
+            }
+        }
+
+        private HeaderCacheEntry StoreHeaderCache(string path, HeaderReadResult result)
+        {
+            if (!CanCacheHeader(result)) return null;
+            var estimatedCharacters = result.Reducer.EstimatedCharacters;
+            var key = ProjectionCacheKey(path);
+            var entry = new HeaderCacheEntry
+            {
+                SessionId = result.Tail.SessionId,
+                Sequence = result.Tail.Sequence,
+                HeadHash = result.Tail.Hash,
+                TailByteOffset = result.Tail.StorageByteOffset,
+                ByteLength = result.ByteLength,
+                LastWriteUtcTicks = result.LastWriteUtcTicks,
+                Reducer = result.Reducer,
+                EstimatedCharacters = estimatedCharacters
+            };
+            lock (_headerCacheSync)
+            {
+                HeaderCacheEntry replaced;
+                if (_headerCache.TryGetValue(key, out replaced))
+                {
+                    _headerCacheCharacters -= replaced.EstimatedCharacters;
+                    _headerCache.Remove(key);
+                }
+                if (estimatedCharacters > MaxHeaderCacheCharacters) return entry;
+                entry.LastAccess = ++_headerCacheClock;
+                _headerCache[key] = entry;
+                _headerCacheCharacters += estimatedCharacters;
+                while (_headerCache.Count > MaxHeaderCacheEntries ||
+                    _headerCacheCharacters > MaxHeaderCacheTotalCharacters)
+                {
+                    var oldest = _headerCache.OrderBy(item => item.Value.LastAccess).First();
+                    _headerCacheCharacters -= oldest.Value.EstimatedCharacters;
+                    _headerCache.Remove(oldest.Key);
+                }
+            }
+            return entry;
+        }
+
+        private void RemoveHeaderCache(string path)
+        {
+            var key = ProjectionCacheKey(path);
+            lock (_headerCacheSync)
+            {
+                HeaderCacheEntry removed;
+                if (!_headerCache.TryGetValue(key, out removed)) return;
+                _headerCacheCharacters -= removed.EstimatedCharacters;
+                _headerCache.Remove(key);
+            }
+        }
+
+        private void ClearHeaderCache()
+        {
+            lock (_headerCacheSync)
+            {
+                _headerCache.Clear();
+                _headerCacheCharacters = 0;
+            }
+        }
+
+        private void MoveHeaderCache(string oldPath, string newPath)
+        {
+            var oldKey = ProjectionCacheKey(oldPath);
+            var newKey = ProjectionCacheKey(newPath);
+            lock (_headerCacheSync)
+            {
+                HeaderCacheEntry entry;
+                if (!_headerCache.TryGetValue(oldKey, out entry)) return;
+                HeaderCacheEntry replaced;
+                if (!string.Equals(oldKey, newKey, StringComparison.OrdinalIgnoreCase) &&
+                    _headerCache.TryGetValue(newKey, out replaced))
+                {
+                    _headerCacheCharacters -= replaced.EstimatedCharacters;
+                    _headerCache.Remove(newKey);
+                }
+                _headerCache.Remove(oldKey);
+                entry.LastAccess = ++_headerCacheClock;
+                _headerCache[newKey] = entry;
+            }
         }
 
         private SessionEvent ReadValidatedTail(
@@ -2647,6 +2869,30 @@ namespace RNAssistant.Core.Storage
         {
             public long ByteLength { get; set; }
             public long LastWriteUtcTicks { get; set; }
+        }
+
+        private sealed class HeaderReadResult
+        {
+            public ChatHeaderReducer Reducer { get; set; }
+            public SessionEvent Tail { get; set; }
+            public bool HasIncompleteTail { get; set; }
+            public bool IsStableSnapshot { get; set; }
+            public long ByteLength { get; set; }
+            public long LastWriteUtcTicks { get; set; }
+            public long TailNextByteOffset { get; set; }
+        }
+
+        private sealed class HeaderCacheEntry
+        {
+            public string SessionId { get; set; }
+            public long Sequence { get; set; }
+            public string HeadHash { get; set; }
+            public long TailByteOffset { get; set; }
+            public long ByteLength { get; set; }
+            public long LastWriteUtcTicks { get; set; }
+            public ChatHeaderReducer Reducer { get; set; }
+            public long EstimatedCharacters { get; set; }
+            public long LastAccess { get; set; }
         }
 
         private sealed class ProjectionCacheEntry
