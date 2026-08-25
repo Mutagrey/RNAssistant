@@ -279,6 +279,8 @@ namespace RNAssistant.Core.Storage
                         session.StorageTailByteOffset,
                         pending,
                         null);
+                    AdvanceHeaderCache(path, session.Id, session.Revision, session.StorageHeadHash,
+                        session.StorageByteLength, appended);
                     AdvanceProjectionCache(path, session.Id, session.Revision, session.StorageHeadHash,
                         session.StorageByteLength, appended);
                     var tail = appended[appended.Count - 1];
@@ -333,6 +335,8 @@ namespace RNAssistant.Core.Storage
                             session.StorageTailByteOffset,
                             pending,
                             log);
+                        AdvanceHeaderCache(path, session.Id, session.Revision, session.StorageHeadHash,
+                            session.StorageByteLength, appended);
                         AdvanceProjectionCache(path, session.Id, session.Revision, session.StorageHeadHash,
                             session.StorageByteLength, appended);
                         var tail = appended[appended.Count - 1];
@@ -849,6 +853,13 @@ namespace RNAssistant.Core.Storage
                     stored == null ? 0 : stored.StorageTailByteOffset,
                     pending,
                     log);
+                AdvanceHeaderCache(
+                    path,
+                    session.Id,
+                    storedRevision,
+                    stored == null ? null : stored.StorageHeadHash,
+                    stored == null ? 0 : stored.StorageByteLength,
+                    appended);
                 var tail = appended[appended.Count - 1];
                 durableRevision = tail.Sequence;
                 session.Revision = durableRevision;
@@ -1422,7 +1433,6 @@ namespace RNAssistant.Core.Storage
                 ParentArtifactId = current == null ? null : current.Id,
                 Revision = current == null ? 1 : Math.Max(1, current.Revision + 1),
                 InlineText = SerializeWorkspaceState(snapshot),
-                ModelContextPolicy = "reference",
                 MetadataJson = JsonConvert.SerializeObject(new
                 {
                     activeFileId = snapshot.ActiveFileId,
@@ -1459,8 +1469,7 @@ namespace RNAssistant.Core.Storage
                     RunId = message.RunId,
                     ParentArtifactId = linked == null ? null : linked.Id,
                     Revision = linked == null ? 1 : Math.Max(1, linked.Revision + 1),
-                    InlineText = normalized,
-                    ModelContextPolicy = "reference"
+                    InlineText = normalized
                 };
                 session.Artifacts.Add(artifact);
                 if (linked != null) message.ArtifactIds.RemoveAll(id =>
@@ -1913,8 +1922,8 @@ namespace RNAssistant.Core.Storage
             if (!TryGetHeaderCache(path, out cached)) return false;
 
             var current = CaptureStorageFileState(path);
-            if (current == null || current.ByteLength < cached.ByteLength ||
-                current.ByteLength == cached.ByteLength && current.LastWriteUtcTicks != cached.LastWriteUtcTicks)
+            if (current == null || current.ByteLength != cached.ByteLength ||
+                current.LastWriteUtcTicks != cached.LastWriteUtcTicks)
             {
                 RemoveHeaderCache(path);
                 return false;
@@ -1934,46 +1943,15 @@ namespace RNAssistant.Core.Storage
                 return false;
             }
 
-            if (current.ByteLength == cached.ByteLength)
+            result = new HeaderReadResult
             {
-                result = new HeaderReadResult
-                {
-                    Reducer = cached.Reducer,
-                    Tail = boundary,
-                    ByteLength = cached.ByteLength,
-                    LastWriteUtcTicks = cached.LastWriteUtcTicks,
-                    TailNextByteOffset = cached.ByteLength,
-                    IsStableSnapshot = true
-                };
-                return true;
-            }
-
-            HeaderReadResult suffix;
-            try
-            {
-                suffix = ReadHeaderLog(path, cached.ByteLength, boundary, cached.Reducer.Clone());
-            }
-            catch
-            {
-                RemoveHeaderCache(path);
-                throw;
-            }
-            if (suffix == null)
-            {
-                RemoveHeaderCache(path);
-                return false;
-            }
-
-            if (CanCacheHeader(suffix))
-            {
-                StoreHeaderCache(path, suffix);
-                Interlocked.Increment(ref _headerIncrementalReplayCount);
-            }
-            else
-            {
-                RemoveHeaderCache(path);
-            }
-            result = suffix;
+                Reducer = cached.Reducer,
+                Tail = boundary,
+                ByteLength = cached.ByteLength,
+                LastWriteUtcTicks = cached.LastWriteUtcTicks,
+                TailNextByteOffset = cached.ByteLength,
+                IsStableSnapshot = true
+            };
             return true;
         }
 
@@ -2068,6 +2046,51 @@ namespace RNAssistant.Core.Storage
                 entry.LastAccess = ++_headerCacheClock;
                 _headerCache[newKey] = entry;
             }
+        }
+
+        private void AdvanceHeaderCache(
+            string path,
+            string sessionId,
+            long expectedRevision,
+            string expectedHeadHash,
+            long expectedByteLength,
+            IReadOnlyList<SessionEvent> appended)
+        {
+            if (appended == null || appended.Count == 0) return;
+            HeaderCacheEntry cached;
+            if (!TryGetHeaderCache(path, out cached) ||
+                cached.Sequence != expectedRevision || cached.ByteLength != expectedByteLength ||
+                !string.Equals(cached.SessionId, sessionId, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(cached.HeadHash, expectedHeadHash, StringComparison.OrdinalIgnoreCase)) return;
+
+            var previous = new SessionEvent
+            {
+                SessionId = cached.SessionId,
+                Sequence = cached.Sequence,
+                Hash = cached.HeadHash,
+                StorageByteOffset = cached.TailByteOffset
+            };
+            HeaderReadResult suffix;
+            try
+            {
+                suffix = ReadHeaderLog(path, cached.ByteLength, previous, cached.Reducer.Clone());
+            }
+            catch
+            {
+                RemoveHeaderCache(path);
+                return;
+            }
+
+            var expectedTail = appended[appended.Count - 1];
+            if (!CanCacheHeader(suffix) || suffix.Tail == null ||
+                suffix.Tail.Sequence != expectedTail.Sequence ||
+                !string.Equals(suffix.Tail.Hash, expectedTail.Hash, StringComparison.OrdinalIgnoreCase))
+            {
+                RemoveHeaderCache(path);
+                return;
+            }
+            StoreHeaderCache(path, suffix);
+            Interlocked.Increment(ref _headerIncrementalReplayCount);
         }
 
         private SessionEvent ReadValidatedTail(
@@ -2183,8 +2206,7 @@ namespace RNAssistant.Core.Storage
             if (!TryGetProjectionCache(path, out cached)) return false;
 
             var current = CaptureStorageFileState(path);
-            if (current == null || current.ByteLength < cached.ByteLength ||
-                current.ByteLength == cached.ByteLength &&
+            if (current == null || current.ByteLength != cached.ByteLength ||
                 current.LastWriteUtcTicks != cached.LastWriteUtcTicks)
             {
                 RemoveProjectionCache(path);
@@ -2205,41 +2227,8 @@ namespace RNAssistant.Core.Storage
                 return false;
             }
 
-            if (current.ByteLength == cached.ByteLength)
-            {
-                result = cached;
-                return true;
-            }
-
-            EventLogReadResult suffix;
-            try
-            {
-                suffix = ReadEventLog(path, cached.ByteLength, boundary);
-            }
-            catch
-            {
-                RemoveProjectionCache(path);
-                throw;
-            }
-            if (!CanCacheProjection(suffix))
-            {
-                RemoveProjectionCache(path);
-                return false;
-            }
-
-            var root = suffix.Events.Any(IsProjectionEvent)
-                ? ReplayProjectionRoot(suffix.Events, cached.Root)
-                : cached.Root;
-            if (root == null)
-            {
-                RemoveProjectionCache(path);
-                return false;
-            }
-            var tail = LastEvent(suffix);
-            result = StoreProjectionCache(path, root, tail.SessionId, tail.Sequence, tail.Hash,
-                tail.StorageByteOffset, suffix.ByteLength, suffix.LastWriteUtcTicks);
-            Interlocked.Increment(ref _projectionIncrementalReplayCount);
-            return result != null;
+            result = cached;
+            return true;
         }
 
         private static bool IsProjectionEvent(SessionEvent sessionEvent)
@@ -2377,6 +2366,7 @@ namespace RNAssistant.Core.Storage
             }
             StoreProjectionCache(path, root, tail.SessionId, tail.Sequence, tail.Hash,
                 tail.StorageByteOffset, state.ByteLength, state.LastWriteUtcTicks);
+            Interlocked.Increment(ref _projectionIncrementalReplayCount);
         }
 
         private void RemoveProjectionCache(string path)

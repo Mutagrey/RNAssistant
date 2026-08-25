@@ -125,7 +125,9 @@ namespace RNAssistant.Core.Tools
         private static bool LooksLikeUnexecutedAction(string message)
         {
             var value = (message ?? string.Empty).Trim();
-            if (value.Length == 0 || value.Length > 240 || value.IndexOf('?') >= 0 || value.IndexOf(':') >= 0) return false;
+            if (value.Length == 0 || value.Length > 240 || value.IndexOf('?') >= 0 ||
+                value.IndexOf(':') >= 0 || value.IndexOf(';') >= 0 || value.IndexOf('—') >= 0 ||
+                value.IndexOf('\n') >= 0 || value.IndexOf(". ", StringComparison.Ordinal) >= 0) return false;
             var lower = value.ToLowerInvariant();
             var terminalMarkers = new[]
             {
@@ -134,6 +136,18 @@ namespace RNAssistant.Core.Tools
                 "done", "completed", "created", "updated", "fixed", "cannot", "can't", "unable"
             };
             if (terminalMarkers.Any(marker => lower.IndexOf(marker, StringComparison.Ordinal) >= 0)) return false;
+
+            var ellipsis = value.EndsWith("...", StringComparison.Ordinal) ||
+                value.EndsWith("…", StringComparison.Ordinal);
+            var explicitIntent = Regex.IsMatch(
+                    value,
+                    "^(?:сейчас\\s+(?:создаю|обновляю|исправляю|проверяю|читаю|добавляю|удаляю|переименовываю|применяю|запускаю|выполняю|привязываю|сохраняю|редактирую|анализирую|пробую)|создам|обновлю|исправлю|проверю|прочитаю|добавлю|удалю|переименую|применю|запущу|выполню|привяжу|сохраню|отредактирую|проанализирую|попробую|начинаю|приступаю)(?:\\b|\\s|[.…])",
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) ||
+                Regex.IsMatch(
+                    value,
+                    "^(?:now\\s+(?:creating|updating|fixing|checking|reading|adding|deleting|renaming|applying|running|executing|binding|saving|editing|analyzing|trying|starting|working\\s+on)|(?:let\\s+me|i(?:'|’)ll|i\\s+will)\\s+(?:create|update|fix|check|read|inspect|add|delete|rename|apply|run|execute|bind|save|edit|analyze|try|start|write|build))(?:\\b|\\s|[.…])",
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (!ellipsis && !explicitIntent) return false;
 
             return Regex.IsMatch(
                        value,

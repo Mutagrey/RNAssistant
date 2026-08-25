@@ -272,7 +272,6 @@ namespace RNAssistant.Office.Services
                 InlineText = artifact.InlineText,
                 ContentSha256 = artifact.ContentSha256,
                 ContentByteLength = artifact.ContentByteLength,
-                ModelContextPolicy = artifact.ModelContextPolicy,
                 MetadataJson = artifact.MetadataJson,
                 RelatedArtifactIds = artifact.RelatedArtifactIds == null ? new List<string>() : new List<string>(artifact.RelatedArtifactIds),
                 CreatedUtc = artifact.CreatedUtc

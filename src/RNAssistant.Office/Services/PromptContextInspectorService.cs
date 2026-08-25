@@ -832,8 +832,7 @@ namespace RNAssistant.Office.Services
                     Subtitle = string.Join(" · ", new[]
                     {
                         artifact.Kind,
-                        "rev. " + Math.Max(1, artifact.Revision),
-                        artifact.ModelContextPolicy ?? "reference"
+                        "rev. " + Math.Max(1, artifact.Revision)
                     }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray()),
                     Tokens = EstimateTextTokens(line),
                     Characters = (artifact.InlineText ?? string.Empty).Length,

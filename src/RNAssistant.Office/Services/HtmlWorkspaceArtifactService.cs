@@ -49,7 +49,6 @@ namespace RNAssistant.Office.Services
                 ParentArtifactId = current == null ? null : current.Id,
                 Revision = current == null ? 1 : Math.Max(1, current.Revision + 1),
                 InlineText = stateJson,
-                ModelContextPolicy = "reference",
                 MetadataJson = JsonConvert.SerializeObject(new
                 {
                     activeFileId = snapshot.ActiveFileId,

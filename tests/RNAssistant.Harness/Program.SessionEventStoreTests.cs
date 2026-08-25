@@ -63,7 +63,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void ProjectionCacheReplaysAppendedSuffix()
+        private static void ProjectionCacheTrustsOnlyOwnedAppends()
         {
             WithTempPaths(paths =>
             {
@@ -91,26 +91,69 @@ namespace RNAssistant.Harness
 
                 var refreshed = reader.Load(created.Id);
                 AssertEqual("External append", refreshed.Title, "new commit replays from the cached byte boundary");
-                AssertEqual(1L, reader.ProjectionFullReplayCount, "append-only growth does not rescan the prefix");
-                AssertEqual(1L, reader.ProjectionIncrementalReplayCount, "one appended suffix was replayed");
+                AssertEqual(2L, reader.ProjectionFullReplayCount,
+                    "growth from another store fully validates the durable prefix");
+                AssertEqual(0L, reader.ProjectionIncrementalReplayCount,
+                    "unowned growth is never accepted as a trusted suffix");
 
-                external.AppendTrace(externalSession, SessionEventTypes.AssistantChunk,
+                reader.AppendTrace(refreshed, SessionEventTypes.AssistantChunk,
                     new { chunkCount = 1 }, null, null, "run-cache", "turn-cache", "step-cache");
                 refreshed = reader.Load(created.Id);
-                AssertEqual("External append", refreshed.Title, "trace-only suffix leaves canonical state unchanged");
-                AssertEqual(externalSession.Revision, refreshed.Revision, "trace-only suffix advances stream revision");
-                AssertEqual(2L, reader.ProjectionIncrementalReplayCount, "trace-only suffix also uses incremental replay");
+                AssertEqual("External append", refreshed.Title, "owned trace append leaves canonical state unchanged");
+                AssertEqual(1L, reader.ProjectionIncrementalReplayCount,
+                    "owned trace append advances the verified cache directly");
+                AssertEqual(2L, reader.ProjectionFullReplayCount,
+                    "owned append does not rescan the prefix");
 
                 refreshed.Title = "Saved after trace";
                 reader.Save(refreshed);
-                AssertEqual(1L, reader.ProjectionFullReplayCount,
+                AssertEqual(2L, reader.ProjectionFullReplayCount,
                     "save after incremental trace replay still uses the verified baseline");
 
                 var path = SessionEventFile(paths, refreshed);
                 File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(-10));
                 AssertEqual("Saved after trace", reader.Load(created.Id).Title,
                     "metadata rewrite falls back to a complete verified replay");
-                AssertEqual(2L, reader.ProjectionFullReplayCount, "non-append change invalidates the cache");
+                AssertEqual(3L, reader.ProjectionFullReplayCount, "non-append change invalidates the cache");
+            });
+        }
+
+        private static void CacheRejectsTamperedPrefixBeforeSuffix()
+        {
+            WithTempPaths(paths =>
+            {
+                var writer = new ChatStore(paths);
+                var session = writer.Create("Word", "tampered-suffix", "Tampered.docx", "Original");
+                session.Title = "Updated!";
+                writer.Save(session);
+
+                var projectionReader = new ChatStore(paths);
+                var cachedSession = projectionReader.Load(session.Id);
+                var headerReader = new ChatStore(paths);
+                AssertEqual(1, headerReader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Count,
+                    "header cache is warm before tampering");
+
+                writer.AppendTrace(session, SessionEventTypes.AssistantChunk,
+                    new { chunkCount = 1 }, null, null, "run-tamper", "turn-tamper", "step-tamper");
+                var path = SessionEventFile(paths, session);
+                ReplaceFileBytes(path, "Original", "Corrupt!");
+
+                AssertTrue(projectionReader.Load(session.Id) == null,
+                    "projection cache does not mask a corrupt prefix behind a valid suffix");
+                AssertEqual(0, headerReader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Count,
+                    "header cache does not mask a corrupt prefix behind a valid suffix");
+
+                var saveRejected = false;
+                try
+                {
+                    cachedSession.Title = "Must not append";
+                    projectionReader.Save(cachedSession);
+                }
+                catch (ChatConcurrencyException)
+                {
+                    saveRejected = true;
+                }
+                AssertTrue(saveRejected, "a warm projection cannot append to the corrupt durable stream");
             });
         }
 
@@ -171,6 +214,7 @@ namespace RNAssistant.Harness
             AssertTrue(!terminalRan, "terminal write is skipped after an earlier persistence failure");
             queue.EnqueueAndDrain("session-failure", () => terminalRan = true);
             AssertTrue(terminalRan, "an idle failed queue can be retried by a later request");
+            AssertEqual(0, queue.QueueCount, "drained per-session queues are evicted");
         }
 
         private static void StreamingTraceQueueDrainsBeforeTerminal()
@@ -306,7 +350,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void HeaderReducerReplaysAppendedSuffix()
+        private static void HeaderCacheTrustsOnlyOwnedAppends()
         {
             WithTempPaths(paths =>
             {
@@ -337,7 +381,8 @@ namespace RNAssistant.Harness
                 AssertEqual("Initial", header.Title, "minimal reducer retains session metadata");
                 AssertEqual(1, header.MessageCount, "minimal reducer excludes protocol messages");
                 AssertEqual("runtime-header", header.RunRuntimeId, "minimal reducer retains run header fields");
-                AssertEqual(1, header.HtmlFileCount, "invalid legacy metadata falls back to the active CAS body");
+                AssertEqual(0, header.HtmlFileCount,
+                    "invalid legacy metadata does not hydrate the active CAS body during header replay");
                 AssertEqual(1L, reader.HeaderFullReplayCount, "cold header read validates the complete stream once");
                 AssertEqual(0L, reader.ProjectionFullReplayCount, "header read does not build a full projection");
 
@@ -353,19 +398,32 @@ namespace RNAssistant.Harness
                 writer.Save(session);
 
                 header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
-                AssertEqual("Appended", header.Title, "suffix replay applies metadata operations");
-                AssertEqual(2, header.MessageCount, "suffix replay applies message upsert/remove/reorder operations");
-                AssertEqual(1, header.HtmlDataSourceCount, "suffix replay follows a new active HTML artifact");
+                AssertEqual("Appended", header.Title, "full replay applies externally appended metadata operations");
+                AssertEqual(2, header.MessageCount, "full replay applies message upsert/remove/reorder operations");
+                AssertEqual(1, header.HtmlDataSourceCount, "full replay follows a new active HTML artifact");
                 AssertEqual(session.Revision, header.Revision, "header revision follows the validated stream tail");
-                AssertEqual(1L, reader.HeaderFullReplayCount, "append-only growth does not rescan the prefix");
-                AssertEqual(1L, reader.HeaderIncrementalReplayCount, "one appended header suffix was replayed");
-                AssertEqual(0L, reader.ProjectionFullReplayCount, "suffix header replay remains projection-free");
+                AssertEqual(2L, reader.HeaderFullReplayCount,
+                    "growth from another store fully validates the durable prefix");
+                AssertEqual(0L, reader.HeaderIncrementalReplayCount,
+                    "unowned growth is never accepted as a trusted suffix");
+                AssertEqual(0L, reader.ProjectionFullReplayCount, "header replay remains projection-free");
 
-                writer.AppendTrace(session, SessionEventTypes.AssistantChunk,
+                var owned = reader.Load(session.Id);
+                reader.AppendTrace(owned, SessionEventTypes.AssistantChunk,
                     new { chunkCount = 1 }, null, null, "run-header", "turn-header", "step-header");
                 header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
-                AssertEqual(session.Revision, header.Revision, "trace-only suffix advances the header revision");
-                AssertEqual(2L, reader.HeaderIncrementalReplayCount, "trace-only suffix also uses byte offsets");
+                AssertEqual(owned.Revision, header.Revision, "owned trace append advances the header revision");
+                AssertEqual(1L, reader.HeaderIncrementalReplayCount,
+                    "owned trace append advances the header reducer from its byte boundary");
+
+                owned.Title = "Owned save";
+                reader.Save(owned);
+                header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
+                AssertEqual("Owned save", header.Title, "owned commit advances the cached header reducer");
+                AssertEqual(2L, reader.HeaderIncrementalReplayCount,
+                    "owned projection append also advances the header reducer");
+                AssertEqual(2L, reader.HeaderFullReplayCount,
+                    "owned header advances do not rescan the prefix");
             });
         }
 
@@ -417,14 +475,24 @@ namespace RNAssistant.Harness
                         0, 0, ChatStorageUsagePolicy.CriticalStoredFootprintByteLength, 0, 0),
                     "stored footprint critical threshold is inclusive");
 
+                var storedBlob = File.ReadAllBytes(blobPath);
                 File.Delete(blobPath);
-                header = new ChatStore(paths)
-                    .ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle)
-                    .Single();
-                AssertEqual(1, header.CasMissingBlobCount, "missing referenced CAS is reported");
+                header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
+                AssertEqual(1, header.CasMissingBlobCount,
+                    "warm header cache refreshes missing referenced CAS state");
                 AssertEqual(0L, header.CasStoredByteLength, "missing CAS contributes no stored bytes");
                 AssertEqual(ChatStorageWarningLevels.Critical, header.StorageWarningLevel,
                     "missing CAS raises a critical warning");
+
+                Directory.CreateDirectory(Path.GetDirectoryName(blobPath));
+                File.WriteAllBytes(blobPath, storedBlob);
+                header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
+                AssertEqual(0, header.CasMissingBlobCount,
+                    "warm header cache notices a restored referenced CAS blob");
+                AssertEqual((long)storedBlob.Length, header.CasStoredByteLength,
+                    "restored CAS contributes its current stored bytes");
+                AssertEqual(ChatStorageWarningLevels.None, header.StorageWarningLevel,
+                    "restored CAS clears the storage warning without a JSONL append");
             });
         }
 
@@ -1833,7 +1901,6 @@ namespace RNAssistant.Harness
                     Kind = ChatArtifactKinds.Compaction,
                     MimeType = "application/json",
                     InlineText = Newtonsoft.Json.JsonConvert.SerializeObject(checkpoint),
-                    ModelContextPolicy = "checkpoint",
                     MetadataJson = "{\"sourceMessageCount\":1}"
                 };
                 var activityMessage = new ChatMessage
@@ -1866,6 +1933,34 @@ namespace RNAssistant.Harness
                 AssertEqual("unique-compaction-summary", loaded.Messages.Single(item => item.Id == activityMessage.Id).Content,
                     "compaction message projects from artifact body");
             });
+        }
+
+        private static void ReplaceFileBytes(string path, string expected, string replacement)
+        {
+            var expectedBytes = Encoding.UTF8.GetBytes(expected ?? string.Empty);
+            var replacementBytes = Encoding.UTF8.GetBytes(replacement ?? string.Empty);
+            if (expectedBytes.Length == 0 || expectedBytes.Length != replacementBytes.Length)
+            {
+                throw new InvalidOperationException("Byte-preserving replacement requires equal non-empty UTF-8 lengths.");
+            }
+            var bytes = File.ReadAllBytes(path);
+            var offset = -1;
+            for (var index = 0; index <= bytes.Length - expectedBytes.Length; index++)
+            {
+                var matches = true;
+                for (var inner = 0; inner < expectedBytes.Length; inner++)
+                {
+                    if (bytes[index + inner] == expectedBytes[inner]) continue;
+                    matches = false;
+                    break;
+                }
+                if (!matches) continue;
+                offset = index;
+                break;
+            }
+            if (offset < 0) throw new InvalidOperationException("Expected byte sequence was not found.");
+            Buffer.BlockCopy(replacementBytes, 0, bytes, offset, replacementBytes.Length);
+            File.WriteAllBytes(path, bytes);
         }
 
         private static string SessionDirectory(AppDataPaths paths, ChatSession session)

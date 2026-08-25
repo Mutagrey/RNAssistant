@@ -52,8 +52,7 @@ namespace RNAssistant.Office.Services
                     (string.IsNullOrWhiteSpace(artifact.MimeType) ? string.Empty : " | mime=" + SafeText(artifact.MimeType)) +
                     (artifact.ContentByteLength.HasValue ? " | bytes=" + artifact.ContentByteLength.Value : string.Empty) +
                     (string.IsNullOrWhiteSpace(artifact.ParentArtifactId) ? string.Empty : " | parent=" + artifact.ParentArtifactId) +
-                    " | reps=" + RepresentationHints(artifact) +
-                    " | policy=" + ArtifactModelContextPolicies.Normalize(artifact.ModelContextPolicy);
+                    " | reps=" + RepresentationHints(artifact);
                 var remaining = maxTokens - used;
                 if (remaining <= 0) break;
                 var selected = ModelContextBudget.TruncateText(line, remaining, settings);
@@ -179,9 +178,6 @@ namespace RNAssistant.Office.Services
                         RelativePath = attachment.RelativePath,
                         ContentSha256 = attachment.ContentSha256,
                         ContentByteLength = attachment.ContentByteLength,
-                        ModelContextPolicy = HasExtractedText(attachment)
-                            ? ArtifactModelContextPolicies.ExtractOnDemand
-                            : ArtifactModelContextPolicies.ReferenceOnly,
                         MetadataJson = JsonConvert.SerializeObject(new
                         {
                             attachmentId = attachment.Id,
@@ -202,9 +198,6 @@ namespace RNAssistant.Office.Services
                     artifact.RelativePath = attachment.RelativePath;
                     artifact.ContentSha256 = attachment.ContentSha256;
                     artifact.ContentByteLength = attachment.ContentByteLength;
-                    artifact.ModelContextPolicy = HasExtractedText(attachment)
-                        ? ArtifactModelContextPolicies.ExtractOnDemand
-                        : ArtifactModelContextPolicies.ReferenceOnly;
                     artifact.MetadataJson = JsonConvert.SerializeObject(new
                     {
                         attachmentId = attachment.Id,
@@ -329,9 +322,7 @@ namespace RNAssistant.Office.Services
         private static string RepresentationHints(ChatArtifact artifact)
         {
             var values = new List<string> { "metadata" };
-            var policy = ArtifactModelContextPolicies.Normalize(artifact == null ? null : artifact.ModelContextPolicy);
-            if (policy == ArtifactModelContextPolicies.ExtractOnDemand ||
-                artifact != null && !string.IsNullOrWhiteSpace(artifact.InlineText)) values.Add("text");
+            if (HasTextRepresentationHint(artifact)) values.Add("text");
             if (artifact != null &&
                 (string.Equals(artifact.Kind, ChatArtifactKinds.Image, StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(artifact.Kind, ChatArtifactKinds.Attachment, StringComparison.OrdinalIgnoreCase) &&
@@ -341,6 +332,22 @@ namespace RNAssistant.Office.Services
                 values.Add("media");
             }
             return string.Join(",", values.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+        }
+
+        private static bool HasTextRepresentationHint(ChatArtifact artifact)
+        {
+            if (artifact == null) return false;
+            if (!string.IsNullOrWhiteSpace(artifact.InlineText) || StartsWith(artifact.MimeType, "text/")) return true;
+            if (!string.IsNullOrWhiteSpace(artifact.MimeType) &&
+                (artifact.MimeType.IndexOf("json", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 artifact.MimeType.IndexOf("xml", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 artifact.MimeType.IndexOf("csv", StringComparison.OrdinalIgnoreCase) >= 0)) return true;
+            return string.Equals(artifact.Kind, ChatArtifactKinds.Plan, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(artifact.Kind, ChatArtifactKinds.Markdown, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(artifact.Kind, ChatArtifactKinds.Compaction, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(artifact.Kind, ChatArtifactKinds.ToolResult, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(artifact.Kind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool StartsWith(string value, string prefix)

@@ -14,6 +14,8 @@ Every Agent request contains one stable editable instruction composed, in order,
 - the enabled skill catalog with `id`, `name`, `description`, package `revision`, `bodyChars`, and `referenceCount`;
 - chat-owned user context and artifact references.
 
+These three Agent prompts use an explicit settings schema version. Settings without the current marker are hard-reset to all three current defaults; RNAssistant does not merge or preserve legacy combined/custom Agent prompt text. Once the current marker is saved, current custom values are preserved normally.
+
 Visible planning is optional data, not a protocol phase. `common.plan_create/read/update/delete` stores a versioned plan artifact for the active chat. The model explicitly supplies every step status; runtime does not infer progress from tool calls. The active plan artifact id appears in the artifact index.
 
 The artifact index is a bounded working-set manifest, not a body store. `common.artifacts_list` pages metadata, `common.artifacts_search` returns bounded literal matches in metadata/extracted text, and `common.artifacts_read` reads one exact `metadata`, `text`, `analysis`, or `media` representation. Text and analysis use `nextCursor`; media is attached only to the immediately following model step, with the artifact id/revision kept as provenance and no base64 in tool JSON. A capable main model reads it directly; missing Vision/Audio capability uses the isolated attachment helper. Historical attachments otherwise replay only as artifact references.

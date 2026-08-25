@@ -10,8 +10,8 @@ namespace RNAssistant.Office.Services
     {
         private const int DefaultMaxPendingWrites = 16;
         private readonly object _sync = new object();
-        private readonly Dictionary<string, SessionQueue> _queues =
-            new Dictionary<string, SessionQueue>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, QueueEntry> _queues =
+            new Dictionary<string, QueueEntry>(StringComparer.OrdinalIgnoreCase);
         private readonly int _maxPendingWrites;
 
         public SessionTraceWriteQueue()
@@ -26,13 +26,28 @@ namespace RNAssistant.Office.Services
 
         public void Enqueue(string sessionId, Action write)
         {
-            Queue(sessionId).Schedule(write);
+            var entry = Acquire(sessionId);
+            try
+            {
+                entry.Queue.Schedule(write);
+            }
+            finally
+            {
+                Release(sessionId, entry);
+            }
         }
 
         public void EnqueueAndDrain(string sessionId, Action write)
         {
-            var queue = Queue(sessionId);
-            queue.WaitAndThrow(queue.Schedule(write));
+            var entry = Acquire(sessionId);
+            try
+            {
+                entry.Queue.WaitAndThrow(entry.Queue.Schedule(write));
+            }
+            finally
+            {
+                Release(sessionId, entry);
+            }
         }
 
         public void Drain(string sessionId)
@@ -42,15 +57,23 @@ namespace RNAssistant.Office.Services
 
         internal int PendingCount(string sessionId)
         {
-            SessionQueue queue;
+            QueueEntry entry;
             lock (_sync)
             {
-                if (!_queues.TryGetValue(sessionId ?? string.Empty, out queue)) return 0;
+                if (!_queues.TryGetValue(sessionId ?? string.Empty, out entry)) return 0;
             }
-            return queue.PendingCount;
+            return entry.Queue.PendingCount;
         }
 
-        private SessionQueue Queue(string sessionId)
+        internal int QueueCount
+        {
+            get
+            {
+                lock (_sync) return _queues.Count;
+            }
+        }
+
+        private QueueEntry Acquire(string sessionId)
         {
             if (string.IsNullOrWhiteSpace(sessionId))
             {
@@ -58,25 +81,63 @@ namespace RNAssistant.Office.Services
             }
             lock (_sync)
             {
-                SessionQueue queue;
-                if (_queues.TryGetValue(sessionId, out queue)) return queue;
-                queue = new SessionQueue(_maxPendingWrites);
-                _queues.Add(sessionId, queue);
-                return queue;
+                QueueEntry entry;
+                if (!_queues.TryGetValue(sessionId, out entry))
+                {
+                    entry = new QueueEntry();
+                    entry.Queue = new SessionQueue(_maxPendingWrites, () => TryRemove(sessionId, entry));
+                    _queues.Add(sessionId, entry);
+                }
+                entry.Leases += 1;
+                return entry;
             }
+        }
+
+        private void Release(string sessionId, QueueEntry entry)
+        {
+            lock (_sync)
+            {
+                QueueEntry current;
+                if (!_queues.TryGetValue(sessionId, out current) || !ReferenceEquals(current, entry)) return;
+                entry.Leases = Math.Max(0, entry.Leases - 1);
+                RemoveIfIdle(sessionId, entry);
+            }
+        }
+
+        private void TryRemove(string sessionId, QueueEntry entry)
+        {
+            lock (_sync)
+            {
+                QueueEntry current;
+                if (!_queues.TryGetValue(sessionId, out current) || !ReferenceEquals(current, entry)) return;
+                RemoveIfIdle(sessionId, entry);
+            }
+        }
+
+        private void RemoveIfIdle(string sessionId, QueueEntry entry)
+        {
+            if (entry.Leases == 0 && entry.Queue.CanEvict) _queues.Remove(sessionId);
+        }
+
+        private sealed class QueueEntry
+        {
+            public SessionQueue Queue { get; set; }
+            public int Leases { get; set; }
         }
 
         private sealed class SessionQueue
         {
             private readonly object _sync = new object();
             private readonly SemaphoreSlim _slots;
+            private readonly Action _idle;
             private Task _tail = Task.FromResult(0);
             private Exception _failure;
             private int _pending;
 
-            public SessionQueue(int maxPendingWrites)
+            public SessionQueue(int maxPendingWrites, Action idle)
             {
                 _slots = new SemaphoreSlim(maxPendingWrites, maxPendingWrites);
+                _idle = idle;
             }
 
             public int PendingCount
@@ -84,6 +145,14 @@ namespace RNAssistant.Office.Services
                 get
                 {
                     lock (_sync) return _pending;
+                }
+            }
+
+            public bool CanEvict
+            {
+                get
+                {
+                    lock (_sync) return _pending == 0 && _failure == null;
                 }
             }
 
@@ -133,8 +202,14 @@ namespace RNAssistant.Office.Services
                 }
                 finally
                 {
-                    lock (_sync) _pending -= 1;
+                    var idle = false;
+                    lock (_sync)
+                    {
+                        _pending -= 1;
+                        idle = _pending == 0 && _failure == null;
+                    }
                     _slots.Release();
+                    if (idle && _idle != null) _idle();
                 }
             }
         }

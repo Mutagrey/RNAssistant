@@ -114,11 +114,6 @@ namespace RNAssistant.Office.Services
                 "\nEND_AUXILIARY_ATTACHMENT_EVIDENCE";
         }
 
-        internal static string AppendHistoricalContext(string content, AttachmentAnalysisContext analysis)
-        {
-            return BuildPrimaryRequest(content, analysis);
-        }
-
         private async Task<string> AnalyzeBatchAsync(
             string userText,
             ChatSession session,

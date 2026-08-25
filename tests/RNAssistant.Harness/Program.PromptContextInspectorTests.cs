@@ -47,8 +47,7 @@ namespace RNAssistant.Harness
                 Id = "plan_r1",
                 Kind = ChatArtifactKinds.Plan,
                 Title = "План проверки",
-                InlineText = "{\"steps\":[]}",
-                ModelContextPolicy = "reference"
+                InlineText = "{\"steps\":[]}"
             });
             var context = NewContext(adapter);
             context.Notes.Add(new ContextNote

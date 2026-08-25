@@ -160,9 +160,7 @@ namespace RNAssistant.Office
             };
             _llmCompletion = completion;
             _attachmentAnalysisService = new AttachmentAnalysisService(completion);
-            _contextCompactionService = new ContextCompactionService(
-                completion,
-                (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars));
+            _contextCompactionService = new ContextCompactionService(completion);
             _agentRunService = new AgentRunService(_adapter, _toolExecutor, completion, _contextCompactionService);
             _plainChatService = new PlainChatService(completion, _contextCompactionService);
             _contextService = new ContextService(_adapter);

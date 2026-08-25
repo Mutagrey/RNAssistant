@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -73,55 +74,43 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void SettingsMigrateLegacySkillLoadingPolicy()
+        private static void SettingsHardCutoverLegacyAgentPrompts()
         {
-            var settings = new AppSettings();
-            var legacy = settings.AgentSkillsPrompt.Replace(
-                AgentSkillPromptPolicy.CurrentInstructions,
-                AgentSkillPromptPolicy.LegacyInstructions);
-            AssertContains(legacy, AgentSkillPromptPolicy.LegacyInstructions,
-                "legacy policy fixture is present");
+            var legacy = JsonConvert.DeserializeObject<AppSettings>(
+                "{\"SystemPrompt\":\"legacy custom combined\"," +
+                "\"AgentToolsPrompt\":\"legacy custom tools\"," +
+                "\"AgentSkillsPrompt\":\"legacy custom skills\"}");
+            AssertEqual(0, legacy.AgentPromptSchemaVersion, "missing schema marker identifies legacy settings");
 
-            var upgraded = AgentSkillPromptPolicy.Upgrade(legacy);
-            AssertContains(upgraded, AgentSkillPromptPolicy.CurrentInstructions,
-                "legacy default policy is upgraded");
-            AssertTrue(upgraded.IndexOf(AgentSkillPromptPolicy.LegacyInstructions, StringComparison.Ordinal) < 0,
-                "legacy policy is removed after upgrade");
+            legacy.NormalizeAgentPrompts();
+            AssertEqual(AppSettings.CurrentAgentPromptSchemaVersion, legacy.AgentPromptSchemaVersion,
+                "legacy settings are marked with the current Agent prompt schema");
+            AssertEqual(AgentPromptDefaults.GeneralInstructions, legacy.SystemPrompt,
+                "legacy combined prompt is discarded during hard cutover");
+            AssertEqual(AgentPromptDefaults.ToolInstructions, legacy.AgentToolsPrompt,
+                "legacy tool prompt is replaced with the current default");
+            AssertEqual(AgentPromptDefaults.SkillInstructions, legacy.AgentSkillsPrompt,
+                "legacy skill prompt is replaced with the current default");
 
-            var revisionPolicy = settings.AgentSkillsPrompt.Replace(
-                AgentSkillPromptPolicy.CurrentInstructions,
-                AgentSkillPromptPolicy.RevisionInstructions);
-            AssertContains(AgentSkillPromptPolicy.Upgrade(revisionPolicy), AgentSkillPromptPolicy.CurrentInstructions,
-                "revision-only policy is upgraded to explicit loaded evidence");
+            legacy.SystemPrompt = "current custom general";
+            legacy.AgentToolsPrompt = "current custom tools";
+            legacy.AgentSkillsPrompt = "current custom skills";
+            var serialized = JsonConvert.SerializeObject(legacy);
+            var current = JsonConvert.DeserializeObject<AppSettings>(serialized);
+            current.NormalizeAgentPrompts();
+            AssertEqual("current custom general", current.SystemPrompt,
+                "current-version general prompt is preserved");
+            AssertEqual("current custom tools", current.AgentToolsPrompt,
+                "current-version tool prompt is preserved");
+            AssertEqual("current custom skills", current.AgentSkillsPrompt,
+                "current-version skill prompt is preserved");
+            AssertContains(serialized, "AgentPromptSchemaVersion",
+                "saved settings persist the Agent prompt schema marker");
 
-            const string custom = "Custom prompt without the default skill policy.";
-            AssertEqual(custom, AgentSkillPromptPolicy.Upgrade(custom),
-                "custom prompt without legacy policy is preserved");
-
-            var evidencePolicy = settings.AgentSkillsPrompt.Replace(
-                AgentSkillPromptPolicy.CurrentInstructions,
-                AgentSkillPromptPolicy.LoadedEvidenceInstructions);
-            AssertContains(AgentSkillPromptPolicy.Upgrade(evidencePolicy), AgentSkillPromptPolicy.CurrentInstructions,
-                "previous loaded-evidence policy is upgraded to metadata-only wording");
-
-            var oldCombined = AgentPromptDefaults.LegacyCombinedInstructions.Replace(
-                AgentSkillPromptPolicy.CurrentInstructions,
-                AgentSkillPromptPolicy.LoadedEvidenceInstructions);
-            AssertContains(AgentPromptDefaults.LegacyCombinedInstructions, "chat.html_workspace_preferred=true",
-                "legacy combined fixture retains the previous runtime wording");
-            AssertEqual(AgentPromptDefaults.GeneralInstructions,
-                AgentPromptDefaults.UpgradeGeneralInstructions(oldCombined),
-                "known legacy combined default migrates to the general Agent prompt");
-
-            var customCombined = oldCombined + "\n\n## Custom\n\nKeep this user rule.";
-            var customUpgraded = AgentPromptDefaults.UpgradeGeneralInstructions(customCombined);
-            AssertTrue(customUpgraded.IndexOf("html_workspace_preferred", StringComparison.Ordinal) < 0,
-                "custom legacy prompt drops the removed HTML preference reference");
-            AssertTrue(customUpgraded.IndexOf("## Tools", StringComparison.Ordinal) < 0 &&
-                customUpgraded.IndexOf("## Skills", StringComparison.Ordinal) < 0,
-                "custom legacy prompt does not duplicate split tool and skill policies");
-            AssertContains(customUpgraded, "Keep this user rule.",
-                "custom legacy prompt content is preserved");
+            current.AgentPromptSchemaVersion = AppSettings.CurrentAgentPromptSchemaVersion + 1;
+            current.NormalizeAgentPrompts();
+            AssertEqual(AgentPromptDefaults.GeneralInstructions, current.SystemPrompt,
+                "unknown Agent prompt schema is not treated as current");
         }
     }
 }

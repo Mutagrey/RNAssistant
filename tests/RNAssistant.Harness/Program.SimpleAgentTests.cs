@@ -514,6 +514,18 @@ namespace RNAssistant.Harness
                 "{\"message\":\"I'll explain: patch requires existing source, while write creates it.\",\"tool_calls\":[]}",
                 new[] { inspect });
             AssertTrue(explanation.Success, "explanatory final is not mistaken for progress");
+            var assessment = new AgentResponseParser().Parse(
+                "{\"message\":\"Проверяю расчёт — формула корректна.\",\"tool_calls\":[]}",
+                new[] { inspect });
+            AssertTrue(assessment.Success, "completed assessment is not mistaken for progress");
+            var englishAssessment = new AgentResponseParser().Parse(
+                "{\"message\":\"Checking the result shows it is correct.\",\"tool_calls\":[]}",
+                new[] { inspect });
+            AssertTrue(englishAssessment.Success, "English assessment is not mistaken for progress");
+            var futurePromise = new AgentResponseParser().Parse(
+                "{\"message\":\"Проверю листы.\",\"tool_calls\":[]}",
+                new[] { inspect });
+            AssertTrue(!futurePromise.Success, "explicit future promise still requires a tool call");
 
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {

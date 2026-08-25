@@ -16,23 +16,6 @@ namespace RNAssistant.Core.Models
         public const string ToolResult = "tool_result";
     }
 
-    public static class ArtifactModelContextPolicies
-    {
-        public const string ReferenceOnly = "reference_only";
-        public const string ExtractOnDemand = "extract_on_demand";
-        public const string DirectCurrentTurn = "direct_current_turn";
-        public const string NeverAuto = "never_auto";
-
-        public static string Normalize(string value)
-        {
-            value = (value ?? string.Empty).Trim().ToLowerInvariant();
-            if (value == "extract" || value == ExtractOnDemand) return ExtractOnDemand;
-            if (value == DirectCurrentTurn) return DirectCurrentTurn;
-            if (value == NeverAuto) return NeverAuto;
-            return ReferenceOnly;
-        }
-    }
-
     public sealed class ChatPlan
     {
         public const int CurrentProtocolVersion = 1;
@@ -98,7 +81,6 @@ namespace RNAssistant.Core.Models
         internal string StorageContentSha256 { get; set; }
         [Newtonsoft.Json.JsonIgnore]
         internal long? StorageContentByteLength { get; set; }
-        public string ModelContextPolicy { get; set; }
         public string MetadataJson { get; set; }
         public List<string> RelatedArtifactIds { get; set; }
         public DateTime CreatedUtc { get; set; }
@@ -107,7 +89,6 @@ namespace RNAssistant.Core.Models
         {
             Id = Guid.NewGuid().ToString("N");
             Revision = 1;
-            ModelContextPolicy = ArtifactModelContextPolicies.ReferenceOnly;
             RelatedArtifactIds = new List<string>();
             CreatedUtc = DateTime.UtcNow;
         }

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -22,14 +21,10 @@ namespace RNAssistant.Office.Services
             "\"summary\":{\"type\":\"string\"}}}";
 
         private readonly LlmCompletionDelegate _completeAsync;
-        private readonly LlmAttachmentTextReader _attachmentTextReader;
 
-        public ContextCompactionService(
-            LlmCompletionDelegate completeAsync,
-            LlmAttachmentTextReader attachmentTextReader = null)
+        public ContextCompactionService(LlmCompletionDelegate completeAsync)
         {
             _completeAsync = completeAsync ?? throw new ArgumentNullException(nameof(completeAsync));
-            _attachmentTextReader = attachmentTextReader;
         }
 
         public async Task<ContextCheckpoint> EnsureWithinBudgetAsync(
@@ -95,7 +90,6 @@ namespace RNAssistant.Office.Services
             var source = BuildCompactionSource(
                 session,
                 prefix,
-                Math.Max(192, sourceTokenBudget / 4),
                 sourceTokenBudget,
                 settings);
             var prompt = CompactionPrompt(settings);
@@ -132,7 +126,9 @@ namespace RNAssistant.Office.Services
                 Model = settings.Model,
                 PromptVersion = ContextCheckpoint.CurrentPromptVersion,
                 SourceMessageCount = prefix.Count,
-                SourceTokens = ModelContextBudget.EstimateMessagesTokens(prefix, settings),
+                SourceTokens = ModelContextBudget.EstimateMessagesTokens(
+                    prefix.Select(HistoricalContextProjector.Project),
+                    settings),
                 SummaryTokens = ModelContextBudget.EstimateTextTokens(summaryMarkdown, settings)
             };
             session.Artifacts = session.Artifacts ?? new List<ChatArtifact>();
@@ -146,8 +142,7 @@ namespace RNAssistant.Office.Services
                 Title = "Сжатый контекст",
                 MimeType = "application/json",
                 ParentArtifactId = previousArtifact == null ? null : previousArtifact.Id,
-                Revision = previousArtifact == null ? 1 : Math.Max(1, previousArtifact.Revision + 1),
-                ModelContextPolicy = "checkpoint",
+                Revision = previousArtifact == null ? 1 : Math.Max(1, previousArtifact.Revision + 1)
             };
             checkpoint.Id = artifact.Id;
             artifact.InlineText = JsonConvert.SerializeObject(checkpoint, Formatting.None);
@@ -291,16 +286,11 @@ namespace RNAssistant.Office.Services
         private string BuildCompactionSource(
             ChatSession session,
             IEnumerable<ChatMessage> prefix,
-            int attachmentTokenBudget,
             int sourceTokenBudget,
             AppSettings settings)
         {
             var builder = new StringBuilder();
             var prefixMessages = (prefix ?? new ChatMessage[0]).Where(message => message != null).ToList();
-            var textAttachmentCount = prefixMessages
-                .SelectMany(message => message.Attachments ?? new List<ChatAttachment>())
-                .Count(HasExtractedText);
-            var remainingAttachmentTokens = Math.Max(0, attachmentTokenBudget);
             var active = ActiveCheckpoint(session);
             if (active != null && !string.IsNullOrWhiteSpace(active.SummaryJson))
             {
@@ -323,11 +313,10 @@ namespace RNAssistant.Office.Services
             foreach (var message in prefixMessages)
             {
                 if (message == null) continue;
-                builder.Append('[').Append(message.Role ?? "unknown").Append("] ");
-                builder.Append(AttachmentAnalysisService.AppendHistoricalContext(
-                    message.Content,
-                    message.AttachmentAnalysis));
-                var toolCalls = (message.ToolCalls ?? new List<LlmToolCall>())
+                var projected = HistoricalContextProjector.Project(message);
+                builder.Append('[').Append(projected.Role ?? "unknown").Append("] ");
+                builder.Append(projected.Content);
+                var toolCalls = (projected.ToolCalls ?? new List<LlmToolCall>())
                     .Where(call => call != null)
                     .Select(call => new
                     {
@@ -340,32 +329,7 @@ namespace RNAssistant.Office.Services
                 {
                     builder.Append(" [tool_calls:").Append(JsonConvert.SerializeObject(toolCalls)).Append(']');
                 }
-                var artifactIds = message.ArtifactIds == null ? string.Empty : string.Join(",", message.ArtifactIds.ToArray());
-                if (!string.IsNullOrWhiteSpace(artifactIds)) builder.Append(" [artifacts:").Append(artifactIds).Append(']');
-                var attachmentNames = (message.Attachments ?? new List<ChatAttachment>())
-                    .Where(item => item != null && !string.IsNullOrWhiteSpace(item.FileName))
-                    .Select(item => item.Id + ":" + item.FileName)
-                    .ToArray();
-                if (attachmentNames.Length > 0) builder.Append(" [attachments:").Append(string.Join(",", attachmentNames)).Append(']');
                 builder.AppendLine();
-                foreach (var attachment in (message.Attachments ?? new List<ChatAttachment>()).Where(HasExtractedText))
-                {
-                    var share = textAttachmentCount <= 0 ? 0 : remainingAttachmentTokens / textAttachmentCount;
-                    textAttachmentCount = Math.Max(0, textAttachmentCount - 1);
-                    if (share <= 0) continue;
-                    var extracted = ReadAttachmentText(
-                        attachment,
-                        Math.Max(1, ModelContextBudget.ApproximateTextCharacterCapacity(share, settings)));
-                    var selected = ModelContextBudget.TruncateText(extracted, share, settings);
-                    if (string.IsNullOrWhiteSpace(selected)) continue;
-                    remainingAttachmentTokens = Math.Max(
-                        0,
-                        remainingAttachmentTokens - ModelContextBudget.EstimateTextTokens(selected, settings));
-                    builder.AppendLine("[attachment_text " + (attachment.Id ?? string.Empty) + ":" + (attachment.FileName ?? "unnamed") + "]");
-                    builder.AppendLine(selected);
-                    if (selected.Length < extracted.Length || attachment.TextTruncated) builder.AppendLine("[attachment_text_truncated]");
-                    builder.AppendLine("[/attachment_text]");
-                }
             }
             var artifactIndex = new StringBuilder();
             artifactIndex.AppendLine("ARTIFACT_INDEX:");
@@ -382,8 +346,7 @@ namespace RNAssistant.Office.Services
                         ModelContextBudget.TruncateText(artifact.Kind, 32, settings) + " | " +
                         ModelContextBudget.TruncateText(artifact.Title, 128, settings) +
                         " | revision=" + artifact.Revision + " | parent=" +
-                        ModelContextBudget.TruncateText(artifact.ParentArtifactId, 64, settings) +
-                        " | policy=" + ModelContextBudget.TruncateText(artifact.ModelContextPolicy, 32, settings));
+                        ModelContextBudget.TruncateText(artifact.ParentArtifactId, 64, settings));
                 }
                 if (artifacts.Count > 100) artifactIndex.AppendLine("[additional artifacts omitted]");
             }
@@ -416,35 +379,6 @@ namespace RNAssistant.Office.Services
                 count += 1;
             }
             return source.Take(ToolProtocolMessages.PreserveCompletePrefix(source, count)).ToList();
-        }
-
-        private static bool HasExtractedText(ChatAttachment attachment)
-        {
-            return attachment != null &&
-                !string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase) &&
-                (attachment.ExtractedCharCount > 0 ||
-                 !string.IsNullOrWhiteSpace(attachment.ExtractedText) ||
-                 !string.IsNullOrWhiteSpace(attachment.ExtractedTextPath));
-        }
-
-        private string ReadAttachmentText(ChatAttachment attachment, int maxChars)
-        {
-            if (_attachmentTextReader != null)
-            {
-                try
-                {
-                    return _attachmentTextReader(attachment, maxChars) ?? string.Empty;
-                }
-                catch (IOException)
-                {
-                }
-                catch (UnauthorizedAccessException)
-                {
-                }
-            }
-            var inline = attachment == null ? string.Empty : attachment.ExtractedText ?? string.Empty;
-            return inline.Length <= maxChars ? inline : inline.Substring(0, maxChars);
         }
 
         private static JObject ParseSummary(string content)

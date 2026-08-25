@@ -55,43 +55,51 @@ namespace RNAssistant.Core.Storage
         public ChatBlobReference StoreFile(string sourcePath, string contentType)
         {
             if (string.IsNullOrWhiteSpace(sourcePath)) throw new ArgumentException("Source path is required.", "sourcePath");
-            long byteLength;
-            var hash = Sha256File(sourcePath, out byteLength);
-            var protector = Protection();
-            var path = PathFor(hash);
-            var verified = Matches(path, hash, byteLength, protector);
-            if (!verified)
+            using (var source = new FileStream(
+                sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.SequentialScan))
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(path));
-                try
+                long byteLength;
+                var hash = Sha256Stream(source, out byteLength);
+                var protector = Protection();
+                var path = PathFor(hash);
+                var verified = Matches(path, hash, byteLength, protector);
+                if (!verified)
                 {
-                    StorageFileSystem.WriteAtomic(path, tempPath =>
+                    Directory.CreateDirectory(Path.GetDirectoryName(path));
+                    try
                     {
-                        CasBlobCodec.EncodeFile(
-                            sourcePath,
-                            byteLength,
-                            contentType,
-                            protector,
-                            BlobPurpose(hash, byteLength),
-                            tempPath);
-                        if (!Matches(tempPath, hash, byteLength, protector))
+                        StorageFileSystem.WriteAtomic(path, tempPath =>
                         {
-                            throw new IOException("Streamed CAS payload does not match its source hash.");
-                        }
-                    });
-                    verified = true;
+                            CasBlobCodec.EncodeFile(
+                                sourcePath,
+                                byteLength,
+                                contentType,
+                                protector,
+                                BlobPurpose(hash, byteLength),
+                                tempPath);
+                            if (!Matches(tempPath, hash, byteLength, protector))
+                            {
+                                throw new IOException("Streamed CAS payload does not match its source hash.");
+                            }
+                        });
+                        verified = true;
+                    }
+                    catch (IOException)
+                    {
+                        verified = Matches(path, hash, byteLength, protector);
+                        if (!verified) throw;
+                    }
                 }
-                catch (IOException)
+                if (!verified)
                 {
-                    verified = Matches(path, hash, byteLength, protector);
-                    if (!verified) throw;
+                    throw new IOException("Content-addressed blob could not be verified after writing.");
                 }
+                if (source.Length != byteLength)
+                {
+                    throw new IOException("CAS source file changed while it was being stored.");
+                }
+                return CreateReference(hash, byteLength, contentType, protector);
             }
-            if (!verified)
-            {
-                throw new IOException("Content-addressed blob could not be verified after writing.");
-            }
-            return CreateReference(hash, byteLength, contentType, protector);
         }
 
         internal bool HasStoredReference(ChatBlobReference reference)
@@ -259,12 +267,12 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private static string Sha256File(string path, out long byteLength)
+        private static string Sha256Stream(FileStream stream, out long byteLength)
         {
-            using (var stream = new FileStream(
-                path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.SequentialScan))
             using (var sha = SHA256.Create())
             {
+                if (stream == null) throw new ArgumentNullException("stream");
+                stream.Position = 0;
                 byteLength = stream.Length;
                 var hash = sha.ComputeHash(stream);
                 if (stream.Position != byteLength)

@@ -36,8 +36,6 @@ namespace RNAssistant.Core.Storage
         private string _activeHtmlArtifactId;
         private ChatRunRecord _lastRun;
         private long _casLogicalByteLength;
-        private long _casStoredByteLength;
-        private int _casMissingBlobCount;
         private int _invalidCasReferenceCount;
 
         public ChatHeaderReducer(ChatBlobStore blobs)
@@ -134,8 +132,6 @@ namespace RNAssistant.Core.Storage
                 _activeHtmlArtifactId = _activeHtmlArtifactId,
                 _lastRun = CloneRun(_lastRun),
                 _casLogicalByteLength = _casLogicalByteLength,
-                _casStoredByteLength = _casStoredByteLength,
-                _casMissingBlobCount = _casMissingBlobCount,
                 _invalidCasReferenceCount = _invalidCasReferenceCount
             };
         }
@@ -168,7 +164,10 @@ namespace RNAssistant.Core.Storage
 
             int fileCount;
             int dataSourceCount;
-            ReadWorkspaceCounts(blobs, out fileCount, out dataSourceCount);
+            ReadWorkspaceCounts(out fileCount, out dataSourceCount);
+            long casStoredByteLength;
+            int casMissingBlobCount;
+            ReadCasStorageUsage(blobs ?? _blobs, out casStoredByteLength, out casMissingBlobCount);
             var run = _lastRun;
             var casReferenceIssueCount = SaturatingAdd(
                 _invalidCasReferenceCount,
@@ -200,14 +199,14 @@ namespace RNAssistant.Core.Storage
                 JsonlByteLength = jsonlByteLength,
                 CasBlobCount = _casReferences.Count,
                 CasLogicalByteLength = _casLogicalByteLength,
-                CasStoredByteLength = _casStoredByteLength,
-                CasMissingBlobCount = _casMissingBlobCount,
+                CasStoredByteLength = casStoredByteLength,
+                CasMissingBlobCount = casMissingBlobCount,
                 CasReferenceIssueCount = casReferenceIssueCount,
                 StorageWarningLevel = ChatStorageUsagePolicy.GetWarningLevel(
                     jsonlByteLength,
                     _casLogicalByteLength,
-                    _casStoredByteLength,
-                    _casMissingBlobCount,
+                    casStoredByteLength,
+                    casMissingBlobCount,
                     casReferenceIssueCount)
             };
         }
@@ -274,18 +273,28 @@ namespace RNAssistant.Core.Storage
                 return;
             }
 
-            var storedByteLength = 0L;
-            var missing = _blobs == null || !_blobs.TryGetStoredByteLength(hash, out storedByteLength);
             var entry = new CasUsageEntry
             {
-                LogicalByteLength = reference.ByteLength,
-                StoredByteLength = missing ? 0 : storedByteLength,
-                Missing = missing
+                LogicalByteLength = reference.ByteLength
             };
             _casReferences[hash] = entry;
             _casLogicalByteLength = SaturatingAdd(_casLogicalByteLength, entry.LogicalByteLength);
-            _casStoredByteLength = SaturatingAdd(_casStoredByteLength, entry.StoredByteLength);
-            if (missing) _casMissingBlobCount = SaturatingIncrement(_casMissingBlobCount);
+        }
+
+        private void ReadCasStorageUsage(ChatBlobStore blobs, out long storedByteLength, out int missingBlobCount)
+        {
+            storedByteLength = 0;
+            missingBlobCount = 0;
+            foreach (var reference in _casReferences)
+            {
+                long length;
+                if (blobs == null || !blobs.TryGetStoredByteLength(reference.Key, out length))
+                {
+                    missingBlobCount = SaturatingIncrement(missingBlobCount);
+                    continue;
+                }
+                storedByteLength = SaturatingAdd(storedByteLength, length);
+            }
         }
 
         private static long SaturatingAdd(long first, long second)
@@ -403,7 +412,7 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private void ReadWorkspaceCounts(ChatBlobStore blobs, out int fileCount, out int dataSourceCount)
+        private void ReadWorkspaceCounts(out int fileCount, out int dataSourceCount)
         {
             fileCount = 0;
             dataSourceCount = 0;
@@ -422,16 +431,7 @@ namespace RNAssistant.Core.Storage
             {
                 fileCount = artifact.InlineFileCount;
                 dataSourceCount = artifact.InlineDataSourceCount;
-                return;
             }
-            if (blobs == null || string.IsNullOrWhiteSpace(artifact.ContentSha256) ||
-                !artifact.ContentByteLength.HasValue) return;
-            var body = blobs.ReadText(new ChatBlobReference
-            {
-                Sha256 = artifact.ContentSha256,
-                ByteLength = artifact.ContentByteLength.Value
-            });
-            TryReadWorkspaceBodyCounts(body, out fileCount, out dataSourceCount);
         }
 
         private static bool TryReadWorkspaceBodyCounts(string json, out int fileCount, out int dataSourceCount)
@@ -528,16 +528,12 @@ namespace RNAssistant.Core.Storage
         private sealed class CasUsageEntry
         {
             public long LogicalByteLength { get; set; }
-            public long StoredByteLength { get; set; }
-            public bool Missing { get; set; }
 
             public CasUsageEntry Clone()
             {
                 return new CasUsageEntry
                 {
-                    LogicalByteLength = LogicalByteLength,
-                    StoredByteLength = StoredByteLength,
-                    Missing = Missing
+                    LogicalByteLength = LogicalByteLength
                 };
             }
         }

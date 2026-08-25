@@ -147,14 +147,7 @@ namespace RNAssistant.Core.Storage
                 ? defaults.ModelsConfigUrl
                 : settings.ModelsConfigUrl.Trim();
             settings.Model = (settings.Model ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(settings.SystemPrompt))
-            {
-                settings.SystemPrompt = defaults.SystemPrompt;
-            }
-            settings.SystemPrompt = AgentPromptDefaults.UpgradeGeneralInstructions(settings.SystemPrompt);
-            settings.AgentToolsPrompt = DefaultIfBlank(settings.AgentToolsPrompt, defaults.AgentToolsPrompt);
-            settings.AgentSkillsPrompt = AgentSkillPromptPolicy.Upgrade(
-                DefaultIfBlank(settings.AgentSkillsPrompt, defaults.AgentSkillsPrompt));
+            settings.NormalizeAgentPrompts();
             if (string.IsNullOrWhiteSpace(settings.ChatSystemPrompt))
             {
                 settings.ChatSystemPrompt = defaults.ChatSystemPrompt;

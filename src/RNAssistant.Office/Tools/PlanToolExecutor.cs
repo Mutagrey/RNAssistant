@@ -178,7 +178,6 @@ namespace RNAssistant.Office.Tools
                 Revision = revision,
                 ParentArtifactId = parent == null ? null : parent.Id,
                 InlineText = JsonConvert.SerializeObject(plan),
-                ModelContextPolicy = "reference",
                 MetadataJson = JsonConvert.SerializeObject(new { planId = plan.Id })
             };
         }

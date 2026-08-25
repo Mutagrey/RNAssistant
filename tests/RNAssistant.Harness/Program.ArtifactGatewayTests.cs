@@ -39,7 +39,6 @@ namespace RNAssistant.Harness
                 Title = "notes.txt",
                 MimeType = "text/plain",
                 SourceMessageId = message.Id,
-                ModelContextPolicy = ArtifactModelContextPolicies.ExtractOnDemand,
                 MetadataJson = "{\"attachmentId\":\"attachment-text\"}"
             };
             var session = new ChatSession
@@ -51,6 +50,8 @@ namespace RNAssistant.Harness
 
             var listed = gateway.List(session, null, null, 10);
             AssertEqual(1, listed["items"].Count(), "artifact list count");
+            AssertTrue(listed["items"][0]["modelContextPolicy"] == null,
+                "artifact descriptors have no legacy context policy");
             AssertTrue(listed["items"][0]["representations"].Values<string>().Contains("text"),
                 "artifact list advertises extracted text");
 
@@ -65,6 +66,17 @@ namespace RNAssistant.Harness
             AssertEqual(1, search["matchCount"].Value<int>(), "artifact text search count");
             AssertEqual(artifact.Id, search["matches"][0]["artifactId"].Value<string>(), "artifact search id");
             AssertContains(search["matches"][0]["snippet"].Value<string>(), "NEEDLE", "artifact search snippet");
+
+            var invalidRepresentationRejected = false;
+            try
+            {
+                gateway.Read(session, artifact.Id, "legacy", 0, 128);
+            }
+            catch (InvalidOperationException)
+            {
+                invalidRepresentationRejected = true;
+            }
+            AssertTrue(invalidRepresentationRejected, "artifact reads reject unknown legacy representations");
 
             var evidence = gateway.BuildSelectedEvidence(session, new[] { artifact.Id }, 256, new AppSettings());
             AssertContains(evidence, "SELECTED_ARTIFACT_EVIDENCE", "selected artifact evidence marker");
@@ -97,6 +109,25 @@ namespace RNAssistant.Harness
                 new[] { imageAttachment });
             AssertEqual("attachment_direct-image", directIds.Single(),
                 "direct multimodal media is excluded from duplicate textual evidence");
+
+            session.Artifacts.Add(new ChatArtifact
+            {
+                Id = "attachment_unmapped",
+                Kind = ChatArtifactKinds.Image,
+                SourceMessageId = imageMessage.Id
+            });
+            imageMessage.Attachments.Add(new ChatAttachment { Id = "unmapped", Kind = "image" });
+            var implicitAttachmentMappingRejected = false;
+            try
+            {
+                gateway.Read(session, "attachment_unmapped", "media", 0, 128);
+            }
+            catch (InvalidOperationException)
+            {
+                implicitAttachmentMappingRejected = true;
+            }
+            AssertTrue(implicitAttachmentMappingRejected,
+                "artifact media requires explicit attachmentId metadata instead of a legacy id convention");
         }
 
         private static void ArtifactPromptUsesBoundedWorkingSet()
@@ -128,6 +159,8 @@ namespace RNAssistant.Harness
             AssertContains(prompt, "artifact_19", "recently referenced artifact remains visible");
             AssertTrue(prompt.IndexOf("private/path", StringComparison.OrdinalIgnoreCase) < 0,
                 "artifact prompt does not expose local paths");
+            AssertTrue(prompt.IndexOf("policy=", StringComparison.OrdinalIgnoreCase) < 0,
+                "artifact prompt has one reference-first rule instead of per-artifact legacy policies");
         }
 
         private static void HistoricalAttachmentsStayReferenceOnly()
@@ -183,6 +216,26 @@ namespace RNAssistant.Harness
             });
             AssertContains(gateway.Read(session, "attachment_old-text", "analysis", 0, 256).Data["content"].Value<string>(),
                 "HISTORICAL_ANALYSIS_MUST_NOT_REPLAY", "historical analysis remains available on demand");
+
+            string compactionInput = null;
+            LlmCompletionDelegate completion = (requestSettings, messages, options, stream, cancellationToken) =>
+            {
+                compactionInput = FlattenSimple(messages);
+                return Task.FromResult(new LlmCompletionResult { Content = "{\"summary\":\"References retained.\"}" });
+            };
+            new ContextCompactionService(completion).EnsureWithinBudgetAsync(
+                session,
+                new AppSettings(),
+                string.Empty,
+                true,
+                null,
+                CancellationToken.None).GetAwaiter().GetResult();
+            AssertContains(compactionInput, "artifact:attachment_old-text",
+                "compaction receives the stable artifact reference");
+            AssertTrue(compactionInput.IndexOf("HISTORICAL_BODY_MUST_NOT_REPLAY", StringComparison.Ordinal) < 0,
+                "compaction does not reopen historical attachment bodies");
+            AssertTrue(compactionInput.IndexOf("HISTORICAL_ANALYSIS_MUST_NOT_REPLAY", StringComparison.Ordinal) < 0,
+                "compaction does not inject saved media analysis");
         }
 
         private static void AgentHydratesArtifactMediaOnlyAfterRead()

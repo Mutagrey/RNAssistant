@@ -265,6 +265,7 @@ function readSettings() {
     BaseUrl: $("baseUrlInput").value.trim(),
     ModelsConfigUrl: $("modelsConfigUrlInput").value.trim(),
     Model: $("modelInput").value.trim(),
+    AgentPromptSchemaVersion: Number(compatibilityValue(state.settings, "AgentPromptSchemaVersion", "agentPromptSchemaVersion", 1) || 1),
     ReasoningRequestMode: reasoningRequestMode,
     ReasoningCustomJson: reasoningCustomJson,
     MaxTokens: Number($("maxTokensInput").value || modelSettingsDefaults.maxTokens),

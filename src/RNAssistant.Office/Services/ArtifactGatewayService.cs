@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
@@ -351,7 +352,6 @@ namespace RNAssistant.Office.Services
                 ["revision"] = Math.Max(1, artifact.Revision),
                 ["mimeType"] = artifact.MimeType,
                 ["byteLength"] = artifact.ContentByteLength,
-                ["modelContextPolicy"] = ArtifactModelContextPolicies.Normalize(artifact.ModelContextPolicy),
                 ["representations"] = representations,
                 ["createdUtc"] = artifact.CreatedUtc
             };
@@ -369,6 +369,10 @@ namespace RNAssistant.Office.Services
         {
             value = (value ?? string.Empty).Trim().ToLowerInvariant();
             if (value == "metadata" || value == "text" || value == "analysis" || value == "media") return value;
+            if (value.Length > 0 && value != "auto")
+            {
+                throw new InvalidOperationException("Unknown artifact representation: " + value);
+            }
             if (HasTextHint(artifact, FindAttachment(session, artifact))) return "text";
             if (!string.IsNullOrWhiteSpace(ReadAnalysis(session, artifact))) return "analysis";
             if (IsModelMedia(FindAttachment(session, artifact))) return "media";
@@ -478,16 +482,13 @@ namespace RNAssistant.Office.Services
             try
             {
                 var metadata = JObject.Parse(artifact.MetadataJson ?? "{}");
-                var value = (string)metadata["attachmentId"] ?? (string)metadata["AttachmentId"];
+                var value = (string)metadata["attachmentId"];
                 if (!string.IsNullOrWhiteSpace(value)) return value;
             }
-            catch
+            catch (JsonException)
             {
             }
-            const string prefix = "attachment_";
-            return (artifact.Id ?? string.Empty).StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-                ? artifact.Id.Substring(prefix.Length)
-                : string.Empty;
+            return string.Empty;
         }
 
         private static ChatArtifact Find(ChatSession session, string artifactId)
