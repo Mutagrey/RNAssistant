@@ -6,6 +6,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
@@ -13,6 +14,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
@@ -109,6 +111,110 @@ namespace RNAssistant.Harness
                 AssertEqual("Saved after trace", reader.Load(created.Id).Title,
                     "metadata rewrite falls back to a complete verified replay");
                 AssertEqual(2L, reader.ProjectionFullReplayCount, "non-append change invalidates the cache");
+            });
+        }
+
+        private static void StreamingTraceQueueIsOrdered()
+        {
+            var queue = new SessionTraceWriteQueue(4);
+            var firstStarted = new ManualResetEventSlim(false);
+            var releaseFirst = new ManualResetEventSlim(false);
+            var order = new List<string>();
+            var orderSync = new object();
+
+            queue.Enqueue("session-a", () =>
+            {
+                firstStarted.Set();
+                releaseFirst.Wait();
+                lock (orderSync) order.Add("chunk-1");
+            });
+            AssertTrue(firstStarted.Wait(TimeSpan.FromSeconds(2)), "first queued write starts on a worker");
+            queue.Enqueue("session-a", () =>
+            {
+                lock (orderSync) order.Add("chunk-2");
+            });
+            AssertEqual(2, queue.PendingCount("session-a"), "SSE callback can enqueue behind a blocked fsync");
+
+            queue.EnqueueAndDrain("session-b", () =>
+            {
+                lock (orderSync) order.Add("other-session");
+            });
+            var terminal = Task.Run(() => queue.EnqueueAndDrain("session-a", () =>
+            {
+                lock (orderSync) order.Add("response");
+            }));
+            AssertTrue(!terminal.Wait(100), "terminal waits for earlier writes in its session");
+            releaseFirst.Set();
+            AssertTrue(terminal.Wait(TimeSpan.FromSeconds(2)), "terminal drain completes after the blocked write");
+            terminal.GetAwaiter().GetResult();
+
+            lock (orderSync)
+            {
+                AssertTrue(order.IndexOf("other-session") < order.IndexOf("chunk-1"),
+                    "another session is not blocked by this session queue");
+                AssertTrue(order.Where(value => value != "other-session")
+                    .SequenceEqual(new[] { "chunk-1", "chunk-2", "response" }),
+                    "writes retain enqueue order through the terminal barrier");
+            }
+
+            var terminalRan = false;
+            queue.Enqueue("session-failure", () => { throw new InvalidOperationException("queued-write-failed"); });
+            try
+            {
+                queue.EnqueueAndDrain("session-failure", () => terminalRan = true);
+                throw new InvalidOperationException("queue failure was not propagated");
+            }
+            catch (InvalidOperationException ex)
+            {
+                AssertEqual("queued-write-failed", ex.Message, "first queued failure reaches the terminal barrier");
+            }
+            AssertTrue(!terminalRan, "terminal write is skipped after an earlier persistence failure");
+            queue.EnqueueAndDrain("session-failure", () => terminalRan = true);
+            AssertTrue(terminalRan, "an idle failed queue can be retried by a later request");
+        }
+
+        private static void StreamingTraceQueueDrainsBeforeTerminal()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Word", "trace-queue", "Trace.docx", "Trace queue");
+                session.LastRun = new ChatRunRecord
+                {
+                    RunId = "run-queue",
+                    TurnId = "turn-queue",
+                    Status = "running",
+                    StartedUtc = DateTime.UtcNow
+                };
+                store.Save(session);
+
+                var service = new ModelTracePersistenceService(store, new SessionTraceWriteQueue(4));
+                var options = new LlmRequestOptions { TraceSession = session, TracePurpose = "agent" };
+                service.Configure(options);
+                options.TraceSink(new LlmTraceRecord
+                {
+                    Type = "request", RequestId = "request-queue", Purpose = "agent",
+                    PayloadJson = "{\"request\":true}", PayloadContentType = "application/json"
+                });
+                options.TraceSink(new LlmTraceRecord
+                {
+                    Type = "chunk", RequestId = "request-queue", Purpose = "agent",
+                    ChunkIndex = 0, ChunkCount = 2, Completed = true,
+                    PayloadJson = "[\"one\",\"two\"]", PayloadContentType = "application/json"
+                });
+                options.TraceSink(new LlmTraceRecord
+                {
+                    Type = "response", RequestId = "request-queue", Purpose = "agent", StatusCode = 200,
+                    PayloadJson = "{\"response\":true}", PayloadContentType = "application/json"
+                });
+
+                var events = store.ReadEvents(session.Host, session.DocumentKey, session.Id);
+                var chunk = events.Single(item => item.Type == SessionEventTypes.AssistantChunk);
+                var response = events.Single(item => item.Type == SessionEventTypes.LlmResponse);
+                AssertTrue(chunk.Sequence < response.Sequence, "terminal response is durable after queued chunks");
+                AssertEqual("[\"one\",\"two\"]", store.ReadEventPayload(chunk), "queued chunk payload remains exact");
+                AssertEqual(SessionEventTypes.StepEnded, events.Last().Type,
+                    "response and step terminal boundary remain one durable append batch");
             });
         }
 

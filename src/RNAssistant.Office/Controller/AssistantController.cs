@@ -22,6 +22,7 @@ namespace RNAssistant.Office
         private readonly AppDataPaths _paths;
         private readonly SettingsService _settingsService;
         private readonly ChatStore _chatStore;
+        private readonly ModelTracePersistenceService _modelTracePersistence;
         private readonly AttachmentStore _attachmentStore;
         private readonly ToolStore _toolStore;
         private readonly SkillStore _skillStore;
@@ -63,6 +64,7 @@ namespace RNAssistant.Office
             RuntimeLog.Configure(_paths.Root);
             _settingsService = new SettingsService(_paths);
             _chatStore = new ChatStore(_paths, () => _settingsService.LoadStorageProtector());
+            _modelTracePersistence = new ModelTracePersistenceService(_chatStore);
             _attachmentStore = new AttachmentStore(_paths, () => _settingsService.LoadStorageProtector());
             _toolStore = new ToolStore(_paths);
             _skillStore = new SkillStore(_paths);
@@ -162,59 +164,7 @@ namespace RNAssistant.Office
 
         private void ConfigureModelTrace(LlmRequestOptions options)
         {
-            if (options == null || options.TraceSession == null || options.TraceSinkConfigured) return;
-            var session = options.TraceSession;
-            var previousSink = options.TraceSink;
-            options.TraceSink = record =>
-            {
-                if (previousSink != null) previousSink(record);
-                if (record == null) return;
-                var type = string.Equals(record.Type, "request", StringComparison.OrdinalIgnoreCase)
-                    ? SessionEventTypes.LlmRequest
-                    : string.Equals(record.Type, "response", StringComparison.OrdinalIgnoreCase)
-                        ? SessionEventTypes.LlmResponse
-                        : string.Equals(record.Type, "chunk", StringComparison.OrdinalIgnoreCase)
-                            ? SessionEventTypes.AssistantChunk
-                            : string.Equals(record.Type, "rejected", StringComparison.OrdinalIgnoreCase)
-                                ? SessionEventTypes.AgentResponseRejected
-                                : SessionEventTypes.LlmFailure;
-                var runId = session.LastRun == null ? null : session.LastRun.RunId;
-                var turnId = session.LastRun == null || string.IsNullOrWhiteSpace(session.LastRun.TurnId)
-                    ? runId
-                    : session.LastRun.TurnId;
-                _chatStore.AppendTrace(
-                    session,
-                    type,
-                    new
-                    {
-                        record.RequestId,
-                        record.Purpose,
-                        record.Endpoint,
-                        record.Model,
-                        record.ResponseFormat,
-                        record.MessageCount,
-                        record.Attempt,
-                        record.EstimatedPromptTokens,
-                        record.PromptTokens,
-                        record.CompletionTokens,
-                        record.TotalTokens,
-                        record.ReasoningTokens,
-                        record.UsageJson,
-                        record.StatusCode,
-                        record.FailureKind,
-                        record.Error,
-                        record.ChunkIndex,
-                        record.ChunkCount,
-                        record.Completed,
-                        record.ChunkEncoding
-                    },
-                    record.PayloadJson,
-                    record.PayloadContentType,
-                    runId,
-                    turnId,
-                    record.RequestId);
-            };
-            options.TraceSinkConfigured = true;
+            _modelTracePersistence.Configure(options);
         }
 
         public string HostName { get { return _adapter.HostName; } }

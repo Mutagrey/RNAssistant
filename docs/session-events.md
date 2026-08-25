@@ -28,7 +28,7 @@ Every `SessionEvent` contains `SchemaVersion`, `SessionId`, contiguous `Sequence
 - `step.started` / `step.ended` delimit one model request. Startup recovery appends a synthetic interrupted end for a request that never reached a terminal event.
 - `llm.request` records the exact final JSON body after messages, attachment parts, system instructions, tool schemas, and response schema are materialized. Persistence succeeds before HTTP dispatch.
 - `llm.response` records the raw non-stream response body or the normalized complete streaming result.
-- `assistant.chunk` records ordered provider SSE data frames in bounded JSON-array batches (up to roughly 64 KiB or one second while frames arrive). The event stores first frame index, count, completion marker, and a CAS payload; batching avoids one durable flush per token.
+- `assistant.chunk` records ordered provider SSE data frames in bounded JSON-array batches (up to roughly 64 KiB or one second while frames arrive). The event stores first frame index, count, completion marker, and a CAS payload. Batches enter one bounded ordered queue per session (up to 16 pending writes), so the SSE reader normally does not wait for `Flush(true)`; saturation applies backpressure instead of allowing unbounded memory growth.
 - `llm.failure` records endpoint/status/failure metadata and any bounded provider error body.
 - `agent.response.rejected` keeps malformed Agent output for diagnosis without adding it to model replay or visible chat history.
 
@@ -66,6 +66,7 @@ Current history encryption does not cover transient attachment staging, settings
 
 - A document-scoped cross-process lock and event-tail compare-and-swap prevent stale writers.
 - Each append is flushed to stable storage before returning.
+- The final materialized model request remains a synchronous durability barrier before network dispatch. Model response/failure is another barrier: every earlier queued `assistant.chunk` batch for that session is durable before the terminal event is appended.
 - Adjacent lifecycle and trace/commit records remain separate hash-linked lines but share one locked durable append batch.
 - A parse-incomplete final JSONL row is ignored; a valid but unterminated final row remains readable. The next successful append normalizes either tail before adding another record.
 - A cold load validates sequence continuity and the complete hash-chain. A warm cached load reuses only its previously validated prefix, revalidates the byte boundary/head, and validates every appended event; a non-append change forces complete validation. A corrupt stream is not projected or listed.

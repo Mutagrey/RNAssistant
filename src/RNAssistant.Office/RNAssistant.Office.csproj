@@ -107,6 +107,8 @@
     <Compile Include="Services\ChatTitleBuilder.cs" />
     <Compile Include="Services\ChatSessionService.cs" />
     <Compile Include="Services\ChatRunRegistry.cs" />
+    <Compile Include="Services\ModelTracePersistenceService.cs" />
+    <Compile Include="Services\SessionTraceWriteQueue.cs" />
     <Compile Include="Services\HtmlNetworkService.cs" />
     <Compile Include="Services\HtmlWorkspaceArtifactService.cs" />
     <Compile Include="Services\DocumentOpenService.cs" />
