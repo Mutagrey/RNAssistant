@@ -123,6 +123,12 @@ namespace RNAssistant.Core.Models
         [JsonProperty(Required = Required.Always)]
         public int FormatVersion { get; set; }
         public long Revision { get; set; }
+        [JsonIgnore]
+        internal string StorageHeadHash { get; set; }
+        [JsonIgnore]
+        internal long StorageByteLength { get; set; }
+        [JsonIgnore]
+        internal long StorageLastWriteUtcTicks { get; set; }
         public string Id { get; set; }
         public string ParentSessionId { get; set; }
         public long? ParentSessionRevision { get; set; }

@@ -64,7 +64,8 @@ Current history encryption does not cover transient attachment staging, settings
 
 - A document-scoped cross-process lock and event-tail compare-and-swap prevent stale writers.
 - Each append is flushed to stable storage before returning.
-- A parse-incomplete final JSONL row is ignored; the next successful append rewrites only the validated prefix first.
+- Adjacent lifecycle and trace/commit records remain separate hash-linked lines but share one locked durable append batch.
+- A parse-incomplete final JSONL row is ignored; a valid but unterminated final row remains readable. The next successful append normalizes either tail before adding another record.
 - Sequence continuity and the hash-chain are validated on every load. A corrupt stream is not projected or listed.
 - Startup recovery marks tool effect as unknown only when the stream contains `tool.execution.started` without the matching `tool.execution.finished` for that run.
 - Recovery closes open model steps with `step.ended { Status: "interrupted", Synthetic: true }`, then closes the logical turn through the normal persisted run transition.

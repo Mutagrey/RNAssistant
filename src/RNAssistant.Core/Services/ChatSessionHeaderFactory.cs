@@ -10,9 +10,16 @@ namespace RNAssistant.Core.Services
             if (session == null) return null;
 
             var workspace = session.HtmlWorkspace;
-            var run = session.LastRun;
             var fileCount = workspace == null || workspace.Files == null ? 0 : workspace.Files.Count;
             var dataSourceCount = workspace == null || workspace.DataSources == null ? 0 : workspace.DataSources.Count;
+            return Create(session, fileCount, dataSourceCount);
+        }
+
+        public static ChatSessionHeader Create(ChatSession session, int htmlFileCount, int htmlDataSourceCount)
+        {
+            if (session == null) return null;
+
+            var run = session.LastRun;
             return new ChatSessionHeader
             {
                 Id = session.Id,
@@ -26,9 +33,9 @@ namespace RNAssistant.Core.Services
                 Mode = ChatModes.Normalize(session.Mode),
                 HtmlModeEnabled = session.HtmlModeEnabled,
                 ReasoningEnabled = session.ReasoningEnabled,
-                HasHtmlWorkspace = fileCount > 0 || dataSourceCount > 0,
-                HtmlFileCount = fileCount,
-                HtmlDataSourceCount = dataSourceCount,
+                HasHtmlWorkspace = htmlFileCount > 0 || htmlDataSourceCount > 0,
+                HtmlFileCount = htmlFileCount,
+                HtmlDataSourceCount = htmlDataSourceCount,
                 CreatedUtc = session.CreatedUtc,
                 UpdatedUtc = session.UpdatedUtc,
                 MessageCount = session.Messages == null

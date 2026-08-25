@@ -46,6 +46,60 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void NaturalListChangesOmitReorder()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Word", "natural-order", "Order.docx", "Order");
+                var first = new ChatMessage { Role = "user", Content = "first" };
+                var second = new ChatMessage { Role = "assistant", Content = "second" };
+                session.Messages.Add(first);
+                session.Messages.Add(second);
+                store.Save(session);
+
+                var commit = store.ReadEvents(session.Host, session.DocumentKey, session.Id).Last();
+                AssertTrue(!commit.Data["Operations"].Any(operation =>
+                    string.Equals((string)operation["Type"], SessionOperationTypes.MessagesReorder, StringComparison.Ordinal)),
+                    "pure appends do not persist a full order vector");
+
+                session.Messages.Reverse();
+                store.Save(session);
+                commit = store.ReadEvents(session.Host, session.DocumentKey, session.Id).Last();
+                AssertTrue(commit.Data["Operations"].Any(operation =>
+                    string.Equals((string)operation["Type"], SessionOperationTypes.MessagesReorder, StringComparison.Ordinal)),
+                    "an explicit reorder remains canonical");
+                AssertTrue(store.Load(session.Id).Messages.Select(item => item.Id)
+                    .SequenceEqual(new[] { second.Id, first.Id }), "reordered messages replay exactly");
+
+                session.Messages.RemoveAt(0);
+                store.Save(session);
+                commit = store.ReadEvents(session.Host, session.DocumentKey, session.Id).Last();
+                AssertTrue(!commit.Data["Operations"].Any(operation =>
+                    string.Equals((string)operation["Type"], SessionOperationTypes.MessagesReorder, StringComparison.Ordinal)),
+                    "removal preserves replay order without a full order vector");
+            });
+        }
+
+        private static void ChatHeadersUseArtifactMetadata()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Word", "header-metadata", "Header.docx", "Header");
+                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "<h1>header</h1>", true);
+                HtmlArtifactToolExecutor.UpsertDataSource(session, "rows", "{\"rows\":[1]}");
+                store.Save(session);
+
+                var active = session.Artifacts.Single(item => item.Id == session.ActiveHtmlArtifactId);
+                var blob = Directory.GetFiles(paths.ChatBlobDirectory, active.ContentSha256 + ".blob", SearchOption.AllDirectories).Single();
+                File.Delete(blob);
+                var header = store.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
+                AssertEqual(1, header.HtmlFileCount, "header reads file count without hydrating CAS");
+                AssertEqual(1, header.HtmlDataSourceCount, "header reads data source count without hydrating CAS");
+            });
+        }
+
         private static void TrajectoryQueryPaginatesAndFilters()
         {
             var events = new List<SessionEvent>
@@ -329,6 +383,20 @@ namespace RNAssistant.Harness
                 first["Data"]["Title"] = "Tampered";
                 lines[0] = first.ToString(Newtonsoft.Json.Formatting.None);
                 File.WriteAllLines(path, lines);
+                File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(-5));
+
+                var appendRejected = false;
+                try
+                {
+                    store.AppendTrace(session, SessionEventTypes.AssistantChunk,
+                        new { requestId = "tampered-prefix", chunkCount = 1 },
+                        null, null, "run-tampered", "turn-tampered", "tampered-prefix");
+                }
+                catch (ChatConcurrencyException)
+                {
+                    appendRejected = true;
+                }
+                AssertTrue(appendRejected, "fast append falls back to full validation after an external file change");
 
                 AssertTrue(store.Load(session.Host, session.DocumentKey, session.Id) == null,
                     "hash mismatch rejects projection");
@@ -786,6 +854,27 @@ namespace RNAssistant.Harness
                 store.Save(loaded);
                 AssertEqual("After recovery", store.Load(loaded.Id).Title, "next commit removes incomplete tail");
                 AssertEqual(2, File.ReadAllLines(path).Length, "stream contains only valid records");
+            });
+        }
+
+        private static void UnterminatedValidEventTailRecovers()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Word", "tail-valid", "Tail.docx", "Before valid tail");
+                var path = SessionEventFile(paths, session);
+                File.WriteAllText(path, File.ReadAllText(path).TrimEnd('\r', '\n'), new UTF8Encoding(false));
+
+                var loaded = store.Load(session.Host, session.DocumentKey, session.Id);
+                AssertEqual("Before valid tail", loaded.Title, "unterminated valid record remains readable");
+                loaded.Title = "After valid tail";
+                store.Save(loaded);
+
+                var text = File.ReadAllText(path);
+                AssertTrue(text.EndsWith("\n", StringComparison.Ordinal), "recovered stream ends with a line terminator");
+                AssertEqual(2, File.ReadAllLines(path).Length, "next commit does not concatenate JSON objects");
+                AssertEqual("After valid tail", store.Load(loaded.Id).Title, "recovered valid tail replays");
             });
         }
 

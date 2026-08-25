@@ -33,6 +33,7 @@ namespace RNAssistant.Core.Storage
         private const string EventFileSuffix = ".events.jsonl";
         private static readonly object PersistenceSync = new object();
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false);
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private static readonly JsonSerializerSettings ProjectionJsonSettings = new JsonSerializerSettings
         {
             ContractResolver = new ChatProjectionContractResolver(),
@@ -114,9 +115,16 @@ namespace RNAssistant.Core.Storage
         public ChatSession Load(string sessionId)
         {
             if (string.IsNullOrWhiteSpace(sessionId)) return null;
-            var header = ListHeaders().FirstOrDefault(item =>
-                string.Equals(item.Id, sessionId, StringComparison.OrdinalIgnoreCase));
-            return header == null ? null : Load(header.Host, header.DocumentKey, header.Id);
+            ChatSession selected = null;
+            foreach (var path in SafeFindSessionFiles(sessionId))
+            {
+                var session = LoadSession(path, true);
+                if (session != null && string.Equals(session.Id, sessionId, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (selected == null || session.UpdatedUtc > selected.UpdatedUtc) selected = session;
+                }
+            }
+            return selected;
         }
 
         public void Save(ChatSession session)
@@ -154,31 +162,40 @@ namespace RNAssistant.Core.Storage
                     {
                         throw new ChatConcurrencyException("The chat must be persisted before trace events can be appended.");
                     }
-                    var revision = session.Revision;
+                    var pending = new List<PendingSessionEvent>();
                     if (string.Equals(type, SessionEventTypes.LlmRequest, StringComparison.Ordinal))
                     {
-                        var started = AppendEvent(path, session.Id, revision, SessionEventTypes.StepStarted,
+                        pending.Add(PendingEvent(SessionEventTypes.StepStarted,
                             BuildStepLifecycleData(dataToken, "running", false, null), null,
-                            runId, turnId, correlatedStepId);
-                        revision = started.Sequence;
-                        session.Revision = revision;
+                            runId, turnId, correlatedStepId));
                     }
 
-                    var appended = AppendEvent(path, session.Id, revision, type,
-                        dataToken, payload, runId, turnId, correlatedStepId);
-                    revision = appended.Sequence;
-                    session.Revision = revision;
+                    var trace = PendingEvent(type, dataToken, payload, runId, turnId, correlatedStepId);
+                    pending.Add(trace);
 
                     if (string.Equals(type, SessionEventTypes.LlmResponse, StringComparison.Ordinal) ||
                         string.Equals(type, SessionEventTypes.LlmFailure, StringComparison.Ordinal))
                     {
                         var status = StepTerminalStatus(type, dataToken);
-                        var ended = AppendEvent(path, session.Id, revision, SessionEventTypes.StepEnded,
-                            BuildStepLifecycleData(dataToken, status, false, appended.EventId), null,
-                            runId, turnId, correlatedStepId);
-                        session.Revision = ended.Sequence;
+                        pending.Add(PendingEvent(SessionEventTypes.StepEnded,
+                            BuildStepLifecycleData(dataToken, status, false, trace.EventId), null,
+                            runId, turnId, correlatedStepId));
                     }
-                    return appended;
+
+                    var appended = AppendEvents(
+                        path,
+                        session.Id,
+                        session.Revision,
+                        session.StorageHeadHash,
+                        session.StorageByteLength,
+                        session.StorageLastWriteUtcTicks,
+                        pending,
+                        null);
+                    var tail = appended[appended.Count - 1];
+                    session.Revision = tail.Sequence;
+                    session.StorageHeadHash = tail.Hash;
+                    CaptureStorageState(session, path);
+                    return appended.First(item => string.Equals(item.EventId, trace.EventId, StringComparison.Ordinal));
                 }
             }
         }
@@ -200,16 +217,34 @@ namespace RNAssistant.Core.Storage
                         throw new ChatConcurrencyException("Chat was changed by another RNAssistant instance. Reload the chat before saving again.");
                     }
                     var open = OpenStepIds(log == null ? null : log.Events, runId);
-                    foreach (var stepId in open)
+                    var turnId = TurnIdForRun(log == null ? null : log.Events, runId);
+                    var pending = open.Select(stepId => PendingEvent(
+                        SessionEventTypes.StepEnded,
+                        new JObject
+                        {
+                            ["Status"] = string.IsNullOrWhiteSpace(status) ? "interrupted" : status,
+                            ["Synthetic"] = true,
+                            ["Error"] = string.IsNullOrWhiteSpace(error) ? JValue.CreateNull() : new JValue(error)
+                        },
+                        null,
+                        runId,
+                        turnId,
+                        stepId)).ToList();
+                    if (pending.Count > 0)
                     {
-                        var ended = AppendEvent(path, session.Id, session.Revision, SessionEventTypes.StepEnded,
-                            new JObject
-                            {
-                                ["Status"] = string.IsNullOrWhiteSpace(status) ? "interrupted" : status,
-                                ["Synthetic"] = true,
-                                ["Error"] = string.IsNullOrWhiteSpace(error) ? JValue.CreateNull() : new JValue(error)
-                            }, null, runId, TurnIdForRun(log == null ? null : log.Events, runId), stepId);
-                        session.Revision = ended.Sequence;
+                        var appended = AppendEvents(
+                            path,
+                            session.Id,
+                            session.Revision,
+                            session.StorageHeadHash,
+                            session.StorageByteLength,
+                            session.StorageLastWriteUtcTicks,
+                            pending,
+                            log);
+                        var tail = appended[appended.Count - 1];
+                        session.Revision = tail.Sequence;
+                        session.StorageHeadHash = tail.Hash;
+                        CaptureStorageState(session, path);
                     }
                     return open.Count;
                 }
@@ -583,14 +618,25 @@ namespace RNAssistant.Core.Storage
 
         public IReadOnlyList<ChatSessionHeader> ListHeaders()
         {
-            return List().Select(ChatSessionHeaderFactory.Create).Where(header => header != null).ToList();
+            if (!Directory.Exists(_paths.ChatDirectory)) return new List<ChatSessionHeader>();
+            var headers = new List<ChatSessionHeader>();
+            foreach (var directory in SafeGetDirectories(_paths.ChatDirectory))
+            {
+                headers.AddRange(SafeGetSessionFiles(directory)
+                    .Select(path => LoadHeader(path, null, null, null))
+                    .Where(header => header != null));
+            }
+            return headers.OrderByDescending(header => header.UpdatedUtc).ToList();
         }
 
         public IReadOnlyList<ChatSessionHeader> ListHeaders(string host, string documentKey, string documentTitle)
         {
-            return List(host, documentKey, documentTitle)
-                .Select(ChatSessionHeaderFactory.Create)
+            var directory = GetDocumentDirectory(host, documentKey);
+            if (!Directory.Exists(directory)) return new List<ChatSessionHeader>();
+            return SafeGetSessionFiles(directory)
+                .Select(path => LoadHeader(path, host, documentKey, documentTitle))
                 .Where(header => header != null)
+                .OrderByDescending(header => header.UpdatedUtc)
                 .ToList();
         }
 
@@ -631,12 +677,6 @@ namespace RNAssistant.Core.Storage
             catch (ChatConcurrencyException) { }
         }
 
-        private long ReadRevision(string path)
-        {
-            var log = ReadEventLog(path);
-            return log == null || log.Events.Count == 0 ? 0 : log.Events[log.Events.Count - 1].Sequence;
-        }
-
         private void SaveInternal(ChatSession session, string explicitPath, bool allowRelocatedSession)
         {
             if (session == null) throw new ArgumentNullException("session");
@@ -657,7 +697,8 @@ namespace RNAssistant.Core.Storage
             EnsureWorkspaceArtifact(session);
             ExternalizeArtifacts(session);
             var exists = File.Exists(path);
-            var stored = exists ? Project(ReadEventLog(path), false) : null;
+            var log = exists ? ReadEventLog(path) : null;
+            var stored = exists ? Project(log, false) : null;
             var storedRevision = stored == null ? 0 : stored.Revision;
             if (exists && stored == null)
             {
@@ -678,30 +719,39 @@ namespace RNAssistant.Core.Storage
             session.UpdatedUtc = DateTime.UtcNow;
             try
             {
-                SessionEvent appended;
+                var pending = new List<PendingSessionEvent>();
                 if (!exists)
                 {
                     var initialType = string.IsNullOrWhiteSpace(session.ParentSessionId)
                         ? SessionEventTypes.SessionCreated
                         : SessionEventTypes.SessionForked;
-                    appended = AppendEvent(path, session.Id, 0, initialType,
-                        ToProjectionToken(session), null, CurrentRunId(session), CurrentTurnId(session), null);
+                    pending.Add(PendingEvent(initialType,
+                        ToProjectionToken(session), null, CurrentRunId(session), CurrentTurnId(session), null));
                 }
                 else
                 {
                     var operations = BuildOperations(stored, session);
                     var correlationRunId = CurrentRunId(session) ?? CurrentRunId(stored);
                     var correlationTurnId = CurrentTurnId(session) ?? CurrentTurnId(stored);
-                    appended = AppendEvent(path, session.Id, storedRevision, SessionEventTypes.SessionCommit,
+                    pending.Add(PendingEvent(SessionEventTypes.SessionCommit,
                         new JObject { ["Operations"] = JArray.FromObject(operations) }, null,
-                        correlationRunId, correlationTurnId, null);
+                        correlationRunId, correlationTurnId, null));
                 }
-                durableRevision = appended.Sequence;
+                AddTurnLifecycleEvents(pending, stored == null ? null : stored.LastRun, session.LastRun);
+                var appended = AppendEvents(
+                    path,
+                    session.Id,
+                    storedRevision,
+                    stored == null ? null : stored.StorageHeadHash,
+                    0,
+                    0,
+                    pending,
+                    log);
+                var tail = appended[appended.Count - 1];
+                durableRevision = tail.Sequence;
                 session.Revision = durableRevision;
-                appended = AppendTurnLifecycleEvents(path, session.Id, appended,
-                    stored == null ? null : stored.LastRun, session.LastRun);
-                durableRevision = appended.Sequence;
-                session.Revision = durableRevision;
+                session.StorageHeadHash = tail.Hash;
+                CaptureStorageState(session, path);
                 RebuildHtmlWorkspaceProjection(session);
                 RebuildContextCheckpointProjection(session);
                 RebuildChartActivityProjection(session);
@@ -710,7 +760,14 @@ namespace RNAssistant.Core.Storage
             {
                 try
                 {
-                    if (File.Exists(path)) durableRevision = ReadRevision(path);
+                    if (File.Exists(path))
+                    {
+                        var recovered = ReadEventLog(path);
+                        var recoveredTail = LastEvent(recovered);
+                        durableRevision = recoveredTail == null ? 0 : recoveredTail.Sequence;
+                        session.StorageHeadHash = recoveredTail == null ? null : recoveredTail.Hash;
+                        CaptureStorageState(session, path);
+                    }
                 }
                 catch
                 {
@@ -722,19 +779,32 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private SessionEvent AppendEvent(
+        private IReadOnlyList<SessionEvent> AppendEvents(
             string path,
             string sessionId,
             long expectedRevision,
-            string type,
-            JToken data,
-            ChatBlobReference payload,
-            string runId,
-            string turnId,
-            string stepId)
+            string expectedHeadHash,
+            long expectedByteLength,
+            long expectedLastWriteUtcTicks,
+            IReadOnlyList<PendingSessionEvent> pending,
+            EventLogReadResult validatedLog)
         {
-            var log = ReadEventLog(path);
-            var actualRevision = log == null || log.Events.Count == 0 ? 0 : log.Events[log.Events.Count - 1].Sequence;
+            if (pending == null || pending.Count == 0) return new List<SessionEvent>();
+
+            var log = validatedLog;
+            var previous = LastEvent(log);
+            if (log == null && expectedRevision > 0 && !string.IsNullOrWhiteSpace(expectedHeadHash))
+            {
+                previous = ReadValidatedTail(path, sessionId, expectedRevision, expectedHeadHash,
+                    expectedByteLength, expectedLastWriteUtcTicks);
+            }
+            if (previous == null && (expectedRevision > 0 || File.Exists(path)))
+            {
+                log = ReadEventLog(path);
+                previous = LastEvent(log);
+            }
+
+            var actualRevision = previous == null ? 0 : previous.Sequence;
             if (actualRevision != expectedRevision)
             {
                 throw new ChatConcurrencyException("Chat was changed by another RNAssistant instance. Reload the chat before saving again.");
@@ -744,33 +814,44 @@ namespace RNAssistant.Core.Storage
                 RewriteValidEvents(path, log.Events);
             }
 
-            var previous = log == null || log.Events.Count == 0 ? null : log.Events[log.Events.Count - 1];
-            var sessionEvent = new SessionEvent
-            {
-                SessionId = sessionId,
-                Sequence = actualRevision + 1,
-                Type = type,
-                RunId = runId,
-                TurnId = turnId,
-                StepId = stepId,
-                PreviousHash = previous == null ? null : previous.Hash,
-                Data = data == null ? null : data.DeepClone(),
-                Payload = payload
-            };
             var protector = Protection();
-            sessionEvent.HashAlgorithm = protector.CurrentHashAlgorithm;
-            sessionEvent.ProtectionKeyId = protector.UsesHmac || protector.Encrypts ? protector.KeyId : null;
-            ProtectEventData(sessionEvent, protector);
-            sessionEvent.Hash = ComputeHash(sessionEvent, protector);
+            var appended = new List<SessionEvent>();
+            foreach (var item in pending)
+            {
+                var sessionEvent = new SessionEvent
+                {
+                    EventId = item.EventId,
+                    CreatedUtc = item.CreatedUtc,
+                    SessionId = sessionId,
+                    Sequence = previous == null ? 1 : previous.Sequence + 1,
+                    Type = item.Type,
+                    RunId = item.RunId,
+                    TurnId = item.TurnId,
+                    StepId = item.StepId,
+                    PreviousHash = previous == null ? null : previous.Hash,
+                    Data = item.Data == null ? null : item.Data.DeepClone(),
+                    Payload = item.Payload
+                };
+                sessionEvent.HashAlgorithm = protector.CurrentHashAlgorithm;
+                sessionEvent.ProtectionKeyId = protector.UsesHmac || protector.Encrypts ? protector.KeyId : null;
+                ProtectEventData(sessionEvent, protector);
+                sessionEvent.Hash = ComputeHash(sessionEvent, protector);
+                appended.Add(sessionEvent);
+                previous = sessionEvent;
+            }
+
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             using (var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read))
             using (var writer = new StreamWriter(stream, Utf8))
             {
-                writer.WriteLine(JsonConvert.SerializeObject(sessionEvent, Formatting.None));
+                foreach (var sessionEvent in appended)
+                {
+                    writer.WriteLine(JsonConvert.SerializeObject(sessionEvent, Formatting.None));
+                }
                 writer.Flush();
                 stream.Flush(true);
             }
-            return sessionEvent;
+            return appended;
         }
 
         private ChatSession LoadSession(string path, bool hydrateActiveArtifacts)
@@ -780,6 +861,7 @@ namespace RNAssistant.Core.Storage
                 var session = Project(ReadEventLog(path), hydrateActiveArtifacts);
                 if (session == null) return null;
                 NormalizeSession(session, session.Host, session.DocumentKey, session.DocumentTitle);
+                CaptureStorageState(session, path);
                 return session;
             }
             catch (IOException) { return null; }
@@ -788,10 +870,95 @@ namespace RNAssistant.Core.Storage
             catch (ChatConcurrencyException) { return null; }
         }
 
+        private ChatSessionHeader LoadHeader(
+            string path,
+            string host,
+            string documentKey,
+            string documentTitle)
+        {
+            try
+            {
+                var log = ReadEventLog(path);
+                var session = Project(log, false, false);
+                if (session == null) return null;
+                NormalizeSession(
+                    session,
+                    host ?? session.Host,
+                    documentKey ?? session.DocumentKey,
+                    documentTitle ?? session.DocumentTitle);
+
+                int fileCount;
+                int dataSourceCount;
+                if (!TryReadWorkspaceCounts(session, out fileCount, out dataSourceCount))
+                {
+                    session = Project(log, false, true);
+                    if (session == null) return null;
+                    NormalizeSession(
+                        session,
+                        host ?? session.Host,
+                        documentKey ?? session.DocumentKey,
+                        documentTitle ?? session.DocumentTitle);
+                    var workspace = session.HtmlWorkspace;
+                    fileCount = workspace == null || workspace.Files == null ? 0 : workspace.Files.Count;
+                    dataSourceCount = workspace == null || workspace.DataSources == null ? 0 : workspace.DataSources.Count;
+                }
+                return ChatSessionHeaderFactory.Create(session, fileCount, dataSourceCount);
+            }
+            catch (IOException) { return null; }
+            catch (UnauthorizedAccessException) { return null; }
+            catch (JsonException) { return null; }
+            catch (ChatConcurrencyException) { return null; }
+        }
+
+        private static bool TryReadWorkspaceCounts(ChatSession session, out int fileCount, out int dataSourceCount)
+        {
+            fileCount = 0;
+            dataSourceCount = 0;
+            if (session == null || string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId)) return true;
+            var artifact = FindHtmlArtifact(session, session.ActiveHtmlArtifactId);
+            if (artifact == null) return true;
+            if (string.IsNullOrWhiteSpace(artifact.MetadataJson)) return false;
+            try
+            {
+                var metadata = JObject.Parse(artifact.MetadataJson);
+                var files = (int?)metadata["fileCount"];
+                var dataSources = (int?)metadata["dataSourceCount"];
+                if (!files.HasValue || !dataSources.HasValue || files.Value < 0 || dataSources.Value < 0)
+                {
+                    return false;
+                }
+                fileCount = files.Value;
+                dataSourceCount = dataSources.Value;
+                return true;
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+            catch (FormatException)
+            {
+                return false;
+            }
+            catch (OverflowException)
+            {
+                return false;
+            }
+            catch (InvalidCastException)
+            {
+                return false;
+            }
+        }
+
         private ChatSession Project(EventLogReadResult log, bool hydrateActiveArtifacts)
+        {
+            return Project(log, hydrateActiveArtifacts, true);
+        }
+
+        private ChatSession Project(EventLogReadResult log, bool hydrateActiveArtifacts, bool rebuildDerivedProjections)
         {
             if (log == null || log.Events.Count == 0) return null;
             JObject root = null;
+            ProjectionReplayState replay = null;
             foreach (var sessionEvent in log.Events)
             {
                 if (string.Equals(sessionEvent.Type, SessionEventTypes.SessionCreated, StringComparison.Ordinal) ||
@@ -799,6 +966,7 @@ namespace RNAssistant.Core.Storage
                 {
                     if (root != null || sessionEvent.Data == null || sessionEvent.Data.Type != JTokenType.Object) return null;
                     root = (JObject)sessionEvent.Data.DeepClone();
+                    replay = new ProjectionReplayState(root);
                     continue;
                 }
                 if (!string.Equals(sessionEvent.Type, SessionEventTypes.SessionCommit, StringComparison.Ordinal)) continue;
@@ -806,14 +974,20 @@ namespace RNAssistant.Core.Storage
                 var operations = sessionEvent.Data["Operations"] == null
                     ? new List<SessionOperation>()
                     : sessionEvent.Data["Operations"].ToObject<List<SessionOperation>>();
-                ApplyOperations(root, operations);
+                ApplyOperations(root, operations, replay);
             }
-            if (root == null) return null;
+            if (root == null || replay == null) return null;
+            replay.Materialize(root);
             var session = root.ToObject<ChatSession>();
-            session.Revision = log.Events[log.Events.Count - 1].Sequence;
-            RebuildHtmlWorkspaceProjection(session);
-            RebuildContextCheckpointProjection(session);
-            RebuildChartActivityProjection(session);
+            var tail = LastEvent(log);
+            session.Revision = tail.Sequence;
+            session.StorageHeadHash = tail.Hash;
+            if (rebuildDerivedProjections)
+            {
+                RebuildHtmlWorkspaceProjection(session);
+                RebuildContextCheckpointProjection(session);
+                RebuildChartActivityProjection(session);
+            }
             if (hydrateActiveArtifacts)
             {
                 foreach (var artifact in (session.Artifacts ?? new List<ChatArtifact>()).Where(ShouldHydrateForActiveSession))
@@ -938,7 +1112,12 @@ namespace RNAssistant.Core.Storage
 
             var beforeOrder = beforeItems.Select(item => (string)item[idProperty]).ToList();
             var afterOrder = afterItems.Select(item => (string)item[idProperty]).ToList();
-            if (!beforeOrder.SequenceEqual(afterOrder, StringComparer.OrdinalIgnoreCase))
+            var replayOrder = beforeOrder
+                .Where(id => !string.IsNullOrWhiteSpace(id) && afterById.ContainsKey(id))
+                .ToList();
+            replayOrder.AddRange(afterOrder.Where(id =>
+                !string.IsNullOrWhiteSpace(id) && !beforeById.ContainsKey(id)));
+            if (!replayOrder.SequenceEqual(afterOrder, StringComparer.OrdinalIgnoreCase))
             {
                 operations.Add(Operation(reorderType, new JObject { ["Ids"] = JArray.FromObject(afterOrder) }));
             }
@@ -993,7 +1172,10 @@ namespace RNAssistant.Core.Storage
             return fallback;
         }
 
-        private static void ApplyOperations(JObject root, IEnumerable<SessionOperation> operations)
+        private static void ApplyOperations(
+            JObject root,
+            IEnumerable<SessionOperation> operations,
+            ProjectionReplayState replay)
         {
             foreach (var operation in operations ?? new List<SessionOperation>())
             {
@@ -1020,86 +1202,28 @@ namespace RNAssistant.Core.Storage
                     case SessionOperationTypes.ToolResultRecorded:
                     case SessionOperationTypes.ToolExecutionStarted:
                     case SessionOperationTypes.ToolExecutionFinished:
-                        Upsert(root, "Messages", data["Value"]);
+                        replay.Upsert("Messages", data["Value"]);
                         break;
                     case SessionOperationTypes.MessageRemove:
-                        Remove(root, "Messages", (string)data["Id"]);
+                        replay.Remove("Messages", (string)data["Id"]);
                         break;
                     case SessionOperationTypes.MessagesReorder:
-                        Reorder(root, "Messages", data["Ids"] as JArray);
+                        replay.Reorder("Messages", data["Ids"] as JArray);
                         break;
                     case SessionOperationTypes.ArtifactUpsert:
                     case SessionOperationTypes.ArtifactRevisionCreated:
-                        Upsert(root, "Artifacts", data["Value"]);
+                        replay.Upsert("Artifacts", data["Value"]);
                         break;
                     case SessionOperationTypes.ArtifactRemove:
-                        Remove(root, "Artifacts", (string)data["Id"]);
+                        replay.Remove("Artifacts", (string)data["Id"]);
                         break;
                     case SessionOperationTypes.ArtifactsReorder:
-                        Reorder(root, "Artifacts", data["Ids"] as JArray);
+                        replay.Reorder("Artifacts", data["Ids"] as JArray);
                         break;
                     default:
                         throw new JsonException("Unsupported session operation: " + operation.Type);
                 }
             }
-        }
-
-        private static void Upsert(JObject root, string property, JToken value)
-        {
-            var item = value as JObject;
-            var id = item == null ? null : (string)item["Id"];
-            if (item == null || string.IsNullOrWhiteSpace(id)) throw new JsonException("Upsert operation requires an object id.");
-            var items = EnsureArray(root, property);
-            var existing = items.OfType<JObject>().FirstOrDefault(candidate =>
-                string.Equals((string)candidate["Id"], id, StringComparison.OrdinalIgnoreCase));
-            if (existing == null) items.Add(item.DeepClone());
-            else existing.Replace(item.DeepClone());
-        }
-
-        private static void Remove(JObject root, string property, string id)
-        {
-            if (string.IsNullOrWhiteSpace(id)) return;
-            var items = EnsureArray(root, property);
-            var existing = items.OfType<JObject>().FirstOrDefault(candidate =>
-                string.Equals((string)candidate["Id"], id, StringComparison.OrdinalIgnoreCase));
-            if (existing != null) existing.Remove();
-        }
-
-        private static void Reorder(JObject root, string property, JArray ids)
-        {
-            var items = EnsureArray(root, property);
-            var byId = items.OfType<JObject>()
-                .Where(item => !string.IsNullOrWhiteSpace((string)item["Id"]))
-                .ToDictionary(item => (string)item["Id"], item => item, StringComparer.OrdinalIgnoreCase);
-            var reordered = new JArray();
-            foreach (var id in (ids ?? new JArray()).Values<string>())
-            {
-                JObject item;
-                if (!string.IsNullOrWhiteSpace(id) && byId.TryGetValue(id, out item))
-                {
-                    reordered.Add(item.DeepClone());
-                    byId.Remove(id);
-                }
-            }
-            foreach (var item in items.OfType<JObject>())
-            {
-                var id = (string)item["Id"];
-                if (!string.IsNullOrWhiteSpace(id) && byId.ContainsKey(id))
-                {
-                    reordered.Add(item.DeepClone());
-                    byId.Remove(id);
-                }
-            }
-            root[property] = reordered;
-        }
-
-        private static JArray EnsureArray(JObject root, string property)
-        {
-            var items = root[property] as JArray;
-            if (items != null) return items;
-            items = new JArray();
-            root[property] = items;
-            return items;
         }
 
         private static JToken CloneValue(JToken value)
@@ -1287,8 +1411,14 @@ namespace RNAssistant.Core.Storage
             string issue = null;
             string message = null;
             string problemArtifactId = null;
+            long historyCharacters = 0;
             while (!string.IsNullOrWhiteSpace(current.ParentArtifactId))
             {
+                if (workspace.History.Count >= HtmlWorkspaceHistoryPolicy.MaxItems ||
+                    historyCharacters >= HtmlWorkspaceHistoryPolicy.MaxContentCharacters)
+                {
+                    break;
+                }
                 problemArtifactId = current.ParentArtifactId;
                 if (!visited.Add(problemArtifactId))
                 {
@@ -1316,9 +1446,16 @@ namespace RNAssistant.Core.Storage
                     message = "An older HTML workspace body is invalid. The active revision is readable, but undo history is incomplete.";
                     break;
                 }
+                var snapshotCharacters = HtmlWorkspaceHistoryPolicy.EstimateContentCharacters(snapshot);
+                if (snapshotCharacters > HtmlWorkspaceHistoryPolicy.MaxContentCharacters ||
+                    historyCharacters + snapshotCharacters > HtmlWorkspaceHistoryPolicy.MaxContentCharacters)
+                {
+                    problemArtifactId = null;
+                    break;
+                }
                 workspace.History.Add(snapshot);
+                historyCharacters += snapshotCharacters;
             }
-            workspace.History = HtmlWorkspaceHistoryPolicy.Trim(workspace.History);
 
             workspace.RedoBranches = HtmlWorkspaceNavigationService.GetRedoBranches(session);
             session.HtmlWorkspace = workspace;
@@ -1470,32 +1607,167 @@ namespace RNAssistant.Core.Storage
         private EventLogReadResult ReadEventLog(string path)
         {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
-            var lines = File.ReadAllLines(path, Utf8);
-            var hasTerminatedFinalLine = StorageFileSystem.HasTerminatedFinalLine(path);
             var result = new EventLogReadResult();
             var protector = Protection();
-            for (var index = 0; index < lines.Length; index++)
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             {
-                if (string.IsNullOrWhiteSpace(lines[index])) continue;
-                SessionEvent sessionEvent;
+                var hasTerminatedFinalLine = HasTerminatedFinalLine(stream);
+                stream.Position = 0;
                 try
                 {
-                    sessionEvent = JsonConvert.DeserializeObject<SessionEvent>(lines[index]);
-                }
-                catch (JsonException)
-                {
-                    if (index == lines.Length - 1 && !hasTerminatedFinalLine)
+                    using (var reader = new StreamReader(stream, StrictUtf8, false, 8192, false))
                     {
-                        result.HasIncompleteTail = true;
-                        break;
+                        string line;
+                        while ((line = reader.ReadLine()) != null)
+                        {
+                            if (string.IsNullOrWhiteSpace(line)) continue;
+                            SessionEvent sessionEvent;
+                            try
+                            {
+                                sessionEvent = JsonConvert.DeserializeObject<SessionEvent>(line);
+                            }
+                            catch (JsonException)
+                            {
+                                if (reader.EndOfStream && !hasTerminatedFinalLine)
+                                {
+                                    result.HasIncompleteTail = true;
+                                    break;
+                                }
+                                throw new ChatConcurrencyException("The chat event log contains an invalid record.");
+                            }
+                            ValidateEvent(result.Events, sessionEvent, protector);
+                            HydrateEventData(sessionEvent, protector);
+                            result.Events.Add(sessionEvent);
+                        }
                     }
-                    throw new ChatConcurrencyException("The chat event log contains an invalid record.");
                 }
-                ValidateEvent(result.Events, sessionEvent, protector);
-                HydrateEventData(sessionEvent, protector);
-                result.Events.Add(sessionEvent);
+                catch (DecoderFallbackException)
+                {
+                    throw new ChatConcurrencyException("The chat event log contains invalid UTF-8.");
+                }
+
+                // A complete JSON object without its line terminator must be normalized before
+                // another append, otherwise the next object would be concatenated to it.
+                if (!hasTerminatedFinalLine && !result.HasIncompleteTail)
+                {
+                    result.HasIncompleteTail = true;
+                }
             }
             return result;
+        }
+
+        private SessionEvent ReadValidatedTail(
+            string path,
+            string sessionId,
+            long expectedRevision,
+            string expectedHeadHash,
+            long expectedByteLength,
+            long expectedLastWriteUtcTicks)
+        {
+            if (expectedByteLength <= 0 || expectedLastWriteUtcTicks <= 0) return null;
+            var file = new FileInfo(path);
+            if (!file.Exists || file.Length != expectedByteLength ||
+                file.LastWriteTimeUtc.Ticks != expectedLastWriteUtcTicks)
+            {
+                return null;
+            }
+            try
+            {
+                string line;
+                if (!TryReadLastTerminatedLine(path, out line)) return null;
+                var sessionEvent = JsonConvert.DeserializeObject<SessionEvent>(line);
+                var protector = Protection();
+                if (sessionEvent == null || sessionEvent.SchemaVersion != SessionEvent.CurrentSchemaVersion ||
+                    sessionEvent.Sequence != expectedRevision ||
+                    !string.Equals(sessionEvent.SessionId, sessionId, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(sessionEvent.Hash, expectedHeadHash, StringComparison.OrdinalIgnoreCase) ||
+                    !ValidHashAlgorithm(sessionEvent.HashAlgorithm) ||
+                    !string.IsNullOrWhiteSpace(sessionEvent.EncryptedData) && sessionEvent.Data != null ||
+                    !ProtectionMatches(sessionEvent, protector) ||
+                    !string.Equals(sessionEvent.Hash, ComputeHash(sessionEvent, protector), StringComparison.OrdinalIgnoreCase))
+                {
+                    return null;
+                }
+                return sessionEvent;
+            }
+            catch (Exception ex) when (ex is JsonException || ex is DecoderFallbackException || ex is CryptographicException)
+            {
+                return null;
+            }
+        }
+
+        private static bool TryReadLastTerminatedLine(string path, out string line)
+        {
+            line = null;
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return false;
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                if (!HasTerminatedFinalLine(stream) || stream.Length == 0) return false;
+                var reversed = new List<byte>();
+                var buffer = new byte[8192];
+                var cursor = stream.Length;
+                var collecting = false;
+                while (cursor > 0)
+                {
+                    var count = (int)Math.Min(buffer.Length, cursor);
+                    cursor -= count;
+                    stream.Position = cursor;
+                    var read = 0;
+                    while (read < count)
+                    {
+                        var next = stream.Read(buffer, read, count - read);
+                        if (next <= 0) break;
+                        read += next;
+                    }
+                    for (var index = read - 1; index >= 0; index--)
+                    {
+                        var value = buffer[index];
+                        if (!collecting)
+                        {
+                            if (value == (byte)'\n' || value == (byte)'\r' || value == (byte)' ' || value == (byte)'\t') continue;
+                            collecting = true;
+                            reversed.Add(value);
+                            continue;
+                        }
+                        if (value == (byte)'\n')
+                        {
+                            reversed.Reverse();
+                            line = StrictUtf8.GetString(reversed.ToArray());
+                            return !string.IsNullOrWhiteSpace(line);
+                        }
+                        reversed.Add(value);
+                    }
+                }
+                if (!collecting) return false;
+                reversed.Reverse();
+                line = StrictUtf8.GetString(reversed.ToArray());
+                return !string.IsNullOrWhiteSpace(line);
+            }
+        }
+
+        private static bool HasTerminatedFinalLine(FileStream stream)
+        {
+            if (stream == null || stream.Length == 0) return true;
+            var position = stream.Position;
+            stream.Position = stream.Length - 1;
+            var value = stream.ReadByte();
+            stream.Position = position;
+            return value == '\n' || value == '\r';
+        }
+
+        private static void CaptureStorageState(ChatSession session, string path)
+        {
+            if (session == null) return;
+            var file = new FileInfo(path);
+            if (!file.Exists)
+            {
+                session.StorageByteLength = 0;
+                session.StorageLastWriteUtcTicks = 0;
+                return;
+            }
+            file.Refresh();
+            session.StorageByteLength = file.Length;
+            session.StorageLastWriteUtcTicks = file.LastWriteTimeUtc.Ticks;
         }
 
         private static void ValidateEvent(
@@ -1733,6 +2005,18 @@ namespace RNAssistant.Core.Storage
             catch (UnauthorizedAccessException) { return new string[0]; }
         }
 
+        private IEnumerable<string> SafeFindSessionFiles(string sessionId)
+        {
+            if (!Directory.Exists(_paths.ChatDirectory)) return new string[0];
+            var fileName = AppDataPaths.SafeFileName(sessionId ?? string.Empty) + EventFileSuffix;
+            try
+            {
+                return Directory.GetFiles(_paths.ChatDirectory, fileName, SearchOption.AllDirectories);
+            }
+            catch (IOException) { return new string[0]; }
+            catch (UnauthorizedAccessException) { return new string[0]; }
+        }
+
         private static string CurrentRunId(ChatSession session)
         {
             return session == null || session.LastRun == null ? null : session.LastRun.RunId;
@@ -1745,75 +2029,68 @@ namespace RNAssistant.Core.Storage
                 : RunTurnId(session.LastRun);
         }
 
-        private SessionEvent AppendTurnLifecycleEvents(
-            string path,
-            string sessionId,
-            SessionEvent tail,
+        private static void AddTurnLifecycleEvents(
+            ICollection<PendingSessionEvent> pending,
             ChatRunRecord before,
             ChatRunRecord after)
         {
             var beforeTurnId = RunTurnId(before);
             var afterTurnId = RunTurnId(after);
-            if (string.IsNullOrWhiteSpace(beforeTurnId) && string.IsNullOrWhiteSpace(afterTurnId)) return tail;
+            if (string.IsNullOrWhiteSpace(beforeTurnId) && string.IsNullOrWhiteSpace(afterTurnId)) return;
 
             if (string.IsNullOrWhiteSpace(beforeTurnId))
             {
-                tail = AppendTurnStarted(path, sessionId, tail, after);
+                pending.Add(TurnStarted(after));
                 if (IsTerminalRunStatus(after == null ? null : after.Status))
                 {
-                    tail = AppendTurnEnded(path, sessionId, tail, after, after.Status);
+                    pending.Add(TurnEnded(after, after.Status));
                 }
-                return tail;
+                return;
             }
 
             if (string.IsNullOrWhiteSpace(afterTurnId))
             {
-                if (IsTerminalRunStatus(before == null ? null : before.Status)) return tail;
+                if (IsTerminalRunStatus(before == null ? null : before.Status)) return;
                 var status = string.Equals(before == null ? null : before.Status, "waiting_confirmation", StringComparison.OrdinalIgnoreCase)
                     ? "cancelled"
                     : "completed";
-                return AppendTurnEnded(path, sessionId, tail, before, status);
+                pending.Add(TurnEnded(before, status));
+                return;
             }
 
             if (!string.Equals(beforeTurnId, afterTurnId, StringComparison.OrdinalIgnoreCase))
             {
                 if (!IsTerminalRunStatus(before == null ? null : before.Status))
                 {
-                    tail = AppendTurnEnded(path, sessionId, tail, before, "superseded");
+                    pending.Add(TurnEnded(before, "superseded"));
                 }
-                tail = AppendTurnStarted(path, sessionId, tail, after);
+                pending.Add(TurnStarted(after));
                 if (IsTerminalRunStatus(after == null ? null : after.Status))
                 {
-                    tail = AppendTurnEnded(path, sessionId, tail, after, after.Status);
+                    pending.Add(TurnEnded(after, after.Status));
                 }
-                return tail;
+                return;
             }
 
             if (!IsTerminalRunStatus(before == null ? null : before.Status) &&
                 IsTerminalRunStatus(after == null ? null : after.Status))
             {
-                tail = AppendTurnEnded(path, sessionId, tail, after, after.Status);
+                pending.Add(TurnEnded(after, after.Status));
             }
-            return tail;
         }
 
-        private SessionEvent AppendTurnStarted(string path, string sessionId, SessionEvent tail, ChatRunRecord run)
+        private static PendingSessionEvent TurnStarted(ChatRunRecord run)
         {
             var turnId = RunTurnId(run);
-            return AppendEvent(path, sessionId, tail.Sequence, SessionEventTypes.TurnStarted,
+            return PendingEvent(SessionEventTypes.TurnStarted,
                 BuildTurnLifecycleData(run, "running"), null,
                 run == null ? null : run.RunId, turnId, null);
         }
 
-        private SessionEvent AppendTurnEnded(
-            string path,
-            string sessionId,
-            SessionEvent tail,
-            ChatRunRecord run,
-            string status)
+        private static PendingSessionEvent TurnEnded(ChatRunRecord run, string status)
         {
             var turnId = RunTurnId(run);
-            return AppendEvent(path, sessionId, tail.Sequence, SessionEventTypes.TurnEnded,
+            return PendingEvent(SessionEventTypes.TurnEnded,
                 BuildTurnLifecycleData(run, string.IsNullOrWhiteSpace(status) ? "completed" : status), null,
                 run == null ? null : run.RunId, turnId, null);
         }
@@ -1830,6 +2107,34 @@ namespace RNAssistant.Core.Storage
                     ? JValue.CreateNull()
                     : new JValue(run.StartedUtc.ToUniversalTime())
             };
+        }
+
+        private static PendingSessionEvent PendingEvent(
+            string type,
+            JToken data,
+            ChatBlobReference payload,
+            string runId,
+            string turnId,
+            string stepId)
+        {
+            return new PendingSessionEvent
+            {
+                EventId = Guid.NewGuid().ToString("N"),
+                CreatedUtc = DateTime.UtcNow,
+                Type = type,
+                Data = data,
+                Payload = payload,
+                RunId = runId,
+                TurnId = turnId,
+                StepId = stepId
+            };
+        }
+
+        private static SessionEvent LastEvent(EventLogReadResult log)
+        {
+            return log == null || log.Events.Count == 0
+                ? null
+                : log.Events[log.Events.Count - 1];
         }
 
         private static bool IsTerminalRunStatus(string status)
@@ -1942,6 +2247,171 @@ namespace RNAssistant.Core.Storage
             {
                 Events = new List<SessionEvent>();
             }
+        }
+
+        private sealed class PendingSessionEvent
+        {
+            public string EventId { get; set; }
+            public DateTime CreatedUtc { get; set; }
+            public string Type { get; set; }
+            public string RunId { get; set; }
+            public string TurnId { get; set; }
+            public string StepId { get; set; }
+            public JToken Data { get; set; }
+            public ChatBlobReference Payload { get; set; }
+        }
+
+        private sealed class ProjectionReplayState
+        {
+            private readonly ProjectionReplayList _messages;
+            private readonly ProjectionReplayList _artifacts;
+
+            public ProjectionReplayState(JObject root)
+            {
+                _messages = new ProjectionReplayList(root == null ? null : root["Messages"] as JArray);
+                _artifacts = new ProjectionReplayList(root == null ? null : root["Artifacts"] as JArray);
+            }
+
+            public void Upsert(string property, JToken value)
+            {
+                List(property).Upsert(value);
+            }
+
+            public void Remove(string property, string id)
+            {
+                List(property).Remove(id);
+            }
+
+            public void Reorder(string property, JArray ids)
+            {
+                List(property).Reorder(ids);
+            }
+
+            public void Materialize(JObject root)
+            {
+                root["Messages"] = _messages.Materialize();
+                root["Artifacts"] = _artifacts.Materialize();
+            }
+
+            private ProjectionReplayList List(string property)
+            {
+                if (string.Equals(property, "Messages", StringComparison.Ordinal)) return _messages;
+                if (string.Equals(property, "Artifacts", StringComparison.Ordinal)) return _artifacts;
+                throw new JsonException("Unsupported projection list: " + property);
+            }
+        }
+
+        private sealed class ProjectionReplayList
+        {
+            private List<ProjectionReplayItem> _ordered;
+            private readonly Dictionary<string, ProjectionReplayItem> _byId;
+
+            public ProjectionReplayList(JArray source)
+            {
+                _ordered = new List<ProjectionReplayItem>();
+                _byId = new Dictionary<string, ProjectionReplayItem>(StringComparer.OrdinalIgnoreCase);
+                foreach (var value in (source ?? new JArray()).OfType<JObject>())
+                {
+                    var item = new ProjectionReplayItem
+                    {
+                        Id = (string)value["Id"],
+                        Value = value,
+                        Active = true
+                    };
+                    _ordered.Add(item);
+                    if (!string.IsNullOrWhiteSpace(item.Id) && !_byId.ContainsKey(item.Id))
+                    {
+                        _byId.Add(item.Id, item);
+                    }
+                }
+            }
+
+            public void Upsert(JToken value)
+            {
+                var objectValue = value as JObject;
+                var id = objectValue == null ? null : (string)objectValue["Id"];
+                if (objectValue == null || string.IsNullOrWhiteSpace(id))
+                {
+                    throw new JsonException("Upsert operation requires an object id.");
+                }
+                ProjectionReplayItem existing;
+                if (_byId.TryGetValue(id, out existing))
+                {
+                    existing.Value = objectValue;
+                    return;
+                }
+                var item = new ProjectionReplayItem
+                {
+                    Id = id,
+                    Value = objectValue,
+                    Active = true
+                };
+                _ordered.Add(item);
+                _byId[id] = item;
+            }
+
+            public void Remove(string id)
+            {
+                if (string.IsNullOrWhiteSpace(id)) return;
+                ProjectionReplayItem existing;
+                if (!_byId.TryGetValue(id, out existing)) return;
+                existing.Active = false;
+                _byId.Remove(id);
+                var duplicate = _ordered.FirstOrDefault(item => item.Active &&
+                    string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
+                if (duplicate != null) _byId[id] = duplicate;
+            }
+
+            public void Reorder(JArray ids)
+            {
+                var remaining = new Dictionary<string, ProjectionReplayItem>(StringComparer.OrdinalIgnoreCase);
+                foreach (var item in _ordered.Where(value => value.Active && !string.IsNullOrWhiteSpace(value.Id)))
+                {
+                    if (remaining.ContainsKey(item.Id))
+                    {
+                        throw new JsonException("Projection list contains duplicate ids.");
+                    }
+                    remaining.Add(item.Id, item);
+                }
+
+                var reordered = new List<ProjectionReplayItem>();
+                foreach (var id in (ids ?? new JArray()).Values<string>())
+                {
+                    ProjectionReplayItem item;
+                    if (!string.IsNullOrWhiteSpace(id) && remaining.TryGetValue(id, out item))
+                    {
+                        reordered.Add(item);
+                        remaining.Remove(id);
+                    }
+                }
+                foreach (var item in _ordered)
+                {
+                    if (!item.Active || string.IsNullOrWhiteSpace(item.Id) || !remaining.ContainsKey(item.Id)) continue;
+                    reordered.Add(item);
+                    remaining.Remove(item.Id);
+                }
+
+                _ordered = reordered;
+                _byId.Clear();
+                foreach (var item in _ordered) _byId[item.Id] = item;
+            }
+
+            public JArray Materialize()
+            {
+                var result = new JArray();
+                foreach (var item in _ordered.Where(value => value.Active))
+                {
+                    result.Add(item.Value.DeepClone());
+                }
+                return result;
+            }
+        }
+
+        private sealed class ProjectionReplayItem
+        {
+            public string Id { get; set; }
+            public JObject Value { get; set; }
+            public bool Active { get; set; }
         }
 
         private sealed class CompositeDisposable : IDisposable

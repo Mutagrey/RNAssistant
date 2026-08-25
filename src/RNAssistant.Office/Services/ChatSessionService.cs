@@ -519,7 +519,7 @@ namespace RNAssistant.Office.Services
 
             if (_activeSessionPersisted)
             {
-                var stored = _chatStore.Load(_activeSessionId);
+                var stored = _chatStore.Load(_activeHost, _activeDocumentKey, _activeSessionId);
                 if (stored == null)
                 {
                     Reset();

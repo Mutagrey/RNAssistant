@@ -8,6 +8,8 @@ namespace RNAssistant.Core.Storage
 {
     internal sealed class ChatBlobStore
     {
+        private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false);
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private readonly string _rootDirectory;
         private readonly Func<StorageProtector> _protectionProvider;
 
@@ -25,7 +27,7 @@ namespace RNAssistant.Core.Storage
 
         public ChatBlobReference StoreText(string value, string contentType)
         {
-            return StoreBytes(new UTF8Encoding(false).GetBytes(value ?? string.Empty), contentType);
+            return StoreBytes(Utf8.GetBytes(value ?? string.Empty), contentType);
         }
 
         public ChatBlobReference StoreBytes(byte[] bytes, string contentType)
@@ -34,20 +36,23 @@ namespace RNAssistant.Core.Storage
             var hash = Sha256(bytes);
             var protector = Protection();
             var path = PathFor(hash);
-            if (!Matches(path, hash, bytes.LongLength, protector))
+            var verified = Matches(path, hash, bytes.LongLength, protector);
+            if (!verified)
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(path));
                 var stored = protector.Protect(bytes, BlobPurpose(hash, bytes.LongLength));
                 try
                 {
                     StorageFileSystem.WriteAtomic(path, tempPath => File.WriteAllBytes(tempPath, stored));
+                    verified = Matches(path, hash, bytes.LongLength, protector);
                 }
                 catch (IOException)
                 {
-                    if (!Matches(path, hash, bytes.LongLength, protector)) throw;
+                    verified = Matches(path, hash, bytes.LongLength, protector);
+                    if (!verified) throw;
                 }
             }
-            if (!Matches(path, hash, bytes.LongLength, protector))
+            if (!verified)
             {
                 throw new IOException("Content-addressed blob could not be verified after writing.");
             }
@@ -65,7 +70,7 @@ namespace RNAssistant.Core.Storage
         public string ReadText(ChatBlobReference reference)
         {
             var bytes = ReadBytes(reference);
-            return bytes == null ? null : new UTF8Encoding(false, true).GetString(bytes);
+            return bytes == null ? null : StrictUtf8.GetString(bytes);
         }
 
         public byte[] ReadBytes(ChatBlobReference reference)

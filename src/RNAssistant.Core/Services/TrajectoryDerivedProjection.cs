@@ -13,12 +13,12 @@ namespace RNAssistant.Core.Services
         public static List<TrajectoryViewRow> Build(IReadOnlyList<SessionEvent> events, string view)
         {
             var source = (events ?? new List<SessionEvent>()).Where(item => item != null).OrderBy(item => item.Sequence).ToList();
-            var models = BuildModelRows(source);
-            var tools = BuildToolRows(source);
-            if (string.Equals(view, TrajectoryViews.ModelReplay, StringComparison.OrdinalIgnoreCase)) return models;
-            if (string.Equals(view, TrajectoryViews.ToolExecution, StringComparison.OrdinalIgnoreCase)) return tools;
+            if (string.Equals(view, TrajectoryViews.ModelReplay, StringComparison.OrdinalIgnoreCase)) return BuildModelRows(source);
+            if (string.Equals(view, TrajectoryViews.ToolExecution, StringComparison.OrdinalIgnoreCase)) return BuildToolRows(source);
             if (string.Equals(view, TrajectoryViews.ArtifactLineage, StringComparison.OrdinalIgnoreCase)) return BuildArtifactRows(source);
+            var tools = BuildToolRows(source);
             if (string.Equals(view, TrajectoryViews.ConfirmationPauses, StringComparison.OrdinalIgnoreCase)) return BuildConfirmationRows(tools);
+            var models = BuildModelRows(source);
             var turns = BuildTurnRows(source, models, tools);
             if (string.Equals(view, TrajectoryViews.TurnUsage, StringComparison.OrdinalIgnoreCase)) return turns;
             if (string.Equals(view, TrajectoryViews.FailureRetries, StringComparison.OrdinalIgnoreCase)) return BuildFailureRows(models, tools, turns);
