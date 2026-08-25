@@ -130,19 +130,6 @@ function renderSendControls() {
   if ($("attachFileButton")) {
     $("attachFileButton").disabled = isSending || approvalPending || isEditing || state.bridgeUnavailable || !state.activeChatId;
   }
-  var optionsMenu = $("composerOptionsMenu");
-  if (optionsMenu) {
-    var optionsDisabled = state.bridgeUnavailable || !state.activeChatId;
-    optionsMenu.classList.toggle("is-disabled", optionsDisabled);
-    if (optionsDisabled) {
-      optionsMenu.open = false;
-    }
-    var optionsSummary = optionsMenu.querySelector("summary");
-    if (optionsSummary) {
-      optionsSummary.setAttribute("aria-disabled", optionsDisabled ? "true" : "false");
-      optionsSummary.tabIndex = optionsDisabled ? -1 : 0;
-    }
-  }
   if (typeof renderPromptContextInspectorAvailability === "function") {
     renderPromptContextInspectorAvailability();
   }

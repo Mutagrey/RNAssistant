@@ -214,8 +214,7 @@
   cursor: pointer;
 }
 
-.composer-icon-button:hover,
-.composer-options[open] > summary {
+.composer-icon-button:hover {
   border: 0;
   background: var(--composer-control-hover);
   color: var(--accent-strong);
@@ -224,50 +223,6 @@
 .composer-icon-button svg {
   width: 16px;
   height: 16px;
-}
-
-.composer-options {
-  position: relative;
-  flex: 0 0 auto;
-}
-
-.composer-options > summary {
-  list-style: none;
-}
-
-.composer-options > summary::-webkit-details-marker {
-  display: none;
-}
-
-.composer-options.is-disabled > summary {
-  opacity: 0.45;
-  pointer-events: none;
-}
-
-.composer-options-panel {
-  position: absolute;
-  z-index: 30;
-  bottom: 38px;
-  left: 0;
-  display: grid;
-  width: min(280px, calc(100vw - 40px));
-  gap: 10px;
-  border: 1px solid #dce3ec;
-  border-radius: 12px;
-  padding: 12px;
-  background: #fff;
-  box-shadow: 0 16px 38px rgba(16, 24, 40, 0.18);
-}
-
-.composer-options-title {
-  color: var(--text);
-  font-size: 12px;
-  font-weight: var(--title-font-weight);
-}
-
-.composer-options-panel .model-capability-indicator {
-  justify-self: start;
-  margin: -2px 0 0;
 }
 
 .composer-mode,

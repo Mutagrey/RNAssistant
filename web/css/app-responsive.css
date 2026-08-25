@@ -188,11 +188,6 @@
     display: none;
   }
 
-  .composer-options-panel {
-    left: -64px;
-    width: min(270px, calc(100vw - 28px));
-  }
-
   .context-strip {
     align-items: center;
     flex-direction: row;

@@ -93,7 +93,6 @@ function bindChatActions() {
   $("chatModeSelect").addEventListener("change", function () {
     saveChatMode($("chatModeSelect").value);
   });
-  var optionsMenu = $("composerOptionsMenu");
   var composerPickers = [$("chatModePicker"), $("chatModelPicker")].filter(Boolean);
   composerPickers.forEach(function (picker) {
     var summary = picker.querySelector("summary");
@@ -104,24 +103,19 @@ function bindChatActions() {
     }
     picker.addEventListener("toggle", function () {
       if (!picker.open) return;
-      if (optionsMenu) optionsMenu.open = false;
       composerPickers.forEach(function (other) {
         if (other !== picker) other.open = false;
       });
     });
   });
   document.addEventListener("pointerdown", function (event) {
-    if (optionsMenu && optionsMenu.open && !optionsMenu.contains(event.target)) {
-      optionsMenu.open = false;
-    }
     composerPickers.forEach(function (picker) {
       if (picker.open && !picker.contains(event.target)) picker.open = false;
     });
   });
   document.addEventListener("keydown", function (event) {
     if (event.key === "Escape") {
-      var opened = composerPickers.filter(function (picker) { return picker.open; })[0] ||
-        (optionsMenu && optionsMenu.open ? optionsMenu : null);
+      var opened = composerPickers.filter(function (picker) { return picker.open; })[0];
       if (opened) {
         opened.open = false;
         var summary = opened.querySelector("summary");

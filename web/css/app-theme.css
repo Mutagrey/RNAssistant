@@ -450,12 +450,6 @@ html[data-theme="dark"] .chat-empty-suggestion:hover {
   color: var(--accent-strong);
 }
 
-html[data-theme="dark"] .composer-options-panel {
-  border-color: #404a57;
-  background: #252c36;
-  box-shadow: 0 16px 38px rgba(0, 0, 0, .46);
-}
-
 html[data-theme="dark"] .composer-model-badge.is-reasoning {
   background: #493b20;
   color: #f0c56b;

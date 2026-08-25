@@ -13,10 +13,12 @@ function renderActiveModelCapability() {
   indicator.textContent = labels.length ? labels.join(" · ") : (known ? "Только текст" : "Возможности ?");
   indicator.className = "model-capability-indicator " +
     (labels.length ? "is-enabled" : (known ? "is-disabled" : "is-unknown"));
-  indicator.title = "Модель: " + (value || "не выбрана") +
+  var detail = "Модель: " + (value || "не выбрана") +
     ". Reasoning: " + (reasoning === null ? "?" : (reasoning ? "да" : "нет")) +
     ". Vision: " + (vision === null ? "?" : (vision ? "да" : "нет")) +
     ". Audio: " + (audio === null ? "?" : (audio ? "да" : "нет")) + ".";
+  indicator.title = detail;
+  indicator.setAttribute("aria-label", detail);
 }
 
 function modelOverrideState(overrides, value) {

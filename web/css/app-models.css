@@ -260,9 +260,13 @@
 }
 
 .model-capability-indicator {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 132px;
+  overflow: hidden;
   color: var(--muted);
   font-size: 10px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
