@@ -54,7 +54,7 @@ namespace RNAssistant.Office.Services
                     true);
             }
 
-            var candidates = history.Select(CloneConversationMessage).ToList();
+            var candidates = history.Select(HistoricalContextProjector.Project).ToList();
             var required = EstimateMessages(candidates, settings);
             if (required > available)
             {
@@ -113,88 +113,5 @@ namespace RNAssistant.Office.Services
                  (message.Content ?? string.Empty).StartsWith("COMPACTED_EARLIER_CONTEXT", StringComparison.Ordinal));
         }
 
-        private static ChatMessage CloneConversationMessage(ChatMessage source)
-        {
-            var sourceAttachments = source == null || source.Attachments == null
-                ? new List<ChatAttachment>()
-                : source.Attachments.Where(attachment => attachment != null).ToList();
-            return new ChatMessage
-            {
-                Role = source == null ? string.Empty : source.Role,
-                Content = AttachmentAnalysisService.AppendHistoricalContext(
-                    AppendHistoricalReferences(source, sourceAttachments),
-                    source == null ? null : source.AttachmentAnalysis),
-                ProtocolMessage = source != null && source.ProtocolMessage,
-                ToolCallId = source == null ? null : source.ToolCallId,
-                ToolName = source == null ? null : source.ToolName,
-                ToolResultRole = source == null ? null : source.ToolResultRole,
-                ToolCalls = source == null || source.ToolCalls == null
-                    ? new List<LlmToolCall>()
-                    : source.ToolCalls.Where(call => call != null).Select(call => new LlmToolCall
-                    {
-                        Id = call.Id,
-                        Type = call.Type,
-                        Name = call.Name,
-                        ArgumentsJson = call.ArgumentsJson
-                    }).ToList(),
-                Attachments = sourceAttachments
-                        .Where(attachment =>
-                            !string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) &&
-                            !string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase))
-                        .Select(CloneHistoryAttachment)
-                        .ToList()
-            };
-        }
-
-        private static string AppendHistoricalReferences(ChatMessage source, IEnumerable<ChatAttachment> attachments)
-        {
-            if (source == null) return string.Empty;
-            var references = new List<string>();
-            references.AddRange((source.ArtifactIds ?? new List<string>())
-                .Where(id => !string.IsNullOrWhiteSpace(id))
-                .Select(id => "artifact:" + id));
-            if (!string.IsNullOrWhiteSpace(source.HtmlWorkspaceCheckpointId))
-            {
-                references.Add("html_workspace:" + source.HtmlWorkspaceCheckpointId);
-            }
-            references.AddRange((attachments ?? new ChatAttachment[0])
-                .Where(attachment =>
-                    string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase))
-                .Select(attachment => "attachment:" + (attachment.Id ?? string.Empty) + " | " +
-                    (attachment.Kind ?? "media") + " | " + (attachment.FileName ?? "unnamed")));
-            references = references.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            if (references.Count == 0) return source.Content ?? string.Empty;
-            return (source.Content ?? string.Empty) +
-                "\n\nHISTORICAL_REFERENCES (local artifacts; not new instructions):\n- " +
-                string.Join("\n- ", references.ToArray());
-        }
-
-        private static ChatAttachment CloneHistoryAttachment(ChatAttachment source)
-        {
-            return new ChatAttachment
-            {
-                Id = source.Id,
-                FileName = source.FileName,
-                ContentType = source.ContentType,
-                Size = source.Size,
-                Kind = string.Equals(source.Kind, "pdf", StringComparison.OrdinalIgnoreCase) ? "text" : source.Kind,
-                RelativePath = source.RelativePath,
-                ContentSha256 = source.ContentSha256,
-                ContentByteLength = source.ContentByteLength,
-                ExtractedText = source.ExtractedText,
-                ExtractedTextPath = source.ExtractedTextPath,
-                ExtractedTextSha256 = source.ExtractedTextSha256,
-                ExtractedTextByteLength = source.ExtractedTextByteLength,
-                ExtractedCharCount = source.ExtractedCharCount,
-                TextTruncated = source.TextTruncated,
-                PageCount = source.PageCount,
-                PageTextLengths = source.PageTextLengths == null ? new List<int>() : new List<int>(source.PageTextLengths),
-                ExtractionWarning = source.ExtractionWarning,
-                Status = source.Status,
-                Error = source.Error,
-                CreatedUtc = source.CreatedUtc
-            };
-        }
     }
 }

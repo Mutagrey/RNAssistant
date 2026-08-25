@@ -32,7 +32,7 @@ namespace RNAssistant.Office.Services
             var currentText = BuildCurrentText(userText, context, Math.Max(256, budget / 3), settings);
             var artifactIndex = ChatArtifactService.BuildPromptIndex(
                 session,
-                Math.Max(256, Math.Min(2000, budget / 10)),
+                Math.Max(128, Math.Min(500, budget / 20)),
                 settings);
             if (!string.IsNullOrWhiteSpace(artifactIndex)) currentText += "\n\n" + artifactIndex;
             if (string.Equals(instructionRole, "user", StringComparison.Ordinal))

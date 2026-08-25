@@ -395,7 +395,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, progressMessages.Add);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b2\",\"type\":\"sendChat\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-1\",\"text\":\"hello\"}}")
+                "{\"id\":\"b2\",\"type\":\"sendChat\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-1\",\"text\":\"hello\",\"artifactIds\":[\"artifact-1\"]}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -406,6 +406,7 @@ namespace RNAssistant.Harness
             AssertEqual("common.generated_skill", response["payload"]["skills"][0]["Id"].Value<string>(), "chat response refreshes skill catalog");
             AssertEqual("hello", controller.LastChatText, "chat text");
             AssertEqual("chat-1", controller.LastChatId, "chat id");
+            AssertEqual("artifact-1", controller.LastArtifactIds.Single(), "artifact id");
             var progress = JObject.Parse(progressMessages[0]);
             AssertEqual("b2", progress["id"].Value<string>(), "progress id");
             AssertEqual("thinking", progress["payload"]["phase"].Value<string>(), "progress phase");

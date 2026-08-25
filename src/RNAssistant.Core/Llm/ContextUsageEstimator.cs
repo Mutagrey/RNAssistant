@@ -76,7 +76,6 @@ namespace RNAssistant.Core.Llm
             var usedChars = 0;
             var usedTokens = 0;
             var baseTokens = 0;
-            var hasMedia = false;
             var count = 0;
             if (session != null && session.Messages != null)
             {
@@ -110,30 +109,10 @@ namespace RNAssistant.Core.Llm
                         continue;
                     }
 
-                    usedChars += (message.Content ?? string.Empty).Length;
-                    usedChars += message.AttachmentAnalysis == null
-                        ? 0
-                        : (message.AttachmentAnalysis.Content ?? string.Empty).Length;
-                    usedTokens += ModelContextBudget.EstimateMessageTokens(message, settings, null, false);
-                    baseTokens += ModelContextBudget.EstimateMessageTokens(message, null, null, false);
-                    foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
-                    {
-                        if (attachment == null)
-                        {
-                            continue;
-                        }
-                        var analyzed = IsAnalyzedAttachment(message, attachment);
-                        hasMedia = hasMedia ||
-                            !analyzed && (string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase));
-                        if (analyzed) continue;
-                        var extractedChars = Math.Max(
-                            attachment.ExtractedCharCount,
-                            (attachment.ExtractedText ?? string.Empty).Length);
-                        usedChars += extractedChars;
-                        usedTokens += ModelContextBudget.EstimateCharacterCountTokens(extractedChars, settings);
-                        baseTokens += ModelContextBudget.EstimateCharacterCountTokens(extractedChars, null);
-                    }
+                    var projectedMessage = HistoricalContextProjector.Project(message);
+                    usedChars += (projectedMessage.Content ?? string.Empty).Length;
+                    usedTokens += ModelContextBudget.EstimateMessageTokens(projectedMessage, settings, null, false);
+                    baseTokens += ModelContextBudget.EstimateMessageTokens(projectedMessage, null, null, false);
                     count += 1;
                 }
             }
@@ -161,9 +140,7 @@ namespace RNAssistant.Core.Llm
                 }
             }
 
-            usedTokens = hasMedia
-                ? TokenEstimateCalibration.AddPromptIntercept(settings, usedTokens)
-                : TokenEstimateCalibration.PredictPromptTokens(settings, baseTokens);
+            usedTokens = TokenEstimateCalibration.PredictPromptTokens(settings, baseTokens);
             return Usage(usedChars, usedTokens, limit, count, false, settings);
         }
 

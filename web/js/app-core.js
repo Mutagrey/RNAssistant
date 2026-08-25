@@ -29,6 +29,7 @@ var state = {
   activePlanArtifactId: "",
   agentPlanExpanded: {},
   draftAttachments: [],
+  draftArtifactIds: [],
   failedSend: null,
   activeSends: {},
   chatRuns: {},

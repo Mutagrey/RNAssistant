@@ -136,17 +136,71 @@ function renderAttachmentDrafts() {
   var box = $("attachmentDrafts");
   if (!box) return;
   box.innerHTML = "";
-  box.classList.toggle("hidden", !state.draftAttachments.length);
+  var artifactIds = state.draftArtifactIds || [];
+  box.classList.toggle("hidden", !state.draftAttachments.length && !artifactIds.length);
   state.draftAttachments.forEach(function (item) { box.appendChild(attachmentCard(item, true)); });
+  artifactIds.forEach(function (id) { box.appendChild(artifactReferenceCard(id)); });
   updateComposerInputState();
+}
+
+function artifactReferenceCard(id) {
+  var artifact = (state.artifacts || []).filter(function (item) {
+    return String(item.Id || item.id || "").toLowerCase() === String(id || "").toLowerCase();
+  })[0] || {};
+  var card = document.createElement("div");
+  card.className = "attachment-draft artifact-reference-draft";
+  var thumb = document.createElement("div");
+  thumb.className = "attachment-thumb";
+  thumb.textContent = "REF";
+  card.appendChild(thumb);
+  var copy = document.createElement("div");
+  copy.className = "attachment-copy";
+  var name = document.createElement("div");
+  name.className = "attachment-name";
+  name.textContent = artifact.Title || artifact.title || id;
+  copy.appendChild(name);
+  var meta = document.createElement("div");
+  meta.className = "attachment-meta";
+  meta.textContent = (artifact.Kind || artifact.kind || "artifact") + " · по ссылке";
+  copy.appendChild(meta);
+  card.appendChild(copy);
+  var remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "attachment-remove";
+  remove.title = "Убрать артефакт из запроса";
+  remove.textContent = "×";
+  remove.addEventListener("click", function () {
+    state.draftArtifactIds = (state.draftArtifactIds || []).filter(function (candidate) {
+      return String(candidate).toLowerCase() !== String(id).toLowerCase();
+    });
+    renderAttachmentDrafts();
+  });
+  card.appendChild(remove);
+  return card;
+}
+
+function queueArtifactReference(id) {
+  id = String(id || "").trim();
+  if (!id || !state.activeChatId || currentActiveSend()) return false;
+  state.draftArtifactIds = state.draftArtifactIds || [];
+  if (!state.draftArtifactIds.some(function (candidate) {
+    return String(candidate).toLowerCase() === id.toLowerCase();
+  })) {
+    state.draftArtifactIds.push(id);
+  }
+  renderAttachmentDrafts();
+  return true;
 }
 
 function clearDraftAttachments() {
   state.draftAttachments.forEach(function (item) { if (item.previewUrl) URL.revokeObjectURL(item.previewUrl); });
   state.draftAttachments = [];
+  state.draftArtifactIds = [];
   if (state.activeChatId) delete chatDraftStore()[state.activeChatId];
   renderAttachmentDrafts();
 }
+
+window.queueArtifactReference = queueArtifactReference;
 
 function bindAttachmentActions() {
   var button = $("attachFileButton");

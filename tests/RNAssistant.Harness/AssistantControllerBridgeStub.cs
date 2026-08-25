@@ -19,6 +19,7 @@ namespace RNAssistant.Office
         public bool LastDryRun { get; private set; }
         public string LastChatText { get; private set; }
         public string LastChatId { get; private set; }
+        public IReadOnlyList<string> LastArtifactIds { get; private set; }
         public string LastChatMode { get; private set; }
         public bool LastChatReasoning { get; private set; }
         public string LastRunId { get; private set; }
@@ -400,6 +401,7 @@ namespace RNAssistant.Office
             string text,
             string chatId = null,
             IReadOnlyList<string> attachmentIds = null,
+            IReadOnlyList<string> artifactIds = null,
             Action<string, string, ChatActivity> progress = null,
             Action<ChatStateResponse> chatStateChanged = null,
             CancellationToken cancellationToken = default(CancellationToken),
@@ -408,6 +410,7 @@ namespace RNAssistant.Office
             cancellationToken.ThrowIfCancellationRequested();
             LastChatText = text;
             LastChatId = chatId;
+            LastArtifactIds = artifactIds ?? new string[0];
             if (progress != null)
             {
                 progress("thinking", "Testing progress", new ChatActivity { Kind = "notice", Title = "Testing progress", Status = "running" });

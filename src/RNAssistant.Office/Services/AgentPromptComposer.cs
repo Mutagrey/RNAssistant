@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 
@@ -145,7 +146,10 @@ namespace RNAssistant.Office.Services
                 ["skills"] = BuildSkills(skills),
                 ["user_context"] = BuildUserContext(context)
             };
-            var artifacts = ChatArtifactService.BuildPromptIndex(session, 2000, settings);
+            var artifactBudget = Math.Max(
+                192,
+                Math.Min(600, ModelContextBudget.InputBudgetTokens(settings) / 20));
+            var artifacts = ChatArtifactService.BuildPromptIndex(session, artifactBudget, settings);
             if (!string.IsNullOrWhiteSpace(artifacts)) root["artifacts"] = artifacts;
             return root.ToString(Formatting.None);
         }

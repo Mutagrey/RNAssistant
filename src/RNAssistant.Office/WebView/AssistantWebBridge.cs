@@ -151,6 +151,7 @@ namespace RNAssistant.Office.WebView
                             sendChat.Text,
                             sendChat.ChatId,
                             sendChat.AttachmentIds,
+                            sendChat.ArtifactIds,
                             (phase, message, activity) => ReportProgress(id, sendChat.ChatId, runId, phase, message, activity),
                             ReportChatState,
                             cancellationToken,

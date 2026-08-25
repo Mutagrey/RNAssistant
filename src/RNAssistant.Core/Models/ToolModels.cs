@@ -106,6 +106,12 @@ namespace RNAssistant.Core.Models
         public string DataJson { get; set; }
         public int ToolStepsConsumed { get; set; }
 
+        [JsonIgnore]
+        public IReadOnlyList<ChatAttachment> ModelAttachments { get; set; }
+
+        [JsonIgnore]
+        public IReadOnlyList<string> ModelArtifactIds { get; set; }
+
         public static ToolResult Ok(string message, string dataJson = null)
         {
             return new ToolResult { Success = true, Status = "completed", Message = message, DataJson = dataJson };

@@ -155,18 +155,19 @@ function updateComposerInputState() {
   var clearButton = $("clearInputButton");
   var hasText = !!(input && input.value.trim());
   var hasAttachments = !!(state.draftAttachments && state.draftAttachments.length);
+  var hasArtifacts = !!(state.draftArtifactIds && state.draftArtifactIds.length);
 
   if (hasActiveMessageEdit() && input) {
     state.editingText = input.value;
   }
 
   if (form) {
-    form.classList.toggle("has-input", hasText || hasAttachments);
+    form.classList.toggle("has-input", hasText || hasAttachments || hasArtifacts);
   }
   if (clearButton) {
     clearButton.hidden = !hasText;
   }
-  updateSendButtonAvailability(hasText || hasAttachments);
+  updateSendButtonAvailability(hasText || hasAttachments || hasArtifacts);
   resizeChatInput();
 }
 

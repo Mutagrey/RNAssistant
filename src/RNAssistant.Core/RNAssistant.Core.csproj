@@ -99,6 +99,7 @@
     <Compile Include="Llm\LlmRequestModels.cs" />
     <Compile Include="Llm\LlmResponseModels.cs" />
     <Compile Include="Llm\LlmResponseParser.cs" />
+    <Compile Include="Llm\HistoricalContextProjector.cs" />
     <Compile Include="Llm\ModelContextBudget.cs" />
     <Compile Include="Llm\TokenEstimateCalibration.cs" />
     <Compile Include="Llm\ContextUsageEstimator.cs" />

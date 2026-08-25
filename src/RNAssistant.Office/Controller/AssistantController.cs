@@ -24,6 +24,7 @@ namespace RNAssistant.Office
         private readonly ChatStore _chatStore;
         private readonly ModelTracePersistenceService _modelTracePersistence;
         private readonly AttachmentStore _attachmentStore;
+        private readonly ArtifactGatewayService _artifactGateway;
         private readonly ToolStore _toolStore;
         private readonly SkillStore _skillStore;
         private readonly VbaJournalStore _vbaJournalStore;
@@ -67,6 +68,9 @@ namespace RNAssistant.Office
             _chatStore = new ChatStore(_paths, () => _settingsService.LoadStorageProtector());
             _modelTracePersistence = new ModelTracePersistenceService(_chatStore);
             _attachmentStore = new AttachmentStore(_paths, () => _settingsService.LoadStorageProtector());
+            _artifactGateway = new ArtifactGatewayService(
+                _chatStore.LoadArtifactBody,
+                (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars));
             _toolStore = new ToolStore(_paths);
             _skillStore = new SkillStore(_paths);
             _vbaJournalStore = new VbaJournalStore(_paths, () => _settingsService.LoadStorageProtector());
@@ -77,7 +81,9 @@ namespace RNAssistant.Office
                 _toolStore,
                 () => _settingsService.Load(),
                 settings => _settingsService.Save(settings),
-                _paths);
+                _paths,
+                _chatStore.LoadArtifactBody,
+                (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars));
             _toolCatalog = new ToolCatalogService(_adapter, _toolExecutor, _toolStore);
             _skillCatalog = new SkillCatalogService(_adapter, _skillStore);
             _chatRuns = new ChatRunRegistry(_paths);
@@ -263,18 +269,22 @@ namespace RNAssistant.Office
             string text,
             string chatId = null,
             IReadOnlyList<string> attachmentIds = null,
+            IReadOnlyList<string> artifactIds = null,
             Action<string, string, ChatActivity> progress = null,
             Action<ChatStateResponse> chatStateChanged = null,
             CancellationToken cancellationToken = default(CancellationToken),
             string runId = null)
         {
-            if (string.IsNullOrWhiteSpace(text) && (attachmentIds == null || attachmentIds.Count == 0))
+            if (string.IsNullOrWhiteSpace(text) &&
+                (attachmentIds == null || attachmentIds.Count == 0) &&
+                (artifactIds == null || artifactIds.Count == 0))
             {
                 return EmptySendResponse(LoadAddressedSession(chatId), _settingsService.Load());
             }
 
             var settings = _settingsService.Load();
             var session = LoadAddressedSession(chatId);
+            var selectedArtifactIds = _artifactGateway.ResolveSelectedIds(session, artifactIds);
             runId = string.IsNullOrWhiteSpace(runId) ? Guid.NewGuid().ToString("N") : runId;
             var attachments = _attachmentStore.LoadDrafts(attachmentIds);
             var invalidAttachment = attachments.FirstOrDefault(a => a != null && a.Status == "error");
@@ -290,6 +300,7 @@ namespace RNAssistant.Office
                 {
                     Text = text ?? string.Empty,
                     Attachments = attachments,
+                    ArtifactIds = selectedArtifactIds,
                     AppendUserMessage = true,
                     CommitUserAttachments = true
                 },
@@ -508,6 +519,7 @@ namespace RNAssistant.Office
         {
             public string Text { get; set; }
             public IReadOnlyList<ChatAttachment> Attachments { get; set; }
+            public IReadOnlyList<string> ArtifactIds { get; set; }
             public bool AppendUserMessage { get; set; }
             public bool CommitUserAttachments { get; set; }
             public IReadOnlyList<ChatMessage> MessagesToDeleteAfterSave { get; set; }
@@ -551,7 +563,15 @@ namespace RNAssistant.Office
                 input = input ?? new ChatTurnInput();
                 var text = input.Text ?? string.Empty;
                 var attachments = input.Attachments ?? new ChatAttachment[0];
-                var attachmentRouting = AttachmentModelRoutingService.Select(settings, session, attachments);
+                var selectedArtifactIds = _artifactGateway.ResolveSelectedIds(session, input.ArtifactIds);
+                var referencedMedia = _artifactGateway.ResolveModelAttachments(session, selectedArtifactIds);
+                var routedAttachments = attachments
+                    .Concat(referencedMedia)
+                    .Where(attachment => attachment != null)
+                    .GroupBy(AttachmentModelRoutingService.AttachmentIdentity, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => group.First())
+                    .ToList();
+                var attachmentRouting = AttachmentModelRoutingService.Select(settings, session, routedAttachments);
                 settings = attachmentRouting.Settings;
                 var executionMode = ChatModes.Normalize(session.Mode);
                 var documentRuntimeKey = string.Empty;
@@ -576,7 +596,8 @@ namespace RNAssistant.Office
                         RunId = runId,
                         Sequence = 1,
                         HtmlWorkspaceCheckpointId = session.ActiveHtmlArtifactId,
-                        Attachments = new List<ChatAttachment>(attachments)
+                        Attachments = new List<ChatAttachment>(attachments),
+                        ArtifactIds = new List<string>(selectedArtifactIds)
                     };
                     session.Messages.Add(userMessage);
                     appendedUserMessage = userMessage;
@@ -701,7 +722,21 @@ namespace RNAssistant.Office
                         attachmentRouting,
                         runProgress,
                         runCancellation.Token).ConfigureAwait(false);
-                    var primaryText = AttachmentAnalysisService.BuildPrimaryRequest(text, attachmentAnalysis);
+                    var artifactEvidence = _artifactGateway.BuildSelectedEvidence(
+                        session,
+                        selectedArtifactIds.Except(
+                            _artifactGateway.ResolveDirectMediaArtifactIds(
+                                session,
+                                selectedArtifactIds,
+                                attachmentRouting.PrimaryAttachments),
+                            StringComparer.OrdinalIgnoreCase),
+                        Math.Max(256, Math.Min(
+                            AttachmentAnalysisService.ResolveEvidenceMaxTokens(settings),
+                            ModelContextBudget.InputBudgetTokens(settings) / 8)),
+                        settings);
+                    var primaryText = AttachmentAnalysisService.BuildPrimaryRequest(
+                        ArtifactGatewayService.AppendSelectedEvidence(text, artifactEvidence),
+                        attachmentAnalysis);
                     var primaryAttachments = attachmentRouting.PrimaryAttachments ?? new ChatAttachment[0];
                     try
                     {

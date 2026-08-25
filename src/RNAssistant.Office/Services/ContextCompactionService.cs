@@ -51,12 +51,13 @@ namespace RNAssistant.Office.Services
             }
 
             var window = BuildReplayTail(session);
+            var projectedWindow = window.Select(HistoricalContextProjector.Project).ToList();
             var inputBudget = Math.Max(1024, ModelContextBudget.InputBudgetTokens(settings));
             var activeCheckpoint = ActiveCheckpoint(session);
             var instructionTokens = Math.Max(
                 ModelContextBudget.EstimateTextTokens(AgentPromptComposer.BuildInstruction(settings), settings),
                 ModelContextBudget.EstimateTextTokens(settings.ChatSystemPrompt, settings));
-            var projected = ModelContextBudget.EstimateMessagesTokens(window, settings) +
+            var projected = ModelContextBudget.EstimateMessagesTokens(projectedWindow, settings) +
                 ModelContextBudget.EstimateTextTokens(activeCheckpoint == null ? null : activeCheckpoint.SummaryMarkdown, settings) +
                 ModelContextBudget.EstimateTextTokens(incomingText, settings) +
                 instructionTokens +
@@ -266,7 +267,9 @@ namespace RNAssistant.Office.Services
             var firstRecent = window.Count;
             for (var index = window.Count - 1; index >= 0; index--)
             {
-                var cost = ModelContextBudget.EstimateMessageTokens(window[index], settings);
+                var cost = ModelContextBudget.EstimateMessageTokens(
+                    HistoricalContextProjector.Project(window[index]),
+                    settings);
                 if (recentTokens + cost > target && firstRecent < window.Count)
                 {
                     break;
@@ -403,7 +406,11 @@ namespace RNAssistant.Office.Services
             var used = 0;
             while (count < source.Count)
             {
-                var cost = Math.Max(1, ModelContextBudget.EstimateMessageTokens(source[count], settings, null, false));
+                var cost = Math.Max(1, ModelContextBudget.EstimateMessageTokens(
+                    HistoricalContextProjector.Project(source[count]),
+                    settings,
+                    null,
+                    false));
                 if (used + cost > tokenBudget) break;
                 used += cost;
                 count += 1;

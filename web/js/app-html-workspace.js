@@ -328,6 +328,15 @@
     log("HTML экспортирован как автономный файл.");
   }
 
+  function addSelectedArtifactToRequest() {
+    var selected = selectedItem();
+    if (!selected || (selected.type !== "plan" && selected.type !== "artifact")) return;
+    if (typeof queueArtifactReference !== "function" || !queueArtifactReference(artifactId(selected.item))) return;
+    switchTab("chat");
+    if ($("chatInput")) $("chatInput").focus();
+    log("Артефакт добавлен в текущий запрос: " + artifactTitle(selected.item));
+  }
+
   function bindHtmlWorkspaceActions() {
     $("htmlWorkspaceSearchInput").addEventListener("input", renderHtmlWorkspaceList);
     $("saveHtmlWorkspaceButton").addEventListener("click", workspaceActions.saveSelection);
@@ -337,6 +346,7 @@
     $("recoverHtmlWorkspaceButton").addEventListener("click", workspaceActions.recoverRevision);
     $("refreshHtmlDataButton").addEventListener("click", workspaceActions.refreshAll);
     $("exportHtmlWorkspaceButton").addEventListener("click", exportHtmlWorkspace);
+    $("addArtifactToChatButton").addEventListener("click", addSelectedArtifactToRequest);
     $("toggleHtmlSidebarButton").addEventListener("click", toggleHtmlWorkspaceSidebar);
     $("addPlanButton").addEventListener("click", workspaceActions.createPlan);
     $("addHtmlFileButton").addEventListener("click", function () { addHtmlWorkspaceFile("html"); });

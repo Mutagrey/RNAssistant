@@ -560,6 +560,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("attachmentIds")]
         public List<string> AttachmentIds { get; set; }
+
+        [JsonProperty("artifactIds")]
+        public List<string> ArtifactIds { get; set; }
     }
 
     public sealed class ImportAttachmentPayload

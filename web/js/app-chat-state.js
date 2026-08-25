@@ -88,17 +88,19 @@ function captureChatDraft(chatIdValue) {
     ? (state.editingDraftText || "")
     : (input ? input.value : "");
   var attachments = (state.draftAttachments || []).slice();
+  var artifactIds = (state.draftArtifactIds || []).slice();
   var drafts = chatDraftStore();
-  if (!text && !attachments.length) {
+  if (!text && !attachments.length && !artifactIds.length) {
     delete drafts[chatIdValue];
     return;
   }
-  drafts[chatIdValue] = { text: text, attachments: attachments };
+  drafts[chatIdValue] = { text: text, attachments: attachments, artifactIds: artifactIds };
 }
 
 function restoreChatDraft(chatIdValue) {
   var draft = chatIdValue ? chatDraftStore()[chatIdValue] : null;
   state.draftAttachments = draft && draft.attachments ? draft.attachments.slice() : [];
+  state.draftArtifactIds = draft && draft.artifactIds ? draft.artifactIds.slice() : [];
   if (typeof renderAttachmentDrafts === "function") {
     renderAttachmentDrafts();
   }

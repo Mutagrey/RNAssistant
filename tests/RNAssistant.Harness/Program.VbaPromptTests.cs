@@ -1422,8 +1422,10 @@ namespace RNAssistant.Harness
             });
             session.Context.Notes.Add(new ContextNote { Text = "selection!" });
             var sessionUsage = JObject.FromObject(ContextUsageEstimator.FromSession(session, settings));
-            AssertEqual(10015, sessionUsage["usedChars"].Value<int>(), "session used chars");
-            AssertEqual(5012, sessionUsage["usedTokens"].Value<int>(), "session used tokens");
+            AssertTrue(sessionUsage["usedChars"].Value<int>() < 500,
+                "session usage counts historical attachment references, not extracted bodies");
+            AssertTrue(sessionUsage["usedTokens"].Value<int>() < 200,
+                "session usage does not reserve historical image tokens");
             AssertEqual(1, sessionUsage["messageCount"].Value<int>(), "session message count");
             AssertTrue(!sessionUsage["actual"].Value<bool>(), "session actual");
         }
