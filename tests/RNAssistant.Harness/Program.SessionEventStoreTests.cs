@@ -369,6 +369,65 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ChatHeadersReportStorageUsage()
+        {
+            WithTempPaths(paths =>
+            {
+                var body = "{\"value\":\"" + new string('ж', 32 * 1024) + "\"}";
+                var logicalByteLength = Encoding.UTF8.GetByteCount(body);
+                var writer = new ChatStore(paths);
+                var session = writer.Create("Word", "storage-usage", "Storage.docx", "Storage usage");
+                var artifact = new ChatArtifact
+                {
+                    Kind = ChatArtifactKinds.Plan,
+                    MimeType = "application/json",
+                    InlineText = body
+                };
+                session.Artifacts.Add(artifact);
+                session.ActivePlanArtifactId = artifact.Id;
+                writer.Save(session);
+                writer.AppendTrace(session, SessionEventTypes.AssistantChunk,
+                    new { chunkCount = 1 }, body, "application/json",
+                    "storage-run", "storage-turn", "storage-step");
+
+                var blobPath = Path.Combine(paths.ChatBlobDirectory,
+                    artifact.ContentSha256.Substring(0, 2), artifact.ContentSha256 + ".blob");
+                var reader = new ChatStore(paths);
+                var header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
+                AssertEqual(new FileInfo(SessionEventFile(paths, session)).Length, header.JsonlByteLength,
+                    "header reports the exact JSONL file length");
+                AssertEqual(1, header.CasBlobCount, "equal artifact and trace payload bytes count once");
+                AssertEqual((long)logicalByteLength, header.CasLogicalByteLength,
+                    "header reports unique plaintext CAS bytes");
+                AssertEqual(new FileInfo(blobPath).Length, header.CasStoredByteLength,
+                    "header reports the actual compressed CAS file length");
+                AssertTrue(header.CasStoredByteLength < header.CasLogicalByteLength,
+                    "stored usage reflects compression");
+                AssertEqual(0, header.CasMissingBlobCount, "present CAS is not reported missing");
+                AssertEqual(0, header.CasReferenceIssueCount, "valid CAS references have no issues");
+                AssertEqual(ChatStorageWarningLevels.None, header.StorageWarningLevel,
+                    "small healthy history has no warning");
+
+                AssertEqual(ChatStorageWarningLevels.Warning,
+                    ChatStorageUsagePolicy.GetWarningLevel(
+                        ChatStorageUsagePolicy.WarningJsonlByteLength, 0, 0, 0, 0),
+                    "JSONL warning threshold is inclusive");
+                AssertEqual(ChatStorageWarningLevels.Critical,
+                    ChatStorageUsagePolicy.GetWarningLevel(
+                        0, 0, ChatStorageUsagePolicy.CriticalStoredFootprintByteLength, 0, 0),
+                    "stored footprint critical threshold is inclusive");
+
+                File.Delete(blobPath);
+                header = new ChatStore(paths)
+                    .ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle)
+                    .Single();
+                AssertEqual(1, header.CasMissingBlobCount, "missing referenced CAS is reported");
+                AssertEqual(0L, header.CasStoredByteLength, "missing CAS contributes no stored bytes");
+                AssertEqual(ChatStorageWarningLevels.Critical, header.StorageWarningLevel,
+                    "missing CAS raises a critical warning");
+            });
+        }
+
         private static void TrajectoryQueryPaginatesAndFilters()
         {
             var events = new List<SessionEvent>

@@ -555,6 +555,7 @@ namespace RNAssistant.Office.Services
                 var runningSummary = ToSummary(running);
                 if (storedIndex >= 0)
                 {
+                    CopyStorageUsage(summaries[storedIndex], runningSummary);
                     summaries[storedIndex] = runningSummary;
                 }
                 else
@@ -606,8 +607,29 @@ namespace RNAssistant.Office.Services
                 RunId = run == null ? header.RunId : run.RunId,
                 RunStatus = run == null ? header.RunStatus : run.Status,
                 RunPhase = run == null ? header.RunPhase : run.Phase,
-                RunStartedUtc = run == null ? header.RunStartedUtc : (DateTime?)run.StartedUtc
+                RunStartedUtc = run == null ? header.RunStartedUtc : (DateTime?)run.StartedUtc,
+                JsonlByteLength = header.JsonlByteLength,
+                CasBlobCount = header.CasBlobCount,
+                CasLogicalByteLength = header.CasLogicalByteLength,
+                CasStoredByteLength = header.CasStoredByteLength,
+                CasMissingBlobCount = header.CasMissingBlobCount,
+                CasReferenceIssueCount = header.CasReferenceIssueCount,
+                StorageWarningLevel = string.IsNullOrWhiteSpace(header.StorageWarningLevel)
+                    ? ChatStorageWarningLevels.None
+                    : header.StorageWarningLevel
             };
+        }
+
+        private static void CopyStorageUsage(ChatSessionSummary source, ChatSessionSummary target)
+        {
+            if (source == null || target == null) return;
+            target.JsonlByteLength = source.JsonlByteLength;
+            target.CasBlobCount = source.CasBlobCount;
+            target.CasLogicalByteLength = source.CasLogicalByteLength;
+            target.CasStoredByteLength = source.CasStoredByteLength;
+            target.CasMissingBlobCount = source.CasMissingBlobCount;
+            target.CasReferenceIssueCount = source.CasReferenceIssueCount;
+            target.StorageWarningLevel = source.StorageWarningLevel;
         }
 
         public bool IsCurrentDocument(ChatSession session)

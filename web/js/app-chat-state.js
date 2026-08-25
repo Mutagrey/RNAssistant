@@ -404,6 +404,19 @@ function renderChatTreeRow(chat) {
   var title = document.createElement("span");
   title.className = "chat-session-title";
   title.textContent = chatTitle(chat);
+  var storageWarningLevel = chatStorageWarningLevel(chat);
+  var storedFootprint = chatJsonlByteLength(chat) + chatCasStoredByteLength(chat);
+  if (storedFootprint > 0 || chatCasMissingBlobCount(chat) > 0 || chatCasReferenceIssueCount(chat) > 0) {
+    var storageTooltip = buildChatStorageTooltip(chat, storageWarningLevel);
+    var storageBadge = createChatSessionBadge(
+      (storageWarningLevel === "none" ? "" : "! ") + formatChatStorageBytes(storedFootprint),
+      storageWarningLevel === "none" ? "storage" : storageWarningLevel
+    );
+    storageBadge.title = storageTooltip;
+    storageBadge.setAttribute("aria-label", storageTooltip);
+    button.classList.add("has-storage-badge");
+    button.title = storageTooltip;
+  }
   var run = state.chatRuns[id] || state.activeSends[id];
   var persistedRunStatus = String(chat.RunStatus || chat.runStatus || "").toLowerCase();
   var hasActiveRun = !!run || persistedRunStatus === "running" || persistedRunStatus === "cancelling";
@@ -411,6 +424,9 @@ function renderChatTreeRow(chat) {
     row.classList.add("has-active-run");
   }
   button.appendChild(title);
+  if (storageBadge) {
+    button.appendChild(storageBadge);
+  }
   row.appendChild(button);
   if (hasActiveRun) {
     var status = document.createElement("span");
@@ -457,6 +473,43 @@ function createChatSessionBadge(text, kind) {
   badge.className = "chat-session-badge is-" + kind;
   badge.textContent = text;
   return badge;
+}
+
+function formatChatStorageBytes(value) {
+  var bytes = Math.max(0, Number(value || 0));
+  if (bytes < 1024) return Math.round(bytes) + " Б";
+  var units = ["КБ", "МБ", "ГБ", "ТБ"];
+  var scaled = bytes;
+  var unit = units[0];
+  for (var index = 0; index < units.length; index += 1) {
+    scaled /= 1024;
+    unit = units[index];
+    if (scaled < 1024 || index === units.length - 1) break;
+  }
+  var digits = scaled < 10 ? 1 : 0;
+  return scaled.toFixed(digits).replace(".", ",") + " " + unit;
+}
+
+function buildChatStorageTooltip(chat, warningLevel) {
+  var lines = [];
+  if (warningLevel === "critical") {
+    lines.push("Хранилище чата требует внимания.");
+  } else if (warningLevel === "warning") {
+    lines.push("Размер истории чата приближается к порогу.");
+  }
+  lines.push("JSONL: " + formatChatStorageBytes(chatJsonlByteLength(chat)) + ".");
+  lines.push("CAS: " + formatChatStorageBytes(chatCasStoredByteLength(chat)) + " на диске, " +
+    formatChatStorageBytes(chatCasLogicalByteLength(chat)) + " логически, blobs: " +
+    Math.round(chatCasBlobCount(chat)) + ".");
+  if (chatCasMissingBlobCount(chat) > 0) {
+    lines.push("Отсутствуют CAS blobs: " + Math.round(chatCasMissingBlobCount(chat)) + ".");
+  }
+  if (chatCasReferenceIssueCount(chat) > 0) {
+    lines.push("Некорректные или конфликтующие CAS-ссылки: " + Math.round(chatCasReferenceIssueCount(chat)) + ".");
+  }
+  lines.push("Общие CAS blobs учитываются в каждом ссылающемся чате.");
+  lines.push("Автоматическое удаление истории отключено.");
+  return lines.join("\n");
 }
 
 function renderHtmlModeToggle() {

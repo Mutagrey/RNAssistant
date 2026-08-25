@@ -1004,6 +1004,7 @@ namespace RNAssistant.Core.Storage
                     : result.Reducer.CreateHeader(
                         _blobs,
                         result.Tail.Sequence,
+                        result.ByteLength,
                         host,
                         documentKey,
                         documentTitle);
@@ -1820,7 +1821,7 @@ namespace RNAssistant.Core.Storage
             HeaderReadResult cached;
             if (TryReadHeaderCache(path, out cached)) return cached;
 
-            var result = ReadHeaderLog(path, 0, null, new ChatHeaderReducer());
+            var result = ReadHeaderLog(path, 0, null, new ChatHeaderReducer(_blobs));
             if (result != null && result.Tail != null)
             {
                 Interlocked.Increment(ref _headerFullReplayCount);
@@ -1838,7 +1839,7 @@ namespace RNAssistant.Core.Storage
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
             var result = new HeaderReadResult
             {
-                Reducer = reducer ?? new ChatHeaderReducer(),
+                Reducer = reducer ?? new ChatHeaderReducer(_blobs),
                 Tail = previousEvent,
                 TailNextByteOffset = startByteOffset
             };

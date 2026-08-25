@@ -16,6 +16,54 @@ namespace RNAssistant.Core.Models
         }
     }
 
+    public static class ChatStorageWarningLevels
+    {
+        public const string None = "none";
+        public const string Warning = "warning";
+        public const string Critical = "critical";
+    }
+
+    public static class ChatStorageUsagePolicy
+    {
+        public const long WarningJsonlByteLength = 64L * 1024 * 1024;
+        public const long CriticalJsonlByteLength = 256L * 1024 * 1024;
+        public const long WarningStoredFootprintByteLength = 256L * 1024 * 1024;
+        public const long CriticalStoredFootprintByteLength = 1024L * 1024 * 1024;
+        public const long WarningCasLogicalByteLength = 512L * 1024 * 1024;
+        public const long CriticalCasLogicalByteLength = 2L * 1024 * 1024 * 1024;
+
+        public static string GetWarningLevel(
+            long jsonlByteLength,
+            long casLogicalByteLength,
+            long casStoredByteLength,
+            int missingCasBlobCount,
+            int casReferenceIssueCount)
+        {
+            var storedFootprint = SaturatingAdd(jsonlByteLength, casStoredByteLength);
+            if (missingCasBlobCount > 0 || casReferenceIssueCount > 0 ||
+                jsonlByteLength >= CriticalJsonlByteLength ||
+                storedFootprint >= CriticalStoredFootprintByteLength ||
+                casLogicalByteLength >= CriticalCasLogicalByteLength)
+            {
+                return ChatStorageWarningLevels.Critical;
+            }
+            if (jsonlByteLength >= WarningJsonlByteLength ||
+                storedFootprint >= WarningStoredFootprintByteLength ||
+                casLogicalByteLength >= WarningCasLogicalByteLength)
+            {
+                return ChatStorageWarningLevels.Warning;
+            }
+            return ChatStorageWarningLevels.None;
+        }
+
+        private static long SaturatingAdd(long first, long second)
+        {
+            first = first < 0 ? 0 : first;
+            second = second < 0 ? 0 : second;
+            return first > long.MaxValue - second ? long.MaxValue : first + second;
+        }
+    }
+
     public sealed class ChatMessage
     {
         public string Id { get; set; }
@@ -235,6 +283,13 @@ namespace RNAssistant.Core.Models
         public string RunStatus { get; set; }
         public string RunPhase { get; set; }
         public DateTime? RunStartedUtc { get; set; }
+        public long JsonlByteLength { get; set; }
+        public int CasBlobCount { get; set; }
+        public long CasLogicalByteLength { get; set; }
+        public long CasStoredByteLength { get; set; }
+        public int CasMissingBlobCount { get; set; }
+        public int CasReferenceIssueCount { get; set; }
+        public string StorageWarningLevel { get; set; }
     }
 
     public sealed class ChatSessionSummary
@@ -261,6 +316,13 @@ namespace RNAssistant.Core.Models
         public string RunStatus { get; set; }
         public string RunPhase { get; set; }
         public DateTime? RunStartedUtc { get; set; }
+        public long JsonlByteLength { get; set; }
+        public int CasBlobCount { get; set; }
+        public long CasLogicalByteLength { get; set; }
+        public long CasStoredByteLength { get; set; }
+        public int CasMissingBlobCount { get; set; }
+        public int CasReferenceIssueCount { get; set; }
+        public string StorageWarningLevel { get; set; }
     }
 
     public sealed class HtmlWorkspace

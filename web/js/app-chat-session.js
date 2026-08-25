@@ -389,7 +389,13 @@ function chatNavigationSignature(payload) {
   return JSON.stringify({
     activeChatId: payload.activeChatId || payload.ActiveChatId || "",
     chats: chats.map(function (chat) {
-      return [chatId(chat), chatTitle(chat), chatMessageCount(chat), chat.DocumentKey || chat.documentKey || "", chat.UpdatedUtc || chat.updatedUtc || ""];
+      return [
+        chatId(chat), chatTitle(chat), chatMessageCount(chat),
+        chat.DocumentKey || chat.documentKey || "", chat.UpdatedUtc || chat.updatedUtc || "",
+        chatJsonlByteLength(chat), chatCasBlobCount(chat), chatCasLogicalByteLength(chat),
+        chatCasStoredByteLength(chat), chatCasMissingBlobCount(chat),
+        chatCasReferenceIssueCount(chat), chatStorageWarningLevel(chat)
+      ];
     }),
     documents: documents.map(function (item) {
       return [item.documentKey || item.DocumentKey || "", item.title || item.Title || "", !!(item.isActive || item.IsActive)];

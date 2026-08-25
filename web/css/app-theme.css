@@ -398,6 +398,20 @@ html[data-theme="dark"] .chat-document-actions {
   background: linear-gradient(90deg, transparent, #232830 8px);
 }
 
+html[data-theme="dark"] .chat-session-badge {
+  background: #2b313a;
+}
+
+html[data-theme="dark"] .chat-session-badge.is-warning {
+  background: #493817;
+  color: #f0bd5c;
+}
+
+html[data-theme="dark"] .chat-session-badge.is-critical {
+  background: #4b2528;
+  color: #ff9a9f;
+}
+
 html[data-theme="dark"] .document-notice {
   background: #191d23;
   color: var(--muted);

@@ -4,6 +4,11 @@
     return source[pascal] !== undefined ? source[pascal] : (source[camel] !== undefined ? source[camel] : fallback);
   }
 
+  function nonNegativeNumberValue(source, pascal, camel) {
+    var value = Number(objectValue(source, pascal, camel, 0) || 0);
+    return isFinite(value) && value > 0 ? value : 0;
+  }
+
   window.messageId = function (message) {
     return objectValue(message, "Id", "id", "");
   };
@@ -54,6 +59,35 @@
 
   window.chatMessageCount = function (chat) {
     return Number(objectValue(chat, "MessageCount", "messageCount", 0) || 0);
+  };
+
+  window.chatJsonlByteLength = function (chat) {
+    return nonNegativeNumberValue(chat, "JsonlByteLength", "jsonlByteLength");
+  };
+
+  window.chatCasBlobCount = function (chat) {
+    return nonNegativeNumberValue(chat, "CasBlobCount", "casBlobCount");
+  };
+
+  window.chatCasLogicalByteLength = function (chat) {
+    return nonNegativeNumberValue(chat, "CasLogicalByteLength", "casLogicalByteLength");
+  };
+
+  window.chatCasStoredByteLength = function (chat) {
+    return nonNegativeNumberValue(chat, "CasStoredByteLength", "casStoredByteLength");
+  };
+
+  window.chatCasMissingBlobCount = function (chat) {
+    return nonNegativeNumberValue(chat, "CasMissingBlobCount", "casMissingBlobCount");
+  };
+
+  window.chatCasReferenceIssueCount = function (chat) {
+    return nonNegativeNumberValue(chat, "CasReferenceIssueCount", "casReferenceIssueCount");
+  };
+
+  window.chatStorageWarningLevel = function (chat) {
+    var value = String(objectValue(chat, "StorageWarningLevel", "storageWarningLevel", "none") || "none").toLowerCase();
+    return value === "warning" || value === "critical" ? value : "none";
   };
 
   window.chatModel = function (chat) {

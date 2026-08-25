@@ -57,6 +57,27 @@ namespace RNAssistant.Core.Storage
             return HasStoredReference(reference, Protection());
         }
 
+        internal bool TryGetStoredByteLength(string sha256, out long byteLength)
+        {
+            byteLength = 0;
+            if (!ValidSha256(sha256)) return false;
+            try
+            {
+                var file = new FileInfo(PathFor(sha256));
+                if (!file.Exists) return false;
+                byteLength = file.Length;
+                return true;
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+
         private ChatBlobReference StoreBytes(
             byte[] bytes,
             string contentType,

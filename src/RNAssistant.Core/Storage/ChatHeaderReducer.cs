@@ -13,8 +13,13 @@ namespace RNAssistant.Core.Storage
     /// </summary>
     internal sealed class ChatHeaderReducer
     {
+        private readonly ChatBlobStore _blobs;
         private HeaderReplayList<HeaderMessage> _messages = new HeaderReplayList<HeaderMessage>();
         private HeaderReplayList<HeaderArtifact> _artifacts = new HeaderReplayList<HeaderArtifact>();
+        private Dictionary<string, CasUsageEntry> _casReferences =
+            new Dictionary<string, CasUsageEntry>(StringComparer.OrdinalIgnoreCase);
+        private HashSet<string> _conflictingCasReferences =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private bool _seeded;
         private bool _invalid;
         private string _id;
@@ -31,6 +36,15 @@ namespace RNAssistant.Core.Storage
         private DateTime _updatedUtc;
         private string _activeHtmlArtifactId;
         private ChatRunRecord _lastRun;
+        private long _casLogicalByteLength;
+        private long _casStoredByteLength;
+        private int _casMissingBlobCount;
+        private int _invalidCasReferenceCount;
+
+        public ChatHeaderReducer(ChatBlobStore blobs)
+        {
+            _blobs = blobs;
+        }
 
         public bool IsValid
         {
@@ -52,6 +66,7 @@ namespace RNAssistant.Core.Storage
                 total += _messages.Items.Sum(item => StringLength(item.Id) + 16L);
                 total += _artifacts.Items.Sum(item => StringLength(item.Id) + StringLength(item.Kind) +
                     StringLength(item.ContentSha256) + 48L);
+                total += _casReferences.Count * 128L + _conflictingCasReferences.Count * 80L;
                 if (_lastRun != null)
                 {
                     total += StringLength(_lastRun.RunId) + StringLength(_lastRun.RuntimeId) +
@@ -64,6 +79,7 @@ namespace RNAssistant.Core.Storage
         public void Apply(SessionEvent sessionEvent)
         {
             if (sessionEvent == null) return;
+            CaptureCasReferences(sessionEvent);
             if (string.Equals(sessionEvent.Type, SessionEventTypes.SessionCreated, StringComparison.Ordinal) ||
                 string.Equals(sessionEvent.Type, SessionEventTypes.SessionForked, StringComparison.Ordinal))
             {
@@ -92,10 +108,17 @@ namespace RNAssistant.Core.Storage
 
         public ChatHeaderReducer Clone()
         {
-            return new ChatHeaderReducer
+            return new ChatHeaderReducer(_blobs)
             {
                 _messages = _messages.Clone(item => item.Clone()),
                 _artifacts = _artifacts.Clone(item => item.Clone()),
+                _casReferences = _casReferences.ToDictionary(
+                    item => item.Key,
+                    item => item.Value.Clone(),
+                    StringComparer.OrdinalIgnoreCase),
+                _conflictingCasReferences = new HashSet<string>(
+                    _conflictingCasReferences,
+                    StringComparer.OrdinalIgnoreCase),
                 _seeded = _seeded,
                 _invalid = _invalid,
                 _id = _id,
@@ -111,13 +134,18 @@ namespace RNAssistant.Core.Storage
                 _createdUtc = _createdUtc,
                 _updatedUtc = _updatedUtc,
                 _activeHtmlArtifactId = _activeHtmlArtifactId,
-                _lastRun = CloneRun(_lastRun)
+                _lastRun = CloneRun(_lastRun),
+                _casLogicalByteLength = _casLogicalByteLength,
+                _casStoredByteLength = _casStoredByteLength,
+                _casMissingBlobCount = _casMissingBlobCount,
+                _invalidCasReferenceCount = _invalidCasReferenceCount
             };
         }
 
         public ChatSessionHeader CreateHeader(
             ChatBlobStore blobs,
             long revision,
+            long jsonlByteLength,
             string fallbackHost,
             string fallbackDocumentKey,
             string fallbackDocumentTitle)
@@ -144,6 +172,10 @@ namespace RNAssistant.Core.Storage
             int dataSourceCount;
             ReadWorkspaceCounts(blobs, out fileCount, out dataSourceCount);
             var run = _lastRun;
+            var casReferenceIssueCount = SaturatingAdd(
+                _invalidCasReferenceCount,
+                _conflictingCasReferences.Count);
+            jsonlByteLength = Math.Max(0, jsonlByteLength);
             return new ChatSessionHeader
             {
                 Id = string.IsNullOrWhiteSpace(_id) ? Guid.NewGuid().ToString("N") : _id,
@@ -167,8 +199,113 @@ namespace RNAssistant.Core.Storage
                 RunRuntimeId = run == null ? null : run.RuntimeId,
                 RunStatus = run == null ? null : run.Status,
                 RunPhase = run == null ? null : run.Phase,
-                RunStartedUtc = run == null ? (DateTime?)null : run.StartedUtc
+                RunStartedUtc = run == null ? (DateTime?)null : run.StartedUtc,
+                JsonlByteLength = jsonlByteLength,
+                CasBlobCount = _casReferences.Count,
+                CasLogicalByteLength = _casLogicalByteLength,
+                CasStoredByteLength = _casStoredByteLength,
+                CasMissingBlobCount = _casMissingBlobCount,
+                CasReferenceIssueCount = casReferenceIssueCount,
+                StorageWarningLevel = ChatStorageUsagePolicy.GetWarningLevel(
+                    jsonlByteLength,
+                    _casLogicalByteLength,
+                    _casStoredByteLength,
+                    _casMissingBlobCount,
+                    casReferenceIssueCount)
             };
+        }
+
+        private void CaptureCasReferences(SessionEvent sessionEvent)
+        {
+            CaptureCasReference(sessionEvent.Payload);
+            CaptureTokenReferences(sessionEvent.Data);
+        }
+
+        private void CaptureTokenReferences(JToken token)
+        {
+            if (token == null) return;
+            var value = token as JObject;
+            if (value != null)
+            {
+                CaptureCasPair(value, "Sha256", "ByteLength");
+                CaptureCasPair(value, "ContentSha256", "ContentByteLength");
+                CaptureCasPair(value, "ExtractedTextSha256", "ExtractedTextByteLength");
+            }
+            foreach (var child in token.Children()) CaptureTokenReferences(child);
+        }
+
+        private void CaptureCasPair(JObject value, string hashProperty, string lengthProperty)
+        {
+            var hashToken = value[hashProperty];
+            if (hashToken == null || hashToken.Type == JTokenType.Null ||
+                hashToken.Type == JTokenType.Undefined) return;
+            var hash = hashToken.Type == JTokenType.String ? (string)hashToken : null;
+            if (string.IsNullOrWhiteSpace(hash)) return;
+
+            var byteLength = -1L;
+            var lengthToken = value[lengthProperty];
+            if (lengthToken != null && lengthToken.Type == JTokenType.Integer)
+            {
+                try { byteLength = lengthToken.ToObject<long>(); }
+                catch (Exception ex) when (ex is JsonException || ex is FormatException ||
+                    ex is OverflowException || ex is InvalidCastException)
+                {
+                    byteLength = -1;
+                }
+            }
+            CaptureCasReference(new ChatBlobReference { Sha256 = hash, ByteLength = byteLength });
+        }
+
+        private void CaptureCasReference(ChatBlobReference reference)
+        {
+            if (reference == null) return;
+            if (!ChatBlobStore.ValidReference(reference))
+            {
+                _invalidCasReferenceCount = SaturatingIncrement(_invalidCasReferenceCount);
+                return;
+            }
+
+            var hash = reference.Sha256.ToLowerInvariant();
+            CasUsageEntry existing;
+            if (_casReferences.TryGetValue(hash, out existing))
+            {
+                if (existing.LogicalByteLength != reference.ByteLength &&
+                    _conflictingCasReferences.Add(hash))
+                {
+                    return;
+                }
+                return;
+            }
+
+            var storedByteLength = 0L;
+            var missing = _blobs == null || !_blobs.TryGetStoredByteLength(hash, out storedByteLength);
+            var entry = new CasUsageEntry
+            {
+                LogicalByteLength = reference.ByteLength,
+                StoredByteLength = missing ? 0 : storedByteLength,
+                Missing = missing
+            };
+            _casReferences[hash] = entry;
+            _casLogicalByteLength = SaturatingAdd(_casLogicalByteLength, entry.LogicalByteLength);
+            _casStoredByteLength = SaturatingAdd(_casStoredByteLength, entry.StoredByteLength);
+            if (missing) _casMissingBlobCount = SaturatingIncrement(_casMissingBlobCount);
+        }
+
+        private static long SaturatingAdd(long first, long second)
+        {
+            if (first < 0) first = 0;
+            if (second < 0) second = 0;
+            return first > long.MaxValue - second ? long.MaxValue : first + second;
+        }
+
+        private static int SaturatingAdd(int first, int second)
+        {
+            return first > int.MaxValue - second ? int.MaxValue : first + second;
+        }
+
+        private static int SaturatingIncrement(int value)
+        {
+            return value == int.MaxValue ? value : value + 1;
         }
 
         private void Seed(JObject root)
@@ -391,6 +528,23 @@ namespace RNAssistant.Core.Storage
         private static long StringLength(string value)
         {
             return value == null ? 0 : value.Length;
+        }
+
+        private sealed class CasUsageEntry
+        {
+            public long LogicalByteLength { get; set; }
+            public long StoredByteLength { get; set; }
+            public bool Missing { get; set; }
+
+            public CasUsageEntry Clone()
+            {
+                return new CasUsageEntry
+                {
+                    LogicalByteLength = LogicalByteLength,
+                    StoredByteLength = StoredByteLength,
+                    Missing = Missing
+                };
+            }
         }
 
         private abstract class HeaderReplayItem

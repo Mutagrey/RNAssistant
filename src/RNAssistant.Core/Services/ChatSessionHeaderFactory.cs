@@ -20,6 +20,7 @@ namespace RNAssistant.Core.Services
             if (session == null) return null;
 
             var run = session.LastRun;
+            var jsonlByteLength = System.Math.Max(0, session.StorageByteLength);
             return new ChatSessionHeader
             {
                 Id = session.Id,
@@ -45,7 +46,10 @@ namespace RNAssistant.Core.Services
                 RunRuntimeId = run == null ? null : run.RuntimeId,
                 RunStatus = run == null ? null : run.Status,
                 RunPhase = run == null ? null : run.Phase,
-                RunStartedUtc = run == null ? (System.DateTime?)null : run.StartedUtc
+                RunStartedUtc = run == null ? (System.DateTime?)null : run.StartedUtc,
+                JsonlByteLength = jsonlByteLength,
+                StorageWarningLevel = ChatStorageUsagePolicy.GetWarningLevel(
+                    jsonlByteLength, 0, 0, 0, 0)
             };
         }
     }

@@ -201,6 +201,12 @@
   text-align: left;
 }
 
+.chat-session-select.has-storage-badge {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px;
+  align-items: center;
+}
+
 .chat-session-select:hover {
   border: 0;
   background: transparent;
@@ -287,6 +293,30 @@
   white-space: nowrap;
   font-size: 12px;
   font-weight: 400;
+}
+
+.chat-session-badge {
+  min-width: 0;
+  max-width: 64px;
+  overflow: hidden;
+  border-radius: 8px;
+  padding: 1px 5px;
+  background: #e6ebf1;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-session-badge.is-warning {
+  background: #fff0cf;
+  color: #8a5500;
+}
+
+.chat-session-badge.is-critical {
+  background: #fde1e1;
+  color: var(--danger);
 }
 
 .chat-document {
