@@ -119,6 +119,7 @@ namespace RNAssistant.Harness
                 Test("storage: event integrity rejects tampering", SessionEventIntegrityRejectsTampering),
                 Test("storage: event HMAC requires matching key", SessionEventHmacRequiresMatchingKey),
                 Test("storage: encrypted history protects events and CAS", EncryptedHistoryProtectsEventsAndCas),
+                Test("storage: protection handles block boundaries", StorageProtectionHandlesBlockBoundaries),
                 Test("storage: CAS GC collects blob-before-event orphan", CasGcCollectsBlobBeforeEventOrphan),
                 Test("storage: CAS health reports missing and corrupt blobs", CasHealthReportsMissingAndCorruptBlobs),
                 Test("storage: CAS GC fails closed for invalid sources", CasGcFailsClosedForInvalidSources),

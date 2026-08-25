@@ -791,6 +791,35 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void StorageProtectionHandlesBlockBoundaries()
+        {
+            var protector = new StorageProtector(
+                HistoryIntegrityModes.Sha256,
+                HistoryEncryptionModes.Aes256CbcHmacSha256,
+                "low-copy protection secret",
+                Enumerable.Range(121, 32).Select(value => (byte)value).ToArray());
+            foreach (var length in new[] { 0, 1, 15, 16, 17, 31, 32, 33, 1024 * 1024 + 3 })
+            {
+                var plaintext = Enumerable.Range(0, length).Select(value => (byte)(value % 251)).ToArray();
+                var stored = protector.Protect(plaintext, "block-boundary");
+                AssertEqual(protector.StoredByteLength(plaintext.LongLength), stored.LongLength,
+                    "protected envelope length is exact at plaintext size " + length);
+                AssertTrue(plaintext.SequenceEqual(protector.Unprotect(stored, "block-boundary")),
+                    "protected payload roundtrips at plaintext size " + length);
+            }
+
+            var tampered = protector.Protect(Encoding.UTF8.GetBytes("authenticated"), "tamper-test");
+            tampered[tampered.Length - 1] ^= 0x01;
+            try
+            {
+                protector.Unprotect(tampered, "tamper-test");
+                throw new InvalidOperationException("tampered protected payload was accepted");
+            }
+            catch (CryptographicException)
+            {
+            }
+        }
+
         private static string ComputeUnkeyedEventHash(JObject record)
         {
             var canonical = new JObject

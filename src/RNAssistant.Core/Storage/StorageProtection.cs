@@ -13,6 +13,7 @@ namespace RNAssistant.Core.Storage
         private const int TagLength = 32;
         private static readonly byte[] Magic = Encoding.ASCII.GetBytes("RNAENC01");
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false, true);
+        private static readonly byte[] EmptyBytes = new byte[0];
 
         private readonly byte[] _encryptionKey;
         private readonly byte[] _authenticationKey;
@@ -95,7 +96,22 @@ namespace RNAssistant.Core.Storage
                 random.GetBytes(iv);
             }
 
-            byte[] ciphertext;
+            var storedLength = StoredByteLength(plaintext.LongLength);
+            if (storedLength > int.MaxValue)
+            {
+                throw new CryptographicException("Encrypted history payload exceeds the supported size.");
+            }
+            var result = new byte[(int)storedLength];
+            var offset = 0;
+            Buffer.BlockCopy(Magic, 0, result, offset, Magic.Length);
+            offset += Magic.Length;
+            var keyIdBytes = Encoding.ASCII.GetBytes(KeyId);
+            Buffer.BlockCopy(keyIdBytes, 0, result, offset, keyIdBytes.Length);
+            offset += keyIdBytes.Length;
+            Buffer.BlockCopy(iv, 0, result, offset, iv.Length);
+            offset += iv.Length;
+
+            var ciphertextLength = result.Length - offset - TagLength;
             using (var aes = Aes.Create())
             {
                 aes.KeySize = 256;
@@ -106,14 +122,24 @@ namespace RNAssistant.Core.Storage
                 aes.IV = iv;
                 using (var transform = aes.CreateEncryptor())
                 {
-                    ciphertext = transform.TransformFinalBlock(plaintext, 0, plaintext.Length);
+                    var remainder = plaintext.Length % transform.InputBlockSize;
+                    var blockLength = plaintext.Length - remainder;
+                    var written = blockLength == 0
+                        ? 0
+                        : transform.TransformBlock(plaintext, 0, blockLength, result, offset);
+                    var final = transform.TransformFinalBlock(plaintext, blockLength, remainder);
+                    Buffer.BlockCopy(final, 0, result, offset + written, final.Length);
+                    if (written + final.Length != ciphertextLength)
+                    {
+                        throw new CryptographicException("Encrypted history payload length is invalid.");
+                    }
                 }
             }
 
-            var keyIdBytes = Encoding.ASCII.GetBytes(KeyId);
-            var body = Combine(Magic, keyIdBytes, iv, ciphertext);
-            var tag = AuthenticationTag(purpose, body);
-            return Combine(body, tag);
+            var bodyLength = result.Length - TagLength;
+            var tag = AuthenticationTag(purpose, result, 0, bodyLength);
+            Buffer.BlockCopy(tag, 0, result, bodyLength, tag.Length);
+            return result;
         }
 
         internal long StoredByteLength(long plaintextByteLength)
@@ -187,17 +213,20 @@ namespace RNAssistant.Core.Storage
             }
 
             var bodyLength = stored.Length - TagLength;
-            var body = Slice(stored, 0, bodyLength);
-            var expectedTag = AuthenticationTag(purpose, body);
-            var actualTag = Slice(stored, bodyLength, TagLength);
-            if (!SecureEquals(expectedTag, actualTag))
+            var expectedTag = AuthenticationTag(purpose, stored, 0, bodyLength);
+            if (!SecureEquals(expectedTag, 0, stored, bodyLength, TagLength))
             {
                 throw new CryptographicException("Encrypted history payload authentication failed.");
             }
 
-            var iv = Slice(stored, offset, IvLength);
+            var iv = new byte[IvLength];
+            Buffer.BlockCopy(stored, offset, iv, 0, iv.Length);
             offset += IvLength;
-            var ciphertext = Slice(stored, offset, bodyLength - offset);
+            var ciphertextLength = bodyLength - offset;
+            if (ciphertextLength < IvLength || ciphertextLength % IvLength != 0)
+            {
+                throw new CryptographicException("Encrypted history payload ciphertext is invalid.");
+            }
             using (var aes = Aes.Create())
             {
                 aes.KeySize = 256;
@@ -208,7 +237,7 @@ namespace RNAssistant.Core.Storage
                 aes.IV = iv;
                 using (var transform = aes.CreateDecryptor())
                 {
-                    return transform.TransformFinalBlock(ciphertext, 0, ciphertext.Length);
+                    return transform.TransformFinalBlock(stored, offset, ciphertextLength);
                 }
             }
         }
@@ -255,15 +284,20 @@ namespace RNAssistant.Core.Storage
             return salt;
         }
 
-        private byte[] AuthenticationTag(string purpose, byte[] body)
+        private byte[] AuthenticationTag(string purpose, byte[] body, int offset, int length)
         {
             var purposeBytes = Utf8.GetBytes(purpose ?? string.Empty);
-            var input = new byte[purposeBytes.Length + 1 + body.Length];
-            Buffer.BlockCopy(purposeBytes, 0, input, 0, purposeBytes.Length);
-            Buffer.BlockCopy(body, 0, input, purposeBytes.Length + 1, body.Length);
+            var separator = new byte[1];
             using (var hmac = new HMACSHA256(_authenticationKey))
             {
-                return hmac.ComputeHash(input);
+                if (purposeBytes.Length > 0)
+                {
+                    hmac.TransformBlock(purposeBytes, 0, purposeBytes.Length, purposeBytes, 0);
+                }
+                hmac.TransformBlock(separator, 0, separator.Length, separator, 0);
+                if (length > 0) hmac.TransformBlock(body, offset, length, body, offset);
+                hmac.TransformFinalBlock(EmptyBytes, 0, 0);
+                return hmac.Hash;
             }
         }
 
@@ -275,33 +309,21 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private static byte[] Combine(params byte[][] values)
+        private static bool SecureEquals(
+            byte[] left,
+            int leftOffset,
+            byte[] right,
+            int rightOffset,
+            int length)
         {
-            var length = 0;
-            foreach (var value in values) length += value == null ? 0 : value.Length;
-            var result = new byte[length];
-            var offset = 0;
-            foreach (var value in values)
-            {
-                if (value == null || value.Length == 0) continue;
-                Buffer.BlockCopy(value, 0, result, offset, value.Length);
-                offset += value.Length;
-            }
-            return result;
-        }
-
-        private static byte[] Slice(byte[] value, int offset, int length)
-        {
-            var result = new byte[length];
-            Buffer.BlockCopy(value, offset, result, 0, length);
-            return result;
-        }
-
-        private static bool SecureEquals(byte[] left, byte[] right)
-        {
-            if (left == null || right == null || left.Length != right.Length) return false;
+            if (left == null || right == null || length < 0 ||
+                leftOffset < 0 || rightOffset < 0 ||
+                leftOffset + length > left.Length || rightOffset + length > right.Length) return false;
             var difference = 0;
-            for (var index = 0; index < left.Length; index++) difference |= left[index] ^ right[index];
+            for (var index = 0; index < length; index++)
+            {
+                difference |= left[leftOffset + index] ^ right[rightOffset + index];
+            }
             return difference == 0;
         }
 
