@@ -27,7 +27,21 @@ namespace RNAssistant.Core.Storage
 
         public ChatBlobReference StoreText(string value, string contentType)
         {
-            return StoreBytes(Utf8.GetBytes(value ?? string.Empty), contentType);
+            return StoreText(value, contentType, null);
+        }
+
+        public ChatBlobReference StoreText(string value, string contentType, ChatBlobReference knownReference)
+        {
+            var bytes = Utf8.GetBytes(value ?? string.Empty);
+            var hash = Sha256(bytes);
+            var protector = Protection();
+            if (knownReference != null && knownReference.ByteLength == bytes.LongLength &&
+                string.Equals(knownReference.Sha256, hash, StringComparison.OrdinalIgnoreCase) &&
+                HasStoredReference(knownReference, protector))
+            {
+                return CreateReference(hash, bytes.LongLength, contentType, protector);
+            }
+            return StoreBytes(bytes, contentType, hash, protector);
         }
 
         public ChatBlobReference StoreBytes(byte[] bytes, string contentType)
@@ -35,6 +49,20 @@ namespace RNAssistant.Core.Storage
             bytes = bytes ?? new byte[0];
             var hash = Sha256(bytes);
             var protector = Protection();
+            return StoreBytes(bytes, contentType, hash, protector);
+        }
+
+        internal bool HasStoredReference(ChatBlobReference reference)
+        {
+            return HasStoredReference(reference, Protection());
+        }
+
+        private ChatBlobReference StoreBytes(
+            byte[] bytes,
+            string contentType,
+            string hash,
+            StorageProtector protector)
+        {
             var path = PathFor(hash);
             var verified = Matches(path, hash, bytes.LongLength, protector);
             if (!verified)
@@ -56,15 +84,7 @@ namespace RNAssistant.Core.Storage
             {
                 throw new IOException("Content-addressed blob could not be verified after writing.");
             }
-
-            return new ChatBlobReference
-            {
-                Sha256 = hash,
-                ByteLength = bytes.LongLength,
-                ContentType = string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType,
-                Encryption = protector.EncryptionMode,
-                ProtectionKeyId = protector.Encrypts ? protector.KeyId : null
-            };
+            return CreateReference(hash, bytes.LongLength, contentType, protector);
         }
 
         public string ReadText(ChatBlobReference reference)
@@ -185,6 +205,45 @@ namespace RNAssistant.Core.Storage
             {
                 return false;
             }
+        }
+
+        private bool HasStoredReference(ChatBlobReference reference, StorageProtector protector)
+        {
+            if (!ValidReference(reference)) return false;
+            if (!string.IsNullOrWhiteSpace(reference.Encryption) &&
+                !string.Equals(HistoryEncryptionModes.Normalize(reference.Encryption), protector.EncryptionMode, StringComparison.Ordinal)) return false;
+            if (!string.IsNullOrWhiteSpace(reference.ProtectionKeyId) &&
+                !string.Equals(reference.ProtectionKeyId, protector.KeyId, StringComparison.OrdinalIgnoreCase)) return false;
+            try
+            {
+                var file = new FileInfo(PathFor(reference.Sha256));
+                if (!file.Exists) return false;
+                return file.Length == protector.StoredByteLength(reference.ByteLength);
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+
+        private static ChatBlobReference CreateReference(
+            string hash,
+            long byteLength,
+            string contentType,
+            StorageProtector protector)
+        {
+            return new ChatBlobReference
+            {
+                Sha256 = hash,
+                ByteLength = byteLength,
+                ContentType = string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType,
+                Encryption = protector.EncryptionMode,
+                ProtectionKeyId = protector.Encrypts ? protector.KeyId : null
+            };
         }
 
         private StorageProtector Protection()

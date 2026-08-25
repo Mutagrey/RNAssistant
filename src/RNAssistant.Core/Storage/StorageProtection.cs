@@ -116,6 +116,14 @@ namespace RNAssistant.Core.Storage
             return Combine(body, tag);
         }
 
+        internal long StoredByteLength(long plaintextByteLength)
+        {
+            if (plaintextByteLength < 0) throw new ArgumentOutOfRangeException("plaintextByteLength");
+            if (!Encrypts) return plaintextByteLength;
+            var cipherBlocks = checked(plaintextByteLength / IvLength + 1);
+            return checked(Magic.Length + KeyIdLength + IvLength + TagLength + cipherBlocks * IvLength);
+        }
+
         public byte[] Unprotect(byte[] stored, string purpose)
         {
             stored = stored ?? new byte[0];

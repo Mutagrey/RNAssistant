@@ -53,6 +53,8 @@ namespace RNAssistant.Core.Models
 
     public sealed class ChatArtifact
     {
+        private string _inlineText;
+
         public string Id { get; set; }
         public string Kind { get; set; }
         public string Title { get; set; }
@@ -62,9 +64,23 @@ namespace RNAssistant.Core.Models
         public int Revision { get; set; }
         public string ParentArtifactId { get; set; }
         public string RelativePath { get; set; }
-        public string InlineText { get; set; }
+        public string InlineText
+        {
+            get { return _inlineText; }
+            set
+            {
+                if (!string.Equals(_inlineText, value, StringComparison.Ordinal)) StorageInlineTextTrusted = false;
+                _inlineText = value;
+            }
+        }
         public string ContentSha256 { get; set; }
         public long? ContentByteLength { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
+        internal bool StorageInlineTextTrusted { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
+        internal string StorageContentSha256 { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
+        internal long? StorageContentByteLength { get; set; }
         public string ModelContextPolicy { get; set; }
         public string MetadataJson { get; set; }
         public List<string> RelatedArtifactIds { get; set; }

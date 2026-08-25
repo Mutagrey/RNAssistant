@@ -38,6 +38,8 @@ The default SHA-256 hash-chain detects accidental edits, truncation in the middl
 
 Large immutable content is stored once by SHA-256 in `chat-blobs`; the event stream keeps hash, byte length, and content type.
 
+An artifact body that was just stored or successfully hydrated keeps a transient trusted `(text, SHA-256, byte length)` tuple. Later metadata-only saves reuse the existing canonical blob without encoding, hashing, decrypting, or rereading it. A copied body with only a known reference still compares one UTF-8 hash and can avoid reading the existing blob. A missing or obviously truncated reference falls back to normal verified `StoreText`; explicit reads and CAS health scans continue to authenticate the complete content.
+
 - committed attachment bytes and extracted text use CAS references;
 - HTML workspace, chart, plan, compaction, and other artifact bodies use the same CAS;
 - exact model request/response payloads use the same CAS;

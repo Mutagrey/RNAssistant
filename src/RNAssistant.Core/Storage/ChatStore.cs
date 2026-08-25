@@ -59,6 +59,7 @@ namespace RNAssistant.Core.Storage
         private long _projectionCacheCharacters;
         private long _projectionFullReplayCount;
         private long _projectionIncrementalReplayCount;
+        private long _artifactCasExternalizationCount;
 
         internal long ProjectionFullReplayCount
         {
@@ -68,6 +69,11 @@ namespace RNAssistant.Core.Storage
         internal long ProjectionIncrementalReplayCount
         {
             get { return Interlocked.Read(ref _projectionIncrementalReplayCount); }
+        }
+
+        internal long ArtifactCasExternalizationCount
+        {
+            get { return Interlocked.Read(ref _artifactCasExternalizationCount); }
         }
 
         public ChatStore(AppDataPaths paths)
@@ -1336,11 +1342,45 @@ namespace RNAssistant.Core.Storage
             foreach (var artifact in session.Artifacts ?? new List<ChatArtifact>())
             {
                 if (artifact == null || string.IsNullOrEmpty(artifact.InlineText)) continue;
+                if (CanReuseArtifactBody(artifact)) continue;
+                Interlocked.Increment(ref _artifactCasExternalizationCount);
                 var reference = _blobs.StoreText(artifact.InlineText,
-                    string.IsNullOrWhiteSpace(artifact.MimeType) ? "text/plain; charset=utf-8" : artifact.MimeType);
+                    string.IsNullOrWhiteSpace(artifact.MimeType) ? "text/plain; charset=utf-8" : artifact.MimeType,
+                    ArtifactBodyReference(artifact));
                 artifact.ContentSha256 = reference.Sha256;
                 artifact.ContentByteLength = reference.ByteLength;
+                RememberArtifactBody(artifact);
             }
+        }
+
+        private bool CanReuseArtifactBody(ChatArtifact artifact)
+        {
+            return artifact != null && artifact.ContentByteLength.HasValue &&
+                artifact.StorageContentByteLength.HasValue &&
+                artifact.ContentByteLength.Value == artifact.StorageContentByteLength.Value &&
+                artifact.StorageInlineTextTrusted &&
+                string.Equals(artifact.ContentSha256, artifact.StorageContentSha256, StringComparison.OrdinalIgnoreCase) &&
+                _blobs.HasStoredReference(ArtifactBodyReference(artifact));
+        }
+
+        private static ChatBlobReference ArtifactBodyReference(ChatArtifact artifact)
+        {
+            return artifact == null || !artifact.ContentByteLength.HasValue
+                ? null
+                : new ChatBlobReference
+                {
+                    Sha256 = artifact.ContentSha256,
+                    ByteLength = artifact.ContentByteLength.Value,
+                    ContentType = artifact.MimeType
+                };
+        }
+
+        private static void RememberArtifactBody(ChatArtifact artifact)
+        {
+            if (artifact == null) return;
+            artifact.StorageInlineTextTrusted = true;
+            artifact.StorageContentSha256 = artifact.ContentSha256;
+            artifact.StorageContentByteLength = artifact.ContentByteLength;
         }
 
         private void EnsureWorkspaceArtifact(ChatSession session)
@@ -1660,13 +1700,10 @@ namespace RNAssistant.Core.Storage
             if (artifact == null) return false;
             if (!string.IsNullOrEmpty(artifact.InlineText)) return true;
             if (string.IsNullOrWhiteSpace(artifact.ContentSha256) || !artifact.ContentByteLength.HasValue) return false;
-            artifact.InlineText = _blobs.ReadText(new ChatBlobReference
-            {
-                Sha256 = artifact.ContentSha256,
-                ByteLength = artifact.ContentByteLength.Value,
-                ContentType = artifact.MimeType
-            });
-            return artifact.InlineText != null;
+            artifact.InlineText = _blobs.ReadText(ArtifactBodyReference(artifact));
+            if (artifact.InlineText == null) return false;
+            RememberArtifactBody(artifact);
+            return true;
         }
 
         private static ChatArtifact FindArtifact(ChatSession session, string artifactId)

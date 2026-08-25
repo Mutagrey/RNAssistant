@@ -840,6 +840,56 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void UnchangedArtifactsSkipCasExternalization()
+        {
+            WithTempPaths(paths =>
+            {
+                const string original = "{\"goal\":\"reuse known artifact body\"}";
+                const string changed = "{\"goal\":\"changed artifact body\"}";
+                var store = new ChatStore(paths);
+                var session = store.Create("Word", "cas-fast-skip", "CAS.docx", "CAS skip");
+                var artifact = new ChatArtifact
+                {
+                    Kind = ChatArtifactKinds.Plan,
+                    MimeType = "application/json",
+                    InlineText = original
+                };
+                session.Artifacts.Add(artifact);
+                session.ActivePlanArtifactId = artifact.Id;
+                store.Save(session);
+                AssertEqual(1L, store.ArtifactCasExternalizationCount, "new body enters CAS once");
+
+                session.Title = "Metadata only";
+                store.Save(session);
+                AssertEqual(1L, store.ArtifactCasExternalizationCount,
+                    "metadata-only save skips unchanged trusted artifact text");
+
+                artifact.InlineText = new string(original.ToCharArray());
+                store.Save(session);
+                AssertEqual(1L, store.ArtifactCasExternalizationCount,
+                    "equal text remains reusable even when its string instance changes");
+
+                artifact.InlineText = changed;
+                store.Save(session);
+                AssertEqual(2L, store.ArtifactCasExternalizationCount, "changed text is externalized");
+                var blobPath = Path.Combine(paths.ChatBlobDirectory,
+                    artifact.ContentSha256.Substring(0, 2), artifact.ContentSha256 + ".blob");
+                File.Delete(blobPath);
+                store.Save(session);
+                AssertEqual(3L, store.ArtifactCasExternalizationCount, "missing known blob falls back to StoreText");
+                AssertTrue(File.Exists(blobPath), "fallback restores the missing CAS body");
+
+                var reloadedStore = new ChatStore(paths);
+                var loaded = reloadedStore.Load(session.Id);
+                AssertEqual(changed, loaded.Artifacts.Single(item => item.Id == artifact.Id).InlineText,
+                    "load verifies and remembers the trusted body");
+                loaded.Title = "Loaded metadata only";
+                reloadedStore.Save(loaded);
+                AssertEqual(0L, reloadedStore.ArtifactCasExternalizationCount,
+                    "verified loaded body also takes the fast skip path");
+            });
+        }
+
         private static void PlaintextCasAcceptsEnvelopePrefix()
         {
             WithTempPaths(paths =>
