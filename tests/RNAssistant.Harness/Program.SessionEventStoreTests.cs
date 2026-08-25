@@ -960,6 +960,89 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void CasCompressionIsTransparent()
+        {
+            var body = "{\"value\":\"" + new string('ж', 32 * 1024) + "\"}";
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Word", "cas-compression", "Compression.docx", "Compression");
+                var artifact = new ChatArtifact
+                {
+                    Kind = ChatArtifactKinds.Markdown,
+                    MimeType = "application/json",
+                    InlineText = body
+                };
+                session.Artifacts.Add(artifact);
+                store.Save(session);
+
+                var blobPath = Path.Combine(paths.ChatBlobDirectory,
+                    artifact.ContentSha256.Substring(0, 2), artifact.ContentSha256 + ".blob");
+                var stored = File.ReadAllBytes(blobPath);
+                AssertEqual("RNACAS01", Encoding.ASCII.GetString(stored, 0, 8),
+                    "compressible plaintext CAS uses the versioned envelope");
+                AssertTrue(stored.LongLength < artifact.ContentByteLength.Value / 4,
+                    "repetitive JSON consumes substantially fewer stored bytes");
+                AssertEqual(body, store.Load(session.Id).Artifacts.Single().InlineText,
+                    "compressed plaintext artifact roundtrips exactly");
+
+                session.Title = "Metadata only";
+                store.Save(session);
+                AssertEqual(1L, store.ArtifactCasExternalizationCount,
+                    "compressed blob header preserves the unchanged-artifact fast skip");
+                var health = CasService(paths, store, new VbaJournalStore(paths), () => StorageProtector.None).Audit();
+                AssertEqual(0, health.CorruptBlobCount, "CAS audit verifies compressed plaintext");
+
+                stored[stored.Length - 1] ^= 0x01;
+                File.WriteAllBytes(blobPath, stored);
+                AssertTrue(store.Load(session.Id).Artifacts.Single().InlineText == null,
+                    "corrupt compressed content is never hydrated");
+                health = CasService(paths, store, new VbaJournalStore(paths), () => StorageProtector.None).Audit();
+                AssertEqual(1, health.CorruptBlobCount, "CAS audit detects compressed payload corruption");
+            });
+
+            WithTempPaths(paths =>
+            {
+                var protector = new StorageProtector(
+                    HistoryIntegrityModes.Sha256,
+                    HistoryEncryptionModes.Aes256CbcHmacSha256,
+                    "compressed CAS secret",
+                    Enumerable.Range(91, 32).Select(value => (byte)value).ToArray());
+                Func<StorageProtector> protection = () => protector;
+                var store = new ChatStore(paths, protection);
+                var session = store.Create("Excel", "cas-compression-protected", "Compression.xlsx", "Compression");
+                var artifact = new ChatArtifact
+                {
+                    Kind = ChatArtifactKinds.Markdown,
+                    MimeType = "application/json",
+                    InlineText = body
+                };
+                session.Artifacts.Add(artifact);
+                store.Save(session);
+
+                var blobPath = Path.Combine(paths.ChatBlobDirectory,
+                    artifact.ContentSha256.Substring(0, 2), artifact.ContentSha256 + ".blob");
+                var stored = File.ReadAllBytes(blobPath);
+                AssertTrue(StorageProtector.IsProtectedPayload(stored),
+                    "compression envelope is encrypted inside the authenticated CAS payload");
+                AssertTrue(stored.LongLength < artifact.ContentByteLength.Value / 4,
+                    "compression remains effective with history encryption enabled");
+                AssertEqual(body, store.Load(session.Id).Artifacts.Single().InlineText,
+                    "compressed encrypted artifact roundtrips exactly");
+
+                session.Title = "Protected metadata only";
+                store.Save(session);
+                AssertEqual(1L, store.ArtifactCasExternalizationCount,
+                    "encrypted compressed blob keeps the trusted-reference fast skip");
+                var health = CasService(
+                    paths,
+                    store,
+                    new VbaJournalStore(paths, protection),
+                    protection).Audit();
+                AssertEqual(0, health.CorruptBlobCount, "CAS audit verifies compressed ciphertext");
+            });
+        }
+
         private static void PlaintextCasAcceptsEnvelopePrefix()
         {
             WithTempPaths(paths =>
@@ -972,11 +1055,20 @@ namespace RNAssistant.Harness
                     MimeType = "text/markdown",
                     InlineText = "RNAENC01-plain-cas-body"
                 });
+                session.Artifacts.Add(new ChatArtifact
+                {
+                    Kind = ChatArtifactKinds.Markdown,
+                    MimeType = "text/markdown",
+                    InlineText = "RNACAS01-plain-cas-body"
+                });
 
                 store.Save(session);
 
-                AssertEqual("RNAENC01-plain-cas-body", store.Load(session.Id).Artifacts.Single().InlineText,
+                var bodies = store.Load(session.Id).Artifacts.Select(item => item.InlineText).ToList();
+                AssertTrue(bodies.Contains("RNAENC01-plain-cas-body"),
                     "plaintext CAS body is not mistaken for an encrypted envelope");
+                AssertTrue(bodies.Contains("RNACAS01-plain-cas-body"),
+                    "plaintext CAS body is not mistaken for a compression envelope");
             });
         }
 

@@ -128,6 +128,7 @@ namespace RNAssistant.Harness
                 Test("storage: delete preserves shared CAS", DeletesDocumentChats),
                 Test("storage: artifact bodies use CAS", ArtifactBodiesUseContentAddressing),
                 Test("storage: unchanged artifacts skip CAS externalization", UnchangedArtifactsSkipCasExternalization),
+                Test("storage: CAS compression is transparent", CasCompressionIsTransparent),
                 Test("storage: plaintext CAS accepts envelope prefix", PlaintextCasAcceptsEnvelopePrefix),
                 Test("storage: model trace shares event stream", ModelTraceSharesSessionStream),
                 Test("storage: turn lifecycle is first-class", TurnLifecycleIsFirstClass),

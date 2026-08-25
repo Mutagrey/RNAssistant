@@ -2,7 +2,7 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <!-- Single source of truth for the RNAssistant product version. -->
-    <RNAssistantVersionPrefix>6.11.8</RNAssistantVersionPrefix>
+    <RNAssistantVersionPrefix>6.11.9</RNAssistantVersionPrefix>
     <RNAssistantVersionSuffix></RNAssistantVersionSuffix>
 
     <VersionPrefix>$(RNAssistantVersionPrefix)</VersionPrefix>

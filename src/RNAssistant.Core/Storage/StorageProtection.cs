@@ -124,6 +124,46 @@ namespace RNAssistant.Core.Storage
             return checked(Magic.Length + KeyIdLength + IvLength + TagLength + cipherBlocks * IvLength);
         }
 
+        internal bool HasStoredPayloadEnvelope(string path)
+        {
+            if (!Encrypts || string.IsNullOrWhiteSpace(path)) return false;
+            try
+            {
+                using (var stream = new System.IO.FileStream(
+                    path,
+                    System.IO.FileMode.Open,
+                    System.IO.FileAccess.Read,
+                    System.IO.FileShare.ReadWrite))
+                {
+                    var fixedLength = Magic.Length + KeyIdLength + IvLength + TagLength;
+                    var ciphertextLength = stream.Length - fixedLength;
+                    if (ciphertextLength < IvLength || ciphertextLength % IvLength != 0) return false;
+                    var header = new byte[Magic.Length + KeyIdLength];
+                    var offset = 0;
+                    while (offset < header.Length)
+                    {
+                        var read = stream.Read(header, offset, header.Length - offset);
+                        if (read <= 0) return false;
+                        offset += read;
+                    }
+                    for (var index = 0; index < Magic.Length; index++)
+                    {
+                        if (header[index] != Magic[index]) return false;
+                    }
+                    var storedKeyId = Encoding.ASCII.GetString(header, Magic.Length, KeyIdLength);
+                    return string.Equals(storedKeyId, KeyId, StringComparison.OrdinalIgnoreCase);
+                }
+            }
+            catch (System.IO.IOException)
+            {
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+
         public byte[] Unprotect(byte[] stored, string purpose)
         {
             stored = stored ?? new byte[0];

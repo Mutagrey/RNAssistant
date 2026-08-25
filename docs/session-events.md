@@ -40,6 +40,8 @@ The default SHA-256 hash-chain detects accidental edits, truncation in the middl
 
 Large immutable content is stored once by SHA-256 in `chat-blobs`; the event stream keeps hash, byte length, and content type.
 
+New text/JSON/XML/VBA CAS bodies of at least 1 KiB are gzip-compressed only when the versioned envelope plus payload saves at least 128 bytes and 5%. SHA-256 and `ByteLength` always describe the original plaintext, so deduplication, references, exports, and health verification remain content-stable. Existing raw blobs remain readable and are not silently rewritten. With history encryption enabled, compression happens first and the complete compression envelope is then authenticated and encrypted; reads decrypt, bounded-decompress to the declared plaintext length, and finally verify SHA-256.
+
 An artifact body that was just stored or successfully hydrated keeps a transient trusted `(text, SHA-256, byte length)` tuple. Later metadata-only saves reuse the existing canonical blob without encoding, hashing, decrypting, or rereading it. A copied body with only a known reference still compares one UTF-8 hash and can avoid reading the existing blob. A missing or obviously truncated reference falls back to normal verified `StoreText`; explicit reads and CAS health scans continue to authenticate the complete content.
 
 - committed attachment bytes and extracted text use CAS references;

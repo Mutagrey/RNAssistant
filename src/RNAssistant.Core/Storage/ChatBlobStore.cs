@@ -68,7 +68,11 @@ namespace RNAssistant.Core.Storage
             if (!verified)
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(path));
-                var stored = protector.Protect(bytes, BlobPurpose(hash, bytes.LongLength));
+                var stored = CasBlobCodec.Encode(
+                    bytes,
+                    contentType,
+                    protector,
+                    BlobPurpose(hash, bytes.LongLength));
                 try
                 {
                     StorageFileSystem.WriteAtomic(path, tempPath => File.WriteAllBytes(tempPath, stored));
@@ -106,7 +110,11 @@ namespace RNAssistant.Core.Storage
             try
             {
                 var stored = File.ReadAllBytes(path);
-                var bytes = protector.Unprotect(stored, BlobPurpose(reference.Sha256, reference.ByteLength));
+                var bytes = CasBlobCodec.Decode(
+                    stored,
+                    reference.ByteLength,
+                    protector,
+                    BlobPurpose(reference.Sha256, reference.ByteLength));
                 return bytes.LongLength == reference.ByteLength &&
                     string.Equals(Sha256(bytes), reference.Sha256, StringComparison.OrdinalIgnoreCase)
                         ? bytes
@@ -189,7 +197,11 @@ namespace RNAssistant.Core.Storage
             {
                 if (!File.Exists(path)) return false;
                 var stored = File.ReadAllBytes(path);
-                var bytes = protector.Unprotect(stored, BlobPurpose(expectedHash, expectedLength));
+                var bytes = CasBlobCodec.Decode(
+                    stored,
+                    expectedLength,
+                    protector,
+                    BlobPurpose(expectedHash, expectedLength));
                 return bytes.LongLength == expectedLength &&
                     string.Equals(Sha256(bytes), expectedHash, StringComparison.OrdinalIgnoreCase);
             }
@@ -218,7 +230,9 @@ namespace RNAssistant.Core.Storage
             {
                 var file = new FileInfo(PathFor(reference.Sha256));
                 if (!file.Exists) return false;
-                return file.Length == protector.StoredByteLength(reference.ByteLength);
+                return CasBlobCodec.HasValidEnvelope(file.FullName, reference.ByteLength) ||
+                    file.Length == protector.StoredByteLength(reference.ByteLength) ||
+                    protector.HasStoredPayloadEnvelope(file.FullName);
             }
             catch (IOException)
             {

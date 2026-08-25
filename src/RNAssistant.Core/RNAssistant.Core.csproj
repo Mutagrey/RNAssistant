@@ -123,6 +123,7 @@
     <Compile Include="Storage\AppDataPaths.cs" />
     <Compile Include="Storage\AttachmentStore.cs" />
     <Compile Include="Storage\PdfAttachmentTextExtractor.cs" />
+    <Compile Include="Storage\CasBlobCodec.cs" />
     <Compile Include="Storage\ChatHeaderReducer.cs" />
     <Compile Include="Storage\ChatStore.cs" />
     <Compile Include="Storage\ChatBlobStore.cs" />
