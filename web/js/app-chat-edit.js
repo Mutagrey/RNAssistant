@@ -208,6 +208,7 @@ async function saveMessageEdit() {
     canceling: false,
     editing: true
   };
+  resetMessageEditState();
   beginChatRunTracking(sentChatId);
   renderChatRunControls();
 
@@ -228,9 +229,6 @@ async function saveMessageEdit() {
   } finally {
     delete state.activeSends[sentChatId];
     endChatRunTracking(sentChatId);
-    if (state.activeChatId === sentChatId) {
-      resetMessageEditState();
-    }
     renderChatRunControls();
   }
 }

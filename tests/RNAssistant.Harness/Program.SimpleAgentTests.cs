@@ -133,7 +133,7 @@ namespace RNAssistant.Harness
                 NewSession(adapter), null);
             var prompt = FlattenSimple(messages);
             AssertContains(prompt, "\"type\":\"function\"", "native-like tool JSON");
-            AssertContains(prompt, "\"description\":\"Worksheet name.\"", "argument description present");
+            AssertContains(prompt, "\"description\":\"Worksheet name; omit only when the active sheet is intended.\"", "argument description present");
             AssertContains(prompt, "excel.add_sheet", "first tool present");
             AssertContains(prompt, "excel.read_range", "second tool present");
             AssertContains(prompt, "common.test", "skill id present");

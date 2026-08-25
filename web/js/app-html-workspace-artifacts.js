@@ -37,7 +37,7 @@
   }
 
   function typeLabel(kind) {
-    var labels = { attachment: "Вложение", image: "Изображение", file: "Файл", markdown: "Markdown", chart: "Диаграмма", compaction: "Контекст", tool_result: "Результат" };
+    var labels = { attachment: "Вложение", image: "Изображение", file: "Файл", markdown: "Markdown", chart: "Диаграмма", compaction: "Checkpoint", tool_result: "Результат" };
     return labels[kind] || kind;
   }
 

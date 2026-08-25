@@ -6,6 +6,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
@@ -320,6 +321,32 @@ namespace RNAssistant.Harness
                     DocumentTitle = adapter.DocumentTitle,
                     Title = "Bound HTML data"
                 };
+                var directRead = executor.Execute(Command("excel.read_range", "sheet", "Data", "address", "A1:B4", "content", "values"), tools, new AppSettings(), false, false, boundSession);
+                AssertTrue(directRead.Success, "published excel.read_range contract executes directly");
+
+                var invalidBind = new ToolCommand { ToolId = HtmlArtifactToolExecutor.BindDataToolId };
+                invalidBind.Arguments["dataName"] = "invalid";
+                invalidBind.Arguments["sourceTool"] = "excel.read_range";
+                invalidBind.Arguments["sourceArguments"] = new JObject
+                {
+                    ["sheet"] = "Data",
+                    ["address"] = "A1:B4",
+                    ["content"] = "values",
+                    ["kind"] = "range"
+                };
+                var invalidBindResult = executor.Execute(invalidBind, tools, new AppSettings(), false, false, boundSession);
+                AssertTrue(!invalidBindResult.Success, "HTML bind rejects fields from another source schema before execution");
+                AssertContains(invalidBindResult.Message, "unsupported property kind", "HTML bind reports the exact invalid nested field");
+
+                var bindDefinition = executor.GetControllerTools().Single(item => item.Id == HtmlArtifactToolExecutor.BindDataToolId);
+                var bindResponseSchema = JObject.Parse(AgentResponseSchemaBuilder.Build(new[] { bindDefinition }));
+                var bindVariants = bindResponseSchema.SelectToken("properties.tool_calls.items.anyOf[0].properties.arguments.anyOf") as JArray;
+                var rangeVariant = bindVariants == null ? null : bindVariants.OfType<JObject>().FirstOrDefault(item =>
+                    string.Equals((string)item.SelectToken("properties.sourceTool.enum[0]"), "excel.read_range", StringComparison.OrdinalIgnoreCase));
+                AssertTrue(rangeVariant != null, "HTML bind strict schema has an excel.read_range branch");
+                AssertTrue(rangeVariant.SelectToken("properties.sourceArguments.properties.kind") == null, "HTML bind range branch does not advertise inspect.kind");
+                AssertTrue(rangeVariant.SelectToken("properties.sourceArguments.properties.address") != null, "HTML bind range branch exposes read_range.address");
+
                 var bind = new ToolCommand { ToolId = HtmlArtifactToolExecutor.BindDataToolId };
                 bind.Arguments["dataName"] = "sales";
                 bind.Arguments["sourceTool"] = "excel.read_range";
@@ -637,6 +664,40 @@ namespace RNAssistant.Harness
                 AssertTrue(result.Success, "tool validate succeeds");
                 AssertContains(result.Message, "valid", "tool validate message");
                 AssertTrue(!HasTool(toolStore.Load(), "excel.validated"), "tool validate does not save");
+
+                var simplified = new ToolCommand { ToolId = "common.tools_validate" };
+                simplified.Arguments["id"] = "excel.validated_definitions";
+                simplified.Arguments["host"] = "Excel";
+                simplified.Arguments["description"] = "Validated from agent-friendly definitions.";
+                simplified.Arguments["parameterDefinitions"] = new JArray(new JObject
+                {
+                    ["name"] = "sheet",
+                    ["type"] = "string",
+                    ["description"] = "Worksheet name to create.",
+                    ["required"] = true,
+                    ["maxLength"] = 31
+                });
+                simplified.Arguments["executor"] = "pipeline";
+                simplified.Arguments["pipelineSteps"] = new JArray(new JObject
+                {
+                    ["toolId"] = "excel.add_sheet",
+                    ["arguments"] = new JArray(new JObject
+                    {
+                        ["name"] = "name",
+                        ["value"] = "{{args.sheet}}"
+                    })
+                });
+                var simplifiedResult = executor.Execute(simplified, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings(), false, false);
+                AssertTrue(simplifiedResult.Success, "tool validate accepts compact parameter and pipeline definitions");
+                AssertContains(simplifiedResult.DataJson, "\"sheet\":{", "parameterDefinitions compile to a native strict parameters object");
+                AssertContains(simplifiedResult.DataJson, "\"arguments\":{\"name\":\"{{args.sheet}}\"}", "pipelineSteps compile to native keyed arguments");
+
+                var authoringTool = executor.GetControllerTools().Single(item => item.Id == "common.tools_validate");
+                var authoringResponseSchema = JObject.Parse(AgentResponseSchemaBuilder.Build(new[] { authoringTool }));
+                AssertTrue(authoringResponseSchema.SelectToken("properties.tool_calls.items.anyOf[0].properties.arguments.properties.parameterDefinitions.items.properties.name") != null,
+                    "strict Agent schema exposes parameterDefinitions");
+                AssertTrue(authoringResponseSchema.SelectToken("properties.tool_calls.items.anyOf[0].properties.arguments.properties.pipelineSteps.items.properties.arguments.items.properties.value.anyOf") != null,
+                    "strict Agent schema exposes compact native pipeline values");
             });
         }
 

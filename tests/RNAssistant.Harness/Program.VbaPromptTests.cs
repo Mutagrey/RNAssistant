@@ -382,6 +382,20 @@ namespace RNAssistant.Harness
                 var created = executor.Execute(create, adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(created.Success, "missing module can be created");
                 AssertContains(adapter.GetVbaModuleCode("NewModule"), "NewMacro", "new module code");
+
+                var missingPatch = Command(
+                    "common.vba_apply_patch",
+                    "moduleName", "MissingModule",
+                    "patch", new Newtonsoft.Json.Linq.JArray(new Newtonsoft.Json.Linq.JObject
+                    {
+                        ["op"] = "insertAfter",
+                        ["find"] = "Option Explicit",
+                        ["text"] = "Sub Added()\nEnd Sub"
+                    }));
+                var missingPatchResult = executor.Execute(missingPatch, adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
+                AssertEqual("vba_module_not_found", missingPatchResult.ErrorCode, "patch cannot masquerade as module creation");
+                AssertContains(missingPatchResult.Message, "common.vba_write_module", "missing patch points directly to the creation tool");
+                AssertContains(missingPatchResult.DataJson, "creationTool", "missing patch returns machine-readable recovery guidance");
             });
         }
 

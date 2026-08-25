@@ -288,7 +288,7 @@ function togglePromptContextRaw() {
 function renderPromptContextInspectorAvailability() {
   var trigger = $("contextMeter");
   if (!trigger) return;
-  var disabled = !!currentActiveSend() || hasActiveMessageEdit() || state.bridgeUnavailable || !state.activeChatId;
+  var disabled = hasActiveMessageEdit() || state.bridgeUnavailable || !state.activeChatId;
   trigger.disabled = disabled;
   if (disabled && promptContextInspectorOpen()) closePromptContextInspector();
 }

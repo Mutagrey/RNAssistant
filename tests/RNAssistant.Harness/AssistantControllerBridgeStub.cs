@@ -418,7 +418,12 @@ namespace RNAssistant.Office
             {
                 chatStateChanged(ChatState("Generated title", chatId));
             }
-            return Task.FromResult(new SendChatResponse { Message = "ok" });
+            return Task.FromResult(new SendChatResponse
+            {
+                Message = "ok",
+                Tools = new[] { new ToolDefinition { Id = "common.generated_tool" } },
+                Skills = new[] { new SkillDefinition { Id = "common.generated_skill" } }
+            });
         }
 
         public AttachmentResponse ImportAttachment(string fileName, string contentType, string base64)

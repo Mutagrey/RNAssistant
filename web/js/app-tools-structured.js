@@ -15,6 +15,7 @@
       var text = JSON.stringify(value, null, 2);
       $(id).value = text;
       if (typeof setCodeEditorValue === "function") setCodeEditorValue(id, text);
+      if (id !== "toolRunArgsInput" && options.markDirty && !state.toolLibraryRendering) options.markDirty();
     }
 
     function showJsonError(id, message) {

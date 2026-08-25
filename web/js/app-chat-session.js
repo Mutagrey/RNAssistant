@@ -278,6 +278,8 @@ function applyInitState(init) {
   state.hasHistorySecret = !!(init.hasHistorySecret || init.HasHistorySecret);
   state.tools = init.tools || [];
   state.skills = init.skills || [];
+  if (typeof acceptToolLibraryState === "function") acceptToolLibraryState();
+  if (typeof acceptSkillLibraryState === "function") acceptSkillLibraryState();
   state.toolsPath = init.toolsPath || "";
   state.skillsPath = init.skillsPath || "";
   state.context = init.context || {};
@@ -351,6 +353,8 @@ function applyBridgeUnavailableState(error) {
   state.activePlanArtifactId = "";
   state.tools = [];
   state.skills = [];
+  if (typeof acceptToolLibraryState === "function") acceptToolLibraryState();
+  if (typeof acceptSkillLibraryState === "function") acceptSkillLibraryState();
   state.vba = { modules: [], backups: [], selectedModule: "" };
   state.toolsPath = "";
   state.skillsPath = "";

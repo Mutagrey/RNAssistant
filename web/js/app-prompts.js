@@ -1,4 +1,5 @@
 (function () {
+  var promptLibraryBaseline = "";
   var promptDefinitions = [
     { key: "systemPrompt", label: "Агент", group: "Основные", source: "root", field: "SystemPrompt", description: "Главные правила Agent-потока, tools и skills." },
     { key: "chatSystemPrompt", label: "Чат", group: "Основные", source: "root", field: "ChatSystemPrompt", description: "Прямой ответ без локальных tools." },
@@ -21,6 +22,20 @@
 
   function promptText(def) {
     return def ? (state.promptDrafts[def.key] || "") : "";
+  }
+
+  function promptLibrarySnapshot() {
+    return JSON.stringify(promptDefinitions.map(function (def) {
+      return state.promptDrafts[def.key] || "";
+    }));
+  }
+
+  function updatePromptSaveButton() {
+    var button = $("savePromptButton");
+    if (!button) return;
+    var dirty = promptLibrarySnapshot() !== promptLibraryBaseline;
+    button.hidden = !dirty;
+    button.disabled = !dirty || !!state.bridgeUnavailable;
   }
 
   function promptEditorValue() {
@@ -262,6 +277,8 @@
     promptDefinitions.forEach(function (def) {
       state.promptDrafts[def.key] = promptValue(settings, def);
     });
+    promptLibraryBaseline = promptLibrarySnapshot();
+    updatePromptSaveButton();
     renderPromptList();
   }
 
@@ -285,6 +302,7 @@
     $("addPromptToChatButton").disabled = !!state.bridgeUnavailable;
     renderPromptPreview(def);
     applyPromptMode();
+    updatePromptSaveButton();
   }
 
   function syncSelectedPromptFromEditor() {
@@ -378,6 +396,7 @@
       syncSelectedPromptFromEditor();
       settingsDirty = true;
       updateSettingsSaveButton();
+      updatePromptSaveButton();
     });
     Array.prototype.slice.call(document.querySelectorAll(".prompt-mode-button")).forEach(function (button) {
       button.addEventListener("click", function () {
@@ -400,6 +419,7 @@
       settingsDirty = true;
       renderPromptEditor();
       updateSettingsSaveButton();
+      updatePromptSaveButton();
       log("Промпт будет сброшен после сохранения.");
     });
     $("resetAllPromptsButton").addEventListener("click", function () {
@@ -409,6 +429,7 @@
       settingsDirty = true;
       renderPromptList();
       updateSettingsSaveButton();
+      updatePromptSaveButton();
       log("Все промпты будут сброшены после сохранения.");
     });
     $("savePromptButton").addEventListener("click", async function () {
@@ -423,6 +444,7 @@
     syncSelectedPromptFromEditor();
     settingsDirty = true;
     updateSettingsSaveButton();
+    updatePromptSaveButton();
   }
 
   window.renderPromptSettings = renderPromptSettings;

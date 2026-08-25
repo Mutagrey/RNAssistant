@@ -4,7 +4,7 @@
   margin-top: 5px;
   padding-top: 6px;
   overflow: auto;
-  border-top: 1px solid #eef2f7;
+  border-top: 1px solid var(--section-line);
 }
 
 .context-manager.hidden {
@@ -31,6 +31,18 @@
   white-space: nowrap;
 }
 
+.context-manager-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 5px;
+  align-items: center;
+}
+
+.context-manager-close {
+  width: 28px;
+  height: 28px;
+}
+
 .context-list {
   display: grid;
   gap: 0;
@@ -41,7 +53,7 @@
   display: grid;
   gap: 6px;
   padding: 9px 0;
-  border-bottom: 1px solid rgba(226, 231, 239, 0.82);
+  border-bottom: 1px solid var(--section-line);
   background: transparent;
 }
 
@@ -72,7 +84,7 @@
   max-height: 180px;
   overflow: auto;
   padding: 7px 8px;
-  border: 1px solid rgba(226, 231, 239, 0.72);
+  border: 1px solid var(--line);
   border-radius: 5px;
   background: var(--code);
   color: var(--code-text);

@@ -119,6 +119,48 @@ function applyChatStateForChat(response, expectedChatId) {
   return false;
 }
 
+function applyLibraryCatalogState(response) {
+  var changed = false;
+  response = response || {};
+  if (response.tools !== undefined || response.Tools !== undefined) {
+    var selectedTool = state.tools[state.selectedToolIndex];
+    var selectedToolId = selectedTool && (selectedTool.Id || selectedTool.id) || "";
+    var responseTools = response.tools || response.Tools || [];
+    if (state.toolLibraryDirty && typeof reconcileToolLibraryCatalog === "function") {
+      reconcileToolLibraryCatalog(responseTools);
+    } else {
+      state.tools = responseTools;
+      if (typeof acceptToolLibraryState === "function") acceptToolLibraryState();
+    }
+    if (selectedToolId) {
+      state.selectedToolIndex = state.tools.findIndex(function (tool) {
+        return String(tool && (tool.Id || tool.id) || "").toLowerCase() === String(selectedToolId).toLowerCase();
+      });
+    }
+    changed = true;
+  }
+  if (response.skills !== undefined || response.Skills !== undefined) {
+    var selectedSkill = state.skills[state.selectedSkillIndex];
+    var selectedSkillId = selectedSkill && (selectedSkill.Id || selectedSkill.id) || "";
+    var responseSkills = response.skills || response.Skills || [];
+    if (state.skillLibraryDirty && typeof reconcileSkillLibraryCatalog === "function") {
+      reconcileSkillLibraryCatalog(responseSkills);
+    } else {
+      state.skills = typeof preserveSkillReferenceState === "function"
+        ? preserveSkillReferenceState(responseSkills)
+        : responseSkills;
+      if (typeof acceptSkillLibraryState === "function") acceptSkillLibraryState();
+    }
+    if (selectedSkillId) {
+      state.selectedSkillIndex = state.skills.findIndex(function (skill) {
+        return String(skill && (skill.Id || skill.id) || "").toLowerCase() === String(selectedSkillId).toLowerCase();
+      });
+    }
+    changed = true;
+  }
+  return changed;
+}
+
 function applyChatState(response) {
   state.chatStateApplyVersion = (state.chatStateApplyVersion || 0) + 1;
   response = response || {};
@@ -153,6 +195,7 @@ function applyChatState(response) {
   if (response.documents !== undefined || response.Documents !== undefined) {
     state.documents = response.documents || response.Documents || [];
   }
+  var libraryChanged = applyLibraryCatalogState(response);
   if (response.context || response.Context) {
     state.context = response.context || response.Context || {};
   }
@@ -188,6 +231,7 @@ function applyChatState(response) {
     if (typeof clearSendError === "function") clearSendError();
   }
   renderChatSessions();
+  if (libraryChanged && typeof renderInstructions === "function") renderInstructions();
   renderMessages();
   renderContext(true);
   renderContextMeter();
@@ -215,7 +259,9 @@ function applyChatCatalogState(response) {
   if (response.documents !== undefined || response.Documents !== undefined) {
     state.documents = response.documents || response.Documents || [];
   }
+  var libraryChanged = applyLibraryCatalogState(response);
   renderChatSessions();
+  if (libraryChanged && typeof renderInstructions === "function") renderInstructions();
 }
 
 function renderChatSessionList(chats) {

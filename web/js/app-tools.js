@@ -1,4 +1,7 @@
-var toolStructuredEditor = window.RNAssistantToolStructuredEditor.create({ state: state });
+var toolStructuredEditor = window.RNAssistantToolStructuredEditor.create({
+  state: state,
+  markDirty: markToolLibraryDirty
+});
 var toolActions = window.RNAssistantToolActions.create({
   state: state,
   send: send,
@@ -11,6 +14,7 @@ var toolActions = window.RNAssistantToolActions.create({
   readRunArguments: toolStructuredEditor.readRunArguments,
   renderTools: renderTools,
   renderEditor: renderToolEditor,
+  acceptSaved: acceptToolLibraryState,
   log: log,
   logToolResult: logToolResult
 });
@@ -49,6 +53,144 @@ function inferredVbaComponentName(tool) {
     raw = "Tool_" + raw;
   }
   return ("RNA_" + raw).slice(0, 40);
+}
+
+function writableToolLibraryItems(tools) {
+  return (tools || []).filter(function (tool) {
+    return tool && !tool.BuiltIn && String(tool.Scope || tool.scope || "global").toLowerCase() !== "document";
+  });
+}
+
+function toolLibraryComparable(tool) {
+  var components = Array.isArray(tool.Components || tool.components) ? (tool.Components || tool.components) : [];
+  return {
+      Id: tool.Id || "",
+      Host: tool.Host || "Common",
+      Name: tool.Name || tool.Id || "",
+      Description: tool.Description || "",
+      ArgumentSchemaJson: tool.ArgumentSchemaJson || emptyToolSchema(),
+      Executor: tool.Executor || "pipeline",
+      RequiresConfirmation: !!tool.RequiresConfirmation,
+      PipelineJson: tool.PipelineJson || "",
+      Code: tool.Code || "",
+      Readme: tool.Readme || "",
+      Enabled: tool.Enabled !== false,
+      MutatesDocument: !!tool.MutatesDocument,
+      MutatesLocalState: !!tool.MutatesLocalState,
+      AgentCanRun: !!tool.AgentCanRun,
+      RiskLevel: Number(tool.RiskLevel || 0),
+      UseWhen: tool.UseWhen || "",
+      DoNotUseWhen: tool.DoNotUseWhen || "",
+      CapabilityStatus: tool.CapabilityStatus || "available",
+      Limitations: tool.Limitations || "",
+      PackageVersion: tool.PackageVersion || "1.0.0",
+      EntryPoint: tool.EntryPoint || "",
+      ArgumentOrder: tool.ArgumentOrder || [],
+      Components: components.map(function (component) {
+        return {
+          Name: component.Name || "",
+          Type: component.Type || "StdModule",
+          FileName: component.FileName || "",
+          Code: component.Code || "",
+          CodeSha256: component.CodeSha256 || ""
+        };
+      })
+  };
+}
+
+function toolLibraryIdentity(tool) {
+  var storagePath = String(tool && (tool.StoragePath || tool.storagePath) || "").toLowerCase();
+  return storagePath ? "path:" + storagePath : "id:" + String(tool && (tool.Id || tool.id) || "").toLowerCase();
+}
+
+function toolLibraryRecords(tools) {
+  return writableToolLibraryItems(tools).map(function (tool) {
+    return {
+      entity: tool,
+      identity: toolLibraryIdentity(tool),
+      id: String(tool.Id || "").toLowerCase(),
+      comparable: toolLibraryComparable(tool)
+    };
+  });
+}
+
+function toolLibrarySnapshot(tools) {
+  return JSON.stringify(toolLibraryRecords(tools).map(function (item) { return item.comparable; }));
+}
+
+function toolRecordIndex(records) {
+  var byIdentity = {};
+  var byId = {};
+  (records || []).forEach(function (item) {
+    if (item.identity) byIdentity[item.identity] = item;
+    if (item.id) byId[item.id] = item;
+  });
+  return { byIdentity: byIdentity, byId: byId };
+}
+
+function matchingToolRecord(index, record) {
+  return index.byIdentity[record.identity] || index.byId[record.id] || null;
+}
+
+function toolRecordChanged(current, baseline) {
+  return !baseline || JSON.stringify(current.comparable) !== JSON.stringify(baseline.comparable);
+}
+
+function setToolLibraryBaseline(tools) {
+  state.toolLibraryBaselineItems = toolLibraryRecords(tools);
+  state.toolLibraryBaseline = toolLibrarySnapshot(tools);
+}
+
+function reconcileToolLibraryCatalog(serverTools) {
+  var currentRecords = toolLibraryRecords(state.tools);
+  var currentIndex = toolRecordIndex(currentRecords);
+  var baselineIndex = toolRecordIndex(state.toolLibraryBaselineItems || []);
+  var used = [];
+  var merged = [];
+  (serverTools || []).forEach(function (serverTool) {
+    if (!serverTool || serverTool.BuiltIn || String(serverTool.Scope || serverTool.scope || "global").toLowerCase() === "document") {
+      if (serverTool) merged.push(serverTool);
+      return;
+    }
+    var serverRecord = toolLibraryRecords([serverTool])[0];
+    var current = matchingToolRecord(currentIndex, serverRecord);
+    var baseline = matchingToolRecord(baselineIndex, serverRecord);
+    if (!current && baseline) return;
+    if (current) used.push(current.entity);
+    merged.push(current && toolRecordChanged(current, baseline) ? current.entity : serverTool);
+  });
+  currentRecords.forEach(function (current) {
+    if (used.indexOf(current.entity) >= 0) return;
+    var baseline = matchingToolRecord(baselineIndex, current);
+    if (toolRecordChanged(current, baseline)) merged.push(current.entity);
+  });
+  setToolLibraryBaseline(serverTools);
+  state.tools = merged;
+  updateToolLibraryDirty();
+  return state.tools;
+}
+
+function updateToolSaveButton() {
+  var button = $("saveToolsButton");
+  if (!button) return;
+  button.hidden = !state.toolLibraryDirty;
+  button.disabled = !!state.bridgeUnavailable || !state.toolLibraryDirty;
+}
+
+function updateToolLibraryDirty() {
+  state.toolLibraryDirty = toolLibrarySnapshot(state.tools) !== state.toolLibraryBaseline;
+  updateToolSaveButton();
+}
+
+function markToolLibraryDirty() {
+  syncSelectedToolFromEditor();
+  updateToolLibraryDirty();
+}
+
+function acceptToolLibraryState() {
+  setToolLibraryBaseline(state.tools);
+  state.toolLibraryDirty = false;
+  updateToolSaveButton();
 }
 
 function selectedToolComponent(tool) {
@@ -164,8 +306,13 @@ function renderToolEditor() {
   state.toolPipelineVisualDraft = null;
   toolStructuredEditor.syncSchemaDraft();
   toolStructuredEditor.syncPipelineDraft();
-  toolStructuredEditor.setMode("schema", state.toolSchemaMode || "form");
-  toolStructuredEditor.setMode("pipeline", state.toolPipelineMode || "form");
+  state.toolLibraryRendering = true;
+  try {
+    toolStructuredEditor.setMode("schema", state.toolSchemaMode || "form");
+    toolStructuredEditor.setMode("pipeline", state.toolPipelineMode || "form");
+  } finally {
+    state.toolLibraryRendering = false;
+  }
   if ($("pipelineToolEditor")) $("pipelineToolEditor").classList.toggle("hidden", !skill || String(skill.Executor || "").toLowerCase() !== "pipeline");
   if ($("vbaToolEditor")) $("vbaToolEditor").classList.toggle("hidden", !isVba);
   applyToolEditorPage();
@@ -205,7 +352,7 @@ function renderToolEditor() {
   $("copyToolContextButton").disabled = disabled;
   $("askToolBuilderButton").disabled = disabled;
   $("addToolButton").disabled = !!state.bridgeUnavailable;
-  $("saveToolsButton").disabled = !!state.bridgeUnavailable;
+  updateToolSaveButton();
   $("vbaPackageActions").hidden = !isVba || builtIn || documentLocal;
   $("installVbaToolButton").disabled = !isVba || builtIn || documentLocal || !!state.bridgeUnavailable;
   $("uninstallVbaToolButton").disabled = $("installVbaToolButton").disabled || String(skill && skill.InstallationStatus || "") === "not_installed";
@@ -355,6 +502,7 @@ function addVbaComponent(type) {
   }
   components.push({ Name: name, Type: type, FileName: vbaComponentFileName(name, type), Code: "Option Explicit\n" });
   state.selectedToolComponentIndex = components.length - 1;
+  updateToolLibraryDirty();
   renderToolEditor();
 }
 
@@ -378,6 +526,7 @@ function bindToolActions() {
     if (!components.length) return;
     components.splice(Number(state.selectedToolComponentIndex || 0), 1);
     state.selectedToolComponentIndex = Math.max(0, Math.min(Number(state.selectedToolComponentIndex || 0), components.length - 1));
+    updateToolLibraryDirty();
     renderToolEditor();
   });
   $("toolExecutorInput").addEventListener("change", function () {
@@ -389,6 +538,7 @@ function bindToolActions() {
       tool.Components = [{ Name: name, Type: "StdModule", FileName: name + ".bas", Code: "Option Explicit\n" }];
       state.selectedToolComponentIndex = 0;
     }
+    updateToolLibraryDirty();
     renderToolEditor();
   });
   $("installVbaToolButton").addEventListener("click", toolActions.installVba);
@@ -420,6 +570,7 @@ function bindToolActions() {
     });
     state.selectedToolIndex = state.tools.length - 1;
     state.selectedInstructionKind = "tool";
+    updateToolLibraryDirty();
     renderTools();
   });
 
@@ -461,6 +612,7 @@ function bindToolActions() {
     });
     state.selectedToolIndex = state.tools.length - 1;
     state.selectedInstructionKind = "tool";
+    updateToolLibraryDirty();
     renderTools();
   });
 
@@ -476,6 +628,7 @@ function bindToolActions() {
     if (state.selectedToolIndex >= state.tools.length) {
       state.selectedToolIndex = state.tools.length - 1;
     }
+    updateToolLibraryDirty();
     renderTools();
   });
 
@@ -498,5 +651,14 @@ function bindToolActions() {
     }).catch(function (error) {
       log(error.detail || error.message, "error");
     });
+  });
+
+  [
+    "toolEnabledInput", "toolIdInput", "toolHostInput", "toolExecutorInput", "toolConfirmInput",
+    "toolDescriptionInput", "toolComponentNameInput", "toolComponentTypeInput"
+  ].forEach(function (id) {
+    var control = $(id);
+    if (!control) return;
+    control.addEventListener(control.type === "checkbox" || control.tagName === "SELECT" ? "change" : "input", markToolLibraryDirty);
   });
 }

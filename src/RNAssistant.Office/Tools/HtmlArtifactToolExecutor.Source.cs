@@ -13,12 +13,26 @@ namespace RNAssistant.Office.Tools
     {
         private static string ReadWorkspaceSchema()
         {
-            return "{\"type\":\"object\",\"properties\":{" +
-                "\"resourceType\":{\"type\":\"string\",\"enum\":[\"file\",\"data\"],\"description\":\"Optional resource type; omit resourceType and name to read the compact workspace manifest.\"}," +
-                "\"name\":{\"type\":\"string\",\"description\":\"Exact file path or data-source name for the selected resource type.\",\"maxLength\":260}," +
-                "\"startLine\":{\"type\":\"integer\",\"description\":\"Optional one-based first line for a bounded file read; omit for the whole file.\",\"minimum\":1}," +
-                "\"lineCount\":{\"type\":\"integer\",\"description\":\"Optional maximum consecutive file lines; when supplied alone range mode starts at line 1. Runtime uses 200 when only startLine is supplied.\",\"minimum\":1,\"maximum\":500}" +
-                "},\"required\":[],\"additionalProperties\":false}";
+            var properties = new JObject
+            {
+                ["resourceType"] = new JObject { ["type"] = "string", ["enum"] = new JArray("file", "data"), ["description"] = "Resource selector; omit resourceType and name together to read the compact workspace manifest." },
+                ["name"] = new JObject { ["type"] = "string", ["description"] = "Exact file path or data-source name for resourceType.", ["minLength"] = 1, ["maxLength"] = 260 },
+                ["startLine"] = new JObject { ["type"] = "integer", ["description"] = "One-based first line for a bounded file read; omit for the whole file.", ["minimum"] = 1 },
+                ["lineCount"] = new JObject { ["type"] = "integer", ["description"] = "Maximum consecutive file lines; alone it starts at line 1, and with startLine omitted runtime uses the whole file.", ["minimum"] = 1, ["maximum"] = 500 }
+            };
+            return new JObject
+            {
+                ["type"] = "object",
+                ["properties"] = properties,
+                ["required"] = new JArray(),
+                ["additionalProperties"] = false,
+                ["anyOf"] = new JArray
+                {
+                    HtmlResourceVariant(properties, new[] { "resourceType", "name", "startLine", "lineCount" }, new[] { "resourceType", "name" }, "file"),
+                    HtmlResourceVariant(properties, new[] { "resourceType", "name" }, new[] { "resourceType", "name" }, "data"),
+                    HtmlResourceVariant(properties, new string[0], new string[0])
+                }
+            }.ToString(Formatting.None);
         }
 
         private static string SearchWorkspaceSchema()
@@ -37,13 +51,50 @@ namespace RNAssistant.Office.Tools
 
         private static string UpsertWorkspaceSchema()
         {
-            return "{\"type\":\"object\",\"properties\":{" +
-                "\"resourceType\":{\"type\":\"string\",\"enum\":[\"file\",\"data\"],\"description\":\"Resource to write: file or data.\"}," +
-                "\"name\":{\"type\":\"string\",\"description\":\"Workspace-relative file path or stable data-source name.\",\"maxLength\":260}," +
-                "\"content\":{\"type\":\"string\",\"description\":\"Complete file text or valid JSON text for a data source.\",\"maxLength\":300000}," +
-                "\"setActive\":{\"type\":\"boolean\",\"description\":\"For an HTML file, make it the active preview after writing. Ignored for data.\",\"default\":true}," +
-                "\"mode\":{\"type\":\"string\",\"description\":\"upsert creates or updates; createOnly and updateOnly enforce exact existence semantics.\",\"default\":\"upsert\",\"enum\":[\"upsert\",\"createOnly\",\"updateOnly\"]}" +
-                "},\"required\":[\"resourceType\",\"name\",\"content\"],\"additionalProperties\":false}";
+            var properties = new JObject
+            {
+                ["resourceType"] = new JObject { ["type"] = "string", ["enum"] = new JArray("file", "data"), ["description"] = "Resource to write: file or data." },
+                ["name"] = new JObject { ["type"] = "string", ["description"] = "Workspace-relative file path or stable data-source name.", ["minLength"] = 1, ["maxLength"] = 260 },
+                ["content"] = new JObject { ["type"] = "string", ["description"] = "Complete file text, or complete valid JSON text when resourceType=data.", ["maxLength"] = 300000 },
+                ["setActive"] = new JObject { ["type"] = "boolean", ["description"] = "For a written HTML file, select it as the active preview.", ["default"] = true },
+                ["mode"] = new JObject { ["type"] = "string", ["description"] = "upsert creates or updates; createOnly/updateOnly enforce exact existence.", ["default"] = "upsert", ["enum"] = new JArray("upsert", "createOnly", "updateOnly") }
+            };
+            return new JObject
+            {
+                ["type"] = "object",
+                ["properties"] = properties,
+                ["required"] = new JArray("resourceType", "name", "content"),
+                ["additionalProperties"] = false,
+                ["anyOf"] = new JArray
+                {
+                    HtmlResourceVariant(properties, new[] { "resourceType", "name", "content", "setActive", "mode" }, new[] { "resourceType", "name", "content" }, "file"),
+                    HtmlResourceVariant(properties, new[] { "resourceType", "name", "content", "mode" }, new[] { "resourceType", "name", "content" }, "data")
+                }
+            }.ToString(Formatting.None);
+        }
+
+        private static JObject HtmlResourceVariant(
+            JObject sourceProperties,
+            IEnumerable<string> allowed,
+            IEnumerable<string> required,
+            string resourceType = null)
+        {
+            var properties = new JObject();
+            foreach (var name in allowed ?? new string[0])
+            {
+                if (sourceProperties[name] != null) properties[name] = sourceProperties[name].DeepClone();
+            }
+            if (!string.IsNullOrWhiteSpace(resourceType))
+            {
+                ((JObject)properties["resourceType"])["enum"] = new JArray(resourceType);
+            }
+            return new JObject
+            {
+                ["type"] = "object",
+                ["properties"] = properties,
+                ["required"] = new JArray(required ?? new string[0]),
+                ["additionalProperties"] = false
+            };
         }
 
         private static string ApplyPatchSchema()

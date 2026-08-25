@@ -28,8 +28,8 @@ namespace RNAssistant.Office.Tools
             }
 
             yield return ControllerToolDefinition.Create("common.tools_read", "Common", "Read-only: Read one custom tool in authoring shape; omit id to list compact metadata for visible custom tools.", OptionalIdSchema());
-            yield return ControllerToolDefinition.Create("common.tools_validate", "Common", "Read-only: Validate a complete custom pipeline or manifest-based VBA tool definition without saving it.", ToolPayloadSchema(false));
-            yield return ControllerToolDefinition.Create("common.tools_upsert", "Common", "Mutates settings: Create a missing custom tool or update an existing one after validating the effective definition. Omitted fields are preserved on update; use strict mode only when existence itself matters.", ToolUpsertSchema(), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
+            yield return ControllerToolDefinition.Create("common.tools_validate", "Common", "Read-only: Validate a complete custom pipeline or manifest-based VBA tool definition without saving it. Agent authoring may use compact parameterDefinitions and pipelineSteps; advanced callers may pass complete native parameters/pipeline objects.", ToolPayloadSchema(false));
+            yield return ControllerToolDefinition.Create("common.tools_upsert", "Common", "Mutates settings: Create or update one custom tool after validating the effective definition. In Agent mode prefer compact parameterDefinitions and pipelineSteps; parameters/pipeline remain the advanced native forms. Omitted update fields are preserved.", ToolUpsertSchema(), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
             yield return ControllerToolDefinition.Create("common.tools_delete", "Common", "Mutates settings: Delete a custom RNAssistant tool by id.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable identifier.\"}},\"required\":[\"id\"],\"additionalProperties\":false}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
         }
 
@@ -99,6 +99,10 @@ namespace RNAssistant.Office.Tools
 
         private ToolResult ValidateToolPayload(ToolCommand command)
         {
+            var parameterError = ValidateParameterInput(command);
+            if (parameterError != null) return parameterError;
+            var pipelineError = ValidatePipelineInput(command);
+            if (pipelineError != null) return pipelineError;
             var tool = ReadToolDefinition(command);
             var validation = ValidateToolDefinition(tool);
             if (!validation.Success)
@@ -111,6 +115,10 @@ namespace RNAssistant.Office.Tools
 
         private ToolResult UpsertTool(ToolCommand command, AppSettings settings, bool dryRun, bool manualRun)
         {
+            var parameterError = ValidateParameterInput(command);
+            if (parameterError != null) return parameterError;
+            var pipelineError = ValidatePipelineInput(command);
+            if (pipelineError != null) return pipelineError;
             var id = ToolArgumentReader.String(command.Arguments, "id", string.Empty);
             var mode = ToolArgumentReader.String(command.Arguments, "mode", "upsert");
             var existing = _toolStore.Load().FirstOrDefault(tool => string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase));
@@ -187,9 +195,9 @@ namespace RNAssistant.Office.Tools
                 Host = ToolArgumentReader.String(command.Arguments, "host", DefaultHostFromId(id)),
                 Name = ToolArgumentReader.String(command.Arguments, "name", id),
                 Description = ToolArgumentReader.String(command.Arguments, "description", string.Empty),
-                ArgumentSchemaJson = ToolArgumentReader.String(command.Arguments, "parameters", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
+                ArgumentSchemaJson = ResolveParameterSchema(command, "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
                 Executor = ToolArgumentReader.String(command.Arguments, "executor", "pipeline"),
-                PipelineJson = ToolArgumentReader.String(command.Arguments, "pipeline", string.Empty),
+                PipelineJson = ResolvePipelineJson(command, string.Empty),
                 Readme = ToolArgumentReader.String(command.Arguments, "readme", string.Empty),
                 Enabled = ReadBool(command, "enabled", true),
                 RequiresConfirmation = ReadBool(command, "requiresConfirmation", false),
@@ -213,9 +221,15 @@ namespace RNAssistant.Office.Tools
             SetString(command, "host", value => tool.Host = value);
             SetString(command, "name", value => tool.Name = value);
             SetString(command, "description", value => tool.Description = value);
-            SetString(command, "parameters", value => tool.ArgumentSchemaJson = value);
+            if (HasArgument(command, "parameters") || HasArgument(command, "parameterDefinitions"))
+            {
+                tool.ArgumentSchemaJson = ResolveParameterSchema(command, tool.ArgumentSchemaJson);
+            }
             SetString(command, "executor", value => tool.Executor = value);
-            SetString(command, "pipeline", value => tool.PipelineJson = value);
+            if (HasArgument(command, "pipeline") || HasArgument(command, "pipelineSteps"))
+            {
+                tool.PipelineJson = ResolvePipelineJson(command, tool.PipelineJson);
+            }
             SetString(command, "readme", value => tool.Readme = value);
             SetString(command, "useWhen", value => tool.UseWhen = value);
             SetString(command, "doNotUseWhen", value => tool.DoNotUseWhen = value);
@@ -229,6 +243,216 @@ namespace RNAssistant.Office.Tools
             if (HasArgument(command, "riskLevel")) tool.RiskLevel = ReadInt(command, "riskLevel", tool.RiskLevel);
             if (HasArgument(command, "components")) tool.Components = ReadComponents(ToolArgumentReader.String(command.Arguments, "components", "[]"));
             return NormalizeVbaEntryCode(tool);
+        }
+
+        private static ToolResult ValidateParameterInput(ToolCommand command)
+        {
+            if (HasArgument(command, "parameters") && HasArgument(command, "parameterDefinitions"))
+            {
+                return ToolResult.Fail(
+                    "Supply either parameters or parameterDefinitions, not both. Prefer parameterDefinitions in Agent mode.",
+                    null,
+                    "tool_parameters_ambiguous",
+                    true);
+            }
+            if (!HasArgument(command, "parameterDefinitions")) return null;
+            try
+            {
+                BuildParameterSchema(ToolArgumentReader.String(command.Arguments, "parameterDefinitions", "[]"));
+                return null;
+            }
+            catch (InvalidOperationException ex)
+            {
+                return ToolResult.Fail(ex.Message, null, "invalid_tool_parameter_definitions", true);
+            }
+            catch (JsonException ex)
+            {
+                return ToolResult.Fail("parameterDefinitions must be a native JSON array: " + ex.Message, null, "invalid_tool_parameter_definitions", true);
+            }
+        }
+
+        private static ToolResult ValidatePipelineInput(ToolCommand command)
+        {
+            if (HasArgument(command, "pipeline") && HasArgument(command, "pipelineSteps"))
+            {
+                return ToolResult.Fail(
+                    "Supply either pipeline or pipelineSteps, not both. Prefer pipelineSteps in Agent mode.",
+                    null,
+                    "tool_pipeline_ambiguous",
+                    true);
+            }
+            if (!HasArgument(command, "pipelineSteps")) return null;
+            try
+            {
+                BuildPipelineJson(ToolArgumentReader.String(command.Arguments, "pipelineSteps", "[]"));
+                return null;
+            }
+            catch (InvalidOperationException ex)
+            {
+                return ToolResult.Fail(ex.Message, null, "invalid_tool_pipeline_steps", true);
+            }
+            catch (JsonException ex)
+            {
+                return ToolResult.Fail("pipelineSteps must be a native JSON array: " + ex.Message, null, "invalid_tool_pipeline_steps", true);
+            }
+        }
+
+        private static string ResolveParameterSchema(ToolCommand command, string fallback)
+        {
+            if (HasArgument(command, "parameterDefinitions"))
+            {
+                return BuildParameterSchema(ToolArgumentReader.String(command.Arguments, "parameterDefinitions", "[]"));
+            }
+            return ToolArgumentReader.String(command.Arguments, "parameters", fallback);
+        }
+
+        private static string ResolvePipelineJson(ToolCommand command, string fallback)
+        {
+            if (HasArgument(command, "pipelineSteps"))
+            {
+                return BuildPipelineJson(ToolArgumentReader.String(command.Arguments, "pipelineSteps", "[]"));
+            }
+            return ToolArgumentReader.String(command.Arguments, "pipeline", fallback);
+        }
+
+        private static string BuildPipelineJson(string stepsJson)
+        {
+            var sourceSteps = JArray.Parse(string.IsNullOrWhiteSpace(stepsJson) ? "[]" : stepsJson);
+            if (sourceSteps.Count == 0) throw new InvalidOperationException("pipelineSteps requires at least one step.");
+            var steps = new JArray();
+            for (var index = 0; index < sourceSteps.Count; index++)
+            {
+                var sourceStep = sourceSteps[index] as JObject;
+                if (sourceStep == null) throw new InvalidOperationException("pipelineSteps item " + (index + 1) + " must be an object.");
+                var toolId = ((string)sourceStep["toolId"] ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(toolId)) throw new InvalidOperationException("pipelineSteps item " + (index + 1) + " requires toolId.");
+
+                var arguments = new JObject();
+                var sourceArguments = sourceStep["arguments"] as JArray ?? new JArray();
+                foreach (var argumentToken in sourceArguments)
+                {
+                    var argument = argumentToken as JObject;
+                    if (argument == null) throw new InvalidOperationException("pipelineSteps arguments for " + toolId + " must be objects.");
+                    var name = ((string)argument["name"] ?? string.Empty).Trim();
+                    if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("Every pipelineSteps argument requires a non-empty name.");
+                    if (arguments[name] != null) throw new InvalidOperationException("pipelineSteps contains duplicate argument " + name + " for " + toolId + ".");
+                    if (argument["value"] == null) throw new InvalidOperationException("pipelineSteps argument " + name + " requires value; use an explicit JSON null when needed.");
+                    arguments[name] = argument["value"].DeepClone();
+                }
+
+                var step = new JObject
+                {
+                    ["toolId"] = toolId,
+                    ["arguments"] = arguments
+                };
+                var id = ((string)sourceStep["id"] ?? string.Empty).Trim();
+                if (!string.IsNullOrWhiteSpace(id)) step["id"] = id;
+                steps.Add(step);
+            }
+            return new JObject { ["version"] = 1, ["steps"] = steps }.ToString(Formatting.None);
+        }
+
+        private static string BuildParameterSchema(string definitionsJson)
+        {
+            var definitions = JArray.Parse(string.IsNullOrWhiteSpace(definitionsJson) ? "[]" : definitionsJson);
+            var properties = new JObject();
+            var required = new JArray();
+            foreach (var definition in definitions.OfType<JObject>())
+            {
+                var name = ((string)definition["name"] ?? string.Empty).Trim();
+                var type = ((string)definition["type"] ?? string.Empty).Trim();
+                var description = ((string)definition["description"] ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("Every parameterDefinitions item requires a non-empty name.");
+                if (properties[name] != null) throw new InvalidOperationException("parameterDefinitions contains duplicate argument " + name + ".");
+                if (string.IsNullOrWhiteSpace(description)) throw new InvalidOperationException("parameterDefinitions." + name + ".description is required.");
+                if (!new[] { "string", "integer", "number", "boolean", "array" }.Contains(type, StringComparer.Ordinal))
+                {
+                    throw new InvalidOperationException("parameterDefinitions." + name + ".type is unsupported.");
+                }
+
+                JToken typeToken = type;
+                if ((bool?)definition["nullable"] == true) typeToken = new JArray(type, "null");
+                var property = new JObject { ["type"] = typeToken, ["description"] = description };
+                if (string.Equals(type, "array", StringComparison.Ordinal))
+                {
+                    var itemsType = ((string)definition["itemsType"] ?? string.Empty).Trim();
+                    if (!new[] { "string", "integer", "number", "boolean" }.Contains(itemsType, StringComparer.Ordinal))
+                    {
+                        throw new InvalidOperationException("parameterDefinitions." + name + ".itemsType is required for an array and must be scalar.");
+                    }
+                    property["items"] = new JObject { ["type"] = itemsType };
+                    CopyNumberConstraint(definition, property, "minItems", true);
+                    CopyNumberConstraint(definition, property, "maxItems", true);
+                }
+                else if (string.Equals(type, "string", StringComparison.Ordinal))
+                {
+                    var enumValues = definition["enumValues"] as JArray;
+                    if (enumValues != null && enumValues.Count > 0)
+                    {
+                        var allowed = (JArray)enumValues.DeepClone();
+                        if ((bool?)definition["nullable"] == true) allowed.Add(JValue.CreateNull());
+                        property["enum"] = allowed;
+                    }
+                    CopyNumberConstraint(definition, property, "minLength", true);
+                    CopyNumberConstraint(definition, property, "maxLength", true);
+                    CopyDefault(definition, property, "defaultString");
+                }
+                else if (string.Equals(type, "integer", StringComparison.Ordinal))
+                {
+                    CopyNumberConstraint(definition, property, "minimum", false);
+                    CopyNumberConstraint(definition, property, "maximum", false);
+                    CopyDefault(definition, property, "defaultInteger");
+                }
+                else if (string.Equals(type, "number", StringComparison.Ordinal))
+                {
+                    CopyNumberConstraint(definition, property, "minimum", false);
+                    CopyNumberConstraint(definition, property, "maximum", false);
+                    CopyDefault(definition, property, "defaultNumber");
+                }
+                else
+                {
+                    CopyDefault(definition, property, "defaultBoolean");
+                }
+                ValidateConstraintOrder(property, name, "minimum", "maximum");
+                ValidateConstraintOrder(property, name, "minLength", "maxLength");
+                ValidateConstraintOrder(property, name, "minItems", "maxItems");
+                properties[name] = property;
+                if ((bool?)definition["required"] == true) required.Add(name);
+            }
+            if (definitions.Count != properties.Count)
+            {
+                throw new InvalidOperationException("Every parameterDefinitions item must be an object.");
+            }
+            return new JObject
+            {
+                ["type"] = "object",
+                ["properties"] = properties,
+                ["required"] = required,
+                ["additionalProperties"] = false
+            }.ToString(Formatting.None);
+        }
+
+        private static void CopyDefault(JObject source, JObject target, string name)
+        {
+            if (source[name] != null && source[name].Type != JTokenType.Null) target["default"] = source[name].DeepClone();
+        }
+
+        private static void CopyNumberConstraint(JObject source, JObject target, string name, bool integer)
+        {
+            var value = source[name];
+            if (value == null || value.Type == JTokenType.Null) return;
+            if (integer && value.Type != JTokenType.Integer) throw new InvalidOperationException(name + " must be an integer.");
+            if (value.Type != JTokenType.Integer && value.Type != JTokenType.Float) throw new InvalidOperationException(name + " must be numeric.");
+            target[name] = value.DeepClone();
+        }
+
+        private static void ValidateConstraintOrder(JObject schema, string argumentName, string minimumName, string maximumName)
+        {
+            if (schema[minimumName] != null && schema[maximumName] != null &&
+                schema[minimumName].Value<double>() > schema[maximumName].Value<double>())
+            {
+                throw new InvalidOperationException("parameterDefinitions." + argumentName + " has " + minimumName + " greater than " + maximumName + ".");
+            }
         }
 
         private static ToolDefinition NormalizeVbaEntryCode(ToolDefinition tool)
@@ -319,7 +543,7 @@ namespace RNAssistant.Office.Tools
             return "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact custom tool id; omit to list compact metadata.\"}},\"required\":[],\"additionalProperties\":false}";
         }
 
-        private static string ToolPayloadSchema(bool update)
+        private string ToolPayloadSchema(bool update)
         {
             var properties = new JObject
             {
@@ -328,8 +552,10 @@ namespace RNAssistant.Office.Tools
                 ["name"] = BoundedStringProperty("Human-readable tool name.", 200),
                 ["description"] = BoundedStringProperty("Clear model-facing description of what the tool does.", 8000),
                 ["parameters"] = ParametersProperty(),
+                ["parameterDefinitions"] = ParameterDefinitionsProperty(),
                 ["executor"] = EnumProperty("Execution type.", "pipeline", "vba"),
                 ["pipeline"] = PipelineProperty(),
+                ["pipelineSteps"] = PipelineStepsProperty(),
                 ["components"] = new JObject
                 {
                     ["type"] = "array",
@@ -383,12 +609,12 @@ namespace RNAssistant.Office.Tools
                 ["properties"] = properties,
                 ["required"] = update
                     ? new JArray("id")
-                    : new JArray("id", "host", "description", "parameters", "executor"),
+                    : new JArray("id", "host", "description", "executor"),
                 ["additionalProperties"] = false
             }.ToString(Formatting.None);
         }
 
-        private static string ToolUpsertSchema()
+        private string ToolUpsertSchema()
         {
             var schema = JObject.Parse(ToolPayloadSchema(true));
             ((JObject)schema["properties"])["mode"] = new JObject
@@ -421,7 +647,7 @@ namespace RNAssistant.Office.Tools
             return new JObject
             {
                 ["type"] = "object",
-                ["description"] = "Strict object JSON Schema for the custom tool arguments.",
+                ["description"] = "Advanced native strict object JSON Schema. In strict Agent output arbitrary property names cannot be generated here, so prefer parameterDefinitions; never pass this object as a JSON string.",
                 ["properties"] = new JObject
                 {
                     ["type"] = new JObject { ["type"] = "string", ["description"] = "Root schema type; must be object.", ["enum"] = new JArray("object") },
@@ -433,12 +659,48 @@ namespace RNAssistant.Office.Tools
             };
         }
 
+        private static JObject ParameterDefinitionsProperty()
+        {
+            return new JObject
+            {
+                ["type"] = "array",
+                ["description"] = "Agent-friendly native array that builds parameters without dynamic JSON keys. Use one unique entry per scalar or scalar-array argument; omit for a no-argument tool or when advanced parameters is supplied.",
+                ["maxItems"] = 100,
+                ["items"] = new JObject
+                {
+                    ["type"] = "object",
+                    ["properties"] = new JObject
+                    {
+                        ["name"] = BoundedStringProperty("Exact argument name.", 128),
+                        ["type"] = EnumProperty("Argument JSON type.", "string", "integer", "number", "boolean", "array"),
+                        ["description"] = BoundedStringProperty("Useful model-facing description of this argument.", 4000),
+                        ["required"] = new JObject { ["type"] = "boolean", ["description"] = "Whether callers must supply this argument.", ["default"] = false },
+                        ["nullable"] = new JObject { ["type"] = "boolean", ["description"] = "Whether an explicit JSON null is meaningful and must be preserved.", ["default"] = false },
+                        ["itemsType"] = EnumProperty("Required scalar item type when type=array.", "string", "integer", "number", "boolean"),
+                        ["enumValues"] = new JObject { ["type"] = "array", ["description"] = "Optional allowed string values when type=string.", ["items"] = new JObject { ["type"] = "string" }, ["minItems"] = 1, ["maxItems"] = 100 },
+                        ["defaultString"] = BoundedStringProperty("Optional string default used only when type=string.", 100000),
+                        ["defaultInteger"] = new JObject { ["type"] = "integer", ["description"] = "Optional integer default used only when type=integer." },
+                        ["defaultNumber"] = new JObject { ["type"] = "number", ["description"] = "Optional numeric default used only when type=number." },
+                        ["defaultBoolean"] = new JObject { ["type"] = "boolean", ["description"] = "Optional boolean default used only when type=boolean." },
+                        ["minimum"] = new JObject { ["type"] = "number", ["description"] = "Optional inclusive numeric minimum." },
+                        ["maximum"] = new JObject { ["type"] = "number", ["description"] = "Optional inclusive numeric maximum." },
+                        ["minLength"] = new JObject { ["type"] = "integer", ["description"] = "Optional string minimum length.", ["minimum"] = 0 },
+                        ["maxLength"] = new JObject { ["type"] = "integer", ["description"] = "Optional string maximum length.", ["minimum"] = 0 },
+                        ["minItems"] = new JObject { ["type"] = "integer", ["description"] = "Optional array minimum item count.", ["minimum"] = 0 },
+                        ["maxItems"] = new JObject { ["type"] = "integer", ["description"] = "Optional array maximum item count.", ["minimum"] = 0 }
+                    },
+                    ["required"] = new JArray("name", "type", "description"),
+                    ["additionalProperties"] = false
+                }
+            };
+        }
+
         private static JObject PipelineProperty()
         {
             return new JObject
             {
                 ["type"] = "object",
-                ["description"] = "Pipeline definition with ordered calls to existing tools.",
+                ["description"] = "Advanced native pipeline object with ordered calls to existing tools. Use pipelineSteps in Agent mode because arbitrary nested argument names cannot be represented by strict structured output; never encode this object as a JSON string.",
                 ["properties"] = new JObject
                 {
                     ["version"] = new JObject { ["type"] = "integer", ["description"] = "Pipeline format version.", ["default"] = 1 },
@@ -464,6 +726,75 @@ namespace RNAssistant.Office.Tools
                 },
                 ["required"] = new JArray("steps"),
                 ["additionalProperties"] = false
+            };
+        }
+
+        private static JObject PipelineStepsProperty()
+        {
+            var primitive = new JArray
+            {
+                new JObject { ["type"] = "string", ["description"] = "String value or placeholder such as {{args.name}}." },
+                new JObject { ["type"] = "number", ["description"] = "Numeric value." },
+                new JObject { ["type"] = "boolean", ["description"] = "Boolean value." },
+                new JObject { ["type"] = "null", ["description"] = "Explicit JSON null." }
+            };
+            var flatArray = new JObject
+            {
+                ["type"] = "array",
+                ["description"] = "Flat array of primitive values.",
+                ["maxItems"] = 10000,
+                ["items"] = new JObject { ["anyOf"] = (JArray)primitive.DeepClone() }
+            };
+            var table = new JObject
+            {
+                ["type"] = "array",
+                ["description"] = "Two-dimensional table of primitive cell values.",
+                ["maxItems"] = 10000,
+                ["items"] = new JObject
+                {
+                    ["type"] = "array",
+                    ["maxItems"] = 10000,
+                    ["items"] = new JObject { ["anyOf"] = (JArray)primitive.DeepClone() }
+                }
+            };
+            return new JObject
+            {
+                ["type"] = "array",
+                ["description"] = "Agent-friendly ordered pipeline steps. Arguments are a native name/value array compiled into the canonical pipeline object; values stay native JSON and may be scalars, null, flat primitive arrays, tables, or placeholders.",
+                ["minItems"] = 1,
+                ["maxItems"] = 50,
+                ["items"] = new JObject
+                {
+                    ["type"] = "object",
+                    ["properties"] = new JObject
+                    {
+                        ["id"] = BoundedStringProperty("Optional unique step id used by result placeholders.", 128),
+                        ["toolId"] = BoundedStringProperty("Exact existing tool id.", 128),
+                        ["arguments"] = new JObject
+                        {
+                            ["type"] = "array",
+                            ["description"] = "Nested tool arguments as unique name/value entries; omit for a no-argument tool.",
+                            ["maxItems"] = 100,
+                            ["items"] = new JObject
+                            {
+                                ["type"] = "object",
+                                ["properties"] = new JObject
+                                {
+                                    ["name"] = BoundedStringProperty("Exact nested argument name.", 128),
+                                    ["value"] = new JObject
+                                    {
+                                        ["description"] = "Native nested argument value.",
+                                        ["anyOf"] = new JArray(primitive.Concat(new JToken[] { flatArray, table }))
+                                    }
+                                },
+                                ["required"] = new JArray("name", "value"),
+                                ["additionalProperties"] = false
+                            }
+                        }
+                    },
+                    ["required"] = new JArray("toolId"),
+                    ["additionalProperties"] = false
+                }
             };
         }
 

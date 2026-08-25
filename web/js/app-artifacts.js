@@ -41,7 +41,7 @@
       attachment: "Вложение",
       file: "Файл",
       chart: "Диаграмма",
-      compaction: "Контекст",
+      compaction: "Checkpoint",
       tool_result: "Результат"
     };
     return labels[kind] || "Артефакт";

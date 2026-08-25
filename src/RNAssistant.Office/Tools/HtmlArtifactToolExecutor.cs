@@ -230,15 +230,18 @@ namespace RNAssistant.Office.Tools
 
         private string BuildBindDescription()
         {
-            return "Workspace: Bind a JSON data source to one approved read-only Office tool, execute it now, and save refresh metadata. " +
-                "Use transform=table for a row array that should become columns plus object rows. Available sources: " +
+            return "Workspace: Execute one approved read-only Office tool, save its JSON as a refreshable HTML data source, and bind it to the active document. " +
+                "Choose sourceTool first and pass only arguments declared by that exact tool in sourceArguments; do not copy selector fields from another source. " +
+                "Use transform=table only when the source returns row arrays. Available sources: " +
                 string.Join(", ", _dataSourceTools.Keys.ToArray()) + ".";
         }
 
         private string BuildBindSchema()
         {
+            var sourceIds = _dataSourceTools.Keys.OrderBy(id => id, StringComparer.OrdinalIgnoreCase).ToArray();
             var sourceProperties = new JObject();
-            foreach (var tool in _dataSourceTools.Values)
+            var alternatives = new JArray();
+            foreach (var tool in _dataSourceTools.Values.OrderBy(item => item.Id, StringComparer.OrdinalIgnoreCase))
             {
                 JObject schema;
                 string error;
@@ -250,58 +253,74 @@ namespace RNAssistant.Office.Tools
                         sourceProperties[property.Name] = property.Value.DeepClone();
                     }
                 }
+
+                schema["description"] = "Arguments accepted by " + tool.Id + "; omit every field not declared in this selected source schema.";
+                alternatives.Add(new JObject
+                {
+                    ["type"] = "object",
+                    ["properties"] = BindProperties(new[] { tool.Id }, schema),
+                    ["required"] = new JArray("dataName", "sourceTool", "sourceArguments"),
+                    ["additionalProperties"] = false
+                });
             }
 
             return new JObject
             {
                 ["type"] = "object",
-                ["properties"] = new JObject
+                ["properties"] = BindProperties(sourceIds, new JObject
                 {
-                    ["dataName"] = new JObject
-                    {
-                        ["type"] = "string",
-                        ["description"] = "Stable HTML workspace data-source name exposed under window.RNAssistantData.",
-                        ["maxLength"] = 128
-                    },
-                    ["sourceTool"] = new JObject
-                    {
-                        ["type"] = "string",
-                        ["enum"] = new JArray(_dataSourceTools.Keys.ToArray()),
-                        ["description"] = "Exact approved read-only Office tool to execute on bind and refresh."
-                    },
-                    ["sourceArguments"] = new JObject
-                    {
-                        ["type"] = "object",
-                        ["description"] = "Native JSON arguments for sourceTool. Use only fields from that selected tool's schema.",
-                        ["properties"] = sourceProperties,
-                        ["required"] = new JArray(),
-                        ["additionalProperties"] = false
-                    },
-                    ["transform"] = new JObject
-                    {
-                        ["type"] = "string",
-                        ["enum"] = new JArray("raw", "table"),
-                        ["description"] = "Keep source JSON unchanged or normalize a row array to a table envelope.",
-                        ["default"] = "raw"
-                    },
-                    ["headers"] = new JObject
-                    {
-                        ["type"] = "string",
-                        ["enum"] = new JArray("firstRow", "none"),
-                        ["description"] = "For array rows with transform=table, use the first row as column labels or generate labels.",
-                        ["default"] = "firstRow"
-                    },
-                    ["refreshPolicy"] = new JObject
-                    {
-                        ["type"] = "string",
-                        ["enum"] = new JArray("manual", "on_preview"),
-                        ["description"] = "Refresh only on request or whenever the user opens HTML preview.",
-                        ["default"] = "on_preview"
-                    }
-                },
+                    ["type"] = "object",
+                    ["description"] = "Arguments for the selected sourceTool; the matching anyOf branch defines the exact allowed fields.",
+                    ["properties"] = sourceProperties,
+                    ["required"] = new JArray(),
+                    ["additionalProperties"] = false
+                }),
                 ["required"] = new JArray("dataName", "sourceTool", "sourceArguments"),
-                ["additionalProperties"] = false
+                ["additionalProperties"] = false,
+                ["anyOf"] = alternatives
             }.ToString(Formatting.None);
+        }
+
+        private static JObject BindProperties(IEnumerable<string> sourceIds, JObject sourceArgumentsSchema)
+        {
+            return new JObject
+            {
+                ["dataName"] = new JObject
+                {
+                    ["type"] = "string",
+                    ["description"] = "Stable data-source name exposed to HTML as window.RNAssistantData[dataName].",
+                    ["minLength"] = 1,
+                    ["maxLength"] = 128
+                },
+                ["sourceTool"] = new JObject
+                {
+                    ["type"] = "string",
+                    ["enum"] = new JArray((sourceIds ?? new string[0]).ToArray()),
+                    ["description"] = "Exact approved read-only Office tool whose result will be stored and refreshed."
+                },
+                ["sourceArguments"] = sourceArgumentsSchema,
+                ["transform"] = new JObject
+                {
+                    ["type"] = "string",
+                    ["enum"] = new JArray("raw", "table"),
+                    ["description"] = "raw preserves source JSON; table converts a returned row array to columns plus object rows.",
+                    ["default"] = "raw"
+                },
+                ["headers"] = new JObject
+                {
+                    ["type"] = "string",
+                    ["enum"] = new JArray("firstRow", "none"),
+                    ["description"] = "For transform=table, firstRow uses row 1 as column labels; none generates column labels.",
+                    ["default"] = "firstRow"
+                },
+                ["refreshPolicy"] = new JObject
+                {
+                    ["type"] = "string",
+                    ["enum"] = new JArray("manual", "on_preview"),
+                    ["description"] = "manual refreshes only through common.html_data_refresh; on_preview also refreshes when HTML preview opens.",
+                    ["default"] = "on_preview"
+                }
+            };
         }
 
         private ToolResult BindDataSource(ChatSession session, ToolCommand command, bool dryRun, CancellationToken cancellationToken)

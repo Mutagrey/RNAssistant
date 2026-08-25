@@ -1875,6 +1875,12 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("toolResults")]
         public IReadOnlyList<object> ToolResults { get; set; }
+
+        [JsonProperty("tools")]
+        public IReadOnlyList<ToolDefinition> Tools { get; set; }
+
+        [JsonProperty("skills")]
+        public IReadOnlyList<SkillDefinition> Skills { get; set; }
     }
 
     public sealed class AttachmentResponse

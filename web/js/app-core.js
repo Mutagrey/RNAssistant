@@ -57,6 +57,12 @@ var state = {
   bridgeUnavailable: false,
   selectedToolIndex: -1,
   selectedSkillIndex: -1,
+  toolLibraryBaseline: "",
+  toolLibraryBaselineItems: [],
+  toolLibraryDirty: false,
+  skillLibraryBaseline: "",
+  skillLibraryBaselineItems: [],
+  skillLibraryDirty: false,
   selectedPromptIndex: -1,
   selectedInstructionKind: "prompt",
   promptEditorMode: "edit",
@@ -292,7 +298,7 @@ if (window.chrome && window.chrome.webview) {
       var isChatProgress = progressPending && (progressPending.type === "sendChat" || progressPending.type === "confirmAgentTool" || progressPending.type === "editMessage");
       var progressChatId = progress.chatId || progress.ChatId || (progressPending && progressPending.payload && progressPending.payload.chatId) || "";
       var progressRunId = progress.runId || progress.RunId || "";
-      if (progressChatId) {
+      if (progressChatId && isChatProgress) {
         state.chatRuns[progressChatId] = state.chatRuns[progressChatId] || { activities: [], stream: "" };
         state.chatRuns[progressChatId].runId = progressRunId;
         state.chatRuns[progressChatId].phase = progress.phase || progress.Phase || "working";

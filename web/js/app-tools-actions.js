@@ -21,6 +21,7 @@
         if (action === "installVbaTool") {
           var selectedId = tool.Id;
           state.tools = await options.send("saveTools", { tools: options.readTools() }) || state.tools;
+          if (options.acceptSaved) options.acceptSaved();
           state.selectedToolIndex = findToolIndex(state.tools, selectedId);
           tool = state.tools[state.selectedToolIndex];
           if (!tool) throw new Error("VBA package was not found after saving.");
@@ -81,6 +82,7 @@
         var response = await options.send("saveTools", { tools: options.readTools() });
         state.tools = response || [];
         state.selectedToolIndex = selectedId ? findToolIndex(state.tools, selectedId) : -1;
+        if (options.acceptSaved) options.acceptSaved();
         options.renderTools();
         options.log("Инструменты сохранены.");
       } catch (error) {

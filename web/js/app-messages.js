@@ -249,11 +249,69 @@ function renderActivityArticle(message, index, activity, options) {
   return node;
 }
 
+function renderCompactionArticle(message, activity) {
+  var node = document.createElement("article");
+  node.className = "message assistant is-compaction-message";
+
+  var details = document.createElement("details");
+  details.className = "context-compaction-divider";
+
+  var summary = document.createElement("summary");
+  summary.className = "context-compaction-summary";
+  var leftLine = document.createElement("span");
+  leftLine.className = "context-compaction-line";
+  var rightLine = document.createElement("span");
+  rightLine.className = "context-compaction-line";
+
+  var label = document.createElement("span");
+  label.className = "context-compaction-label";
+  var icon = document.createElement("svg");
+  icon.setAttribute("viewBox", "0 0 24 24");
+  icon.setAttribute("aria-hidden", "true");
+  icon.innerHTML = "<path d=\"M5 8h14M8 12h8M10 16h4\"/>";
+  var title = document.createElement("span");
+  title.className = "context-compaction-title";
+  title.textContent = activityTitle(activity) || "Контекст сжат";
+  var subtitle = document.createElement("span");
+  subtitle.className = "context-compaction-subtitle";
+  subtitle.textContent = activityValue(activity, "Subtitle", "subtitle", "") || "Ранняя история свернута";
+  var caret = document.createElement("span");
+  caret.className = "context-compaction-caret";
+  caret.setAttribute("aria-hidden", "true");
+  caret.textContent = "›";
+  label.appendChild(icon);
+  label.appendChild(title);
+  label.appendChild(subtitle);
+  label.appendChild(caret);
+  summary.appendChild(leftLine);
+  summary.appendChild(label);
+  summary.appendChild(rightLine);
+  details.appendChild(summary);
+
+  var body = document.createElement("div");
+  body.className = "context-compaction-body";
+  var note = document.createElement("div");
+  note.className = "context-compaction-note";
+  note.textContent = "Исходная история сохранена; это резюме заменяет её раннюю часть только в активном контексте модели.";
+  body.appendChild(note);
+  var markdownBody = document.createElement("div");
+  markdownBody.className = "markdown context-compaction-markdown";
+  markdownBody.innerHTML = markdown(activityResultMessage(activity) || messageContent(message));
+  body.appendChild(markdownBody);
+  details.appendChild(body);
+  node.appendChild(details);
+  enhanceMarkdown(markdownBody);
+  return node;
+}
+
 function renderMessageArticle(message, index) {
   var node = document.createElement("article");
   node.className = "message " + messageRole(message) + (message.Pending ? " pending" : "") + (message.Failed ? " failed" : "");
   var activity = messageActivity(message);
   if (activity) {
+    if (activityKind(activity) === "compaction" && activityStatus(activity) === "completed") {
+      return renderCompactionArticle(message, activity);
+    }
     var activityArticle = renderActivityArticle(message, index, activity, { live: false, current: false });
     if (typeof appendMessageReasoning === "function") {
       var activityReasoning = reasoningBlock(

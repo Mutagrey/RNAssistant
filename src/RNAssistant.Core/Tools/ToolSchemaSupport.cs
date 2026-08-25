@@ -110,6 +110,7 @@ namespace RNAssistant.Core.Tools
         public static JObject ForStructuredOutput(JObject schema)
         {
             var clone = schema == null ? EmptyObjectSchema() : (JObject)schema.DeepClone();
+            CollapseObjectAnyOfConstraints(clone);
             MakeOptionalPropertiesNullable(clone);
             MakeObjectSchemasStrict(clone);
             return clone;
@@ -196,6 +197,8 @@ namespace RNAssistant.Core.Tools
             {
                 string firstError = null;
                 string discriminatorError = null;
+                string closestError = null;
+                var closestScore = int.MinValue;
                 foreach (var candidate in anyOf.OfType<JObject>())
                 {
                     string candidateError;
@@ -207,8 +210,14 @@ namespace RNAssistant.Core.Tools
                     }
                     if (firstError == null) firstError = candidateError;
                     if (MatchesDiscriminator(value, candidate)) discriminatorError = candidateError;
+                    var score = AlternativeMatchScore(value, candidate);
+                    if (score > closestScore)
+                    {
+                        closestScore = score;
+                        closestError = candidateError;
+                    }
                 }
-                error = discriminatorError ?? (anyOf.Count == 1 ? firstError : null) ?? path + " does not match any allowed schema.";
+                error = discriminatorError ?? closestError ?? firstError ?? path + " does not match any allowed schema.";
                 return false;
             }
 
@@ -338,6 +347,29 @@ namespace RNAssistant.Core.Tools
             return false;
         }
 
+        private static int AlternativeMatchScore(JToken value, JObject schema)
+        {
+            var obj = value as JObject;
+            var properties = schema == null ? null : schema["properties"] as JObject;
+            if (obj == null || properties == null) return 0;
+            var score = 0;
+            foreach (var actual in obj.Properties())
+            {
+                var propertySchema = properties[actual.Name] as JObject;
+                if (propertySchema == null)
+                {
+                    score--;
+                    continue;
+                }
+                score += 2;
+                var constant = propertySchema["const"];
+                if (constant != null) score += JToken.DeepEquals(actual.Value, constant) ? 20 : -20;
+                var allowed = propertySchema["enum"] as JArray;
+                if (allowed != null && allowed.Count == 1) score += JToken.DeepEquals(actual.Value, allowed[0]) ? 20 : -20;
+            }
+            return score;
+        }
+
         private static void CopyValidatedValue(JToken target, JToken source)
         {
             var targetObject = target as JObject;
@@ -432,6 +464,36 @@ namespace RNAssistant.Core.Tools
             }
         }
 
+        private static void CollapseObjectAnyOfConstraints(JToken token)
+        {
+            var obj = token as JObject;
+            if (obj != null)
+            {
+                foreach (var property in obj.Properties().ToList())
+                {
+                    CollapseObjectAnyOfConstraints(property.Value);
+                }
+
+                if (ContainsType(obj["type"], "object") && obj["anyOf"] is JArray)
+                {
+                    // Runtime validation treats anyOf branches as complete alternatives. Keep the
+                    // structured-output schema equivalent: a strict parent object with the union of
+                    // branch properties would otherwise require fields that every branch forbids.
+                    obj.Remove("type");
+                    obj.Remove("properties");
+                    obj.Remove("required");
+                    obj.Remove("additionalProperties");
+                }
+                return;
+            }
+
+            var array = token as JArray;
+            if (array != null)
+            {
+                foreach (var item in array) CollapseObjectAnyOfConstraints(item);
+            }
+        }
+
         private static void MakeOptionalPropertiesNullable(JToken token)
         {
             var obj = token as JObject;
@@ -476,6 +538,14 @@ namespace RNAssistant.Core.Tools
                 schema["type"] = type.Type == JTokenType.Array
                     ? new JArray(((JArray)type).Select(item => item.DeepClone()).Concat(new[] { new JValue("null") }))
                     : new JArray(type.DeepClone(), "null");
+            }
+            else if (type == null && schema["anyOf"] is JArray)
+            {
+                var alternatives = (JArray)schema["anyOf"];
+                if (!alternatives.OfType<JObject>().Any(item => ContainsType(item["type"], "null")))
+                {
+                    alternatives.Add(new JObject { ["type"] = "null" });
+                }
             }
 
             var enumValues = schema["enum"] as JArray;

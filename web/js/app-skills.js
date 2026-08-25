@@ -31,6 +31,122 @@ function selectedSkillReferencePath(skill) {
   return skill ? (skill._selectedReferencePath || "") : "";
 }
 
+function writableSkillLibraryItems(skills) {
+  return (skills || []).filter(function (skill) { return skill && !skill.BuiltIn; });
+}
+
+function skillLibraryComparable(skill) {
+  return {
+      Id: skill.Id || "",
+      Host: skill.Host || "Common",
+      Name: skill.Name || skill.Id || "",
+      Description: skill.Description || "",
+      Version: skill.Version || "1.0.0",
+      BodyMarkdown: skill.BodyMarkdown || "",
+      Enabled: skill.Enabled !== false
+  };
+}
+
+function skillLibraryIdentity(skill) {
+  var storagePath = String(skill && (skill.StoragePath || skill.storagePath) || "").toLowerCase();
+  return storagePath ? "path:" + storagePath : "id:" + String(skill && (skill.Id || skill.id) || "").toLowerCase();
+}
+
+function skillLibraryRecords(skills) {
+  return writableSkillLibraryItems(skills).map(function (skill) {
+    return {
+      entity: skill,
+      identity: skillLibraryIdentity(skill),
+      id: String(skill.Id || "").toLowerCase(),
+      comparable: skillLibraryComparable(skill)
+    };
+  });
+}
+
+function skillLibrarySnapshot(skills) {
+  return JSON.stringify(skillLibraryRecords(skills).map(function (item) { return item.comparable; }));
+}
+
+function skillRecordIndex(records) {
+  var byIdentity = {};
+  var byId = {};
+  (records || []).forEach(function (item) {
+    if (item.identity) byIdentity[item.identity] = item;
+    if (item.id) byId[item.id] = item;
+  });
+  return { byIdentity: byIdentity, byId: byId };
+}
+
+function matchingSkillRecord(index, record) {
+  return index.byIdentity[record.identity] || index.byId[record.id] || null;
+}
+
+function skillHasDirtyReferences(skill) {
+  ensureSkillReferenceState(skill);
+  return Object.keys(skill._referenceDirty).some(function (path) { return !!skill._referenceDirty[path]; });
+}
+
+function skillRecordChanged(current, baseline) {
+  return !baseline || skillHasDirtyReferences(current.entity) ||
+    JSON.stringify(current.comparable) !== JSON.stringify(baseline.comparable);
+}
+
+function setSkillLibraryBaseline(skills) {
+  state.skillLibraryBaselineItems = skillLibraryRecords(skills);
+  state.skillLibraryBaseline = skillLibrarySnapshot(skills);
+}
+
+function reconcileSkillLibraryCatalog(serverSkills) {
+  var currentRecords = skillLibraryRecords(state.skills);
+  var currentIndex = skillRecordIndex(currentRecords);
+  var baselineIndex = skillRecordIndex(state.skillLibraryBaselineItems || []);
+  var used = [];
+  var merged = [];
+  (serverSkills || []).forEach(function (serverSkill) {
+    if (!serverSkill || serverSkill.BuiltIn) {
+      if (serverSkill) merged.push(serverSkill);
+      return;
+    }
+    var serverRecord = skillLibraryRecords([serverSkill])[0];
+    var current = matchingSkillRecord(currentIndex, serverRecord);
+    var baseline = matchingSkillRecord(baselineIndex, serverRecord);
+    if (!current && baseline) return;
+    if (current) used.push(current.entity);
+    merged.push(current && skillRecordChanged(current, baseline) ? current.entity : serverSkill);
+  });
+  currentRecords.forEach(function (current) {
+    if (used.indexOf(current.entity) >= 0) return;
+    var baseline = matchingSkillRecord(baselineIndex, current);
+    if (skillRecordChanged(current, baseline)) merged.push(current.entity);
+  });
+  setSkillLibraryBaseline(serverSkills);
+  state.skills = preserveSkillReferenceState(merged);
+  updateSkillLibraryDirty();
+  return state.skills;
+}
+
+function hasDirtySkillReference() {
+  return (state.skills || []).some(function (skill) {
+    return skillHasDirtyReferences(skill);
+  });
+}
+
+function updateSkillLibraryDirty() {
+  state.skillLibraryDirty = skillLibrarySnapshot(state.skills) !== state.skillLibraryBaseline || hasDirtySkillReference();
+  updateSkillSaveButton();
+}
+
+function markSkillLibraryDirty() {
+  syncSelectedSkillFromEditor();
+  updateSkillLibraryDirty();
+}
+
+function acceptSkillLibraryState() {
+  setSkillLibraryBaseline(state.skills);
+  state.skillLibraryDirty = hasDirtySkillReference();
+  updateSkillSaveButton();
+}
+
 function captureSelectedSkillResource(skill) {
   if (!skill) return;
   ensureSkillReferenceState(skill);
@@ -107,7 +223,8 @@ function hasPendingSkillReferenceLoad() {
 
 function updateSkillSaveButton() {
   if ($("saveSkillsButton")) {
-    $("saveSkillsButton").disabled = !!state.bridgeUnavailable || hasPendingSkillReferenceLoad();
+    $("saveSkillsButton").hidden = !state.skillLibraryDirty;
+    $("saveSkillsButton").disabled = !!state.bridgeUnavailable || !state.skillLibraryDirty || hasPendingSkillReferenceLoad();
   }
 }
 
@@ -382,6 +499,7 @@ async function saveSelectedSkillResource() {
     }
   }
   log(savedReferences ? ("Навыки и references сохранены: " + savedReferences + ".") : "Навыки сохранены.");
+  acceptSkillLibraryState();
   renderSkills();
 }
 
@@ -410,6 +528,7 @@ function addSkillReference() {
   skill._referenceLoaded[path] = true;
   skill._referenceDirty[path] = true;
   skill._selectedReferencePath = path;
+  updateSkillLibraryDirty();
   renderSkillEditor();
 }
 
@@ -437,6 +556,7 @@ async function deleteSelectedSkillReference() {
   delete skill._referenceLoadTokens[path];
   delete skill._referenceDirty[path];
   skill._selectedReferencePath = "";
+  updateSkillLibraryDirty();
   renderSkillEditor();
   log("Reference удалён: " + path);
 }
@@ -462,6 +582,7 @@ function bindSkillActions() {
     });
     state.selectedSkillIndex = state.skills.length - 1;
     state.selectedInstructionKind = "skill";
+    updateSkillLibraryDirty();
     renderSkills();
   });
 
@@ -486,6 +607,7 @@ function bindSkillActions() {
     });
     state.selectedSkillIndex = state.skills.length - 1;
     state.selectedInstructionKind = "skill";
+    updateSkillLibraryDirty();
     renderSkills();
   });
 
@@ -531,6 +653,7 @@ function bindSkillActions() {
     if (state.selectedSkillIndex >= state.skills.length) {
       state.selectedSkillIndex = state.skills.length - 1;
     }
+    updateSkillLibraryDirty();
     renderSkills();
   });
 
@@ -550,5 +673,11 @@ function bindSkillActions() {
     }).catch(function (error) {
       log(error.detail || error.message, "error");
     });
+  });
+
+  ["skillEnabledInput", "skillIdInput", "skillHostInput", "skillDescriptionInput"].forEach(function (id) {
+    var control = $(id);
+    if (!control) return;
+    control.addEventListener(control.type === "checkbox" || control.tagName === "SELECT" ? "change" : "input", markSkillLibraryDirty);
   });
 }

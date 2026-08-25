@@ -294,8 +294,34 @@ async function collectCasGarbage() {
   }
 }
 
+function setDiagnosticsTab(name, refreshRecords) {
+  name = name || "overview";
+  state.diagnosticsTab = name;
+  Array.prototype.slice.call(document.querySelectorAll(".diagnostics-tab-button")).forEach(function (button) {
+    var active = button.getAttribute("data-diagnostics-tab") === name;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  Array.prototype.slice.call(document.querySelectorAll(".diagnostics-tab-panel")).forEach(function (panel) {
+    var target = panel.getAttribute("data-diagnostics-panel");
+    var active = target === name || target === "records" &&
+      (name === "events" || name === "trajectory" || name === "vba-journal");
+    panel.classList.toggle("active", active);
+  });
+  if ((name === "events" || name === "trajectory" || name === "vba-journal") &&
+      typeof setTrajectoryDiagnosticsMode === "function") {
+    setTrajectoryDiagnosticsMode(name, refreshRecords !== false);
+  }
+}
+
 function bindDiagnosticsActions() {
   renderModelConnectionIndicator();
+  Array.prototype.slice.call(document.querySelectorAll(".diagnostics-tab-button")).forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      setDiagnosticsTab(tab.getAttribute("data-diagnostics-tab"), true);
+    });
+  });
+  setDiagnosticsTab(state.diagnosticsTab || "overview", false);
   var button = $("testModelConnectionButton");
   if (button) button.addEventListener("click", async function () {
     var root = $("modelConnectionResults");
@@ -320,3 +346,5 @@ function bindDiagnosticsActions() {
   if (auditCas) auditCas.addEventListener("click", auditCasHealth);
   if (collectCas) collectCas.addEventListener("click", collectCasGarbage);
 }
+
+window.setDiagnosticsTab = setDiagnosticsTab;

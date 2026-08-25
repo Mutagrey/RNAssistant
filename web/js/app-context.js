@@ -172,6 +172,13 @@ async function syncActiveChatState() {
   await synchronizeChatState(true);
 }
 
+function applyContextResponse(response) {
+  var context = response && (response.context || response.Context) || response;
+  if (!context || typeof context !== "object") return;
+  state.context = context;
+  renderContext();
+}
+
 async function refreshContext() {
   try {
     await syncActiveChatState();
@@ -187,7 +194,7 @@ async function addSelectionContext(mode) {
       document.activeElement.blur();
     }
     reportFocusState();
-    await send("addSelectionContext", { chatId: state.activeChatId, mode: mode || "full" });
+    applyContextResponse(await send("addSelectionContext", { chatId: state.activeChatId, mode: mode || "full" }));
     await syncActiveChatState();
     log("Выделение добавлено в контекст.");
   } catch (error) {
@@ -198,14 +205,14 @@ async function addSelectionContext(mode) {
 }
 
 async function addTextContext(kind, title, reference, text, details) {
-  await send("addTextContext", {
+  applyContextResponse(await send("addTextContext", {
     chatId: state.activeChatId,
     kind: kind,
     title: title,
     reference: reference,
     text: text,
     detailsJson: typeof details === "string" ? details : JSON.stringify(details || {})
-  });
+  }));
   await syncActiveChatState();
 }
 
@@ -236,7 +243,8 @@ async function removeContextItem(id) {
   }
 
   try {
-    await send("removeContextItem", { chatId: state.activeChatId, id: id });
+    applyContextResponse(await send("removeContextItem", { chatId: state.activeChatId, id: id }));
+    if (!contextNotes().length) setContextManagerOpen(false);
     await syncActiveChatState();
     log("Элемент контекста удален.");
   } catch (error) {
@@ -265,17 +273,25 @@ function toggleContextManager() {
 
 function bindContextActions() {
   $("openContextTabButton").addEventListener("click", toggleContextManager);
+  $("closeContextManagerButton").addEventListener("click", function () { setContextManagerOpen(false); });
   $("addSelectionContextButton").addEventListener("click", function () { addSelectionContext("full"); });
   $("clearContextButton").addEventListener("click", async function () {
     setControlBusy("clearContextButton", true);
     try {
-      await send("clearContext", { chatId: state.activeChatId });
+      applyContextResponse(await send("clearContext", { chatId: state.activeChatId }));
+      setContextManagerOpen(false);
       await syncActiveChatState();
       log("Контекст очищен.");
     } catch (error) {
       log(error.message, "error");
     } finally {
       setControlBusy("clearContextButton", false);
+    }
+  });
+  document.addEventListener("keydown", function (event) {
+    var panel = $("contextManager");
+    if (event.key === "Escape" && panel && !panel.classList.contains("hidden")) {
+      setContextManagerOpen(false);
     }
   });
 }

@@ -27,18 +27,18 @@
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=media-routing-20260824-1">
-  <link rel="stylesheet" href="css/app-workspace.css?v=cas-health-20260825-1">
-  <link rel="stylesheet" href="css/app-trajectory.css?v=trajectory-export-20260825-1">
+  <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-ui-20260825-1">
+  <link rel="stylesheet" href="css/app-trajectory.css?v=diagnostics-ui-20260825-1">
   <link rel="stylesheet" href="css/app-tools.css?v=skill-references-20260825-1">
   <link rel="stylesheet" href="css/app-vba.css?v=userform-20260824-1">
-  <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
+  <link rel="stylesheet" href="css/app-context-panel.css?v=context-close-20260825-1">
   <link rel="stylesheet" href="css/app-context-inspector.css?v=context-inspector-20260824-1">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260702-2">
   <link rel="stylesheet" href="css/app-artifacts.css?v=ui-simplify-20260821-3">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=html-recovery-20260825-1">
   <link rel="stylesheet" href="css/app-responsive.css?v=skill-references-20260825-1">
-  <link rel="stylesheet" href="css/app-agent.css?v=ui-simplify-20260821-4">
+  <link rel="stylesheet" href="css/app-agent.css?v=compaction-divider-20260825-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=agent-ui-20260821-2">
   <link rel="stylesheet" href="css/app-theme.css?v=media-routing-20260824-1">
 </head>
@@ -125,7 +125,12 @@
           <div class="context-manager hidden" id="contextManager">
             <div class="context-manager-head">
               <div class="context-summary" id="contextSummary"></div>
-              <button class="secondary danger-soft" id="clearContextButton" type="button">Очистить</button>
+              <div class="context-manager-actions">
+                <button class="secondary danger-soft" id="clearContextButton" type="button">Очистить</button>
+                <button class="icon-button context-manager-close" id="closeContextManagerButton" type="button" title="Закрыть ручной контекст" aria-label="Закрыть ручной контекст">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+              </div>
             </div>
             <div class="context-list" id="contextList"></div>
             <details class="context-json">
@@ -270,7 +275,7 @@
               <div class="resource-editor-actions library-editor-actions">
                 <button class="icon-button secondary" id="copyToolContextButton" type="button" title="Скопировать описание инструмента" aria-label="Скопировать описание инструмента"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                 <button class="icon-button secondary" id="askToolBuilderButton" type="button" title="Добавить инструмент в контекст и обсудить" aria-label="Обсудить инструмент в чате"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"/><path d="M8 9h8M8 13h5"/></svg></button>
-                <button class="accent-soft icon-text-button library-save-button" id="saveToolsButton" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>Сохранить</span></button>
+                <button class="accent-soft icon-text-button library-save-button" id="saveToolsButton" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>Сохранить</span></button>
                 <details class="toolbar-menu library-editor-menu" id="toolActionsMenu">
                   <summary class="icon-button" title="Другие действия с инструментом" aria-label="Другие действия с инструментом"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></summary>
                   <div class="toolbar-menu-body library-editor-menu-body">
@@ -360,7 +365,7 @@
                 <div class="resource-editor-actions library-editor-actions">
                   <button class="icon-button secondary" id="copySkillContextButton" type="button" title="Скопировать описание навыка" aria-label="Скопировать описание навыка"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                   <button class="icon-button secondary" id="askSkillBuilderButton" type="button" title="Добавить навык в контекст и обсудить" aria-label="Обсудить навык в чате"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"/><path d="M8 9h8M8 13h5"/></svg></button>
-                  <button class="accent-soft icon-text-button library-save-button" id="saveSkillsButton" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>Сохранить</span></button>
+                  <button class="accent-soft icon-text-button library-save-button" id="saveSkillsButton" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>Сохранить</span></button>
                   <details class="toolbar-menu library-editor-menu" id="skillActionsMenu">
                     <summary class="icon-button" title="Другие действия с навыком" aria-label="Другие действия с навыком"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></summary>
                     <div class="toolbar-menu-body library-editor-menu-body">
@@ -399,7 +404,7 @@
                 <div class="resource-editor-actions library-editor-actions">
                   <button class="icon-button secondary" id="copyPromptButton" type="button" title="Скопировать промпт" aria-label="Скопировать промпт"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                   <button class="icon-button secondary" id="addPromptToChatButton" type="button" title="Добавить промпт в контекст" aria-label="Добавить промпт в контекст"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
-                  <button class="accent-soft icon-text-button library-save-button" id="savePromptButton" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>Сохранить</span></button>
+                  <button class="accent-soft icon-text-button library-save-button" id="savePromptButton" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>Сохранить</span></button>
                   <details class="toolbar-menu library-editor-menu" id="promptActionsMenu">
                     <summary class="icon-button" title="Другие действия с промптом" aria-label="Другие действия с промптом"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></summary>
                     <div class="toolbar-menu-body library-editor-menu-body">
@@ -799,63 +804,79 @@
             <section class="settings-page" data-settings-page="service">
               <div class="settings-heading">
                 <h2>Диагностика</h2>
-                <p>События текущей сессии и очистка локальных данных.</p>
+                <p>Проверки runtime, канонические JSONL-журналы и производные представления.</p>
               </div>
               <input id="debugModelTrafficInput" type="checkbox" hidden>
-              <section class="model-compatibility-panel diagnostics-model-panel" aria-labelledby="modelConnectionTitle">
-                <div class="model-compatibility-head">
-                  <div>
-                    <h3 id="modelConnectionTitle">Связь с моделью</h3>
-                    <p>Один короткий запрос с текущими настройками. Фоновые проверки не выполняются.</p>
-                  </div>
-                  <button class="secondary" id="testModelConnectionButton" type="button">Проверить модель</button>
+              <div class="diagnostics-tabs" role="tablist" aria-label="Разделы диагностики">
+                <button class="diagnostics-tab-button active" type="button" role="tab" aria-selected="true" data-diagnostics-tab="overview">Проверки</button>
+                <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="events">События JSONL</button>
+                <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="trajectory">Траектория</button>
+                <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="vba-journal">VBA journal</button>
+                <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="runtime-log">Журнал UI</button>
+              </div>
+
+              <div class="diagnostics-tab-panel diagnostics-overview active" data-diagnostics-panel="overview">
+                <div class="diagnostics-concepts" aria-label="Различие событий и траектории">
+                  <div><strong>События JSONL</strong><span>Неизменяемый источник истины: точные записи session stream с hash chain.</span></div>
+                  <div><strong>Траектория</strong><span>Временная проекция из проверенных событий: связывает turns, model steps, tools и версии артефактов.</span></div>
+                  <div><strong>VBA journal</strong><span>Отдельный document-scoped JSONL-журнал мутаций модулей и пакетов с before/intended source в CAS.</span></div>
                 </div>
-                <div class="model-compatibility-results" id="modelConnectionResults" aria-live="polite"></div>
-              </section>
-              <section class="model-compatibility-panel diagnostics-model-panel" aria-labelledby="casHealthTitle">
-                <div class="model-compatibility-head">
+                <section class="model-compatibility-panel diagnostics-model-panel" aria-labelledby="modelConnectionTitle">
+                  <div class="model-compatibility-head">
+                    <div>
+                      <h3 id="modelConnectionTitle">Связь с моделью</h3>
+                      <p>Один короткий запрос с текущими настройками. Фоновые проверки не выполняются.</p>
+                    </div>
+                    <button class="secondary" id="testModelConnectionButton" type="button">Проверить модель</button>
+                  </div>
+                  <div class="model-compatibility-results" id="modelConnectionResults" aria-live="polite"></div>
+                </section>
+                <section class="model-compatibility-panel diagnostics-model-panel" aria-labelledby="casHealthTitle">
+                  <div class="model-compatibility-head">
+                    <div>
+                      <h3 id="casHealthTitle">Хранилище CAS</h3>
+                      <p>Проверяет ссылки из всех chat streams и VBA journals. Удаляются только доказанные orphan blobs.</p>
+                    </div>
+                    <div class="cas-health-actions">
+                      <button class="secondary" id="auditCasButton" type="button">Проверить CAS</button>
+                      <button class="danger" id="collectCasButton" type="button" disabled>Удалить orphan</button>
+                    </div>
+                  </div>
+                  <div class="model-compatibility-results" id="casHealthResults" aria-live="polite"></div>
+                </section>
+                <div class="danger-zone diagnostics-danger-zone">
                   <div>
-                    <h3 id="casHealthTitle">Хранилище CAS</h3>
-                    <p>Проверяет ссылки из всех chat streams и VBA journals. Удаляются только доказанные orphan blobs.</p>
+                    <div class="danger-zone-title">Сброс локальных данных</div>
+                    <div class="danger-zone-text">Удаляет чаты, контекст, резервные копии VBA и кеш WebView.</div>
                   </div>
-                  <div class="cas-health-actions">
-                    <button class="secondary" id="auditCasButton" type="button">Проверить CAS</button>
-                    <button class="danger" id="collectCasButton" type="button" disabled>Удалить orphan</button>
-                  </div>
+                  <button class="danger" id="clearRuntimeDataButton" type="button">Очистить данные</button>
                 </div>
-                <div class="model-compatibility-results" id="casHealthResults" aria-live="polite"></div>
-              </section>
-              <section class="model-compatibility-panel trajectory-panel" aria-labelledby="trajectoryTitle">
+              </div>
+
+              <section class="model-compatibility-panel trajectory-panel diagnostics-tab-panel" data-diagnostics-panel="records" aria-labelledby="trajectoryTitle">
                 <div class="model-compatibility-head">
                   <div>
-                    <h3 id="trajectoryTitle">Траектория и recovery</h3>
-                    <p>Канонические chat events, версии артефактов и document-scoped VBA mutation journal.</p>
+                    <h3 id="trajectoryTitle">События JSONL</h3>
+                    <p id="trajectoryDescription">Канонические записи активного chat stream. Event data показан сразу, большие payload читаются из CAS только по запросу.</p>
                   </div>
                 </div>
                 <div class="trajectory-querybar">
-                  <select id="trajectoryViewInput" aria-label="Представление траектории"><option value="raw">Raw events</option><option value="model-replay">Model replay</option><option value="tool-execution">Tool execution</option><option value="artifact-lineage">Artifact lineage</option><option value="confirmation-pauses">Confirmations</option><option value="failure-retries">Failures / retries</option><option value="turn-usage">Turn usage</option><option value="vba-mutations">VBA mutations</option></select>
-                  <input id="trajectorySearchInput" maxlength="512" placeholder="Поиск по metadata и event data">
-                  <input id="trajectoryTypeInput" maxlength="256" placeholder="Типы через запятую">
-                  <select id="trajectoryVisibilityInput" aria-label="Состояние события"><option value="">Все состояния</option><option value="current">Current</option><option value="shadowed">Shadowed</option><option value="log-only">Log-only</option></select>
-                  <select class="hidden" id="trajectoryVbaKindInput" aria-label="Тип VBA mutation"><option value="">Module + package</option><option value="module">Module</option><option value="package">Package</option></select>
-                  <select class="hidden" id="trajectoryVbaStatusInput" aria-label="Статус VBA mutation"><option value="">Все статусы</option><option value="open">Open</option><option value="committed">Committed</option><option value="not_applied">Not applied</option><option value="rolled_back">Rolled back</option><option value="failed">Failed</option><option value="unknown">Unknown</option></select>
-                  <button class="secondary" id="refreshTrajectoryButton" type="button">Найти</button>
-                </div>
-                <div class="trajectory-export-bar">
-                  <select id="trajectoryExportRedactionInput" aria-label="Redaction экспорта"><option value="metadata">Export: metadata only</option><option value="secrets">Export: redact credential fields</option><option value="none">Export: full, no redaction</option></select>
-                  <label class="trajectory-export-cas"><input id="trajectoryExportCasInput" type="checkbox" disabled> Включить CAS bodies</label>
-                  <button class="secondary" id="exportTrajectoryButton" type="button">Скачать ZIP</button>
-                  <span id="trajectoryExportNotice">Data и CAS bodies не попадут в архив.</span>
+                  <label class="trajectory-field" id="trajectoryViewField"><span>Представление</span><select id="trajectoryViewInput"><option value="raw" hidden>События JSONL</option><option value="model-replay">Шаги модели</option><option value="tool-execution">Вызовы инструментов</option><option value="artifact-lineage">Дерево артефактов</option><option value="confirmation-pauses">Подтверждения</option><option value="failure-retries">Ошибки и повторы</option><option value="turn-usage">Токены и стоимость</option><option value="vba-mutations" hidden>VBA mutations</option></select></label>
+                  <label class="trajectory-field trajectory-search-field"><span>Поиск</span><input id="trajectorySearchInput" maxlength="512" placeholder="Metadata и event data"></label>
+                  <label class="trajectory-field" id="trajectoryTypeField"><span>Тип события</span><input id="trajectoryTypeInput" maxlength="256" placeholder="Типы через запятую"></label>
+                  <label class="trajectory-field" id="trajectoryVisibilityField"><span>Состояние</span><select id="trajectoryVisibilityInput"><option value="">Все</option><option value="current">Текущее</option><option value="shadowed">Заменённое</option><option value="log-only">Только журнал</option></select></label>
+                  <label class="trajectory-field hidden" id="trajectoryVbaKindField"><span>VBA scope</span><select id="trajectoryVbaKindInput"><option value="">Модули и пакеты</option><option value="module">Модули</option><option value="package">Пакеты</option></select></label>
+                  <label class="trajectory-field hidden" id="trajectoryVbaStatusField"><span>Статус</span><select id="trajectoryVbaStatusInput"><option value="">Все</option><option value="open">Open</option><option value="committed">Committed</option><option value="not_applied">Not applied</option><option value="rolled_back">Rolled back</option><option value="failed">Failed</option><option value="unknown">Unknown</option></select></label>
+                  <button class="secondary trajectory-refresh-button" id="refreshTrajectoryButton" type="button">Обновить</button>
                 </div>
                 <div class="trajectory-correlation-bar hidden" id="trajectoryCorrelationBar"><div class="trajectory-correlation-actions" id="trajectoryCorrelationActions"></div><button class="secondary hidden" id="clearTrajectoryCorrelationButton" type="button">Сбросить переход</button></div>
-                <div class="trajectory-status-row"><div class="trajectory-status" id="trajectoryStatus">Нажмите «Найти», чтобы прочитать текущий event stream.</div><button class="secondary hidden" id="loadMoreTrajectoryButton" type="button">Старше</button></div>
+                <div class="trajectory-status-row"><div class="trajectory-status" id="trajectoryStatus">Нажмите «Обновить», чтобы прочитать текущий event stream.</div><button class="secondary hidden" id="loadMoreTrajectoryButton" type="button">Старше</button></div>
                 <div class="trajectory-workspace hidden" id="trajectoryWorkspace">
                   <div class="trajectory-events" id="trajectoryEvents" role="listbox" aria-label="События траектории"></div>
                   <div class="trajectory-detail">
                     <div class="trajectory-detail-head">
                       <strong id="trajectoryEventTitle">Событие не выбрано</strong>
-                      <button class="secondary hidden" id="loadTrajectoryPayloadButton" type="button">Показать payload</button>
-                      <button class="secondary hidden" id="loadVbaMutationButton" type="button">Показать before / after</button>
+                      <div class="trajectory-detail-actions"><button class="secondary hidden" id="loadTrajectoryPayloadButton" type="button">Показать payload</button><button class="secondary hidden" id="loadVbaMutationButton" type="button">Показать before / after</button></div>
                     </div>
                     <div class="trajectory-meta" id="trajectoryEventMeta"></div>
                     <pre class="trajectory-json" id="trajectoryEventData"></pre>
@@ -863,10 +884,20 @@
                     <div class="trajectory-vba-diff hidden" id="trajectoryVbaDiff"></div>
                   </div>
                 </div>
+                <details class="trajectory-export-options">
+                  <summary>Экспорт диагностики</summary>
+                  <div class="trajectory-export-bar">
+                    <label class="trajectory-field"><span>Редактирование данных</span><select id="trajectoryExportRedactionInput"><option value="metadata">Только metadata</option><option value="secrets">Скрыть credential fields</option><option value="none">Без редактирования</option></select></label>
+                    <label class="trajectory-export-cas"><input id="trajectoryExportCasInput" type="checkbox" disabled> Включить CAS bodies</label>
+                    <button class="secondary" id="exportTrajectoryButton" type="button">Скачать ZIP</button>
+                    <span id="trajectoryExportNotice">Data и CAS bodies не попадут в архив.</span>
+                  </div>
+                </details>
               </section>
-              <div class="logs-workspace diagnostics-logs">
+
+              <div class="logs-workspace diagnostics-logs diagnostics-tab-panel" data-diagnostics-panel="runtime-log">
                 <section class="log-section surface-panel padded">
-                  <div class="log-section-head"><strong>События текущей сессии</strong><button class="secondary" id="clearLogButton" type="button">Очистить</button></div>
+                  <div class="log-section-head"><div><strong>Журнал интерфейса</strong><span>Текущий WebView-сеанс; это не durable JSONL chat stream.</span></div><button class="secondary" id="clearLogButton" type="button">Очистить</button></div>
                   <div class="log-filter-bar" role="toolbar" aria-label="Фильтр событий">
                     <button class="log-filter-button active" type="button" data-log-filter="all" aria-pressed="true">Все <span class="log-filter-count">0</span></button>
                     <button class="log-filter-button" type="button" data-log-filter="error" aria-pressed="false">Ошибки <span class="log-filter-count">0</span></button>
@@ -876,13 +907,6 @@
                   </div>
                   <pre class="log-box" id="logBox" aria-live="polite" aria-label="Журнал событий"></pre>
                 </section>
-              </div>
-              <div class="danger-zone diagnostics-danger-zone">
-                <div>
-                  <div class="danger-zone-title">Сброс локальных данных</div>
-                  <div class="danger-zone-text">Удаляет чаты, контекст, резервные копии VBA и кеш WebView.</div>
-                </div>
-                <button class="danger" id="clearRuntimeDataButton" type="button">Очистить данные</button>
               </div>
             </section>
             <div class="settings-actions-row action-bar" hidden>
@@ -908,58 +932,58 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=html-recovery-20260825-1"></script>
+  <script src="js/app-core.js?v=library-sync-20260825-1"></script>
   <script src="js/app-utils.js?v=runtime-20260807-1"></script>
   <script src="js/app-layout.js"></script>
-  <script src="js/app-editors.js?v=library-editor-20260824-1"></script>
+  <script src="js/app-editors.js?v=library-dirty-20260825-1"></script>
   <script src="js/app-markdown.js?v=log-filters-20260824-1"></script>
   <script src="js/app-settings.js?v=attachment-limits-20260825-1"></script>
   <script src="js/app-logs.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-diagnostics.js?v=cas-health-20260825-1"></script>
-  <script src="js/app-trajectory.js?v=trajectory-export-20260825-1"></script>
-  <script src="js/app-prompts.js?v=library-editor-20260824-1"></script>
+  <script src="js/app-diagnostics.js?v=diagnostics-ui-20260825-1"></script>
+  <script src="js/app-trajectory.js?v=diagnostics-ui-20260825-1"></script>
+  <script src="js/app-prompts.js?v=library-dirty-20260825-1"></script>
   <script src="js/app-model-data.js?v=media-routing-20260824-1"></script>
   <script src="js/app-model-picker.js?v=model-modules-20260823-2"></script>
   <script src="js/app-model-capabilities.js?v=attachment-limit-20260824-1"></script>
   <script src="js/app-model-render.js?v=media-routing-20260824-1"></script>
   <script src="js/app-models.js?v=chat-binding-20260824-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=html-recovery-20260825-1"></script>
+  <script src="js/app-chat-state.js?v=library-sync-20260825-1"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
-  <script src="js/app-tools-structured.js?v=tools-modules-20260823-1"></script>
-  <script src="js/app-tools-actions.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-tools.js?v=userform-package-20260825-1"></script>
-  <script src="js/app-skills.js?v=skill-references-20260825-1"></script>
+  <script src="js/app-tools-structured.js?v=library-dirty-20260825-1"></script>
+  <script src="js/app-tools-actions.js?v=library-dirty-20260825-1"></script>
+  <script src="js/app-tools.js?v=library-dirty-20260825-1"></script>
+  <script src="js/app-skills.js?v=library-dirty-20260825-1"></script>
   <script src="js/app-vba-diff.js?v=vba-modules-20260823-1"></script>
   <script src="js/app-vba-actions.js?v=userform-20260824-1"></script>
   <script src="js/app-vba-project.js?v=userform-20260824-1"></script>
   <script src="js/app-vba.js?v=vba-recovery-20260825-1"></script>
   <script src="js/app-html-workspace-preview.js?v=html-data-20260824-1"></script>
-  <script src="js/app-html-workspace-artifacts.js?v=workspace-modules-20260823-1"></script>
+  <script src="js/app-html-workspace-artifacts.js?v=compaction-label-20260825-1"></script>
   <script src="js/app-html-workspace-model.js?v=html-recovery-20260825-1"></script>
   <script src="js/app-html-workspace-editor.js?v=html-recovery-20260825-1"></script>
   <script src="js/app-html-workspace-tree.js?v=html-data-20260824-1"></script>
   <script src="js/app-html-workspace-actions.js?v=html-recovery-20260825-1"></script>
   <script src="js/app-html-workspace.js?v=html-recovery-20260825-1"></script>
-  <script src="js/app-context.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-context-inspector.js?v=token-estimate-20260824-2"></script>
+  <script src="js/app-context.js?v=context-close-20260825-1"></script>
+  <script src="js/app-context-inspector.js?v=context-inspect-active-run-20260825-1"></script>
   <script src="js/app-agent-data.js?v=agent-ui-20260821-2"></script>
   <script src="js/app-agent-model.js?v=agent-ui-20260821-3"></script>
   <script src="js/app-chart-artifacts.js?v=log-filters-20260824-1"></script>
   <script src="js/app-html-artifacts.js?v=chatui-20260702-2"></script>
-  <script src="js/app-artifacts.js?v=artifact-dedup-20260824-1"></script>
+  <script src="js/app-artifacts.js?v=compaction-label-20260825-1"></script>
   <script src="js/app-plan.js?v=ui-simplify-20260821-3"></script>
   <script src="js/app-agent-activity.js?v=agent-modules-20260823-1"></script>
   <script src="js/app-agent-approval.js?v=agent-modules-20260823-2"></script>
   <script src="js/app-agent.js?v=artifact-dedup-20260824-1"></script>
-  <script src="js/app-messages.js?v=agent-ui-20260821-2"></script>
+  <script src="js/app-messages.js?v=compaction-divider-20260825-1"></script>
   <script src="js/app-reasoning.js?v=reasoning-ui-20260819-1"></script>
   <script src="js/app-attachments.js?v=chat-binding-20260824-1"></script>
-  <script src="js/app-chat-session.js?v=html-recovery-20260825-1"></script>
+  <script src="js/app-chat-session.js?v=library-sync-20260825-1"></script>
   <script src="js/app-chat-composer.js?v=message-replay-20260824-1"></script>
   <script src="js/app-chat-run.js?v=log-filters-20260824-1"></script>
   <script src="js/app-chat.js?v=chat-binding-20260824-1"></script>
-  <script src="js/app-chat-edit.js?v=message-replay-20260824-1"></script>
+  <script src="js/app-chat-edit.js?v=message-edit-submit-20260825-1"></script>
   <script src="js/app.js?v=excel-runtime-fix-20260824-1"></script>
 </body>
 </html>

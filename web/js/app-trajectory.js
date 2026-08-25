@@ -9,6 +9,7 @@
   var trajectoryChatId = null;
   var trajectoryRequestId = 0;
   var detailRequestId = 0;
+  var lastDerivedView = "model-replay";
 
   function value(source, pascal, camel, fallback) {
     source = source || {};
@@ -75,6 +76,9 @@
   }
 
   function navigateCorrelation(field, filterValue, targetView, sourceChatId) {
+    if (typeof setDiagnosticsTab === "function") {
+      setDiagnosticsTab(targetView === "raw" ? "events" : "trajectory", false);
+    }
     correlationFilter = {};
     if (field === "sourceRange") {
       correlationFilter.minSequence = filterValue.min;
@@ -84,6 +88,7 @@
     }
     trajectoryChatId = sourceChatId || state.activeChatId;
     $("trajectoryViewInput").value = targetView;
+    if (targetView !== "raw") lastDerivedView = targetView;
     nextCursor = null;
     updateViewControls();
     refreshTrajectory(false);
@@ -279,12 +284,32 @@
     events = append ? events.concat(page) : page;
     var root = $("trajectoryEvents");
     root.replaceChildren();
-    events.forEach(function (item) {
+    var artifactMap = {};
+    if (activeView === "artifact-lineage") {
+      events.forEach(function (item) {
+        var artifactId = value(item, "ArtifactId", "artifactId", "");
+        if (artifactId) artifactMap[String(artifactId).toLowerCase()] = item;
+      });
+      root.setAttribute("role", "tree");
+      root.setAttribute("aria-label", "Дерево версий артефактов");
+    } else {
+      root.setAttribute("role", "listbox");
+      root.setAttribute("aria-label", activeView === "raw" ? "События JSONL" : "Строки траектории");
+    }
+    var renderedEvents = activeView === "artifact-lineage" ? orderArtifactTree(events, artifactMap) : events;
+    renderedEvents.forEach(function (item) {
       var button = document.createElement("button");
       button.type = "button";
       button.className = "trajectory-event";
-      button.setAttribute("role", "option");
-      button.setAttribute("aria-selected", "false");
+      button.setAttribute("role", activeView === "artifact-lineage" ? "treeitem" : "option");
+      var itemSelected = !!selected && itemId(selected) === itemId(item);
+      button.classList.toggle("active", itemSelected);
+      button.setAttribute("aria-selected", itemSelected ? "true" : "false");
+      if (activeView === "artifact-lineage") {
+        var depth = artifactTreeDepth(item, artifactMap, {});
+        button.style.setProperty("--trajectory-depth", String(depth));
+        button.setAttribute("aria-level", String(depth + 1));
+      }
       var first = document.createElement("span");
       first.className = "trajectory-event-line";
       var sequence = document.createElement("span");
@@ -325,17 +350,17 @@
     nextCursor = value(response, "NextCursor", "nextCursor", null);
     var hasMore = !!value(response, "HasMore", "hasMore", false);
     var projectionNote = isVbaView()
-      ? " · rebuildable из VBA journal; CAS source только по запросу"
-      : (activeView === "raw" ? " · payload только по запросу" : " · rebuildable из event stream");
+      ? " · пересобрано из VBA journal; source из CAS только по запросу"
+      : (activeView === "raw" ? " · payload из CAS только по запросу" : " · пересобрано из JSONL event stream");
     $("trajectoryStatus").textContent = "Совпадений: " + matches + " из " + total + " · загружено " + events.length + projectionNote;
     $("loadMoreTrajectoryButton").classList.toggle("hidden", !hasMore);
     $("trajectoryWorkspace").classList.toggle("hidden", events.length === 0);
-    if (!append && events.length) {
-      selectEvent(events[0], root.firstElementChild);
+    if (!append && renderedEvents.length) {
+      selectEvent(renderedEvents[0], root.firstElementChild);
       root.scrollTop = 0;
     } else if (append && selected) {
-      var selectedIndex = events.map(itemId).indexOf(itemId(selected));
-      if (selectedIndex >= 0) selectEvent(events[selectedIndex], root.children[selectedIndex]);
+      var selectedIndex = renderedEvents.map(itemId).indexOf(itemId(selected));
+      if (selectedIndex >= 0) selectEvent(renderedEvents[selectedIndex], root.children[selectedIndex]);
     } else if (!events.length) {
       selected = null;
       $("trajectoryEventTitle").textContent = activeView === "raw" ? "Событие не выбрано" : "Строка не выбрана";
@@ -344,6 +369,60 @@
       resetLazyDetail();
       renderCorrelationActions({});
     }
+  }
+
+  function artifactTreeDepth(item, map, visited) {
+    var id = String(value(item, "ArtifactId", "artifactId", "") || "").toLowerCase();
+    var parentId = String(value(item, "ParentArtifactId", "parentArtifactId", "") || "").toLowerCase();
+    if (!parentId || !map[parentId] || visited[id]) return 0;
+    visited[id] = true;
+    return Math.min(8, 1 + artifactTreeDepth(map[parentId], map, visited));
+  }
+
+  function artifactLastSequence(item) {
+    return Number(value(item, "LastSequence", "lastSequence", 0) || 0);
+  }
+
+  function orderArtifactTree(rows, map) {
+    var children = {};
+    var roots = [];
+    (rows || []).forEach(function (item) {
+      var parentId = String(value(item, "ParentArtifactId", "parentArtifactId", "") || "").toLowerCase();
+      if (parentId && map[parentId]) {
+        children[parentId] = children[parentId] || [];
+        children[parentId].push(item);
+      } else {
+        roots.push(item);
+      }
+    });
+    Object.keys(children).forEach(function (parentId) {
+      children[parentId].sort(function (left, right) {
+        return artifactLastSequence(left) - artifactLastSequence(right);
+      });
+    });
+    function branchLastSequence(item, visited) {
+      var id = String(value(item, "ArtifactId", "artifactId", "") || "").toLowerCase();
+      if (!id || visited[id]) return artifactLastSequence(item);
+      visited[id] = true;
+      return (children[id] || []).reduce(function (latest, child) {
+        return Math.max(latest, branchLastSequence(child, visited));
+      }, artifactLastSequence(item));
+    }
+    roots.sort(function (left, right) {
+      return branchLastSequence(right, {}) - branchLastSequence(left, {});
+    });
+    var ordered = [];
+    var appended = {};
+    function append(item) {
+      var id = String(value(item, "ArtifactId", "artifactId", "") || "").toLowerCase();
+      if (id && appended[id]) return;
+      if (id) appended[id] = true;
+      ordered.push(item);
+      (children[id] || []).forEach(append);
+    }
+    roots.forEach(append);
+    (rows || []).forEach(append);
+    return ordered;
   }
 
   function applyCorrelation(payload) {
@@ -446,10 +525,24 @@
           : "Без redaction: архив содержит чувствительные данные."));
   }
 
+  function clearTrajectoryRows() {
+    events = [];
+    selected = null;
+    nextCursor = null;
+    $("trajectoryEvents").replaceChildren();
+    $("trajectoryWorkspace").classList.add("hidden");
+    $("trajectoryEventTitle").textContent = "Запись не выбрана";
+    $("trajectoryEventMeta").textContent = "";
+    $("trajectoryEventData").textContent = "";
+    resetLazyDetail();
+    renderCorrelationActions({});
+  }
+
   async function refreshTrajectory(append) {
     var requestedView = $("trajectoryViewInput").value || "raw";
     var vba = requestedView === "vba-mutations";
     var chatId = trajectoryChatId || state.activeChatId;
+    if (!append) clearTrajectoryRows();
     if (!vba && !chatId) {
       $("trajectoryStatus").textContent = "Нет активного чата.";
       return;
@@ -620,15 +713,50 @@
     var view = $("trajectoryViewInput").value || "raw";
     var raw = view === "raw";
     var vba = view === "vba-mutations";
-    $("trajectoryTypeInput").classList.toggle("hidden", !raw);
+    var panel = document.querySelector(".trajectory-panel");
+    if (panel) {
+      panel.classList.toggle("is-derived", !raw);
+      panel.classList.toggle("is-artifact-tree", view === "artifact-lineage");
+      panel.classList.toggle("is-vba", vba);
+    }
+    $("trajectoryViewField").classList.toggle("hidden", raw || vba);
+    $("trajectoryTypeField").classList.toggle("hidden", !raw);
     $("trajectoryTypeInput").disabled = !raw;
-    $("trajectoryVisibilityInput").classList.toggle("hidden", !raw);
+    $("trajectoryVisibilityField").classList.toggle("hidden", !raw);
     $("trajectoryVisibilityInput").disabled = !raw;
-    $("trajectoryVbaKindInput").classList.toggle("hidden", !vba);
+    $("trajectoryVbaKindField").classList.toggle("hidden", !vba);
     $("trajectoryVbaKindInput").disabled = !vba;
-    $("trajectoryVbaStatusInput").classList.toggle("hidden", !vba);
+    $("trajectoryVbaStatusField").classList.toggle("hidden", !vba);
     $("trajectoryVbaStatusInput").disabled = !vba;
+    if (raw) {
+      $("trajectoryTitle").textContent = "События JSONL";
+      $("trajectoryDescription").textContent = "Канонические записи активного chat stream. Event data показан сразу, большие payload читаются из CAS только по запросу.";
+    } else if (vba) {
+      $("trajectoryTitle").textContent = "VBA mutation journal";
+      $("trajectoryDescription").textContent = "Document-scoped операции из mutations.events.jsonl. Before/after source загружается из CAS только по запросу.";
+    } else {
+      $("trajectoryTitle").textContent = "Траектория выполнения";
+      $("trajectoryDescription").textContent = "Read-only проекция, которая каждый раз пересобирается из проверенного JSONL stream и связывает исходные event seq/id.";
+    }
     updateExportControls();
+  }
+
+  function setDiagnosticsMode(mode, refresh) {
+    invalidateTrajectoryRequest();
+    correlationFilter = {};
+    trajectoryChatId = null;
+    nextCursor = null;
+    if (mode === "events") {
+      var current = $("trajectoryViewInput").value || "raw";
+      if (current !== "raw" && current !== "vba-mutations") lastDerivedView = current;
+      $("trajectoryViewInput").value = "raw";
+    } else if (mode === "vba-journal") {
+      $("trajectoryViewInput").value = "vba-mutations";
+    } else {
+      $("trajectoryViewInput").value = lastDerivedView === "raw" ? "model-replay" : lastDerivedView;
+    }
+    updateViewControls();
+    if (refresh) refreshTrajectory(false);
   }
 
   window.bindTrajectoryActions = function () {
@@ -655,6 +783,7 @@
       correlationFilter = {};
       trajectoryChatId = null;
       nextCursor = null;
+      if ($("trajectoryViewInput").value !== "raw") lastDerivedView = $("trajectoryViewInput").value;
       updateViewControls();
       refreshTrajectory(false);
     });
@@ -664,4 +793,5 @@
     if (vbaDetail) vbaDetail.addEventListener("click", loadVbaMutation);
     updateViewControls();
   };
+  window.setTrajectoryDiagnosticsMode = setDiagnosticsMode;
 }());

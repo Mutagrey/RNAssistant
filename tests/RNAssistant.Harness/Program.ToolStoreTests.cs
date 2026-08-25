@@ -275,6 +275,89 @@ namespace RNAssistant.Harness
             AssertTrue(HasTool(outlook, "outlook.search_mail"), "outlook search visible");
             AssertTrue(HasTool(outlook, "outlook.create_draft"), "outlook draft facade visible");
             AssertTrue(FindTool(outlook, "outlook.update_mail").AgentCanRun, "outlook mail updates remain runnable");
+
+            var catalogs = new Dictionary<string, List<ToolDefinition>>
+            {
+                { "Excel", excel },
+                { "Word", word },
+                { "PowerPoint", powerpoint },
+                { "Outlook", outlook }
+            };
+            AssertEqual(17, excel.Count, "complete Excel tool count");
+            AssertEqual(10, word.Count, "complete Word tool count");
+            AssertEqual(11, powerpoint.Count, "complete PowerPoint tool count");
+            AssertEqual(6, outlook.Count, "complete Outlook tool count");
+            foreach (var catalog in catalogs)
+            {
+                AssertEqual(catalog.Value.Count, catalog.Value.Select(tool => tool.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count(), catalog.Key + " ids are unique");
+                var adapter = FakeOfficeAdapter.ForHost(catalog.Key);
+                WithTempExecutor(adapter, delegate(OfficeToolExecutor executor, FakeOfficeAdapter fake)
+                {
+                    foreach (var tool in catalog.Value)
+                    {
+                        JObject schema;
+                        string schemaError;
+                        AssertTrue(ToolSchemaSupport.TryParse(tool, out schema, out schemaError), tool.Id + " schema: " + schemaError);
+                        var arguments = MinimalValidArguments(schema);
+                        string argumentError;
+                        AssertTrue(ToolSchemaSupport.ValidateArguments(arguments, schema, true, out argumentError), tool.Id + " minimal arguments: " + argumentError);
+                        var command = new ToolCommand { ToolId = tool.Id };
+                        ToolArgumentNormalizer.AddProperties(arguments, command.Arguments);
+                        var result = executor.Execute(command, catalog.Value, new AppSettings { AutoConfirmToolActions = true }, false, true);
+                        AssertTrue(result == null || !string.Equals(result.ErrorCode, "unknown_tool", StringComparison.OrdinalIgnoreCase), tool.Id + " dispatch is registered");
+                        AssertTrue(result == null || !string.Equals(result.ErrorCode, "invalid_arguments", StringComparison.OrdinalIgnoreCase), tool.Id + " published schema reaches its handler");
+                    }
+                });
+            }
+        }
+
+        private static JObject MinimalValidArguments(JObject schema)
+        {
+            var alternatives = schema == null ? null : schema["anyOf"] as JArray;
+            if (alternatives != null)
+            {
+                var first = alternatives.OfType<JObject>().FirstOrDefault();
+                if (first != null) return MinimalValidArguments(first);
+            }
+            var result = new JObject();
+            var properties = schema == null ? null : schema["properties"] as JObject ?? new JObject();
+            foreach (var name in (schema == null ? new JArray() : schema["required"] as JArray ?? new JArray()).Values<string>())
+            {
+                var property = properties[name] as JObject;
+                if (property != null) result[name] = MinimalSchemaValue(property);
+            }
+            return result;
+        }
+
+        private static JToken MinimalSchemaValue(JObject schema)
+        {
+            if (schema["default"] != null) return schema["default"].DeepClone();
+            var alternatives = schema["anyOf"] as JArray;
+            if (alternatives != null)
+            {
+                var first = alternatives.OfType<JObject>().FirstOrDefault();
+                return first == null ? JValue.CreateNull() : MinimalSchemaValue(first);
+            }
+            var values = schema["enum"] as JArray;
+            if (values != null && values.Count > 0) return values[0].DeepClone();
+            var type = schema["type"];
+            var typeName = type is JArray
+                ? ((JArray)type).Values<string>().FirstOrDefault(value => !string.Equals(value, "null", StringComparison.OrdinalIgnoreCase))
+                : (string)type;
+            if (string.Equals(typeName, "object", StringComparison.OrdinalIgnoreCase)) return MinimalValidArguments(schema);
+            if (string.Equals(typeName, "array", StringComparison.OrdinalIgnoreCase))
+            {
+                var array = new JArray();
+                var count = Math.Max(1, (int?)schema["minItems"] ?? 0);
+                var items = schema["items"] as JObject ?? new JObject { ["type"] = "string" };
+                for (var index = 0; index < count; index++) array.Add(MinimalSchemaValue(items));
+                return array;
+            }
+            if (string.Equals(typeName, "boolean", StringComparison.OrdinalIgnoreCase)) return false;
+            if (string.Equals(typeName, "integer", StringComparison.OrdinalIgnoreCase)) return (int?)schema["minimum"] ?? 1;
+            if (string.Equals(typeName, "number", StringComparison.OrdinalIgnoreCase)) return (double?)schema["minimum"] ?? 1d;
+            var minLength = Math.Max(1, (int?)schema["minLength"] ?? 1);
+            return new string('x', minLength);
         }
 
         private static void PromptToolMetadataIsWeakModelFriendly()
@@ -512,6 +595,23 @@ namespace RNAssistant.Harness
                     referenceUpsert, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(referenceCreated.Success, "agent reference upsert succeeds");
                 AssertContains(referenceCreated.DataJson, "references/checklist.md", "reference mutation returns path");
+
+                var mixed = Command(
+                    "common.skills_upsert",
+                    "id", "excel.review_style",
+                    "description", "Mixed core change",
+                    "referencePath", "references/mixed.md",
+                    "referenceMarkdown", "# Mixed");
+                var mixedResult = executor.Execute(mixed, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+                AssertEqual("invalid_arguments", mixedResult.ErrorCode, "mixed skill core/reference call is rejected by its published schema");
+                AssertTrue(!string.Equals(mixedResult.ErrorCode, "mixed_skill_reference_update", StringComparison.Ordinal), "mixed call never reaches the old runtime trap");
+
+                var upsertDefinition = executor.GetControllerTools().Single(item => item.Id == "common.skills_upsert");
+                var responseSchema = JObject.Parse(AgentResponseSchemaBuilder.Build(new[] { upsertDefinition }));
+                var upsertVariants = responseSchema.SelectToken("properties.tool_calls.items.anyOf[0].properties.arguments.anyOf") as JArray;
+                AssertEqual(2, upsertVariants == null ? 0 : upsertVariants.Count, "skill upsert strict schema separates core and reference calls");
+                AssertTrue(upsertVariants.OfType<JObject>().Any(item => item.SelectToken("properties.referencePath") != null && item.SelectToken("properties.description") == null),
+                    "reference branch excludes core fields");
 
                 var referenceRead = executor.Execute(
                     Command("common.skills_read", "id", "excel.review_style", "referencePath", "references/checklist.md"),

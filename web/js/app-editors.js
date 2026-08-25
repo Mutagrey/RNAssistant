@@ -75,6 +75,13 @@
       if (id === "promptEditInput" && typeof markPromptEditorDirty === "function") {
         markPromptEditorDirty();
       }
+      if (["toolSchemaInput", "toolPipelineInput", "toolCodeInput", "toolReadmeInput"].indexOf(id) >= 0 &&
+          typeof markToolLibraryDirty === "function") {
+        markToolLibraryDirty();
+      }
+      if (id === "skillBodyInput" && typeof markSkillLibraryDirty === "function") {
+        markSkillLibraryDirty();
+      }
     });
 
     editors[id] = cm;

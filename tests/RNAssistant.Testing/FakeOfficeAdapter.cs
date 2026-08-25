@@ -7,6 +7,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
 {
@@ -1093,74 +1094,22 @@ namespace RNAssistant.Harness
 
         private static IEnumerable<ToolDefinition> ExcelBuiltIns()
         {
-            return new[]
-            {
-                BuiltIn("Excel", "excel.get_context", false, false, true),
-                BuiltIn("Excel", "excel.get_selection", false, false, true, canSourceHtmlData: true),
-                BuiltIn("Excel", "excel.inspect", false, false, true, canSourceHtmlData: true),
-                BuiltIn("Excel", "excel.read_range", false, false, true, canSourceHtmlData: true),
-                BuiltIn("Excel", "excel.find_cells", false, false, true),
-                BuiltIn("Excel", "excel.replace_cells", true, true, true),
-                BuiltIn("Excel", "excel.create_chat_chart", false, false, true),
-                BuiltIn("Excel", "excel.write_range", false, true, true),
-                BuiltIn("Excel", "excel.add_table", false, true, true),
-                BuiltIn("Excel", "excel.upsert_chart", false, true, true),
-                BuiltIn("Excel", "excel.delete_chart", true, true, true, 3),
-                BuiltIn("Excel", "excel.format_range", false, true, true, 1),
-                BuiltIn("Excel", "excel.add_sheet", false, true, true, 1),
-                BuiltIn("Excel", "excel.rename_sheet", true, true, true),
-                BuiltIn("Excel", "excel.clear_range", true, true, true, 3),
-                BuiltIn("Excel", "excel.sort_range", true, true, true),
-                BuiltIn("Excel", "excel.filter_range", true, true, true)
-            };
+            return OfficeBuiltInToolCatalog.ForHost("Excel");
         }
 
         private static IEnumerable<ToolDefinition> WordBuiltIns()
         {
-            return new[]
-            {
-                BuiltIn("Word", "word.get_context", false, false, true),
-                BuiltIn("Word", "word.read_text", false, false, true, canSourceHtmlData: true),
-                BuiltIn("Word", "word.find_text", false, false, true),
-                BuiltIn("Word", "word.inspect", false, false, true, canSourceHtmlData: true),
-                BuiltIn("Word", "word.write_text", false, true, true),
-                BuiltIn("Word", "word.replace_text", true, true, true),
-                BuiltIn("Word", "word.format_text", false, true, true, 1),
-                BuiltIn("Word", "word.add_table", false, true, true),
-                BuiltIn("Word", "word.insert_page_break", false, true, true, 1),
-                BuiltIn("Word", "word.add_comment", false, true, true, 1)
-            };
+            return OfficeBuiltInToolCatalog.ForHost("Word");
         }
 
         private static IEnumerable<ToolDefinition> PowerPointBuiltIns()
         {
-            return new[]
-            {
-                BuiltIn("PowerPoint", "powerpoint.get_context", false, false, true),
-                BuiltIn("PowerPoint", "powerpoint.get_selection", false, false, true, canSourceHtmlData: true),
-                BuiltIn("PowerPoint", "powerpoint.read_slides", false, false, true, canSourceHtmlData: true),
-                BuiltIn("PowerPoint", "powerpoint.list_objects", false, false, true, canSourceHtmlData: true),
-                BuiltIn("PowerPoint", "powerpoint.search_text", false, false, true),
-                BuiltIn("PowerPoint", "powerpoint.add_slide", false, true, true, 1),
-                BuiltIn("PowerPoint", "powerpoint.set_text", false, true, true),
-                BuiltIn("PowerPoint", "powerpoint.replace_text", true, true, true),
-                BuiltIn("PowerPoint", "powerpoint.add_object", false, true, true, 1),
-                BuiltIn("PowerPoint", "powerpoint.duplicate_slide", false, true, true, 1),
-                BuiltIn("PowerPoint", "powerpoint.move_slide", true, true, true)
-            };
+            return OfficeBuiltInToolCatalog.ForHost("PowerPoint");
         }
 
         private static IEnumerable<ToolDefinition> OutlookBuiltIns()
         {
-            return new[]
-            {
-                BuiltIn("Outlook", "outlook.get_context", false, false, true),
-                BuiltIn("Outlook", "outlook.read_mail", false, false, true, canSourceHtmlData: true),
-                BuiltIn("Outlook", "outlook.search_mail", false, false, true),
-                BuiltIn("Outlook", "outlook.create_draft", false, true, true, 1),
-                BuiltIn("Outlook", "outlook.update_mail", false, true, true, 1),
-                BuiltIn("Outlook", "outlook.collect_mail", false, false, true, canSourceHtmlData: true)
-            };
+            return OfficeBuiltInToolCatalog.ForHost("Outlook");
         }
 
         private static ToolDefinition BuiltIn(string host, string id, bool requiresConfirmation, bool mutatesDocument, bool agentCanRun, int riskLevel = 0, bool canSourceHtmlData = false)
