@@ -191,11 +191,15 @@ namespace RNAssistant.Harness
                 var service = new ModelTracePersistenceService(store, new SessionTraceWriteQueue(4));
                 var options = new LlmRequestOptions { TraceSession = session, TracePurpose = "agent" };
                 service.Configure(options);
-                options.TraceSink(new LlmTraceRecord
+                var requestRecord = new LlmTraceRecord
                 {
                     Type = "request", RequestId = "request-queue", Purpose = "agent",
-                    PayloadJson = "{\"request\":true}", PayloadContentType = "application/json"
-                });
+                    PayloadUtf8Bytes = Encoding.UTF8.GetBytes("{\"request\":\"точно\"}"),
+                    PayloadContentType = "application/json"
+                };
+                options.TraceSink(requestRecord);
+                AssertTrue(!requestRecord.PayloadTextMaterialized,
+                    "byte-backed request persists without materializing another UTF-16 string");
                 options.TraceSink(new LlmTraceRecord
                 {
                     Type = "chunk", RequestId = "request-queue", Purpose = "agent",
@@ -209,8 +213,11 @@ namespace RNAssistant.Harness
                 });
 
                 var events = store.ReadEvents(session.Host, session.DocumentKey, session.Id);
+                var request = events.Single(item => item.Type == SessionEventTypes.LlmRequest);
                 var chunk = events.Single(item => item.Type == SessionEventTypes.AssistantChunk);
                 var response = events.Single(item => item.Type == SessionEventTypes.LlmResponse);
+                AssertEqual("{\"request\":\"точно\"}", store.ReadEventPayload(request),
+                    "request CAS preserves the exact HTTP UTF-8 payload");
                 AssertTrue(chunk.Sequence < response.Sequence, "terminal response is durable after queued chunks");
                 AssertEqual("[\"one\",\"two\"]", store.ReadEventPayload(chunk), "queued chunk payload remains exact");
                 AssertEqual(SessionEventTypes.StepEnded, events.Last().Type,
@@ -1157,7 +1164,13 @@ namespace RNAssistant.Harness
             AssertTrue(stopped, "trace persistence failure aborts before HTTP dispatch");
             AssertTrue(trace != null, "final request trace emitted");
             AssertEqual("request", trace.Type, "request trace type");
+            AssertTrue(trace.PayloadUtf8Bytes != null && trace.PayloadUtf8Bytes.Length > 0,
+                "final request is materialized as reusable UTF-8 bytes");
+            AssertTrue(!trace.PayloadTextMaterialized,
+                "request trace does not eagerly allocate a duplicate UTF-16 payload");
             var payload = JObject.Parse(trace.PayloadJson);
+            AssertTrue(trace.PayloadUtf8Bytes.SequenceEqual(Encoding.UTF8.GetBytes(trace.PayloadJson)),
+                "trace bytes are exactly the JSON payload exposed to observers");
             AssertEqual("trace-model", (string)payload["model"], "materialized model recorded");
             AssertEqual("materialized prompt", (string)payload.SelectToken("messages[0].content"),
                 "materialized message recorded");

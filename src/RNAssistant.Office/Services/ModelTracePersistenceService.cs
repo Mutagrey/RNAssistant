@@ -65,15 +65,31 @@ namespace RNAssistant.Office.Services
                 record.Completed,
                 record.ChunkEncoding
             };
-            Action append = () => _chatStore.AppendTrace(
-                session,
-                type,
-                data,
-                record.PayloadJson,
-                record.PayloadContentType,
-                runId,
-                turnId,
-                record.RequestId);
+            Action append;
+            if (record.PayloadUtf8Bytes == null)
+            {
+                append = () => _chatStore.AppendTrace(
+                    session,
+                    type,
+                    data,
+                    record.PayloadJson,
+                    record.PayloadContentType,
+                    runId,
+                    turnId,
+                    record.RequestId);
+            }
+            else
+            {
+                append = () => _chatStore.AppendTraceBytes(
+                    session,
+                    type,
+                    data,
+                    record.PayloadUtf8Bytes,
+                    record.PayloadContentType,
+                    runId,
+                    turnId,
+                    record.RequestId);
+            }
 
             if (string.Equals(type, SessionEventTypes.AssistantChunk, StringComparison.Ordinal))
             {

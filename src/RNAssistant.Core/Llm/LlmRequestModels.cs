@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -80,6 +81,8 @@ namespace RNAssistant.Core.Llm
 
     public sealed class LlmTraceRecord
     {
+        private string _payloadJson;
+
         public string Type { get; set; }
         public string RequestId { get; set; }
         public string Purpose { get; set; }
@@ -102,9 +105,28 @@ namespace RNAssistant.Core.Llm
         public bool? Completed { get; set; }
         public string ChunkEncoding { get; set; }
         [JsonIgnore]
-        public string PayloadJson { get; set; }
+        public string PayloadJson
+        {
+            get
+            {
+                if (_payloadJson == null && PayloadUtf8Bytes != null)
+                {
+                    _payloadJson = Encoding.UTF8.GetString(PayloadUtf8Bytes);
+                }
+                return _payloadJson;
+            }
+            set { _payloadJson = value; }
+        }
+        [JsonIgnore]
+        public byte[] PayloadUtf8Bytes { get; set; }
         [JsonIgnore]
         public string PayloadContentType { get; set; }
+
+        [JsonIgnore]
+        internal bool PayloadTextMaterialized
+        {
+            get { return _payloadJson != null; }
+        }
     }
 
     public sealed class LlmRunCache

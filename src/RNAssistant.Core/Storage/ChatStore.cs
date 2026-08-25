@@ -187,15 +187,57 @@ namespace RNAssistant.Core.Storage
             string turnId,
             string stepId)
         {
+            return AppendTraceCore(
+                session,
+                type,
+                data,
+                payloadText == null ? null : Utf8.GetBytes(payloadText),
+                payloadContentType,
+                runId,
+                turnId,
+                stepId);
+        }
+
+        public SessionEvent AppendTraceBytes(
+            ChatSession session,
+            string type,
+            object data,
+            byte[] payloadBytes,
+            string payloadContentType,
+            string runId,
+            string turnId,
+            string stepId)
+        {
+            return AppendTraceCore(
+                session,
+                type,
+                data,
+                payloadBytes,
+                payloadContentType,
+                runId,
+                turnId,
+                stepId);
+        }
+
+        private SessionEvent AppendTraceCore(
+            ChatSession session,
+            string type,
+            object data,
+            byte[] payloadBytes,
+            string payloadContentType,
+            string runId,
+            string turnId,
+            string stepId)
+        {
             if (session == null) throw new ArgumentNullException("session");
             if (string.IsNullOrWhiteSpace(type)) throw new ArgumentException("Event type is required.", "type");
 
             var dataToken = data == null ? null : JToken.FromObject(data);
             var correlatedStepId = ResolveStepId(stepId, dataToken);
             ChatBlobReference payload = null;
-            if (payloadText != null)
+            if (payloadBytes != null)
             {
-                payload = _blobs.StoreText(payloadText, payloadContentType);
+                payload = _blobs.StoreBytes(payloadBytes, payloadContentType);
             }
 
             lock (PersistenceSync)

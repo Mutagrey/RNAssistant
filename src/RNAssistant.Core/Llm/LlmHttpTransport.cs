@@ -46,7 +46,7 @@ namespace RNAssistant.Core.Llm
             }
         }
 
-        public static HttpContent CreateJsonContent(JObject body)
+        public static byte[] SerializeJson(JObject body)
         {
             using (var output = new MemoryStream())
             {
@@ -63,11 +63,22 @@ namespace RNAssistant.Core.Llm
                         LlmFailureKind.RequestTooLarge,
                         "LLM request body exceeds the 96 MB safety limit.");
                 }
-
-                var result = new ByteArrayContent(output.GetBuffer(), 0, (int)output.Length);
-                result.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
-                return result;
+                return output.ToArray();
             }
+        }
+
+        public static HttpContent CreateJsonContent(byte[] utf8Bytes)
+        {
+            utf8Bytes = utf8Bytes ?? new byte[0];
+            if (utf8Bytes.LongLength > MaxRequestBodyBytes)
+            {
+                throw new LlmRequestException(
+                    LlmFailureKind.RequestTooLarge,
+                    "LLM request body exceeds the 96 MB safety limit.");
+            }
+            var result = new ByteArrayContent(utf8Bytes);
+            result.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
+            return result;
         }
 
         public static async Task<string> ReadContentAsStringAsync(

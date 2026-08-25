@@ -111,6 +111,7 @@ namespace RNAssistant.Core.Llm
                     ? TokenEstimateCalibration.AddPromptIntercept(settings, scaledRequestTokens)
                     : TokenEstimateCalibration.PredictPromptTokens(settings, baseEstimatedRequestTokens);
                 var body = BuildRequestBody(settings, apiMessages, estimatedRequestTokens, requestOptions, true);
+                var requestPayloadBytes = LlmHttpTransport.SerializeJson(body);
                 traceMessageCount = apiMessages.Count;
                 traceEstimatedPromptTokens = estimatedRequestTokens;
                 Trace(requestOptions, new LlmTraceRecord
@@ -123,7 +124,7 @@ namespace RNAssistant.Core.Llm
                     ResponseFormat = requestOptions.ResponseFormat,
                     MessageCount = apiMessages.Count,
                     EstimatedPromptTokens = estimatedRequestTokens,
-                    PayloadJson = body.ToString(Formatting.None),
+                    PayloadUtf8Bytes = requestPayloadBytes,
                     PayloadContentType = "application/json"
                 });
                 requestTraceRecorded = true;
@@ -143,7 +144,7 @@ namespace RNAssistant.Core.Llm
                 {
                     LogModelJson(settings, trafficId, "REQUEST POST " + requestUri, body.ToString(Formatting.Indented));
                 }
-                var content = LlmHttpTransport.CreateJsonContent(body);
+                var content = LlmHttpTransport.CreateJsonContent(requestPayloadBytes);
                 var diagnostics = CreateDiagnostics(requestUri, settings, apiMessages.Count, !string.IsNullOrWhiteSpace(apiKey));
                 var timeout = TimeSpan.FromSeconds(Math.Max(
                     30,
