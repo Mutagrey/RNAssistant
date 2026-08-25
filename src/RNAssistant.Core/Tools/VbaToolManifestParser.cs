@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json;
@@ -191,17 +190,17 @@ namespace RNAssistant.Core.Tools
         public static string CodeSha256(string code)
         {
             var normalized = NormalizeCode(code);
-            return Sha256(normalized);
+            return TextPatternEngine.Sha256(normalized);
         }
 
         public static string LiveCodeSha256(string code)
         {
-            return Sha256(NormalizeLiveCode(code));
+            return TextPatternEngine.Sha256(NormalizeLiveCode(code));
         }
 
         public static string VbeComparableCodeSha256(string code)
         {
-            return Sha256(NormalizeVbeComparableCode(code));
+            return TextPatternEngine.Sha256(NormalizeVbeComparableCode(code));
         }
 
         public static string NormalizeLiveCode(string code)
@@ -308,14 +307,6 @@ namespace RNAssistant.Core.Tools
         private static void AppendVbeToken(StringBuilder output, string token)
         {
             output.Append((token ?? string.Empty).Length).Append(':').Append(token).Append(';');
-        }
-
-        private static string Sha256(string value)
-        {
-            using (var sha = SHA256.Create())
-            {
-                return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(value ?? string.Empty))).Replace("-", string.Empty).ToLowerInvariant();
-            }
         }
 
         public static string NormalizeCode(string code)

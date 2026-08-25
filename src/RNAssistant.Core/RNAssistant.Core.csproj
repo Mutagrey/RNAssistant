@@ -112,6 +112,7 @@
     <Compile Include="Tools\AgentResponseSchemaBuilder.cs" />
     <Compile Include="Services\ContextNormalizer.cs" />
     <Compile Include="Services\ChartArtifactBuilder.cs" />
+    <Compile Include="Services\ChartArtifactPayload.cs" />
     <Compile Include="Services\ChatSettingsResolver.cs" />
     <Compile Include="Services\ChatSessionNormalizer.cs" />
     <Compile Include="Services\ChatSessionHeaderFactory.cs" />
@@ -123,14 +124,22 @@
     <Compile Include="Services\TrajectoryExportService.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
     <Compile Include="Storage\AttachmentStore.cs" />
+    <Compile Include="Storage\BoundedLruCache.cs" />
     <Compile Include="Storage\PdfAttachmentTextExtractor.cs" />
     <Compile Include="Storage\CasBlobCodec.cs" />
     <Compile Include="Storage\ChatHeaderReducer.cs" />
     <Compile Include="Storage\ChatStore.cs" />
+    <Compile Include="Storage\ChatStore.Artifacts.cs" />
+    <Compile Include="Storage\ChatStore.Caching.cs" />
+    <Compile Include="Storage\ChatStore.SessionProjection.cs" />
     <Compile Include="Storage\ChatBlobStore.cs" />
     <Compile Include="Storage\CasMaintenanceService.cs" />
+    <Compile Include="Storage\DisposablePair.cs" />
+    <Compile Include="Storage\EventProtectionSupport.cs" />
     <Compile Include="Storage\JsonFileStore.cs" />
     <Compile Include="Storage\JsonlByteReader.cs" />
+    <Compile Include="Storage\JsonlRecordReader.cs" />
+    <Compile Include="Storage\JsonlRecordWriter.cs" />
     <Compile Include="Storage\ProtectedSecretStore.cs" />
     <Compile Include="Storage\SettingsService.cs" />
     <Compile Include="Storage\StorageProtection.cs" />
@@ -138,6 +147,7 @@
     <Compile Include="Storage\StorageFileSystem.cs" />
     <Compile Include="Storage\ToolStore.cs" />
     <Compile Include="Storage\VbaJournalStore.cs" />
+    <Compile Include="Storage\VbaJournalStore.Projection.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -3,13 +3,11 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 
@@ -28,7 +26,7 @@ namespace RNAssistant.Core.Storage
     /// persisted as a mutable snapshot. Each Save appends one atomic commit containing typed state
     /// operations; model traffic is appended to the same stream as non-projecting trace events.
     /// </summary>
-    public sealed class ChatStore
+    public sealed partial class ChatStore
     {
         private const string EventFileSuffix = ".events.jsonl";
         private const int MaxProjectionCacheEntries = 16;
@@ -39,11 +37,6 @@ namespace RNAssistant.Core.Storage
         private const long MaxHeaderCacheTotalCharacters = 4L * 1024 * 1024;
         private static readonly object PersistenceSync = new object();
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false);
-        private static readonly JsonSerializerSettings ProjectionJsonSettings = new JsonSerializerSettings
-        {
-            ContractResolver = new ChatProjectionContractResolver(),
-            DateTimeZoneHandling = DateTimeZoneHandling.Utc
-        };
         private static readonly HashSet<string> SessionEventProperties = new HashSet<string>(
             new[]
             {
@@ -53,28 +46,13 @@ namespace RNAssistant.Core.Storage
             },
             StringComparer.Ordinal);
 
-        private static readonly string[] MetadataProperties =
-        {
-            "FormatVersion", "Id", "ParentSessionId", "ParentSessionRevision", "ForkedThroughMessageId",
-            "Host", "DocumentKey", "DocumentTitle", "DocumentPath",
-            "Title", "Model", "Mode", "ReasoningEnabled", "CreatedUtc", "UpdatedUtc"
-        };
-
         private readonly AppDataPaths _paths;
         private readonly ChatBlobStore _blobs;
         private readonly Func<StorageProtector> _protectionProvider;
-        private readonly object _projectionCacheSync = new object();
-        private readonly Dictionary<string, ProjectionCacheEntry> _projectionCache =
-            new Dictionary<string, ProjectionCacheEntry>(StringComparer.OrdinalIgnoreCase);
-        private readonly object _headerCacheSync = new object();
-        private readonly Dictionary<string, HeaderCacheEntry> _headerCache =
-            new Dictionary<string, HeaderCacheEntry>(StringComparer.OrdinalIgnoreCase);
-        private long _projectionCacheClock;
-        private long _projectionCacheCharacters;
+        private readonly BoundedLruCache<ProjectionCacheEntry> _projectionCache;
+        private readonly BoundedLruCache<HeaderCacheEntry> _headerCache;
         private long _projectionFullReplayCount;
         private long _projectionIncrementalReplayCount;
-        private long _headerCacheClock;
-        private long _headerCacheCharacters;
         private long _headerFullReplayCount;
         private long _headerIncrementalReplayCount;
         private long _artifactCasExternalizationCount;
@@ -114,6 +92,18 @@ namespace RNAssistant.Core.Storage
             _paths = paths ?? throw new ArgumentNullException("paths");
             _protectionProvider = protectionProvider ?? (() => StorageProtector.None);
             _blobs = new ChatBlobStore(paths, _protectionProvider);
+            _projectionCache = new BoundedLruCache<ProjectionCacheEntry>(
+                MaxProjectionCacheEntries,
+                MaxProjectionCacheCharacters,
+                MaxProjectionCacheTotalCharacters,
+                entry => entry == null ? 0 : entry.EstimatedCharacters,
+                StringComparer.OrdinalIgnoreCase);
+            _headerCache = new BoundedLruCache<HeaderCacheEntry>(
+                MaxHeaderCacheEntries,
+                MaxHeaderCacheCharacters,
+                MaxHeaderCacheTotalCharacters,
+                entry => entry == null ? 0 : entry.EstimatedCharacters,
+                StringComparer.OrdinalIgnoreCase);
         }
 
         public ChatSession LoadOrCreateActive(string host, string documentKey, string documentTitle)
@@ -928,7 +918,7 @@ namespace RNAssistant.Core.Storage
             }
             if (log != null && log.HasIncompleteTail)
             {
-                RewriteValidEvents(path, log.Events);
+                JsonlRecordWriter.RewriteAll(path, log.Events, Utf8);
             }
 
             var protector = Protection();
@@ -1067,700 +1057,6 @@ namespace RNAssistant.Core.Storage
             return session;
         }
 
-        private static JObject ReplayProjectionRoot(IEnumerable<SessionEvent> events, JObject seedRoot)
-        {
-            var root = seedRoot == null ? null : (JObject)seedRoot.DeepClone();
-            var replay = root == null ? null : new ProjectionReplayState(root);
-            foreach (var sessionEvent in events ?? new List<SessionEvent>())
-            {
-                if (string.Equals(sessionEvent.Type, SessionEventTypes.SessionCreated, StringComparison.Ordinal) ||
-                    string.Equals(sessionEvent.Type, SessionEventTypes.SessionForked, StringComparison.Ordinal))
-                {
-                    if (root != null || sessionEvent.Data == null || sessionEvent.Data.Type != JTokenType.Object) return null;
-                    root = (JObject)sessionEvent.Data.DeepClone();
-                    replay = new ProjectionReplayState(root);
-                    continue;
-                }
-                if (!string.Equals(sessionEvent.Type, SessionEventTypes.SessionCommit, StringComparison.Ordinal)) continue;
-                if (root == null || sessionEvent.Data == null) return null;
-                var operations = sessionEvent.Data["Operations"] == null
-                    ? new List<SessionOperation>()
-                    : sessionEvent.Data["Operations"].ToObject<List<SessionOperation>>();
-                ApplyOperations(root, operations, replay);
-            }
-            if (root == null || replay == null) return null;
-            replay.Materialize(root);
-            return root;
-        }
-
-        private ChatSession Project(
-            JObject root,
-            long sequence,
-            string headHash,
-            long tailByteOffset,
-            long byteLength,
-            long lastWriteUtcTicks,
-            bool hydrateActiveArtifacts,
-            bool rebuildDerivedProjections)
-        {
-            if (root == null) return null;
-            var session = root.ToObject<ChatSession>();
-            session.Revision = sequence;
-            session.StorageHeadHash = headHash;
-            session.StorageTailByteOffset = tailByteOffset;
-            session.StorageByteLength = byteLength;
-            session.StorageLastWriteUtcTicks = lastWriteUtcTicks;
-            if (rebuildDerivedProjections)
-            {
-                RebuildHtmlWorkspaceProjection(session);
-                RebuildContextCheckpointProjection(session);
-                RebuildChartActivityProjection(session);
-            }
-            if (hydrateActiveArtifacts)
-            {
-                foreach (var artifact in (session.Artifacts ?? new List<ChatArtifact>()).Where(ShouldHydrateForActiveSession))
-                {
-                    HydrateArtifact(artifact);
-                }
-            }
-            return session;
-        }
-
-        private static List<SessionOperation> BuildOperations(ChatSession beforeSession, ChatSession afterSession)
-        {
-            var before = ToProjectionToken(beforeSession);
-            var after = ToProjectionToken(afterSession);
-            var operations = new List<SessionOperation>();
-
-            var metadata = new JObject();
-            foreach (var property in MetadataProperties)
-            {
-                if (!JToken.DeepEquals(before[property], after[property]))
-                {
-                    metadata[property] = after[property] == null ? JValue.CreateNull() : after[property].DeepClone();
-                }
-            }
-            if (metadata.HasValues) operations.Add(Operation(SessionOperationTypes.SessionMetadataSet, metadata));
-
-            AddSetOperation(operations, before, after, "Context", SessionOperationTypes.ContextSet);
-            AddRunOperation(operations, before["LastRun"], after["LastRun"]);
-            AddListOperations(operations, before, after, "Messages", "Id",
-                SessionOperationTypes.MessageUpsert, SessionOperationTypes.MessageRemove, SessionOperationTypes.MessagesReorder);
-            AddListOperations(operations, before, after, "Artifacts", "Id",
-                SessionOperationTypes.ArtifactUpsert, SessionOperationTypes.ArtifactRemove, SessionOperationTypes.ArtifactsReorder);
-
-            var active = new JObject();
-            foreach (var property in new[] { "ActiveContextCheckpointId", "ActiveHtmlArtifactId", "ActivePlanArtifactId" })
-            {
-                if (!JToken.DeepEquals(before[property], after[property]))
-                {
-                    active[property] = after[property] == null ? JValue.CreateNull() : after[property].DeepClone();
-                }
-            }
-            if (active.HasValues) operations.Add(Operation(SessionOperationTypes.ActiveReferencesSet, active));
-            return operations;
-        }
-
-        private static void AddSetOperation(
-            ICollection<SessionOperation> operations,
-            JObject before,
-            JObject after,
-            string property,
-            string operationType)
-        {
-            if (!JToken.DeepEquals(before[property], after[property]))
-            {
-                operations.Add(Operation(operationType, new JObject
-                {
-                    ["Value"] = after[property] == null ? JValue.CreateNull() : after[property].DeepClone()
-                }));
-            }
-        }
-
-        private static void AddRunOperation(ICollection<SessionOperation> operations, JToken before, JToken after)
-        {
-            if (JToken.DeepEquals(before, after)) return;
-            var type = IsNull(before)
-                ? SessionOperationTypes.RunStarted
-                : IsNull(after)
-                    ? SessionOperationTypes.RunEnded
-                    : SessionOperationTypes.RunUpdated;
-            var data = new JObject
-            {
-                ["Value"] = after == null ? JValue.CreateNull() : after.DeepClone()
-            };
-            if (string.Equals(type, SessionOperationTypes.RunEnded, StringComparison.Ordinal))
-            {
-                data["Previous"] = before == null ? JValue.CreateNull() : before.DeepClone();
-            }
-            operations.Add(Operation(type, data));
-        }
-
-        private static bool IsNull(JToken value)
-        {
-            return value == null || value.Type == JTokenType.Null || value.Type == JTokenType.Undefined;
-        }
-
-        private static void AddListOperations(
-            ICollection<SessionOperation> operations,
-            JObject before,
-            JObject after,
-            string property,
-            string idProperty,
-            string upsertType,
-            string removeType,
-            string reorderType)
-        {
-            var beforeItems = (before[property] as JArray ?? new JArray()).OfType<JObject>().ToList();
-            var afterItems = (after[property] as JArray ?? new JArray()).OfType<JObject>().ToList();
-            var beforeById = beforeItems.Where(item => !string.IsNullOrWhiteSpace((string)item[idProperty]))
-                .ToDictionary(item => (string)item[idProperty], item => item, StringComparer.OrdinalIgnoreCase);
-            var afterById = afterItems.Where(item => !string.IsNullOrWhiteSpace((string)item[idProperty]))
-                .ToDictionary(item => (string)item[idProperty], item => item, StringComparer.OrdinalIgnoreCase);
-
-            foreach (var item in afterItems)
-            {
-                var id = (string)item[idProperty];
-                JObject previous = null;
-                var existed = !string.IsNullOrWhiteSpace(id) && beforeById.TryGetValue(id, out previous);
-                if (!existed || !JToken.DeepEquals(previous, item))
-                {
-                    operations.Add(Operation(ResolveUpsertType(property, upsertType, previous, item),
-                        new JObject { ["Value"] = item.DeepClone() }));
-                }
-            }
-            foreach (var item in beforeItems)
-            {
-                var id = (string)item[idProperty];
-                if (!string.IsNullOrWhiteSpace(id) && !afterById.ContainsKey(id))
-                {
-                    operations.Add(Operation(removeType, new JObject { ["Id"] = id }));
-                }
-            }
-
-            var beforeOrder = beforeItems.Select(item => (string)item[idProperty]).ToList();
-            var afterOrder = afterItems.Select(item => (string)item[idProperty]).ToList();
-            var replayOrder = beforeOrder
-                .Where(id => !string.IsNullOrWhiteSpace(id) && afterById.ContainsKey(id))
-                .ToList();
-            replayOrder.AddRange(afterOrder.Where(id =>
-                !string.IsNullOrWhiteSpace(id) && !beforeById.ContainsKey(id)));
-            if (!replayOrder.SequenceEqual(afterOrder, StringComparer.OrdinalIgnoreCase))
-            {
-                operations.Add(Operation(reorderType, new JObject { ["Ids"] = JArray.FromObject(afterOrder) }));
-            }
-        }
-
-        private static SessionOperation Operation(string type, JObject data)
-        {
-            return new SessionOperation { Type = type, Data = data ?? new JObject() };
-        }
-
-        private static string ResolveUpsertType(string property, string fallback, JObject previous, JObject item)
-        {
-            if (string.Equals(property, "Artifacts", StringComparison.Ordinal))
-            {
-                return SessionOperationTypes.ArtifactRevisionCreated;
-            }
-            if (!string.Equals(property, "Messages", StringComparison.Ordinal)) return fallback;
-
-            var activity = item["Activity"] as JObject;
-            var status = activity == null ? null : (string)activity["Status"];
-            var executionStatus = activity == null ? null : (string)activity["ExecutionStatus"];
-            var toolCallId = activity == null ? null : (string)activity["ToolCallId"];
-            if (!string.IsNullOrWhiteSpace(toolCallId) && string.Equals(status, "running", StringComparison.OrdinalIgnoreCase))
-            {
-                return SessionOperationTypes.ToolExecutionStarted;
-            }
-            if (!string.IsNullOrWhiteSpace(toolCallId) &&
-                (string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(status, "cancelled", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(status, "waiting", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(status, "waiting_confirmation", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(executionStatus, "waiting_confirmation", StringComparison.OrdinalIgnoreCase)))
-            {
-                return SessionOperationTypes.ToolExecutionFinished;
-            }
-            if ((bool?)item["ProtocolMessage"] == true)
-            {
-                var calls = item["ToolCalls"] as JArray;
-                return calls != null && calls.Count > 0
-                    ? SessionOperationTypes.ToolCallRecorded
-                    : SessionOperationTypes.ToolResultRecorded;
-            }
-            if (previous == null && string.Equals((string)item["Role"], "user", StringComparison.OrdinalIgnoreCase))
-            {
-                return SessionOperationTypes.UserMessageAppended;
-            }
-            if (previous == null && string.Equals((string)item["Role"], "assistant", StringComparison.OrdinalIgnoreCase))
-            {
-                return SessionOperationTypes.AssistantMessageAppended;
-            }
-            return fallback;
-        }
-
-        private static void ApplyOperations(
-            JObject root,
-            IEnumerable<SessionOperation> operations,
-            ProjectionReplayState replay)
-        {
-            foreach (var operation in operations ?? new List<SessionOperation>())
-            {
-                if (operation == null || string.IsNullOrWhiteSpace(operation.Type)) continue;
-                var data = operation.Data ?? new JObject();
-                switch (operation.Type)
-                {
-                    case SessionOperationTypes.SessionMetadataSet:
-                    case SessionOperationTypes.ActiveReferencesSet:
-                        foreach (var property in data.Properties()) root[property.Name] = property.Value.DeepClone();
-                        break;
-                    case SessionOperationTypes.ContextSet:
-                        root["Context"] = CloneValue(data["Value"]);
-                        break;
-                    case SessionOperationTypes.RunStarted:
-                    case SessionOperationTypes.RunUpdated:
-                    case SessionOperationTypes.RunEnded:
-                        root["LastRun"] = CloneValue(data["Value"]);
-                        break;
-                    case SessionOperationTypes.MessageUpsert:
-                    case SessionOperationTypes.UserMessageAppended:
-                    case SessionOperationTypes.AssistantMessageAppended:
-                    case SessionOperationTypes.ToolCallRecorded:
-                    case SessionOperationTypes.ToolResultRecorded:
-                    case SessionOperationTypes.ToolExecutionStarted:
-                    case SessionOperationTypes.ToolExecutionFinished:
-                        replay.Upsert("Messages", data["Value"]);
-                        break;
-                    case SessionOperationTypes.MessageRemove:
-                        replay.Remove("Messages", (string)data["Id"]);
-                        break;
-                    case SessionOperationTypes.MessagesReorder:
-                        replay.Reorder("Messages", data["Ids"] as JArray);
-                        break;
-                    case SessionOperationTypes.ArtifactUpsert:
-                    case SessionOperationTypes.ArtifactRevisionCreated:
-                        replay.Upsert("Artifacts", data["Value"]);
-                        break;
-                    case SessionOperationTypes.ArtifactRemove:
-                        replay.Remove("Artifacts", (string)data["Id"]);
-                        break;
-                    case SessionOperationTypes.ArtifactsReorder:
-                        replay.Reorder("Artifacts", data["Ids"] as JArray);
-                        break;
-                    default:
-                        throw new JsonException("Unsupported session operation: " + operation.Type);
-                }
-            }
-        }
-
-        private static JToken CloneValue(JToken value)
-        {
-            return value == null ? JValue.CreateNull() : value.DeepClone();
-        }
-
-        private void ExternalizeArtifacts(ChatSession session)
-        {
-            foreach (var artifact in session.Artifacts ?? new List<ChatArtifact>())
-            {
-                if (artifact == null || string.IsNullOrEmpty(artifact.InlineText)) continue;
-                if (CanReuseArtifactBody(artifact)) continue;
-                Interlocked.Increment(ref _artifactCasExternalizationCount);
-                var reference = _blobs.StoreText(artifact.InlineText,
-                    string.IsNullOrWhiteSpace(artifact.MimeType) ? "text/plain; charset=utf-8" : artifact.MimeType,
-                    ArtifactBodyReference(artifact));
-                artifact.ContentSha256 = reference.Sha256;
-                artifact.ContentByteLength = reference.ByteLength;
-                RememberArtifactBody(artifact);
-            }
-        }
-
-        private bool CanReuseArtifactBody(ChatArtifact artifact)
-        {
-            return artifact != null && artifact.ContentByteLength.HasValue &&
-                artifact.StorageContentByteLength.HasValue &&
-                artifact.ContentByteLength.Value == artifact.StorageContentByteLength.Value &&
-                artifact.StorageInlineTextTrusted &&
-                string.Equals(artifact.ContentSha256, artifact.StorageContentSha256, StringComparison.OrdinalIgnoreCase) &&
-                _blobs.HasStoredReference(ArtifactBodyReference(artifact));
-        }
-
-        private static ChatBlobReference ArtifactBodyReference(ChatArtifact artifact)
-        {
-            return artifact == null || !artifact.ContentByteLength.HasValue
-                ? null
-                : new ChatBlobReference
-                {
-                    Sha256 = artifact.ContentSha256,
-                    ByteLength = artifact.ContentByteLength.Value,
-                    ContentType = artifact.MimeType
-                };
-        }
-
-        private static void RememberArtifactBody(ChatArtifact artifact)
-        {
-            if (artifact == null) return;
-            artifact.StorageInlineTextTrusted = true;
-            artifact.StorageContentSha256 = artifact.ContentSha256;
-            artifact.StorageContentByteLength = artifact.ContentByteLength;
-        }
-
-        private void EnsureWorkspaceArtifact(ChatSession session)
-        {
-            if (session == null) return;
-            var workspace = session.HtmlWorkspace ?? new HtmlWorkspace();
-            var hasContent = (workspace.Files != null && workspace.Files.Any(item => item != null)) ||
-                (workspace.DataSources != null && workspace.DataSources.Any(item => item != null));
-            if (session.HtmlWorkspaceRecovery != null && !session.HtmlWorkspaceRecovery.CanMutate)
-            {
-                if (hasContent)
-                {
-                    throw new InvalidOperationException("HTML workspace mutation is blocked until a healthy revision is selected.");
-                }
-                return;
-            }
-            var current = FindArtifact(session, session.ActiveHtmlArtifactId);
-            if (!hasContent && current == null) return;
-            if (current != null) HydrateArtifact(current);
-
-            var snapshot = HtmlWorkspaceCopyService.CaptureSnapshot(workspace, "HTML workspace");
-            if (current != null && WorkspaceStateEquals(current.InlineText, snapshot)) return;
-            var artifact = new ChatArtifact
-            {
-                Kind = ChatArtifactKinds.HtmlWorkspace,
-                Title = "HTML workspace",
-                MimeType = "application/vnd.rnassistant.html-workspace+json",
-                ParentArtifactId = current == null ? null : current.Id,
-                Revision = current == null ? 1 : Math.Max(1, current.Revision + 1),
-                InlineText = SerializeWorkspaceState(snapshot),
-                MetadataJson = JsonConvert.SerializeObject(new
-                {
-                    activeFileId = snapshot.ActiveFileId,
-                    fileCount = snapshot.Files.Count,
-                    dataSourceCount = snapshot.DataSources.Count
-                })
-            };
-            session.Artifacts = session.Artifacts ?? new List<ChatArtifact>();
-            session.Artifacts.Add(artifact);
-            session.ActiveHtmlArtifactId = artifact.Id;
-        }
-
-        private static void EnsureChartArtifacts(ChatSession session)
-        {
-            if (session == null) return;
-            session.Artifacts = session.Artifacts ?? new List<ChatArtifact>();
-            foreach (var message in session.Messages ?? new List<ChatMessage>())
-            {
-                var activity = message == null ? null : message.Activity;
-                JObject chart;
-                if (activity == null || !TryParseChart(activity.DataJson, out chart)) continue;
-                message.ArtifactIds = message.ArtifactIds ?? new List<string>();
-                var linked = session.Artifacts.LastOrDefault(item => item != null &&
-                    message.ArtifactIds.Contains(item.Id, StringComparer.OrdinalIgnoreCase) &&
-                    string.Equals(item.Kind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase));
-                var normalized = chart.ToString(Formatting.None);
-                if (linked != null && string.Equals(linked.InlineText, normalized, StringComparison.Ordinal)) continue;
-                var artifact = new ChatArtifact
-                {
-                    Kind = ChatArtifactKinds.Chart,
-                    Title = (string)chart["title"] ?? (string)chart["Title"] ?? activity.Title ?? "Диаграмма",
-                    MimeType = "application/vnd.rnassistant.chart+json",
-                    SourceMessageId = message.Id,
-                    RunId = message.RunId,
-                    ParentArtifactId = linked == null ? null : linked.Id,
-                    Revision = linked == null ? 1 : Math.Max(1, linked.Revision + 1),
-                    InlineText = normalized
-                };
-                session.Artifacts.Add(artifact);
-                if (linked != null) message.ArtifactIds.RemoveAll(id =>
-                    string.Equals(id, linked.Id, StringComparison.OrdinalIgnoreCase));
-                message.ArtifactIds.Add(artifact.Id);
-            }
-        }
-
-        private void RebuildChartActivityProjection(ChatSession session)
-        {
-            if (session == null) return;
-            foreach (var message in session.Messages ?? new List<ChatMessage>())
-            {
-                if (message == null || message.Activity == null) continue;
-                var artifact = (session.Artifacts ?? new List<ChatArtifact>()).LastOrDefault(item => item != null &&
-                    (message.ArtifactIds ?? new List<string>()).Contains(item.Id, StringComparer.OrdinalIgnoreCase) &&
-                    string.Equals(item.Kind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase));
-                if (artifact == null || !HydrateArtifact(artifact)) continue;
-                message.Activity.DataJson = artifact.InlineText;
-            }
-        }
-
-        private static bool TryParseChart(string json, out JObject chart)
-        {
-            chart = null;
-            if (string.IsNullOrWhiteSpace(json)) return false;
-            try
-            {
-                chart = JObject.Parse(json);
-                var type = (string)chart["type"] ?? (string)chart["Type"];
-                if (string.Equals(type, "rnassistant.chart", StringComparison.OrdinalIgnoreCase)) return true;
-                chart = null;
-                return false;
-            }
-            catch (JsonException)
-            {
-                return false;
-            }
-        }
-
-        private void RebuildHtmlWorkspaceProjection(ChatSession session)
-        {
-            if (session == null) return;
-            var activeId = session.ActiveHtmlArtifactId;
-            if (string.IsNullOrWhiteSpace(activeId))
-            {
-                session.HtmlWorkspace = new HtmlWorkspace();
-                session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
-                    session, HtmlWorkspaceRecoveryStatuses.Empty, null, null, null, null, true);
-                return;
-            }
-
-            var active = FindHtmlArtifact(session, activeId);
-            if (active == null)
-            {
-                session.HtmlWorkspace = new HtmlWorkspace();
-                session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
-                    session,
-                    HtmlWorkspaceRecoveryStatuses.Degraded,
-                    HtmlWorkspaceRecoveryIssues.ActiveArtifactMissing,
-                    "The active HTML workspace revision metadata is missing. Select another revision before editing.",
-                    activeId,
-                    activeId,
-                    false);
-                return;
-            }
-            if (!HydrateArtifact(active))
-            {
-                session.HtmlWorkspace = new HtmlWorkspace();
-                session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
-                    session,
-                    HtmlWorkspaceRecoveryStatuses.Degraded,
-                    HtmlWorkspaceRecoveryIssues.ActiveBodyUnavailable,
-                    "The active HTML workspace body is missing, corrupt, or cannot be decrypted. Select another revision before editing.",
-                    activeId,
-                    activeId,
-                    false);
-                return;
-            }
-            var activeSnapshot = ParseWorkspaceSnapshot(active);
-            if (activeSnapshot == null)
-            {
-                session.HtmlWorkspace = new HtmlWorkspace();
-                session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
-                    session,
-                    HtmlWorkspaceRecoveryStatuses.Degraded,
-                    HtmlWorkspaceRecoveryIssues.ActiveBodyInvalid,
-                    "The active HTML workspace body is invalid. Select another revision before editing.",
-                    activeId,
-                    activeId,
-                    false);
-                return;
-            }
-
-            var workspace = HtmlWorkspaceCopyService.CreateWorkspaceFromSnapshot(activeSnapshot);
-            workspace.UpdatedUtc = active.CreatedUtc;
-            var current = active;
-            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { active.Id };
-            string issue = null;
-            string message = null;
-            string problemArtifactId = null;
-            long historyCharacters = 0;
-            while (!string.IsNullOrWhiteSpace(current.ParentArtifactId))
-            {
-                if (workspace.History.Count >= HtmlWorkspaceHistoryPolicy.MaxItems ||
-                    historyCharacters >= HtmlWorkspaceHistoryPolicy.MaxContentCharacters)
-                {
-                    break;
-                }
-                problemArtifactId = current.ParentArtifactId;
-                if (!visited.Add(problemArtifactId))
-                {
-                    issue = HtmlWorkspaceRecoveryIssues.LineageCycle;
-                    message = "The HTML workspace revision lineage contains a cycle. The active revision is readable, but older undo history is incomplete.";
-                    break;
-                }
-                current = FindHtmlArtifact(session, problemArtifactId);
-                if (current == null)
-                {
-                    issue = HtmlWorkspaceRecoveryIssues.ParentArtifactMissing;
-                    message = "An older HTML workspace revision is missing. The active revision is readable, but undo history is incomplete.";
-                    break;
-                }
-                if (!HydrateArtifact(current))
-                {
-                    issue = HtmlWorkspaceRecoveryIssues.ParentBodyUnavailable;
-                    message = "An older HTML workspace body is unavailable. The active revision is readable, but undo history is incomplete.";
-                    break;
-                }
-                var snapshot = ParseWorkspaceSnapshot(current);
-                if (snapshot == null)
-                {
-                    issue = HtmlWorkspaceRecoveryIssues.ParentBodyInvalid;
-                    message = "An older HTML workspace body is invalid. The active revision is readable, but undo history is incomplete.";
-                    break;
-                }
-                var snapshotCharacters = HtmlWorkspaceHistoryPolicy.EstimateContentCharacters(snapshot);
-                if (snapshotCharacters > HtmlWorkspaceHistoryPolicy.MaxContentCharacters ||
-                    historyCharacters + snapshotCharacters > HtmlWorkspaceHistoryPolicy.MaxContentCharacters)
-                {
-                    problemArtifactId = null;
-                    break;
-                }
-                workspace.History.Add(snapshot);
-                historyCharacters += snapshotCharacters;
-            }
-
-            workspace.RedoBranches = HtmlWorkspaceNavigationService.GetRedoBranches(session);
-            session.HtmlWorkspace = workspace;
-            session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
-                session,
-                issue == null ? HtmlWorkspaceRecoveryStatuses.Healthy : HtmlWorkspaceRecoveryStatuses.Degraded,
-                issue,
-                message,
-                active.Id,
-                problemArtifactId,
-                true);
-        }
-
-        private static HtmlWorkspaceSnapshot ParseWorkspaceSnapshot(ChatArtifact artifact)
-        {
-            if (artifact == null || string.IsNullOrWhiteSpace(artifact.InlineText)) return null;
-            try
-            {
-                var snapshot = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(artifact.InlineText);
-                if (snapshot == null) return null;
-                snapshot.Id = artifact.Id;
-                snapshot.Label = string.IsNullOrWhiteSpace(artifact.Title) ? "HTML workspace" : artifact.Title;
-                snapshot.CreatedUtc = artifact.CreatedUtc;
-                return snapshot;
-            }
-            catch (JsonException)
-            {
-                return null;
-            }
-        }
-
-        private static bool WorkspaceStateEquals(string existingJson, HtmlWorkspaceSnapshot candidate)
-        {
-            if (string.IsNullOrWhiteSpace(existingJson) || candidate == null) return false;
-            try
-            {
-                var existing = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(existingJson);
-                return existing != null &&
-                    string.Equals(existing.ActiveFileId, candidate.ActiveFileId, StringComparison.OrdinalIgnoreCase) &&
-                    JToken.DeepEquals(JArray.FromObject(existing.Files ?? new List<HtmlWorkspaceFile>()),
-                        JArray.FromObject(candidate.Files ?? new List<HtmlWorkspaceFile>())) &&
-                    JToken.DeepEquals(JArray.FromObject(existing.DataSources ?? new List<HtmlWorkspaceDataSource>()),
-                        JArray.FromObject(candidate.DataSources ?? new List<HtmlWorkspaceDataSource>()));
-            }
-            catch (JsonException)
-            {
-                return false;
-            }
-        }
-
-        private static string SerializeWorkspaceState(HtmlWorkspaceSnapshot snapshot)
-        {
-            snapshot = snapshot ?? new HtmlWorkspaceSnapshot();
-            return JsonConvert.SerializeObject(new
-            {
-                snapshot.ActiveFileId,
-                Files = snapshot.Files ?? new List<HtmlWorkspaceFile>(),
-                DataSources = snapshot.DataSources ?? new List<HtmlWorkspaceDataSource>()
-            }, Formatting.None);
-        }
-
-        private void RebuildContextCheckpointProjection(ChatSession session)
-        {
-            if (session == null) return;
-            var checkpoints = new List<ContextCheckpoint>();
-            foreach (var artifact in (session.Artifacts ?? new List<ChatArtifact>())
-                .Where(item => item != null &&
-                    string.Equals(item.Kind, ChatArtifactKinds.Compaction, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(item => item.CreatedUtc))
-            {
-                if (!HydrateArtifact(artifact)) continue;
-                try
-                {
-                    var checkpoint = JsonConvert.DeserializeObject<ContextCheckpoint>(artifact.InlineText);
-                    if (checkpoint == null || string.IsNullOrWhiteSpace(checkpoint.ThroughMessageId)) continue;
-                    checkpoint.Id = artifact.Id;
-                    checkpoint.CreatedUtc = artifact.CreatedUtc;
-                    checkpoints.Add(checkpoint);
-                    var sourceMessage = (session.Messages ?? new List<ChatMessage>()).FirstOrDefault(item =>
-                        item != null && string.Equals(item.Id, artifact.SourceMessageId, StringComparison.OrdinalIgnoreCase));
-                    if (sourceMessage != null && sourceMessage.Activity != null &&
-                        string.Equals(sourceMessage.Activity.Kind, "compaction", StringComparison.OrdinalIgnoreCase))
-                    {
-                        sourceMessage.Content = checkpoint.SummaryMarkdown;
-                        sourceMessage.Activity.ResultMessage = checkpoint.SummaryMarkdown;
-                        sourceMessage.Activity.DataJson = artifact.MetadataJson;
-                    }
-                }
-                catch (JsonException)
-                {
-                }
-            }
-            session.ContextCheckpoints = checkpoints;
-            if (!checkpoints.Any(item => string.Equals(item.Id, session.ActiveContextCheckpointId, StringComparison.OrdinalIgnoreCase)))
-            {
-                session.ActiveContextCheckpointId = null;
-            }
-        }
-
-        private bool HydrateArtifact(ChatArtifact artifact)
-        {
-            if (artifact == null) return false;
-            if (!string.IsNullOrEmpty(artifact.InlineText)) return true;
-            if (string.IsNullOrWhiteSpace(artifact.ContentSha256) || !artifact.ContentByteLength.HasValue) return false;
-            artifact.InlineText = _blobs.ReadText(ArtifactBodyReference(artifact));
-            if (artifact.InlineText == null) return false;
-            RememberArtifactBody(artifact);
-            return true;
-        }
-
-        private static ChatArtifact FindArtifact(ChatSession session, string artifactId)
-        {
-            if (session == null || string.IsNullOrWhiteSpace(artifactId)) return null;
-            return (session.Artifacts ?? new List<ChatArtifact>()).FirstOrDefault(item =>
-                item != null && string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase));
-        }
-
-        private static ChatArtifact FindHtmlArtifact(ChatSession session, string artifactId)
-        {
-            var artifact = FindArtifact(session, artifactId);
-            return artifact != null && string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase)
-                ? artifact
-                : null;
-        }
-
-        private static bool ShouldHydrateForActiveSession(ChatArtifact artifact)
-        {
-            if (artifact == null || string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-            var mimeType = artifact.MimeType ?? string.Empty;
-            return mimeType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) ||
-                mimeType.IndexOf("json", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                mimeType.IndexOf("xml", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                string.Equals(artifact.Kind, ChatArtifactKinds.Plan, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(artifact.Kind, ChatArtifactKinds.Markdown, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(artifact.Kind, ChatArtifactKinds.ToolResult, StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static JObject ToProjectionToken(ChatSession session)
-        {
-            return JObject.FromObject(session, JsonSerializer.Create(ProjectionJsonSettings));
-        }
-
         private EventLogReadResult ReadEventLog(string path)
         {
             return ReadEventLog(path, 0, null);
@@ -1774,654 +1070,38 @@ namespace RNAssistant.Core.Storage
             var before = CaptureStorageFileState(path);
             try
             {
-                using (var reader = new JsonlByteReader(path, startByteOffset))
-                {
-                    result.ByteLength = reader.Length;
-                    JsonlByteLine line;
-                    while ((line = reader.ReadLine()) != null)
+                var summary = JsonlRecordReader.Read(
+                    path,
+                    startByteOffset,
+                    ParseSessionEvent,
+                    (sessionEvent, line) =>
                     {
-                        if (string.IsNullOrWhiteSpace(line.Text))
-                        {
-                            if (!line.Terminated)
-                            {
-                                result.HasIncompleteTail = true;
-                                break;
-                            }
-                            throw new ChatConcurrencyException("The chat event log contains a blank record.");
-                        }
-                        SessionEvent sessionEvent;
-                        try
-                        {
-                            sessionEvent = ParseSessionEvent(line.Text);
-                        }
-                        catch (JsonException)
-                        {
-                            if (!line.Terminated && line.NextOffset == reader.Length)
-                            {
-                                result.HasIncompleteTail = true;
-                                break;
-                            }
-                            throw new ChatConcurrencyException("The chat event log contains an invalid record.");
-                        }
                         ValidateEvent(previousEvent, sessionEvent, protector);
                         HydrateEventData(sessionEvent, protector);
                         sessionEvent.StorageByteOffset = line.Offset;
                         result.Events.Add(sessionEvent);
-                        result.TailNextByteOffset = line.NextOffset;
                         previousEvent = sessionEvent;
-                        if (!line.Terminated)
-                        {
-                            result.HasIncompleteTail = true;
-                            break;
-                        }
-                    }
-                }
+                    });
+                result.ByteLength = summary.ByteLength;
+                result.TailNextByteOffset = summary.TailNextByteOffset;
+                result.HasIncompleteTail = summary.HasIncompleteTail;
                 var after = CaptureStorageFileState(path);
                 result.IsStableSnapshot = before != null && after != null &&
                     before.ByteLength == result.ByteLength && after.ByteLength == result.ByteLength &&
                     before.LastWriteUtcTicks == after.LastWriteUtcTicks;
                 result.LastWriteUtcTicks = result.IsStableSnapshot ? after.LastWriteUtcTicks : 0;
             }
-            catch (DecoderFallbackException)
+            catch (JsonlRecordException ex)
             {
-                throw new ChatConcurrencyException("The chat event log contains invalid UTF-8.");
-            }
-            return result;
-        }
-
-        private HeaderReadResult ReadHeader(string path)
-        {
-            HeaderReadResult cached;
-            if (TryReadHeaderCache(path, out cached)) return cached;
-
-            var result = ReadHeaderLog(path, 0, null, new ChatHeaderReducer(_blobs));
-            if (result != null && result.Tail != null)
-            {
-                Interlocked.Increment(ref _headerFullReplayCount);
-                if (CanCacheHeader(result)) StoreHeaderCache(path, result);
-            }
-            return result;
-        }
-
-        private HeaderReadResult ReadHeaderLog(
-            string path,
-            long startByteOffset,
-            SessionEvent previousEvent,
-            ChatHeaderReducer reducer)
-        {
-            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
-            var result = new HeaderReadResult
-            {
-                Reducer = reducer ?? new ChatHeaderReducer(_blobs),
-                Tail = previousEvent,
-                TailNextByteOffset = startByteOffset
-            };
-            var protector = Protection();
-            var before = CaptureStorageFileState(path);
-            try
-            {
-                using (var reader = new JsonlByteReader(path, startByteOffset))
-                {
-                    result.ByteLength = reader.Length;
-                    JsonlByteLine line;
-                    while ((line = reader.ReadLine()) != null)
-                    {
-                        if (string.IsNullOrWhiteSpace(line.Text))
-                        {
-                            if (!line.Terminated)
-                            {
-                                result.HasIncompleteTail = true;
-                                break;
-                            }
-                            throw new ChatConcurrencyException("The chat event log contains a blank record.");
-                        }
-                        SessionEvent sessionEvent;
-                        try
-                        {
-                            sessionEvent = ParseSessionEvent(line.Text);
-                        }
-                        catch (JsonException)
-                        {
-                            if (!line.Terminated && line.NextOffset == reader.Length)
-                            {
-                                result.HasIncompleteTail = true;
-                                break;
-                            }
-                            throw new ChatConcurrencyException("The chat event log contains an invalid record.");
-                        }
-                        ValidateEvent(previousEvent, sessionEvent, protector);
-                        HydrateEventData(sessionEvent, protector);
-                        sessionEvent.StorageByteOffset = line.Offset;
-                        result.Reducer.Apply(sessionEvent);
-                        result.Tail = sessionEvent;
-                        result.TailNextByteOffset = line.NextOffset;
-                        previousEvent = sessionEvent;
-                        if (!line.Terminated)
-                        {
-                            result.HasIncompleteTail = true;
-                            break;
-                        }
-                    }
-                }
-                var after = CaptureStorageFileState(path);
-                result.IsStableSnapshot = before != null && after != null &&
-                    before.ByteLength == result.ByteLength && after.ByteLength == result.ByteLength &&
-                    before.LastWriteUtcTicks == after.LastWriteUtcTicks;
-                result.LastWriteUtcTicks = result.IsStableSnapshot ? after.LastWriteUtcTicks : 0;
+                throw new ChatConcurrencyException(ex.Kind == JsonlRecordErrorKind.BlankRecord
+                    ? "The chat event log contains a blank record."
+                    : "The chat event log contains an invalid record.");
             }
             catch (DecoderFallbackException)
             {
                 throw new ChatConcurrencyException("The chat event log contains invalid UTF-8.");
             }
             return result;
-        }
-
-        private static bool CanCacheHeader(HeaderReadResult result)
-        {
-            return result != null && result.Reducer != null && result.Reducer.IsValid &&
-                result.Tail != null && !result.HasIncompleteTail && result.IsStableSnapshot &&
-                result.TailNextByteOffset == result.ByteLength;
-        }
-
-        private bool TryReadHeaderCache(string path, out HeaderReadResult result)
-        {
-            result = null;
-            HeaderCacheEntry cached;
-            if (!TryGetHeaderCache(path, out cached)) return false;
-
-            var current = CaptureStorageFileState(path);
-            if (current == null || current.ByteLength != cached.ByteLength ||
-                current.LastWriteUtcTicks != cached.LastWriteUtcTicks)
-            {
-                RemoveHeaderCache(path);
-                return false;
-            }
-
-            var boundary = ReadValidatedEventAtOffset(
-                path,
-                cached.SessionId,
-                cached.Sequence,
-                cached.HeadHash,
-                cached.TailByteOffset,
-                cached.ByteLength,
-                current.ByteLength);
-            if (boundary == null)
-            {
-                RemoveHeaderCache(path);
-                return false;
-            }
-
-            result = new HeaderReadResult
-            {
-                Reducer = cached.Reducer,
-                Tail = boundary,
-                ByteLength = cached.ByteLength,
-                LastWriteUtcTicks = cached.LastWriteUtcTicks,
-                TailNextByteOffset = cached.ByteLength,
-                IsStableSnapshot = true
-            };
-            return true;
-        }
-
-        private bool TryGetHeaderCache(string path, out HeaderCacheEntry entry)
-        {
-            entry = null;
-            var key = ProjectionCacheKey(path);
-            lock (_headerCacheSync)
-            {
-                if (!_headerCache.TryGetValue(key, out entry)) return false;
-                entry.LastAccess = ++_headerCacheClock;
-                return true;
-            }
-        }
-
-        private HeaderCacheEntry StoreHeaderCache(string path, HeaderReadResult result)
-        {
-            if (!CanCacheHeader(result)) return null;
-            var estimatedCharacters = result.Reducer.EstimatedCharacters;
-            var key = ProjectionCacheKey(path);
-            var entry = new HeaderCacheEntry
-            {
-                SessionId = result.Tail.SessionId,
-                Sequence = result.Tail.Sequence,
-                HeadHash = result.Tail.Hash,
-                TailByteOffset = result.Tail.StorageByteOffset,
-                ByteLength = result.ByteLength,
-                LastWriteUtcTicks = result.LastWriteUtcTicks,
-                Reducer = result.Reducer,
-                EstimatedCharacters = estimatedCharacters
-            };
-            lock (_headerCacheSync)
-            {
-                HeaderCacheEntry replaced;
-                if (_headerCache.TryGetValue(key, out replaced))
-                {
-                    _headerCacheCharacters -= replaced.EstimatedCharacters;
-                    _headerCache.Remove(key);
-                }
-                if (estimatedCharacters > MaxHeaderCacheCharacters) return entry;
-                entry.LastAccess = ++_headerCacheClock;
-                _headerCache[key] = entry;
-                _headerCacheCharacters += estimatedCharacters;
-                while (_headerCache.Count > MaxHeaderCacheEntries ||
-                    _headerCacheCharacters > MaxHeaderCacheTotalCharacters)
-                {
-                    var oldest = _headerCache.OrderBy(item => item.Value.LastAccess).First();
-                    _headerCacheCharacters -= oldest.Value.EstimatedCharacters;
-                    _headerCache.Remove(oldest.Key);
-                }
-            }
-            return entry;
-        }
-
-        private void RemoveHeaderCache(string path)
-        {
-            var key = ProjectionCacheKey(path);
-            lock (_headerCacheSync)
-            {
-                HeaderCacheEntry removed;
-                if (!_headerCache.TryGetValue(key, out removed)) return;
-                _headerCacheCharacters -= removed.EstimatedCharacters;
-                _headerCache.Remove(key);
-            }
-        }
-
-        private void ClearHeaderCache()
-        {
-            lock (_headerCacheSync)
-            {
-                _headerCache.Clear();
-                _headerCacheCharacters = 0;
-            }
-        }
-
-        private void MoveHeaderCache(string oldPath, string newPath)
-        {
-            var oldKey = ProjectionCacheKey(oldPath);
-            var newKey = ProjectionCacheKey(newPath);
-            lock (_headerCacheSync)
-            {
-                HeaderCacheEntry entry;
-                if (!_headerCache.TryGetValue(oldKey, out entry)) return;
-                HeaderCacheEntry replaced;
-                if (!string.Equals(oldKey, newKey, StringComparison.OrdinalIgnoreCase) &&
-                    _headerCache.TryGetValue(newKey, out replaced))
-                {
-                    _headerCacheCharacters -= replaced.EstimatedCharacters;
-                    _headerCache.Remove(newKey);
-                }
-                _headerCache.Remove(oldKey);
-                entry.LastAccess = ++_headerCacheClock;
-                _headerCache[newKey] = entry;
-            }
-        }
-
-        private void AdvanceHeaderCache(
-            string path,
-            string sessionId,
-            long expectedRevision,
-            string expectedHeadHash,
-            long expectedByteLength,
-            IReadOnlyList<SessionEvent> appended)
-        {
-            if (appended == null || appended.Count == 0) return;
-            HeaderCacheEntry cached;
-            if (!TryGetHeaderCache(path, out cached) ||
-                cached.Sequence != expectedRevision || cached.ByteLength != expectedByteLength ||
-                !string.Equals(cached.SessionId, sessionId, StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(cached.HeadHash, expectedHeadHash, StringComparison.OrdinalIgnoreCase)) return;
-
-            var previous = new SessionEvent
-            {
-                SessionId = cached.SessionId,
-                Sequence = cached.Sequence,
-                Hash = cached.HeadHash,
-                StorageByteOffset = cached.TailByteOffset
-            };
-            HeaderReadResult suffix;
-            try
-            {
-                suffix = ReadHeaderLog(path, cached.ByteLength, previous, cached.Reducer.Clone());
-            }
-            catch
-            {
-                RemoveHeaderCache(path);
-                return;
-            }
-
-            var expectedTail = appended[appended.Count - 1];
-            if (!CanCacheHeader(suffix) || suffix.Tail == null ||
-                suffix.Tail.Sequence != expectedTail.Sequence ||
-                !string.Equals(suffix.Tail.Hash, expectedTail.Hash, StringComparison.OrdinalIgnoreCase))
-            {
-                RemoveHeaderCache(path);
-                return;
-            }
-            StoreHeaderCache(path, suffix);
-            Interlocked.Increment(ref _headerIncrementalReplayCount);
-        }
-
-        private SessionEvent ReadValidatedTail(
-            string path,
-            string sessionId,
-            long expectedRevision,
-            string expectedHeadHash,
-            long expectedByteLength,
-            long expectedLastWriteUtcTicks,
-            long expectedTailByteOffset)
-        {
-            try
-            {
-                if (expectedByteLength <= 0 || expectedLastWriteUtcTicks <= 0 ||
-                    expectedTailByteOffset < 0 || expectedTailByteOffset >= expectedByteLength) return null;
-                var file = new FileInfo(path);
-                if (!file.Exists || file.Length != expectedByteLength ||
-                    file.LastWriteTimeUtc.Ticks != expectedLastWriteUtcTicks) return null;
-                return ReadValidatedEventAtOffset(path, sessionId, expectedRevision, expectedHeadHash,
-                    expectedTailByteOffset, expectedByteLength, expectedByteLength);
-            }
-            catch (Exception ex) when (
-                ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentOutOfRangeException ||
-                ex is JsonException || ex is DecoderFallbackException || ex is CryptographicException)
-            {
-                return null;
-            }
-        }
-
-        private SessionEvent ReadValidatedEventAtOffset(
-            string path,
-            string sessionId,
-            long expectedRevision,
-            string expectedHeadHash,
-            long expectedByteOffset,
-            long expectedNextByteOffset,
-            long expectedSnapshotLength)
-        {
-            try
-            {
-                JsonlByteLine line;
-                using (var reader = new JsonlByteReader(path, expectedByteOffset))
-                {
-                    if (reader.Length != expectedSnapshotLength) return null;
-                    line = reader.ReadLine();
-                    if (line == null || !line.Terminated || line.NextOffset != expectedNextByteOffset ||
-                        string.IsNullOrWhiteSpace(line.Text)) return null;
-                }
-
-                var sessionEvent = ParseSessionEvent(line.Text);
-                var protector = Protection();
-                if (sessionEvent == null || sessionEvent.SchemaVersion != SessionEvent.CurrentSchemaVersion ||
-                    sessionEvent.Sequence != expectedRevision ||
-                    !string.Equals(sessionEvent.SessionId, sessionId, StringComparison.OrdinalIgnoreCase) ||
-                    !string.Equals(sessionEvent.Hash, expectedHeadHash, StringComparison.OrdinalIgnoreCase) ||
-                    !ValidHashAlgorithm(sessionEvent.HashAlgorithm) ||
-                    !string.IsNullOrWhiteSpace(sessionEvent.EncryptedData) && sessionEvent.Data != null ||
-                    !ProtectionMatches(sessionEvent, protector) ||
-                    !string.Equals(sessionEvent.Hash, ComputeHash(sessionEvent, protector), StringComparison.OrdinalIgnoreCase))
-                {
-                    return null;
-                }
-                sessionEvent.StorageByteOffset = line.Offset;
-                return sessionEvent;
-            }
-            catch (Exception ex) when (
-                ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentOutOfRangeException ||
-                ex is JsonException || ex is DecoderFallbackException || ex is CryptographicException)
-            {
-                return null;
-            }
-        }
-
-        private static void CaptureStorageState(ChatSession session, string path)
-        {
-            if (session == null) return;
-            var file = new FileInfo(path);
-            if (!file.Exists)
-            {
-                session.StorageByteLength = 0;
-                session.StorageLastWriteUtcTicks = 0;
-                return;
-            }
-            file.Refresh();
-            session.StorageByteLength = file.Length;
-            session.StorageLastWriteUtcTicks = file.LastWriteTimeUtc.Ticks;
-        }
-
-        private static StorageFileState CaptureStorageFileState(string path)
-        {
-            if (string.IsNullOrWhiteSpace(path)) return null;
-            var file = new FileInfo(path);
-            file.Refresh();
-            return file.Exists
-                ? new StorageFileState
-                {
-                    ByteLength = file.Length,
-                    LastWriteUtcTicks = file.LastWriteTimeUtc.Ticks
-                }
-                : null;
-        }
-
-        private static bool CanCacheProjection(EventLogReadResult log)
-        {
-            return log != null && log.Events.Count > 0 && !log.HasIncompleteTail &&
-                log.IsStableSnapshot && log.TailNextByteOffset == log.ByteLength;
-        }
-
-        private bool TryReadProjectionCache(string path, out ProjectionCacheEntry result)
-        {
-            result = null;
-            ProjectionCacheEntry cached;
-            if (!TryGetProjectionCache(path, out cached)) return false;
-
-            var current = CaptureStorageFileState(path);
-            if (current == null || current.ByteLength != cached.ByteLength ||
-                current.LastWriteUtcTicks != cached.LastWriteUtcTicks)
-            {
-                RemoveProjectionCache(path);
-                return false;
-            }
-
-            var boundary = ReadValidatedEventAtOffset(
-                path,
-                cached.SessionId,
-                cached.Sequence,
-                cached.HeadHash,
-                cached.TailByteOffset,
-                cached.ByteLength,
-                current.ByteLength);
-            if (boundary == null)
-            {
-                RemoveProjectionCache(path);
-                return false;
-            }
-
-            result = cached;
-            return true;
-        }
-
-        private static bool IsProjectionEvent(SessionEvent sessionEvent)
-        {
-            return sessionEvent != null &&
-                (string.Equals(sessionEvent.Type, SessionEventTypes.SessionCreated, StringComparison.Ordinal) ||
-                 string.Equals(sessionEvent.Type, SessionEventTypes.SessionForked, StringComparison.Ordinal) ||
-                 string.Equals(sessionEvent.Type, SessionEventTypes.SessionCommit, StringComparison.Ordinal));
-        }
-
-        private bool TryGetProjectionCache(string path, out ProjectionCacheEntry entry)
-        {
-            entry = null;
-            var key = ProjectionCacheKey(path);
-            lock (_projectionCacheSync)
-            {
-                if (!_projectionCache.TryGetValue(key, out entry)) return false;
-                entry.LastAccess = ++_projectionCacheClock;
-                return true;
-            }
-        }
-
-        private void StoreProjectionCache(string path, JObject root, ChatSession session)
-        {
-            if (session == null) return;
-            StoreProjectionCache(path, root, session.Id, session.Revision, session.StorageHeadHash,
-                session.StorageTailByteOffset, session.StorageByteLength, session.StorageLastWriteUtcTicks);
-        }
-
-        private ProjectionCacheEntry StoreProjectionCache(
-            string path,
-            JObject root,
-            string sessionId,
-            long sequence,
-            string headHash,
-            long tailByteOffset,
-            long byteLength,
-            long lastWriteUtcTicks)
-        {
-            if (root == null || string.IsNullOrWhiteSpace(sessionId) || sequence <= 0 ||
-                string.IsNullOrWhiteSpace(headHash) || tailByteOffset < 0 ||
-                byteLength <= tailByteOffset || lastWriteUtcTicks <= 0) return null;
-            var key = ProjectionCacheKey(path);
-            var estimatedCharacters = EstimateProjectionCharacters(root, MaxProjectionCacheCharacters + 1);
-            var entry = new ProjectionCacheEntry
-            {
-                SessionId = sessionId,
-                Sequence = sequence,
-                HeadHash = headHash,
-                TailByteOffset = tailByteOffset,
-                ByteLength = byteLength,
-                LastWriteUtcTicks = lastWriteUtcTicks,
-                Root = root,
-                EstimatedCharacters = estimatedCharacters
-            };
-            lock (_projectionCacheSync)
-            {
-                ProjectionCacheEntry replaced;
-                if (_projectionCache.TryGetValue(key, out replaced))
-                {
-                    _projectionCacheCharacters -= replaced.EstimatedCharacters;
-                    _projectionCache.Remove(key);
-                }
-                if (estimatedCharacters > MaxProjectionCacheCharacters) return entry;
-                entry.LastAccess = ++_projectionCacheClock;
-                _projectionCache[key] = entry;
-                _projectionCacheCharacters += estimatedCharacters;
-                while (_projectionCache.Count > MaxProjectionCacheEntries ||
-                    _projectionCacheCharacters > MaxProjectionCacheTotalCharacters)
-                {
-                    var oldest = _projectionCache.OrderBy(item => item.Value.LastAccess).First();
-                    _projectionCacheCharacters -= oldest.Value.EstimatedCharacters;
-                    _projectionCache.Remove(oldest.Key);
-                }
-            }
-            return entry;
-        }
-
-        private static long EstimateProjectionCharacters(JToken root, long stopAfter)
-        {
-            long total = 0;
-            var pending = new Stack<JToken>();
-            pending.Push(root);
-            while (pending.Count > 0 && total <= stopAfter)
-            {
-                var token = pending.Pop();
-                var objectValue = token as JObject;
-                if (objectValue != null)
-                {
-                    foreach (var property in objectValue.Properties())
-                    {
-                        total += property.Name.Length + 4L;
-                        pending.Push(property.Value);
-                    }
-                    continue;
-                }
-                var arrayValue = token as JArray;
-                if (arrayValue != null)
-                {
-                    total += arrayValue.Count;
-                    foreach (var value in arrayValue) pending.Push(value);
-                    continue;
-                }
-                var scalar = token as JValue;
-                var text = scalar == null || scalar.Value == null ? null : scalar.Value as string;
-                total += text == null ? 32L : text.Length + 2L;
-            }
-            return total;
-        }
-
-        private void AdvanceProjectionCache(
-            string path,
-            string sessionId,
-            long expectedRevision,
-            string expectedHeadHash,
-            long expectedByteLength,
-            IReadOnlyList<SessionEvent> appended)
-        {
-            if (appended == null || appended.Count == 0) return;
-            ProjectionCacheEntry cached;
-            if (!TryGetProjectionCache(path, out cached) ||
-                cached.Sequence != expectedRevision || cached.ByteLength != expectedByteLength ||
-                !string.Equals(cached.SessionId, sessionId, StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(cached.HeadHash, expectedHeadHash, StringComparison.OrdinalIgnoreCase)) return;
-            var state = CaptureStorageFileState(path);
-            if (state == null) return;
-            var root = appended.Any(IsProjectionEvent)
-                ? ReplayProjectionRoot(appended, cached.Root)
-                : cached.Root;
-            var tail = appended[appended.Count - 1];
-            if (root == null || tail.StorageByteOffset >= state.ByteLength)
-            {
-                RemoveProjectionCache(path);
-                return;
-            }
-            StoreProjectionCache(path, root, tail.SessionId, tail.Sequence, tail.Hash,
-                tail.StorageByteOffset, state.ByteLength, state.LastWriteUtcTicks);
-            Interlocked.Increment(ref _projectionIncrementalReplayCount);
-        }
-
-        private void RemoveProjectionCache(string path)
-        {
-            var key = ProjectionCacheKey(path);
-            lock (_projectionCacheSync)
-            {
-                ProjectionCacheEntry removed;
-                if (!_projectionCache.TryGetValue(key, out removed)) return;
-                _projectionCacheCharacters -= removed.EstimatedCharacters;
-                _projectionCache.Remove(key);
-            }
-        }
-
-        private void ClearProjectionCache()
-        {
-            lock (_projectionCacheSync)
-            {
-                _projectionCache.Clear();
-                _projectionCacheCharacters = 0;
-            }
-        }
-
-        private void MoveProjectionCache(string oldPath, string newPath)
-        {
-            var oldKey = ProjectionCacheKey(oldPath);
-            var newKey = ProjectionCacheKey(newPath);
-            lock (_projectionCacheSync)
-            {
-                ProjectionCacheEntry entry;
-                if (!_projectionCache.TryGetValue(oldKey, out entry)) return;
-                ProjectionCacheEntry replaced;
-                if (!string.Equals(oldKey, newKey, StringComparison.OrdinalIgnoreCase) &&
-                    _projectionCache.TryGetValue(newKey, out replaced))
-                {
-                    _projectionCacheCharacters -= replaced.EstimatedCharacters;
-                    _projectionCache.Remove(newKey);
-                }
-                _projectionCache.Remove(oldKey);
-                entry.LastAccess = ++_projectionCacheClock;
-                _projectionCache[newKey] = entry;
-            }
-        }
-
-        private static string ProjectionCacheKey(string path)
-        {
-            return Path.GetFullPath(path ?? string.Empty);
         }
 
         private static void ValidateEvent(
@@ -2431,9 +1111,13 @@ namespace RNAssistant.Core.Storage
         {
             if (sessionEvent == null || sessionEvent.SchemaVersion != SessionEvent.CurrentSchemaVersion ||
                 string.IsNullOrWhiteSpace(sessionEvent.SessionId) || string.IsNullOrWhiteSpace(sessionEvent.Type) ||
-                !ValidHashAlgorithm(sessionEvent.HashAlgorithm) ||
+                !EventProtectionSupport.IsSupportedHashAlgorithm(sessionEvent.HashAlgorithm) ||
                 !string.IsNullOrWhiteSpace(sessionEvent.EncryptedData) && sessionEvent.Data != null ||
-                !ProtectionMatches(sessionEvent, protector))
+                !EventProtectionSupport.Matches(
+                    protector,
+                    sessionEvent.HashAlgorithm,
+                    sessionEvent.ProtectionKeyId,
+                    sessionEvent.EncryptedData))
             {
                 throw new ChatConcurrencyException("The chat event log contains an unsupported record.");
             }
@@ -2503,11 +1187,11 @@ namespace RNAssistant.Core.Storage
         private static void ProtectEventData(SessionEvent sessionEvent, StorageProtector protector)
         {
             if (sessionEvent == null || protector == null || !protector.Encrypts) return;
-            var plaintext = Utf8.GetBytes(sessionEvent.Data == null
-                ? "null"
-                : sessionEvent.Data.ToString(Formatting.None));
-            sessionEvent.EncryptedData = Convert.ToBase64String(
-                protector.Protect(plaintext, EventProtectionPurpose(sessionEvent)));
+            sessionEvent.EncryptedData = EventProtectionSupport.ProtectPayload(
+                sessionEvent.Data,
+                protector,
+                EventProtectionPurpose(sessionEvent),
+                Utf8);
             sessionEvent.Data = null;
         }
 
@@ -2516,12 +1200,11 @@ namespace RNAssistant.Core.Storage
             if (sessionEvent == null || string.IsNullOrWhiteSpace(sessionEvent.EncryptedData)) return;
             try
             {
-                var stored = Convert.FromBase64String(sessionEvent.EncryptedData);
-                var plaintext = (protector ?? StorageProtector.None).Unprotect(
-                    stored,
-                    EventProtectionPurpose(sessionEvent));
-                var parsed = JToken.Parse(Utf8.GetString(plaintext));
-                sessionEvent.Data = parsed.Type == JTokenType.Null ? null : parsed;
+                sessionEvent.Data = EventProtectionSupport.UnprotectPayload(
+                    sessionEvent.EncryptedData,
+                    protector,
+                    EventProtectionPurpose(sessionEvent),
+                    Utf8);
             }
             catch (FormatException ex)
             {
@@ -2557,36 +1240,9 @@ namespace RNAssistant.Core.Storage
             }.ToString(Formatting.None);
         }
 
-        private static bool ValidHashAlgorithm(string value)
-        {
-            return string.Equals(value, HistoryIntegrityModes.Sha256, StringComparison.Ordinal) ||
-                string.Equals(value, HistoryIntegrityModes.HmacSha256, StringComparison.Ordinal);
-        }
-
-        private static bool ProtectionMatches(SessionEvent sessionEvent, StorageProtector protector)
-        {
-            protector = protector ?? StorageProtector.None;
-            if (!string.Equals(sessionEvent.HashAlgorithm, protector.CurrentHashAlgorithm, StringComparison.Ordinal)) return false;
-            if (protector.Encrypts != !string.IsNullOrWhiteSpace(sessionEvent.EncryptedData)) return false;
-            if (protector.UsesHmac || protector.Encrypts)
-            {
-                return !string.IsNullOrWhiteSpace(sessionEvent.ProtectionKeyId) &&
-                    string.Equals(sessionEvent.ProtectionKeyId, protector.KeyId, StringComparison.OrdinalIgnoreCase);
-            }
-            return string.IsNullOrWhiteSpace(sessionEvent.ProtectionKeyId);
-        }
-
         private StorageProtector Protection()
         {
             return _protectionProvider() ?? StorageProtector.None;
-        }
-
-        private static void RewriteValidEvents(string path, IEnumerable<SessionEvent> events)
-        {
-            var content = string.Join("\n", (events ?? new List<SessionEvent>())
-                .Select(sessionEvent => JsonConvert.SerializeObject(sessionEvent, Formatting.None)));
-            if (content.Length > 0) content += "\n";
-            StorageFileSystem.WriteAllTextAtomic(path, content, Utf8);
         }
 
         private IDisposable AcquirePathLock(string targetPath)
@@ -2637,8 +1293,12 @@ namespace RNAssistant.Core.Storage
                 return AcquireDocumentDirectoryLock(firstDirectory);
             }
             return string.Compare(firstDirectory, secondDirectory, StringComparison.OrdinalIgnoreCase) < 0
-                ? new CompositeDisposable(AcquireDocumentDirectoryLock(firstDirectory), AcquireDocumentDirectoryLock(secondDirectory))
-                : new CompositeDisposable(AcquireDocumentDirectoryLock(secondDirectory), AcquireDocumentDirectoryLock(firstDirectory));
+                ? DisposablePair.Acquire(
+                    () => AcquireDocumentDirectoryLock(firstDirectory),
+                    () => AcquireDocumentDirectoryLock(secondDirectory))
+                : DisposablePair.Acquire(
+                    () => AcquireDocumentDirectoryLock(secondDirectory),
+                    () => AcquireDocumentDirectoryLock(firstDirectory));
         }
 
         private string GetDocumentDirectory(string host, string documentKey)
@@ -2938,7 +1598,6 @@ namespace RNAssistant.Core.Storage
             public long LastWriteUtcTicks { get; set; }
             public ChatHeaderReducer Reducer { get; set; }
             public long EstimatedCharacters { get; set; }
-            public long LastAccess { get; set; }
         }
 
         private sealed class ProjectionCacheEntry
@@ -2951,7 +1610,6 @@ namespace RNAssistant.Core.Storage
             public long LastWriteUtcTicks { get; set; }
             public JObject Root { get; set; }
             public long EstimatedCharacters { get; set; }
-            public long LastAccess { get; set; }
         }
 
         private sealed class PendingSessionEvent
@@ -2966,232 +1624,5 @@ namespace RNAssistant.Core.Storage
             public ChatBlobReference Payload { get; set; }
         }
 
-        private sealed class ProjectionReplayState
-        {
-            private readonly ProjectionReplayList _messages;
-            private readonly ProjectionReplayList _artifacts;
-
-            public ProjectionReplayState(JObject root)
-            {
-                _messages = new ProjectionReplayList(root == null ? null : root["Messages"] as JArray);
-                _artifacts = new ProjectionReplayList(root == null ? null : root["Artifacts"] as JArray);
-            }
-
-            public void Upsert(string property, JToken value)
-            {
-                List(property).Upsert(value);
-            }
-
-            public void Remove(string property, string id)
-            {
-                List(property).Remove(id);
-            }
-
-            public void Reorder(string property, JArray ids)
-            {
-                List(property).Reorder(ids);
-            }
-
-            public void Materialize(JObject root)
-            {
-                root["Messages"] = _messages.Materialize();
-                root["Artifacts"] = _artifacts.Materialize();
-            }
-
-            private ProjectionReplayList List(string property)
-            {
-                if (string.Equals(property, "Messages", StringComparison.Ordinal)) return _messages;
-                if (string.Equals(property, "Artifacts", StringComparison.Ordinal)) return _artifacts;
-                throw new JsonException("Unsupported projection list: " + property);
-            }
-        }
-
-        private sealed class ProjectionReplayList
-        {
-            private List<ProjectionReplayItem> _ordered;
-            private readonly Dictionary<string, ProjectionReplayItem> _byId;
-
-            public ProjectionReplayList(JArray source)
-            {
-                _ordered = new List<ProjectionReplayItem>();
-                _byId = new Dictionary<string, ProjectionReplayItem>(StringComparer.OrdinalIgnoreCase);
-                foreach (var value in (source ?? new JArray()).OfType<JObject>())
-                {
-                    var item = new ProjectionReplayItem
-                    {
-                        Id = (string)value["Id"],
-                        Value = value,
-                        Active = true
-                    };
-                    _ordered.Add(item);
-                    if (!string.IsNullOrWhiteSpace(item.Id) && !_byId.ContainsKey(item.Id))
-                    {
-                        _byId.Add(item.Id, item);
-                    }
-                }
-            }
-
-            public void Upsert(JToken value)
-            {
-                var objectValue = value as JObject;
-                var id = objectValue == null ? null : (string)objectValue["Id"];
-                if (objectValue == null || string.IsNullOrWhiteSpace(id))
-                {
-                    throw new JsonException("Upsert operation requires an object id.");
-                }
-                ProjectionReplayItem existing;
-                if (_byId.TryGetValue(id, out existing))
-                {
-                    existing.Value = objectValue;
-                    return;
-                }
-                var item = new ProjectionReplayItem
-                {
-                    Id = id,
-                    Value = objectValue,
-                    Active = true
-                };
-                _ordered.Add(item);
-                _byId[id] = item;
-            }
-
-            public void Remove(string id)
-            {
-                if (string.IsNullOrWhiteSpace(id)) return;
-                ProjectionReplayItem existing;
-                if (!_byId.TryGetValue(id, out existing)) return;
-                existing.Active = false;
-                _byId.Remove(id);
-                var duplicate = _ordered.FirstOrDefault(item => item.Active &&
-                    string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
-                if (duplicate != null) _byId[id] = duplicate;
-            }
-
-            public void Reorder(JArray ids)
-            {
-                var remaining = new Dictionary<string, ProjectionReplayItem>(StringComparer.OrdinalIgnoreCase);
-                foreach (var item in _ordered.Where(value => value.Active && !string.IsNullOrWhiteSpace(value.Id)))
-                {
-                    if (remaining.ContainsKey(item.Id))
-                    {
-                        throw new JsonException("Projection list contains duplicate ids.");
-                    }
-                    remaining.Add(item.Id, item);
-                }
-
-                var reordered = new List<ProjectionReplayItem>();
-                foreach (var id in (ids ?? new JArray()).Values<string>())
-                {
-                    ProjectionReplayItem item;
-                    if (!string.IsNullOrWhiteSpace(id) && remaining.TryGetValue(id, out item))
-                    {
-                        reordered.Add(item);
-                        remaining.Remove(id);
-                    }
-                }
-                foreach (var item in _ordered)
-                {
-                    if (!item.Active || string.IsNullOrWhiteSpace(item.Id) || !remaining.ContainsKey(item.Id)) continue;
-                    reordered.Add(item);
-                    remaining.Remove(item.Id);
-                }
-
-                _ordered = reordered;
-                _byId.Clear();
-                foreach (var item in _ordered) _byId[item.Id] = item;
-            }
-
-            public JArray Materialize()
-            {
-                var result = new JArray();
-                foreach (var item in _ordered.Where(value => value.Active))
-                {
-                    result.Add(item.Value.DeepClone());
-                }
-                return result;
-            }
-        }
-
-        private sealed class ProjectionReplayItem
-        {
-            public string Id { get; set; }
-            public JObject Value { get; set; }
-            public bool Active { get; set; }
-        }
-
-        private sealed class CompositeDisposable : IDisposable
-        {
-            private readonly IDisposable _first;
-            private readonly IDisposable _second;
-
-            public CompositeDisposable(IDisposable first, IDisposable second)
-            {
-                _first = first;
-                _second = second;
-            }
-
-            public void Dispose()
-            {
-                if (_second != null) _second.Dispose();
-                if (_first != null) _first.Dispose();
-            }
-        }
-
-        private sealed class ChatProjectionContractResolver : DefaultContractResolver
-        {
-            protected override JsonProperty CreateProperty(MemberInfo member, MemberSerialization memberSerialization)
-            {
-                var property = base.CreateProperty(member, memberSerialization);
-                if (member.DeclaringType == typeof(ChatArtifact) &&
-                    string.Equals(member.Name, "InlineText", StringComparison.Ordinal))
-                {
-                    property.ShouldSerialize = value => string.IsNullOrWhiteSpace((value as ChatArtifact)?.ContentSha256);
-                }
-                if (member.DeclaringType == typeof(ChatSession) &&
-                    string.Equals(member.Name, "HtmlWorkspace", StringComparison.Ordinal))
-                {
-                    property.ShouldSerialize = value => false;
-                }
-                if (member.DeclaringType == typeof(ChatSession) &&
-                    string.Equals(member.Name, "ContextCheckpoints", StringComparison.Ordinal))
-                {
-                    property.ShouldSerialize = value => false;
-                }
-                if (member.DeclaringType == typeof(ChatMessage) &&
-                    string.Equals(member.Name, "Content", StringComparison.Ordinal))
-                {
-                    property.ShouldSerialize = value => !IsCompactionMessage(value as ChatMessage);
-                }
-                if (member.DeclaringType == typeof(ChatActivity) &&
-                    string.Equals(member.Name, "ResultMessage", StringComparison.Ordinal))
-                {
-                    property.ShouldSerialize = value => !IsCompactionActivity(value as ChatActivity);
-                }
-                if (member.DeclaringType == typeof(ChatActivity) &&
-                    string.Equals(member.Name, "DataJson", StringComparison.Ordinal))
-                {
-                    property.ShouldSerialize = value =>
-                    {
-                        if (IsCompactionActivity(value as ChatActivity)) return false;
-                        JObject ignored;
-                        return !TryParseChart((value as ChatActivity)?.DataJson, out ignored);
-                    };
-                }
-                return property;
-            }
-
-            private static bool IsCompactionMessage(ChatMessage message)
-            {
-                return message != null && IsCompactionActivity(message.Activity) &&
-                    message.ArtifactIds != null && message.ArtifactIds.Count > 0;
-            }
-
-            private static bool IsCompactionActivity(ChatActivity activity)
-            {
-                return activity != null &&
-                    string.Equals(activity.Kind, "compaction", StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(activity.Status, "completed", StringComparison.OrdinalIgnoreCase);
-            }
-        }
     }
 }

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
@@ -131,6 +133,52 @@ namespace RNAssistant.Harness
             AssertContains(raw.RawRequestJson, "Новый вопрос", "raw structure is generated explicitly");
             AssertTrue(!raw.Sections.Any(section => section.Id == "tools" || section.Id == "skills"),
                 "chat mode has no agent catalogs");
+        }
+
+        private static void PromptContextInspectorIsolatesConcurrentSettings()
+        {
+            var adapter = FakeOfficeAdapter.ForHost("Excel");
+            var session = NewSession(adapter);
+            session.Mode = ChatModes.Chat;
+            session.Messages.Add(new ChatMessage { Role = "user", Content = new string('x', 4000) });
+            var context = NewContext(adapter);
+            var baseSettings = new AppSettings
+            {
+                AutoCalibrateTokenEstimate = false,
+                TokenEstimateMultiplier = 1
+            };
+            var scaledSettings = new AppSettings
+            {
+                AutoCalibrateTokenEstimate = false,
+                TokenEstimateMultiplier = 2
+            };
+            var expectedBase = new PromptContextInspectorService(adapter, null).Inspect(
+                session, context, baseSettings, new ToolDefinition[0], new SkillDefinition[0],
+                new ChatAttachment[0], "question", false).UsedTokens;
+            var expectedScaled = new PromptContextInspectorService(adapter, null).Inspect(
+                session, context, scaledSettings, new ToolDefinition[0], new SkillDefinition[0],
+                new ChatAttachment[0], "question", false).UsedTokens;
+            AssertTrue(expectedScaled > expectedBase, "test settings produce distinct estimates");
+
+            var service = new PromptContextInspectorService(adapter, null);
+            using (var start = new ManualResetEventSlim(false))
+            {
+                var tasks = Enumerable.Range(0, 12).Select(index => Task.Run(() =>
+                {
+                    start.Wait();
+                    var settings = index % 2 == 0 ? baseSettings : scaledSettings;
+                    return service.Inspect(
+                        session, context, settings, new ToolDefinition[0], new SkillDefinition[0],
+                        new ChatAttachment[0], "question", false).UsedTokens;
+                })).ToArray();
+                start.Set();
+                Task.WaitAll(tasks);
+                for (var index = 0; index < tasks.Length; index++)
+                {
+                    AssertEqual(index % 2 == 0 ? expectedBase : expectedScaled, tasks[index].Result,
+                        "parallel inspection keeps its own token settings");
+                }
+            }
         }
     }
 }

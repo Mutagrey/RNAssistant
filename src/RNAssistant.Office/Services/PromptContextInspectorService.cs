@@ -21,12 +21,21 @@ namespace RNAssistant.Office.Services
 
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly AppDataPaths _paths;
-        private AppSettings _estimationSettings;
+        private readonly AppSettings _estimationSettings;
 
         public PromptContextInspectorService(IOfficeApplicationAdapter adapter, AppDataPaths paths)
+            : this(adapter, paths, null)
+        {
+        }
+
+        private PromptContextInspectorService(
+            IOfficeApplicationAdapter adapter,
+            AppDataPaths paths,
+            AppSettings estimationSettings)
         {
             _adapter = adapter;
             _paths = paths;
+            _estimationSettings = estimationSettings;
         }
 
         public PromptContextInspectorResponse Inspect(
@@ -40,7 +49,29 @@ namespace RNAssistant.Office.Services
             bool includeRaw)
         {
             settings = settings ?? new AppSettings();
-            _estimationSettings = settings;
+            var inspection = new PromptContextInspectorService(_adapter, _paths, settings);
+            return inspection.InspectCore(
+                session,
+                context,
+                settings,
+                tools,
+                skills,
+                attachments,
+                draftText,
+                includeRaw);
+        }
+
+        private PromptContextInspectorResponse InspectCore(
+            ChatSession session,
+            DocumentContext context,
+            AppSettings settings,
+            IReadOnlyList<ToolDefinition> tools,
+            IReadOnlyList<SkillDefinition> skills,
+            IReadOnlyList<ChatAttachment> attachments,
+            string draftText,
+            bool includeRaw)
+        {
+            settings = settings ?? new AppSettings();
             session = session ?? new ChatSession();
             attachments = attachments ?? new ChatAttachment[0];
             draftText = draftText ?? string.Empty;

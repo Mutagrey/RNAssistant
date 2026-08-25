@@ -63,6 +63,77 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void BoundedCacheHonorsLruAndWeights()
+        {
+            var cache = new BoundedLruCache<string>(
+                2,
+                3,
+                4,
+                value => value == null ? 0 : value.Length,
+                StringComparer.OrdinalIgnoreCase);
+            string cachedValue;
+
+            cache.Set("first", "aa");
+            cache.Set("second", "bb");
+            AssertTrue(cache.TryGet("FIRST", out cachedValue) && cachedValue == "aa", "cache comparer and lookup work");
+
+            cache.Set("third", "c");
+            AssertTrue(!cache.TryGet("second", out cachedValue), "least recently used entry is evicted");
+            AssertTrue(cache.TryGet("first", out cachedValue) && cachedValue == "aa", "recent entry survives eviction");
+
+            cache.Set("first", "oversized");
+            AssertTrue(!cache.TryGet("first", out cachedValue), "oversized replacement removes the stale value");
+            AssertTrue(cache.TryGet("third", out cachedValue) && cachedValue == "c", "oversized replacement preserves other entries");
+
+            cache.Move("third", "THIRD");
+            AssertTrue(cache.TryGet("third", out cachedValue) && cachedValue == "c", "case-equivalent move preserves cache weight");
+            cache.Set("target", "tt");
+            cache.Move("third", "target");
+            AssertTrue(!cache.TryGet("third", out cachedValue), "move removes the old key");
+            AssertTrue(cache.TryGet("target", out cachedValue) && cachedValue == "c", "move replaces the destination atomically");
+        }
+
+        private static void DisposablePairReleasesBothResources()
+        {
+            var firstDisposed = false;
+            var secondDisposed = false;
+            var pair = new DisposablePair(
+                new CallbackDisposable(() => firstDisposed = true),
+                new CallbackDisposable(() =>
+                {
+                    secondDisposed = true;
+                    throw new InvalidOperationException("second dispose failed");
+                }));
+            var failed = false;
+            try
+            {
+                pair.Dispose();
+            }
+            catch (InvalidOperationException)
+            {
+                failed = true;
+            }
+
+            AssertTrue(failed, "dispose preserves the original failure");
+            AssertTrue(secondDisposed, "second resource is released first");
+            AssertTrue(firstDisposed, "first resource is released even if the second release fails");
+
+            var acquiredFirstDisposed = false;
+            failed = false;
+            try
+            {
+                DisposablePair.Acquire(
+                    () => new CallbackDisposable(() => acquiredFirstDisposed = true),
+                    () => { throw new InvalidOperationException("second acquisition failed"); });
+            }
+            catch (InvalidOperationException)
+            {
+                failed = true;
+            }
+            AssertTrue(failed, "second acquisition failure is preserved");
+            AssertTrue(acquiredFirstDisposed, "first resource is released when second acquisition fails");
+        }
+
         private static void ProjectionCacheTrustsOnlyOwnedAppends()
         {
             WithTempPaths(paths =>
