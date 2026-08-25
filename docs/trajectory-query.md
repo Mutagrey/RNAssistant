@@ -43,3 +43,11 @@ New `llm.response` events keep compact actual token usage inline beside the immu
 - `log-only`: lifecycle/model trace/rejection events that are intentionally excluded from `ChatSession` replay.
 
 A commit containing multiple operations is `current` while any one of its targets remains current. Visibility is reconstructed from the complete stream on each query; it is not persisted into JSONL.
+
+## Export
+
+Diagnostics can export the current chat trajectory selection as a bounded disposable ZIP. The service rereads a complete validated event stream, applies the same raw/derived filters, resolves full `sourceEventSeqs`, and records referenced CAS metadata. It never writes an index or export copy into RNAssistant storage.
+
+The default `metadata` mode removes event/row data, content-derived row titles, the search phrase, and all CAS bodies. `secrets` recursively replaces known credential-named fields but may still contain prompts or document text. `none` preserves decrypted event data and is the only mode that can include CAS bodies; each included body is decrypted and verified through `ChatBlobStore` before packaging.
+
+`manifest.json` records selection, source-stream head evidence, reference metadata, and file hashes. `checksums.sha256` covers all preceding bundle files including the manifest, while the bridge reports the ZIP SHA-256. Because redaction changes the records, exported source hashes are evidence linked to the canonical stream rather than a self-contained replacement hash chain. See [trajectory-export.md](trajectory-export.md).

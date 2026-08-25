@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -220,6 +221,78 @@ namespace RNAssistant.Harness
             AssertEqual(14, turn.TotalTokens, "turn usage aggregates model steps");
             AssertEqual(0.002m, turn.CostUsd, "turn cost aggregates provider usage");
             AssertTrue(turn.SourceEventSeqs.SequenceEqual(Enumerable.Range(1, 9).Select(value => (long)value)), "turn row retains complete event lineage");
+        }
+
+        private static void TrajectoryExportRedactsAndVerifiesBundle()
+        {
+            WithTempPaths(paths =>
+            {
+                const string credential = "TRAJECTORY_SECRET_91c8";
+                const string visible = "TRAJECTORY_VISIBLE_5b42";
+                const string payload = "TRAJECTORY_PAYLOAD_a0e7";
+                var protector = new StorageProtector(
+                    HistoryIntegrityModes.Sha256,
+                    HistoryEncryptionModes.Aes256CbcHmacSha256,
+                    "trajectory export key",
+                    Enumerable.Range(61, 32).Select(value => (byte)value).ToArray());
+                Func<StorageProtector> protection = () => protector;
+                var store = new ChatStore(paths, protection);
+                var session = store.Create("Word", "trajectory-export", "Export.docx", "Export");
+                store.AppendTrace(session, SessionEventTypes.LlmRequest,
+                    new { ApiKey = credential, SafeValue = visible },
+                    payload, "application/json", "run-export", "turn-export", "step-export");
+                var events = store.ReadCompleteEvents(session.Host, session.DocumentKey, session.Id);
+                var exporter = new TrajectoryExportService(paths, protection, new EventStreamTrajectoryQuery());
+
+                var metadata = exporter.Export(session.Host, session.DocumentKey, session.Id, events,
+                    new TrajectoryExportRequest
+                    {
+                        EventTypes = new List<string> { SessionEventTypes.LlmRequest },
+                        RedactionMode = TrajectoryExportRedactionModes.Metadata
+                    });
+                var metadataEvents = ZipEntryText(metadata.BundleBytes, "events.jsonl");
+                AssertTrue(metadataEvents.IndexOf(credential, StringComparison.Ordinal) < 0, "metadata export removes credential");
+                AssertTrue(metadataEvents.IndexOf(visible, StringComparison.Ordinal) < 0, "metadata export removes event data");
+                AssertContains(metadataEvents, "\"redacted\":true", "metadata export marks redaction");
+                AssertContains(ZipEntryText(metadata.BundleBytes, "checksums.sha256"), "manifest.json", "export checksums cover manifest");
+                AssertTrue(!ZipEntryNames(metadata.BundleBytes).Any(name => name.StartsWith("cas/", StringComparison.Ordinal)),
+                    "metadata export excludes CAS bodies");
+
+                var secrets = exporter.Export(session.Host, session.DocumentKey, session.Id, events,
+                    new TrajectoryExportRequest
+                    {
+                        EventTypes = new List<string> { SessionEventTypes.LlmRequest },
+                        RedactionMode = TrajectoryExportRedactionModes.Secrets
+                    });
+                var secretEvents = ZipEntryText(secrets.BundleBytes, "events.jsonl");
+                AssertTrue(secretEvents.IndexOf(credential, StringComparison.Ordinal) < 0, "credential field is redacted");
+                AssertContains(secretEvents, visible, "non-credential event data remains in secrets mode");
+
+                var full = exporter.Export(session.Host, session.DocumentKey, session.Id, events,
+                    new TrajectoryExportRequest
+                    {
+                        EventTypes = new List<string> { SessionEventTypes.LlmRequest },
+                        RedactionMode = TrajectoryExportRedactionModes.None,
+                        IncludeCasPayloads = true
+                    });
+                var manifest = JObject.Parse(ZipEntryText(full.BundleBytes, "manifest.json"));
+                var exportedPath = (string)manifest["references"][0]["exportPath"];
+                AssertEqual(payload, ZipEntryText(full.BundleBytes, exportedPath), "full export decrypts and verifies CAS body");
+                AssertContains(ZipEntryText(full.BundleBytes, "events.jsonl"), credential, "full export preserves event data");
+                AssertEqual(64, full.BundleSha256.Length, "bundle has SHA-256");
+
+                File.AppendAllText(SessionEventFile(paths, session), "{\"incomplete\"");
+                var incompleteRejected = false;
+                try
+                {
+                    store.ReadCompleteEvents(session.Host, session.DocumentKey, session.Id);
+                }
+                catch (ChatConcurrencyException)
+                {
+                    incompleteRejected = true;
+                }
+                AssertTrue(incompleteRejected, "trajectory export source rejects incomplete tail");
+            });
         }
 
         private static SessionEvent TrajectoryEvent(
@@ -1042,6 +1115,26 @@ namespace RNAssistant.Harness
         private static string SessionEventFile(AppDataPaths paths, ChatSession session)
         {
             return Path.Combine(SessionDirectory(paths, session), AppDataPaths.SafeFileName(session.Id) + ".events.jsonl");
+        }
+
+        private static string ZipEntryText(byte[] bytes, string path)
+        {
+            using (var stream = new MemoryStream(bytes))
+            using (var archive = new ZipArchive(stream, ZipArchiveMode.Read))
+            {
+                var entry = archive.GetEntry(path);
+                if (entry == null) throw new InvalidOperationException("ZIP entry was not found: " + path);
+                using (var reader = new StreamReader(entry.Open(), Encoding.UTF8)) return reader.ReadToEnd();
+            }
+        }
+
+        private static List<string> ZipEntryNames(byte[] bytes)
+        {
+            using (var stream = new MemoryStream(bytes))
+            using (var archive = new ZipArchive(stream, ZipArchiveMode.Read))
+            {
+                return archive.Entries.Select(entry => entry.FullName).ToList();
+            }
         }
     }
 }

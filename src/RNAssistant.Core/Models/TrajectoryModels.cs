@@ -179,4 +179,70 @@ namespace RNAssistant.Core.Models
             Rows = new List<TrajectoryViewRow>();
         }
     }
+
+    public static class TrajectoryExportRedactionModes
+    {
+        public const string Metadata = "metadata";
+        public const string Secrets = "secrets";
+        public const string None = "none";
+
+        public static bool IsValid(string value)
+        {
+            return string.Equals(value, Metadata, System.StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, Secrets, System.StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, None, System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static string Normalize(string value)
+        {
+            value = (value ?? string.Empty).Trim().ToLowerInvariant();
+            return IsValid(value) ? value : Metadata;
+        }
+    }
+
+    public sealed class TrajectoryExportRequest
+    {
+        public string View { get; set; }
+        public string Search { get; set; }
+        public long? MinSequence { get; set; }
+        public long? MaxSequence { get; set; }
+        public List<string> EventTypes { get; set; }
+        public string RunId { get; set; }
+        public string TurnId { get; set; }
+        public string StepId { get; set; }
+        public string ToolCallId { get; set; }
+        public string ArtifactId { get; set; }
+        public string Status { get; set; }
+        public string Visibility { get; set; }
+        public string RedactionMode { get; set; }
+        public bool IncludeCasPayloads { get; set; }
+
+        public TrajectoryExportRequest()
+        {
+            View = TrajectoryViews.Raw;
+            EventTypes = new List<string>();
+            RedactionMode = TrajectoryExportRedactionModes.Metadata;
+        }
+    }
+
+    public sealed class TrajectoryExportResult
+    {
+        public string FileName { get; set; }
+        public string ContentType { get; set; }
+        public byte[] BundleBytes { get; set; }
+        public string BundleSha256 { get; set; }
+        public string RedactionMode { get; set; }
+        public bool CasPayloadsIncluded { get; set; }
+        public int EventCount { get; set; }
+        public int DerivedRowCount { get; set; }
+        public int ReferencedBlobCount { get; set; }
+        public int IncludedBlobCount { get; set; }
+        public long UncompressedByteLength { get; set; }
+
+        public TrajectoryExportResult()
+        {
+            ContentType = "application/zip";
+            BundleBytes = new byte[0];
+        }
+    }
 }

@@ -106,6 +106,7 @@ namespace RNAssistant.Harness
                 Test("storage: event log is canonical", SessionEventLogIsCanonical),
                 Test("storage: trajectory query paginates and filters", TrajectoryQueryPaginatesAndFilters),
                 Test("storage: trajectory derived views retain sources and usage", TrajectoryDerivedViewsRetainSourcesAndUsage),
+                Test("storage: trajectory export redacts and verifies bundle", TrajectoryExportRedactsAndVerifiesBundle),
                 Test("storage: fork lineage is canonical", SessionForkLineageIsCanonical),
                 Test("storage: stale chat save is rejected", StaleChatRevisionIsRejected),
                 Test("storage: event integrity rejects tampering", SessionEventIntegrityRejectsTampering),

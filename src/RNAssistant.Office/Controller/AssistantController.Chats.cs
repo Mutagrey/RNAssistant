@@ -64,6 +64,20 @@ namespace RNAssistant.Office
             };
         }
 
+        public ChatTrajectoryExportResponse ExportChatTrajectory(ChatTrajectoryExportRequest request)
+        {
+            request = request ?? new ChatTrajectoryExportRequest();
+            var session = LoadAddressedSession(request.ChatId);
+            var events = _chatStore.ReadCompleteEvents(session.Host, session.DocumentKey, session.Id);
+            var result = _trajectoryExportService.Export(
+                session.Host,
+                session.DocumentKey,
+                session.Id,
+                events,
+                request.ToExportRequest());
+            return ChatTrajectoryExportResponse.From(session.Id, result);
+        }
+
         public ChatEventPayloadResponse GetChatEventPayload(string chatId, string eventId)
         {
             if (string.IsNullOrWhiteSpace(eventId)) throw new InvalidOperationException("eventId is required.");

@@ -22,6 +22,38 @@
   min-width: 0;
 }
 
+.trajectory-export-bar {
+  display: flex;
+  min-height: 28px;
+  gap: 7px;
+  align-items: center;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.trajectory-export-bar select {
+  min-width: 180px;
+}
+
+.trajectory-export-cas {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.trajectory-export-cas input {
+  margin: 0;
+}
+
+#trajectoryExportNotice {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .trajectory-status-row {
   display: flex;
   min-height: 28px;
@@ -223,5 +255,9 @@
 
   .trajectory-workspace {
     grid-template-columns: minmax(140px, 38%) minmax(0, 1fr);
+  }
+
+  .trajectory-export-bar {
+    flex-wrap: wrap;
   }
 }

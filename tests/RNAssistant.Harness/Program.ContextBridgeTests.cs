@@ -352,6 +352,17 @@ namespace RNAssistant.Harness
             AssertEqual("tool failure", controller.LastTrajectorySearch, "trajectory search");
             AssertEqual("log-only", controller.LastTrajectoryVisibility, "trajectory visibility");
             AssertEqual("llm.failure", controller.LastTrajectoryEventTypes[1], "trajectory event types remain native array");
+
+            responseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"trajectory2\",\"type\":\"exportChatTrajectory\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-export\",\"view\":\"raw\",\"search\":\"failed\",\"eventTypes\":[\"llm.failure\"],\"visibility\":\"log-only\",\"redactionMode\":\"none\",\"includeCasPayloads\":true}}")
+                .GetAwaiter()
+                .GetResult();
+            AssertTrue(JObject.Parse(responseJson)["ok"].Value<bool>(), "trajectory export bridge response ok");
+            AssertEqual("chat-export", controller.LastChatId, "trajectory export chat id");
+            AssertEqual("none", controller.LastTrajectoryExportRedaction, "trajectory export redaction");
+            AssertTrue(controller.LastTrajectoryExportCas, "trajectory export CAS flag");
+            AssertEqual("llm.failure", controller.LastTrajectoryEventTypes.Single(), "trajectory export types remain native array");
         }
 
         private static void BridgeRejectsMissingToken()

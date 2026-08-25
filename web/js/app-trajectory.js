@@ -360,6 +360,79 @@
     });
   }
 
+  function exportPayload(chatId) {
+    var payload = queryPayload(chatId, null);
+    delete payload.cursor;
+    delete payload.pageSize;
+    payload.redactionMode = $("trajectoryExportRedactionInput").value || "metadata";
+    payload.includeCasPayloads = payload.redactionMode === "none" && $("trajectoryExportCasInput").checked;
+    return payload;
+  }
+
+  function downloadBase64(response) {
+    var encoded = value(response, "Base64", "base64", "");
+    var binary = window.atob(encoded);
+    var bytes = new Uint8Array(binary.length);
+    for (var index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+    var blob = new Blob([bytes], { type: value(response, "ContentType", "contentType", "application/zip") });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = url;
+    link.download = value(response, "FileName", "fileName", "rnassistant-trajectory.zip");
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
+  async function exportTrajectory() {
+    var view = $("trajectoryViewInput").value || "raw";
+    var chatId = trajectoryChatId || state.activeChatId;
+    if (view === "vba-mutations") {
+      $("trajectoryStatus").textContent = "VBA journal пока не входит в chat trajectory export.";
+      return;
+    }
+    if (!chatId) {
+      $("trajectoryStatus").textContent = "Нет активного чата.";
+      return;
+    }
+    var payload = exportPayload(chatId);
+    if (payload.redactionMode === "none" && !window.confirm(
+      "Экспорт без redaction содержит расшифрованные prompts, document data и event data. Продолжить?")) return;
+    var button = $("exportTrajectoryButton");
+    try {
+      button.disabled = true;
+      button.textContent = "Готовлю ZIP…";
+      $("trajectoryStatus").textContent = "Проверяю stream/CAS и формирую одноразовую projection…";
+      var response = await send("exportChatTrajectory", payload);
+      downloadBase64(response);
+      $("trajectoryStatus").textContent = "Экспортировано событий: " + value(response, "EventCount", "eventCount", 0) +
+        " · ZIP " + bytesLabel(value(response, "ByteLength", "byteLength", 0)) +
+        " · sha256=" + shortHash(value(response, "BundleSha256", "bundleSha256", ""));
+    } catch (error) {
+      $("trajectoryStatus").textContent = "Не удалось экспортировать trajectory: " + error.message;
+    } finally {
+      button.disabled = false;
+      button.textContent = "Скачать ZIP";
+    }
+  }
+
+  function updateExportControls() {
+    var mode = $("trajectoryExportRedactionInput").value || "metadata";
+    var full = mode === "none";
+    var vba = ($("trajectoryViewInput").value || "raw") === "vba-mutations";
+    $("trajectoryExportCasInput").disabled = !full || vba;
+    if (!full) $("trajectoryExportCasInput").checked = false;
+    $("exportTrajectoryButton").disabled = vba;
+    $("trajectoryExportNotice").textContent = vba
+      ? "VBA export будет отдельным bundle из journal."
+      : (mode === "metadata"
+        ? "Data и CAS bodies не попадут в архив."
+        : (mode === "secrets"
+          ? "Credential fields скрыты; prompts и document text могут остаться."
+          : "Без redaction: архив содержит чувствительные данные."));
+  }
+
   async function refreshTrajectory(append) {
     var button = $("refreshTrajectoryButton");
     var requestedView = $("trajectoryViewInput").value || "raw";
@@ -537,6 +610,7 @@
     $("trajectoryVbaKindInput").disabled = !vba;
     $("trajectoryVbaStatusInput").classList.toggle("hidden", !vba);
     $("trajectoryVbaStatusInput").disabled = !vba;
+    updateExportControls();
   }
 
   window.bindTrajectoryActions = function () {
@@ -544,8 +618,10 @@
     var more = $("loadMoreTrajectoryButton");
     var payload = $("loadTrajectoryPayloadButton");
     var vbaDetail = $("loadVbaMutationButton");
+    var exportButton = $("exportTrajectoryButton");
     if (refresh) refresh.addEventListener("click", function () { refreshTrajectory(false); });
     if (more) more.addEventListener("click", function () { refreshTrajectory(true); });
+    if (exportButton) exportButton.addEventListener("click", exportTrajectory);
     ["trajectorySearchInput", "trajectoryTypeInput"].forEach(function (id) {
       $(id).addEventListener("input", function () {
         nextCursor = null;
@@ -564,6 +640,7 @@
       refreshTrajectory(false);
     });
     $("clearTrajectoryCorrelationButton").addEventListener("click", clearCorrelation);
+    $("trajectoryExportRedactionInput").addEventListener("change", updateExportControls);
     if (payload) payload.addEventListener("click", loadPayload);
     if (vbaDetail) vbaDetail.addEventListener("click", loadVbaMutation);
     updateViewControls();

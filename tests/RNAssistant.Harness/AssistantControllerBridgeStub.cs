@@ -48,6 +48,8 @@ namespace RNAssistant.Office
         public string LastTrajectorySearch { get; private set; }
         public string LastTrajectoryVisibility { get; private set; }
         public IReadOnlyList<string> LastTrajectoryEventTypes { get; private set; }
+        public string LastTrajectoryExportRedaction { get; private set; }
+        public bool LastTrajectoryExportCas { get; private set; }
 
         public InitResponse Initialize() { return new InitResponse { Host = "Excel", Title = "Harness.xlsx" }; }
         public ChatStateResponse ListChats() { return ChatState(); }
@@ -62,6 +64,27 @@ namespace RNAssistant.Office
                 ? (IReadOnlyList<string>)new string[0]
                 : request.EventTypes ?? new List<string>();
             return new ChatTrajectoryResponse { ChatId = LastChatId, Revision = 1, Events = new SessionEventDto[0], Rows = new TrajectoryViewRowDto[0] };
+        }
+        public ChatTrajectoryExportResponse ExportChatTrajectory(ChatTrajectoryExportRequest request)
+        {
+            LastChatId = request == null ? null : request.ChatId;
+            LastTrajectoryView = request == null ? null : request.View;
+            LastTrajectorySearch = request == null ? null : request.Search;
+            LastTrajectoryVisibility = request == null ? null : request.Visibility;
+            LastTrajectoryEventTypes = request == null
+                ? (IReadOnlyList<string>)new string[0]
+                : request.EventTypes ?? new List<string>();
+            LastTrajectoryExportRedaction = request == null ? null : request.RedactionMode;
+            LastTrajectoryExportCas = request != null && request.IncludeCasPayloads == true;
+            return new ChatTrajectoryExportResponse
+            {
+                ChatId = LastChatId,
+                FileName = "trajectory.zip",
+                ContentType = "application/zip",
+                Base64 = string.Empty,
+                RedactionMode = LastTrajectoryExportRedaction,
+                CasPayloadsIncluded = LastTrajectoryExportCas
+            };
         }
         public ChatEventPayloadResponse GetChatEventPayload(string chatId, string eventId)
         {

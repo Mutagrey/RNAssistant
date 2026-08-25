@@ -28,6 +28,7 @@ namespace RNAssistant.Office
         private readonly VbaJournalStore _vbaJournalStore;
         private readonly CasMaintenanceService _casMaintenanceService;
         private readonly ITrajectoryQuery _trajectoryQuery;
+        private readonly TrajectoryExportService _trajectoryExportService;
         private readonly OfficeToolExecutor _toolExecutor;
         private readonly ToolCatalogService _toolCatalog;
         private readonly SkillCatalogService _skillCatalog;
@@ -85,6 +86,10 @@ namespace RNAssistant.Office
                 _chatRuns.ReserveMaintenance,
                 EnsureNoActiveRuns);
             _trajectoryQuery = new EventStreamTrajectoryQuery();
+            _trajectoryExportService = new TrajectoryExportService(
+                _paths,
+                () => _settingsService.LoadStorageProtector(),
+                _trajectoryQuery);
             _chatSessions = new ChatSessionService(_adapter, _chatStore);
             _lifetimeCancellation = new CancellationTokenSource();
             _chatSessions.RunStateProvider = _chatRuns.Get;

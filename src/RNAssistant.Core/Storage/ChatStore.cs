@@ -230,6 +230,24 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        public IReadOnlyList<SessionEvent> ReadCompleteEvents(string host, string documentKey, string sessionId)
+        {
+            if (string.IsNullOrWhiteSpace(sessionId)) return new List<SessionEvent>();
+            var path = GetSessionPath(host, documentKey, sessionId);
+            lock (PersistenceSync)
+            {
+                using (AcquireDocumentLock(host, documentKey))
+                {
+                    var log = ReadEventLog(path);
+                    if (log != null && log.HasIncompleteTail)
+                    {
+                        throw new ChatConcurrencyException("The chat event log has an incomplete tail and cannot be exported.");
+                    }
+                    return log == null ? new List<SessionEvent>() : log.Events;
+                }
+            }
+        }
+
         internal void ScanCasReferences(CasReachabilityScan scan)
         {
             if (scan == null) throw new ArgumentNullException("scan");

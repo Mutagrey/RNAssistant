@@ -12,14 +12,14 @@
 
 ## Known gaps
 
-- Diagnostics now provides a repository-wide CAS health report and fail-closed orphan collector. Retention/pruning, re-keying, and redacted export lifecycles are still missing.
+- Diagnostics now provides a repository-wide CAS health report, fail-closed orphan collector, and bounded redacted/full chat trajectory export. Retention/pruning, re-keying, and VBA-journal export are still missing.
 - Diagnostics rebuilds paged module/package mutation rows from the validated VBA journal and lazily verifies CAS-backed before/intended source for per-component diffs and explicit restore.
 - Correlated trajectory rows expose direct navigation by run, turn, step, tool call, artifact/parent artifact and source-event range; VBA rows can jump to their originating chat session.
 - Prompt-size preflight may use learned linear token-estimation coefficients. Historical monetary cost is different: it remains `null` unless the provider usage saved with that response reports cost, and is never recomputed from current price tables.
 
 ## Next implementation order
 
-Current priority is: (1) Windows/Office smoke coverage for VBA packages and code-only UserForms, (2) redacted export plus replay/eval fixtures, (3) retention policies and re-key/export lifecycle, and only then (4) persistence seams or an optional disposable SQLite query accelerator. The Windows smoke remains external to this machine; the next locally implementable slice is export/replay. Full Designer/FRX UserForms remain a separate later protocol decision.
+Current priority is: (1) Windows/Office smoke coverage for VBA packages and code-only UserForms, (2) reproducible replay/eval fixtures, (3) retention policies and explicit re-key lifecycle, and only then (4) persistence seams or an optional disposable SQLite query accelerator. The Windows smoke remains external to this machine; the next locally implementable slice is replay/eval. Full Designer/FRX UserForms remain a separate later protocol decision.
 
 ### P0 — deterministic recovery and storage health
 
@@ -48,16 +48,17 @@ Current priority is: (1) Windows/Office smoke coverage for VBA packages and code
 - [x] Introduce `ITrajectoryQuery`: cursor pagination, tokenized full-text search, and filters for sequence range, event type, run, turn, step, tool call, artifact, status, and `current` / `shadowed` / `log-only`. The event stream remains authoritative; the current projection is disposable and rebuilt in memory.
 - [x] Add derived views for model replay, tool execution, artifact lineage, confirmation pauses, failure/retry history, and per-turn timing/token/cost usage. Every projection row retains complete `sourceEventSeqs` and source event ids; cost is provider-reported rather than recomputed from mutable price tables.
 - [x] Extend the paged Diagnostics view with correlation navigation, artifact lineage, and VBA before/intended-after per-component diff with an explicit restore action. VBA pagination uses a journal snapshot cursor; source bodies remain lazy CAS reads, and restore creates a new guarded/journaled mutation.
-- [ ] Add an export bundle containing selected event records, a manifest of referenced CAS payloads, and integrity hashes for offline trajectory analysis and regression fixtures.
+- [x] Add a bounded disposable ZIP export containing selected source events, optional derived rows, a CAS-reference manifest, per-file checksums and bundle SHA-256. Metadata-only is the default; credential-field redaction is optional; decrypted data and verified CAS bodies require explicit no-redaction selection.
 - [ ] Add the remaining persistence seams (`ISessionPersistence`, `IBlobStore`); `ITrajectoryQuery` is now explicit. Consider an optional SQLite query backend only for scale; it must preserve append-only/CAS semantics and must not become a second durable truth beside JSONL.
 
 ### P3 — lifecycle, evaluation, and tamper resistance
 
-- [ ] Add retention/pruning policies for chats, model payloads, attachments, artifacts, VBA snapshots, and diagnostic exports on top of the reference-aware collector; add configurable redaction before share/export.
+- [ ] Add retention/pruning policies for chats, model payloads, attachments, artifacts, VBA snapshots, and user-created diagnostic exports on top of the reference-aware collector.
+- [x] Add configurable redaction before trajectory share/export, with metadata-only default and explicit full decrypted export.
 - [ ] Add reproducible replay fixtures and trajectory evaluations for malformed Agent output, confirmation continuation, tool failures, HTML branch navigation, VBA stale guards, and crash recovery.
 - [ ] Surface aggregate latency, tokens, cost, model failures, format repairs, tool outcomes, uncertain effects, and restore outcomes from the same canonical journal without mixing telemetry into model replay.
 - [x] Add optional HMAC-SHA256 event authentication and optional authenticated encryption-at-rest for event data and committed CAS; keep both disabled by default and expose API/custom-secret key selection in Settings.
-- [ ] Add explicit re-key/decrypt-for-export operations so protected history can change keys or become a shareable redacted bundle without clearing canonical data.
+- [ ] Add explicit re-key operations so protected canonical history can change keys without clearing data. Explicit full export can already decrypt verified selected records/CAS into a disposable bundle.
 
 ## Non-negotiable invariants
 

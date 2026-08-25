@@ -28,7 +28,7 @@
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=media-routing-20260824-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=cas-health-20260825-1">
-  <link rel="stylesheet" href="css/app-trajectory.css?v=vba-recovery-20260825-1">
+  <link rel="stylesheet" href="css/app-trajectory.css?v=trajectory-export-20260825-1">
   <link rel="stylesheet" href="css/app-tools.css?v=skill-references-20260825-1">
   <link rel="stylesheet" href="css/app-vba.css?v=userform-20260824-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=chatui-20260621-6">
@@ -839,6 +839,12 @@
                   <select class="hidden" id="trajectoryVbaStatusInput" aria-label="Статус VBA mutation"><option value="">Все статусы</option><option value="open">Open</option><option value="committed">Committed</option><option value="not_applied">Not applied</option><option value="rolled_back">Rolled back</option><option value="failed">Failed</option><option value="unknown">Unknown</option></select>
                   <button class="secondary" id="refreshTrajectoryButton" type="button">Найти</button>
                 </div>
+                <div class="trajectory-export-bar">
+                  <select id="trajectoryExportRedactionInput" aria-label="Redaction экспорта"><option value="metadata">Export: metadata only</option><option value="secrets">Export: redact credential fields</option><option value="none">Export: full, no redaction</option></select>
+                  <label class="trajectory-export-cas"><input id="trajectoryExportCasInput" type="checkbox" disabled> Включить CAS bodies</label>
+                  <button class="secondary" id="exportTrajectoryButton" type="button">Скачать ZIP</button>
+                  <span id="trajectoryExportNotice">Data и CAS bodies не попадут в архив.</span>
+                </div>
                 <div class="trajectory-correlation-bar hidden" id="trajectoryCorrelationBar"><div class="trajectory-correlation-actions" id="trajectoryCorrelationActions"></div><button class="secondary hidden" id="clearTrajectoryCorrelationButton" type="button">Сбросить переход</button></div>
                 <div class="trajectory-status-row"><div class="trajectory-status" id="trajectoryStatus">Нажмите «Найти», чтобы прочитать текущий event stream.</div><button class="secondary hidden" id="loadMoreTrajectoryButton" type="button">Старше</button></div>
                 <div class="trajectory-workspace hidden" id="trajectoryWorkspace">
@@ -908,7 +914,7 @@
   <script src="js/app-settings.js?v=screen-protection-20260824-1"></script>
   <script src="js/app-logs.js?v=log-filters-20260824-1"></script>
   <script src="js/app-diagnostics.js?v=cas-health-20260825-1"></script>
-  <script src="js/app-trajectory.js?v=vba-recovery-20260825-1"></script>
+  <script src="js/app-trajectory.js?v=trajectory-export-20260825-1"></script>
   <script src="js/app-prompts.js?v=library-editor-20260824-1"></script>
   <script src="js/app-model-data.js?v=media-routing-20260824-1"></script>
   <script src="js/app-model-picker.js?v=model-modules-20260823-2"></script>

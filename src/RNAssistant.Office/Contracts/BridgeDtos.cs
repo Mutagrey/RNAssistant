@@ -661,6 +661,45 @@ namespace RNAssistant.Office.Contracts
         }
     }
 
+    public sealed class ChatTrajectoryExportRequest : ChatPayload
+    {
+        [JsonProperty("view")] public string View { get; set; }
+        [JsonProperty("search")] public string Search { get; set; }
+        [JsonProperty("minSequence")] public long? MinSequence { get; set; }
+        [JsonProperty("maxSequence")] public long? MaxSequence { get; set; }
+        [JsonProperty("eventTypes")] public List<string> EventTypes { get; set; }
+        [JsonProperty("runId")] public string RunId { get; set; }
+        [JsonProperty("turnId")] public string TurnId { get; set; }
+        [JsonProperty("stepId")] public string StepId { get; set; }
+        [JsonProperty("toolCallId")] public string ToolCallId { get; set; }
+        [JsonProperty("artifactId")] public string ArtifactId { get; set; }
+        [JsonProperty("status")] public string Status { get; set; }
+        [JsonProperty("visibility")] public string Visibility { get; set; }
+        [JsonProperty("redactionMode")] public string RedactionMode { get; set; }
+        [JsonProperty("includeCasPayloads")] public bool? IncludeCasPayloads { get; set; }
+
+        public TrajectoryExportRequest ToExportRequest()
+        {
+            return new TrajectoryExportRequest
+            {
+                View = View,
+                Search = Search,
+                MinSequence = MinSequence,
+                MaxSequence = MaxSequence,
+                EventTypes = EventTypes ?? new List<string>(),
+                RunId = RunId,
+                TurnId = TurnId,
+                StepId = StepId,
+                ToolCallId = ToolCallId,
+                ArtifactId = ArtifactId,
+                Status = Status,
+                Visibility = Visibility,
+                RedactionMode = RedactionMode,
+                IncludeCasPayloads = IncludeCasPayloads == true
+            };
+        }
+    }
+
     public sealed class ChatTrajectoryResponse
     {
         [JsonProperty("chatId")] public string ChatId { get; set; }
@@ -674,6 +713,44 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("hasMore")] public bool HasMore { get; set; }
         [JsonProperty("events")] public IReadOnlyList<SessionEventDto> Events { get; set; }
         [JsonProperty("rows")] public IReadOnlyList<TrajectoryViewRowDto> Rows { get; set; }
+    }
+
+    public sealed class ChatTrajectoryExportResponse
+    {
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("fileName")] public string FileName { get; set; }
+        [JsonProperty("contentType")] public string ContentType { get; set; }
+        [JsonProperty("base64")] public string Base64 { get; set; }
+        [JsonProperty("bundleSha256")] public string BundleSha256 { get; set; }
+        [JsonProperty("byteLength")] public long ByteLength { get; set; }
+        [JsonProperty("uncompressedByteLength")] public long UncompressedByteLength { get; set; }
+        [JsonProperty("redactionMode")] public string RedactionMode { get; set; }
+        [JsonProperty("casPayloadsIncluded")] public bool CasPayloadsIncluded { get; set; }
+        [JsonProperty("eventCount")] public int EventCount { get; set; }
+        [JsonProperty("derivedRowCount")] public int DerivedRowCount { get; set; }
+        [JsonProperty("referencedBlobCount")] public int ReferencedBlobCount { get; set; }
+        [JsonProperty("includedBlobCount")] public int IncludedBlobCount { get; set; }
+
+        public static ChatTrajectoryExportResponse From(string chatId, TrajectoryExportResult result)
+        {
+            if (result == null) return null;
+            return new ChatTrajectoryExportResponse
+            {
+                ChatId = chatId,
+                FileName = result.FileName,
+                ContentType = result.ContentType,
+                Base64 = Convert.ToBase64String(result.BundleBytes ?? new byte[0]),
+                BundleSha256 = result.BundleSha256,
+                ByteLength = result.BundleBytes == null ? 0 : result.BundleBytes.LongLength,
+                UncompressedByteLength = result.UncompressedByteLength,
+                RedactionMode = result.RedactionMode,
+                CasPayloadsIncluded = result.CasPayloadsIncluded,
+                EventCount = result.EventCount,
+                DerivedRowCount = result.DerivedRowCount,
+                ReferencedBlobCount = result.ReferencedBlobCount,
+                IncludedBlobCount = result.IncludedBlobCount
+            };
+        }
     }
 
     public sealed class TrajectoryViewRowDto
